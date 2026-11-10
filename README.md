@@ -17,7 +17,7 @@ cmd/brant-admin/                  operator-only grants: authority row, permissio
 cmd/brant-migrate/                operator-only migrations: Bento schema, framework migration, then each manifest directory in order
 cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink, settle; at least once
 internal/bootstrap/               composition root: one connection pool, a Bento transaction owner per context and for the relay
-internal/contexts/evd/            EVD: text sources (content, origin, import), immutable; SourceRef lookup
+internal/contexts/evd/            EVD: text sources (content, origin, import) and business files, immutable; SourceRef lookup
 internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup
 internal/contexts/cat/            CAT: SKUs and specification revisions; SkuRef lookup
 internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed
@@ -66,6 +66,8 @@ IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-admin grant -tenant t -company c -
     -permissions source.register,evd.read,party.save_draft,party.confirm,pty.read,rfq.save_draft,rfq.confirm_scope,inq.read
 IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-api -oidc-issuer https://issuer.example -oidc-audience brant-api
 ```
+
+`-replay-sink https://...` adds `POST /api/brant/v1/msg/dead_letters/<source>/<event_id>/replay` for humans holding `dead_letter.replay`. Request bodies are limited to 1 MiB, except `file.register` (15 MiB, for a 10 MiB file in Base64).
 
 `scripts/dev-postgres.sh` pulls PostgreSQL 16.12 by the digest CI pins. Set `BRANT_PG_IMAGE` to pull the same digest from another registry and `BRANT_PG_PORT` for another port.
 
