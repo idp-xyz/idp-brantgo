@@ -111,10 +111,12 @@
           ],
           "commands": [
             "contact.save_draft",
-            "contact.confirm"
+            "contact.confirm",
+            "contact.revise"
           ],
           "events": [
-            "ContactConfirmed"
+            "ContactConfirmed",
+            "ContactRevised"
           ],
           "goPackage": "internal/contexts/pty/internal/domain/contact",
           "pythonSource": "master(kind=contact)；T03 A30",

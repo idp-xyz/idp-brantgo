@@ -25,9 +25,11 @@ import (
 // every S1 permission, Python's "*".
 var allPermissions = []string{
 	"source.register", "file.register", "evd.read", "evd.audit",
-	"party.save_draft", "party.confirm", "party.revise", "party.deactivate", "contact.save_draft", "contact.confirm",
+	"party.save_draft", "party.confirm", "party.revise", "party.deactivate", "contact.save_draft", "contact.confirm", "contact.revise",
+	"service_role.verify", "trading_profile.save_draft", "trading_profile.publish",
 	"pty.read", "pty.audit",
-	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "cat.read", "cat.audit",
+	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "item_code_mapping.save_draft", "item_code_mapping.publish",
+	"cat.read", "cat.audit",
 	"config.save_draft", "config.discard_draft", "config.publish", "config.retire", "number.issue", "foundation.snapshot",
 	"pol.read", "pol.audit", "pol.read_sensitive",
 	"rfq.save_draft", "rfq.confirm_scope", "rfq.cancel", "rfq.close", "inq.read", "inq.audit",

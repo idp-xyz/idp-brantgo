@@ -1,5 +1,25 @@
 # IDP Brant 主档案变更记录
 
+## V1.5 · 2026-11-10 · S1 完成
+
+S1 第三批合并：PTY 交易档案、地址角色与服务方角色，CAT 货号映射，brant-cli 基础演示；S1 的 11 项工作全部有本机与远程 CI 记录。
+
+### 新增
+- 09：S1 执行报告新增决定 S1-D33—S1-D40（地址角色、服务方角色、交易档案、contact.revise、货号映射、REFERENCE_STALE 的用法、基础演示、HTTP 映射的复数缩写）。
+
+### 更新
+- 03：PTY 命令新增 contact.revise，事件新增 ContactRevised、TradingProfilePublished、PartyScreeningRecorded；CAT 命令新增 item_code_mapping.save_draft；R60 的契约扩展到交易档案引用的付款与贸易条款。
+- 05：Contact 聚合加入 contact.revise 与 ContactRevised；岗位模板：contact.revise 与 item_code_mapping.save_draft 归销售经办与采购，trading_profile.save_draft 另归采购；独立性清单加入 trading_profile.publish。
+- 06：错误码 INDEPENDENT_REVIEW_REQUIRED 适用 PTY，BUSINESS_KEY_CONFLICT 适用 CAT 与参考数据。
+- 08：Python 测试映射 T01 与共享基础 73 行：67 行 PORTED、2 行 DIVERGES_BY_DESIGN（引用 X-INV-003、POL-INV-003）、3 行 NOT_APPLICABLE；PYT-0135 的渲染一半改归 TRD，随 S3-04 移植。
+- 09：WBS 中 S1-02、S1-03、S1-07 改为 DONE_CI；S1 完成。
+- 构建器：版本 1.5。
+
+### 限制
+- TradingProfileRef 与 AddressRoleRef 只有事务前查询，没有守卫函数（R13 有守卫锁，TRD 在 S3 需要）。
+- 货号映射没有退役命令，已发布的键不能释放；服务方角色没有撤回，交易档案没有草稿丢弃。设计中都没有对应命令，作为设计缺口登记。
+- 真实身份提供方仍按负责人决定延后；G0、G1 结论不变。
+
 ## V1.4 · 2026-11-10 · S1 第二批：筛查、岗位模板与 POL 全部配置
 
 S1 第二批合并：POL 其余 13 种配置与 ConfigGuard v1、主体筛查与筛查名单、岗位模板与职责分离、OpenAPI 3.1 候选、Inbox 去重与提交结果未知的对账。执行证据回写到 09 阶段。

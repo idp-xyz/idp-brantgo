@@ -14,6 +14,7 @@ func TestSnakeNames(t *testing.T) {
 	for in, want := range map[string]string{
 		"LegalName": "legal_name", "FXRate": "fx_rate", "MaxFXAgeSeconds": "max_fx_age_seconds", "SkuID": "sku_id",
 		"OwnerID": "owner_id", "RegistrationNo": "registration_no", "SpecRevision": "spec_revision", "Code": "code",
+		"EvidenceIDs": "evidence_ids", "IDs": "ids", "URLsSeen": "urls_seen", "ContactRefs": "contact_refs",
 	} {
 		if got := snake(in); got != want {
 			t.Errorf("snake(%s) = %s, want %s", in, got, want)

@@ -4,23 +4,23 @@ title: IDP Brant S1 主数据与询价切片执行报告 V0.1
 short: S1 执行报告 V0.1
 kicker: IDP BRANT / 09 IMPLEMENTATION PLAN / S1 EXECUTION REPORT
 doc_title: S1 主数据与询价切片执行报告 V0.1
-doc_desc: 远程 CI 跑通 · 命令账本 · EVD、PTY、CAT、INQ、POL · HTTP 入口、OIDC 与 OpenAPI 候选 · 岗位模板 · 主体筛查与名单 · 死信、Inbox 与提交未知恢复 · BRC-001 前段重放 · Python 测试移植
-meta: 版本=V0.1; 日期=2026-11-10; 证据=E2 本机执行＋GitHub Actions; 结论=S1 部分完成 · G1 NO-GO
+doc_desc: 远程 CI 跑通 · 命令账本 · EVD、PTY、CAT、INQ、POL · HTTP 入口、OIDC 与 OpenAPI 候选 · 岗位模板 · 主体筛查与名单 · 交易档案、地址与服务方角色 · 货号映射 · 死信、Inbox 与提交未知恢复 · BRC-001 前段重放 · brant-cli 演示 · Python 测试移植
+meta: 版本=V0.1; 日期=2026-11-10; 证据=E2 本机执行＋GitHub Actions; 结论=S1 完成 · G1 NO-GO
 stage: 09 · 工程实施总体计划
 eyebrow: S1 EXECUTION REPORT
 search: 搜索工作项、测试、Python 用例或证据
 foot: S1 Execution Report V0.1 · 2026-11-10
 ---
-<span class="scope-badge">S1 PARTIAL · REMOTE CI GREEN · G1 NO-GO</span>
+<span class="scope-badge">S1 DONE · REMOTE CI GREEN · G1 NO-GO</span>
 
 <h2>远程 CI 已跑通；询价主链在 PostgreSQL 16 上从来源走到 ready，并能经 HTTP 与 OIDC 令牌重放</h2>
 
-<p class="lede">2026-11-10，修复了使 GitHub Actions 无法解析的工作流文件，远程 CI 在私有仓库 idpxyz/idp-brantgo 上首次通过。S1 建立了命令账本（幂等、重放、审计与 Outbox 同一事务）和 EVD、PTY、CAT、INQ、POL 五个上下文，HTTP 入口以 OIDC 访问令牌认证，Outbox 有了死信、告警与人工重放。BRC-001 前段（四行合计 120 PCS 的询价确认为 ready）在 PostgreSQL 16 上直接调用和经 HTTP 都已重放。同日第二批：POL 全部 18 种配置与 ConfigGuard v1，主体筛查与 PartyScreeningGuard v1，筛查名单作为参考数据受控导入，岗位模板与职责分离，OpenAPI 3.1 候选，Inbox 去重与提交结果未知的对账。真实身份提供方按负责人决定延后；G1 仍为 NO-GO（审批为模拟）。</p>
+<p class="lede">2026-11-10，修复了使 GitHub Actions 无法解析的工作流文件，远程 CI 在私有仓库 idpxyz/idp-brantgo 上首次通过。S1 建立了命令账本（幂等、重放、审计与 Outbox 同一事务）和 EVD、PTY、CAT、INQ、POL 五个上下文，HTTP 入口以 OIDC 访问令牌认证，Outbox 有了死信、告警与人工重放。BRC-001 前段（四行合计 120 PCS 的询价确认为 ready）在 PostgreSQL 16 上直接调用和经 HTTP 都已重放。同日第二批：POL 全部 18 种配置与 ConfigGuard v1，主体筛查与 PartyScreeningGuard v1，筛查名单作为参考数据受控导入，岗位模板与职责分离，OpenAPI 3.1 候选，Inbox 去重与提交结果未知的对账。第三批补齐交易档案、地址角色与服务方角色、货号映射和 brant-cli 基础演示，S1 的 11 项工作全部完成。真实身份提供方按负责人决定延后；G1 仍为 NO-GO（审批为模拟）。</p>
 
 ::: cover
-- 结论 | S1 部分完成：S1-01、04、05、06、08、09、10、11 完成并有远程 CI 记录；S1-02、03、07 部分完成（交易档案、地址与服务方角色，货号映射，7 个 Python 测试未移植或只移植一半）。
+- 结论 | S1 完成：S1-01 至 S1-11 都有本机与远程 CI 记录。T01 与共享基础的 73 个 Python 测试中 67 个已移植、2 个登记为有意背离、3 个为 SQLite 专属；剩余 1 个的渲染一半归 TRD 正式化，随 S3-04 移植。
 - 证据 | 05_S1_EVIDENCE：环境、源文件 SHA-256 快照、make ci、逐项测试日志、GitHub Actions 运行记录、严格 JSON 模糊测试。
-- 未执行 | 真实身份提供方（负责人决定延后至 B0 试点门之前）、Inbox 订阅登记与 WF-03 风险传播（S4-06）、定时复筛任务、真实名单文件与真实客户样例。
+- 未执行 | 真实身份提供方（负责人决定延后至 B0 试点门之前）、Inbox 订阅登记与 WF-03 风险传播（S4-06）、定时复筛任务、TradingProfileRef 与 AddressRoleRef 的守卫函数（R13，TRD 在 S3 需要）、真实名单文件与真实客户样例。
 :::
 
 ## 01 结论摘要 {#s1}
@@ -36,6 +36,8 @@ foot: S1 Execution Report V0.1 · 2026-11-10
 - S1-04 | POL 全部 18 种配置与 ConfigGuard v1 | 配置的修订、发布须由编制人以外的人工执行（数据库约束同样强制）、原子替代、退役；汇率按方向与用途、不推导反向、过期即阻断；税额拆分精确、未知可抵扣性阻断；单位换算按 SKU 规格修订、需舍入即拒绝；银行账号无敏感权限只见末四位；单据编号按公司、类型、年度原子分配；基础快照须有公司档案与定价政策。守卫函数对确切修订行 FOR SHARE，三种提交顺序实测符合设计。
 - S1-09 · S1-11 | 主体筛查与筛查名单 | 名单版本由合规岗位受控导入（来源、发布日期、文件 SHA-256、条目数），条目不可改；按 screening_regulation 启用的名单精确匹配；疑似命中由合规人工裁决，AI 与 system 不能裁决；正向名单绑定主体修订与条目内容，负向名单永久阻断；新名单版本或主体修订使结论不再通过。PartyScreeningGuard v1 在四种提交顺序下实测符合设计（TD-AT15）。
 - BC-D02 · C10 | 岗位模板与职责分离 | 15 个默认岗位由 05 阶段源文件生成，覆盖全部命令；禁止组合在定义与分配岗位时拒绝；专属权限（合规结论、名单导入、信用决定）只归其岗位。
+- S1-02 · S1-03 | 交易档案、地址与服务方角色、货号映射 | 地址随主体草稿核实并按修订保留；服务方角色由人工按可读证据核实，起讫地以 UN/LOCODE 表示；交易档案固定主体修订、付款与贸易条款和联系人版本，发布须由编制人以外的人工执行；货号映射按主体、角色与外部货号唯一发布（BUSINESS_KEY_CONFLICT），引用已核实的 SKU 规格修订，规格修订后旧引用为 REFERENCE_STALE。
+- S1-07 | brant-cli 基础演示 | foundation-demo 在新的合成公司里由独立的编制人与审核人发布 18 种配置 20 条，取得基础快照，经 POL 查询得出 854.81 CNY、含税 113.00 与 24 PCS，与 Python 一致；不调用模型。
 - C07 | Inbox 去重与提交结果未知 | 消费方在一个事务内按事件 ID 去重并处理，重复投递只处理一次；丢失 COMMIT 应答报告为 COMMIT_UNCERTAIN，Reconcile 只读判定已提交、载荷冲突或未提交；在 PostgreSQL 16 上以注入故障的连接实测丢失 COMMIT 与丢失应答两种情形。
 - S1-10 · C13 | Outbox 死信、告警与重放 | 四条放弃路径（含 Bento 在领取次数超限时的静默放弃）都写入死信并告警；撤销、否认与风险类事件为关键告警；人工按事件 ID 以原事件 ID 重放。
 :::
@@ -80,10 +82,18 @@ foot: S1 Execution Report V0.1 · 2026-11-10
 | S1-D30 | Inbox：消费方在一个事务内按事件 ID 去重并处理，处理者以 system:inbox.&lt;consumer&gt; 身份运行；只有 RejectEvent 记为永久拒绝，处理者返回的业务拒绝按暂时失败重试直至死信 | ADR-BR-015；Bento Inbox | Python 无 Inbox |
 | S1-D31 | Bento v0.1.0-rc.2 与 pgx v5.10.0 把丢失的 COMMIT 应答报告为普通的连接已关闭；ScopeTransactor 在回调成功后为其附加 ErrCommitUncertain。账本的 Reconcile 只读并审计，需业务读权限而非写权限 | Python test_reconciliation_requires_business_read_and_does_not_repeat_write_permission | 修复应进入 Bento 上游 |
 | S1-D32 | 账本先查已存结果再锁根行，同键命令在两者之间提交会表现为版本冲突；命令以 VERSION_CONFLICT 结束时在新事务中查同键已存结果，有则按重放或载荷冲突回答 | Python 在同一锁内判定；GitHub Actions 运行 42815414128 暴露该窗口 | — |
+| S1-D33 | 地址是主体的 AddressRole：随主体草稿保存、随核实修订保留；角色为 buyer、seller、payer、payee、consignee、shipper、billing；AddressRoleRef v1 为（主体、已核实修订、地址 ID） | 战术模型 PTY-AGG-Party；PTY-INV-001 | Python 地址在 party_profile 内；legal_name、country 不迁入 |
+| S1-D34 | 服务方角色只有 service_role.verify（人工、证据可读），只属于已核实的供应商；起讫地为 UN/LOCODE；一个角色一个服务代码；主体修订后须重新核实 | T02 规格 13.1；UL PTY-ServicePartyRole | T02 引用尚不存在的 POL location 配置 |
+| S1-D35 | 交易档案固定主体的已核实修订、付款与贸易条款修订（R60 契约扩展到这两类条款）和联系人行版本；证据在发布时引用；发布须由编制人以外的人工执行（INDEPENDENT_REVIEW_REQUIRED 扩展到 PTY）；联系人可选，因 Go 的联系人只属于客户 | Python party_profile；岗位模板独立性原则 | Python 固定主体行版本、保存时引用证据 |
+| S1-D36 | 新增 contact.revise（人工或 AI），与 party.revise 相同：已核实联系人回到草稿并保留旧修订 | PTY-INV-001；没有它联系人版本永不过期 | Python 以 master.revise 修订联系人 |
+| S1-D37 | 货号映射有自己的 ID，键（主体、角色、外部货号）在首次保存时固定；同键只允许一个生效修订（数据库唯一索引，BUSINESS_KEY_CONFLICT）；主体 ID 按原样保存，由下游核对（PTY 不是 CAT 的上游）；发布不要求独立；没有退役命令，已发布的键不能释放（设计缺口）；外部货号精确匹配、区分大小写，拒绝首尾空白与控制字符 | 战术模型 CAT-AGG-ItemCodeMapping；R06 | Python 允许后续修订改键 |
+| S1-D38 | 已不适用的引用（旧 SKU 规格修订、已修订的联系人或主体修订）返回 REFERENCE_STALE（409，刷新后重提）；不存在、不可见或从未核实的返回 REFERENCE_INVALID | 错误码目录 | Python 一律 REFERENCE_INVALID |
+| S1-D39 | brant-cli foundation-demo 每次运行新建合成公司（tenant.synthetic.demo），只发布 POL 的 18 种配置共 20 条；数值经 POL 查询与 kernel 计算 | Python foundation-demo | Python 22 条，含 4 种在 Brant 不属于 POL 的类型 |
+| S1-D40 | HTTP 反射映射中复数缩写保持完整（EvidenceIDs 为 evidence_ids），任何配置引用的 ConfigID 都映射为 id | S1-D23 | — |
 
 ## 03 Python 测试移植 {#s3}
 
-08 阶段映射表中 T01 与共享基础 V0.2 的 73 个测试方法：63 个已移植（PORTED），3 个为 SQLite 专属（NOT_APPLICABLE），7 个未移植。未移植的 7 个中 3 个已移植一半（模板渲染为文件不属于 POL；快照读取时重查证据未实现；SKU 档案一半属于 CAT），2 个属于 PTY、CAT 尚未实现的档案，1 个依赖 Go 不提供的 fx.convert 命令，1 个为 CLI 演示。主体筛查与名单在 Python V0.50 中没有实现，Go 测试引用 TD-AT15 与 PTY-INV-002。每个 Go 测试在注释中引用其来源。
+08 阶段映射表中 T01 与共享基础 V0.2 的 73 个测试方法：67 个已移植（PORTED），2 个登记为有意背离（DIVERGES_BY_DESIGN：POL 对象属于公司、不提供 fx.convert，引用 X-INV-003 与 POL-INV-003），3 个为 SQLite 专属（NOT_APPLICABLE），1 个未移植：编号与模板一半已移植，按模板渲染为文件归 TRD 正式化，目标改为 TRD，随 S3-04 移植。主体筛查与名单在 Python V0.50 中没有实现，Go 测试引用 TD-AT15 与 PTY-INV-002。每个 Go 测试在注释中引用其来源。
 
 {{s1_ported}}
 
@@ -101,7 +111,7 @@ foot: S1 Execution Report V0.1 · 2026-11-10
 {{s1_evidence}}
 
 > [!warn] 尚未执行
-> 真实身份提供方；Inbox 订阅登记与 WF-03 风险传播（S4-06，消费方尚未接入）；定时复筛任务（现只有待复筛查询）；主体交易档案、地址与服务方角色（S1-02）与货号映射（S1-03）；Bento 上游对丢失 COMMIT 应答的修复；真实名单文件、真实客户样例与真人签核。G0、G1 仍为 NO-GO。
+> 真实身份提供方；Inbox 订阅登记与 WF-03 风险传播（S4-06，消费方尚未接入）；定时复筛任务（现只有待复筛查询）；TradingProfileRef 与 AddressRoleRef 的守卫函数（R13 有守卫锁，TRD 在 S3 需要）；货号映射退役、服务方角色撤回与交易档案草稿丢弃（设计中没有对应命令）；Bento 上游对丢失 COMMIT 应答的修复；真实名单文件、真实客户样例与真人签核。G0、G1 仍为 NO-GO。
 
 > [!decision] 已决定（负责人，2026-11-10）
 > 配置发布的核实证据须可读：Context Map 新增 R63 EVD→POL，POL 发布前经 EVD 读取证据，不可读返回 REFERENCE_INVALID（S1-D16）。受保护主干不配置：GitHub 免费版私有仓库不提供，C09 非阻断，记为接受的缺口。真实身份提供方接入延后到 B0 试点门之前；C10 的其余要求（令牌取得租户与公司、权限纪元、人工专属命令、岗位与数据范围）已满足。

@@ -1,14 +1,14 @@
 {
-  "recorded_at": "2026-11-10T13:22:21+00:00",
+  "recorded_at": "2026-11-10T14:28:43+00:00",
   "host": {
     "os": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
     "kernel": "6.18.54.1-microsoft-standard-WSL2"
   },
   "git": {
-    "branch": "s1/role-templates",
-    "head": "92b89d4bb2b22a6cb7012b8cafab4daae32f004c",
+    "branch": "s1/finish",
+    "head": "ed169016ee8dc2bda0f63153f37aeb41003bdd86",
     "remote": "https://github.com/idpxyz/idp-brantgo.git",
-    "working_tree": "archive sources and the README edited for V1.4, not yet committed; Go sources as committed"
+    "working_tree": "Go sources as committed; archive generated files not yet rebuilt"
   },
   "go": {
     "default": "go version go1.26.8 linux/amd64",

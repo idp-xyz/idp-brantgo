@@ -1,5 +1,6 @@
 // Package contact is the Contact aggregate: a person at a customer party. A contact is confirmed
-// only while its party is a confirmed customer the confirming human sees.
+// only while its party is a confirmed customer the confirming human sees; a confirmed contact is
+// revised back into a draft, never edited (PTY-INV-001), and its confirmed revisions are kept.
 package contact
 
 import (

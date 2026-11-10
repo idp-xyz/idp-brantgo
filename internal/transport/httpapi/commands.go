@@ -301,11 +301,17 @@ type reasoned struct {
 }
 
 func ptyCommands(c PTY) *commandSet {
+	type address struct {
+		AddressID string `json:"address_id"`
+		Role      string `json:"role"`
+		Address   string `json:"address"`
+	}
 	type saveParty struct {
-		ID              string   `json:"id"`
-		ExpectedVersion *int64   `json:"expected_version"`
-		Name            string   `json:"name"`
-		Roles           []string `json:"roles"`
+		ID              string    `json:"id"`
+		ExpectedVersion *int64    `json:"expected_version"`
+		Name            string    `json:"name"`
+		Roles           []string  `json:"roles"`
+		Addresses       []address `json:"addresses"`
 	}
 	type saveContact struct {
 		ID              string `json:"id"`
@@ -316,7 +322,11 @@ func ptyCommands(c PTY) *commandSet {
 	return &commandSet{bc: "pty", contract: ptyapi.Contract, auditor: c, audit: c.Audit, commands: map[string]commandFunc{
 		ptyapi.CommandSaveParty: handle(func(key string, a saveParty) (ptyapi.SaveParty, error) {
 			v, err := version(a.ExpectedVersion)
-			return ptyapi.SaveParty{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, Name: a.Name, Roles: a.Roles}, err
+			cmd := ptyapi.SaveParty{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, Name: a.Name, Roles: a.Roles}
+			for _, ad := range a.Addresses {
+				cmd.Addresses = append(cmd.Addresses, ptyapi.Address(ad))
+			}
+			return cmd, err
 		}, c.SaveParty),
 		ptyapi.CommandConfirmParty: handle(func(key string, a evidenced) (ptyapi.ConfirmParty, error) {
 			v, err := version(a.ExpectedVersion)
@@ -338,6 +348,30 @@ func ptyCommands(c PTY) *commandSet {
 			v, err := version(a.ExpectedVersion)
 			return ptyapi.ConfirmContact{IdempotencyKey: key, ContactID: a.ID, ExpectedVersion: v, EvidenceIDs: a.EvidenceIDs}, err
 		}, c.ConfirmContact),
+		ptyapi.CommandReviseContact: handle(func(key string, a reasoned) (ptyapi.ReviseContact, error) {
+			v, err := version(a.ExpectedVersion)
+			return ptyapi.ReviseContact{IdempotencyKey: key, ContactID: a.ID, ExpectedVersion: v, Reason: a.Reason}, err
+		}, c.ReviseContact),
+		ptyapi.CommandVerifyServiceRole: handle(func(key string, a verifyServiceRole) (ptyapi.VerifyServiceRole, error) {
+			v, err := version(a.ExpectedVersion)
+			return ptyapi.VerifyServiceRole{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, ServiceRoleID: a.ServiceRoleID, Role: a.Role,
+				ServiceCode: a.ServiceCode, Origin: a.Origin, Destination: a.Destination, ValidFrom: a.ValidFrom, ValidUntil: a.ValidUntil,
+				EvidenceIDs: a.EvidenceIDs}, err
+		}, c.VerifyServiceRole),
+		ptyapi.CommandSaveTradingProfile: handle(func(key string, a saveTradingProfile) (ptyapi.SaveTradingProfile, error) {
+			v, err := version(a.ExpectedVersion)
+			cmd := ptyapi.SaveTradingProfile{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, PartyRevision: a.PartyRevision,
+				PaymentTerms: ptyapi.TermsRef(a.PaymentTerms), TradeTerms: ptyapi.TermsRef(a.TradeTerms), Owner: ptyapi.OwnerRef(a.Owner)}
+			for _, r := range a.ContactRefs {
+				cmd.ContactRefs = append(cmd.ContactRefs, ptyapi.PinnedContact(r))
+			}
+			return cmd, err
+		}, c.SaveTradingProfile),
+		ptyapi.CommandPublishTradingProfile: handle(func(key string, a publishRevision) (ptyapi.PublishTradingProfile, error) {
+			v, err := version(a.ExpectedVersion)
+			return ptyapi.PublishTradingProfile{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, Revision: a.Revision,
+				EvidenceIDs: a.EvidenceIDs, Reason: a.Reason}, err
+		}, c.PublishTradingProfile),
 		ptyapi.CommandRecordScreening: handle(func(key string, a recordScreening) (ptyapi.RecordScreening, error) {
 			v, err := version(a.ExpectedVersion)
 			return ptyapi.RecordScreening{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, RegulationID: a.RegulationID,
@@ -353,6 +387,51 @@ func ptyCommands(c PTY) *commandSet {
 			return ptyapi.BlockParty{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, Reason: a.Reason}, err
 		}, c.BlockParty),
 	}}
+}
+
+type verifyServiceRole struct {
+	ID              string   `json:"id"`
+	ExpectedVersion *int64   `json:"expected_version"`
+	ServiceRoleID   string   `json:"service_role_id"`
+	Role            string   `json:"role"`
+	ServiceCode     string   `json:"service_code"`
+	Origin          string   `json:"origin"`
+	Destination     string   `json:"destination"`
+	ValidFrom       string   `json:"valid_from"`
+	ValidUntil      string   `json:"valid_until"`
+	EvidenceIDs     []string `json:"evidence_ids"`
+}
+
+type termsRef struct {
+	Kind     string `json:"kind"`
+	ConfigID string `json:"id"`
+	Revision int64  `json:"revision"`
+}
+
+type saveTradingProfile struct {
+	ID              string   `json:"id"`
+	ExpectedVersion *int64   `json:"expected_version"`
+	PartyRevision   int64    `json:"party_revision"`
+	PaymentTerms    termsRef `json:"payment_terms"`
+	TradeTerms      termsRef `json:"trade_terms"`
+	Owner           struct {
+		ActorID string `json:"actor_id"`
+		TeamID  string `json:"team_id"`
+	} `json:"owner"`
+	ContactRefs []struct {
+		ContactID  string `json:"id"`
+		RowVersion int64  `json:"row_version"`
+	} `json:"contact_refs"`
+}
+
+// publishRevision publishes one revision of a versioned root on evidence (trading profiles, item
+// code mappings).
+type publishRevision struct {
+	ID              string   `json:"id"`
+	ExpectedVersion *int64   `json:"expected_version"`
+	Revision        int64    `json:"revision"`
+	EvidenceIDs     []string `json:"evidence_ids"`
+	Reason          string   `json:"reason"`
 }
 
 type recordScreening struct {
@@ -439,7 +518,27 @@ func catCommands(c CAT) *commandSet {
 			v, err := version(a.ExpectedVersion)
 			return catapi.DeactivateSku{IdempotencyKey: key, SkuID: a.ID, ExpectedVersion: v, Reason: a.Reason}, err
 		}, c.DeactivateSku),
+		catapi.CommandSaveItemCodeMapping: handle(func(key string, a saveItemCodeMapping) (catapi.SaveItemCodeMapping, error) {
+			v, err := version(a.ExpectedVersion)
+			return catapi.SaveItemCodeMapping{IdempotencyKey: key, MappingID: a.ID, ExpectedVersion: v, PartyID: a.PartyID, PartyRole: a.PartyRole,
+				ExternalCode: a.ExternalCode, SkuID: a.SkuID, SpecRevision: a.SpecRevision}, err
+		}, c.SaveItemCodeMapping),
+		catapi.CommandPublishItemCodeMapping: handle(func(key string, a publishRevision) (catapi.PublishItemCodeMapping, error) {
+			v, err := version(a.ExpectedVersion)
+			return catapi.PublishItemCodeMapping{IdempotencyKey: key, MappingID: a.ID, ExpectedVersion: v, Revision: a.Revision,
+				EvidenceIDs: a.EvidenceIDs, Reason: a.Reason}, err
+		}, c.PublishItemCodeMapping),
 	}}
+}
+
+type saveItemCodeMapping struct {
+	ID              string `json:"id"`
+	ExpectedVersion *int64 `json:"expected_version"`
+	PartyID         string `json:"party_id"`
+	PartyRole       string `json:"party_role"`
+	ExternalCode    string `json:"external_code"`
+	SkuID           string `json:"sku_id"`
+	SpecRevision    int64  `json:"spec_revision"`
 }
 
 func inqCommands(c INQ) *commandSet {

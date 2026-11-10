@@ -7,20 +7,22 @@
 - Go `1.26.5` (`toolchain` directive); PostgreSQL 16.
 - The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is not published with the code. `docs/00_START_HERE/00_INDEX.html` is its entry page.
 
-M0 built the engineering baseline. S1 (master data and inquiry) is in progress: EVD, PTY with party screening, CAT, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. Trading profiles, addresses and service roles of parties, item-code mapping and the connection to a real identity provider (deferred to the B0 pilot gate) are not done yet.
+M0 built the engineering baseline. S1 (master data and inquiry) is done: EVD, PTY with party screening, trading profiles, address roles and service roles, CAT with item-code mappings, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. `brant-cli foundation-demo` publishes a synthetic foundation. The connection to a real identity provider is deferred to the B0 pilot gate. S2 (sourcing and costing) is next.
 
 ## Layout
 
 ```
 cmd/brant-api/                    HTTP API: S1 command routes and audited reads behind OIDC access tokens
 cmd/brant-admin/                  operator-only grants and roles: authority row, permissions, data scope, role definitions and assignments
+cmd/brant-cli/                    local operations and demo: foundation-demo publishes synthetic POL configurations in a fresh company
 cmd/brant-migrate/                operator-only migrations: Bento schema, framework migration, then each manifest directory in order
 cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink, settle; at least once
 internal/bootstrap/               composition root: one connection pool, a Bento transaction owner per context and for the relay
 internal/contexts/evd/            EVD: text sources (content, origin, import) and business files, immutable; SourceRef lookup
 internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup;
-                                  party screening with positive and negative lists and PartyScreeningGuard v1
-internal/contexts/cat/            CAT: SKUs and specification revisions; SkuRef lookup
+                                  address roles, service roles, trading profiles; party screening with positive and negative
+                                  lists and PartyScreeningGuard v1
+internal/contexts/cat/            CAT: SKUs and specification revisions, item-code mappings; SkuRef and ItemCodeMappingRef lookups
 internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed
 internal/contexts/pol/            POL: eighteen configuration kinds with independent publication, ConfigGuard v1, FX, tax and
                                   unit lookups, document numbers, foundation snapshots

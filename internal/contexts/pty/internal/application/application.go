@@ -9,6 +9,7 @@ package application
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,11 +32,12 @@ import (
 
 // Read commands and permissions.
 const (
-	CommandGetParty   = "party.get"
-	CommandGetContact = "contact.get"
-	CommandAudit      = "pty.audit"
-	PermissionRead    = "pty.read"
-	PermissionAudit   = "pty.audit"
+	CommandGetParty          = "party.get"
+	CommandGetContact        = "contact.get"
+	CommandGetTradingProfile = "trading_profile.get"
+	CommandAudit             = "pty.audit"
+	PermissionRead           = "pty.read"
+	PermissionAudit          = "pty.audit"
 )
 
 var (
@@ -43,10 +45,11 @@ var (
 	humanOrAgent = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}
 )
 
-// Rules is PTY's authorization policy. Confirming and deactivating are human only (05 stage
-// humanOnlyCommands); saving and revising drafts are open to AI agents with the grant. Screening is
-// open to AI agents; deciding a suspected match and blocking a party are human only, and their
-// permissions belong to the compliance template alone.
+// Rules is PTY's authorization policy. Confirming, deactivating, verifying a service role and
+// publishing a trading profile are human only (05 stage humanOnlyCommands); saving and revising
+// drafts are open to AI agents with the grant. Screening is open to AI agents; deciding a suspected
+// match and blocking a party are human only, and their permissions belong to the compliance template
+// alone.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandSaveParty, Permission: api.CommandSaveParty, ActorKinds: humanOrAgent},
@@ -55,6 +58,11 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandDeactivateParty, api.CommandDeactivateParty),
 		{Command: api.CommandSaveContact, Permission: api.CommandSaveContact, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandConfirmContact, api.CommandConfirmContact),
+		{Command: api.CommandReviseContact, Permission: api.CommandReviseContact, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandVerifyServiceRole, api.CommandVerifyServiceRole),
+		{Command: api.CommandSaveTradingProfile, Permission: api.CommandSaveTradingProfile, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandPublishTradingProfile, api.CommandPublishTradingProfile),
+		{Command: CommandGetTradingProfile, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandRecordScreening, Permission: api.CommandRecordScreening, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandDecideScreening, api.CommandDecideScreening),
 		authorization.HumanOnly(api.CommandBlockParty, api.CommandBlockParty),
@@ -66,7 +74,8 @@ func Rules() []authorization.Rule {
 	}
 }
 
-// Visible reports whether d's actor sees the party or contact a stored result names.
+// Visible reports whether d's actor sees the party or contact a stored result names. A service role
+// and a trading profile are seen with their party, whose ID the result names.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	scope, _ := bento.ScopeFromContext(ctx)
 	if strings.HasPrefix(command, "contact.") {
@@ -104,28 +113,44 @@ func (s Service) run(ctx context.Context, cmd action.Command, args any, validati
 	return api.Receipt(res), err
 }
 
-// SaveParty saves a whole draft party (Python master.upsert_draft kind=customer/supplier).
+// SaveParty saves a whole draft party with its addresses (Python master.upsert_draft
+// kind=customer/supplier; party_profile.addresses).
 func (s Service) SaveParty(ctx context.Context, cmd api.SaveParty) (api.Receipt, error) {
 	roles := make([]party.Role, len(cmd.Roles))
 	for i, r := range cmd.Roles {
 		roles[i] = party.Role(r)
 	}
+	addresses := make([]party.Address, len(cmd.Addresses))
+	for i, a := range cmd.Addresses {
+		addresses[i] = party.Address{ID: a.AddressID, Role: party.AddressRole(a.Role), Text: a.Address}
+	}
+	// The request hash covers the business arguments in a canonical order (addresses by ID); a
+	// party saved without addresses hashes as before addresses existed.
 	return s.run(ctx, action.Command{Name: api.CommandSaveParty, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.PartyID},
 		struct {
-			ID, Name string
-			Roles    []string
-		}{cmd.PartyID, cmd.Name, cmd.Roles}, cmd.Validate(),
+			ID, Name  string
+			Roles     []string
+			Addresses []party.Address `json:",omitempty"`
+		}{cmd.PartyID, cmd.Name, cmd.Roles, party.SortAddresses(addresses)}, cmd.Validate(),
 		&partyCommand{s: s, id: cmd.PartyID, apply: func(h *partyCommand, ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 			if err := lifecycle.CheckSave(h.record(), h.visible(d), cmd.ExpectedVersion); err != nil {
 				return action.Outcome{}, err
 			}
 			if h.p == nil {
 				h.p = &party.Party{Record: lifecycle.New(cmd.PartyID, d.Actor.ID, d.Team)}
-				h.p.ReplaceDraft(cmd.Name, roles)
-				return h.outcome(nil), postgres.InsertParty(ctx, exec, h.scope(ctx), h.p, s.Clock.Now())
+				h.p.ReplaceDraft(cmd.Name, roles, addresses)
+				err := postgres.InsertParty(ctx, exec, h.scope(ctx), h.p, s.Clock.Now())
+				if err == nil {
+					err = postgres.ReplaceAddresses(ctx, exec, h.scope(ctx), h.p)
+				}
+				return h.outcome(nil), err
 			}
-			h.p.ReplaceDraft(cmd.Name, roles)
-			return h.save(ctx, exec, nil)
+			h.p.ReplaceDraft(cmd.Name, roles, addresses)
+			out, err := h.save(ctx, exec, nil)
+			if err == nil {
+				err = postgres.ReplaceAddresses(ctx, exec, h.scope(ctx), h.p)
+			}
+			return out, err
 		}})
 }
 
@@ -201,9 +226,11 @@ func (h *partyCommand) scope(ctx context.Context) kernel.Scope {
 
 func (h *partyCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
 	var err error
+	h.from = 0
 	h.p, err = postgres.LoadParty(ctx, exec, h.scope(ctx), h.id, postgres.ForUpdate)
-	if h.p != nil {
+	if err == nil && h.p != nil {
 		h.from = h.p.RowVersion
+		h.p.Addresses, err = postgres.Addresses(ctx, exec, h.scope(ctx), h.id)
 	}
 	return err
 }
@@ -236,7 +263,9 @@ func (h *partyCommand) outcome(event *action.Event) action.Outcome {
 	out := action.Outcome{ObjectID: h.p.ID, RowVersion: h.p.RowVersion, Status: string(h.p.Status)}
 	if event != nil {
 		event.AggregateType, event.AggregateID, event.AggregateVersion = "Party", h.p.ID, h.p.RowVersion
-		event.Fields = map[string]any{"party_id": h.p.ID, "row_version": h.p.RowVersion, "revision": h.p.Revision}
+		fields := map[string]any{"party_id": h.p.ID, "row_version": h.p.RowVersion, "revision": h.p.Revision}
+		maps.Copy(fields, event.Fields)
+		event.Fields = fields
 		out.Events = []action.Event{*event}
 	}
 	return out
@@ -314,6 +343,24 @@ func (s Service) ConfirmContact(ctx context.Context, cmd api.ConfirmContact) (ap
 			ID       string
 			Evidence []string
 		}{cmd.ContactID, cmd.EvidenceIDs}, cmd.Validate(), &preparedContact{h})
+}
+
+// ReviseContact reopens a confirmed contact as a draft; its confirmed revisions stay
+// (PTY-INV-001, Python master.revise of a contact). References that pinned its row version become
+// stale for new use.
+func (s Service) ReviseContact(ctx context.Context, cmd api.ReviseContact) (api.Receipt, error) {
+	return s.run(ctx, action.Command{Name: api.CommandReviseContact, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ContactID, Reason: cmd.Reason},
+		struct{ ID, Reason string }{cmd.ContactID, cmd.Reason}, cmd.Validate(),
+		&contactCommand{s: s, id: cmd.ContactID, apply: func(h *contactCommand, ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+			if err := lifecycle.Check(h.record(), h.visible(d), cmd.ExpectedVersion, lifecycle.Confirmed); err != nil {
+				return action.Outcome{}, err
+			}
+			h.c.Move(lifecycle.Draft)
+			out, err := h.save(ctx, exec, false)
+			out.Events = []action.Event{{Type: api.EventContactRevised, AggregateType: "Contact", AggregateID: h.c.ID, AggregateVersion: h.c.RowVersion,
+				Fields: map[string]any{"contact_id": h.c.ID, "party_id": h.c.PartyID, "row_version": h.c.RowVersion}}}
+			return out, err
+		}})
 }
 
 type contactCommand struct {
@@ -405,11 +452,24 @@ func (s Service) GetParty(ctx context.Context, id string) (api.PartyView, error)
 		if p == nil || !d.Sees(p.OwnerActor, p.OwnerTeam) {
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
-		v = api.PartyView{PartyID: p.ID, Status: string(p.Status), RowVersion: p.RowVersion, Name: p.Name, Roles: roleNames(p)}
+		v = api.PartyView{PartyID: p.ID, Status: string(p.Status), RowVersion: p.RowVersion, Revision: p.Revision, Name: p.Name,
+			Roles: roleNames(p), ServiceRoles: []api.ServiceRoleView{}}
+		addresses, err := postgres.Addresses(ctx, exec, scope, id)
+		if err != nil {
+			return err
+		}
+		v.Addresses = addressViews(addresses)
 		revisions, err := postgres.PartyRevisions(ctx, exec, scope, id)
+		if err != nil {
+			return err
+		}
 		for _, r := range revisions {
 			v.Revisions = append(v.Revisions, api.PartyRevision{Revision: r.Revision, Name: r.Name, Roles: r.Roles,
-				EvidenceIDs: r.Confirmation.EvidenceIDs, ConfirmedBy: r.Confirmation.By})
+				Addresses: addressViews(r.Addresses), EvidenceIDs: r.Confirmation.EvidenceIDs, ConfirmedBy: r.Confirmation.By})
+		}
+		roles, err := postgres.ServiceRoles(ctx, exec, scope, id)
+		for _, r := range roles {
+			v.ServiceRoles = append(v.ServiceRoles, serviceRoleView(r.Role))
 		}
 		return err
 	})
@@ -449,7 +509,8 @@ func (s Service) ResolveParties(ctx context.Context, q api.Resolve) (api.Resolve
 		}
 		for _, p := range parties {
 			if d.Sees(p.OwnerActor, p.OwnerTeam) {
-				out.Parties[p.ID] = api.PartyRef{PartyID: p.ID, RowVersion: p.RowVersion, Status: string(p.Status), Roles: roleNames(p)}
+				out.Parties[p.ID] = api.PartyRef{PartyID: p.ID, RowVersion: p.RowVersion, Status: string(p.Status), Roles: roleNames(p),
+					Revision: p.Revision}
 			}
 		}
 		contacts, err := postgres.Contacts(ctx, exec, scope, slices.Compact(slices.Sorted(slices.Values(q.ContactIDs))))

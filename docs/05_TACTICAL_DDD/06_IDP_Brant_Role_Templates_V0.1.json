@@ -21,6 +21,7 @@
     "claim.open",
     "clm.read",
     "cnx.read",
+    "contact.revise",
     "contact.save_draft",
     "credit_limit.request",
     "crm.read",
@@ -31,6 +32,7 @@
     "ful.read",
     "goal.verify",
     "inq.read",
+    "item_code_mapping.save_draft",
     "lead.capture",
     "mfg.read",
     "object_control.bind",
@@ -153,6 +155,7 @@
     "cat.read",
     "clm.read",
     "cnx.read",
+    "contact.revise",
     "contact.save_draft",
     "crm.read",
     "cst.read",
@@ -161,6 +164,7 @@
     "ful.read",
     "goal.verify",
     "inq.read",
+    "item_code_mapping.save_draft",
     "logistics_offer.save_draft",
     "logistics_offer.verify",
     "logistics_offer.withdraw",
@@ -207,6 +211,7 @@
     "task.resume",
     "task.scope",
     "task.take_control",
+    "trading_profile.save_draft",
     "trd.read",
     "tsk.read"
    ]
@@ -924,6 +929,12 @@
    "command": "config.publish",
    "independentOf": "该修订的最后编辑人",
    "context": "POL",
+   "state": "IMPLEMENTED"
+  },
+  {
+   "command": "trading_profile.publish",
+   "independentOf": "该修订的最后编辑人",
+   "context": "PTY",
    "state": "IMPLEMENTED"
   },
   {

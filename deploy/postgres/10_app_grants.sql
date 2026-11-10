@@ -47,11 +47,30 @@ GRANT SELECT, INSERT ON brant_pty.party_screening, brant_pty.screening_result, b
 GRANT UPDATE (row_version, current_screening_id, status, negative, updated_at) ON brant_pty.party_screening TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_pty.party_screening_state(text, timestamptz, boolean),
     brant_pty.party_screening_guard_v1(text, timestamptz) TO brant_app;
+-- PTY profiles: a draft party's addresses are replaced whole (trigger: only while the party is a draft);
+-- confirmed revisions' addresses and verified service roles only grow. A trading profile's root
+-- moves its version; a working revision is edited and published, a published one only superseded
+-- (trigger); a working revision's contacts are replaced whole (trigger).
+GRANT SELECT, INSERT, DELETE ON brant_pty.party_address, brant_pty.trading_profile_contact TO brant_app;
+GRANT SELECT, INSERT ON brant_pty.party_revision_address, brant_pty.service_role, brant_pty.trading_profile,
+    brant_pty.trading_profile_revision TO brant_app;
+GRANT UPDATE (root_version, last_revision, updated_at) ON brant_pty.trading_profile TO brant_app;
+GRANT UPDATE (status, content_hash, party_revision, payment_terms_id, payment_terms_revision, trade_terms_id, trade_terms_revision,
+              owner_actor_id, owner_team_id, saved_by_kind, saved_by_id, saved_epoch, saved_at, published_by_kind, published_by_id,
+              publish_epoch, published_at, evidence_ids, ended_at)
+    ON brant_pty.trading_profile_revision TO brant_app;
 
 -- CAT: SKUs change through their lifecycle; specification revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_cat TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_cat.sku TO brant_app;
 GRANT SELECT, INSERT ON brant_cat.sku_revision, brant_cat.action_result, brant_cat.audit_event TO brant_app;
+-- CAT item code mappings: a root's version and a draft revision change; a published revision changes
+-- only its status and supersession (trigger); the key never changes.
+GRANT SELECT, INSERT ON brant_cat.item_code_mapping, brant_cat.item_code_mapping_revision TO brant_app;
+GRANT UPDATE (root_version, last_revision, updated_at) ON brant_cat.item_code_mapping TO brant_app;
+GRANT UPDATE (status, sku_id, spec_revision, saved_by_kind, saved_by_id, saved_epoch, saved_at, published_by_kind,
+              published_by_id, publish_epoch, published_at, evidence_ids, superseded_at)
+    ON brant_cat.item_code_mapping_revision TO brant_app;
 
 -- POL: a root's version and a working revision change; a published revision changes only its status and
 -- end (trigger); counters count up; issued numbers, snapshots and the ledger only grow.

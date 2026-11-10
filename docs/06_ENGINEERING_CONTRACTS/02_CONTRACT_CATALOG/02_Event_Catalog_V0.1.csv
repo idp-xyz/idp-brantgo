@@ -3,7 +3,10 @@ PTY,PartyConfirmed,idp-brant.pty.party_confirmed.v1,idp-brant.pty,Party,S1
 PTY,PartyRevised,idp-brant.pty.party_revised.v1,idp-brant.pty,Party,S1
 PTY,PartyDeactivated,idp-brant.pty.party_deactivated.v1,idp-brant.pty,Party,S1
 PTY,ContactConfirmed,idp-brant.pty.contact_confirmed.v1,idp-brant.pty,Contact,S1
+PTY,ContactRevised,idp-brant.pty.contact_revised.v1,idp-brant.pty,Contact,S1
 PTY,ServiceRoleVerified,idp-brant.pty.service_role_verified.v1,idp-brant.pty,Party,S1
+PTY,TradingProfilePublished,idp-brant.pty.trading_profile_published.v1,idp-brant.pty,TradingProfile,S1
+PTY,PartyScreeningRecorded,idp-brant.pty.party_screening_recorded.v1,idp-brant.pty,PartyScreening,S1
 PTY,PartyScreeningDecided,idp-brant.pty.party_screening_decided.v1,idp-brant.pty,PartyScreening,S1
 PTY,PartyScreeningBlocked,idp-brant.pty.party_screening_blocked.v1,idp-brant.pty,PartyScreening,S1
 CAT,SkuConfirmed,idp-brant.cat.sku_confirmed.v1,idp-brant.cat,Sku,S1

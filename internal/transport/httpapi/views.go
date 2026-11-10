@@ -80,6 +80,7 @@ type revisionView struct {
 	Name        string    `json:"name"`
 	Roles       []string  `json:"roles,omitempty"`
 	BaseUOM     string    `json:"base_uom,omitempty"`
+	Addresses   any       `json:"addresses,omitempty"`
 	EvidenceIDs []string  `json:"evidence_ids"`
 	ConfirmedBy actorView `json:"confirmed_by"`
 }
@@ -89,16 +90,29 @@ type partyJSON struct {
 	PartyID    string         `json:"party_id"`
 	Status     string         `json:"status"`
 	RowVersion int64          `json:"row_version"`
+	Revision   int64          `json:"revision"` // latest confirmed revision; 0: never confirmed
 	Name       string         `json:"name,omitempty"`
 	Roles      []string       `json:"roles"`
+	Addresses  any            `json:"addresses"`
 	Revisions  []revisionView `json:"revisions"`
+	// ServiceRoles are every verified revision of the party's service roles.
+	ServiceRoles any `json:"service_roles"`
+}
+
+// list returns the tagged copy of a slice, never null.
+func list[T any](s []T) any {
+	if s == nil {
+		s = []T{}
+	}
+	return wire(s)
 }
 
 func partyView(v ptyapi.PartyView) partyJSON {
-	out := partyJSON{OK: true, PartyID: v.PartyID, Status: v.Status, RowVersion: v.RowVersion, Name: v.Name, Roles: v.Roles, Revisions: []revisionView{}}
+	out := partyJSON{OK: true, PartyID: v.PartyID, Status: v.Status, RowVersion: v.RowVersion, Revision: v.Revision, Name: v.Name, Roles: v.Roles,
+		Addresses: list(v.Addresses), Revisions: []revisionView{}, ServiceRoles: list(v.ServiceRoles)}
 	for _, r := range v.Revisions {
-		out.Revisions = append(out.Revisions, revisionView{Revision: r.Revision, Name: r.Name, Roles: r.Roles, EvidenceIDs: r.EvidenceIDs,
-			ConfirmedBy: actorView{string(r.ConfirmedBy.Kind), r.ConfirmedBy.ID}})
+		out.Revisions = append(out.Revisions, revisionView{Revision: r.Revision, Name: r.Name, Roles: r.Roles, Addresses: list(r.Addresses),
+			EvidenceIDs: r.EvidenceIDs, ConfirmedBy: actorView{string(r.ConfirmedBy.Kind), r.ConfirmedBy.ID}})
 	}
 	return out
 }
