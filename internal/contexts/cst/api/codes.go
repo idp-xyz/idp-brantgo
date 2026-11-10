@@ -1,16 +1,11 @@
-// Package api is the contract of the CST bounded context (costing: costing contexts, cost
-// scenarios, their evaluation and frozen cost snapshots) for transports, the AI layer and the
-// contexts downstream of CST. It exposes no CST domain type.
-//
-// So far it declares the rejection codes CST decides with (error catalog V0.1, the rows whose
-// contexts include CST); commands, queries and events follow with the application layer.
 package api
 
 import "go.idp.xyz/idp-brant/internal/kernel"
 
-// Codes CST declares, with the category the error catalog V0.1 gives them (422 invalid, 409
-// conflict). CST also answers with the shared kernel codes (SCHEMA_INVALID, INVALID_KNOWN_VALUE,
-// REFERENCE_INVALID, DUPLICATE_LINE_ID, DRAFT_NOT_READY and the rest).
+// Codes CST declares (error catalog V0.1, the rows whose contexts include CST), with the category
+// the catalog gives them (422 invalid, 409 conflict). CST also answers with the shared kernel codes
+// (SCHEMA_INVALID, INVALID_KNOWN_VALUE, REFERENCE_INVALID, DUPLICATE_LINE_ID, INVALID_STATE and the
+// rest) and passes on POL's CONFIG_NOT_ACTIVE and CONFIG_EXPIRED for a configuration not in force.
 const (
 	CodeCalculationLimitExceeded = "CALCULATION_LIMIT_EXCEEDED" // input or arithmetic beyond the resource budget
 	CodeDependencyNotSupported   = "DEPENDENCY_NOT_SUPPORTED"   // a dependency path not delivered yet
