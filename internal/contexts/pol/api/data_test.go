@@ -54,18 +54,15 @@ func valid() map[string]ConfigData {
 			LimitSources:         []string{LimitSourceInternalAssessment, LimitSourceSinosureBuyerLimit},
 			ApprovalTiers:        []CreditApprovalTier{{Level: "credit_officer", MaxAmount: "1000"}, {Level: "credit_manager", MaxAmount: "10000.00"}},
 			OverdueToleranceDays: 30}},
+		KindScreeningRegulation: {ScreeningRegulation: &ScreeningRegulation{RescreenIntervalDays: 90,
+			Lists: []ScreeningList{{ListCode: "cn.export_control", Jurisdiction: JurisdictionCN},
+				{ListCode: "eu.consolidated", Jurisdiction: JurisdictionForeign, LegalConfirmationEvidenceID: "src.legal.1"}}}},
 	}
 }
 
 func TestEveryImplementedKindHasAContract(t *testing.T) {
 	data := valid()
 	for _, kind := range kinds {
-		if kind == KindScreeningRegulation {
-			if KindImplemented(kind) {
-				t.Fatal("screening_regulation waits for its own contract")
-			}
-			continue
-		}
 		d, ok := data[kind]
 		if !ok || !KindImplemented(kind) {
 			t.Fatalf("%s has no example or is not implemented", kind)

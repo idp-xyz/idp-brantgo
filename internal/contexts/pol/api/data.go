@@ -128,6 +128,7 @@ type ConfigData struct {
 	DocumentTemplate      *DocumentTemplate
 	QuoteDocumentTemplate *QuoteDocumentTemplate
 	CreditPolicy          *CreditPolicy
+	ScreeningRegulation   *ScreeningRegulation
 }
 
 // CompanyProfile is the company of the scope; its config_id is the company's ID (at most
@@ -337,6 +338,50 @@ type CreditApprovalTier struct {
 	MaxAmount string // positive
 }
 
+// ScreeningRegulation is the screening lists a company enables and how often a party is screened
+// again (ADR-BR-017, Context Map R60 POL->PTY). PTY screens only against the lists named here; a
+// conclusion stays valid RescreenIntervalDays after the screening. Brant records the lists and the
+// legal confirmations; it gives no legal opinion.
+type ScreeningRegulation struct {
+	Lists                []ScreeningList
+	RescreenIntervalDays int // 1–3650
+}
+
+// ScreeningList is one enabled list. A foreign list needs LegalConfirmationEvidenceID: the EVD
+// source of the tenant's legal confirmation, which the publication must cite among its evidence,
+// so the publisher must be able to read it (R63).
+type ScreeningList struct {
+	ListCode                    string // the list code reference data imports it under
+	Jurisdiction                string // CN, UN or foreign
+	LegalConfirmationEvidenceID string // required for a foreign list
+}
+
+func (r *ScreeningRegulation) validate() error {
+	if len(r.Lists) < 1 || len(r.Lists) > MaxScreeningLists {
+		return schema("/args/data/lists")
+	}
+	seen := map[string]bool{}
+	for i, l := range r.Lists {
+		at := "/args/data/lists/" + strconv.Itoa(i)
+		switch {
+		case len(l.ListCode) > maxListCodeLength || !kernel.ValidIdentifier(l.ListCode) || seen[l.ListCode]:
+			return schema(at + "/list_code")
+		case !slices.Contains(jurisdictions, l.Jurisdiction):
+			return schema(at + "/jurisdiction")
+		case l.LegalConfirmationEvidenceID != "" && !kernel.ValidIdentifier(l.LegalConfirmationEvidenceID):
+			return schema(at + "/legal_confirmation_evidence_id")
+		case l.Jurisdiction == JurisdictionForeign && l.LegalConfirmationEvidenceID == "":
+			// A foreign list is off unless the tenant registers its legal confirmation (SR-19).
+			return schema(at + "/legal_confirmation_evidence_id")
+		}
+		seen[l.ListCode] = true
+	}
+	if r.RescreenIntervalDays < 1 || r.RescreenIntervalDays > maxRescreenDays {
+		return schema("/args/data/rescreen_interval_days")
+	}
+	return nil
+}
+
 func (d ConfigData) validate(kind string) error {
 	members := map[string]bool{
 		KindCompanyProfile: d.CompanyProfile != nil, KindCurrency: d.Currency != nil, KindUnit: d.Unit != nil,
@@ -345,6 +390,7 @@ func (d ConfigData) validate(kind string) error {
 		KindTaxApplication: d.TaxApplication != nil, KindFeeCategory: d.FeeCategory != nil, KindPricingPolicy: d.PricingPolicy != nil,
 		KindBankAccount: d.BankAccount != nil, KindNumberSequence: d.NumberSequence != nil, KindDocumentTemplate: d.DocumentTemplate != nil,
 		KindQuoteDocumentTemplate: d.QuoteDocumentTemplate != nil, KindCreditPolicy: d.CreditPolicy != nil,
+		KindScreeningRegulation: d.ScreeningRegulation != nil,
 	}
 	for k, present := range members {
 		if present != (k == kind) {
@@ -386,6 +432,8 @@ func (d ConfigData) validate(kind string) error {
 		return d.QuoteDocumentTemplate.validate()
 	case KindCreditPolicy:
 		return d.CreditPolicy.validate()
+	case KindScreeningRegulation:
+		return d.ScreeningRegulation.validate()
 	}
 	return schema("/args/kind")
 }

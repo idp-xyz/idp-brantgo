@@ -106,6 +106,7 @@ type Content struct {
 	DocumentTemplate      *DocumentTemplate
 	QuoteDocumentTemplate *QuoteDocumentTemplate
 	CreditPolicy          *CreditPolicy
+	ScreeningRegulation   *ScreeningRegulation
 }
 
 // Validity returns the revision's validity interval.
@@ -158,6 +159,8 @@ func (c Content) Data() any {
 		return present(c.QuoteDocumentTemplate)
 	case KindCreditPolicy:
 		return present(c.CreditPolicy)
+	case KindScreeningRegulation:
+		return present(c.ScreeningRegulation)
 	}
 	return nil
 }
@@ -241,6 +244,8 @@ func (c *Content) DecodeData(raw []byte) error {
 		return decode(raw, &c.QuoteDocumentTemplate)
 	case KindCreditPolicy:
 		return decode(raw, &c.CreditPolicy)
+	case KindScreeningRegulation:
+		return decode(raw, &c.ScreeningRegulation)
 	}
 	return fmt.Errorf("pol: no data of kind %q", c.Kind)
 }
@@ -326,8 +331,9 @@ func (r *Root) Save(c Content, by kernel.ActorRef, epoch int64, at time.Time) (*
 // Publish makes working revision number active for the human by, superseding the active revision.
 // Its last editor may not publish it (POL-INV-001); its content must still be valid, its validity
 // must contain at (CONFIG_EXPIRED: an expired or future revision never replaces the active one), its
-// references must be in force, and a currency or unit keeps the definition of its latest
-// publication, retired or not (POL-INV-002). It returns the superseded revision, if any.
+// references must be in force, a screening regulation's legal confirmations must be among the
+// evidence, and a currency or unit keeps the definition of its latest publication, retired or not
+// (POL-INV-002). It returns the superseded revision, if any.
 func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, evidence []string, at time.Time) (*Revision, error) {
 	w := r.Working
 	switch {
@@ -345,6 +351,9 @@ func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, e
 		return nil, reject(CodeConfigExpired, "/args/revision")
 	}
 	if err := CheckReferences(r.ID, w.Content, f); err != nil {
+		return nil, err
+	}
+	if err := CheckLegalConfirmations(w.Content, evidence); err != nil {
 		return nil, err
 	}
 	if d := r.Definition; d != nil && !sameDefinition(d.Content, w.Content) {

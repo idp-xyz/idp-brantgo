@@ -102,6 +102,11 @@ const (
 	DocumentTypeOrder         = "order"
 	DocumentTypePurchaseOrder = "purchase_order"
 	DocumentTypeInvoice       = "invoice"
+
+	// Jurisdictions of a screening list a screening_regulation enables (ADR-BR-017).
+	JurisdictionCN      = "CN"
+	JurisdictionUN      = "UN"
+	JurisdictionForeign = "foreign"
 )
 
 // Limits of the contract.
@@ -111,6 +116,7 @@ const (
 	MaxRefs           = 200
 	MaxEvidence       = 200
 	MaxPaymentStages  = 20
+	MaxScreeningLists = 100
 
 	maxVersion            = 2147483647
 	maxNameCharacters     = 500
@@ -121,17 +127,20 @@ const (
 	minSequenceWidth      = 4
 	maxSequenceWidth      = 12
 	maxSequencePrefix     = 16
+	maxListCodeLength     = 32
+	maxRescreenDays       = 3650
 )
 
 var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
 		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy}
-	implemented   = slices.DeleteFunc(slices.Clone(kinds), func(k string) bool { return k == KindScreeningRegulation })
+	implemented   = slices.Clone(kinds)
 	purposes      = []string{PurposeCostEstimate, PurposeQuotation}
 	dimensions    = []string{DimensionCount, DimensionMass, DimensionLength, DimensionVolume}
 	triggers      = []string{TriggerOrderConfirmed, TriggerBeforeShipment, TriggerAfterShipment, TriggerAfterInvoice}
 	documentTypes = []string{DocumentTypeRfq, DocumentTypeQuote, DocumentTypeOrder, DocumentTypePurchaseOrder, DocumentTypeInvoice}
+	jurisdictions = []string{JurisdictionCN, JurisdictionUN, JurisdictionForeign}
 )
 
 // PercentFormat is the lexical form of a payment stage's percentage.

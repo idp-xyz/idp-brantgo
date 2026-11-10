@@ -77,6 +77,13 @@ func content(cmd api.SaveDraft) config.Content {
 			v.ApprovalTiers[i] = config.CreditApprovalTier(t)
 		}
 		c.CreditPolicy = &v
+	case d.ScreeningRegulation != nil:
+		v := config.ScreeningRegulation{Lists: make([]config.ScreeningList, len(d.ScreeningRegulation.Lists)),
+			RescreenIntervalDays: d.ScreeningRegulation.RescreenIntervalDays}
+		for i, l := range d.ScreeningRegulation.Lists {
+			v.Lists[i] = config.ScreeningList(l)
+		}
+		c.ScreeningRegulation = &v
 	}
 	return c
 }
@@ -164,6 +171,13 @@ func data(c config.Content) api.ConfigData {
 			v.ApprovalTiers[i] = api.CreditApprovalTier(t)
 		}
 		d.CreditPolicy = &v
+	case c.ScreeningRegulation != nil:
+		v := api.ScreeningRegulation{Lists: make([]api.ScreeningList, len(c.ScreeningRegulation.Lists)),
+			RescreenIntervalDays: c.ScreeningRegulation.RescreenIntervalDays}
+		for i, l := range c.ScreeningRegulation.Lists {
+			v.Lists[i] = api.ScreeningList(l)
+		}
+		d.ScreeningRegulation = &v
 	}
 	return d
 }

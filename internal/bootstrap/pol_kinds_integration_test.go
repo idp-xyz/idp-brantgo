@@ -403,18 +403,3 @@ func TestTradeTaxApplicationAndCreditKinds(t *testing.T) {
 		t.Fatalf("resolved %+v", resolved)
 	}
 }
-
-func TestUnimplementedKindsAreRefusedAndAudited(t *testing.T) {
-	w := newWorld(t)
-	editor, _ := w.polActors()
-	_, err := w.c.POL.SaveDraft(editor, polapi.SaveDraft{IdempotencyKey: w.key(), Kind: polapi.KindScreeningRegulation, ConfigID: "lists",
-		ValidFrom: kernel.FormatTimestamp(time.Now())})
-	if code(err) != kernel.CodeUnsupportedContract || path(err) != "/args/kind" {
-		t.Fatalf("screening_regulation: %v", err)
-	}
-	audit, err := w.c.POL.Audit(editor)
-	w.must(err)
-	if last := audit[len(audit)-1]; last.Code != kernel.CodeUnsupportedContract || last.ObjectID != "screening_regulation:lists" {
-		t.Fatalf("audit %+v", last)
-	}
-}

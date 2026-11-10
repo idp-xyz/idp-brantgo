@@ -30,6 +30,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/identity/oidc"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
+	"go.idp.xyz/idp-brant/internal/reference"
 	"go.idp.xyz/idp-brant/internal/transport/httpapi"
 )
 
@@ -140,8 +141,10 @@ func (p *Platform) newDB() (*bentopg.DB, error) {
 	return bentopg.NewDB(p.pool, bentopg.WithSchema(p.schema))
 }
 
-// Contexts are the bounded contexts of a process, each on a transaction owner of its own.
+// Contexts are the bounded contexts of a process and its reference data, each on a transaction
+// owner of its own.
 type Contexts struct {
+	REF *reference.Module // screening lists; not a bounded context
 	EVD *evd.Module
 	PTY *pty.Module
 	CAT *cat.Module
@@ -149,10 +152,17 @@ type Contexts struct {
 	INQ *inq.Module
 }
 
-// Contexts wires every bounded context, upstream first. Call it once per process.
+// Contexts wires reference data and every bounded context, upstream first. Call it once per
+// process.
 func (p *Platform) Contexts() (*Contexts, error) {
 	var c Contexts
 	db, err := p.newDB()
+	if err == nil {
+		c.REF, err = reference.New(db)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
 	if err == nil {
 		c.EVD, err = evd.New(db)
 	}
@@ -160,19 +170,19 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.PTY, err = pty.New(db, c.EVD)
+		c.POL, err = pol.New(db, c.EVD)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.PTY, err = pty.New(db, c.EVD, c.POL, c.REF)
 	}
 	if err == nil {
 		db, err = p.newDB()
 	}
 	if err == nil {
 		c.CAT, err = cat.New(db, c.EVD)
-	}
-	if err == nil {
-		db, err = p.newDB()
-	}
-	if err == nil {
-		c.POL, err = pol.New(db, c.EVD)
 	}
 	if err == nil {
 		db, err = p.newDB()

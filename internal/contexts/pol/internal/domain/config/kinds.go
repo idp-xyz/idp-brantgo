@@ -9,8 +9,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// Kind is a configuration kind. The domain knows the kinds it has rules for; screening_regulation
-// is not one of them yet.
+// Kind is a configuration kind. The domain knows the kinds it has rules for.
 type Kind string
 
 const (
@@ -31,6 +30,7 @@ const (
 	KindDocumentTemplate      Kind = "document_template"
 	KindQuoteDocumentTemplate Kind = "quote_document_template"
 	KindCreditPolicy          Kind = "credit_policy"
+	KindScreeningRegulation   Kind = "screening_regulation"
 )
 
 // Closed values the rules below compare.
@@ -41,6 +41,10 @@ const (
 	OwnerCompany            = "company"
 	OwnerParty              = "party"
 	DayBasisWorking         = "working"
+
+	// JurisdictionForeign is the jurisdiction of a screening list a tenant enables only with its
+	// legal confirmation (ADR-BR-017, SR-19).
+	JurisdictionForeign = "foreign"
 )
 
 // Ref is a ConfigRef v1 inside configuration data: the exact revision of another configuration.
@@ -267,6 +271,20 @@ func ratio(s string) bool {
 	return err == nil && d.Sign() >= 0 && d.Cmp(kernel.DecimalFromInt(1)) <= 0
 }
 
+// ScreeningRegulation is the screening lists a company enables and its re-screening interval.
+type ScreeningRegulation struct {
+	Lists                []ScreeningList `json:"lists"`
+	RescreenIntervalDays int             `json:"rescreen_interval_days"`
+}
+
+// ScreeningList is one enabled list; a foreign list carries the EVD source of the tenant's legal
+// confirmation.
+type ScreeningList struct {
+	ListCode                    string `json:"list_code"`
+	Jurisdiction                string `json:"jurisdiction"`
+	LegalConfirmationEvidenceID string `json:"legal_confirmation_evidence_id,omitempty"`
+}
+
 // Validate judges content the contract admitted (Python foundation.validate): a validity that ends
 // after it starts; a currency or unit whose config_id is its code; an exchange rate between two
 // currencies with a positive rate observed no later than it becomes valid; a conversion between
@@ -343,6 +361,29 @@ func Validate(id string, c Content) error {
 		return checkTemplate(c.DocumentTemplate)
 	case KindCreditPolicy:
 		return checkCredit(c.CreditPolicy)
+	case KindScreeningRegulation:
+		for i, l := range c.ScreeningRegulation.Lists {
+			if l.Jurisdiction == JurisdictionForeign && l.LegalConfirmationEvidenceID == "" {
+				return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/lists/"+strconv.Itoa(i)+"/legal_confirmation_evidence_id",
+					"A foreign list needs the tenant's legal confirmation")
+			}
+		}
+	}
+	return nil
+}
+
+// CheckLegalConfirmations requires a screening regulation's publication to cite, among its
+// evidence, the legal confirmation of every list that has one, so the publisher must be able to
+// read it like the rest of the evidence (ADR-BR-017, Context Map R63).
+func CheckLegalConfirmations(c Content, evidence []string) error {
+	if c.Kind != KindScreeningRegulation {
+		return nil
+	}
+	for _, l := range c.ScreeningRegulation.Lists {
+		if id := l.LegalConfirmationEvidenceID; id != "" && !slices.Contains(evidence, id) {
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/evidence_ids",
+				"Cite the legal confirmation of screening list "+l.ListCode)
+		}
 	}
 	return nil
 }

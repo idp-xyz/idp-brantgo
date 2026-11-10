@@ -477,6 +477,36 @@
         },
         "type": "object"
       },
+      "pol.screening_regulation": {
+        "additionalProperties": false,
+        "properties": {
+          "lists": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "jurisdiction": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "legal_confirmation_evidence_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "list_code": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "rescreen_interval_days": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "pol.tax_application": {
         "additionalProperties": false,
         "properties": {
@@ -3218,6 +3248,10 @@
                           {
                             "$ref": "#/components/schemas/pol.quote_document_template",
                             "title": "quote_document_template"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.screening_regulation",
+                            "title": "screening_regulation"
                           },
                           {
                             "$ref": "#/components/schemas/pol.tax_application",
