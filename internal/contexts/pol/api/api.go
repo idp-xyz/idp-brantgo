@@ -1,12 +1,15 @@
-// Package api is the contract of the POL bounded context (policy and configuration: currencies,
-// units, exchange rates, payment terms and document numbering) for transports, the AI layer and
-// the contexts downstream of POL. It exposes no POL domain type.
+// Package api is the contract of the POL bounded context (policy and configuration: the company
+// profile, currencies, units and their conversions, exchange rates, calendars, trade and payment
+// terms, taxes, fees, pricing and credit policies, bank accounts, document templates and
+// numbering) for transports, the AI layer and the contexts downstream of POL. It exposes no POL
+// domain type.
 //
 // A configuration is identified by (tenant, company, kind, config_id). Its content lives in
 // revisions with monotonic numbers: one working revision is saved whole, a human other than its
 // last editor publishes it, and publishing supersedes the previously active revision atomically
 // (SM-POL-REVISION). Downstream contexts adopt an exact revision as a ConfigRef v1 and ask POL
-// whether it is in force at an instant.
+// whether it is in force at an instant: before their transaction through Queries, and inside it
+// through ConfigGuard v1 (guard.go), the guard function POL publishes in its schema.
 package api
 
 import (
@@ -53,8 +56,8 @@ const (
 )
 
 // Kinds of configuration: the closed enumeration of the tactical model (POL-AGG-ConfigurationRoot).
-// Only the kinds KindImplemented reports are accepted so far; the others are refused with
-// UNSUPPORTED_CONTRACT until their contracts land.
+// Only the kinds KindImplemented reports are accepted so far; screening_regulation is refused with
+// UNSUPPORTED_CONTRACT until its contract lands.
 const (
 	KindCompanyProfile        = "company_profile"
 	KindCurrency              = "currency"
@@ -124,7 +127,7 @@ var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
 		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy}
-	implemented   = []string{KindCurrency, KindUnit, KindFXRate, KindPaymentTerms, KindNumberSequence}
+	implemented   = slices.DeleteFunc(slices.Clone(kinds), func(k string) bool { return k == KindScreeningRegulation })
 	purposes      = []string{PurposeCostEstimate, PurposeQuotation}
 	dimensions    = []string{DimensionCount, DimensionMass, DimensionLength, DimensionVolume}
 	triggers      = []string{TriggerOrderConfirmed, TriggerBeforeShipment, TriggerAfterShipment, TriggerAfterInvoice}
@@ -152,6 +155,9 @@ const (
 	CodeBusinessKeyConflict       = "BUSINESS_KEY_CONFLICT"
 	CodeConfigNotActive           = "CONFIG_NOT_ACTIVE"
 	CodeConfigExpired             = "CONFIG_EXPIRED"
+	CodeUnitScopeMismatch         = "UNIT_SCOPE_MISMATCH"
+	CodeTaxPolicyUnconfirmed      = "TAX_POLICY_UNCONFIRMED"
+	CodeTemplateInvalid           = "TEMPLATE_INVALID"
 )
 
 var codes = map[string]kernel.Category{
@@ -164,6 +170,9 @@ var codes = map[string]kernel.Category{
 	CodeBusinessKeyConflict:       kernel.CategoryConflict,
 	CodeConfigNotActive:           kernel.CategoryInvalid,
 	CodeConfigExpired:             kernel.CategoryInvalid,
+	CodeUnitScopeMismatch:         kernel.CategoryInvalid,
+	CodeTaxPolicyUnconfirmed:      kernel.CategoryInvalid,
+	CodeTemplateInvalid:           kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code POL declares.
@@ -344,159 +353,6 @@ func (c CaptureSnapshot) Validate() error {
 	return refs(c.Refs, 1, "/args/refs")
 }
 
-// ConfigData is the content of one configuration kind; exactly the member of the revision's kind
-// is set. Decimals are strings in their contract format, never floats.
-type ConfigData struct {
-	Currency       *Currency
-	Unit           *Unit
-	FXRate         *FXRate
-	PaymentTerms   *PaymentTerms
-	NumberSequence *NumberSequence
-}
-
-// Currency is an ISO 4217 currency; its config_id is its code. Code, minor units and rounding are
-// its meaning, which never changes once published (POL-INV-002).
-type Currency struct {
-	Code       string // ^[A-Z]{3}$
-	Name       string
-	MinorUnits int    // 0–4
-	Rounding   string // HALF_UP
-}
-
-// Unit is a unit of measure; its config_id is its code. Code, dimension and precision are its
-// meaning (POL-INV-002).
-type Unit struct {
-	Code      string // kernel.UnitCode: 1–32 of A–Z, 0–9 and '-'
-	Name      string
-	Dimension string // count, mass, length or volume
-	Precision int    // fractional digits, 0–6
-}
-
-// FXRate is an exchange rate for one direction and one purpose: one unit of FromCurrency is Rate
-// units of ToCurrency (POL-INV-003). Its validity interval is the revision's and must be bounded.
-type FXRate struct {
-	FromCurrency string // currency code
-	ToCurrency   string
-	Rate         string // kernel.FactorFormat, positive
-	Purpose      string // cost_estimate or quotation
-	SourceName   string
-	ObservedAt   string // UTC timestamp, not after the revision's ValidFrom
-}
-
-// PaymentTerms are payment stages whose percentages are positive and sum to exactly 100
-// (POL-INV-004). Days count calendar days after the trigger.
-type PaymentTerms struct {
-	Name   string
-	Stages []PaymentStage
-}
-
-// PaymentStage is one stage of PaymentTerms.
-type PaymentStage struct {
-	StageID string
-	Percent string // PercentFormat
-	Trigger string // order_confirmed, before_shipment, after_shipment or after_invoice
-	Days    int    // 0–3650
-}
-
-// NumberSequence is how document numbers of one document type are formed: Prefix, the year in
-// TimeZone, '-' and the yearly counter zero-padded to Width digits, such as QT-2026-00001.
-type NumberSequence struct {
-	DocumentType string // rfq, quote, order, purchase_order or invoice
-	Prefix       string // ^[A-Z0-9][A-Z0-9-]{0,15}$
-	Width        int    // 4–12
-	Reset        string // annual
-	TimeZone     string // IANA time zone the year is counted in, such as Asia/Shanghai
-}
-
-func (d ConfigData) validate(kind string) error {
-	set := map[string]bool{KindCurrency: d.Currency != nil, KindUnit: d.Unit != nil, KindFXRate: d.FXRate != nil,
-		KindPaymentTerms: d.PaymentTerms != nil, KindNumberSequence: d.NumberSequence != nil}
-	for k, present := range set {
-		if present != (k == kind) {
-			return schema("/args/data")
-		}
-	}
-	switch kind {
-	case KindCurrency:
-		c := d.Currency
-		switch {
-		case !currencyCode(c.Code):
-			return schema("/args/data/code")
-		case !name(c.Name):
-			return schema("/args/data/name")
-		case c.MinorUnits < 0 || c.MinorUnits > maxCurrencyMinorUnits:
-			return schema("/args/data/minor_units")
-		case c.Rounding != RoundingHalfUp:
-			return schema("/args/data/rounding")
-		}
-	case KindUnit:
-		u := d.Unit
-		switch {
-		case !kernel.UnitCode(u.Code).Valid():
-			return schema("/args/data/code")
-		case !name(u.Name):
-			return schema("/args/data/name")
-		case !slices.Contains(dimensions, u.Dimension):
-			return schema("/args/data/dimension")
-		case u.Precision < 0 || u.Precision > maxUnitPrecision:
-			return schema("/args/data/precision")
-		}
-	case KindFXRate:
-		x := d.FXRate
-		switch {
-		case !currencyCode(x.FromCurrency):
-			return schema("/args/data/from_currency")
-		case !currencyCode(x.ToCurrency):
-			return schema("/args/data/to_currency")
-		case !decimal(x.Rate, kernel.FactorFormat):
-			return schema("/args/data/rate")
-		case !slices.Contains(purposes, x.Purpose):
-			return schema("/args/data/purpose")
-		case !name(x.SourceName):
-			return schema("/args/data/source_name")
-		}
-		if _, err := kernel.ParseTimestamp(x.ObservedAt); err != nil {
-			return schema("/args/data/observed_at")
-		}
-	case KindPaymentTerms:
-		p := d.PaymentTerms
-		if !name(p.Name) {
-			return schema("/args/data/name")
-		}
-		if len(p.Stages) < 1 || len(p.Stages) > MaxPaymentStages {
-			return schema("/args/data/stages")
-		}
-		for i, s := range p.Stages {
-			at := "/args/data/stages/" + strconv.Itoa(i)
-			switch {
-			case !kernel.ValidIdentifier(s.StageID):
-				return schema(at + "/stage_id")
-			case !decimal(s.Percent, PercentFormat):
-				return schema(at + "/percent")
-			case !slices.Contains(triggers, s.Trigger):
-				return schema(at + "/trigger")
-			case s.Days < 0 || s.Days > maxPaymentDays:
-				return schema(at + "/days")
-			}
-		}
-	case KindNumberSequence:
-		n := d.NumberSequence
-		switch {
-		case !slices.Contains(documentTypes, n.DocumentType):
-			return schema("/args/data/document_type")
-		case !sequencePrefix(n.Prefix):
-			return schema("/args/data/prefix")
-		case n.Width < minSequenceWidth || n.Width > maxSequenceWidth:
-			return schema("/args/data/width")
-		case n.Reset != ResetAnnual:
-			return schema("/args/data/reset")
-		case !text(n.TimeZone, maxTimeZoneCharacters):
-			return schema("/args/data/time_zone")
-		}
-	}
-	return nil
-}
-
 // Auditor records a request an inbound adapter refused before it became a command, such as a body
 // that is not valid JSON, in the context's audit trail. The principal in ctx is the requester.
 type Auditor interface {
@@ -577,7 +433,9 @@ func (r ResolvedConfig) Check(path string) error {
 // ToCurrency for Purpose at instant At. Rate names the fx_rate revision the caller adopted; the same
 // currency needs none and gets exactly 1, different currencies need one: a missing rate is never 1
 // and never the reciprocal of the opposite direction. A positive MaxObservationAge also refuses a
-// rate observed longer ago than that before At.
+// rate observed longer ago than that before At. Policy names the pricing_policy revision of the
+// calculation (Python fx.convert): it must be in force with its tax profile, ToCurrency must be its
+// calculation currency, and its max_fx_age_seconds bounds the observation age as well.
 type FXQuery struct {
 	FromCurrency      string
 	ToCurrency        string
@@ -585,6 +443,7 @@ type FXQuery struct {
 	At                time.Time
 	Rate              *ConfigRef
 	MaxObservationAge time.Duration
+	Policy            *ConfigRef
 }
 
 // Validate checks the form of the query.
@@ -609,7 +468,7 @@ func (q FXQuery) Validate() error {
 			return schema("/rate/kind")
 		}
 	}
-	return nil
+	return optionalRef(q.Policy, KindPricingPolicy, "/policy")
 }
 
 // ExchangeRate is the rate a use may apply. Rate is the fx_rate revision used, zero for the same
@@ -640,15 +499,24 @@ type SnapshotView struct {
 
 // Queries is POL's read side.
 type Queries interface {
-	// GetConfig returns a configuration and its revisions, audited as config.get.
+	// GetConfig returns a configuration and its revisions, audited as config.get. Bank accounts
+	// follow their read rules (BankAccount): a party's account is NOT_FOUND to a reader whose data
+	// scope is narrower than the company, and account numbers are masked without pol.read_sensitive.
 	GetConfig(ctx context.Context, kind, configID string) (ConfigView, error)
 	// ResolveConfigs answers ConfigRef v1 lookups of downstream contexts at instant at. It needs no
-	// permission beyond an active grant; references that do not exist in the caller's company are
-	// absent. Ask before opening your own transaction.
+	// permission beyond an active grant; references that do not exist in the caller's company, or
+	// that the bank account read rules hide, are absent. Code covers the revision itself, not the
+	// revisions it depends on. Ask before opening your own transaction; inside it, use ConfigGuard.
 	ResolveConfigs(ctx context.Context, refs []ConfigRef, at time.Time) (map[ConfigRef]ResolvedConfig, error)
 	// LookupFX applies POL-INV-003 to one use of an exchange rate. Ask before opening your own
 	// transaction.
 	LookupFX(ctx context.Context, q FXQuery) (ExchangeRate, error)
+	// LookupTax returns the tax profile revision a calculation adopts, in force, with a confirmed
+	// recovery treatment, and the currency it splits amounts in (Python foundation.tax.preview).
+	LookupTax(ctx context.Context, q TaxQuery) (TaxRate, error)
+	// LookupUnitConversion returns the unit_conversion revision a calculation adopts for one SKU at
+	// one specification revision, in force with both its units (Python foundation.unit.convert).
+	LookupUnitConversion(ctx context.Context, q UnitQuery) (QuantityConversion, error)
 	// GetSnapshot returns a FoundationSnapshot, audited as snapshot.get.
 	GetSnapshot(ctx context.Context, snapshotID string) (SnapshotView, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
@@ -739,8 +607,11 @@ func decimal(s string, f kernel.DecimalFormat) bool {
 }
 
 // name is text of 1–500 characters with at least one that is not white space (Python \S).
-func name(s string) bool {
-	return text(s, maxNameCharacters) && strings.IndexFunc(s, func(r rune) bool { return !unicode.IsSpace(r) }) >= 0
+func name(s string) bool { return nonBlank(s, maxNameCharacters) }
+
+// nonBlank is text of 1–max characters with at least one that is not white space.
+func nonBlank(s string, max int) bool {
+	return text(s, max) && strings.IndexFunc(s, func(r rune) bool { return !unicode.IsSpace(r) }) >= 0
 }
 
 func text(s string, max int) bool {
