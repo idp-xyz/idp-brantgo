@@ -69,3 +69,7 @@ func (r *Record) Move(status Status) {
 		r.Revision++
 	}
 }
+
+// Touch increments the row version of a record whose own content and status stay as they are,
+// for a change to an entity the root carries (a verified service role of a party).
+func (r *Record) Touch() { r.RowVersion++ }

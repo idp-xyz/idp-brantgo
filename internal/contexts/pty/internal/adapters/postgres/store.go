@@ -1,5 +1,5 @@
-// Package postgres stores PTY parties and contacts in schema brant_pty, on the executor of PTY's own
-// transaction.
+// Package postgres stores PTY parties, contacts, screenings and trading profiles in schema
+// brant_pty, on the executor of PTY's own transaction.
 package postgres
 
 import (
@@ -98,13 +98,52 @@ type Confirmation struct {
 	At          time.Time
 }
 
-// InsertPartyRevision keeps the confirmed revision of p unchanged for good.
+// InsertPartyRevision keeps the confirmed revision of p, with its addresses, unchanged for good.
 func InsertPartyRevision(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, p *party.Party, c Confirmation) error {
 	_, err := exec.Exec(ctx, `INSERT INTO brant_pty.party_revision (tenant_id, company_id, party_id, revision, row_version, name, roles,
 		evidence_ids, confirmed_by_kind, confirmed_by_id, authority_epoch, confirmed_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		string(scope.Tenant), string(scope.Company), p.ID, p.Revision, p.RowVersion, p.Name, roles(p), c.EvidenceIDs,
 		string(c.By.Kind), c.By.ID, c.Epoch, c.At)
+	for _, a := range p.Addresses {
+		if err != nil {
+			return err
+		}
+		_, err = exec.Exec(ctx, `INSERT INTO brant_pty.party_revision_address (tenant_id, company_id, party_id, revision, address_id, role, address)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`, string(scope.Tenant), string(scope.Company), p.ID, p.Revision, a.ID, string(a.Role), a.Text)
+	}
+	return err
+}
+
+// Addresses returns the current addresses of a party, ordered by ID.
+func Addresses(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, partyID string) ([]party.Address, error) {
+	rows, err := exec.Query(ctx, `SELECT address_id, role, address FROM brant_pty.party_address
+		WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3 ORDER BY address_id`, string(scope.Tenant), string(scope.Company), partyID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, scanAddress)
+}
+
+func scanAddress(row pgx.CollectableRow) (party.Address, error) {
+	var a party.Address
+	var role string
+	err := row.Scan(&a.ID, &role, &a.Text)
+	a.Role = party.AddressRole(role)
+	return a, err
+}
+
+// ReplaceAddresses replaces the stored addresses of p, a draft, with its addresses.
+func ReplaceAddresses(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, p *party.Party) error {
+	_, err := exec.Exec(ctx, `DELETE FROM brant_pty.party_address WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3`,
+		string(scope.Tenant), string(scope.Company), p.ID)
+	for _, a := range p.Addresses {
+		if err != nil {
+			return err
+		}
+		_, err = exec.Exec(ctx, `INSERT INTO brant_pty.party_address (tenant_id, company_id, party_id, address_id, role, address)
+			VALUES ($1, $2, $3, $4, $5, $6)`, string(scope.Tenant), string(scope.Company), p.ID, a.ID, string(a.Role), a.Text)
+	}
 	return err
 }
 
@@ -113,10 +152,11 @@ type Revision struct {
 	Revision     int64
 	Name         string
 	Roles        []string
+	Addresses    []party.Address
 	Confirmation Confirmation
 }
 
-// PartyRevisions returns the confirmed revisions of a party, oldest first.
+// PartyRevisions returns the confirmed revisions of a party with their addresses, oldest first.
 func PartyRevisions(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) ([]Revision, error) {
 	rows, err := exec.Query(ctx, `SELECT revision, name, roles, evidence_ids, confirmed_by_kind, confirmed_by_id, authority_epoch, confirmed_at
 		FROM brant_pty.party_revision WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3 ORDER BY revision`,
@@ -124,14 +164,43 @@ func PartyRevisions(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Revision, error) {
+	revisions, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Revision, error) {
 		var r Revision
 		var kind string
 		err := row.Scan(&r.Revision, &r.Name, &r.Roles, &r.Confirmation.EvidenceIDs, &kind, &r.Confirmation.By.ID,
 			&r.Confirmation.Epoch, &r.Confirmation.At)
 		r.Confirmation.By.Kind = kernel.ActorKind(kind)
+		r.Addresses = []party.Address{}
 		return r, err
 	})
+	if err != nil || len(revisions) == 0 {
+		return revisions, err
+	}
+	rows, err = exec.Query(ctx, `SELECT revision, address_id, role, address FROM brant_pty.party_revision_address
+		WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3 ORDER BY revision, address_id`,
+		string(scope.Tenant), string(scope.Company), id)
+	if err != nil {
+		return nil, err
+	}
+	type revisionAddress struct {
+		revision int64
+		address  party.Address
+	}
+	addresses, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (revisionAddress, error) {
+		var ra revisionAddress
+		var role string
+		err := row.Scan(&ra.revision, &ra.address.ID, &role, &ra.address.Text)
+		ra.address.Role = party.AddressRole(role)
+		return ra, err
+	})
+	for _, ra := range addresses {
+		for i := range revisions {
+			if revisions[i].Revision == ra.revision {
+				revisions[i].Addresses = append(revisions[i].Addresses, ra.address)
+			}
+		}
+	}
+	return revisions, err
 }
 
 const contactColumns = `contact_id, status, row_version, revision, coalesce(name, ''), coalesce(party_id, ''), owner_actor_id, coalesce(owner_team_id, '')`
