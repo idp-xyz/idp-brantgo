@@ -1,0 +1,126 @@
+{
+  "release_status": "engineering_preview_only_not_production_master",
+  "reference_sha256": "25861f3c3a3f3fe364036a3325f3fc5861e32f22000291489bb620d139c33c7f",
+  "reference_copy_sha256": "25861f3c3a3f3fe364036a3325f3fc5861e32f22000291489bb620d139c33c7f",
+  "locked_source_integrity": "PASS",
+  "locked_image_size": [
+    1643,
+    957
+  ],
+  "asset_provenance": "all PNG transparent lockups copied from V1.1 pixel extracts of approved user-uploaded picture",
+  "vector_status": "automatic traces only; SVG bitmap wrappers are embedded raster, not native paths",
+  "parent_IDP_master_verified": false,
+  "wordmark_font_original_available": false,
+  "small_size_readability_user_test_completed": false,
+  "trademark_clearance_completed": false,
+  "raster_trace_iou_A": 0.98891,
+  "raster_trace_iou_B": 0.97503,
+  "icon_pixel_footprints": [
+    {
+      "theme": "midnight",
+      "canvas_px": 16,
+      "visible_bird_height_px": 4,
+      "filename": "Brant_Symbol_midnight_16.png"
+    },
+    {
+      "theme": "midnight",
+      "canvas_px": 24,
+      "visible_bird_height_px": 7,
+      "filename": "Brant_Symbol_midnight_24.png"
+    },
+    {
+      "theme": "midnight",
+      "canvas_px": 32,
+      "visible_bird_height_px": 8,
+      "filename": "Brant_Symbol_midnight_32.png"
+    },
+    {
+      "theme": "midnight",
+      "canvas_px": 48,
+      "visible_bird_height_px": 13,
+      "filename": "Brant_Symbol_midnight_48.png"
+    },
+    {
+      "theme": "midnight",
+      "canvas_px": 64,
+      "visible_bird_height_px": 17,
+      "filename": "Brant_Symbol_midnight_64.png"
+    },
+    {
+      "theme": "midnight",
+      "canvas_px": 128,
+      "visible_bird_height_px": 35,
+      "filename": "Brant_Symbol_midnight_128.png"
+    },
+    {
+      "theme": "midnight",
+      "canvas_px": 256,
+      "visible_bird_height_px": 70,
+      "filename": "Brant_Symbol_midnight_256.png"
+    },
+    {
+      "theme": "midnight",
+      "canvas_px": 512,
+      "visible_bird_height_px": 138,
+      "filename": "Brant_Symbol_midnight_512.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 16,
+      "visible_bird_height_px": 4,
+      "filename": "Brant_Symbol_light_16.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 24,
+      "visible_bird_height_px": 7,
+      "filename": "Brant_Symbol_light_24.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 32,
+      "visible_bird_height_px": 8,
+      "filename": "Brant_Symbol_light_32.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 48,
+      "visible_bird_height_px": 13,
+      "filename": "Brant_Symbol_light_48.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 64,
+      "visible_bird_height_px": 17,
+      "filename": "Brant_Symbol_light_64.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 128,
+      "visible_bird_height_px": 35,
+      "filename": "Brant_Symbol_light_128.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 256,
+      "visible_bird_height_px": 70,
+      "filename": "Brant_Symbol_light_256.png"
+    },
+    {
+      "theme": "light",
+      "canvas_px": 512,
+      "visible_bird_height_px": 138,
+      "filename": "Brant_Symbol_light_512.png"
+    }
+  ],
+  "preview_colors": {
+    "navy": "#111C35",
+    "light": "#F5F7FB"
+  },
+  "signoff_required": [
+    "Master IDP source and typographic license/approved outlines",
+    "Manual Bezier and reference overlay validation",
+    "Real device/browser icon usability test",
+    "Trademark clearance for target classes/territories"
+  ]
+}

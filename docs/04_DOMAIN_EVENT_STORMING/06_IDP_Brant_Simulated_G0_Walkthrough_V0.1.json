@@ -1,0 +1,552 @@
+{
+  "artifact": "IDP Brant Simulated G0 Walkthrough",
+  "version": "0.1",
+  "date": "2026-11-10",
+  "status": "SIMULATED — 虚构企业与业务，按中国服装出口通行做法与 SAP 标准流程构造；证据层级 E0，不是真实客户证据，不满足 G0 的真实业务要求",
+  "company": {
+    "name": "模拟企业 A（虚构）",
+    "profile": "华东服装外贸公司：单一经营主体、自营一般贸易出口（CN-M01）、外购成品（S01），工厂直送堆场；岗位为销售、跟单、采购、单证、财务、合规；约 30 人。",
+    "basis": "按国内外贸公司常见做法与 SAP 订单到收款、采购到付款、贸易合规流程构造；数值为模拟值，不代表任何真实企业或政策。"
+  },
+  "fits": {
+    "FIT": "模型已覆盖",
+    "PARTIAL": "已覆盖但需细化",
+    "GAP": "模型缺失"
+  },
+  "cases": [
+    {
+      "id": "SIM-01",
+      "title": "普通出口：FOB 宁波，T/T 30% 定金、70% 见提单副本付款",
+      "given": "美国零售商 B1（虚构）：3 款针织衫 1,200 件，FOB 宁波 USD 6.50／件，合计 USD 7,800；工厂含税价 CNY 30／件（13%），模拟退税率 13%；交期 45 天。",
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售",
+          "action": "客户邮件询价，附款式与尺码配比",
+          "commands": [
+            "source.register",
+            "rfq.save_draft",
+            "rfq.confirm_scope"
+          ],
+          "events": [
+            "RfqScopeConfirmed"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 2,
+          "actor": "采购",
+          "action": "向两家工厂询价并比价",
+          "commands": [
+            "supplier_rfq.record_issued",
+            "supplier_offer.verify",
+            "cost_scenario.evaluate"
+          ],
+          "events": [
+            "SupplierOfferVerified",
+            "CostScenarioEvaluated"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 3,
+          "actor": "核价",
+          "action": "按含税采购价、可回收税额与 FOB 前的内陆和港杂费核价",
+          "commands": [
+            "cost_snapshot.freeze"
+          ],
+          "events": [
+            "CostSnapshotFrozen"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 4,
+          "actor": "销售／报价审核人",
+          "action": "报价审批后发给客户",
+          "commands": [
+            "quote.freeze",
+            "quote.review.decide",
+            "quote.activate"
+          ],
+          "events": [
+            "QuoteActivated"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 5,
+          "actor": "销售",
+          "action": "客户回 PO，与报价逐行一致",
+          "commands": [
+            "quote.response.record",
+            "quote.response.verify"
+          ],
+          "events": [
+            "AcceptanceVerified"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 6,
+          "actor": "销售",
+          "action": "生成 PI，客户回签",
+          "commands": [
+            "order.prepare",
+            "order.document.generate",
+            "order.document.record_signed"
+          ],
+          "events": [
+            "OrderDocumentSigned"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 7,
+          "actor": "订单审核人",
+          "action": "订单审批生效；70% 见提单副本付款且正本提单由我方控制",
+          "commands": [
+            "order.review.decide",
+            "order.activate"
+          ],
+          "events": [
+            "OrderActivated"
+          ],
+          "fit": "PARTIAL",
+          "finding": "F-04"
+        },
+        {
+          "n": 8,
+          "actor": "财务",
+          "action": "收到 30% 定金 USD 2,340",
+          "commands": [
+            "fund.record",
+            "application.apply"
+          ],
+          "events": [
+            "FundRecorded",
+            "Applied"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 9,
+          "actor": "采购",
+          "action": "向工厂下采购单并取得确认",
+          "commands": [
+            "purchase.draft.prepare",
+            "purchase.commitment.decide",
+            "purchase.commitment.issue",
+            "purchase.supplier_confirmation.record"
+          ],
+          "events": [
+            "PurchaseCommitmentIssued",
+            "SupplierConfirmationRecorded"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 10,
+          "actor": "跟单",
+          "action": "产前样确认与大货进度跟踪",
+          "commands": [
+            "sample.approve",
+            "milestone.plan",
+            "milestone.record_actual"
+          ],
+          "events": [
+            "SampleApproved",
+            "MilestoneActualRecorded"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 11,
+          "actor": "跟单／质检",
+          "action": "尾期验货（第三方验货报告）并放行",
+          "commands": [
+            "inspection.record",
+            "quality_release.grant"
+          ],
+          "events": [
+            "InspectionRecorded",
+            "QualityReleased"
+          ],
+          "fit": "PARTIAL",
+          "finding": "F-06"
+        },
+        {
+          "n": 12,
+          "actor": "单证",
+          "action": "订舱；工厂装柜直送堆场，货代收货单证实 1,200 件",
+          "commands": [
+            "booking.record",
+            "supplier_delivery.verify"
+          ],
+          "events": [
+            "SupplierDeliveryVerified"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 13,
+          "actor": "合规／单证",
+          "action": "贸易合规核查与出口报关",
+          "commands": [
+            "trade_compliance.decide",
+            "declaration_case.prepare",
+            "declaration_case.record_receipt"
+          ],
+          "events": [
+            "TradeComplianceDecided",
+            "DeclarationReceiptRecorded"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 14,
+          "actor": "单证",
+          "action": "出运确认，出具商业发票、装箱单，取得提单",
+          "commands": [
+            "commercial_release.evaluate",
+            "shipment.confirm",
+            "shipment_document.issue"
+          ],
+          "events": [
+            "ShipmentConfirmed",
+            "ShipmentDocumentIssued"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 15,
+          "actor": "财务",
+          "action": "客户见提单副本付 70%，到账 USD 5,435（中间行扣费 25，经批准由我方承担）",
+          "commands": [
+            "fund.record",
+            "application.apply"
+          ],
+          "events": [
+            "FundRecorded",
+            "Applied"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 16,
+          "actor": "单证",
+          "action": "尾款核销足额后电放",
+          "commands": [
+            "document_release.record"
+          ],
+          "events": [
+            "DocumentsReleased"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 17,
+          "actor": "财务／税务",
+          "action": "工厂开增值税专票，登记退税资料",
+          "commands": [
+            "purchase_invoice.import",
+            "tax_refund_case.allocate"
+          ],
+          "events": [
+            "PurchaseInvoiceVerified",
+            "TaxEvidenceAllocated"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 18,
+          "actor": "财务",
+          "action": "结汇并关闭订单经营结果",
+          "commands": [
+            "fund.record",
+            "order_result.close"
+          ],
+          "events": [
+            "FundRecorded",
+            "OrderResultClosed"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        }
+      ]
+    },
+    {
+      "id": "SIM-02",
+      "title": "变更与异常：CIF 汉堡，O/A 60 天，客户改单、工厂短交、到港客诉",
+      "given": "德国进口商 B2（虚构）：2 款梭织衬衫 1,000 件，CIF 汉堡 USD 9.20／件；PO 条款写明适用德国法；额度 10,000 USD，未结应收 7,000。",
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售",
+          "action": "客户 PO 把一个颜色改为藏青，构成反要约",
+          "commands": [
+            "quote.response.record"
+          ],
+          "events": [
+            "CustomerResponseRecorded"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 2,
+          "actor": "销售／报价审核人",
+          "action": "按新颜色形成报价新修订并审批，客户确认",
+          "commands": [
+            "quote.freeze",
+            "quote.review.decide",
+            "quote.replace",
+            "quote.response.verify"
+          ],
+          "events": [
+            "QuoteReplaced",
+            "AcceptanceVerified"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 3,
+          "actor": "销售",
+          "action": "PO 条款约定适用德国法与汉堡仲裁",
+          "commands": [],
+          "events": [],
+          "fit": "GAP",
+          "finding": "F-02"
+        },
+        {
+          "n": 4,
+          "actor": "销售／信用经理",
+          "action": "O/A 60 天：信用占用超额，生成信用决定，信用经理在权限内放行",
+          "commands": [
+            "credit.reserve",
+            "credit_exception.decide"
+          ],
+          "events": [
+            "CreditDecisionOpened",
+            "CreditReserved"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 5,
+          "actor": "合规",
+          "action": "收货人与名单疑似命中，核实为误报并登记正向名单",
+          "commands": [
+            "party_screening.decide"
+          ],
+          "events": [
+            "PartyScreeningDecided"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 6,
+          "actor": "订单审核人",
+          "action": "订单生效",
+          "commands": [
+            "order.review.decide",
+            "order.activate"
+          ],
+          "events": [
+            "OrderActivated"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 7,
+          "actor": "销售／采购",
+          "action": "客户减量 10%：订单变更，作废多余的采购分配",
+          "commands": [
+            "order.amendment.prepare",
+            "order.amendment.decide",
+            "order.amendment.apply",
+            "purchase.draft.void"
+          ],
+          "events": [
+            "OrderAmended",
+            "PurchaseDraftVoided"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 8,
+          "actor": "单证",
+          "action": "CIF 投保：按 CIF 价的 110% 投保并取得保险单",
+          "commands": [],
+          "events": [],
+          "fit": "GAP",
+          "finding": "F-03"
+        },
+        {
+          "n": 9,
+          "actor": "采购／单证",
+          "action": "工厂只交 850 件（变更后 900 件），出运 850 件并短交关闭余量",
+          "commands": [
+            "supplier_delivery.verify",
+            "shipment.confirm",
+            "order.close_remainder"
+          ],
+          "events": [
+            "SupplierDeliveryVerified",
+            "ShipmentConfirmed",
+            "OrderRemainderClosed"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        },
+        {
+          "n": 10,
+          "actor": "销售",
+          "action": "到港后客户投诉色差，协商折让并形成贷项",
+          "commands": [
+            "claim.open",
+            "remedy.decide",
+            "credit.confirm"
+          ],
+          "events": [
+            "ClaimOpened",
+            "RemedyDecided",
+            "CreditConfirmed"
+          ],
+          "fit": "PARTIAL",
+          "finding": "F-05"
+        },
+        {
+          "n": 11,
+          "actor": "财务",
+          "action": "60 天后部分到账，余款逾期；该客户下一张订单的占用因逾期被拦",
+          "commands": [
+            "fund.record",
+            "application.apply",
+            "credit.reserve"
+          ],
+          "events": [
+            "FundRecorded",
+            "Applied",
+            "CreditDecisionOpened"
+          ],
+          "fit": "FIT",
+          "finding": ""
+        }
+      ]
+    },
+    {
+      "id": "SIM-03",
+      "title": "返单：同一报价有效期内第二张 PO",
+      "given": "B1 在报价有效期内按同一报价再下 2,000 件。",
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售",
+          "action": "登记第二张 PO 并准备订单",
+          "commands": [
+            "quote.response.verify",
+            "order.prepare"
+          ],
+          "events": [
+            "AcceptanceVerified"
+          ],
+          "fit": "GAP",
+          "finding": "F-01"
+        },
+        {
+          "n": 2,
+          "actor": "销售／报价审核人",
+          "action": "临时做法：复制原报价形成新报价根并重新审批",
+          "commands": [
+            "quote.save_draft",
+            "quote.freeze",
+            "quote.review.decide",
+            "quote.activate"
+          ],
+          "events": [
+            "QuoteActivated"
+          ],
+          "fit": "PARTIAL",
+          "finding": "F-01"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-01",
+      "kind": "GAP",
+      "title": "同一报价多次下单（返单）被整单一次转换阻断",
+      "decision": "BC-D06 裁决：P0 保留 full_v1；R1 增加参照报价下单（部分与多次），以报价行剩余数量台账控制，每张订单独立确认与审批；P0 期间返单以复制原报价形成新报价根并重新审批。",
+      "owner": "R-PRD",
+      "wbs": "S6-07",
+      "refs": "BC-D06；SAP 流程参照 O2C-04"
+    },
+    {
+      "id": "F-02",
+      "kind": "GAP",
+      "title": "合同适用法律与争议解决条款未建模",
+      "decision": "报价与外销合同条款增加适用法律与争议解决（POL 条款模板），合同成立规则按适用法律选择；默认 CISG 与中国法，由租户配置。",
+      "owner": "R-TRD",
+      "wbs": "S3-17",
+      "refs": "ADR-BR-013"
+    },
+    {
+      "id": "F-03",
+      "kind": "GAP",
+      "title": "CIF／CIP 投保与保险单未建模",
+      "decision": "FUL 出运单证套增加保险单引用（保险服务方、投保金额、险别、保单号）；投保金额与险别按合同（CIF 通常按 CIF 价 110%）；保险费已是核价组件。",
+      "owner": "R-FUL",
+      "wbs": "S5-16",
+      "refs": "补齐矩阵 INT-03／04"
+    },
+    {
+      "id": "F-04",
+      "kind": "DECISION",
+      "title": "见提单副本付款且控制正本提单或电放时的信用口径",
+      "decision": "信用政策可把单证控制下的出运后付款视为有担保，不需信用占用；前提是 FUL 放行闸门把单证扣到付款为止。TRD-INV-022 已按此修订。",
+      "owner": "R-STL",
+      "wbs": "S5-12",
+      "refs": "TRD-INV-022；FUL-INV-002"
+    },
+    {
+      "id": "F-05",
+      "kind": "PARTIAL",
+      "title": "客诉、折让与贷项只到轮廓",
+      "decision": "按 S6-03 细化 CLM 状态机与贷项、退款的关联。",
+      "owner": "R-OPS",
+      "wbs": "S6-03",
+      "refs": "基线 F28"
+    },
+    {
+      "id": "F-06",
+      "kind": "PARTIAL",
+      "title": "第三方或客户验货报告的来源",
+      "decision": "QLT 检验记录登记外部检验机构（ServicePartyRole）与报告来源；外部报告是证据，放行仍由我方授权人员决定。",
+      "owner": "R-OPS",
+      "wbs": "S5-02",
+      "refs": "基线 F26；INT-03"
+    }
+  ]
+}

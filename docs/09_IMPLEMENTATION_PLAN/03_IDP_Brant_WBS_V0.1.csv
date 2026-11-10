@@ -1,0 +1,79 @@
+﻿id,phase,domain,title,priority,dependencies,deliverable,acceptance,owner,python_parity,status
+M0-01,M0,仓库,仓库骨架：go.mod（go.idp.xyz/idp-brant 候选）、README、AGENTS.md、Makefile、.golangci.yml,P0,,idp-brantgo 根目录 Go Module,go build ./... 与 go vet ./... 通过；docs/ 不进入 Go 构建,研发负责人,,DONE_LOCAL
+M0-02,M0,工具链,Go 工具链与依赖锁定：Go 1.26.x 精确版本、idp-bento-go v0.1.0-rc.2、完整 go.sum,P0,M0-01,go.mod／go.sum；toolchain 指令,GOPROXY=direct 下 h1 校验通过；CI 与本机同版本,研发负责人,,DONE_LOCAL
+M0-03,M0,kernel,internal/kernel：Money、Quantity、Ratio、ExchangeRate、ValidityInterval、Scope、ActorRef,P0,M0-01,只依赖标准库（或已批准十进制库）的值对象,精度上限、HALF_UP、禁止 float 的单元与模糊测试；ADR-BR-REPO-10 裁决,首席架构师,T02 §3、§13.3；T03 §5.1,PARTIAL
+M0-04,M0,foundation,foundation/bento：每上下文独立 bentopg.DB、租户与公司事务绑定,P0,M0-02,TenantTransactor（app.tenant_id／app.company_id）,两个上下文、两个 DB 时跨上下文嵌套事务返回 transactionConflict（AC4）,技术负责人,,DONE_LOCAL
+M0-05,M0,foundation,foundation/database 与 cmd/brant-migrate：bento schema、migrations/manifest、校验值不可变,P0,M0-04,迁移工具与清单,空库升级、重复执行、校验值篡改拒绝,DBA,Python 迁移 1–17 的历史保全要求,DONE_LOCAL
+M0-06,M0,foundation,PG16 角色与 FORCE RLS：brant_app 无 owner／BYPASSRLS／DDL；brant_migrator 执行迁移,P0,M0-05,角色与 RLS 迁移模板,跨租户、跨公司负向集成测试,DBA＋安全负责人,BC-AT21,DONE_LOCAL
+M0-07,M0,foundation,foundation/identity 与 authorization：Principal、authority_epoch 守卫行、人工专属命令策略,P0,M0-03,Authorizer 端口实现,AI 身份执行人工命令被拒绝；撤权与生效竞争测试,安全负责人,T01 实施说明 2、8；核心设计 8.1,DONE_LOCAL
+M0-08,M0,工具,tools/dependency-check：由 Context Map V0.1 关系生成 import 白名单,P0,M0-01,白名单生成器与 CI 检查,AC2、AC3 可失败检查,首席架构师,,DONE_LOCAL
+M0-09,M0,CI,CI：gofmt、vet、test -race、PG16 集成、dependency-check；受保护主干与必需评审,P0,M0-05;M0-08,.github/workflows 与分支保护,PR 必须通过必需检查；直接推送 main 被拒绝,研发负责人,,PARTIAL
+M0-10,M0,ADR,ADR-BR-004／011 裁决原型：SC-03、SC-04 在 PG16 上的竞争实测（方案 A 与方案 B 对比）,P0,M0-04;M0-05,spike 代码与实测报告,两种提交顺序的结果与业务核心设计一致；结论提交首席架构师裁决,首席架构师＋TRD／CST Owner,T03 A26；核心设计 9.2,DONE_LOCAL
+M0-11,M0,messaging,Outbox 中继：cmd/brant-worker 与 foundation/messaging（沿用 Cargo V2.9 模式）,P1,M0-04,中继与崩溃演练,失败退避、放弃不阻塞分区、SIGKILL 后重投,技术负责人,Python 本地 outbox 表,DONE_LOCAL
+S1-01,S1,EVD,来源四层身份与业务文件,P0,M0-04;M0-07,internal/contexts/evd,EVD-INV-001；同渠道异正文拒绝；来源权限撤回后读取拒绝,EVD Owner,T01 source.register；foundation.file.register,NOT_STARTED
+S1-02,S1,PTY,主体、联系人、交易档案、地址角色与服务方角色,P0,S1-01,internal/contexts/pty；PartyRef v1,PTY-INV-001；人工核实；修订保留旧快照,PTY Owner,master.*；A29–A31,NOT_STARTED
+S1-03,S1,CAT,SKU、规格修订与货号映射,P0,S1-01,internal/contexts/cat；SkuRef v1,CAT-INV-001；未知 SKU 拒绝,CAT Owner,master(kind=sku)；foundation SKU 规格,NOT_STARTED
+S1-04,S1,POL,配置根、修订、独立发布、基础快照与编号（首批 13 类配置）,P0,M0-03;M0-07,internal/contexts/pol；ConfigRef v1,POL-INV-001–005；汇率方向用途；付款比例 100,POL Owner＋财务,共享基础 V0.2；brant.foundation/0.1.0,NOT_STARTED
+S1-05,S1,INQ,客户询价 draft／ready／cancelled／closed,P0,S1-02;S1-03,internal/contexts/inq；RfqRef v1,INQ-INV-001–002；BC-AT02、05 组件断言,INQ Owner,rfq.*,NOT_STARTED
+S1-06,S1,transport,transport/http 最小命令路由与查询、cmd/brant-api、入口资源限制,P0,S1-05,OpenAPI 3.1 候选；1 MiB／64 层等限制,重复 JSON 键、浮点数、额外字段被拒绝,接口负责人,__main__.py 入口限制；T03 规格 §10,NOT_STARTED
+S1-07,S1,测试,移植 T01 与共享基础测试（test_core、test_storage、test_foundation、test_cli、test_contracts）,P0,S1-01;S1-02;S1-03;S1-04;S1-05,Go 等价用例与映射状态更新,08 阶段映射表对应行改为 PORTED 且 Go CI 通过,QA,73 个 Python 测试方法（08 阶段映射）,NOT_STARTED
+S1-08,S1,演示,BRC-001 前段：四行 120 PCS 询价 ready 在 PG16 重放,P1,S1-06;S1-07,可重放脚本与证据,结果与 Python demo 一致,QA,python -m brant_core demo,NOT_STARTED
+S1-09,S1,PTY,主体筛查结论与 PartyScreeningGuard（名单来源由合规负责人确认）,P1,S1-02;S1-11,PartyScreening 聚合、守卫函数与复筛触发,PTY-INV-002；TD-AT15：新主体 pending、误报放行与正向名单失效、负向名单永久阻断；AI 与 system 身份裁决 match 被拒,PTY Owner＋合规负责人,—（Python 未实现）,NOT_STARTED
+S1-10,S1,消息,Outbox 死信、告警与重放（ADR-BR-015）,P0,M0-11,死信状态、告警与按事件 ID 的授权重放,预算耗尽的消息进入死信并告警；重放后消费方按事件 ID 去重；撤销与风险类事件不静默丢失,技术负责人＋运维,—（Python 未实现）,NOT_STARTED
+S1-11,S1,reference,筛查名单参考数据的受控导入（来源、版本、导入时间、哈希）与 POL screening_regulation,P1,S1-04,internal/reference 名单版本与导入命令；适用配置,新版本导入触发复筛；条目不可手工编辑；启用外国名单前须 ADR-BR-017 裁决,合规负责人＋研发,—（Python 未实现）,NOT_STARTED
+S2-01,S2,SUP,供应商询价与供应报价修订、核实、撤回,P0,S1-05,internal/contexts/sup,SUP-INV-001–002,SUP Owner,T02 §5、§13.2,NOT_STARTED
+S2-02,S2,SUP,采购条件独立发布、物流报价、服务方适用,P0,S2-01,PurchaseTerms、LogisticsOffer,SUP-INV-003；依附型与独立型条件,SUP Owner,T02 §6、§13.1；A46,NOT_STARTED
+S2-03,S2,CST,核价上下文、测算假设与测量快照,P0,S1-05;S1-04,CostingContext、MeasurementSnapshot,完整询价行覆盖；provisional 不可冻结,CST Owner,T02 §4、§13.1,NOT_STARTED
+S2-04,S2,CST,计算规则纯函数：阶梯、MOQ、费用义务、税价、汇率、分摊、资源预算,P0,M0-03,cst/internal/domain 规则包,T02 §11 全部样例与独立算术对照；CST-INV-003–007,CST Owner＋财务,costing_engine/rules.py、validator.py、resource_budget.py,NOT_STARTED
+S2-05,S2,CST,场景评估与冻结、来源核验与否认、快照可采纳资格,P0,S2-01;S2-03;S2-04,CostScenario、CostSnapshot,CST-INV-001–002；同场景唯一快照,CST Owner,integrated_model.py；costing.py,NOT_STARTED
+S2-06,S2,跨上下文,资格守卫：SupplyConditionGuard、ConfigGuard、AdoptabilityGuard（按 ADR-BR-004 裁决实现）,P0,M0-10;S2-05,上游 api 中的守卫契约与实现,依赖撤销先提交则冻结拒绝的 PG16 测试,首席架构师,T03 规格 §7；A26,NOT_STARTED
+S2-07,S2,测试,移植 T02 测试（test_costing*）,P0,S2-05,Go 等价用例,映射行 PORTED 且通过,QA,87 个 Python 测试方法（08 阶段映射）,NOT_STARTED
+S2-08,S2,CST,部分回收税额与成本口径（CST-INV-007）,P0,S2-04,partial 回收处理与可回收率校验,113 CNY、税率 0.13、可回收率 0.09 得 104；缺率或率高于税率被拒；真实可回收率在 CN-D02 冻结后启用,CST Owner＋财务,test_costing_domains.py（扩展）,NOT_STARTED
+S3-01,S3,TRD,QuoteRoot：工作稿、冻结、商业哈希黄金向量,P0,S2-05;S1-04,trd/internal/domain/quote,TRD-INV-002；哈希跨实现互操作向量（含中文与换行）,TRD Owner,T03 A1–A4；t03_candidate/protocol.py；hash-vectors.json,NOT_STARTED
+S3-02,S3,TRD,服务端计算：销售收费、税、销售汇率、毛利、付款分配,P0,S3-01;S2-04,纯函数计算包,TRD-INV-007–008；T03 §5.3 合成案例,TRD Owner＋财务,T03 A5、A28、A32,NOT_STARTED
+S3-03,S3,TRD,审核请求、批准、撤销与审核人当前资格,P0,S3-01;M0-07,ReviewRequest、QuoteApproval、ApprovalEffectivity,TRD-INV-003–005,TRD Owner,T03 A3、A6、A33–A35,NOT_STARTED
+S3-04,S3,TRD,正式化：报价模板、确定性渲染、编号、文件字节、提交证据、风险暂停,P0,S3-03;S1-01,quote.activate,TRD-INV-009、016；文件或编号失败整体回滚,TRD Owner,T03 A4、A13、A18、A19,NOT_STARTED
+S3-05,S3,TRD,替代、撤回、取消与转换名额锁定,P0,S3-04,quote.replace／withdraw／cancel,TRD-INV-001、010；SC-03,TRD Owner,T03 A17、A24,NOT_STARTED
+S3-06,S3,TRD,客户回复登记与核实、Acceptance 效力账本（含 invalidate／mark_disputed）,P0,S3-04,CustomerResponse、Acceptance,TRD-INV-011–012；BC-AT10–12,TRD Owner,T03 A20；T04 A36、A37、A44、A45,NOT_STARTED
+S3-07,S3,TRD,订单准备、订单审批与撤销、激活资格重查、order.cancel／close_unfulfilled（草稿态）,P0,S3-05;S3-06;S2-06,SalesOrder,TRD-INV-010、013、014；BC-AT13、15–17；SC-04,TRD Owner,T03 A20、A24–A26；T04 A38–A43,NOT_STARTED
+S3-08,S3,TRD,根级对象控制绑定与 control_epoch 围栏,P0,S3-01,ObjectControl,TRD-INV-015,TRD Owner＋AI Owner,t03_object_control；A24,NOT_STARTED
+S3-09,S3,TRD,查询：quote_ready、报价／审批／文档／Outbox／提交证据历史、发送前准入、动作对账,P1,S3-04;S3-07,查询 api 与 OpenAPI,读取与重放重查当前权限（X-INV-003）,TRD Owner,T03 A8–A16、A22–A23；T04 A42–A43,NOT_STARTED
+S3-10,S3,PUR,采购草稿（A46 对等）,P0,S3-07;S2-02;S2-06,internal/contexts/pur,PUR-INV-001–007,PUR Owner,T04 A46,NOT_STARTED
+S3-11,S3,测试,移植 T03／T04 测试并出具 V0.50 等价性报告,P0,S3-01;S3-02;S3-03;S3-04;S3-05;S3-06;S3-07;S3-08;S3-09;S3-10,等价性报告（映射、移植、通过、不移植及原因）,08 阶段映射表全部行有结论；未移植项有业务理由；有意背离项逐条引用 05 阶段不变量，不按 Python 行为移植。,QA＋首席架构师,417 个 Python 测试方法（08 阶段映射）,NOT_STARTED
+S3-12,S3,演示,BRC-001 全链人工路径在 PG16 重放（BC-AT01）,P0,S3-11,可重放证据,报价 960.00、订单 960.00、草稿 600.00；有效订单唯一,QA,BC-AT01,NOT_STARTED
+S3-13,S3,TRD,合同成立与有效期：承诺到达时间、迟到承诺、到期后订单生效与风险确认（ADR-BR-013）,P0,S3-06;S3-07,ReceivedAt、TRD-INV-012／014／017 与风险确认,SC-07、TD-AT03、BC-AT13 在 PG16 通过,TRD Owner,T04 A37、T03 A26（有意背离）,NOT_STARTED
+S3-14,S3,TRD,毛利例外批准（TRD-INV-007）,P0,S3-03,例外权限、独立性与绑定,SC-02、BC-AT06：普通批准不放行，例外批准后可激活,TRD Owner＋财务,test_t03_server_calculation.py（有意背离）,NOT_STARTED
+S3-15,S3,TRD,生效订单变更、取消、短交关闭与关闭；外销合同／形式发票,P0,S3-07,SM-TRD-ORDER、SM-TRD-ORDER-AMENDMENT、TRD-INV-018／019／020,TD-AT01、TD-AT02；订单修订与提交证据；PI 绑定订单修订,TRD Owner,—（Python 未实现）,NOT_STARTED
+S3-16,S3,PUR,需求分配、多来源草稿与草稿作废（PUR-INV-002／005／007）,P0,S3-10,DemandAllocation 聚合与 purchase.draft.void,TD-AT05、TD-AT06；并发分配只有一个成功,PUR Owner,test_t04_a46_purchase_draft.py（有意背离）,NOT_STARTED
+S3-17,S3,TRD,合同适用法律与争议解决条款（F-02）,P1,S3-02,POL 条款模板与 TRD 报价、合同条款字段,合同成立规则按适用法律选择；默认 CISG 与中国法；SIM-02 第 3 步可表达,TRD Owner＋法务,—（Python 未实现）,NOT_STARTED
+S4-01,S4,TSK,业务任务生命周期与控制模式（基线第 16 章）,P0,S3-08,internal/contexts/tsk,TSK-INV-001–002；未列出转换拒绝,AI Owner,Q01 旧包 take_control,NOT_STARTED
+S4-02,S4,TSK,动作执行与对账；提交后断连恢复,P0,S4-01,ActionExecution,BC-AT18、19,AI Owner,t03_reconciliation.py,NOT_STARTED
+S4-03,S4,ai,internal/ai：capability、gateway、policy、approvalgrant、execution、executionevidence,P0,S4-01;S1-06,AI 能力层,无授权默认拒绝；AI 只调用 api 命令,AI Owner＋安全负责人,,NOT_STARTED
+S4-04,S4,ai,受限文件导入、来源定位与候选生成,P0,S4-03,解析适配（候选）,BC-AT27,AI Owner,,NOT_STARTED
+S4-05,S4,集成,EER／BIP 适配评估与接入（ACL）,P1,S4-03,"adapters/{eer,bip}",停止屏障、恢复、unknown 对账证据,集成负责人,BC-D08,NOT_STARTED
+S4-06,S4,messaging,Inbox 分发与订阅登记,P0,M0-11,foundation/messaging Inbox,事件 ID 去重；重放；WF-03 风险传播,技术负责人,,NOT_STARTED
+S4-07,S4,评测,tests/ai-evaluation 与 BC-AT28 真实 AI 目标链,P0,S4-03;S4-04,评测套件与试次记录,记录全部试次、人工修正、实际成本与权威断言,AI Owner＋QA,,NOT_STARTED
+S4-08,S4,门禁,P0 退出评审（G2 证据包）,P0,S4-02;S4-06;S4-07;S3-12,G2 评审记录,适用 AT／AN／CT 有证据；未执行项逐项说明,研发＋测试＋业务,,NOT_STARTED
+S5-01,S5,PUR,采购承诺审批（A47）、承诺发出与供应商确认,P1,S3-10,PurchaseCommitment,A47 最低验收,PUR Owner,A47 设计,NOT_STARTED
+S5-02,S5,QLT,检验、处置与质量放行,P1,S5-01,internal/contexts/qlt,放行撤回后不能出运；外部检验机构与报告来源可登记，放行仍由我方授权人员决定（F-06）,QLT Owner,,NOT_STARTED
+S5-03,S5,FUL,节点、装箱、出运确认与出口批次,P1,S5-02,internal/contexts/ful,FUL-INV-001,FUL Owner,,NOT_STARTED
+S5-04,S5,STL,结算单、业务应收应付、资金记录、同币种核销,P1,S5-03,internal/contexts/stl,STL-INV-001–002,STL Owner＋财务,,NOT_STARTED
+S5-05,S5,CNX,中国最小协同（CN-M01）：发票、报关、退税资料与外部对账（人工路径）,P1,S5-03;S5-04,internal/contexts/cnx,适用 CN-AT；CN-R05、R07、R11,CNX Owner＋专业角色,,NOT_STARTED
+S5-07,S5,FUL,商业条件放行：STL 付款条件守卫、FUL 放行与例外（WF-07）,P0,S5-02;S5-03;S5-04;S1-09;S5-13;S5-15,CommercialRelease 聚合、PaymentConditionGuard,SC-08、TD-AT08；放行撤回与核销撤销的并发测试,FUL／STL Owner,—（Python 未实现）,NOT_STARTED
+S5-08,S5,FUL,订舱与出运单证套（商业发票、装箱单、提单记录、原产地证引用）,P1,S5-03,ShipmentDocumentSet 与版本核对,BT12：单证差异逐项显示，未核对不能签发,FUL Owner＋单证,—（Python 未实现）,NOT_STARTED
+S5-09,S5,跨上下文,订单变更传播：PUR、FUL、STL 复核（WF-06）,P1,S3-15;S5-01;S5-03;S5-04,OrderAmended 的下游处理,BT10：已发生事实保留；受影响承诺、装箱与付款计划可追溯,TRD／PUR／FUL／STL Owner,—（Python 未实现）,NOT_STARTED
+S5-10,S5,CAT,商品申报档案与官方证书结果（CAT DeclarationProfile、CNX DocumentBundle）,P1,S5-05,申报档案核实与证书适用性,CAT-INV-002；证书适用对象、市场与有效期核对,CAT／CNX Owner＋申报专业人员,—（Python 未实现）,NOT_STARTED
+S5-11,S5,运维,容量基准与恢复演练（G4）,P0,S5-04,阶梯负载测试、备份恢复与升级演练报告,候选目标：普通读取 P95 500 ms、业务命令 P95 800 ms、RPO 15 分钟、RTO 4 小时；按实测冻结或修订,技术负责人＋运维,—（Python 未实现）,NOT_STARTED
+S5-12,S5,STL,客户信用额度与信用占用（STL CustomerCredit、CreditGuard；TRD order.activate 接入）,P1,S3-07;S5-04,CustomerCredit 聚合、守卫函数与占用状态机,TD-AT11、SC-09；S5 之前，付款条件含出运后到期部分的订单 order.activate 返回 CREDIT_RESERVATION_REQUIRED；TD-AT16：信用决定按金额层级裁决，销售经办不能放行,STL Owner＋财务,—（Python 未实现）,NOT_STARTED
+S5-13,S5,CNX,贸易合规核查：国别禁运、制裁项目与出口管制（CNX TradeComplianceCheck、TradeComplianceGuard）,P1,S5-05;S1-09,核查聚合、结论状态机与守卫,TD-AT12；订单变更后旧结论不适用,CNX Owner＋合规负责人,—（Python 未实现）,NOT_STARTED
+S5-14,S5,CNX,出口许可证与用量台账（CNX ExportLicense）,P1,S5-13;S5-10,许可证聚合与用量分配,TD-AT13；并发分配只有一笔成功,CNX Owner＋单证,—（Python 未实现）,NOT_STARTED
+S5-15,S5,PUR,直发供应商交付（PUR SupplierDelivery）与出运引用,P1,S5-01;S5-03,SupplierDelivery 聚合与 SupplierDeliveryGuard,TD-AT14；未核实上报不计入,PUR／FUL Owner,—（Python 未实现）,NOT_STARTED
+S5-06,S5,门禁,B0 客户场景与 G0、G3、G4 证据（含订单形成方式核对：PO、PI、定金、返单、部分下单）,P1,S4-08;S5-05;S5-07;S5-11,试点评审,真实客户任务与人工、质量、成本比较,客户代表＋交付,,NOT_STARTED
+S5-16,S5,FUL,CIF／CIP 投保与保险单（F-03）,P1,S5-08,出运单证套中的保险单引用与投保金额、险别,SIM-02 第 8 步可表达；保险费与核价组件一致,FUL Owner＋单证,—（Python 未实现）,NOT_STARTED
+S6-01,S6,STK,库存与外厂台账（条件）,P2,S5-03,internal/contexts/stk,并发安全出库；直发不虚构收发,STK Owner,,NOT_STARTED
+S6-02,S6,MFG,生产协同与委外（条件）,P2,S6-01,internal/contexts/mfg,材料责任与交接留证,MFG Owner,,NOT_STARTED
+S6-03,S6,CLM,售后与索赔,P2,S5-04,internal/contexts/clm,退货不抹去原发货,CLM Owner,,NOT_STARTED
+S6-04,S6,CRM,CRM 可选包与来源桥接,P2,S1-05,internal/contexts/crm,BC-AT24：CRM 关闭时整链可运行,CRM Owner,,NOT_STARTED
+S6-05,S6,CNX,中国专业接口与全量协同,P2,S5-05,foundation/interop＋cnx adapters,外部回执乱序与 unknown 对账,集成负责人＋专业角色,,NOT_STARTED
+S6-06,S6,门禁,R1 发布（G5）,P2,S6-01;S6-02;S6-03;S6-04;S6-05,支持矩阵与发布证据,完整回归与实际发布指标,产品＋研发＋经营负责人,,NOT_STARTED
+S6-07,S6,TRD,参照报价下单：部分与多次（F-01，BC-D06）,P1,S3-15,报价行剩余数量台账、每张订单独立确认与审批,SIM-03：有效期内第二张 PO 可下单，累计不超报价数量（如报价设定）；并发只有一张占用成功,TRD Owner＋产品,—（Python 未实现）,NOT_STARTED

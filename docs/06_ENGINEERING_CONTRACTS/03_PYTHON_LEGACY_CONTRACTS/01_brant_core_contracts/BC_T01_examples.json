@@ -1,0 +1,37 @@
+{
+  "valid_partial": {
+    "contract": "brant.trade-core/0.1.0",
+    "command": "rfq.save_draft",
+    "idempotency_key": "req.1",
+    "args": {
+      "id": "rfq.1",
+      "expected_version": 0,
+      "lines": [
+        {
+          "line_id": "L1",
+          "requested_item": "待核实商品"
+        }
+      ]
+    }
+  },
+  "invalid_null": {
+    "contract": "brant.trade-core/0.1.0",
+    "command": "rfq.save_draft",
+    "idempotency_key": "req.2",
+    "args": {
+      "id": "rfq.1",
+      "expected_version": 0,
+      "customer_id": null
+    }
+  },
+  "invalid_extra": {
+    "contract": "brant.trade-core/0.1.0",
+    "command": "rfq.save_draft",
+    "idempotency_key": "req.3",
+    "args": {
+      "id": "rfq.1",
+      "expected_version": 0,
+      "status": "active"
+    }
+  }
+}

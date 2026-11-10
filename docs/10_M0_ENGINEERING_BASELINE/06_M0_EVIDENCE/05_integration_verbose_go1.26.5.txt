@@ -1,0 +1,207 @@
+== 2026-11-07T03:32:36Z go version go1.26.5 linux/amd64
+=== RUN   TestManifestOrdersDirectories
+--- PASS: TestManifestOrdersDirectories (0.00s)
+=== RUN   TestMigrationFilesAreContiguousAndCarryTheirDirectory
+--- PASS: TestMigrationFilesAreContiguousAndCarryTheirDirectory (0.00s)
+=== RUN   TestRepositoryManifestLoads
+--- PASS: TestRepositoryManifestLoads (0.00s)
+=== RUN   TestApplyIsIdempotentAndRefusesTampering
+APPLIED brant:000001_t_schema
+APPLIED brant:000002_t_table
+--- PASS: TestApplyIsIdempotentAndRefusesTampering (0.04s)
+PASS
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.047s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+=== RUN   TestOpenRequiresADSN
+--- PASS: TestOpenRequiresADSN (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	0.002s
+=== RUN   TestHumanOnlyCommandsRefuseAIAndSystemActors
+--- PASS: TestHumanOnlyCommandsRefuseAIAndSystemActors (0.00s)
+=== RUN   TestPolicyRejectsInvalidRules
+--- PASS: TestPolicyRejectsInvalidRules (0.00s)
+=== RUN   TestAIIsRefusedHumanOnlyCommandsEvenWithTheGrant
+--- PASS: TestAIIsRefusedHumanOnlyCommandsEvenWithTheGrant (0.02s)
+=== RUN   TestMissingGrantsAndUnknownCommandsAreDenied
+--- PASS: TestMissingGrantsAndUnknownCommandsAreDenied (0.02s)
+=== RUN   TestEpochChangesOnlyWhenAccessChanges
+--- PASS: TestEpochChangesOnlyWhenAccessChanges (0.03s)
+=== RUN   TestScopesAreIsolatedByRowLevelSecurity
+--- PASS: TestScopesAreIsolatedByRowLevelSecurity (0.02s)
+=== RUN   TestCommandHoldingTheGuardCommitsBeforeARevocation
+--- PASS: TestCommandHoldingTheGuardCommitsBeforeARevocation (0.03s)
+=== RUN   TestRevocationHoldingTheGuardDeniesTheWaitingCommand
+--- PASS: TestRevocationHoldingTheGuardDeniesTheWaitingCommand (0.03s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.150s
+=== RUN   TestContextsNeverJoinEachOthersTransactions
+--- PASS: TestContextsNeverJoinEachOthersTransactions (0.03s)
+=== RUN   TestScopeBindsTheTransaction
+--- PASS: TestScopeBindsTheTransaction (0.02s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/bento	0.052s
+=== RUN   TestApplicationRoleIsUnprivileged
+--- PASS: TestApplicationRoleIsUnprivileged (0.01s)
+=== RUN   TestApplicationRoleCannotRunDDL
+--- PASS: TestApplicationRoleCannotRunDDL (0.01s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.023s
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+=== RUN   TestRelayPublishesInClaimOrder
+--- PASS: TestRelayPublishesInClaimOrder (0.00s)
+=== RUN   TestRelayRecordsFailureWithBackoff
+--- PASS: TestRelayRecordsFailureWithBackoff (0.00s)
+=== RUN   TestRelayRecordsFailureWhenPublishTimesOut
+--- PASS: TestRelayRecordsFailureWhenPublishTimesOut (0.02s)
+=== RUN   TestRelayAbandonsRejectedAndInvalidDeliveries
+--- PASS: TestRelayAbandonsRejectedAndInvalidDeliveries (0.00s)
+=== RUN   TestRelayTreatsLostLeaseAsSettled
+--- PASS: TestRelayTreatsLostLeaseAsSettled (0.00s)
+=== RUN   TestRelayLeavesDeliveryLeasedWhenStopping
+--- PASS: TestRelayLeavesDeliveryLeasedWhenStopping (0.00s)
+=== RUN   TestRelayBackoffDoublesUpToMax
+--- PASS: TestRelayBackoffDoublesUpToMax (0.00s)
+=== RUN   TestRelayRejectsMisconfiguration
+--- PASS: TestRelayRejectsMisconfiguration (0.00s)
+=== RUN   TestWebhookPostsEnvelopeWithIdempotencyKey
+--- PASS: TestWebhookPostsEnvelopeWithIdempotencyKey (0.03s)
+=== RUN   TestWebhookClassifiesSinkAnswers
+--- PASS: TestWebhookClassifiesSinkAnswers (0.06s)
+=== RUN   TestRelayRetriesFailedPublishThenSucceeds
+--- PASS: TestRelayRetriesFailedPublishThenSucceeds (0.09s)
+=== RUN   TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition
+--- PASS: TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition (0.09s)
+=== RUN   TestWorkerCrashRecoveryDrill
+    relay_integration_test.go:278: re-delivered 3.062s after the first delivery (lease 3s)
+    relay_integration_test.go:279: second worker:
+        time=2026-11-07T11:32:38.059+08:00 level=INFO msg="relaying outbox" schema=brant_t_outbox_59fef44ea2a4 sink=http://127.0.0.1:44699 lease=3s
+        time=2026-11-07T11:32:41.158+08:00 level=INFO msg=stopped
+--- PASS: TestWorkerCrashRecoveryDrill (3.57s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	3.870s
+=== RUN   TestPaymentTailFollowsRemainderOrder
+--- PASS: TestPaymentTailFollowsRemainderOrder (0.00s)
+=== RUN   TestTiesGoToTheSmallerID
+--- PASS: TestTiesGoToTheSmallerID (0.00s)
+=== RUN   TestAllocationRejectsInvalidInput
+--- PASS: TestAllocationRejectsInvalidInput (0.00s)
+=== RUN   TestAllocationProperties
+--- PASS: TestAllocationProperties (0.03s)
+=== RUN   TestParseDecimalAcceptsContractForms
+--- PASS: TestParseDecimalAcceptsContractForms (0.00s)
+=== RUN   TestParseDecimalRejectsEverythingElse
+--- PASS: TestParseDecimalRejectsEverythingElse (0.00s)
+=== RUN   TestRoundHalfUpIsExact
+--- PASS: TestRoundHalfUpIsExact (0.00s)
+=== RUN   TestExactAndString
+--- PASS: TestExactAndString (0.00s)
+=== RUN   TestQuoByZero
+--- PASS: TestQuoByZero (0.00s)
+=== RUN   TestCurrencyForm
+--- PASS: TestCurrencyForm (0.00s)
+=== RUN   TestParseMinorFollowsTheContractPattern
+--- PASS: TestParseMinorFollowsTheContractPattern (0.00s)
+=== RUN   TestParseAmountNeverRounds
+--- PASS: TestParseAmountNeverRounds (0.00s)
+=== RUN   TestAmountsOfDifferentCurrenciesNeverCombine
+--- PASS: TestAmountsOfDifferentCurrenciesNeverCombine (0.00s)
+=== RUN   TestAmountLimitIsTheCalculationLimit
+--- PASS: TestAmountLimitIsTheCalculationLimit (0.00s)
+=== RUN   TestMoneyIsImmutable
+--- PASS: TestMoneyIsImmutable (0.00s)
+=== RUN   TestLinesRoundBeforeAggregation
+--- PASS: TestLinesRoundBeforeAggregation (0.00s)
+=== RUN   TestBRC001Arithmetic
+--- PASS: TestBRC001Arithmetic (0.00s)
+=== RUN   TestTaxSplits
+--- PASS: TestTaxSplits (0.00s)
+=== RUN   TestExchangeRateConversion
+--- PASS: TestExchangeRateConversion (0.00s)
+=== RUN   TestTierArithmetic
+--- PASS: TestTierArithmetic (0.00s)
+=== RUN   TestMarginFloorIsComparedExactly
+--- PASS: TestMarginFloorIsComparedExactly (0.00s)
+=== RUN   TestUnitConversionUsesThePublishedFactor
+--- PASS: TestUnitConversionUsesThePublishedFactor (0.00s)
+=== RUN   TestIdentifierRule
+--- PASS: TestIdentifierRule (0.00s)
+=== RUN   TestScopeAndActor
+--- PASS: TestScopeAndActor (0.00s)
+=== RUN   TestValidityIsHalfOpen
+--- PASS: TestValidityIsHalfOpen (0.00s)
+=== RUN   TestTimestampsHaveMicrosecondPrecision
+--- PASS: TestTimestampsHaveMicrosecondPrecision (0.00s)
+=== RUN   FuzzParseDecimal
+=== RUN   FuzzParseDecimal/seed#0
+=== RUN   FuzzParseDecimal/seed#1
+=== RUN   FuzzParseDecimal/seed#2
+=== RUN   FuzzParseDecimal/seed#3
+=== RUN   FuzzParseDecimal/seed#4
+=== RUN   FuzzParseDecimal/seed#5
+=== RUN   FuzzParseDecimal/seed#6
+=== RUN   FuzzParseDecimal/seed#7
+=== RUN   FuzzParseDecimal/seed#8
+--- PASS: FuzzParseDecimal (0.00s)
+    --- PASS: FuzzParseDecimal/seed#0 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#1 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#2 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#3 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#4 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#5 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#6 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#7 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#8 (0.00s)
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle/seed#0
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle/seed#1
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle/seed#2
+--- PASS: FuzzRoundHalfUpAgainstDigitOracle (0.00s)
+    --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#0 (0.00s)
+    --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#1 (0.00s)
+    --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#2 (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.027s
+=== RUN   TestClassify
+--- PASS: TestClassify (0.00s)
+=== RUN   TestImportRules
+--- PASS: TestImportRules (0.00s)
+=== RUN   TestPackagesOutsideTheLayersAreReported
+--- PASS: TestPackagesOutsideTheLayersAreReported (0.00s)
+=== RUN   TestTestSupportIsForTestFilesOnly
+--- PASS: TestTestSupportIsForTestFilesOnly (0.00s)
+=== RUN   TestDocsHoldNoGoCode
+--- PASS: TestDocsHoldNoGoCode (0.00s)
+=== RUN   TestGeneratedAllowlistCoversPresentContextsOnly
+--- PASS: TestGeneratedAllowlistCoversPresentContextsOnly (0.00s)
+=== RUN   TestArchiveContextMapIsReadable
+--- PASS: TestArchiveContextMapIsReadable (0.00s)
+=== RUN   TestCodeownersMustNameEveryContextAndTheKernel
+--- PASS: TestCodeownersMustNameEveryContextAndTheKernel (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.003s
+=== RUN   TestSC04OptionAPrefetchLeavesACommitWindow
+--- PASS: TestSC04OptionAPrefetchLeavesACommitWindow (0.06s)
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first
+--- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder (0.07s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first (0.01s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first (0.02s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first (0.01s)
+=== RUN   TestSC03CheckThenActWithoutRootLockLetsBothWin
+--- PASS: TestSC03CheckThenActWithoutRootLockLetsBothWin (0.06s)
+=== RUN   TestSC03RootLockLetsExactlyOneWin
+=== RUN   TestSC03RootLockLetsExactlyOneWin/replace_first
+=== RUN   TestSC03RootLockLetsExactlyOneWin/convert_first
+--- PASS: TestSC03RootLockLetsExactlyOneWin (0.07s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/replace_first (0.02s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/convert_first (0.01s)
+=== RUN   TestSC03StressComparesTheTwoImplementations
+    consistency_integration_test.go:617: no root lock: 200 of 200 rounds had two winners
+    consistency_integration_test.go:617: root row FOR UPDATE first: 0 of 200 rounds had two winners
+--- PASS: TestSC03StressComparesTheTwoImplementations (2.95s)
+PASS
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	3.212s
+exit status: 0

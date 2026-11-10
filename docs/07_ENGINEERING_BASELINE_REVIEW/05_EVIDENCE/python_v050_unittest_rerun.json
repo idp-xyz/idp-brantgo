@@ -1,0 +1,12 @@
+{
+  "source": "90_ORIGINAL_SOURCES/01_IDP_Brant_T04_A46采购准备包_V0.50.zip",
+  "source_sha256": "22146a528ed451beb659a3f4a37471a7c1ccfab1990cb72572b378fc50a25eff",
+  "copy": "/tmp/claude-1000/-home-tops-workspace-idp-brantgo/1df2d245-cd5f-43fd-a26b-d5ad89dd9a0c/scratchpad/py_v050_from_zip",
+  "python": "Python 3.12.13",
+  "environment": "uv sync --frozen --no-dev --offline（包内 uv.lock；jsonschema 4.26.0）",
+  "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s tests",
+  "started_at": "2026-11-10T04:49:47Z",
+  "finished_at": "2026-11-10T04:59:26Z",
+  "exit_code": 0,
+  "summary": "Ran 679 tests in 522.989s  OK "
+}

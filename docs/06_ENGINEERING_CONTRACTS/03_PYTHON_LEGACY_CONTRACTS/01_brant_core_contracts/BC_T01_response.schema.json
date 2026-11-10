@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BC-T01 response candidate",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "action_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "object_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "row_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "registered",
+            "draft",
+            "confirmed",
+            "inactive",
+            "ready",
+            "cancelled",
+            "closed"
+          ]
+        },
+        "replayed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "action_id",
+        "object_id",
+        "row_version",
+        "status",
+        "replayed"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "code": {
+          "enum": [
+            "SCHEMA_INVALID",
+            "UNSUPPORTED_CONTRACT",
+            "PERMISSION_DENIED",
+            "NOT_FOUND",
+            "VERSION_CONFLICT",
+            "IDEMPOTENCY_PAYLOAD_CONFLICT",
+            "REFERENCE_INVALID",
+            "INVALID_KNOWN_VALUE",
+            "DUPLICATE_LINE_ID",
+            "DRAFT_NOT_READY",
+            "INVALID_STATE",
+            "SOURCE_IDENTITY_CONFLICT",
+            "OBJECT_CONTROL_CONFLICT"
+          ]
+        },
+        "field_errors": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "path",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "correlation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "retryable": {
+          "const": false
+        }
+      },
+      "required": [
+        "ok",
+        "code",
+        "field_errors",
+        "correlation_id",
+        "retryable"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

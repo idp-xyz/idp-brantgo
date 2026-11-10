@@ -1,0 +1,5304 @@
+{
+  "artifact": "IDP Brant Tactical DDD Candidate",
+  "version": "0.1",
+  "date": "2026-11-06",
+  "status": "SIMULATED REVIEW ACCEPTED (E0) — aggregates, state machines and invariants accepted by an AI-simulated review; not signed by named owners; no Go business code yet",
+  "dependsOn": {
+    "UL": "02_UBIQUITOUS_LANGUAGE/01_IDP_Brant_Ubiquitous_Language_V0.1_Draft.json",
+    "ContextMap": "03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json",
+    "EventStorming": "04_DOMAIN_EVENT_STORMING/02_IDP_Brant_Event_Storming_Model_V0.1.json"
+  },
+  "principles": [
+    "先确定必须在一个本地事务内成立的不变量，再命名聚合根；聚合只处理自己拥有的事实。",
+    "不可变业务修订与可变根版本分开：business_revision／business_hash 表达内容身份，root_version 表达并发。",
+    "持久状态只经注册命令迁移；到期、可采纳、就绪等资格是带 as_of 的派生判断，不由定时器改写。",
+    "历史事实可读与当前可用分开：后续变化登记风险或撤销事件，不倒写已提交的合法事实。",
+    "合同成立与内部生效分开：客户承诺在报价有效期内到达即合同成立；订单准备、审批与生效是对已成立合同的内部执行授权，报价随后到期不否定合同，上游变化作为风险由审批逐项确认（ADR-BR-013）。",
+    "人工核实、审批与正式化命令只接受人工身份；humanOnlyCommands 是这份清单的唯一来源，命令目录与 M0 门禁页由它生成。AI 产生候选并走同一命令路径。",
+    "一个事务只修改一个既有聚合实例；同上下文内允许同时创建由本命令派生的新聚合，限于登记的例外：order.prepare 占用名额并创建订单草稿；quote.response.verify 创建 Acceptance；cost_snapshot.freeze 冻结场景并创建快照；purchase.draft.prepare 更新需求分配余额并创建草稿。",
+    "不在本上下文事务内写入其他上下文：正式文档字节、哈希与编号绑定封存在 TRD 自身 schema；编号由 POL 在下游事务之前分配（回滚留号段空缺），EVD 经事件登记文件引用。",
+    "一次成功写入原子提交业务变化、动作结果、提交证据、审计与 Outbox；失败不留下半份事实。"
+  ],
+  "lockOrder": [
+    "本上下文聚合根行 FOR UPDATE；多根按 ID 排序（TRD 为报价根及其 ObjectControl，PUR 为订单行需求分配）",
+    "同根下级行 FOR UPDATE，固定顺序：QuoteRevision 与 RevisionEffectivity → AcceptanceEffectivity → SalesOrder 与 OrderAmendment → ApprovalEffectivity（报价批准与订单审批）",
+    "上游守卫行 FOR SHARE：经上游发布的守卫函数调用，按上下文代码字母序；公司授权守卫（authority_epoch）属于上游守卫",
+    "ActionResult／CommitEvidence／审计／Outbox 追加",
+    "上游的撤销、撤权与否认只以 FOR UPDATE 锁自己的守卫行，从不锁下游行；守卫锁边（Context Map relationships.guardLock）必须构成有向无环图，由构建器校验"
+  ],
+  "contexts": [
+    {
+      "id": "PTY",
+      "depth": "full",
+      "coreQuestion": "下游引用的主体、联系人与地址是否是当前已核实的版本？",
+      "aggregates": [
+        {
+          "id": "PTY-AGG-Party",
+          "name": "Party",
+          "cn": "交易主体",
+          "root": "Party",
+          "entities": [
+            "PartyRole",
+            "AddressRole"
+          ],
+          "valueObjects": [
+            "PartyRef",
+            "LegalName",
+            "MasterVerification"
+          ],
+          "identity": "(tenant, party_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [
+            "PTY-INV-001"
+          ],
+          "commands": [
+            "party.save_draft",
+            "party.confirm",
+            "party.revise",
+            "party.deactivate",
+            "service_role.verify"
+          ],
+          "events": [
+            "PartyConfirmed",
+            "PartyRevised",
+            "PartyDeactivated",
+            "ServiceRoleVerified"
+          ],
+          "goPackage": "internal/contexts/pty/internal/domain/party",
+          "pythonSource": "service.py master.*；BC_T01_reference.sql master／master_evidence",
+          "notes": "Python 以 master.kind 区分 customer／supplier；Go 以角色集合表达，同一主体可同时是客户和供应商。"
+        },
+        {
+          "id": "PTY-AGG-TradingProfile",
+          "name": "TradingProfile",
+          "cn": "公司交易档案",
+          "root": "TradingProfile",
+          "entities": [],
+          "valueObjects": [
+            "SettlementTermsRef",
+            "OwnerRef"
+          ],
+          "identity": "(tenant, company, party_id)",
+          "concurrency": "revision＋root_version",
+          "invariants": [
+            "PTY-INV-001"
+          ],
+          "commands": [
+            "trading_profile.save_draft",
+            "trading_profile.publish"
+          ],
+          "events": [
+            "TradingProfilePublished"
+          ],
+          "goPackage": "internal/contexts/pty/internal/domain/profile",
+          "pythonSource": "foundation 交易伙伴档案（T03 A29）",
+          "notes": "首期只有一个启用公司。"
+        },
+        {
+          "id": "PTY-AGG-Contact",
+          "name": "Contact",
+          "cn": "联系人",
+          "root": "Contact",
+          "entities": [],
+          "valueObjects": [
+            "ContactChannel",
+            "PartyRef"
+          ],
+          "identity": "(tenant, company, contact_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [
+            "PTY-INV-001"
+          ],
+          "commands": [
+            "contact.save_draft",
+            "contact.confirm"
+          ],
+          "events": [
+            "ContactConfirmed"
+          ],
+          "goPackage": "internal/contexts/pty/internal/domain/contact",
+          "pythonSource": "master(kind=contact)；T03 A30",
+          "notes": "联系人归属主体须核实；邮箱电话按用途授权。"
+        },
+        {
+          "id": "PTY-AGG-PartyScreening",
+          "name": "PartyScreening",
+          "cn": "主体筛查",
+          "root": "PartyScreening",
+          "entities": [
+            "ScreeningResult",
+            "ScreeningDecision",
+            "PositiveListEntry",
+            "NegativeListEntry"
+          ],
+          "valueObjects": [
+            "ListSourceVersion",
+            "ScreeningScope",
+            "ScreeningOutcome",
+            "ValidUntil"
+          ],
+          "identity": "(tenant, party_id, screening_id)",
+          "concurrency": "只追加；当前结论指针 CAS",
+          "invariants": [
+            "PTY-INV-002"
+          ],
+          "commands": [
+            "party_screening.record",
+            "party_screening.decide",
+            "party_screening.block"
+          ],
+          "events": [
+            "PartyScreeningRecorded",
+            "PartyScreeningDecided",
+            "PartyScreeningBlocked"
+          ],
+          "goPackage": "internal/contexts/pty/internal/domain/screening",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "名单内容从合规数据服务商或官方发布源导入 internal/reference（brant_ref），带来源、版本、导入时间与哈希；企业只启用 POL screening_regulation 中适用的名单。新建或资料变更的主体在筛查完成前为 pending；疑似命中由合规人工裁决：误报可放行并可登记正向名单（绑定主体版本与名单条目，条目变化即失效），真实命中保持 blocked，负向名单永久阻断、不随名单更新解除。结论不是法律认定。"
+        }
+      ],
+      "policies": [
+        "主数据核实仅限人工身份且须具备来源读取权限。"
+      ],
+      "crossBoundary": [
+        "向 INQ、SUP、TRD、PUR、FUL、STL 发布 PartyRef v1；向 TRD、FUL 发布 PartyScreeningGuard；消费 POL screening_regulation 与 internal/reference 名单版本；守卫读取当前版本（ADR-BR-004）。"
+      ],
+      "consistency": "单聚合 CAS；跨上下文只按引用与版本。",
+      "risks": [
+        "停用主体被在途报价继续转单：TRD 在转单时重查当前可交易性。"
+      ]
+    },
+    {
+      "id": "CAT",
+      "depth": "full",
+      "coreQuestion": "交易行引用的 SKU 与技术版本是否当前有效且被正确映射？",
+      "aggregates": [
+        {
+          "id": "CAT-AGG-Sku",
+          "name": "Sku",
+          "cn": "可交易规格",
+          "root": "Sku",
+          "entities": [
+            "SpecificationRevision"
+          ],
+          "valueObjects": [
+            "SkuRef",
+            "ColorSizeCode",
+            "BaseUnitRef"
+          ],
+          "identity": "(tenant, company, sku_id)",
+          "concurrency": "row_version CAS；规格修订单调递增",
+          "invariants": [
+            "CAT-INV-001"
+          ],
+          "commands": [
+            "sku.save_draft",
+            "sku.confirm",
+            "sku.revise_spec",
+            "sku.deactivate"
+          ],
+          "events": [
+            "SkuConfirmed",
+            "SpecificationRevised",
+            "SkuDeactivated"
+          ],
+          "goPackage": "internal/contexts/cat/internal/domain/sku",
+          "pythonSource": "master(kind=sku)；foundation SKU 规格",
+          "notes": "服装款色码通过行业模板扩展点表达。"
+        },
+        {
+          "id": "CAT-AGG-ItemCodeMapping",
+          "name": "ItemCodeMapping",
+          "cn": "货号映射",
+          "root": "ItemCodeMapping",
+          "entities": [],
+          "valueObjects": [
+            "ExternalItemCode",
+            "SkuRef"
+          ],
+          "identity": "(tenant, company, party_id, external_code)",
+          "concurrency": "revision＋root_version",
+          "invariants": [],
+          "commands": [
+            "item_code_mapping.save_draft",
+            "item_code_mapping.publish"
+          ],
+          "events": [
+            "ItemCodeMappingPublished"
+          ],
+          "goPackage": "internal/contexts/cat/internal/domain/mapping",
+          "pythonSource": "foundation 客户／供应商货号映射",
+          "notes": "缺失映射进入待核实，不自动替换 SKU。"
+        },
+        {
+          "id": "CAT-AGG-Item",
+          "name": "Item",
+          "cn": "商品",
+          "root": "Item",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, item_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [],
+          "events": [],
+          "goPackage": "internal/contexts/cat/internal/domain/item",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "商品身份；SKU 为可交易规格。轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "CAT-AGG-SampleApproval",
+          "name": "SampleApproval",
+          "cn": "样品批准",
+          "root": "SampleApproval",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, sample_approval_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "sample.approve"
+          ],
+          "events": [
+            "SampleApproved"
+          ],
+          "goPackage": "internal/contexts/cat/internal/domain/sampleapproval",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "批准绑定技术版本与范围（BC-AT23）。轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "CAT-AGG-DeclarationProfile",
+          "name": "DeclarationProfile",
+          "cn": "商品申报档案",
+          "root": "DeclarationProfile",
+          "entities": [
+            "DeclarationProfileRevision"
+          ],
+          "valueObjects": [
+            "CommodityCode",
+            "CodeTableVersion",
+            "DeclarationElements",
+            "LegalUnitConversion",
+            "OriginBasis"
+          ],
+          "identity": "(tenant, company, sku_id, profile_revision)",
+          "concurrency": "修订根 CAS；核实后不可变",
+          "invariants": [
+            "CAT-INV-002"
+          ],
+          "commands": [
+            "declaration_profile.save_draft",
+            "declaration_profile.verify"
+          ],
+          "events": [
+            "DeclarationProfileVerified"
+          ],
+          "goPackage": "internal/contexts/cat/internal/domain/declaration",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "基线第 22.1 节 CNProductDeclarationProfile；商品编码、出口管制分类与原产地证据分别保存。"
+        }
+      ],
+      "policies": [
+        "未知 SKU 不能自动创建并生效。"
+      ],
+      "crossBoundary": [
+        "向 INQ、SUP、CST、TRD、PUR、CNX 发布 SkuRef v1；向 CNX 发布 DeclarationProfileRef v1。"
+      ],
+      "consistency": "单聚合 CAS。",
+      "risks": [
+        "技术版本更新后旧样品确认被误用：BC-AT23 要求返回 unknown／unsatisfied。"
+      ]
+    },
+    {
+      "id": "POL",
+      "depth": "full",
+      "coreQuestion": "计算与正式化所用的每一项配置是否是当前已独立发布、在有效区间内的精确修订？",
+      "aggregates": [
+        {
+          "id": "POL-AGG-ConfigurationRoot",
+          "name": "ConfigurationRoot",
+          "cn": "配置根",
+          "root": "ConfigurationRoot",
+          "entities": [
+            "ConfigRevision",
+            "Publication"
+          ],
+          "valueObjects": [
+            "ConfigRef",
+            "ValidityInterval",
+            "VerificationEvidence"
+          ],
+          "identity": "(tenant, company, kind, config_id)",
+          "concurrency": "root_version CAS；修订号单调",
+          "invariants": [
+            "POL-INV-001",
+            "POL-INV-002",
+            "POL-INV-003",
+            "POL-INV-004"
+          ],
+          "commands": [
+            "config.save_draft",
+            "config.discard_draft",
+            "config.publish",
+            "config.retire"
+          ],
+          "events": [
+            "ConfigPublished",
+            "ConfigSuperseded",
+            "ConfigRetired"
+          ],
+          "goPackage": "internal/contexts/pol/internal/domain/config",
+          "pythonSource": "foundation.py save／publish／retire；t03_config.py",
+          "notes": "kind 封闭枚举：company_profile、currency、unit、unit_conversion、fx_rate、calendar、trade_terms、payment_terms、tax_profile、tax_application、fee_category、pricing_policy、bank_account、number_sequence、document_template、quote_document_template、screening_regulation（启用的筛查名单与合规法规、复筛频率）、credit_policy（默认额度、额度来源、审批层级与金额阈值、逾期容忍天数）。"
+        },
+        {
+          "id": "POL-AGG-FoundationSnapshot",
+          "name": "FoundationSnapshot",
+          "cn": "核价基础快照",
+          "root": "FoundationSnapshot",
+          "entities": [],
+          "valueObjects": [
+            "ConfigRef",
+            "ContentHash"
+          ],
+          "identity": "(tenant, company, snapshot_id)",
+          "concurrency": "只追加",
+          "invariants": [],
+          "commands": [
+            "foundation.snapshot"
+          ],
+          "events": [
+            "FoundationSnapshotCaptured"
+          ],
+          "goPackage": "internal/contexts/pol/internal/domain/snapshot",
+          "pythonSource": "foundation.capture；foundation_snapshot",
+          "notes": "保存被采用的全部配置及依赖版本与哈希。"
+        },
+        {
+          "id": "POL-AGG-DocumentNumberSequence",
+          "name": "DocumentNumberSequence",
+          "cn": "单据编号序列",
+          "root": "DocumentNumberSequence",
+          "entities": [
+            "IssuedNumber"
+          ],
+          "valueObjects": [
+            "BusinessReference"
+          ],
+          "identity": "(tenant, company, document_type, year)",
+          "concurrency": "行锁原子递增",
+          "invariants": [
+            "POL-INV-005"
+          ],
+          "commands": [
+            "number.issue"
+          ],
+          "events": [
+            "DocumentNumberIssued"
+          ],
+          "goPackage": "internal/contexts/pol/internal/domain/numbering",
+          "pythonSource": "foundation.number_issue；document_counter／document_number",
+          "notes": "若采用 idp-platform-go 编号能力，POL 保留业务引用唯一与审计；待 ADR。编号在下游事务之前由 POL 分配，下游同事务绑定；下游回滚留号段空缺。"
+        }
+      ],
+      "policies": [
+        "发布须授权人工且与编制人不同；核实证据必需。",
+        "示例税率与汇率均为合成参数。"
+      ],
+      "crossBoundary": [
+        "向 SUP、CST、TRD、STL 发布 ConfigRef v1 与 ConfigGuard（ADR-BR-004）。"
+      ],
+      "consistency": "单配置根 CAS；发布原子替代 active。",
+      "risks": [
+        "汇率缺失默认 1 或自动反向；含义已启用的币种被修改。"
+      ]
+    },
+    {
+      "id": "EVD",
+      "depth": "full",
+      "coreQuestion": "业务对象引用的来源与文件是否不可变、可追溯，并在当前权限下可读？",
+      "aggregates": [
+        {
+          "id": "EVD-AGG-Source",
+          "name": "Source",
+          "cn": "来源",
+          "root": "SourceOrigin",
+          "entities": [
+            "SourceContent",
+            "SourceImport",
+            "SourceUse"
+          ],
+          "valueObjects": [
+            "ContentHash",
+            "SourceLocator",
+            "ChannelIdentity"
+          ],
+          "identity": "(tenant, company, source_id)",
+          "concurrency": "只追加；数据库禁止更新与删除",
+          "invariants": [
+            "EVD-INV-001"
+          ],
+          "commands": [
+            "source.register",
+            "source.use"
+          ],
+          "events": [
+            "SourceRegistered",
+            "SourceUsed"
+          ],
+          "goPackage": "internal/contexts/evd/internal/domain/source",
+          "pythonSource": "BC_T01_reference.sql source_*",
+          "notes": "相同内容同 scope 共享；同渠道消息不同正文拒绝。"
+        },
+        {
+          "id": "EVD-AGG-BusinessFile",
+          "name": "BusinessFile",
+          "cn": "业务文件",
+          "root": "BusinessFile",
+          "entities": [],
+          "valueObjects": [
+            "ContentHash",
+            "MimeType",
+            "ByteSize"
+          ],
+          "identity": "(tenant, company, file_id)",
+          "concurrency": "只追加",
+          "invariants": [
+            "EVD-INV-001"
+          ],
+          "commands": [
+            "file.register"
+          ],
+          "events": [
+            "FileRegistered"
+          ],
+          "goPackage": "internal/contexts/evd/internal/domain/file",
+          "pythonSource": "foundation.file_register；business_file",
+          "notes": "10 MiB 上限、Base64 与哈希校验；正式文档字节由 TRD 在自身 schema 同事务封存，EVD 经 QuoteActivated／OrderDocumentGenerated 事件登记文件引用，不在 TRD 事务内写入。"
+        }
+      ],
+      "policies": [
+        "原文不写普通审计日志。"
+      ],
+      "crossBoundary": [
+        "向 INQ、SUP、TRD、CNX 发布 SourceRef v1 与 FileRef v1；消费 TRD 正式文档事件登记文件引用。"
+      ],
+      "consistency": "只追加。",
+      "risks": [
+        "正式文档字节与 TRD 正式化分属两个上下文时的原子性：见 ADR-BR-004 与 12 阶段规则。"
+      ]
+    },
+    {
+      "id": "INQ",
+      "depth": "full",
+      "coreQuestion": "客户需求是否完整、逐行可追溯，并经人工核实为 ready？",
+      "aggregates": [
+        {
+          "id": "INQ-AGG-CustomerRfq",
+          "name": "CustomerRfq",
+          "cn": "客户询价",
+          "root": "CustomerRfq",
+          "entities": [
+            "RfqLine",
+            "UnresolvedField",
+            "Clarification"
+          ],
+          "valueObjects": [
+            "PartyRef",
+            "SkuRef",
+            "Quantity",
+            "SourceLocator"
+          ],
+          "identity": "(tenant, company, rfq_id)",
+          "concurrency": "row_version CAS；整稿替换",
+          "invariants": [
+            "INQ-INV-001",
+            "INQ-INV-002"
+          ],
+          "commands": [
+            "rfq.save_draft",
+            "rfq.confirm_scope",
+            "rfq.cancel",
+            "rfq.close"
+          ],
+          "events": [
+            "RfqScopeConfirmed",
+            "RfqCancelled",
+            "RfqClosed"
+          ],
+          "goPackage": "internal/contexts/inq/internal/domain/rfq",
+          "pythonSource": "service.py rfq.*；rfq／rfq_line",
+          "notes": "ready 后实质变更需询价修订（尚未设计）。"
+        }
+      ],
+      "policies": [
+        "rfq.confirm_scope 只能由人工执行且须覆盖询价引用的全部来源。"
+      ],
+      "crossBoundary": [
+        "向 SUP、CST、TRD 发布 RfqRef v1 与 RfqLineRef v1。"
+      ],
+      "consistency": "单聚合 CAS。",
+      "risks": [
+        "源数量冲突被改行凑平（BC-AT05）。"
+      ]
+    },
+    {
+      "id": "SUP",
+      "depth": "full",
+      "coreQuestion": "核价与采购引用的供应条件是否是当前已核实或已发布、在有效区间内的修订？",
+      "aggregates": [
+        {
+          "id": "SUP-AGG-SupplierRfq",
+          "name": "SupplierRfq",
+          "cn": "供应商询价",
+          "root": "SupplierRfq",
+          "entities": [
+            "SupplierRfqLine"
+          ],
+          "valueObjects": [
+            "RfqLineRef",
+            "PartyRef",
+            "IssueEvidence"
+          ],
+          "identity": "(tenant, company, supplier_rfq_id)",
+          "concurrency": "root_version CAS",
+          "invariants": [],
+          "commands": [
+            "supplier_rfq.save_draft",
+            "supplier_rfq.record_issued",
+            "supplier_rfq.close"
+          ],
+          "events": [
+            "SupplierRfqIssued"
+          ],
+          "goPackage": "internal/contexts/sup/internal/domain/supplierrfq",
+          "pythonSource": "T02 规格 13.1",
+          "notes": "issued 只表示已登记人工发出事实。"
+        },
+        {
+          "id": "SUP-AGG-SupplierOffer",
+          "name": "SupplierOffer",
+          "cn": "供应报价",
+          "root": "SupplierOfferRoot",
+          "entities": [
+            "OfferRevision",
+            "OfferLine",
+            "PriceTier"
+          ],
+          "valueObjects": [
+            "Moq",
+            "OrderMultiple",
+            "PriceBasisQuantity",
+            "LeadTimeCommitment",
+            "PriceIncludes"
+          ],
+          "identity": "(tenant, company, offer_id)；修订 (offer_id, revision)",
+          "concurrency": "root_version CAS；working／active 修订指针",
+          "invariants": [
+            "SUP-INV-001",
+            "SUP-INV-002"
+          ],
+          "commands": [
+            "supplier_offer.save_draft",
+            "supplier_offer.revise",
+            "supplier_offer.discard_draft",
+            "supplier_offer.verify",
+            "supplier_offer.withdraw"
+          ],
+          "events": [
+            "SupplierOfferVerified",
+            "SupplierOfferWithdrawn"
+          ],
+          "goPackage": "internal/contexts/sup/internal/domain/offer",
+          "pythonSource": "costing_engine/extension_model.py；t02_root／t02_revision（kind=supplier_offer）",
+          "notes": "in_response_to_rfq 必须关联 SupplierRfq；主动报价与导入价目走受限来源分支。"
+        },
+        {
+          "id": "SUP-AGG-PurchaseTerms",
+          "name": "PurchaseTerms",
+          "cn": "采购条件",
+          "root": "PurchaseTermsRoot",
+          "entities": [
+            "PurchaseTermsVersion"
+          ],
+          "valueObjects": [
+            "ApplicabilityRange",
+            "OfferRevisionRef"
+          ],
+          "identity": "(tenant, company, terms_id)",
+          "concurrency": "root_version CAS",
+          "invariants": [
+            "SUP-INV-003"
+          ],
+          "commands": [
+            "purchase_terms.save_draft",
+            "purchase_terms.publish",
+            "purchase_terms.retire"
+          ],
+          "events": [
+            "PurchaseTermsPublished",
+            "PurchaseTermsRetired"
+          ],
+          "goPackage": "internal/contexts/sup/internal/domain/terms",
+          "pythonSource": "t02_root／t02_revision（kind=purchase_terms）；A46 依附型与独立型",
+          "notes": "依附型条件同时要求原报价当前有效；独立型可引用历史原报价版本。"
+        },
+        {
+          "id": "SUP-AGG-LogisticsOffer",
+          "name": "LogisticsOffer",
+          "cn": "物流报价",
+          "root": "LogisticsOfferRoot",
+          "entities": [
+            "LogisticsOfferRevision",
+            "ChargeRule"
+          ],
+          "valueObjects": [
+            "ChargeableRule",
+            "BillingIncrement",
+            "ServiceRoleRef"
+          ],
+          "identity": "(tenant, company, logistics_offer_id)",
+          "concurrency": "root_version CAS",
+          "invariants": [],
+          "commands": [
+            "logistics_offer.save_draft",
+            "logistics_offer.verify",
+            "logistics_offer.withdraw"
+          ],
+          "events": [
+            "LogisticsOfferVerified"
+          ],
+          "goPackage": "internal/contexts/sup/internal/domain/logistics",
+          "pythonSource": "T02 规格 6",
+          "notes": "首批仅 exact origin＋destination 与明确运输方式。"
+        }
+      ],
+      "policies": [
+        "采购条件独立发布为强制；其他核实是否独立按当前核价政策。"
+      ],
+      "crossBoundary": [
+        "向 CST、PUR 发布 SupplyConditionRef v1 与 SupplyConditionGuard（ADR-BR-004）。"
+      ],
+      "consistency": "单根 CAS；核实原子替代 active。",
+      "risks": [
+        "单次供应回复被当作永久采购条件；阶梯含义不明被猜测。"
+      ]
+    },
+    {
+      "id": "CST",
+      "depth": "full",
+      "coreQuestion": "这个成本是否来自已核实、同口径、当前有效的输入，并可被新报价或新订单采用？",
+      "aggregates": [
+        {
+          "id": "CST-AGG-CostingContext",
+          "name": "CostingContext",
+          "cn": "核价上下文",
+          "root": "CostingContextRoot",
+          "entities": [
+            "CostingContextRevision",
+            "Assumption"
+          ],
+          "valueObjects": [
+            "RfqRef",
+            "ComparisonBasis",
+            "RequestedDelivery"
+          ],
+          "identity": "(tenant, company, context_id)",
+          "concurrency": "root_version CAS",
+          "invariants": [
+            "CST-INV-001"
+          ],
+          "commands": [
+            "costing_context.save_draft",
+            "costing_context.revise",
+            "costing_context.verify"
+          ],
+          "events": [
+            "CostingContextVerified"
+          ],
+          "goPackage": "internal/contexts/cst/internal/domain/context",
+          "pythonSource": "integrated_model.py costing_context.*",
+          "notes": "必须覆盖原询价完整行集合；what_if 另建上下文且不可用于正式报价。"
+        },
+        {
+          "id": "CST-AGG-MeasurementSnapshot",
+          "name": "MeasurementSnapshot",
+          "cn": "测量快照",
+          "root": "MeasurementSnapshot",
+          "entities": [
+            "PackageLine"
+          ],
+          "valueObjects": [
+            "Measurement",
+            "SourceLocator"
+          ],
+          "identity": "(tenant, company, measurement_id, revision)",
+          "concurrency": "不可变版本＋效力头",
+          "invariants": [],
+          "commands": [
+            "measurement.record_verified",
+            "measurement.supersede",
+            "measurement.withdraw"
+          ],
+          "events": [
+            "MeasurementRecorded"
+          ],
+          "goPackage": "internal/contexts/cst/internal/domain/measurement",
+          "pythonSource": "T02 规格 13.1、13.8",
+          "notes": "先按包装数量汇总，父子层级不重复计入。"
+        },
+        {
+          "id": "CST-AGG-CostScenario",
+          "name": "CostScenario",
+          "cn": "成本场景",
+          "root": "CostScenario",
+          "entities": [
+            "ScenarioLineSelection",
+            "EvaluationResult"
+          ],
+          "valueObjects": [
+            "SupplyConditionRef",
+            "FeeObligation",
+            "AllocationBasis",
+            "InputManifestHash"
+          ],
+          "identity": "(tenant, company, scenario_id)",
+          "concurrency": "root_version CAS；evaluate 追加结果不递增版本",
+          "invariants": [
+            "CST-INV-001",
+            "CST-INV-003",
+            "CST-INV-004",
+            "CST-INV-005",
+            "CST-INV-006",
+            "CST-INV-007"
+          ],
+          "commands": [
+            "cost_scenario.save_draft",
+            "cost_scenario.evaluate",
+            "cost_snapshot.freeze"
+          ],
+          "events": [
+            "CostScenarioEvaluated",
+            "CostSnapshotFrozen"
+          ],
+          "goPackage": "internal/contexts/cst/internal/domain/scenario",
+          "pythonSource": "integrated_model.py；rules.py；write_admission.py；resource_budget.py",
+          "notes": "freeze 冻结场景并生成唯一快照，结果绑定冻结前场景版本。"
+        },
+        {
+          "id": "CST-AGG-CostSnapshot",
+          "name": "CostSnapshot",
+          "cn": "成本快照",
+          "root": "CostSnapshot",
+          "entities": [
+            "CostComponent",
+            "AllocationLine"
+          ],
+          "valueObjects": [
+            "EvidenceHash",
+            "Money",
+            "SelectionRationale"
+          ],
+          "identity": "(tenant, company, snapshot_id)",
+          "concurrency": "只追加；(company, scenario_id) 唯一",
+          "invariants": [
+            "CST-INV-002"
+          ],
+          "commands": [
+            "costing.attest_source"
+          ],
+          "events": [
+            "CostSourceDenied",
+            "CostSnapshotSuperseded"
+          ],
+          "goPackage": "internal/contexts/cst/internal/domain/snapshot",
+          "pythonSource": "costing.py snapshot_in_transaction；t02_result／t02_source_attestation",
+          "notes": "可采纳资格为派生判断；否认先提交则新动作拒绝。"
+        }
+      ],
+      "policies": [
+        "评估结果与冻结快照分开，防止未核实预览冒充可报价成本。",
+        "计算顺序：测量层级→计费量舍入→费率→最低收费→税价→汇率→舍入→分摊。"
+      ],
+      "crossBoundary": [
+        "消费 SUP、POL、INQ；向 TRD、PUR 发布 CostSnapshotRef v1 与 AdoptabilityGuard。"
+      ],
+      "consistency": "freeze 在单事务内复核全部依赖（跨上下文部分取决于 ADR-BR-004）。",
+      "risks": [
+        "跨币种缺汇率默认 1；费用包含关系不明被双计。"
+      ]
+    },
+    {
+      "id": "TRD",
+      "depth": "full",
+      "coreQuestion": "这份报价、这次客户接受和这张订单是否在提交时满足全部当前资格，并保持同根唯一？",
+      "aggregates": [
+        {
+          "id": "TRD-AGG-QuoteRoot",
+          "name": "QuoteRoot",
+          "cn": "报价根",
+          "root": "QuoteRoot",
+          "entities": [
+            "QuoteDraft",
+            "QuoteRevision",
+            "RevisionEffectivity",
+            "ReviewRequest",
+            "QuoteApproval",
+            "ApprovalEffectivity",
+            "QuoteDocumentBinding",
+            "CommitEvidence",
+            "RiskHold",
+            "ObjectControl"
+          ],
+          "valueObjects": [
+            "BusinessHash",
+            "IssuedAt",
+            "ExpiresAt",
+            "QuoteLine",
+            "SalesCharge",
+            "PaymentSchedule",
+            "MarginCheckResult",
+            "ConversionSlot"
+          ],
+          "identity": "(tenant, company, quote_id)；修订 (quote_id, business_revision)",
+          "concurrency": "root_version CAS；同根至多一个 working、一个 active；批准效力 effectivity_version CAS",
+          "invariants": [
+            "TRD-INV-001",
+            "TRD-INV-002",
+            "TRD-INV-003",
+            "TRD-INV-004",
+            "TRD-INV-005",
+            "TRD-INV-006",
+            "TRD-INV-007",
+            "TRD-INV-008",
+            "TRD-INV-009",
+            "TRD-INV-010",
+            "TRD-INV-015",
+            "TRD-INV-016"
+          ],
+          "commands": [
+            "quote.save_draft",
+            "quote.revise",
+            "quote.discard_draft",
+            "quote.freeze",
+            "quote.submit_review",
+            "quote.review.decide",
+            "quote.approval.revoke",
+            "quote.activate",
+            "quote.replace",
+            "quote.withdraw",
+            "quote.cancel",
+            "object_control.bind",
+            "object_control.stop",
+            "object_control.release"
+          ],
+          "events": [
+            "QuoteFrozen",
+            "QuoteReviewRequested",
+            "QuoteReviewDecided",
+            "QuoteApprovalRevoked",
+            "QuoteActivated",
+            "QuoteReplaced",
+            "QuoteWithdrawn",
+            "QuoteCancelled"
+          ],
+          "goPackage": "internal/contexts/trd/internal/domain/quote",
+          "pythonSource": "t03_write.py；t03_storage.py（save_draft…activate）；t03_quote_* 表",
+          "notes": "聚合较大但符合不变量：单一 active、转换名额锁定、批准绑定与对象控制都以根为冲突键。 正式文档字节与编号绑定在 TRD 自身 schema；编号由 POL 在事务前分配，EVD 经 QuoteActivated 登记文件引用。"
+        },
+        {
+          "id": "TRD-AGG-CustomerResponse",
+          "name": "CustomerResponse",
+          "cn": "客户回复",
+          "root": "CustomerResponse",
+          "entities": [
+            "ResponseVerification"
+          ],
+          "valueObjects": [
+            "ResponseClassification",
+            "SourceRef",
+            "SourceLocator",
+            "ReceivedAt",
+            "CustomerPoRef"
+          ],
+          "identity": "(tenant, company, response_id)",
+          "concurrency": "只追加；同 ID 相同内容可重放",
+          "invariants": [
+            "TRD-INV-011",
+            "TRD-INV-012"
+          ],
+          "commands": [
+            "quote.response.record",
+            "quote.response.verify"
+          ],
+          "events": [
+            "CustomerResponseRecorded",
+            "AcceptanceVerified"
+          ],
+          "goPackage": "internal/contexts/trd/internal/domain/response",
+          "pythonSource": "t04_response.py；t04_customer_response／t04_response_verification",
+          "notes": "核实成功同事务创建 Acceptance（登记的创建型例外）。客户 PO 是回复来源之一：与报价修订逐行一致且无新增条件时按 full_unconditional 核实，有差异按 conditional。"
+        },
+        {
+          "id": "TRD-AGG-Acceptance",
+          "name": "Acceptance",
+          "cn": "客户接受",
+          "root": "Acceptance",
+          "entities": [
+            "AcceptanceEffectivity"
+          ],
+          "valueObjects": [
+            "QuoteRevisionRef",
+            "BusinessHash",
+            "AcceptedLineSet",
+            "ReceivedAt",
+            "FormationBasis"
+          ],
+          "identity": "(tenant, company, acceptance_id)",
+          "concurrency": "effectivity_version CAS",
+          "invariants": [
+            "TRD-INV-011",
+            "TRD-INV-012",
+            "TRD-INV-017"
+          ],
+          "commands": [
+            "acceptance.invalidate",
+            "acceptance.mark_disputed"
+          ],
+          "events": [
+            "AcceptanceInvalidated",
+            "AcceptanceDisputed"
+          ],
+          "goPackage": "internal/contexts/trd/internal/domain/acceptance",
+          "pythonSource": "t03_acceptance；register_acceptance",
+          "notes": "invalidate／mark_disputed 在 Python 中尚未实现，属于核心设计 8.2 的待实现命令。"
+        },
+        {
+          "id": "TRD-AGG-SalesOrder",
+          "name": "SalesOrder",
+          "cn": "外销订单",
+          "root": "SalesOrder",
+          "entities": [
+            "OrderReviewRequest",
+            "OrderReviewDecision",
+            "OrderApprovalRevocation",
+            "OrderCommitEvidence",
+            "OrderRevision",
+            "OrderAmendment",
+            "OrderContractDocument",
+            "RiskAcknowledgement"
+          ],
+          "valueObjects": [
+            "OrderCommercialSnapshot",
+            "OrderHash",
+            "AcceptanceRef",
+            "QuoteRevisionRef",
+            "AmendmentImpact",
+            "ContractFormationRef"
+          ],
+          "identity": "(tenant, company, order_id)；(company, root_quote_id, slot=full_v1) 唯一",
+          "concurrency": "row_version CAS；转换名额唯一约束",
+          "invariants": [
+            "TRD-INV-010",
+            "TRD-INV-013",
+            "TRD-INV-014",
+            "TRD-INV-016",
+            "TRD-INV-017",
+            "TRD-INV-018",
+            "TRD-INV-019",
+            "TRD-INV-020",
+            "TRD-INV-021",
+            "TRD-INV-022",
+            "TRD-INV-023"
+          ],
+          "commands": [
+            "order.prepare",
+            "order.review.request",
+            "order.review.decide",
+            "order.activate",
+            "order.approval.revoke",
+            "order.cancel",
+            "order.close_unfulfilled",
+            "order.close_remainder",
+            "order.close",
+            "order.amendment.prepare",
+            "order.amendment.submit",
+            "order.amendment.decide",
+            "order.amendment.apply",
+            "order.amendment.withdraw",
+            "order.document.generate",
+            "order.document.record_signed"
+          ],
+          "events": [
+            "OrderPrepared",
+            "OrderReviewRequested",
+            "OrderReviewDecided",
+            "OrderActivated",
+            "OrderApprovalRevoked",
+            "OrderCancelled",
+            "OrderClosedUnfulfilled",
+            "OrderAmendmentRequested",
+            "OrderAmendmentDecided",
+            "OrderAmended",
+            "OrderRemainderClosed",
+            "OrderClosed",
+            "OrderDocumentGenerated",
+            "OrderDocumentSigned"
+          ],
+          "goPackage": "internal/contexts/trd/internal/domain/order",
+          "pythonSource": "t03_storage.py prepare_order／activate_order；t04_order_review.py；t03_order_qualification.py；t03_order_snapshot.py",
+          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。"
+        }
+      ],
+      "policies": [
+        "报价批准与订单审批权限分离。",
+        "低于最低毛利返回 requires_approval，须独立的毛利例外批准；普通内容批准不覆盖。",
+        "合同成立以承诺到达时间判定；合同成立后的上游变化由订单审批逐项确认，不以拒绝否定合同。",
+        "正式文档在同事务内确定性渲染并封存在 TRD 自身 schema；编号由 POL 在事务前分配；禁止模型、网络与外部存储等待。"
+      ],
+      "crossBoundary": [
+        "消费 CST、INQ、PTY、CAT、POL、EVD、STL（信用守卫）、CNX（贸易合规守卫）；向 PUR、FUL、STL、CNX、TSK 发布订单、变更、合同文件与目标核验事实。"
+      ],
+      "consistency": "按 lockOrder 在单事务中裁决；跨上下文资格重查取决于 ADR-BR-004。",
+      "risks": [
+        "t03_storage.py 3,992 行混合报价、确认、订单与采购草稿，移植时须按聚合拆分。"
+      ]
+    },
+    {
+      "id": "PUR",
+      "depth": "full",
+      "coreQuestion": "采购草稿是否基于生效订单与当前供应条件，并且与承诺严格分开？",
+      "aggregates": [
+        {
+          "id": "PUR-AGG-PurchaseDraft",
+          "name": "PurchaseDraft",
+          "cn": "采购草稿",
+          "root": "PurchaseDraft",
+          "entities": [
+            "PurchaseDraftLine",
+            "PriceGroup"
+          ],
+          "valueObjects": [
+            "SupplyConditionRef",
+            "DraftHash",
+            "SelectionReason",
+            "CostComparison",
+            "CommitmentState",
+            "OverbuyQuantity"
+          ],
+          "identity": "(tenant, company, draft_id)；订单行分配余额由 DemandAllocation 守卫",
+          "concurrency": "只追加；DemandAllocation 根 FOR UPDATE 后条件更新余额",
+          "invariants": [
+            "PUR-INV-001",
+            "PUR-INV-002",
+            "PUR-INV-003",
+            "PUR-INV-004",
+            "PUR-INV-005",
+            "PUR-INV-006",
+            "PUR-INV-007"
+          ],
+          "commands": [
+            "purchase.draft.prepare",
+            "purchase.draft.void"
+          ],
+          "events": [
+            "PurchaseDraftPrepared",
+            "PurchaseDraftVoided"
+          ],
+          "goPackage": "internal/contexts/pur/internal/domain/draft",
+          "pythonSource": "t04_purchase.py；t04_purchase_draft／t04_purchase_draft_line",
+          "notes": "同一订单行可多来源分配；错误草稿经 purchase.draft.void 作废并释放分配余额，原记录保留。"
+        },
+        {
+          "id": "PUR-AGG-PurchaseCommitment",
+          "name": "PurchaseCommitment",
+          "cn": "采购承诺",
+          "root": "PurchaseCommitment",
+          "entities": [
+            "CommitmentApproval",
+            "ApprovalRevocation",
+            "SupplierConfirmation"
+          ],
+          "valueObjects": [
+            "DraftHash",
+            "OrderHash",
+            "DeviationAcknowledgement"
+          ],
+          "identity": "(tenant, company, commitment_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "purchase.commitment.request",
+            "purchase.commitment.decide",
+            "purchase.commitment.revoke",
+            "purchase.commitment.issue",
+            "purchase.supplier_confirmation.record"
+          ],
+          "events": [
+            "PurchaseCommitmentApproved",
+            "PurchaseCommitmentIssued",
+            "SupplierConfirmationRecorded"
+          ],
+          "goPackage": "internal/contexts/pur/internal/domain/commitment",
+          "pythonSource": "A47 设计（未实现）",
+          "notes": "裁决时按当前数据重算并逐字段一致，否则草稿失效。"
+        },
+        {
+          "id": "PUR-AGG-DemandAllocation",
+          "name": "DemandAllocation",
+          "cn": "需求分配",
+          "root": "DemandAllocation",
+          "entities": [
+            "AllocationEntry"
+          ],
+          "valueObjects": [
+            "AllocatableQuantity",
+            "OverbuyQuantity",
+            "SupplyReference"
+          ],
+          "identity": "(tenant, company, order_line_id)",
+          "concurrency": "根行 FOR UPDATE；条件更新余额",
+          "invariants": [
+            "PUR-INV-002"
+          ],
+          "commands": [
+            "purchase.draft.prepare",
+            "purchase.draft.void"
+          ],
+          "events": [],
+          "goPackage": "internal/contexts/pur/internal/domain/allocation",
+          "pythonSource": "—（Python 以唯一约束实现一行一草稿）",
+          "notes": "订单行至草稿与承诺的数量分配台账；订单变更后按 OrderAmended 复核。"
+        },
+        {
+          "id": "PUR-AGG-SupplierDelivery",
+          "name": "SupplierDelivery",
+          "cn": "供应商交付",
+          "root": "SupplierDelivery",
+          "entities": [
+            "SupplierDeliveryLine",
+            "DeliveryVerification"
+          ],
+          "valueObjects": [
+            "HandoverPlace",
+            "DeliveryEvidence",
+            "CommitmentLineRef"
+          ],
+          "identity": "(tenant, company, delivery_id)",
+          "concurrency": "只追加；核实后不可变，更正形成新版本",
+          "invariants": [
+            "PUR-INV-008"
+          ],
+          "commands": [
+            "supplier_delivery.record",
+            "supplier_delivery.verify"
+          ],
+          "events": [
+            "SupplierDeliveryVerified"
+          ],
+          "goPackage": "internal/contexts/pur/internal/domain/supplierdelivery",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "直发路线代替本仓收货的交付事实：供应商上报只是声明，人工核实后才计入采购结算与出运来源。"
+        }
+      ],
+      "policies": [
+        "人工逐行指定供应条件与理由，系统不自动选择。",
+        "同一订单行可分配给多家供应商；超采显式标记并批准。",
+        "核价对照只供审核，不自动阻断草稿。"
+      ],
+      "crossBoundary": [
+        "消费 TRD、SUP、CST、PTY；向 STL、CNX、QLT 发布采购事实；向 FUL 发布 SupplierDeliveryGuard（直发交付）。"
+      ],
+      "consistency": "草稿单事务；跨上下文供应条件重查取决于 ADR-BR-004。",
+      "risks": [
+        "草稿被误认为已下单；不同供应商混在一个草稿。"
+      ]
+    },
+    {
+      "id": "TSK",
+      "depth": "full",
+      "coreQuestion": "任务是否只在权威记录核验后完成，接管后旧执行者是否被围栏阻止？",
+      "aggregates": [
+        {
+          "id": "TSK-AGG-BusinessTask",
+          "name": "BusinessTask",
+          "cn": "业务任务",
+          "root": "BusinessTask",
+          "entities": [
+            "GoalSpec",
+            "TaskStep",
+            "ControlTransition"
+          ],
+          "valueObjects": [
+            "ControlMode",
+            "ControlEpoch",
+            "ResumeCondition",
+            "CompletionActor"
+          ],
+          "identity": "(tenant, company, task_id)",
+          "concurrency": "task_version CAS；control_epoch 单调",
+          "invariants": [
+            "TSK-INV-001",
+            "TSK-INV-002"
+          ],
+          "commands": [
+            "task.create",
+            "task.scope",
+            "task.take_control",
+            "task.release",
+            "task.handoff",
+            "task.resume",
+            "task.cancel",
+            "goal.verify"
+          ],
+          "events": [
+            "TaskCreated",
+            "TaskControlChanged",
+            "TaskCompleted",
+            "TaskClosedUnfulfilled"
+          ],
+          "goPackage": "internal/contexts/tsk/internal/domain/task",
+          "pythonSource": "Q01 旧包 store.py take_control／verify_and_complete（未移植进 V0.50）",
+          "notes": "未列出的转换拒绝；不提供设置任意状态接口。接管先由 TRD object_control.stop 递增 epoch，再记录任务控制变化。"
+        },
+        {
+          "id": "TSK-AGG-ActionExecution",
+          "name": "ActionExecution",
+          "cn": "动作执行",
+          "root": "ActionExecution",
+          "entities": [
+            "Attempt"
+          ],
+          "valueObjects": [
+            "IdempotencyKey",
+            "RequestHash",
+            "ExternalState"
+          ],
+          "identity": "(tenant, company, action_id)",
+          "concurrency": "只追加尝试；unknown 先对账",
+          "invariants": [
+            "X-INV-001"
+          ],
+          "commands": [
+            "action.record_attempt",
+            "action.reconcile"
+          ],
+          "events": [
+            "ActionReconciled"
+          ],
+          "goPackage": "internal/contexts/tsk/internal/domain/action",
+          "pythonSource": "t03_reconciliation.py action_reconciliation",
+          "notes": "对账 committed 只表示原本地成功账本，不是新的资格令牌。"
+        }
+      ],
+      "policies": [
+        "预算与重试上限由执行入口强制检查，不依赖提示词。"
+      ],
+      "crossBoundary": [
+        "向 TRD 发出对象控制命令；读取 TRD 的目标核验查询。"
+      ],
+      "consistency": "单任务 CAS；control_epoch 由 TRD 对象控制唯一写入，TSK 记录 TRD 返回的 epoch。",
+      "risks": [
+        "以模型自述宣告完成；时间到期强制接管后盲目重复发送。"
+      ]
+    },
+    {
+      "id": "MFG",
+      "depth": "outline",
+      "coreQuestion": "委外与工序协作是否明确材料责任、作业粒度与交接依据？",
+      "aggregates": [
+        {
+          "id": "MFG-AGG-CollaborationPlan",
+          "name": "CollaborationPlan",
+          "cn": "协同计划",
+          "root": "CollaborationPlan",
+          "entities": [
+            "OperationTask"
+          ],
+          "valueObjects": [
+            "MaterialResponsibility"
+          ],
+          "identity": "(tenant, company, plan_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "collaboration_plan.publish"
+          ],
+          "events": [
+            "CollaborationPlanPublished"
+          ],
+          "goPackage": "internal/contexts/mfg/internal/domain/plan",
+          "pythonSource": "无",
+          "notes": "条件启用。"
+        },
+        {
+          "id": "MFG-AGG-SubcontractOrder",
+          "name": "SubcontractOrder",
+          "cn": "委外单",
+          "root": "SubcontractOrder",
+          "entities": [],
+          "valueObjects": [
+            "ProcessingFee"
+          ],
+          "identity": "(tenant, company, subcontract_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "subcontract_order.issue",
+            "operation.record_progress"
+          ],
+          "events": [
+            "SubcontractOrderIssued",
+            "OperationProgressRecorded"
+          ],
+          "goPackage": "internal/contexts/mfg/internal/domain/subcontract",
+          "pythonSource": "无",
+          "notes": ""
+        }
+      ],
+      "policies": [],
+      "crossBoundary": [
+        "消费 PUR；向 QLT、STK 发布受检对象与交接。"
+      ],
+      "consistency": "待详细设计。",
+      "risks": [
+        "工序加工量累加成销售需求。"
+      ]
+    },
+    {
+      "id": "QLT",
+      "depth": "outline",
+      "coreQuestion": "出运所需的质量放行是否有效且范围明确？",
+      "aggregates": [
+        {
+          "id": "QLT-AGG-Inspection",
+          "name": "Inspection",
+          "cn": "检验",
+          "root": "Inspection",
+          "entities": [
+            "Disposition"
+          ],
+          "valueObjects": [
+            "StandardVersion",
+            "SamplingPlan"
+          ],
+          "identity": "(tenant, company, inspection_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "inspection.record",
+            "disposition.decide"
+          ],
+          "events": [
+            "InspectionRecorded",
+            "DispositionDecided"
+          ],
+          "goPackage": "internal/contexts/qlt/internal/domain/inspection",
+          "pythonSource": "无",
+          "notes": ""
+        },
+        {
+          "id": "QLT-AGG-QualityRelease",
+          "name": "QualityRelease",
+          "cn": "质量放行",
+          "root": "QualityRelease",
+          "entities": [
+            "ReleaseRevocation"
+          ],
+          "valueObjects": [
+            "ReleasedQuantity",
+            "ValidityInterval"
+          ],
+          "identity": "(tenant, company, release_id)",
+          "concurrency": "effectivity_version CAS",
+          "invariants": [],
+          "commands": [
+            "quality_release.grant",
+            "quality_release.revoke"
+          ],
+          "events": [
+            "QualityReleased",
+            "QualityReleaseRevoked"
+          ],
+          "goPackage": "internal/contexts/qlt/internal/domain/release",
+          "pythonSource": "无",
+          "notes": ""
+        }
+      ],
+      "policies": [],
+      "crossBoundary": [
+        "向 FUL 发布 QualityReleaseRef v1。"
+      ],
+      "consistency": "待详细设计。",
+      "risks": [
+        "供应商自报合格直接放行。"
+      ]
+    },
+    {
+      "id": "STK",
+      "depth": "outline",
+      "coreQuestion": "可用数量是否扣除有效占用且出库并发安全？",
+      "aggregates": [
+        {
+          "id": "STK-AGG-StockLedger",
+          "name": "StockLedger",
+          "cn": "库存台账",
+          "root": "StockLedger",
+          "entities": [
+            "StockMovement",
+            "CostLayer"
+          ],
+          "valueObjects": [
+            "CustodyLocation",
+            "BatchRef"
+          ],
+          "identity": "(tenant, company, item, location, batch)",
+          "concurrency": "数量条件更新",
+          "invariants": [],
+          "commands": [
+            "stock.receive",
+            "stock.issue",
+            "stock.adjust"
+          ],
+          "events": [
+            "StockReceived",
+            "StockIssued",
+            "StockAdjusted"
+          ],
+          "goPackage": "internal/contexts/stk/internal/domain/ledger",
+          "pythonSource": "无",
+          "notes": "条件启用。"
+        },
+        {
+          "id": "STK-AGG-Reservation",
+          "name": "Reservation",
+          "cn": "占用",
+          "root": "Reservation",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, reservation_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "reservation.place",
+            "reservation.release"
+          ],
+          "events": [
+            "ReservationPlaced",
+            "ReservationReleased"
+          ],
+          "goPackage": "internal/contexts/stk/internal/domain/reservation",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "STK-AGG-BatchLineage",
+          "name": "BatchLineage",
+          "cn": "批次谱系",
+          "root": "BatchLineage",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, batch_lineage_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [],
+          "events": [],
+          "goPackage": "internal/contexts/stk/internal/domain/batchlineage",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "材料、在制、成品批次至包装与出运的输入输出关系（基线 3.7）。轮廓聚合，待详细设计。"
+        }
+      ],
+      "policies": [],
+      "crossBoundary": [
+        "消费 PUR、MFG；向 FUL、STL 发布。"
+      ],
+      "consistency": "待详细设计。",
+      "risks": [
+        "占用与可用量重复计入。"
+      ]
+    },
+    {
+      "id": "FUL",
+      "depth": "outline",
+      "coreQuestion": "实际出运是否有质量放行、库存或直发证据并不超发？",
+      "aggregates": [
+        {
+          "id": "FUL-AGG-Shipment",
+          "name": "Shipment",
+          "cn": "出运",
+          "root": "Shipment",
+          "entities": [
+            "ShipmentLine",
+            "ActualPackage",
+            "BookingRecord",
+            "PackingPlan"
+          ],
+          "valueObjects": [
+            "QualityReleaseRef",
+            "OrderLineRef"
+          ],
+          "identity": "(tenant, company, shipment_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [
+            "FUL-INV-001",
+            "FUL-INV-002",
+            "FUL-INV-003"
+          ],
+          "commands": [
+            "shipment.confirm",
+            "booking.record",
+            "packing.plan"
+          ],
+          "events": [
+            "ShipmentConfirmed"
+          ],
+          "goPackage": "internal/contexts/ful/internal/domain/shipment",
+          "pythonSource": "无",
+          "notes": "订舱委托与确认作为出运的业务事实；出运确认须有效商业条件放行。"
+        },
+        {
+          "id": "FUL-AGG-MilestonePlan",
+          "name": "MilestonePlan",
+          "cn": "节点计划",
+          "root": "MilestonePlan",
+          "entities": [
+            "MilestoneActual"
+          ],
+          "valueObjects": [
+            "EvidenceLevel"
+          ],
+          "identity": "(tenant, company, plan_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "milestone.plan",
+            "milestone.record_actual"
+          ],
+          "events": [
+            "MilestoneActualRecorded"
+          ],
+          "goPackage": "internal/contexts/ful/internal/domain/milestone",
+          "pythonSource": "无",
+          "notes": ""
+        },
+        {
+          "id": "FUL-AGG-ExportLot",
+          "name": "ExportLot",
+          "cn": "出口批次",
+          "root": "ExportLot",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, export_lot_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "export_lot.register"
+          ],
+          "events": [
+            "ExportLotRegistered"
+          ],
+          "goPackage": "internal/contexts/ful/internal/domain/exportlot",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "销售／交付至本次出口明细的数量金额，供报关、退税与收汇资料引用。轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "FUL-AGG-CommercialRelease",
+          "name": "CommercialRelease",
+          "cn": "商业条件放行",
+          "root": "CommercialRelease",
+          "entities": [
+            "ReleaseException"
+          ],
+          "valueObjects": [
+            "QualityReleaseRef",
+            "PaymentConditionRef",
+            "ScreeningRef",
+            "ReleaseScope",
+            "TradeComplianceRef",
+            "LicenseAllocationRef"
+          ],
+          "identity": "(tenant, company, release_id)；(company, shipment_id, scope) 唯一",
+          "concurrency": "根 CAS；守卫 FOR SHARE",
+          "invariants": [
+            "FUL-INV-002"
+          ],
+          "commands": [
+            "commercial_release.evaluate",
+            "commercial_release.grant_exception",
+            "document_release.record"
+          ],
+          "events": [
+            "CommercialReleaseGranted",
+            "DocumentsReleased"
+          ],
+          "goPackage": "internal/contexts/ful/internal/domain/release",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "F29／BT13：出运与正本提单、电放等单证放行的统一闸门；读取 QLT、STL、PTY、CNX 守卫。"
+        },
+        {
+          "id": "FUL-AGG-ShipmentDocumentSet",
+          "name": "ShipmentDocumentSet",
+          "cn": "出运单证套",
+          "root": "ShipmentDocumentSet",
+          "entities": [
+            "CommercialInvoice",
+            "PackingList",
+            "BillOfLadingRecord",
+            "OriginCertificateRef"
+          ],
+          "valueObjects": [],
+          "identity": "(tenant, company, shipment_document_set_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "shipment_document.issue"
+          ],
+          "events": [
+            "ShipmentDocumentIssued"
+          ],
+          "goPackage": "internal/contexts/ful/internal/domain/shipmentdocumentset",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "商业发票、装箱单、提单记录与原产地证引用逐版本保存并与订单行、出运行、包装行核对（BT12）。轮廓聚合，待详细设计。"
+        }
+      ],
+      "policies": [
+        "质量放行、付款条件与主体筛查任一不满足即进入等待；例外须授权人工批准。",
+        "商业发票、装箱单与提单草稿逐版本核对；未核对不能签发。"
+      ],
+      "crossBoundary": [
+        "消费 TRD、QLT、STK、PUR（直发交付守卫）、STL（付款条件守卫）、PTY（主体筛查守卫）、CNX（贸易合规与许可证守卫）；向 STL、CLM、CNX 发布出运、放行与单证事实。"
+      ],
+      "consistency": "出运确认与单证放行在 FUL 单事务内裁决，按锁序以 FOR SHARE 调用 QLT、STL、PTY、CNX、PUR 守卫。",
+      "risks": [
+        "本地出库被当作海关出口确认。"
+      ]
+    },
+    {
+      "id": "STL",
+      "depth": "outline",
+      "coreQuestion": "业务应收应付与核销是否守恒、可解释且不重复？",
+      "aggregates": [
+        {
+          "id": "STL-AGG-SettlementStatement",
+          "name": "SettlementStatement",
+          "cn": "结算单",
+          "root": "SettlementStatement",
+          "entities": [
+            "SettlementLine"
+          ],
+          "valueObjects": [
+            "ShipmentLineRef",
+            "Money"
+          ],
+          "identity": "(tenant, company, statement_id)",
+          "concurrency": "row_version CAS；来源明细唯一",
+          "invariants": [
+            "STL-INV-001"
+          ],
+          "commands": [
+            "settlement.confirm",
+            "credit.confirm"
+          ],
+          "events": [
+            "SettlementConfirmed",
+            "CreditConfirmed"
+          ],
+          "goPackage": "internal/contexts/stl/internal/domain/settlement",
+          "pythonSource": "无",
+          "notes": ""
+        },
+        {
+          "id": "STL-AGG-Application",
+          "name": "Application",
+          "cn": "核销",
+          "root": "Application",
+          "entities": [
+            "Unapply"
+          ],
+          "valueObjects": [
+            "Money"
+          ],
+          "identity": "(tenant, company, application_id)",
+          "concurrency": "余额条件更新",
+          "invariants": [
+            "STL-INV-002",
+            "STL-INV-003"
+          ],
+          "commands": [
+            "application.apply",
+            "application.unapply"
+          ],
+          "events": [
+            "Applied",
+            "Unapplied"
+          ],
+          "goPackage": "internal/contexts/stl/internal/domain/application",
+          "pythonSource": "无",
+          "notes": ""
+        },
+        {
+          "id": "STL-AGG-FundRecord",
+          "name": "FundRecord",
+          "cn": "资金记录",
+          "root": "FundRecord",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, fund_record_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "fund.record"
+          ],
+          "events": [
+            "FundRecorded"
+          ],
+          "goPackage": "internal/contexts/stl/internal/domain/fundrecord",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "银行原始流水、到账与结汇；银行核实与本地登记分别留证。轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "STL-AGG-OrderResult",
+          "name": "OrderResult",
+          "cn": "订单经营结果",
+          "root": "OrderResult",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, order_result_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "order_result.close",
+            "charge.allocate"
+          ],
+          "events": [
+            "OrderResultClosed"
+          ],
+          "goPackage": "internal/contexts/stl/internal/domain/orderresult",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "预计／执行中／已确认经营结果与成本结算状态。轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "STL-AGG-CustomerCredit",
+          "name": "CustomerCredit",
+          "cn": "客户信用",
+          "root": "CustomerCredit",
+          "entities": [
+            "CreditLimitVersion",
+            "CreditLimitRequest",
+            "CreditReservation",
+            "CreditDecision"
+          ],
+          "valueObjects": [
+            "CreditExposure",
+            "CreditPortion",
+            "LimitCurrency",
+            "LimitSource",
+            "OverdueExposure",
+            "ApprovalLevel"
+          ],
+          "identity": "(tenant, company, party_id)",
+          "concurrency": "信用根行 FOR UPDATE；占用按根串行",
+          "invariants": [
+            "STL-INV-004",
+            "STL-INV-005"
+          ],
+          "commands": [
+            "credit_limit.request",
+            "credit_limit.publish",
+            "credit.reserve",
+            "credit.release",
+            "credit_exception.decide"
+          ],
+          "events": [
+            "CreditLimitPublished",
+            "CreditReserved",
+            "CreditReservationReleased",
+            "CreditExceptionDecided",
+            "CreditLimitRequested",
+            "CreditDecisionOpened"
+          ],
+          "goPackage": "internal/contexts/stl/internal/domain/customercredit",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "先占用、后生效。超额或逾期超限时 credit.reserve 不直接失败，而是生成信用决定（CreditDecision，参照 SAP 的 documented credit decision），由具备相应金额权限的信用人员放行或拒绝；额度调整经额度申请按金额分级审批。额度来源记为内部评估或中信保买方信用限额（启用信保时取二者较低）。新客户默认额度为 0；信用政策可把单证控制下的出运后付款（如见提单副本付款、电放前收款）视为有担保。"
+        }
+      ],
+      "policies": [],
+      "crossBoundary": [
+        "消费 FUL、PUR、TRD、POL、CLM、CNX；向 FUL 发布 PaymentConditionGuard，向 TRD 发布 CreditGuard；向 CNX 发布资金事实。"
+      ],
+      "consistency": "待详细设计。",
+      "risks": [
+        "跨币种核销未经评审启用。"
+      ]
+    },
+    {
+      "id": "CLM",
+      "depth": "outline",
+      "coreQuestion": "退货与补救是否保留原发货事实并受控关联财务与库存？",
+      "aggregates": [
+        {
+          "id": "CLM-AGG-ClaimCase",
+          "name": "ClaimCase",
+          "cn": "客诉案件",
+          "root": "ClaimCase",
+          "entities": [
+            "ReturnRecord",
+            "Remedy"
+          ],
+          "valueObjects": [
+            "ShipmentLineRef"
+          ],
+          "identity": "(tenant, company, claim_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "claim.open",
+            "return.register",
+            "remedy.decide",
+            "claim.close"
+          ],
+          "events": [
+            "ClaimOpened",
+            "ReturnRegistered",
+            "RemedyDecided",
+            "ClaimClosed"
+          ],
+          "goPackage": "internal/contexts/clm/internal/domain/claim",
+          "pythonSource": "无",
+          "notes": ""
+        },
+        {
+          "id": "CLM-AGG-ReturnRecord",
+          "name": "ReturnRecord",
+          "cn": "退货记录",
+          "root": "ReturnRecord",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, return_record_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "return.register"
+          ],
+          "events": [
+            "ReturnRegistered"
+          ],
+          "goPackage": "internal/contexts/clm/internal/domain/returnrecord",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "轮廓聚合，待详细设计。"
+        }
+      ],
+      "policies": [],
+      "crossBoundary": [
+        "消费 FUL；向 STL 发布贷项请求。"
+      ],
+      "consistency": "待详细设计。",
+      "risks": [
+        "退货抹去原发货。"
+      ]
+    },
+    {
+      "id": "CNX",
+      "depth": "outline",
+      "coreQuestion": "中国出口资料链是否分用途匹配、外部结果可追溯且不冒充专业办理？",
+      "aggregates": [
+        {
+          "id": "CNX-AGG-DeclarationCase",
+          "name": "DeclarationCase",
+          "cn": "报关案件",
+          "root": "DeclarationCase",
+          "entities": [
+            "DeclarationVersion",
+            "DeclarationReceipt"
+          ],
+          "valueObjects": [
+            "ExternalStatusMapping"
+          ],
+          "identity": "(tenant, company, declaration_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "declaration_case.prepare",
+            "declaration_case.record_receipt"
+          ],
+          "events": [
+            "DeclarationReceiptRecorded"
+          ],
+          "goPackage": "internal/contexts/cnx/internal/domain/declaration",
+          "pythonSource": "无",
+          "notes": ""
+        },
+        {
+          "id": "CNX-AGG-TaxRefundCase",
+          "name": "TaxRefundCase",
+          "cn": "退税案件",
+          "root": "TaxRefundCase",
+          "entities": [
+            "TaxEvidenceAllocation"
+          ],
+          "valueObjects": [
+            "PolicyVersion"
+          ],
+          "identity": "(tenant, company, tax_case_id)",
+          "concurrency": "用途余额条件更新",
+          "invariants": [],
+          "commands": [
+            "tax_refund_case.allocate"
+          ],
+          "events": [
+            "TaxEvidenceAllocated"
+          ],
+          "goPackage": "internal/contexts/cnx/internal/domain/taxrefund",
+          "pythonSource": "无",
+          "notes": ""
+        },
+        {
+          "id": "CNX-AGG-PurchaseInvoice",
+          "name": "PurchaseInvoice",
+          "cn": "购进发票",
+          "root": "PurchaseInvoice",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, purchase_invoice_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "purchase_invoice.import"
+          ],
+          "events": [
+            "PurchaseInvoiceVerified"
+          ],
+          "goPackage": "internal/contexts/cnx/internal/domain/purchaseinvoice",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "票据原件、解析候选、核验状态与红蓝关系分别记录。轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "CNX-AGG-DocumentBundle",
+          "name": "DocumentBundle",
+          "cn": "资料包",
+          "root": "DocumentBundle",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, document_bundle_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "document_bundle.check",
+            "external_reconciliation.resolve"
+          ],
+          "events": [
+            "DocumentBundleChecked"
+          ],
+          "goPackage": "internal/contexts/cnx/internal/domain/documentbundle",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "业务证据目录、缺件与专业核实；含原产地证、许可证、检验证书等官方证书结果，以及目的市场供应链合规证据（如对美服装的棉花来源追溯）。轮廓聚合，待详细设计。"
+        },
+        {
+          "id": "CNX-AGG-TradeComplianceCheck",
+          "name": "TradeComplianceCheck",
+          "cn": "贸易合规核查",
+          "root": "TradeComplianceCheck",
+          "entities": [
+            "ComplianceFinding",
+            "ComplianceDecision"
+          ],
+          "valueObjects": [
+            "DestinationCountry",
+            "PartyCountries",
+            "ControlClassification",
+            "RegulationVersion",
+            "ValidUntil"
+          ],
+          "identity": "(tenant, company, check_id)；(company, order_id, order_revision) 当前结论唯一",
+          "concurrency": "根 CAS；结论只追加",
+          "invariants": [
+            "CNX-INV-001"
+          ],
+          "commands": [
+            "trade_compliance.evaluate",
+            "trade_compliance.decide"
+          ],
+          "events": [
+            "TradeComplianceDecided"
+          ],
+          "goPackage": "internal/contexts/cnx/internal/domain/tradecompliancecheck",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "按目的国、买方与收货方所在国、商品与最终用途核查国别禁运、制裁项目与出口管制；AI 与名单服务只产生候选，结论由授权合规人工确定；所用法规与禁运项目来自 POL screening_regulation 启用的来源，版本随核查结论保存。"
+        },
+        {
+          "id": "CNX-AGG-ExportLicense",
+          "name": "ExportLicense",
+          "cn": "出口许可证",
+          "root": "ExportLicense",
+          "entities": [
+            "LicenseAllocation"
+          ],
+          "valueObjects": [
+            "LicenseNumber",
+            "Issuer",
+            "LicensedQuantity",
+            "LicensedValue",
+            "ValidityInterval",
+            "EndUser"
+          ],
+          "identity": "(tenant, company, license_id)",
+          "concurrency": "许可证根 FOR UPDATE；用量条件更新",
+          "invariants": [
+            "CNX-INV-002"
+          ],
+          "commands": [
+            "export_license.register",
+            "export_license.allocate",
+            "export_license.release"
+          ],
+          "events": [
+            "ExportLicenseRegistered",
+            "ExportLicenseAllocated"
+          ],
+          "goPackage": "internal/contexts/cnx/internal/domain/exportlicense",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "许可证的数量、金额、有效期、目的国与最终用户；按出运或出口批次分配用量。"
+        }
+      ],
+      "policies": [
+        "CN-R01–CN-R15 在启用前落实为详细规格。"
+      ],
+      "crossBoundary": [
+        "消费 FUL、PUR、STL、CAT、TRD；向 TRD、FUL 发布 TradeComplianceGuard，向 FUL 发布 ExportLicenseGuard 与证书结果引用；向 STL 发布退税核准与到账对账引用。"
+      ],
+      "consistency": "待详细设计。",
+      "risks": [
+        "导出文件冒充专业系统成功。"
+      ]
+    },
+    {
+      "id": "CRM",
+      "depth": "outline",
+      "coreQuestion": "关闭 CRM 时交易链是否仍成立？",
+      "aggregates": [
+        {
+          "id": "CRM-AGG-Opportunity",
+          "name": "Opportunity",
+          "cn": "商机",
+          "root": "Opportunity",
+          "entities": [
+            "FollowUp"
+          ],
+          "valueObjects": [
+            "Stage"
+          ],
+          "identity": "(tenant, company, opportunity_id)",
+          "concurrency": "row_version CAS",
+          "invariants": [],
+          "commands": [
+            "opportunity.advance"
+          ],
+          "events": [
+            "OpportunityAdvanced"
+          ],
+          "goPackage": "internal/contexts/crm/internal/domain/opportunity",
+          "pythonSource": "无",
+          "notes": "可选包。"
+        },
+        {
+          "id": "CRM-AGG-Lead",
+          "name": "Lead",
+          "cn": "线索",
+          "root": "Lead",
+          "entities": [],
+          "valueObjects": [],
+          "identity": "(tenant, company, lead_id)",
+          "concurrency": "待详细设计",
+          "invariants": [],
+          "commands": [
+            "lead.capture"
+          ],
+          "events": [],
+          "goPackage": "internal/contexts/crm/internal/domain/lead",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "轮廓聚合，待详细设计。"
+        }
+      ],
+      "policies": [],
+      "crossBoundary": [
+        "仅向 INQ 提供可选来源关联。"
+      ],
+      "consistency": "单聚合。",
+      "risks": [
+        "交易链反向依赖 CRM。"
+      ]
+    }
+  ],
+  "stateMachines": [
+    {
+      "id": "SM-PTY-PARTY",
+      "context": "PTY",
+      "aggregate": "Party",
+      "object": "Party",
+      "states": [
+        "draft",
+        "confirmed",
+        "inactive"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "inactive"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "party.confirm",
+          "to": "confirmed",
+          "guard": "人工；来源可读；角色与关系核实",
+          "actor": "human"
+        },
+        {
+          "from": "confirmed",
+          "command": "party.revise",
+          "to": "draft",
+          "guard": "保留旧 confirmed 快照；旧引用须当前核实才可继续",
+          "actor": "human|ai"
+        },
+        {
+          "from": "confirmed",
+          "command": "party.deactivate",
+          "to": "inactive",
+          "guard": "影响后续新业务，历史可读",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "confirmed": [
+          1,
+          0
+        ],
+        "inactive": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-INQ-RFQ",
+      "context": "INQ",
+      "aggregate": "CustomerRfq",
+      "object": "CustomerRfq",
+      "states": [
+        "draft",
+        "ready",
+        "cancelled",
+        "closed"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "cancelled",
+        "closed"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "rfq.save_draft",
+          "to": "draft",
+          "guard": "整稿替换；CAS",
+          "actor": "human|ai"
+        },
+        {
+          "from": "draft",
+          "command": "rfq.confirm_scope",
+          "to": "ready",
+          "guard": "人工；客户联系人、至少一行 SKU／正数量／单位及全部来源已核实；缺项为空",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "rfq.cancel",
+          "to": "cancelled",
+          "guard": "理由写审计",
+          "actor": "human"
+        },
+        {
+          "from": "ready",
+          "command": "rfq.cancel",
+          "to": "cancelled",
+          "guard": "理由写审计；保留行及来源",
+          "actor": "human"
+        },
+        {
+          "from": "ready",
+          "command": "rfq.close",
+          "to": "closed",
+          "guard": "理由写审计",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "ready": [
+          1,
+          0
+        ],
+        "cancelled": [
+          1,
+          1
+        ],
+        "closed": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-POL-REVISION",
+      "context": "POL",
+      "aggregate": "ConfigurationRoot",
+      "object": "ConfigRevision",
+      "states": [
+        "working",
+        "active",
+        "superseded",
+        "retired",
+        "discarded"
+      ],
+      "initial": "working",
+      "terminal": [
+        "superseded",
+        "retired",
+        "discarded"
+      ],
+      "transitions": [
+        {
+          "from": "working",
+          "command": "config.publish",
+          "to": "active",
+          "guard": "人工且≠编制人；核实证据；有效区间；原子替代旧 active",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "config.publish",
+          "to": "superseded",
+          "guard": "新修订发布时旧版被替代",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "config.retire",
+          "to": "retired",
+          "guard": "停用不抹去历史快照",
+          "actor": "human"
+        },
+        {
+          "from": "working",
+          "command": "config.discard_draft",
+          "to": "discarded",
+          "guard": "CAS",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "working": [
+          0,
+          0
+        ],
+        "active": [
+          1,
+          0
+        ],
+        "superseded": [
+          2,
+          0
+        ],
+        "retired": [
+          2,
+          1
+        ],
+        "discarded": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-SUP-OFFER",
+      "context": "SUP",
+      "aggregate": "SupplierOffer",
+      "object": "OfferRevision",
+      "states": [
+        "draft",
+        "active",
+        "superseded",
+        "withdrawn",
+        "discarded"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "superseded",
+        "withdrawn",
+        "discarded"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "supplier_offer.verify",
+          "to": "active",
+          "guard": "人工；证据齐备；supersedes 必须等于当前 active",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "supplier_offer.verify",
+          "to": "superseded",
+          "guard": "新修订核实时旧版被替代",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "supplier_offer.withdraw",
+          "to": "withdrawn",
+          "guard": "精确 target_revision；清空 active",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "supplier_offer.discard_draft",
+          "to": "discarded",
+          "guard": "CAS",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "active": [
+          1,
+          0
+        ],
+        "superseded": [
+          2,
+          0
+        ],
+        "withdrawn": [
+          2,
+          1
+        ],
+        "discarded": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-SUP-SRFQ",
+      "context": "SUP",
+      "aggregate": "SupplierRfq",
+      "object": "SupplierRfq",
+      "states": [
+        "draft",
+        "issued",
+        "closed"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "closed"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "supplier_rfq.record_issued",
+          "to": "issued",
+          "guard": "人工发送证据；封存内容",
+          "actor": "human"
+        },
+        {
+          "from": "issued",
+          "command": "supplier_rfq.close",
+          "to": "closed",
+          "guard": "更正用新 SupplierRfq 并引用旧对象",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "issued": [
+          1,
+          0
+        ],
+        "closed": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-CST-SCENARIO",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "object": "CostScenario",
+      "states": [
+        "draft",
+        "frozen"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "frozen"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "cost_scenario.evaluate",
+          "to": "draft",
+          "guard": "追加不可变结果，不递增场景版本",
+          "actor": "human|ai"
+        },
+        {
+          "from": "draft",
+          "command": "cost_snapshot.freeze",
+          "to": "frozen",
+          "guard": "结果 verified＋comparable；依赖当前有效；单事务；同场景唯一快照",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "frozen": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-CST-ADOPT",
+      "context": "CST",
+      "aggregate": "CostSnapshot",
+      "object": "SnapshotAdoptability（派生）",
+      "states": [
+        "eligible",
+        "denied",
+        "superseded"
+      ],
+      "initial": "eligible",
+      "terminal": [
+        "denied",
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "eligible",
+          "command": "costing.attest_source",
+          "to": "denied",
+          "guard": "来源否认；不改历史数值",
+          "actor": "human"
+        },
+        {
+          "from": "eligible",
+          "command": "cost_snapshot.freeze",
+          "to": "superseded",
+          "guard": "新快照 supersedes 旧快照",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "eligible": [
+          0,
+          0
+        ],
+        "denied": [
+          1,
+          0
+        ],
+        "superseded": [
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-REVISION",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "object": "RevisionEffectivity",
+      "states": [
+        "working",
+        "frozen",
+        "pending_approval",
+        "active",
+        "superseded",
+        "withdrawn",
+        "cancelled"
+      ],
+      "initial": "working",
+      "terminal": [
+        "superseded",
+        "withdrawn",
+        "cancelled"
+      ],
+      "transitions": [
+        {
+          "from": "working",
+          "command": "quote.freeze",
+          "to": "frozen",
+          "guard": "人工；工作稿完整；成本、条款、金额与依赖符合规则；分配修订号、issued_at、expires_at、business_hash",
+          "actor": "human"
+        },
+        {
+          "from": "frozen",
+          "command": "quote.submit_review",
+          "to": "pending_approval",
+          "guard": "目标 activate 或 replace；当前资格满足；非低毛利例外",
+          "actor": "human"
+        },
+        {
+          "from": "pending_approval",
+          "command": "quote.review.decide",
+          "to": "frozen",
+          "guard": "decision=return 或 reject；理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "pending_approval",
+          "command": "quote.activate",
+          "to": "active",
+          "guard": "根无 active；目标为 activate 的有效批准；当前资格重查；封存正式文档与提交证据",
+          "actor": "human"
+        },
+        {
+          "from": "pending_approval",
+          "command": "quote.replace",
+          "to": "active",
+          "guard": "精确旧 active；目标为 replace 的有效批准；无转换名额",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "quote.replace",
+          "to": "superseded",
+          "guard": "同事务旧版 superseded、新版 active",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "quote.cancel",
+          "to": "cancelled",
+          "guard": "精确当前 active；原因与新证据；无转换名额",
+          "actor": "human"
+        },
+        {
+          "from": "frozen",
+          "command": "quote.withdraw",
+          "to": "withdrawn",
+          "guard": "未生效；人工与新证据",
+          "actor": "human"
+        },
+        {
+          "from": "pending_approval",
+          "command": "quote.withdraw",
+          "to": "withdrawn",
+          "guard": "关闭 open 审核；相关批准不再可用",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "working": [
+          0,
+          0
+        ],
+        "frozen": [
+          1,
+          0
+        ],
+        "pending_approval": [
+          2,
+          0
+        ],
+        "active": [
+          3,
+          0
+        ],
+        "superseded": [
+          4,
+          0
+        ],
+        "withdrawn": [
+          1.5,
+          1
+        ],
+        "cancelled": [
+          4,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-REVIEW",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "object": "ReviewRequest",
+      "states": [
+        "open",
+        "approved",
+        "returned",
+        "rejected",
+        "cancelled"
+      ],
+      "initial": "open",
+      "terminal": [
+        "approved",
+        "returned",
+        "rejected",
+        "cancelled"
+      ],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "quote.review.decide",
+          "to": "approved",
+          "guard": "独立人工；精确修订／哈希／政策一致",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "quote.review.decide",
+          "to": "returned",
+          "guard": "理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "quote.review.decide",
+          "to": "rejected",
+          "guard": "理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "quote.withdraw",
+          "to": "cancelled",
+          "guard": "修订撤回时关闭",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0.5
+        ],
+        "approved": [
+          1,
+          0
+        ],
+        "returned": [
+          1,
+          1
+        ],
+        "rejected": [
+          2,
+          1
+        ],
+        "cancelled": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-APPROVAL",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "object": "ApprovalEffectivity",
+      "states": [
+        "valid",
+        "revoked"
+      ],
+      "initial": "valid",
+      "terminal": [
+        "revoked"
+      ],
+      "transitions": [
+        {
+          "from": "valid",
+          "command": "quote.approval.revoke",
+          "to": "revoked",
+          "guard": "effectivity_version CAS；原因与新证据；生效后撤销登记风险暂停",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "valid": [
+          0,
+          0
+        ],
+        "revoked": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-ACCEPTANCE",
+      "context": "TRD",
+      "aggregate": "Acceptance",
+      "object": "AcceptanceEffectivity",
+      "states": [
+        "valid",
+        "invalidated",
+        "disputed"
+      ],
+      "initial": "valid",
+      "terminal": [
+        "invalidated",
+        "disputed"
+      ],
+      "transitions": [
+        {
+          "from": "valid",
+          "command": "acceptance.invalidate",
+          "to": "invalidated",
+          "guard": "人工；expected_effectivity_version；原因与新证据（待实现）",
+          "actor": "human"
+        },
+        {
+          "from": "valid",
+          "command": "acceptance.mark_disputed",
+          "to": "disputed",
+          "guard": "同上；生效后建立争议处置（待实现）",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "valid": [
+          0,
+          0.5
+        ],
+        "invalidated": [
+          1,
+          0
+        ],
+        "disputed": [
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-ORDER",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "object": "SalesOrder",
+      "states": [
+        "draft",
+        "active",
+        "cancelled",
+        "closed_unfulfilled",
+        "closed"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "cancelled",
+        "closed_unfulfilled",
+        "closed"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "order.activate",
+          "to": "active",
+          "guard": "合同已成立（Acceptance 有效，承诺到达早于报价到期）；同一订单快照的已批准、未撤销、未过期订单审批；订单准备后出现的上游风险已由该审批逐项确认；写提交证据。报价在合同成立后到期不阻断",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "order.cancel",
+          "to": "cancelled",
+          "guard": "授权负责人与理由；名额保留",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "order.close_unfulfilled",
+          "to": "closed_unfulfilled",
+          "guard": "授权负责人与理由（如接受被作废、客户撤回）；名额保留",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "order.amendment.apply",
+          "to": "active",
+          "guard": "已批准的订单变更，绑定当前订单修订（CAS）；数量不低于已确认出运量；生成新订单修订并发布影响事件",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "order.cancel",
+          "to": "cancelled",
+          "guard": "无已确认出运；下游采购承诺与占用已解除或已有获批处置；授权人工与理由；名额保留",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "order.close_remainder",
+          "to": "closed",
+          "guard": "已有确认出运；未发部分的短交理由与授权；相关采购与占用已处理",
+          "actor": "human"
+        },
+        {
+          "from": "active",
+          "command": "order.close",
+          "to": "closed",
+          "guard": "已确认出运量等于订单量（含获批容差）",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          1
+        ],
+        "active": [
+          1,
+          0
+        ],
+        "cancelled": [
+          1,
+          1
+        ],
+        "closed_unfulfilled": [
+          1,
+          2
+        ],
+        "closed": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-ORDER-AMENDMENT",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "object": "OrderAmendment",
+      "states": [
+        "draft",
+        "pending_approval",
+        "approved",
+        "applied",
+        "rejected",
+        "withdrawn"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "applied",
+        "rejected",
+        "withdrawn"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "order.amendment.prepare",
+          "to": "draft",
+          "guard": "绑定当前订单修订与变更来源（客户回复、客户 PO 修订或经客户确认的我方提议）；附影响评估：采购、材料、工序、质检、包装、订舱与付款计划",
+          "actor": "human|ai"
+        },
+        {
+          "from": "draft",
+          "command": "order.amendment.submit",
+          "to": "pending_approval",
+          "guard": "影响评估齐备；未决项显式列出",
+          "actor": "human"
+        },
+        {
+          "from": "pending_approval",
+          "command": "order.amendment.decide",
+          "to": "approved",
+          "guard": "人工；独立于申请人；绑定变更哈希与订单修订",
+          "actor": "human"
+        },
+        {
+          "from": "pending_approval",
+          "command": "order.amendment.decide",
+          "to": "rejected",
+          "guard": "人工；理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "approved",
+          "command": "order.amendment.apply",
+          "to": "applied",
+          "guard": "订单修订未变（CAS）；数量不低于已确认出运量；同事务生成新订单修订、提交证据与 OrderAmended 事件",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "order.amendment.withdraw",
+          "to": "withdrawn",
+          "guard": "申请人或负责人；理由",
+          "actor": "human"
+        },
+        {
+          "from": "pending_approval",
+          "command": "order.amendment.withdraw",
+          "to": "withdrawn",
+          "guard": "申请人或负责人；关闭 open 审批",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "pending_approval": [
+          1,
+          0
+        ],
+        "approved": [
+          2,
+          0
+        ],
+        "applied": [
+          3,
+          0
+        ],
+        "rejected": [
+          1,
+          1
+        ],
+        "withdrawn": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-ORDER-REVIEW",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "object": "OrderReview",
+      "states": [
+        "open",
+        "approved",
+        "rejected",
+        "revoked"
+      ],
+      "initial": "open",
+      "terminal": [
+        "rejected",
+        "revoked"
+      ],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "order.review.decide",
+          "to": "approved",
+          "guard": "人工；独立于草稿创建人与申请人；逐项确认订单准备后出现的上游风险；有效期由订单审批政策设定，与报价有效期无关",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "order.review.decide",
+          "to": "rejected",
+          "guard": "拒绝后可新建请求",
+          "actor": "human"
+        },
+        {
+          "from": "approved",
+          "command": "order.approval.revoke",
+          "to": "revoked",
+          "guard": "阻止新激活，不倒写已激活订单",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0
+        ],
+        "approved": [
+          1,
+          0
+        ],
+        "rejected": [
+          1,
+          1
+        ],
+        "revoked": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-TRD-CONTROL",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "object": "ObjectControl",
+      "states": [
+        "unbound",
+        "bound",
+        "stopping",
+        "manual"
+      ],
+      "initial": "unbound",
+      "terminal": [],
+      "transitions": [
+        {
+          "from": "unbound",
+          "command": "object_control.bind",
+          "to": "bound",
+          "guard": "任务认领根，CAS 取得绑定；另一任务返回 OBJECT_CONTROL_CONFLICT",
+          "actor": "system"
+        },
+        {
+          "from": "bound",
+          "command": "object_control.stop",
+          "to": "stopping",
+          "guard": "TRD 在根事务内递增 control_epoch（唯一写入方）并进入 stopping，围栏立即生效；之后 TSK 记录任务控制变化",
+          "actor": "human"
+        },
+        {
+          "from": "stopping",
+          "command": "（屏障完成）",
+          "to": "manual",
+          "guard": "屏障完成；submitted／unknown 已对账",
+          "actor": "system"
+        },
+        {
+          "from": "manual",
+          "command": "object_control.release",
+          "to": "unbound",
+          "guard": "task.control 权限；当前 epoch；无未知在途结果",
+          "actor": "human"
+        },
+        {
+          "from": "bound",
+          "command": "object_control.release",
+          "to": "unbound",
+          "guard": "绑定任务已 completed、closed_unfulfilled 或 cancelled；无在途 submitted／unknown 结果",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "unbound": [
+          0,
+          0
+        ],
+        "bound": [
+          1,
+          0
+        ],
+        "stopping": [
+          2,
+          0
+        ],
+        "manual": [
+          3,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-PUR-DRAFT",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "object": "PurchaseDraft",
+      "states": [
+        "prepared",
+        "supply_expired",
+        "voided"
+      ],
+      "initial": "prepared",
+      "terminal": [
+        "voided"
+      ],
+      "transitions": [
+        {
+          "from": "prepared",
+          "command": "（时钟派生）",
+          "to": "supply_expired",
+          "guard": "供应有效截止已过；历史读取不改写",
+          "actor": "system"
+        },
+        {
+          "from": "prepared",
+          "command": "purchase.draft.void",
+          "to": "voided",
+          "guard": "未形成采购承诺；授权人工与理由；释放该草稿占用的需求分配余额，保留原记录",
+          "actor": "human"
+        },
+        {
+          "from": "supply_expired",
+          "command": "purchase.draft.void",
+          "to": "voided",
+          "guard": "同上",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "prepared": [
+          0,
+          0
+        ],
+        "supply_expired": [
+          1,
+          0
+        ],
+        "voided": [
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-TSK-TASK",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "object": "TaskLifecycle",
+      "states": [
+        "created",
+        "scoping",
+        "running",
+        "waiting",
+        "verifying",
+        "paused",
+        "stopping",
+        "completed",
+        "closed_unfulfilled",
+        "cancelled",
+        "failed"
+      ],
+      "initial": "created",
+      "terminal": [
+        "completed",
+        "closed_unfulfilled",
+        "cancelled",
+        "failed"
+      ],
+      "transitions": [
+        {
+          "from": "created",
+          "command": "task.scope",
+          "to": "scoping",
+          "guard": "输入范围、身份及目标有效；来源防重",
+          "actor": "system"
+        },
+        {
+          "from": "scoping",
+          "command": "task.scope",
+          "to": "running",
+          "guard": "关键缺项清除；目标与动作范围已定",
+          "actor": "human|system"
+        },
+        {
+          "from": "running",
+          "command": "（进入等待）",
+          "to": "waiting",
+          "guard": "等待输入、审批或外部结果；保存恢复条件",
+          "actor": "system"
+        },
+        {
+          "from": "waiting",
+          "command": "task.resume",
+          "to": "running",
+          "guard": "去重、版本及内容仍适用；先重查上下文",
+          "actor": "system"
+        },
+        {
+          "from": "running",
+          "command": "（进入核验）",
+          "to": "verifying",
+          "guard": "必需动作已有可靠结果",
+          "actor": "system"
+        },
+        {
+          "from": "verifying",
+          "command": "goal.verify",
+          "to": "completed",
+          "guard": "全部断言 satisfied；快照版本仍匹配",
+          "actor": "system"
+        },
+        {
+          "from": "verifying",
+          "command": "（核验未满足）",
+          "to": "waiting",
+          "guard": "任一断言 unsatisfied／unknown／error：记录未满足项与证据，回到等待",
+          "actor": "system"
+        },
+        {
+          "from": "running",
+          "command": "（暂停）",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突",
+          "actor": "system"
+        },
+        {
+          "from": "paused",
+          "command": "task.resume",
+          "to": "running",
+          "guard": "原因已处理；副作用已对账",
+          "actor": "human"
+        },
+        {
+          "from": "running",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试",
+          "actor": "human"
+        },
+        {
+          "from": "waiting",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "同 running 接管；等待中的外部结果先对账",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "模型不可用或预算耗尽后人工接管；同 running 接管",
+          "actor": "human"
+        },
+        {
+          "from": "stopping",
+          "command": "（屏障完成）",
+          "to": "paused",
+          "guard": "接管或交回：切换 control_mode",
+          "actor": "system"
+        },
+        {
+          "from": "stopping",
+          "command": "task.cancel",
+          "to": "cancelled",
+          "guard": "取消请求且屏障完成",
+          "actor": "human"
+        },
+        {
+          "from": "running",
+          "command": "（拒绝或到期）",
+          "to": "closed_unfulfilled",
+          "guard": "无未决冲突；保存原因",
+          "actor": "human|system"
+        },
+        {
+          "from": "running",
+          "command": "（不可恢复失败）",
+          "to": "failed",
+          "guard": "已对账副作用；明确原因与后续责任",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "created": [
+          0,
+          0
+        ],
+        "scoping": [
+          1,
+          0
+        ],
+        "running": [
+          2,
+          0
+        ],
+        "verifying": [
+          3,
+          0
+        ],
+        "completed": [
+          4,
+          0
+        ],
+        "stopping": [
+          0,
+          1
+        ],
+        "waiting": [
+          2,
+          1
+        ],
+        "closed_unfulfilled": [
+          4,
+          1
+        ],
+        "cancelled": [
+          0,
+          2
+        ],
+        "paused": [
+          1,
+          2
+        ],
+        "failed": [
+          3,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-CREDIT-RESERVATION",
+      "context": "STL",
+      "aggregate": "CustomerCredit",
+      "object": "CreditReservation",
+      "states": [
+        "reserved",
+        "consumed",
+        "released"
+      ],
+      "initial": "reserved",
+      "terminal": [
+        "released"
+      ],
+      "transitions": [
+        {
+          "from": "reserved",
+          "command": "（OrderActivated 事件）",
+          "to": "consumed",
+          "guard": "占用未过期；订单与金额一致",
+          "actor": "system"
+        },
+        {
+          "from": "reserved",
+          "command": "credit.release",
+          "to": "released",
+          "guard": "订单未生效即放弃，或占用到期",
+          "actor": "human|system"
+        },
+        {
+          "from": "consumed",
+          "command": "（订单取消、关闭或结清事件）",
+          "to": "released",
+          "guard": "按事件 ID 去重",
+          "actor": "system"
+        }
+      ],
+      "layout": {
+        "reserved": [
+          0,
+          0
+        ],
+        "consumed": [
+          1,
+          0
+        ],
+        "released": [
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-CNX-COMPLIANCE",
+      "context": "CNX",
+      "aggregate": "TradeComplianceCheck",
+      "object": "TradeComplianceCheck",
+      "states": [
+        "pending",
+        "clear",
+        "blocked"
+      ],
+      "initial": "pending",
+      "terminal": [],
+      "transitions": [
+        {
+          "from": "pending",
+          "command": "trade_compliance.decide",
+          "to": "clear",
+          "guard": "授权合规人工；法规与名单版本、有效期",
+          "actor": "human"
+        },
+        {
+          "from": "pending",
+          "command": "trade_compliance.decide",
+          "to": "blocked",
+          "guard": "授权合规人工；理由与依据",
+          "actor": "human"
+        },
+        {
+          "from": "clear",
+          "command": "（订单变更或法规版本更新）",
+          "to": "pending",
+          "guard": "目的国、交易方、商品或法规版本变化",
+          "actor": "system"
+        },
+        {
+          "from": "blocked",
+          "command": "trade_compliance.evaluate",
+          "to": "pending",
+          "guard": "事实变化后重新核查（如取得许可证、更换收货方）",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "pending": [
+          0,
+          0
+        ],
+        "clear": [
+          1,
+          0
+        ],
+        "blocked": [
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-CREDIT-DECISION",
+      "context": "STL",
+      "aggregate": "CustomerCredit",
+      "object": "CreditDecision",
+      "states": [
+        "open",
+        "released",
+        "rejected",
+        "expired"
+      ],
+      "initial": "open",
+      "terminal": [
+        "rejected",
+        "expired"
+      ],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "credit_exception.decide",
+          "to": "released",
+          "guard": "审批人层级覆盖超额金额且不是销售经办；超过最高阈值须两人",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "credit_exception.decide",
+          "to": "rejected",
+          "guard": "理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "released",
+          "command": "（决定有效期届满）",
+          "to": "expired",
+          "guard": "未在有效期内完成占用",
+          "actor": "system"
+        },
+        {
+          "from": "open",
+          "command": "（决定有效期届满）",
+          "to": "expired",
+          "guard": "未裁决",
+          "actor": "system"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0
+        ],
+        "released": [
+          1,
+          0
+        ],
+        "rejected": [
+          1,
+          1
+        ],
+        "expired": [
+          2,
+          0
+        ]
+      }
+    }
+  ],
+  "invariantRegister": [
+    {
+      "id": "PTY-INV-001",
+      "context": "PTY",
+      "aggregate": "Party／Contact",
+      "rule": "已核实主数据不原地修改；修订进入新草稿并保留旧快照。",
+      "enforcement": "领域守卫＋数据库禁止更新已核实行",
+      "positive": "party.revise 生成新草稿版本",
+      "negative": "直接修改已核实主体被拒绝（INVALID_STATE）",
+      "concurrency": "并发修订按 CAS 只有一个成功",
+      "errors": "INVALID_STATE、VERSION_CONFLICT",
+      "pythonEvidence": "tests/test_core.py；tests/test_foundation.py",
+      "ulRef": "UL-INV-14",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CAT-INV-001",
+      "context": "CAT",
+      "aggregate": "Sku",
+      "rule": "未知 SKU 不自动创建；SKU 身份与规格修订分开引用。",
+      "enforcement": "领域守卫",
+      "positive": "已核实 SKU 规格 r1 被引用",
+      "negative": "引用未核实 SKU 返回 REFERENCE_INVALID",
+      "concurrency": "—",
+      "errors": "REFERENCE_INVALID、REFERENCE_STALE",
+      "pythonEvidence": "tests/test_core.py",
+      "ulRef": "UL-INV-14",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "POL-INV-001",
+      "context": "POL",
+      "aggregate": "ConfigurationRoot",
+      "rule": "发布须授权人工且与编制人不同。",
+      "enforcement": "领域守卫＋权限",
+      "positive": "他人发布成功",
+      "negative": "编制人自发布返回 INDEPENDENT_REVIEW_REQUIRED",
+      "concurrency": "并发发布按 CAS",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED",
+      "pythonEvidence": "tests/test_foundation.py",
+      "ulRef": "UL-INV-15",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "POL-INV-002",
+      "context": "POL",
+      "aggregate": "ConfigurationRoot",
+      "rule": "币种与单位定义启用后含义不可改变；修改用新 ID。",
+      "enforcement": "领域守卫",
+      "positive": "新 ID 发布",
+      "negative": "修改已启用定义返回 IMMUTABLE_DEFINITION",
+      "concurrency": "—",
+      "errors": "IMMUTABLE_DEFINITION",
+      "pythonEvidence": "tests/test_foundation.py",
+      "ulRef": "UL-INV-13",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "POL-INV-003",
+      "context": "POL",
+      "aggregate": "ConfigurationRoot",
+      "rule": "汇率按方向与用途使用；过期或用途错配阻断。",
+      "enforcement": "领域守卫＋查询守卫",
+      "positive": "USD→USD 明确 1；cost_estimate 用途汇率换算",
+      "negative": "缺失汇率不默认 1；用途错配返回 FX_SCOPE_MISMATCH；过期返回 FX_STALE",
+      "concurrency": "—",
+      "errors": "FX_SCOPE_MISMATCH、FX_STALE",
+      "pythonEvidence": "tests/test_foundation.py；tests/test_t03_a32_sales_fx.py",
+      "ulRef": "UL-INV-12",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "POL-INV-004",
+      "context": "POL",
+      "aggregate": "ConfigurationRoot",
+      "rule": "付款阶段比例均大于 0 且合计 100。",
+      "enforcement": "领域守卫",
+      "positive": "30／70 通过",
+      "negative": "合计 99 返回 PAYMENT_TOTAL_MISMATCH",
+      "concurrency": "—",
+      "errors": "PAYMENT_TOTAL_MISMATCH",
+      "pythonEvidence": "tests/test_foundation.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "POL-INV-005",
+      "context": "POL",
+      "aggregate": "DocumentNumberSequence",
+      "rule": "编号按公司、类型、年度原子分配；同业务引用唯一；幂等重试不重复占号。",
+      "enforcement": "行锁＋唯一约束",
+      "positive": "同业务键重放返回原号",
+      "negative": "序列耗尽返回 SEQUENCE_EXHAUSTED",
+      "concurrency": "并发分配无重号",
+      "errors": "SEQUENCE_EXHAUSTED、BUSINESS_KEY_CONFLICT",
+      "pythonEvidence": "tests/test_foundation.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "EVD-INV-001",
+      "context": "EVD",
+      "aggregate": "Source／BusinessFile",
+      "rule": "来源内容、身份、导入记录与文件字节不可变；同渠道消息不同正文拒绝。",
+      "enforcement": "数据库禁止更新删除＋领域守卫",
+      "positive": "相同内容同 scope 共享",
+      "negative": "同渠道消息不同正文返回 SOURCE_IDENTITY_CONFLICT",
+      "concurrency": "并发登记同内容只产生一条内容记录",
+      "errors": "SOURCE_IDENTITY_CONFLICT、FILE_INVALID",
+      "pythonEvidence": "tests/test_core.py；tests/test_storage.py",
+      "ulRef": "UL-INV-16",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "INQ-INV-001",
+      "context": "INQ",
+      "aggregate": "CustomerRfq",
+      "rule": "ready 需客户联系人、至少一行 SKU／正数量／单位及来源均已人工核实，缺项为空。",
+      "enforcement": "领域守卫",
+      "positive": "BRC-001 四行 120 PCS 确认为 ready",
+      "negative": "缺 SKU 返回 DRAFT_NOT_READY",
+      "concurrency": "—",
+      "errors": "DRAFT_NOT_READY、PERMISSION_DENIED",
+      "pythonEvidence": "tests/test_core.py；tests/test_cli.py",
+      "ulRef": "UL-INV-17",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "INQ-INV-002",
+      "context": "INQ",
+      "aggregate": "CustomerRfq",
+      "rule": "保存只限 draft，整稿替换；ready 不能被直接覆盖。",
+      "enforcement": "领域守卫＋CAS",
+      "positive": "draft 整稿替换",
+      "negative": "ready 上保存返回 INVALID_STATE",
+      "concurrency": "过期 CAS 返回 VERSION_CONFLICT",
+      "errors": "INVALID_STATE、VERSION_CONFLICT、DUPLICATE_LINE_ID",
+      "pythonEvidence": "tests/test_core.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "SUP-INV-001",
+      "context": "SUP",
+      "aggregate": "SupplierOffer",
+      "rule": "核实后内容冻结；更正生成新修订；核实时 supersedes 必须等于当前 active。",
+      "enforcement": "领域守卫＋CAS",
+      "positive": "revise→verify 原子替代",
+      "negative": "旧 active 不匹配返回 VERSION_CONFLICT",
+      "concurrency": "并发核实只有一个成功",
+      "errors": "VERSION_CONFLICT、INVALID_STATE",
+      "pythonEvidence": "tests/test_costing_lifecycle.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "SUP-INV-002",
+      "context": "SUP",
+      "aggregate": "SupplierOffer",
+      "rule": "价格阶梯连续、无重叠；阶梯含义不明保持待确认。",
+      "enforcement": "领域守卫",
+      "positive": "[0,100)、[100,∞) 通过",
+      "negative": "重叠区间返回 PRICE_TIER_AMBIGUOUS",
+      "concurrency": "—",
+      "errors": "PRICE_TIER_AMBIGUOUS、UNSUPPORTED_PRICING_MODE",
+      "pythonEvidence": "tests/test_costing_domains.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "SUP-INV-003",
+      "context": "SUP",
+      "aggregate": "PurchaseTerms",
+      "rule": "采购条件发布者与编制者不同；同根最多一个 active。",
+      "enforcement": "领域守卫＋CAS",
+      "positive": "独立发布成功",
+      "negative": "自发布返回 INDEPENDENT_REVIEW_REQUIRED",
+      "concurrency": "并发发布按 CAS",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED",
+      "pythonEvidence": "tests/test_costing_lifecycle.py",
+      "ulRef": "UL-INV-15",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CST-INV-001",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "rule": "冻结须评估结果 verified＋comparable，全部依赖当前有效、汇率时效满足，规范化输入与引擎版本相等。",
+      "enforcement": "领域守卫＋资格守卫（ADR-BR-004）",
+      "positive": "BRC-001 冻结 660 USD",
+      "negative": "provisional 结果冻结返回 COST_INPUT_NOT_READY；不可比返回 COMPARISON_BASIS_MISMATCH",
+      "concurrency": "依赖撤销先提交则冻结拒绝",
+      "errors": "COST_INPUT_NOT_READY、COMPARISON_BASIS_MISMATCH、REFERENCE_STALE",
+      "pythonEvidence": "tests/test_costing.py；tests/test_costing_failures.py",
+      "ulRef": "UL-INV-09",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CST-INV-002",
+      "context": "CST",
+      "aggregate": "CostSnapshot",
+      "rule": "同一场景只能冻结一次，不同请求键也不能重复冻结。",
+      "enforcement": "唯一约束 (company, scenario_id)",
+      "positive": "同键重放返回原快照",
+      "negative": "异键再冻结被拒绝",
+      "concurrency": "两个同版本冻结请求只有一个成功",
+      "errors": "VERSION_CONFLICT、IDEMPOTENCY_PAYLOAD_CONFLICT",
+      "pythonEvidence": "tests/test_costing_lifecycle.py",
+      "ulRef": "UL-INV-24",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CST-INV-003",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "rule": "同一费用义务不重复计入；包含关系不再相加；无法判断时不擅自删除或双计。",
+      "enforcement": "领域守卫",
+      "positive": "A 报价已含运费不再加 60",
+      "negative": "重复义务返回 CHARGE_DOUBLE_COUNT；范围不明返回 CHARGE_SCOPE_UNRESOLVED",
+      "concurrency": "—",
+      "errors": "CHARGE_DOUBLE_COUNT、CHARGE_SCOPE_UNRESOLVED",
+      "pythonEvidence": "tests/test_costing_domains.py",
+      "ulRef": "UL-INV-10",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CST-INV-004",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "rule": "分摊以整数最小币值的最大余数法，合计严格等于总额；零分母拒绝。",
+      "enforcement": "领域守卫（纯函数）",
+      "positive": "0.05 USD 三行等权分为 0.02／0.02／0.01",
+      "negative": "零分母返回 ALLOCATION_INVALID",
+      "concurrency": "—",
+      "errors": "ALLOCATION_INVALID",
+      "pythonEvidence": "tests/test_costing.py",
+      "ulRef": "UL-INV-11",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CST-INV-005",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "rule": "MOQ 与订购倍数按实际采购量与明确分组校验，不自动超采。",
+      "enforcement": "领域守卫",
+      "positive": "四 SKU 分组合计 120 ≥ MOQ 100",
+      "negative": "按 sku 范围四行均不满足返回 MOQ_NOT_MET",
+      "concurrency": "—",
+      "errors": "MOQ_NOT_MET、ORDER_MULTIPLE_INVALID",
+      "pythonEvidence": "tests/test_costing_domains.py",
+      "ulRef": "UL-INV-25",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CST-INV-006",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "rule": "跨币种使用 cost_estimate 用途的明确方向汇率；同币种明确 1。",
+      "enforcement": "领域守卫",
+      "positive": "100 USD×7.123456＝712.35 CNY",
+      "negative": "报价用途汇率用于成本返回 FX_NOT_APPLICABLE",
+      "concurrency": "—",
+      "errors": "FX_NOT_APPLICABLE",
+      "pythonEvidence": "tests/test_costing_domains.py",
+      "ulRef": "UL-INV-12",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CST-INV-007",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "rule": "税额回收处理四种：recoverable 取未税额；nonrecoverable 取含税额；partial 取含税额减可回收税额（未税额×可回收率，可回收率不高于税率，按币种 HALF_UP 舍入），用于外贸企业免退税下退税率低于征税率等情形；unknown 阻断。可回收率来自经专业核实的税价适用版本（CN-D02），不由商品名称或税率推导；预计可回收额不计作利润。",
+      "enforcement": "领域守卫",
+      "positive": "含税 113 CNY、税率 0.13：recoverable 得 100；partial 可回收率 0.09 得 104",
+      "negative": "partial 缺可回收率或可回收率高于税率返回 TAX_RECOVERY_RATE_INVALID；回收处理未知返回 TAX_TREATMENT_UNKNOWN",
+      "concurrency": "—",
+      "errors": "TAX_TREATMENT_UNKNOWN、TAX_RECOVERY_RATE_INVALID",
+      "pythonEvidence": "tests/test_costing_domains.py（Go 扩展：Python 不支持 partial）",
+      "ulRef": "UL-INV-29",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-001",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "同一报价根至多一个 active 修订；两个修订同时首次激活只有一个成功。",
+      "enforcement": "根行锁＋root_version CAS＋部分唯一索引",
+      "positive": "r1 激活成功",
+      "negative": "并发激活 r2 返回 VERSION_CONFLICT",
+      "concurrency": "SC-03",
+      "errors": "VERSION_CONFLICT、QUOTE_ACTIVE",
+      "pythonEvidence": "tests/test_t03_formalization.py；tests/test_t03_persistence.py",
+      "ulRef": "UL-INV-01",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-002",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "冻结后商业修订内容与 business_hash 不可变；标签与备注变化不改变哈希。",
+      "enforcement": "数据库禁止修改封存行＋领域守卫",
+      "positive": "改备注 row_version 变化、哈希不变（BC-AT09）",
+      "negative": "修改封存修订被拒绝",
+      "concurrency": "—",
+      "errors": "INVALID_STATE、BUSINESS_HASH_MISMATCH",
+      "pythonEvidence": "tests/test_t03_snapshot.py",
+      "ulRef": "UL-INV-02",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-003",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "批准绑定修订、哈希、目标动作、政策与（replace 时）预期旧 active；不能改目标复用。",
+      "enforcement": "领域守卫",
+      "positive": "批准用于 activate",
+      "negative": "replace 批准用于 activate 返回 APPROVAL_REFERENCE_MISMATCH；撤销后返回 APPROVAL_REVOKED",
+      "concurrency": "撤销先提交则激活拒绝",
+      "errors": "APPROVAL_REQUIRED、APPROVAL_REVOKED、APPROVAL_STALE、APPROVAL_REFERENCE_MISMATCH",
+      "pythonEvidence": "tests/test_t03_quote_review.py；tests/test_t03_a6_authority.py",
+      "ulRef": "UL-INV-03",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-004",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "审核人为授权人工，不属于商业编制人集合与冻结经办人；激活时重查审核人当前资格。",
+      "enforcement": "领域守卫＋授权守卫",
+      "positive": "独立审核人批准",
+      "negative": "编制人自审返回 INDEPENDENT_REVIEW_REQUIRED；审核人被撤权后激活拒绝",
+      "concurrency": "撤权先提交则激活拒绝",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED、PERMISSION_DENIED",
+      "pythonEvidence": "tests/test_t03_a33_reviewer_qualification.py；tests/test_t03_a34_ready_reviewer.py",
+      "ulRef": "UL-INV-04",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-005",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "报价有效期：issued_at < expires_at ≤ issued_at＋quote_valid_days×86400 秒；quote.activate、quote.replace 与报价批准要求 as_of < expires_at，相等拒绝；不得在激活时延长有效期。合同成立后报价到期不阻断订单（见 TRD-INV-017）。",
+      "enforcement": "领域守卫；提交前重新采集服务器时点",
+      "positive": "有效期内激活",
+      "negative": "quote.activate 在 now 恰等于 expires_at 时返回 QUOTE_EXPIRED（BC-AT12）",
+      "concurrency": "跨越期限则整体回滚",
+      "errors": "QUOTE_EXPIRED、QUOTE_VALIDITY_INVALID、APPROVAL_EXPIRED",
+      "pythonEvidence": "tests/test_t03_a35_time_qualification.py",
+      "ulRef": "UL-INV-05",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-006",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "报价覆盖所绑定询价的完整行集合，SKU、规格与转换后数量与成本快照逐行相等；首批一个修订只绑定一个完整快照。",
+      "enforcement": "领域守卫＋资格守卫",
+      "positive": "四行与快照逐行相等",
+      "negative": "部分行或 what_if 快照返回 COMPARISON_BASIS_MISMATCH／COST_SNAPSHOT_NOT_ELIGIBLE",
+      "concurrency": "—",
+      "errors": "COMPARISON_BASIS_MISMATCH、COST_SNAPSHOT_NOT_ELIGIBLE、COST_SNAPSHOT_MISSING",
+      "pythonEvidence": "tests/test_t03_cost_binding.py；tests/test_t03_a27_cost_scope.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-007",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "毛利精确比较 R−C ≥ R×minimum_margin；低于阈值为 requires_approval，须由具备毛利例外权限、独立于编制人的人工在审核中显式批准例外，例外绑定修订、business_hash、规则版本与差额；普通内容批准不覆盖；非法金额、越权与作用域错误不能被例外覆盖。",
+      "enforcement": "领域守卫（纯函数）",
+      "positive": "净销售 880、成本 660 恰为 25% 通过；7.00 单价经毛利例外批准后可激活",
+      "negative": "879.99 不通过；7.00 单价只有普通批准时 activate 返回 MARGIN_POLICY_REQUIRES_APPROVAL（BC-AT06）；编制人自批例外返回 MARGIN_EXCEPTION_NOT_AUTHORIZED",
+      "concurrency": "—",
+      "errors": "MARGIN_POLICY_REQUIRES_APPROVAL、MARGIN_EXCEPTION_NOT_AUTHORIZED",
+      "pythonEvidence": "tests/test_t03_server_calculation.py（Go 有意背离：Python 无例外通道）",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-008",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "行金额按币种最小单位舍入后求和；含税拆分以应付守恒；付款计划最大余数法合计等于应付。",
+      "enforcement": "领域守卫（纯函数）",
+      "positive": "两行各 0.005 USD 合计 2 分；30／70 得 288.00＋672.00",
+      "negative": "极小总额致某阶段为 0 时拒绝",
+      "concurrency": "—",
+      "errors": "PAYMENT_TOTAL_MISMATCH、CALCULATION_LIMIT_EXCEEDED",
+      "pythonEvidence": "tests/test_t03_server_calculation.py；tests/test_t03_a28_sales_terms.py",
+      "ulRef": "UL-INV-11",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-009",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "一个商业修订至多一份主正式文档；字节、哈希、编号与 business_hash 反向绑定并与正式化同事务封存。",
+      "enforcement": "唯一约束＋同事务写入＋读取时校验实际字节",
+      "positive": "激活生成唯一正式文档",
+      "negative": "r2 引用 r1 文档 quote_ready 失败（BC-AT22）；字节损坏返回 FORMAL_DOCUMENT_INTEGRITY_FAILURE",
+      "concurrency": "文件、编号、Outbox 任一失败整体回滚",
+      "errors": "FORMAL_DOCUMENT_MISSING、FORMAL_DOCUMENT_INTEGRITY_FAILURE、DOCUMENT_BINDING_MISSING",
+      "pythonEvidence": "tests/test_t03_formalization.py；tests/test_t03_a19_configuration_consumption.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-010",
+      "context": "TRD",
+      "aggregate": "QuoteRoot／SalesOrder",
+      "rule": "同根 full_v1 唯一订单；prepare 同事务占用名额；占用后 replace／cancel 返回 ROOT_CONVERSION_LOCKED。",
+      "enforcement": "根行锁＋唯一约束 (company, root_quote_id, slot)",
+      "positive": "唯一订单草稿",
+      "negative": "不同键重复 prepare 返回 CONVERSION_SLOT_CONFLICT（BC-AT15）",
+      "concurrency": "SC-03／BC-AT17",
+      "errors": "CONVERSION_SLOT_CONFLICT、ROOT_CONVERSION_LOCKED、QUOTE_NOT_CURRENT",
+      "pythonEvidence": "tests/test_t03_a20_acceptance_order.py；tests/test_t03_a24_write_control.py",
+      "ulRef": "UL-INV-06",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-011",
+      "context": "TRD",
+      "aggregate": "CustomerResponse／Acceptance",
+      "rule": "仅 full_unconditional 经授权人工核实形成 Acceptance；客户、联系人、报价修订、哈希与完整行集合一致；同消息不重复。客户 PO 与报价修订逐行一致且无新增条件时按 full_unconditional 核实，有差异按 conditional（反要约）；以行为承诺（如按报价付定金）仅在报价条款明示允许时由人工核实并引用 STL 资金记录。",
+      "enforcement": "领域守卫＋唯一约束",
+      "positive": "完整接受核实成功",
+      "negative": "附条件返回 ACCEPTANCE_NOT_UNCONDITIONAL；错配返回 ACCEPTANCE_SCOPE_MISMATCH（BC-AT10／11）",
+      "concurrency": "—",
+      "errors": "ACCEPTANCE_NOT_UNCONDITIONAL、ACCEPTANCE_SCOPE_MISMATCH、ACCEPTANCE_LINES_MISMATCH、SOURCE_MESSAGE_DUPLICATE",
+      "pythonEvidence": "tests/test_t04_a36_customer_response.py；tests/test_t04_a37_response_verification.py",
+      "ulRef": "UL-INV-07",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-012",
+      "context": "TRD",
+      "aggregate": "CustomerResponse",
+      "rule": "承诺以到达时间判定：received_at 取渠道服务器或导入来源可核实的接收时间（source_claimed_at 不算），须 < quote.expires_at；无法核实到达时间时以服务端核实时间判定。核实动作本身可以晚于报价到期。迟到承诺不形成 Acceptance，按客户新要约处理（新报价修订并重新审批）。",
+      "enforcement": "领域守卫",
+      "positive": "承诺第 6 天到达、第 8 天核实（报价第 7 天到期）：形成 Acceptance",
+      "negative": "received_at 恰等于 expires_at 返回 ACCEPTANCE_LATE；只有邮件自报时间时按核实时间判定",
+      "concurrency": "—",
+      "errors": "ACCEPTANCE_LATE、ACCEPTANCE_TIME_CONFLICT",
+      "pythonEvidence": "tests/test_t04_a37_response_verification.py（Go 有意背离：Python 以核实时间判定）",
+      "ulRef": "UL-INV-26",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-013",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "订单生效须同一快照的已批准、未撤销、未过期订单审批；审核人独立于草稿创建人与申请人；订单审批有效期由订单审批政策设定，与报价有效期无关。",
+      "enforcement": "领域守卫＋授权守卫",
+      "positive": "经审核激活",
+      "negative": "无审批返回 ORDER_APPROVAL_REQUIRED；自审返回 REVIEWER_NOT_INDEPENDENT；撤销后返回 ORDER_APPROVAL_REVOKED",
+      "concurrency": "撤销与激活共享锁，先提交者胜",
+      "errors": "ORDER_APPROVAL_REQUIRED、REVIEWER_NOT_INDEPENDENT、ORDER_APPROVAL_REVOKED、ORDER_APPROVAL_EXPIRED、ORDER_REVIEW_STALE",
+      "pythonEvidence": "tests/test_t04_a38_order_review.py；tests/test_t04_a39_order_gate.py；tests/test_t04_a40_public_revoke.py",
+      "ulRef": "UL-INV-08",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-014",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "新激活在同一事务重查：来源报价修订与接受仍有效、正式化批准未撤销、审核人仍合格、正式文件字节完整、成本快照可采纳、已消费配置仍有效、异币汇率时效。合同成立后报价到期不阻断；成本、配置与汇率变化不否定合同，作为风险须由订单审批逐项确认，未确认返回 ORDER_RISK_UNACKNOWLEDGED。",
+      "enforcement": "资格守卫（ADR-BR-004）＋提交前时点复核",
+      "positive": "全部资格满足激活",
+      "negative": "成本来源否认先提交则拒绝（A26）",
+      "concurrency": "SC-04",
+      "errors": "QUOTE_NOT_CURRENT、APPROVAL_REVOKED、ACCEPTANCE_NOT_VALID、ORDER_RISK_UNACKNOWLEDGED",
+      "pythonEvidence": "tests/test_t03_a26_order_qualification.py（Go 有意背离：Python 以拒绝处理上游变化）",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-015",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "rule": "已绑定任务的根，所有写入须处于允许模式并携带当前 control_epoch；旧 epoch 拒绝；无绑定的人工命令按权限执行。",
+      "enforcement": "根行锁内查询 ObjectControl",
+      "positive": "无绑定人工写入成功",
+      "negative": "绑定中无任务上下文写入返回 OBJECT_CONTROL_CONFLICT；旧 epoch 返回 CONTROL_EPOCH_STALE",
+      "concurrency": "接管与提交竞争（BC-AT20）",
+      "errors": "OBJECT_CONTROL_CONFLICT、CONTROL_EPOCH_STALE",
+      "pythonEvidence": "tests/test_t03_a24_write_control.py",
+      "ulRef": "UL-INV-18",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-016",
+      "context": "TRD",
+      "aggregate": "QuoteRoot／SalesOrder",
+      "rule": "激活、替代与订单生效同事务追加提交证据、动作结果、审计与 Outbox；失败无残留。",
+      "enforcement": "单事务",
+      "positive": "提交后断连恢复读取原结果（BC-AT18）",
+      "negative": "提交前注入故障无部分生效（BC-AT19）",
+      "concurrency": "—",
+      "errors": "STORAGE_FAILURE",
+      "pythonEvidence": "tests/test_t03_persistence.py；tests/test_t03_a23_reconciliation_access.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-001",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "rule": "只有已激活、经独立订单审批且审批未撤销的订单可以编制草稿。",
+      "enforcement": "领域守卫＋上游守卫读取",
+      "positive": "生效订单编制成功",
+      "negative": "草稿订单返回 ORDER_NOT_ACTIVE；撤销后返回 ORDER_APPROVAL_REVOKED",
+      "concurrency": "—",
+      "errors": "ORDER_NOT_ACTIVE、ORDER_APPROVAL_REQUIRED、ORDER_APPROVAL_REVOKED",
+      "pythonEvidence": "tests/test_t04_a46_purchase_draft.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-002",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "rule": "同一订单行可以分配给多个采购草稿；按 (company, order_line_id) 的有效分配合计（未作废草稿＋承诺）不超过可分配需求加获批的损耗或超采量，并发以需求分配根行的条件更新守卫。",
+      "enforcement": "需求分配根 FOR UPDATE＋条件更新",
+      "positive": "120 件订单行分给两家供应商 80＋40",
+      "negative": "再分配 1 件返回 PURCHASE_ALLOCATION_EXCEEDED",
+      "concurrency": "两个草稿并发争用剩余量只有一个成功",
+      "errors": "PURCHASE_ALLOCATION_EXCEEDED",
+      "pythonEvidence": "tests/test_t04_a46_purchase_draft.py（Go 有意背离：Python 一行一草稿）",
+      "ulRef": "UL-INV-20",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-003",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "rule": "一个草稿只对应一个供应商，币种、付款条件、贸易术语与采购责任范围一致。",
+      "enforcement": "领域守卫",
+      "positive": "同供应商两行合并计价",
+      "negative": "混供应商返回 SUPPLIER_MISMATCH；口径不一致返回 PURCHASE_TERMS_INCONSISTENT",
+      "concurrency": "—",
+      "errors": "SUPPLIER_MISMATCH、PURCHASE_TERMS_INCONSISTENT",
+      "pythonEvidence": "tests/test_t04_a46_purchase_draft.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-004",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "rule": "供应条件须为当前生效、经他人核实或发布、来源可信且在有效区间；供应报价须属于订单来源询价行。",
+      "enforcement": "资格守卫（ADR-BR-004）",
+      "positive": "当前 offer 修订成稿",
+      "negative": "被替代返回 SUPPLY_CONDITION_NOT_CURRENT；过期返回 SUPPLY_CONDITION_EXPIRED；范围不符返回 SUPPLY_SCOPE_MISMATCH",
+      "concurrency": "—",
+      "errors": "SUPPLY_CONDITION_NOT_CURRENT、SUPPLY_CONDITION_EXPIRED、SUPPLY_SCOPE_MISMATCH",
+      "pythonEvidence": "tests/test_t04_a46_purchase_draft.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-005",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "rule": "条件行规格版本与订单行完全一致、单位一致；采购量按分配量计算，因 MOQ、订购倍数或损耗超出分配量时须显式标记超采量、理由与批准，超出部分不计入已售商品成本；MOQ、倍数与阶梯复用核价规则。",
+      "enforcement": "领域守卫（复用 CST 纯函数规则）",
+      "positive": "两行 MOQ 合计与组价分摊",
+      "negative": "规格不一致返回 SPECIFICATION_MISMATCH；MOQ 不足且未标记超采返回 MOQ_NOT_MET；超采未获批返回 OVERBUY_NOT_APPROVED",
+      "concurrency": "—",
+      "errors": "SPECIFICATION_MISMATCH、MOQ_NOT_MET、ORDER_MULTIPLE_INVALID、OVERBUY_NOT_APPROVED、REFERENCE_STALE",
+      "pythonEvidence": "tests/test_t04_a46_purchase_draft.py（Go 有意背离：Python 要求采购量等于订单量）",
+      "ulRef": "UL-INV-25",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-006",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "rule": "本阶段只接受固定日期交期：里程碑、地点与时区与订单一致，不晚于订单要求，不早于当前本地日期。",
+      "enforcement": "领域守卫",
+      "positive": "余量天数记录",
+      "negative": "晚于要求返回 DELIVERY_LATE；已过返回 DELIVERY_DATE_PASSED；锚点未发生返回 DELIVERY_UNRESOLVED",
+      "concurrency": "—",
+      "errors": "DELIVERY_NOT_COMPARABLE、DELIVERY_LATE、DELIVERY_DATE_PASSED、DELIVERY_UNRESOLVED",
+      "pythonEvidence": "tests/test_t04_a46_purchase_draft.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-007",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "rule": "草稿正文不可修改或替换；错误草稿经 purchase.draft.void 作废（未形成承诺、授权人工、理由），作废释放分配余额并保留原记录；写重放要求同一编制人、相同请求与当前对象控制。",
+      "enforcement": "数据库禁止修改＋领域守卫",
+      "positive": "相同请求重放返回原草稿",
+      "negative": "已形成承诺的草稿作废返回 PURCHASE_DRAFT_COMMITTED；修改正文返回 PURCHASE_DRAFT_IMMUTABLE",
+      "concurrency": "—",
+      "errors": "PURCHASE_DRAFT_IMMUTABLE、PURCHASE_DRAFT_COMMITTED、OBJECT_CONTROL_CONFLICT",
+      "pythonEvidence": "tests/test_t04_a46_purchase_draft.py",
+      "ulRef": "UL-INV-20",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TSK-INV-001",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "rule": "completed 只能由目标断言核验通过后进入；closed_unfulfilled 不计为成功。",
+      "enforcement": "领域守卫",
+      "positive": "order_active 核验通过后完成",
+      "negative": "客户端 completed=true 被拒绝",
+      "concurrency": "—",
+      "errors": "INVALID_STATE",
+      "pythonEvidence": "Q01 旧包（未移植）",
+      "ulRef": "UL-INV-19",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TSK-INV-002",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "rule": "接管递增 control_epoch 并进入 stopping；旧执行者以旧 epoch 提交被围栏拒绝；外部未知结果先对账。",
+      "enforcement": "task_version CAS＋TRD 根内 epoch 校验",
+      "positive": "接管后人工继续",
+      "negative": "旧 epoch 提交返回 CONTROL_EPOCH_STALE",
+      "concurrency": "BC-AT20",
+      "errors": "CONTROL_EPOCH_STALE、OBJECT_CONTROL_CONFLICT",
+      "pythonEvidence": "Q01 旧包 take_control（未移植）",
+      "ulRef": "UL-INV-18",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "FUL-INV-001",
+      "context": "FUL",
+      "aggregate": "Shipment",
+      "rule": "订单数量不得低于已确认出运数量；默认不超发。",
+      "enforcement": "待详细设计",
+      "positive": "",
+      "negative": "",
+      "concurrency": "",
+      "errors": "",
+      "pythonEvidence": "无",
+      "ulRef": "UL-INV-21",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "STL-INV-001",
+      "context": "STL",
+      "aggregate": "SettlementStatement",
+      "rule": "同一出运或收货明细的已结算数量不重复结算。",
+      "enforcement": "待详细设计",
+      "positive": "",
+      "negative": "",
+      "concurrency": "",
+      "errors": "",
+      "pythonEvidence": "无",
+      "ulRef": "UL-INV-23",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "STL-INV-002",
+      "context": "STL",
+      "aggregate": "Application",
+      "rule": "核销不超过来源可用余额与目标未结余额；首期同币种。",
+      "enforcement": "待详细设计",
+      "positive": "",
+      "negative": "",
+      "concurrency": "",
+      "errors": "",
+      "pythonEvidence": "无",
+      "ulRef": "UL-INV-22",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "X-INV-001",
+      "context": "ALL",
+      "aggregate": "ActionResult",
+      "rule": "同幂等键同参数获权重放返回原 action_id，不重算、不重新编号；同键异参返回 IDEMPOTENCY_PAYLOAD_CONFLICT。",
+      "enforcement": "唯一约束 (scope, command, idempotency_key)＋request_hash",
+      "positive": "重放 replayed=true",
+      "negative": "同键异参冲突（BC-AT14）",
+      "concurrency": "—",
+      "errors": "IDEMPOTENCY_PAYLOAD_CONFLICT",
+      "pythonEvidence": "tests/test_core.py；tests/test_t03_write_contract.py",
+      "ulRef": "UL-INV-24",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "X-INV-002",
+      "context": "ALL",
+      "aggregate": "—",
+      "rule": "人工专属命令以 humanOnlyCommands 为唯一清单（命令目录与 M0 门禁页由它生成）；清单内命令拒绝 AI 与 system 身份，即使有通配授权。",
+      "enforcement": "应用层授权守卫",
+      "positive": "人工执行成功",
+      "negative": "AI 执行返回 PERMISSION_DENIED",
+      "concurrency": "—",
+      "errors": "PERMISSION_DENIED",
+      "pythonEvidence": "tests/test_core.py；tests/test_t04_a46_purchase_draft.py",
+      "ulRef": "UL-INV-17",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "X-INV-003",
+      "context": "ALL",
+      "aggregate": "—",
+      "rule": "读取、重放与对账重查当前权限与对象范围；无权或不存在按防泄露规则返回通用错误。",
+      "enforcement": "应用层授权守卫",
+      "positive": "获权读取历史",
+      "negative": "跨公司访问返回 PERMISSION_DENIED／NOT_FOUND（BC-AT21）",
+      "concurrency": "撤权与读取竞争",
+      "errors": "PERMISSION_DENIED、NOT_FOUND",
+      "pythonEvidence": "tests/test_t03_a23_reconciliation_access.py；tests/test_t04_a45_response_query_recovery.py",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-017",
+      "context": "TRD",
+      "aggregate": "Acceptance／SalesOrder",
+      "rule": "合同成立以 Acceptance 有效为准：承诺到达早于报价到期且未被作废或争议。order.prepare、order.review.decide 与 order.activate 检查合同成立，不检查当前时钟早于报价到期。",
+      "enforcement": "领域守卫",
+      "positive": "报价到期后，对有效期内成立的合同准备、审批并生效订单（BC-AT13）",
+      "negative": "接受已作废返回 ACCEPTANCE_NOT_VALID；迟到承诺不能准备订单",
+      "concurrency": "接受纠错与 activate 并发按锁序裁决",
+      "errors": "ACCEPTANCE_NOT_VALID、ACCEPTANCE_LATE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-26",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-018",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "生效订单的变更只经 OrderAmendment：绑定当前订单修订与客户变更来源，独立审批后应用为新订单修订；数量不得低于已确认出运量；价格、数量、SKU、交期或条款变化使原订单审批对新修订不适用，并向 PUR、FUL、STL 发布 OrderAmended；不覆盖已发生事实。",
+      "enforcement": "领域守卫＋订单根 CAS",
+      "positive": "已批准变更把蓝 M 由 48 改为 36，生成订单修订 r2",
+      "negative": "减量低于已出运量返回 QUANTITY_BELOW_SHIPPED；绑定旧订单修订返回 ORDER_AMENDMENT_STALE",
+      "concurrency": "两个变更并发应用只有一个成功",
+      "errors": "QUANTITY_BELOW_SHIPPED、ORDER_AMENDMENT_STALE、REVIEWER_NOT_INDEPENDENT",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-27",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-019",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "生效订单取消须无已确认出运且下游采购承诺与占用已解除或已有获批处置；短交关闭须已有出运、理由与授权；关闭须已确认出运量等于订单量（含获批容差）；三者均保留转换名额与历史。",
+      "enforcement": "领域守卫",
+      "positive": "未出运、无承诺的订单取消",
+      "negative": "已出运订单取消返回 ORDER_HAS_SHIPMENTS；有未解除承诺返回 DOWNSTREAM_COMMITMENT_OPEN；未出完关闭返回 ORDER_NOT_FULFILLED",
+      "concurrency": "取消与出运确认并发：出运先提交则取消拒绝",
+      "errors": "ORDER_HAS_SHIPMENTS、DOWNSTREAM_COMMITMENT_OPEN、ORDER_NOT_FULFILLED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-21",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-020",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "外销合同／形式发票（S/C、PI）绑定订单商业快照与订单修订哈希；签署或回签版本作为不可变证据登记；订单变更后旧合同文件只读，须为新订单修订重新生成。",
+      "enforcement": "领域守卫＋文档绑定",
+      "positive": "r1 订单生成 PI 并登记客户回签件",
+      "negative": "订单 r2 引用 r1 的 PI 返回 ORDER_DOCUMENT_STALE",
+      "concurrency": "—",
+      "errors": "ORDER_DOCUMENT_STALE、DOCUMENT_BINDING_MISSING",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-021",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "order.activate 时买方、付款方与收货方须有当前有效的主体筛查结论 clear（PTY 守卫）；match、pending 或过期时拒绝，经授权合规人工裁决后才可继续。",
+      "enforcement": "上游守卫（PTY PartyScreeningGuard）",
+      "positive": "三方筛查均为 clear",
+      "negative": "付款方筛查为 match 返回 PARTY_SCREENING_NOT_CLEAR",
+      "concurrency": "筛查结论更新与生效并发按锁序裁决",
+      "errors": "PARTY_SCREENING_NOT_CLEAR",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PTY-INV-002",
+      "context": "PTY",
+      "aggregate": "PartyScreening",
+      "rule": "主体筛查按 POL screening_regulation 启用的名单与版本执行，结论记录名单来源与版本、筛查范围、结论（clear／match／pending）、复核人与有效期；新建或资料变更的主体在筛查完成前为 pending；主体资料或名单版本变化触发复筛；疑似命中由授权合规人工裁决，误报放行须写理由，正向名单绑定主体版本与名单条目、条目变化即失效；负向名单永久阻断，不随名单更新解除；结论不是法律认定。",
+      "enforcement": "领域守卫",
+      "positive": "名单版本 v3 下主体结论 clear，有效期内",
+      "negative": "AI 或 system 身份裁决 match 返回 PERMISSION_DENIED；过期结论不能作为 clear；负向名单主体在名单更新后仍为 blocked；正向名单在名单条目变化后失效并重新进入 pending",
+      "concurrency": "—",
+      "errors": "PERMISSION_DENIED、PARTY_SCREENING_NOT_CLEAR",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CAT-INV-002",
+      "context": "CAT",
+      "aggregate": "DeclarationProfile",
+      "rule": "商品申报档案（商品编码、申报名称与要素、法定单位及换算、原产地依据）按 SKU 规格版本与编码表版本保存，由授权专业人工核实；编码候选（含 AI）不能自动生效；更新不覆盖历史申报快照。",
+      "enforcement": "领域守卫",
+      "positive": "SKU 规格 r1 绑定已核实的申报档案 v1",
+      "negative": "未核实档案用于报关资料返回 DECLARATION_PROFILE_UNVERIFIED",
+      "concurrency": "—",
+      "errors": "DECLARATION_PROFILE_UNVERIFIED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "FUL-INV-002",
+      "context": "FUL",
+      "aggregate": "CommercialRelease",
+      "rule": "出运确认与单证放行（正本提单、电放）须同时满足：有效质量放行（QLT 守卫）、合同付款条件满足（STL 守卫）、主体筛查 clear（PTY 守卫）、贸易合规 clear 且需要时已分配许可证（CNX 守卫）；任一不满足进入等待；付款条件例外须授权人工批准，绑定订单、出运、规则与金额；贸易合规 blocked 不能被例外覆盖。",
+      "enforcement": "上游守卫（QLT、STL、PTY）",
+      "positive": "质量放行、尾款到账、筛查 clear 后出运并放单",
+      "negative": "尾款未到账返回 COMMERCIAL_RELEASE_BLOCKED；放行撤回后出运返回 QUALITY_RELEASE_REQUIRED",
+      "concurrency": "核销撤销与放单并发按锁序裁决",
+      "errors": "COMMERCIAL_RELEASE_BLOCKED、QUALITY_RELEASE_REQUIRED、PARTY_SCREENING_NOT_CLEAR、TRADE_COMPLIANCE_NOT_CLEAR、EXPORT_LICENSE_REQUIRED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-28",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "STL-INV-003",
+      "context": "STL",
+      "aggregate": "Application",
+      "rule": "付款条件满足为派生判断：按订单付款阶段与已核销到账金额（原币，未解释差额不计）判定；撤销核销、退款或退汇后重新判定；以守卫函数 PaymentConditionGuard 向 FUL 发布。",
+      "enforcement": "派生查询＋守卫函数",
+      "positive": "出运前 70% 尾款 672.00 已到账并核销",
+      "negative": "到账 670.00 且差额未解释：不满足",
+      "concurrency": "撤销核销与 FUL 放单并发按锁序裁决",
+      "errors": "COMMERCIAL_RELEASE_BLOCKED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-28",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-022",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "付款条件含出运后才到期的部分时，order.activate 须持有覆盖该部分、未过期的信用占用（STL CreditGuard）；付款全部在出运前到期，或出运后到期但出运单证（正本提单或电放）由 FUL 放行闸门扣到付款为止、且信用政策把这种付款视为有担保时，不需要占用。",
+      "enforcement": "上游守卫（STL CreditGuard）",
+      "positive": "出运后 30 天付 70%：先占用 672.00 再生效",
+      "negative": "无占用返回 CREDIT_RESERVATION_REQUIRED；占用金额小于信用部分返回 CREDIT_RESERVATION_REQUIRED",
+      "concurrency": "占用释放与生效并发按锁序裁决",
+      "errors": "CREDIT_RESERVATION_REQUIRED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-30",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-023",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "rule": "order.activate 时须有覆盖当前订单修订（目的国、买方与收货方所在国、商品）的有效贸易合规结论 clear（CNX TradeComplianceGuard）；blocked 或 pending 时拒绝，普通业务审批不能覆盖。",
+      "enforcement": "上游守卫（CNX TradeComplianceGuard）",
+      "positive": "目的国与商品核查为 clear",
+      "negative": "目的国处于禁运项目返回 TRADE_COMPLIANCE_NOT_CLEAR",
+      "concurrency": "订单变更后旧结论不适用于新修订",
+      "errors": "TRADE_COMPLIANCE_NOT_CLEAR",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-31",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "STL-INV-004",
+      "context": "STL",
+      "aggregate": "CustomerCredit",
+      "rule": "信用占用在客户信用根事务中裁决：未结业务应收＋有效占用＋本次占用 ≤ 当前有效额度（额度币种；跨币种须有 credit 用途的显式汇率），且最早逾期应收不超过 POL credit_policy 的容忍天数；任一不满足时生成信用决定，放行前不形成占用；新客户默认额度为 0；占用带到期时间，过期视为释放；取消、关闭或结清后释放。",
+      "enforcement": "领域守卫＋根 FOR UPDATE",
+      "positive": "额度 10,000、未结 5,000、占用 4,000 成功",
+      "negative": "未结 7,000 时占用 4,000 生成信用决定且不形成占用；最早逾期 45 天超过容忍 30 天返回 CREDIT_OVERDUE_EXCEEDED；跨币种无 credit 汇率返回 FX_SCOPE_MISMATCH",
+      "concurrency": "两笔并发占用合计超额时只有一笔成功",
+      "errors": "CREDIT_LIMIT_EXCEEDED、CREDIT_OVERDUE_EXCEEDED、FX_SCOPE_MISMATCH",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-30",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "PUR-INV-008",
+      "context": "PUR",
+      "aggregate": "SupplierDelivery",
+      "rule": "直发路线的供应商交付按采购承诺行登记数量、交接地点与时间、证据；供应商上报只是声明，经授权人工核实后才计入采购结算与出运来源；同一承诺行累计核实交付量不超过承诺量加获批容差。",
+      "enforcement": "领域守卫",
+      "positive": "承诺 120 件，核实交付 100 件",
+      "negative": "累计核实超出承诺与容差返回 SUPPLIER_DELIVERY_EXCEEDED；未核实上报不能被出运引用",
+      "concurrency": "两次核实并发只有一个成功",
+      "errors": "SUPPLIER_DELIVERY_EXCEEDED、SUPPLIER_DELIVERY_UNVERIFIED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-32",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "FUL-INV-003",
+      "context": "FUL",
+      "aggregate": "Shipment",
+      "rule": "直发出运的每行引用已核实的供应商交付行（PUR SupplierDeliveryGuard）；同一交付行累计出运量不超过核实交付量；本仓发货改为引用库存出库。",
+      "enforcement": "上游守卫（PUR SupplierDeliveryGuard）",
+      "positive": "核实交付 100 件，出运 100 件",
+      "negative": "出运 120 件返回 SUPPLIER_DELIVERY_INSUFFICIENT；引用未核实交付返回 SUPPLIER_DELIVERY_UNVERIFIED",
+      "concurrency": "交付更正与出运确认并发按锁序裁决",
+      "errors": "SUPPLIER_DELIVERY_INSUFFICIENT、SUPPLIER_DELIVERY_UNVERIFIED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-32",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CNX-INV-001",
+      "context": "CNX",
+      "aggregate": "TradeComplianceCheck",
+      "rule": "贸易合规核查按订单修订记录目的国、买方与收货方所在国、商品管制分类与最终用途，以及所用法规与名单版本；结论 clear／blocked／pending 由授权合规人工确定，带有效期；订单变更改动目的国、交易方或商品，或法规版本更新时，结论对新修订不适用、须重新核查；blocked 不能由业务审批覆盖。",
+      "enforcement": "领域守卫",
+      "positive": "版本 v5 下核查 clear，有效期内",
+      "negative": "AI 或 system 身份确定结论返回 PERMISSION_DENIED；变更后的订单修订沿用旧结论返回 TRADE_COMPLIANCE_NOT_CLEAR",
+      "concurrency": "—",
+      "errors": "PERMISSION_DENIED、TRADE_COMPLIANCE_NOT_CLEAR",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-31",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "CNX-INV-002",
+      "context": "CNX",
+      "aggregate": "ExportLicense",
+      "rule": "需要许可证的出运须分配有效许可证：目的国与最终用户一致、在有效期内，累计分配数量与金额不超过许可额度；报关改单或撤销按外部结果释放用量，不凭本地取消恢复。",
+      "enforcement": "领域守卫＋许可证根 FOR UPDATE",
+      "positive": "许可 1,000 件，分配 600＋400",
+      "negative": "再分配 1 件返回 EXPORT_LICENSE_EXCEEDED；过期返回 EXPORT_LICENSE_EXPIRED；需要许可证而未分配返回 EXPORT_LICENSE_REQUIRED",
+      "concurrency": "两笔并发分配合计超额时只有一笔成功",
+      "errors": "EXPORT_LICENSE_EXCEEDED、EXPORT_LICENSE_EXPIRED、EXPORT_LICENSE_REQUIRED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-31",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "STL-INV-005",
+      "context": "STL",
+      "aggregate": "CustomerCredit",
+      "rule": "信用决定与额度申请按 POL credit_policy 的审批层级裁决：审批人须具备覆盖超额金额（或申请额度）的层级权限，且不是该客户的销售经办或申请人；超过最高层级阈值须两名审批人；决定绑定订单、金额、原因与有效期，过期后须重新申请；额度版本保存额度来源（内部评估或中信保限额）与有效期。",
+      "enforcement": "领域守卫＋授权策略",
+      "positive": "超额 3,000 由信用经理放行（层级上限 5,000）",
+      "negative": "信用专员放行超额 3,000（层级上限 1,000）返回 CREDIT_DECISION_NOT_AUTHORIZED；销售经办自行放行返回 CREDIT_DECISION_NOT_AUTHORIZED",
+      "concurrency": "两名审批人同时裁决同一决定只有一个生效",
+      "errors": "CREDIT_DECISION_NOT_AUTHORIZED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-30",
+      "status": "ACCEPTED（模拟评审）"
+    }
+  ],
+  "crossContextOrchestrations": [
+    {
+      "id": "WF-01",
+      "name": "Q01 询价到订单",
+      "owner": "TSK（任务）；决策留在 INQ、CST、TRD",
+      "sequence": [
+        "INQ rfq.confirm_scope",
+        "SUP supplier_offer.verify",
+        "CST cost_snapshot.freeze",
+        "TRD quote.freeze → submit_review → review.decide → activate",
+        "TRD quote.response.record → quote.response.verify",
+        "TRD order.prepare → order.review.request → order.review.decide → order.activate",
+        "TSK goal.verify(order_active)"
+      ],
+      "failureMode": "任何一步阻断进入 waiting_input／waiting_approval；模型不可用进入 paused 并可人工接管。",
+      "idempotency": "每步稳定 action_id 与幂等键；提交后断连先读结果再核验。"
+    },
+    {
+      "id": "WF-02",
+      "name": "订单到采购草稿",
+      "owner": "PUR",
+      "sequence": [
+        "TRD OrderActivated",
+        "PUR 人工逐行指定供应条件",
+        "PUR purchase.draft.prepare"
+      ],
+      "failureMode": "订单审批撤销或供应条件失效时拒绝；错误草稿经 purchase.draft.void 作废后重新编制。",
+      "idempotency": "draft_id 与请求一致性校验；订单行分配余额由 DemandAllocation 守卫。"
+    },
+    {
+      "id": "WF-03",
+      "name": "成本来源否认的风险传播",
+      "owner": "CST（事实）；TRD／PUR（各自守卫）",
+      "sequence": [
+        "CST costing.attest_source(denied)",
+        "CST CostSourceDenied 事件",
+        "TRD／PUR 新动作重查可采纳资格",
+        "TRD 已生效对象登记风险暂停（候选）"
+      ],
+      "failureMode": "否认先提交则新动作拒绝；激活先提交则保留历史并登记风险。",
+      "idempotency": "事件 ID 去重；风险登记幂等。"
+    },
+    {
+      "id": "WF-04",
+      "name": "正式化与发送分离",
+      "owner": "TRD（正式化）；internal/ai＋BIP（发送，未交付）",
+      "sequence": [
+        "TRD quote.activate 封存正式文档与投递目标快照",
+        "发送前准入 dispatch_preflight",
+        "独立外发授权与 operation_id（未交付）"
+      ],
+      "failureMode": "渠道未配置返回 EXTERNAL_CHANNEL_NOT_CONFIGURED；unknown 先对账。",
+      "idempotency": "operation_id；不承诺跨外部系统恰好一次。"
+    },
+    {
+      "id": "WF-05",
+      "name": "中国出口资料链（B0 候选）",
+      "owner": "CNX",
+      "sequence": [
+        "FUL ExportLotRegistered",
+        "CNX declaration_case.prepare",
+        "CNX purchase_invoice 匹配",
+        "STL FundRecorded",
+        "CNX document_bundle.check"
+      ],
+      "failureMode": "外部结果 unknown 不盲目重申报；红冲使匹配待复核。",
+      "idempotency": "外部版本与业务顺序核对旧回执。"
+    },
+    {
+      "id": "WF-06",
+      "name": "订单变更传播",
+      "owner": "TRD（变更决定）；PUR、FUL、STL（各自复核）",
+      "sequence": [
+        "TRD order.amendment.prepare（读取 PUR 承诺、FUL 出运与 STK 占用形成影响评估）",
+        "TRD order.amendment.submit → order.amendment.decide",
+        "TRD order.amendment.apply → OrderAmended",
+        "PUR 复核受影响分配与承诺（作废草稿、撤销或新建承诺）",
+        "FUL 复核装箱、订舱与单证",
+        "STL 复核付款计划与结算来源"
+      ],
+      "failureMode": "下游已发生事实不回滚；无法自动确认影响时进入待处理并指定责任人。",
+      "idempotency": "事件 ID 去重；各下游按订单修订号只处理一次。"
+    },
+    {
+      "id": "WF-07",
+      "name": "出运与单证放行",
+      "owner": "FUL（放行决定）；QLT、STL、PTY、CNX、PUR（守卫）",
+      "sequence": [
+        "QLT QualityReleased",
+        "PUR supplier_delivery.verify（直发路线）",
+        "STL FundRecorded → Applied（付款条件满足）",
+        "PTY 主体筛查结论 clear",
+        "CNX 贸易合规 clear；需要时 export_license.allocate",
+        "FUL commercial_release.evaluate → CommercialReleaseGranted",
+        "FUL shipment.confirm → ShipmentConfirmed",
+        "FUL document_release.record（正本提单或电放）→ DocumentsReleased"
+      ],
+      "failureMode": "任一守卫不满足进入等待；例外须授权人工批准并绑定规则与金额。",
+      "idempotency": "(company, shipment_id, scope) 唯一放行；重放返回原结果。"
+    },
+    {
+      "id": "WF-08",
+      "name": "订单生效前的信用占用与合规核查",
+      "owner": "TRD（生效决定）；STL、CNX（各自事实）",
+      "sequence": [
+        "TRD order.prepare → OrderPrepared",
+        "STL credit.reserve（付款条件含出运后到期部分时）→ CreditReserved",
+        "CNX trade_compliance.evaluate → trade_compliance.decide → TradeComplianceDecided",
+        "TRD order.review.decide → order.activate（读取 STL CreditGuard 与 CNX TradeComplianceGuard）",
+        "STL 消费 OrderActivated，占用转为已使用"
+      ],
+      "failureMode": "信用不足须信用例外或改付款条件；合规 blocked 不能放行；占用到期后须重新占用。",
+      "idempotency": "占用按 (company, order_id, order_revision) 唯一；事件 ID 去重。"
+    }
+  ],
+  "sharedEventEnvelope": {
+    "eventId": "evt-…（UUIDv7）",
+    "eventType": "idp-brant.trd.quote_activated.v1",
+    "schemaVersion": "1.0.0",
+    "source": "idp-brant.trd",
+    "aggregateType": "QuoteRoot",
+    "aggregateId": "quote-…",
+    "aggregateVersion": 7,
+    "partitionKey": "aggregateType:aggregateId；同一聚合的事件按 aggregateVersion 顺序投递",
+    "businessRevision": 2,
+    "businessHash": "sha256:…",
+    "occurredAt": "2026-11-06T08:00:00Z",
+    "recordedAt": "2026-11-06T08:00:00Z",
+    "actor": {
+      "kind": "human",
+      "id": "user-…"
+    },
+    "tenantId": "tenant-…",
+    "companyId": "company-…",
+    "correlationId": "corr-…",
+    "causationId": "action-…",
+    "idempotencyKey": "…",
+    "task": {
+      "taskId": "task-…",
+      "controlEpoch": 3
+    },
+    "evidenceRefs": [
+      "commit-evidence-…"
+    ],
+    "payloadHash": "sha256:…",
+    "payload": {
+      "quoteId": "quote-…",
+      "businessRevision": 2
+    }
+  },
+  "approvalMatrix": [
+    {
+      "component": "UL V0.1 与 18 个上下文",
+      "approver": "各上下文 Domain Owner＋首席架构师",
+      "evidence": "逐词条签核记录；SD-01–SD-10 裁决",
+      "status": "PENDING"
+    },
+    {
+      "component": "TRD 报价与订单聚合、锁序",
+      "approver": "TRD Domain Owner＋技术负责人",
+      "evidence": "SC-03、SC-04 PG16 并发测试",
+      "status": "PENDING"
+    },
+    {
+      "component": "CST 计算与舍入规则",
+      "approver": "核价业务 Owner＋财务",
+      "evidence": "独立算术样例与 Go 纯函数测试",
+      "status": "PENDING"
+    },
+    {
+      "component": "税价、汇率与中国配置",
+      "approver": "税务／财务专业角色",
+      "evidence": "CN-D01–CN-D08 冻结结果",
+      "status": "PENDING"
+    },
+    {
+      "component": "AI 委托、自治级别与人工专属命令",
+      "approver": "AI Owner＋安全负责人",
+      "evidence": "越权与提示注入红队用例",
+      "status": "PENDING"
+    },
+    {
+      "component": "ADR-BR-004 一致性策略",
+      "approver": "首席架构师＋研发负责人＋TRD／CST Owner",
+      "evidence": "方案对比与竞争实测",
+      "status": "OPEN"
+    }
+  ],
+  "testCatalog": [
+    {
+      "id": "BC-AT01",
+      "context": "INQ／SUP／CST／TRD",
+      "aggregate": "全链",
+      "command": "WF-01",
+      "given": "BRC-001 合成样例",
+      "assertion": "报价 960.00、订单 960.00、来源链完整；有效订单唯一",
+      "class_": "E2E",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT02",
+      "context": "INQ／TRD",
+      "aggregate": "CustomerRfq／QuoteRoot",
+      "command": "rfq.save_draft／quote.save_draft",
+      "given": "询价缺 SKU／交期，报价缺成本",
+      "assertion": "允许保存草稿；ready／submit／activate 明确阻断",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT03",
+      "context": "SUP／CST",
+      "aggregate": "CostScenario",
+      "command": "cost_scenario.evaluate",
+      "given": "MOQ 不满足或费用范围缺失",
+      "assertion": "展示不可比原因；不自动选最低价",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT04",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.freeze",
+      "given": "红 S＝2 DOZEN、96 USD；base_quantity=2",
+      "assertion": "前者 24 PCS／192.00；后者 BASE_QUANTITY_MISMATCH",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT05",
+      "context": "INQ",
+      "aggregate": "CustomerRfq",
+      "command": "rfq.confirm_scope",
+      "given": "矩阵 120、原文 118",
+      "assertion": "待核实，不改行凑平；未澄清不生效",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT06",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.activate",
+      "given": "单价 7.00、成本 660.00",
+      "assertion": "毛利 180／840；普通审核不能放行；毛利例外批准后可激活",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT07",
+      "context": "CST／TRD",
+      "aggregate": "CostScenario／QuoteRoot",
+      "command": "evaluate／freeze",
+      "given": "行价已含收费又加总",
+      "assertion": "CHARGE_DOUBLE_COUNT；总额不双计",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT08",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.revise",
+      "given": "批准 r1 后创建 r2 改价",
+      "assertion": "r1 批准不覆盖 r2；旧 active 不因新草稿替代",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT09",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "metadata 更新",
+      "given": "批准后改标签",
+      "assertion": "row_version 变化，business_hash 不变",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT10",
+      "context": "TRD",
+      "aggregate": "CustomerResponse",
+      "command": "quote.response.verify",
+      "given": "接受但改颜色",
+      "assertion": "只生成 conditional 回复；不生成 Acceptance 或订单",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT11",
+      "context": "TRD",
+      "aggregate": "Acceptance",
+      "command": "quote.response.verify",
+      "given": "金额相同但客户、联系人或修订错误",
+      "assertion": "ACCEPTANCE_SCOPE_MISMATCH",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT12",
+      "context": "TRD",
+      "aggregate": "QuoteRoot／Acceptance／SalesOrder",
+      "command": "verify／prepare／activate",
+      "given": "now 恰等于 expires_at",
+      "assertion": "quote.activate 在 now = expires_at 拒绝；承诺按可核实的到达时间判定，邮件自报时间不作到达时间",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT13",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "command": "order.activate",
+      "given": "prepare 后等待审核至报价到期",
+      "assertion": "合同在有效期内已成立：报价到期后订单仍可审批并生效；未确认的上游风险返回 ORDER_RISK_UNACKNOWLEDGED",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT14",
+      "context": "ALL",
+      "aggregate": "ActionResult",
+      "command": "任意写命令",
+      "given": "同动作键不同参数",
+      "assertion": "IDEMPOTENCY_PAYLOAD_CONFLICT；无第二次写入",
+      "class_": "Integration",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT15",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "command": "order.prepare",
+      "given": "两请求键对同根 prepare",
+      "assertion": "唯一订单草稿；另一返回 CONVERSION_SLOT_CONFLICT",
+      "class_": "Concurrency",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT16",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "order.prepare",
+      "given": "r2 已批准，r1 已占 full_v1",
+      "assertion": "不能靠新修订再取名额",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT17",
+      "context": "TRD",
+      "aggregate": "QuoteRoot／SalesOrder",
+      "command": "replace∥prepare",
+      "given": "r1 转单与 r2 替代同时提交",
+      "assertion": "确定事务顺序下处理，无竞态绕过",
+      "class_": "Concurrency",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT18",
+      "context": "TRD／TSK",
+      "aggregate": "SalesOrder",
+      "command": "order.activate",
+      "given": "提交成功后进程退出再恢复",
+      "assertion": "读取原结果；不重复创建",
+      "class_": "Recovery",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT19",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "command": "order.activate",
+      "given": "提交前注入异常",
+      "assertion": "业务、名额、动作结果与 Outbox 无部分生效",
+      "class_": "Recovery",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT20",
+      "context": "TSK／TRD",
+      "aggregate": "BusinessTask／ObjectControl",
+      "command": "task.take_control∥写命令",
+      "given": "AI 提交与接管竞争",
+      "assertion": "已提交保留；旧 epoch 新提交拒绝",
+      "class_": "Concurrency",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT21",
+      "context": "ALL",
+      "aggregate": "—",
+      "command": "任意",
+      "given": "权限撤销或跨公司访问",
+      "assertion": "拒绝且审计，不泄露存在性或成本",
+      "class_": "Security",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT22",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote_ready 查询",
+      "given": "r2 引用 r1 正式文档",
+      "assertion": "quote_ready 失败",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT23",
+      "context": "CAT／TRD",
+      "aggregate": "Sku",
+      "command": "order.activate",
+      "given": "样衣确认 r1，订单要求 r2",
+      "assertion": "行业条件 unknown／unsatisfied",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT24",
+      "context": "CRM／全链",
+      "aggregate": "—",
+      "command": "WF-01",
+      "given": "关闭 CRM",
+      "assertion": "交易与 Q01 不依赖 CRM",
+      "class_": "E2E",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT25",
+      "context": "TRD／TSK",
+      "aggregate": "SalesOrder",
+      "command": "goal 查询",
+      "given": "订单完成后报价自然到期",
+      "assertion": "历史完成事实保留；不能继续前向动作",
+      "class_": "Domain",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT26",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "command": "task.take_control",
+      "given": "模型或渠道不可用",
+      "assertion": "人工接管并标明驱动；不宣称 AI 或自动发信成功",
+      "class_": "Recovery",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT27",
+      "context": "EVD／INQ",
+      "aggregate": "Source",
+      "command": "source.register",
+      "given": "真实文本／XLSX／PDF 导入并人工核实",
+      "assertion": "字段定位、逐行修正与文件访问可验证",
+      "class_": "E2E",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "BC-AT28",
+      "context": "TSK／internal/ai",
+      "aggregate": "BusinessTask",
+      "command": "WF-01",
+      "given": "真实 AI 目标链",
+      "assertion": "记录全部试次、人工修正、实际成本与权威断言",
+      "class_": "AI-E2E",
+      "source": "核心设计 14",
+      "status": "SPEC"
+    },
+    {
+      "id": "SC-03",
+      "context": "TRD",
+      "aggregate": "QuoteRoot／SalesOrder",
+      "command": "replace∥prepare",
+      "given": "见 Context Map SC-03",
+      "assertion": "两种顺序都只有一个结果成立",
+      "class_": "Concurrency-PG16",
+      "source": "Context Map",
+      "status": "SPEC"
+    },
+    {
+      "id": "SC-04",
+      "context": "CST／TRD",
+      "aggregate": "CostSnapshot／SalesOrder",
+      "command": "attest_source∥activate",
+      "given": "见 Context Map SC-04",
+      "assertion": "否认先提交则拒绝；激活先提交则登记风险",
+      "class_": "Concurrency-PG16",
+      "source": "Context Map",
+      "status": "BLOCKED by ADR-BR-004"
+    },
+    {
+      "id": "T02-S04",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "command": "evaluate",
+      "given": "150 PCS；[0,100) 5、[100,∞) 4",
+      "assertion": "all_units 600；graduated 700",
+      "class_": "Domain",
+      "source": "T02 规格 11",
+      "status": "SPEC"
+    },
+    {
+      "id": "T02-S07",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "command": "evaluate",
+      "given": "100 USD×7.123456 CNY/USD",
+      "assertion": "712.35 CNY；缺方向或过期不放行",
+      "class_": "Domain",
+      "source": "T02 规格 11",
+      "status": "SPEC"
+    },
+    {
+      "id": "T03-C08",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.freeze",
+      "given": "净销售 100 EUR、EUR→USD 1.1、成本 66 USD",
+      "assertion": "比较净销售 110 USD、毛利 44、毛利率 40%；客户仍付 100 EUR",
+      "class_": "Domain",
+      "source": "T03 规格 5.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "A46-01",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "command": "purchase.draft.prepare",
+      "given": "两行同条件行、每 100 件计价、graduated 阶梯",
+      "assertion": "先合并计价再按数量最大余数法分摊；正文列出适用阶梯",
+      "class_": "Domain",
+      "source": "A46 报告",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT01",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "command": "order.amendment.apply",
+      "given": "BRC-001 订单已出运蓝 M 40 件；变更把蓝 M 改为 36",
+      "assertion": "QUANTITY_BELOW_SHIPPED；改为 44 时生成订单修订 r2 并发布 OrderAmended",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT02",
+      "context": "TRD",
+      "aggregate": "SalesOrder",
+      "command": "order.cancel／order.close_remainder",
+      "given": "生效订单分别处于未出运与已出运 60 件",
+      "assertion": "未出运可取消；已出运取消返回 ORDER_HAS_SHIPMENTS，短交关闭成功且名额保留",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT03",
+      "context": "TRD",
+      "aggregate": "CustomerResponse",
+      "command": "quote.response.verify",
+      "given": "报价第 7 天 08:00 到期；客户承诺渠道接收时间为到期时刻",
+      "assertion": "ACCEPTANCE_LATE；登记为迟到回复，不形成 Acceptance",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT04",
+      "context": "TRD",
+      "aggregate": "CustomerResponse",
+      "command": "quote.response.verify",
+      "given": "客户 PO 与报价 r1 相同但蓝 M 数量为 50",
+      "assertion": "按 conditional 处理；不形成 Acceptance，转新报价修订",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT05",
+      "context": "PUR",
+      "aggregate": "DemandAllocation",
+      "command": "purchase.draft.prepare",
+      "given": "订单行 120 件：supplier.A 80 件、supplier.B 40 件，再请求 1 件",
+      "assertion": "前两个草稿成功；第三个 PURCHASE_ALLOCATION_EXCEEDED；并发争用只有一个成功",
+      "class_": "Concurrency-PG16",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT06",
+      "context": "PUR",
+      "aggregate": "PurchaseDraft",
+      "command": "purchase.draft.void",
+      "given": "选错供应条件的草稿未形成承诺",
+      "assertion": "作废成功并释放 80 件分配余额；已形成承诺时返回 PURCHASE_DRAFT_COMMITTED",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT07",
+      "context": "CST",
+      "aggregate": "CostScenario",
+      "command": "cost_scenario.evaluate",
+      "given": "含税 113 CNY、税率 0.13、partial 可回收率 0.09",
+      "assertion": "成本 104 CNY；可回收率 0.15 返回 TAX_RECOVERY_RATE_INVALID",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT08",
+      "context": "FUL",
+      "aggregate": "CommercialRelease",
+      "command": "commercial_release.evaluate",
+      "given": "质量已放行；出运前 70% 尾款到账 670.00，差额未解释",
+      "assertion": "COMMERCIAL_RELEASE_BLOCKED；尾款核销足额后放行；例外须授权人工",
+      "class_": "Integration",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT09",
+      "context": "TRD／PTY",
+      "aggregate": "SalesOrder",
+      "command": "order.activate",
+      "given": "付款方筛查结论为 match",
+      "assertion": "PARTY_SCREENING_NOT_CLEAR；合规人工裁决 clear 后可生效",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT10",
+      "context": "TSK／TRD",
+      "aggregate": "BusinessTask",
+      "command": "task.take_control",
+      "given": "模型不可用，任务 paused 且根已绑定",
+      "assertion": "接管进入 stopping；TRD 先递增 epoch，旧执行者返回 CONTROL_EPOCH_STALE",
+      "class_": "Concurrency",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT11",
+      "context": "STL／TRD",
+      "aggregate": "CustomerCredit",
+      "command": "credit.reserve",
+      "given": "额度 10,000 USD、未结应收 7,000；新订单信用部分 4,000",
+      "assertion": "CREDIT_LIMIT_EXCEEDED；信用例外批准后占用成功；两笔并发占用只有一笔成功",
+      "class_": "Concurrency-PG16",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT12",
+      "context": "CNX／TRD／FUL",
+      "aggregate": "TradeComplianceCheck",
+      "command": "order.activate",
+      "given": "目的国处于禁运项目，合规结论 blocked",
+      "assertion": "order.activate 与出运放行均返回 TRADE_COMPLIANCE_NOT_CLEAR；普通审批不能覆盖",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT13",
+      "context": "CNX",
+      "aggregate": "ExportLicense",
+      "command": "export_license.allocate",
+      "given": "许可 1,000 件；已分配 600，再分配 500；另一许可证已过期",
+      "assertion": "EXPORT_LICENSE_EXCEEDED；过期许可证返回 EXPORT_LICENSE_EXPIRED",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT14",
+      "context": "PUR／FUL",
+      "aggregate": "SupplierDelivery",
+      "command": "shipment.confirm",
+      "given": "直发：承诺 120 件，核实交付 100 件，另有未核实上报 20 件",
+      "assertion": "出运 120 件返回 SUPPLIER_DELIVERY_INSUFFICIENT；未核实上报不计入",
+      "class_": "Domain",
+      "source": "05 阶段战术设计",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT15",
+      "context": "PTY",
+      "aggregate": "PartyScreening",
+      "command": "party_screening.decide",
+      "given": "新客户与名单条目疑似命中；另一主体在负向名单",
+      "assertion": "新客户筛查前为 pending；合规人工判为误报后 clear 并登记正向名单；名单条目更新后正向名单失效；负向名单主体始终 blocked",
+      "class_": "Domain",
+      "source": "05 阶段战术设计（参照 SAP GTS）",
+      "status": "SPEC"
+    },
+    {
+      "id": "TD-AT16",
+      "context": "STL",
+      "aggregate": "CustomerCredit",
+      "command": "credit_exception.decide",
+      "given": "超额 3,000；信用专员层级上限 1,000、信用经理 5,000",
+      "assertion": "信用专员放行返回 CREDIT_DECISION_NOT_AUTHORIZED；信用经理放行后 credit.reserve 成功；决定过期后须重新申请",
+      "class_": "Domain",
+      "source": "05 阶段战术设计（参照 SAP FSCM）",
+      "status": "SPEC"
+    }
+  ],
+  "humanOnlyCommands": [
+    "party.confirm",
+    "party.deactivate",
+    "contact.confirm",
+    "service_role.verify",
+    "trading_profile.publish",
+    "party_screening.decide",
+    "sku.confirm",
+    "sku.deactivate",
+    "item_code_mapping.publish",
+    "sample.approve",
+    "declaration_profile.verify",
+    "config.publish",
+    "config.retire",
+    "config.discard_draft",
+    "rfq.confirm_scope",
+    "rfq.cancel",
+    "rfq.close",
+    "supplier_rfq.record_issued",
+    "supplier_rfq.close",
+    "supplier_offer.verify",
+    "supplier_offer.withdraw",
+    "purchase_terms.publish",
+    "purchase_terms.retire",
+    "logistics_offer.verify",
+    "logistics_offer.withdraw",
+    "costing_context.verify",
+    "measurement.record_verified",
+    "cost_snapshot.freeze",
+    "costing.attest_source",
+    "quote.freeze",
+    "quote.submit_review",
+    "quote.review.decide",
+    "quote.approval.revoke",
+    "quote.activate",
+    "quote.replace",
+    "quote.withdraw",
+    "quote.cancel",
+    "quote.response.verify",
+    "acceptance.invalidate",
+    "acceptance.mark_disputed",
+    "order.review.decide",
+    "order.activate",
+    "order.approval.revoke",
+    "order.cancel",
+    "order.close_unfulfilled",
+    "order.close_remainder",
+    "order.close",
+    "order.amendment.submit",
+    "order.amendment.decide",
+    "order.amendment.apply",
+    "order.amendment.withdraw",
+    "order.document.record_signed",
+    "object_control.stop",
+    "object_control.release",
+    "purchase.draft.prepare",
+    "purchase.draft.void",
+    "purchase.commitment.decide",
+    "purchase.commitment.revoke",
+    "purchase.commitment.issue",
+    "disposition.decide",
+    "quality_release.grant",
+    "quality_release.revoke",
+    "commercial_release.grant_exception",
+    "shipment.confirm",
+    "document_release.record",
+    "settlement.confirm",
+    "application.apply",
+    "application.unapply",
+    "credit.confirm",
+    "order_result.close",
+    "external_reconciliation.resolve",
+    "task.take_control",
+    "task.release",
+    "task.handoff",
+    "task.cancel",
+    "credit_limit.publish",
+    "credit_exception.decide",
+    "supplier_delivery.verify",
+    "trade_compliance.decide",
+    "export_license.register",
+    "export_license.release",
+    "party_screening.block"
+  ]
+}

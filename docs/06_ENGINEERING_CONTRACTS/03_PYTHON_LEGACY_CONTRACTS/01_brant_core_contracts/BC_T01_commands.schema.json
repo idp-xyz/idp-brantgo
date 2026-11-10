@@ -1,0 +1,663 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:brant:trade-core:t01:0.1.0",
+  "title": "BC-T01 closed command subset, candidate",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "source.register"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "content_text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50000
+            },
+            "source_kind": {
+              "enum": [
+                "manual_text",
+                "email_text"
+              ]
+            },
+            "provider": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "account_ref": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "external_message_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "author_claim": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "id",
+            "content_text",
+            "source_kind"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source_kind": {
+                    "const": "email_text"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "provider",
+                  "account_ref",
+                  "external_message_id",
+                  "author_claim"
+                ]
+              },
+              "else": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "provider"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "account_ref"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "external_message_id"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "master.upsert_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "kind": {
+              "enum": [
+                "customer",
+                "contact",
+                "supplier",
+                "sku"
+              ]
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parent_customer_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "base_uom": {
+              "const": "PCS"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "expected_version"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "master.confirm"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                "minLength": 1,
+                "maxLength": 64,
+                "not": {
+                  "pattern": "[^A-Za-z0-9._:-]"
+                }
+              },
+              "minItems": 1,
+              "maxItems": 200,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "evidence_ids"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "master.deactivate"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "rfq.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "customer_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "contact_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "lines": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "line_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "not": {
+                      "pattern": "[^A-Za-z0-9._:-]"
+                    }
+                  },
+                  "sku_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "not": {
+                      "pattern": "[^A-Za-z0-9._:-]"
+                    }
+                  },
+                  "quantity": {
+                    "type": "string",
+                    "pattern": "^(?:0|[1-9][0-9]{0,5})(?:\\.[0-9]{1,6})?$|^1000000(?:\\.0{1,6})?$",
+                    "not": {
+                      "pattern": "[^0-9.]"
+                    }
+                  },
+                  "uom": {
+                    "const": "PCS"
+                  },
+                  "requested_item": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "source_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "not": {
+                      "pattern": "[^A-Za-z0-9._:-]"
+                    }
+                  },
+                  "locator": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "line_id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "source_ids": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                "minLength": 1,
+                "maxLength": 64,
+                "not": {
+                  "pattern": "[^A-Za-z0-9._:-]"
+                }
+              },
+              "uniqueItems": true
+            },
+            "unresolved_fields": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "id",
+            "expected_version"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "rfq.confirm_scope"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                "minLength": 1,
+                "maxLength": 64,
+                "not": {
+                  "pattern": "[^A-Za-z0-9._:-]"
+                }
+              },
+              "minItems": 1,
+              "maxItems": 200,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "evidence_ids"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "rfq.cancel"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.trade-core/0.1.0"
+        },
+        "command": {
+          "const": "rfq.close"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "minLength": 1,
+          "maxLength": 64,
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+              "minLength": 1,
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "stage": "A27",
+  "source_version": "V0.31",
+  "contract": "brant.quote-cost-scope/0.1.0",
+  "migration": 12,
+  "applies_to": "all structured payloads carrying lines; incomplete drafts may be saved but not frozen",
+  "required_scope_fields": [
+    "rfq_ref",
+    "customer_ref",
+    "contact_ref",
+    "pricing_policy_ref",
+    "trade_terms_ref",
+    "trade_scope_ref",
+    "named_place_ref",
+    "payment_terms_ref",
+    "delivery"
+  ],
+  "same_connection": "existing caller-owned SQLite writer transaction; no commit or rollback",
+  "cost_basis": "nominal_direct_cost",
+  "snapshot_binding": [
+    "exact ID/result hash/evidence hash",
+    "full input_manifest hash",
+    "current sealed actual costing context and its manifest data hash"
+  ],
+  "rfq": [
+    "current ready RFQ and exact row_version",
+    "same snapshot/context/RFQ identity",
+    "confirmed current customer/contact revisions and RFQ parties",
+    "contact belongs to the exact customer",
+    "entire RFQ line set exactly once"
+  ],
+  "line": [
+    "unique sales line identity",
+    "unique RFQ line identity; no splitting or merging",
+    "exact SKU profile revision and manifest hash",
+    "current confirmed SKU master revision",
+    "positive quantity and unit precision",
+    "exact normalized RFQ/context quantity",
+    "same unit or explicit current SKU/direction-bound conversion",
+    "conversion factor uses exact rational arithmetic; no package guessing"
+  ],
+  "comparison": [
+    "exact pricing policy and comparison currency",
+    "export_sale responsibility scope",
+    "exact terms/scope/named place/payment references",
+    "exact fixed delivery date, milestone, place and time zone"
+  ],
+  "frozen_evidence": "calculation.cost_scope_binding with deterministic binding_hash",
+  "current_rechecks": [
+    "freeze",
+    "quote.activate",
+    "quote.replace",
+    "new order.activate through A26 qualification",
+    "informational quote_ready"
+  ],
+  "not_a_token": "re-resolve and compare the server certificate on each new formalization/adoption",
+  "historical_behavior": "do not rewrite old payloads or committed results; A24/A25 recovery retained",
+  "old_structured_frozen_without_binding": "readable history, not newly formalizable or adoptable",
+  "legacy_boundary": "pre-existing unstructured lifecycle adapters are not certified complete quotations",
+  "not_certified": [
+    "complete quote business-profile/address validation",
+    "all tax/charge combinations",
+    "all dependency deadlines at physical COMMIT",
+    "general risk lifecycle",
+    "split RFQ or multiple cost snapshots",
+    "enterprise identity or production admission",
+    "full T04",
+    "all Q03-01..48 or G01..G06",
+    "product V1.0"
+  ],
+  "fixture_classification": "synthetic",
+  "external_business_actions": 0,
+  "production_admission": false,
+  "product_v1_complete": false
+}

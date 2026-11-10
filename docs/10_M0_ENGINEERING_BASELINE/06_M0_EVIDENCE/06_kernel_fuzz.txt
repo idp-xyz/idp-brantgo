@@ -1,0 +1,30 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/214 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 214/214 completed, now fuzzing with 20 workers
+fuzz: elapsed: 3s, execs: 3238170 (1079055/sec), new interesting: 6 (total: 220)
+fuzz: elapsed: 6s, execs: 6831726 (1198102/sec), new interesting: 8 (total: 222)
+fuzz: elapsed: 9s, execs: 10477225 (1213195/sec), new interesting: 9 (total: 223)
+fuzz: elapsed: 12s, execs: 13876352 (1134973/sec), new interesting: 13 (total: 227)
+fuzz: elapsed: 15s, execs: 17185280 (1102759/sec), new interesting: 16 (total: 230)
+fuzz: elapsed: 18s, execs: 20738468 (1184278/sec), new interesting: 18 (total: 232)
+fuzz: elapsed: 21s, execs: 24171248 (1144387/sec), new interesting: 20 (total: 234)
+fuzz: elapsed: 24s, execs: 27642312 (1156838/sec), new interesting: 22 (total: 236)
+fuzz: elapsed: 27s, execs: 31111436 (1156783/sec), new interesting: 22 (total: 236)
+fuzz: elapsed: 30s, execs: 34475392 (1121283/sec), new interesting: 22 (total: 236)
+fuzz: elapsed: 30s, execs: 34475392 (0/sec), new interesting: 22 (total: 236)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/kernel	30.127s
+fuzz: elapsed: 0s, gathering baseline coverage: 0/19 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 19/19 completed, now fuzzing with 20 workers
+fuzz: elapsed: 3s, execs: 1785113 (595007/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 6s, execs: 4019811 (744891/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 9s, execs: 6286354 (753859/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 12s, execs: 8576791 (765149/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 15s, execs: 10841351 (754639/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 18s, execs: 13010968 (722800/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 21s, execs: 15021473 (670642/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 24s, execs: 17229200 (735838/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 27s, execs: 19311116 (694153/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 30s, execs: 21278625 (655805/sec), new interesting: 2 (total: 21)
+fuzz: elapsed: 30s, execs: 21278625 (0/sec), new interesting: 2 (total: 21)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/kernel	30.107s

@@ -1,0 +1,55 @@
+﻿python_module,lines,classes,top_level_functions,slice,target_context,target_go_location,class_names
+brant_core/__init__.py,4,0,0,T01,—,—,
+brant_core/__main__.py,189,0,2,T01,transport,cmd/brant-cli,
+brant_core/common.py,37,2,2,T01,kernel／foundation,internal/kernel＋internal/foundation/identity,Principal；Rejected
+brant_core/costing.py,682,0,15,T02,CST,internal/contexts/cst,
+brant_core/costing_engine/__init__.py,6,0,0,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,
+brant_core/costing_engine/access_rules.py,35,0,1,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,
+brant_core/costing_engine/assumption_rules.py,40,0,1,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,
+brant_core/costing_engine/command_model.py,258,1,0,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,CommandModel
+brant_core/costing_engine/commercial_rules.py,123,0,8,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,
+brant_core/costing_engine/delivery_rules.py,77,0,2,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,
+brant_core/costing_engine/extension_model.py,289,1,0,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,ExtensionModel
+brant_core/costing_engine/integrated_model.py,1374,1,0,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,IntegratedModel
+brant_core/costing_engine/normalization.py,117,0,6,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,
+brant_core/costing_engine/output_evidence.py,104,0,3,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,
+brant_core/costing_engine/resource_budget.py,341,2,9,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,Fraction；Budget
+brant_core/costing_engine/rules.py,458,1,13,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,RevisionModel
+brant_core/costing_engine/strict_formats.py,47,1,2,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,FormatChecker
+brant_core/costing_engine/validator.py,314,1,13,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,Invalid
+brant_core/costing_engine/write_admission.py,672,1,0,T02,CST／SUP,internal/contexts/cst/internal/domain（规则）＋sup/internal/domain（供应条件）,WriteAdmission
+brant_core/costing_registry.py,203,0,3,T02,CST,internal/contexts/cst,
+brant_core/costing_storage.py,49,0,1,T02,CST,internal/contexts/cst,
+brant_core/foundation.py,841,0,22,共享基础 V0.2,POL,internal/contexts/pol,
+brant_core/foundation_demo.py,384,0,1,共享基础 V0.2,POL,internal/contexts/pol,
+brant_core/foundation_storage.py,113,0,1,共享基础 V0.2,POL,internal/contexts/pol,
+brant_core/service.py,1564,1,0,T01–T04,多上下文（组合根）,internal/bootstrap＋各上下文 module.go,Core
+brant_core/storage.py,76,0,1,T01,INQ／EVD／PTY,"internal/contexts/{inq,evd,pty}/internal/adapters/postgres",
+brant_core/t03_config.py,1006,0,26,T03 A18–A19,POL,internal/contexts/pol/internal/domain/config,
+brant_core/t03_cost_scope.py,186,0,5,T03 A27,TRD,internal/contexts/trd/internal/domain/quote,
+brant_core/t03_order_qualification.py,218,0,3,T03 A25–A26,TRD,internal/contexts/trd/internal/domain/order,
+brant_core/t03_order_snapshot.py,109,0,3,T03 A25–A26,TRD,internal/contexts/trd/internal/domain/order,
+brant_core/t03_query.py,494,0,16,T03 A8–A16,TRD,internal/contexts/trd/internal/application（查询）,
+brant_core/t03_reconciliation.py,113,0,1,T03 A22–A23,TSK／TRD,internal/contexts/tsk/internal/domain/action,
+brant_core/t03_sales_terms.py,151,0,4,T03 A28,TRD,internal/contexts/trd/internal/domain/quote,
+brant_core/t03_storage.py,3993,0,71,T03／T04,TRD／PUR,internal/contexts/trd/internal/adapters/postgres（按聚合拆分）,
+brant_core/t03_trade_parties.py,151,0,2,T03 A29–A31,TRD,internal/contexts/trd/internal/domain/quote,
+brant_core/t03_write.py,635,0,12,T03 A17,TRD,internal/contexts/trd/internal/application（命令）,
+brant_core/t04_order_review.py,192,0,11,T04 A38–A43,TRD,internal/contexts/trd/internal/domain/order,
+brant_core/t04_purchase.py,439,0,16,T04 A46,PUR,internal/contexts/pur/internal/domain/draft,
+brant_core/t04_response.py,159,0,5,T04 A36–A37／A44–A45,TRD,internal/contexts/trd/internal/domain/response,
+t03_candidate/__init__.py,2,0,0,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/admission.py,192,0,2,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/build_contracts.py,766,0,12,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/build_examples.py,422,0,3,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/calculation.py,381,0,4,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/configuration.py,379,4,0,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,CandidateActor；Revision；Root；ConfigurationModel
+t03_candidate/dependencies.py,253,1,1,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,References
+t03_candidate/document.py,97,0,1,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/export_t02_example.py,78,0,1,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/protocol.py,138,1,8,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,Invalid
+t03_candidate/verify.py,648,0,3,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/verify_a1.py,299,0,6,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/verify_configuration.py,457,0,1,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/verify_dependencies.py,390,0,1,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,
+t03_candidate/verify_transaction_adapter.py,391,0,1,T03 候选契约,TRD（契约）,contracts/＋tools/contract-check,

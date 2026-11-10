@@ -1,0 +1,28 @@
+{
+  "stage": "A30",
+  "source_version": "V0.34",
+  "core_version": "0.5.1",
+  "migration": 12,
+  "contract": "brant.quote-trade-parties/0.1.0",
+  "transaction": "caller-owned SQLite writer transaction; no commit or rollback",
+  "selection": "when no direct contact_refs match, require exactly one active contact_profile whose customer, row version and legacy_contact_ref match the confirmed quotation contact",
+  "checks": "Foundation publication, dependencies, source accessibility and foundation.read; selected contact_profile object control",
+  "binding": "selected profile reference and data hash in contact proof and business hash; no email or phone in rendered quotation",
+  "compatibility": "direct contact_refs retain A29 proof shape and take precedence if both forms are present",
+  "recheck": [
+    "quote.freeze",
+    "quote.activate",
+    "quote.replace",
+    "new order.activate",
+    "quote_ready"
+  ],
+  "history": "existing direct proofs and committed replay remain valid; stale profile cannot authorize new actions",
+  "limitations": [
+    "contact_profile without exact legacy_contact_ref cannot identify a quotation contact",
+    "ambiguous matching profiles are rejected",
+    "Foundation source accessibility is checked; source revocation is not a supported Foundation state",
+    "only synthetic local SQLite",
+    "no complete quotation runtime, T04, production admission or V1.0 claim"
+  ],
+  "external_business_actions": 0
+}

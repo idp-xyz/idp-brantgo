@@ -1,0 +1,9 @@
+﻿candidate_context,semantic_conflict_0_to_2,rule_autonomy_0_to_2,transaction_independence_0_to_2,lifecycle_difference_0_to_2,evolution_cadence_0_to_2,total_0_to_10,negative_scenario,decision,approver,state
+报价与订单拆分（QUO／ORD）,1,1,0,2,1,5,订单准备与报价替代并发需同根锁序,不拆，合为 TRD（ADR-BR-002）,TRD Owner＋首席架构师,PENDING
+客户确认独立（trade.confirmation）,1,1,0,1,1,4,确认纠错与订单激活按根→确认→订单锁序裁决,并入 TRD,TRD Owner,PENDING
+供应条件独立于核价（SUP）,1,2,2,2,1,8,采购草稿直接绑定供应报价而不经核价,独立为 SUP（ADR-BR-006）,SUP／CST Owner,PENDING
+业务任务独立（TSK）,2,2,2,2,2,10,任务 completed 不代表订单生效,独立为 TSK（ADR-BR-003）,AI Owner＋首席架构师,PENDING
+商业政策独立（POL）,1,2,2,2,1,8,汇率与税价由财务独立发布并被多个上下文引用,独立为 POL（ADR-BR-007）,首席架构师＋财务,PENDING
+主体与商品拆分（PTY／CAT）,1,2,2,1,1,7,SKU 技术版本由产品负责、客户档案由销售负责,拆分,首席架构师,PENDING
+中国协同拆分（发票／报关／退税）,1,1,1,2,1,6,同一出口批次被三类资料同时引用,暂不拆（ADR-BR-009）,产品＋专业角色,PENDING
+采购与供需分配拆分,1,1,1,1,1,5,混合供给启用前分配几乎都落到采购,暂不拆,PUR Owner,PENDING

@@ -1,0 +1,91 @@
+﻿state_machine,context,aggregate,object,from,command,to,guard,actor
+SM-PTY-PARTY,PTY,Party,Party,draft,party.confirm,confirmed,人工；来源可读；角色与关系核实,human
+SM-PTY-PARTY,PTY,Party,Party,confirmed,party.revise,draft,保留旧 confirmed 快照；旧引用须当前核实才可继续,human|ai
+SM-PTY-PARTY,PTY,Party,Party,confirmed,party.deactivate,inactive,影响后续新业务，历史可读,human
+SM-INQ-RFQ,INQ,CustomerRfq,CustomerRfq,draft,rfq.save_draft,draft,整稿替换；CAS,human|ai
+SM-INQ-RFQ,INQ,CustomerRfq,CustomerRfq,draft,rfq.confirm_scope,ready,人工；客户联系人、至少一行 SKU／正数量／单位及全部来源已核实；缺项为空,human
+SM-INQ-RFQ,INQ,CustomerRfq,CustomerRfq,draft,rfq.cancel,cancelled,理由写审计,human
+SM-INQ-RFQ,INQ,CustomerRfq,CustomerRfq,ready,rfq.cancel,cancelled,理由写审计；保留行及来源,human
+SM-INQ-RFQ,INQ,CustomerRfq,CustomerRfq,ready,rfq.close,closed,理由写审计,human
+SM-POL-REVISION,POL,ConfigurationRoot,ConfigRevision,working,config.publish,active,人工且≠编制人；核实证据；有效区间；原子替代旧 active,human
+SM-POL-REVISION,POL,ConfigurationRoot,ConfigRevision,active,config.publish,superseded,新修订发布时旧版被替代,human
+SM-POL-REVISION,POL,ConfigurationRoot,ConfigRevision,active,config.retire,retired,停用不抹去历史快照,human
+SM-POL-REVISION,POL,ConfigurationRoot,ConfigRevision,working,config.discard_draft,discarded,CAS,human
+SM-SUP-OFFER,SUP,SupplierOffer,OfferRevision,draft,supplier_offer.verify,active,人工；证据齐备；supersedes 必须等于当前 active,human
+SM-SUP-OFFER,SUP,SupplierOffer,OfferRevision,active,supplier_offer.verify,superseded,新修订核实时旧版被替代,human
+SM-SUP-OFFER,SUP,SupplierOffer,OfferRevision,active,supplier_offer.withdraw,withdrawn,精确 target_revision；清空 active,human
+SM-SUP-OFFER,SUP,SupplierOffer,OfferRevision,draft,supplier_offer.discard_draft,discarded,CAS,human|ai
+SM-SUP-SRFQ,SUP,SupplierRfq,SupplierRfq,draft,supplier_rfq.record_issued,issued,人工发送证据；封存内容,human
+SM-SUP-SRFQ,SUP,SupplierRfq,SupplierRfq,issued,supplier_rfq.close,closed,更正用新 SupplierRfq 并引用旧对象,human
+SM-CST-SCENARIO,CST,CostScenario,CostScenario,draft,cost_scenario.evaluate,draft,追加不可变结果，不递增场景版本,human|ai
+SM-CST-SCENARIO,CST,CostScenario,CostScenario,draft,cost_snapshot.freeze,frozen,结果 verified＋comparable；依赖当前有效；单事务；同场景唯一快照,human
+SM-CST-ADOPT,CST,CostSnapshot,SnapshotAdoptability（派生）,eligible,costing.attest_source,denied,来源否认；不改历史数值,human
+SM-CST-ADOPT,CST,CostSnapshot,SnapshotAdoptability（派生）,eligible,cost_snapshot.freeze,superseded,新快照 supersedes 旧快照,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,working,quote.freeze,frozen,人工；工作稿完整；成本、条款、金额与依赖符合规则；分配修订号、issued_at、expires_at、business_hash,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,frozen,quote.submit_review,pending_approval,目标 activate 或 replace；当前资格满足；非低毛利例外,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,pending_approval,quote.review.decide,frozen,decision=return 或 reject；理由必填,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,pending_approval,quote.activate,active,根无 active；目标为 activate 的有效批准；当前资格重查；封存正式文档与提交证据,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,pending_approval,quote.replace,active,精确旧 active；目标为 replace 的有效批准；无转换名额,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,active,quote.replace,superseded,同事务旧版 superseded、新版 active,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,active,quote.cancel,cancelled,精确当前 active；原因与新证据；无转换名额,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,frozen,quote.withdraw,withdrawn,未生效；人工与新证据,human
+SM-TRD-REVISION,TRD,QuoteRoot,RevisionEffectivity,pending_approval,quote.withdraw,withdrawn,关闭 open 审核；相关批准不再可用,human
+SM-TRD-REVIEW,TRD,QuoteRoot,ReviewRequest,open,quote.review.decide,approved,独立人工；精确修订／哈希／政策一致,human
+SM-TRD-REVIEW,TRD,QuoteRoot,ReviewRequest,open,quote.review.decide,returned,理由必填,human
+SM-TRD-REVIEW,TRD,QuoteRoot,ReviewRequest,open,quote.review.decide,rejected,理由必填,human
+SM-TRD-REVIEW,TRD,QuoteRoot,ReviewRequest,open,quote.withdraw,cancelled,修订撤回时关闭,human
+SM-TRD-APPROVAL,TRD,QuoteRoot,ApprovalEffectivity,valid,quote.approval.revoke,revoked,effectivity_version CAS；原因与新证据；生效后撤销登记风险暂停,human
+SM-TRD-ACCEPTANCE,TRD,Acceptance,AcceptanceEffectivity,valid,acceptance.invalidate,invalidated,人工；expected_effectivity_version；原因与新证据（待实现）,human
+SM-TRD-ACCEPTANCE,TRD,Acceptance,AcceptanceEffectivity,valid,acceptance.mark_disputed,disputed,同上；生效后建立争议处置（待实现）,human
+SM-TRD-ORDER,TRD,SalesOrder,SalesOrder,draft,order.activate,active,合同已成立（Acceptance 有效，承诺到达早于报价到期）；同一订单快照的已批准、未撤销、未过期订单审批；订单准备后出现的上游风险已由该审批逐项确认；写提交证据。报价在合同成立后到期不阻断,human
+SM-TRD-ORDER,TRD,SalesOrder,SalesOrder,draft,order.cancel,cancelled,授权负责人与理由；名额保留,human
+SM-TRD-ORDER,TRD,SalesOrder,SalesOrder,draft,order.close_unfulfilled,closed_unfulfilled,授权负责人与理由（如接受被作废、客户撤回）；名额保留,human
+SM-TRD-ORDER,TRD,SalesOrder,SalesOrder,active,order.amendment.apply,active,已批准的订单变更，绑定当前订单修订（CAS）；数量不低于已确认出运量；生成新订单修订并发布影响事件,human
+SM-TRD-ORDER,TRD,SalesOrder,SalesOrder,active,order.cancel,cancelled,无已确认出运；下游采购承诺与占用已解除或已有获批处置；授权人工与理由；名额保留,human
+SM-TRD-ORDER,TRD,SalesOrder,SalesOrder,active,order.close_remainder,closed,已有确认出运；未发部分的短交理由与授权；相关采购与占用已处理,human
+SM-TRD-ORDER,TRD,SalesOrder,SalesOrder,active,order.close,closed,已确认出运量等于订单量（含获批容差）,human
+SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,draft,order.amendment.prepare,draft,绑定当前订单修订与变更来源（客户回复、客户 PO 修订或经客户确认的我方提议）；附影响评估：采购、材料、工序、质检、包装、订舱与付款计划,human|ai
+SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,draft,order.amendment.submit,pending_approval,影响评估齐备；未决项显式列出,human
+SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,pending_approval,order.amendment.decide,approved,人工；独立于申请人；绑定变更哈希与订单修订,human
+SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,pending_approval,order.amendment.decide,rejected,人工；理由必填,human
+SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,approved,order.amendment.apply,applied,订单修订未变（CAS）；数量不低于已确认出运量；同事务生成新订单修订、提交证据与 OrderAmended 事件,human
+SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,draft,order.amendment.withdraw,withdrawn,申请人或负责人；理由,human
+SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,pending_approval,order.amendment.withdraw,withdrawn,申请人或负责人；关闭 open 审批,human
+SM-TRD-ORDER-REVIEW,TRD,SalesOrder,OrderReview,open,order.review.decide,approved,人工；独立于草稿创建人与申请人；逐项确认订单准备后出现的上游风险；有效期由订单审批政策设定，与报价有效期无关,human
+SM-TRD-ORDER-REVIEW,TRD,SalesOrder,OrderReview,open,order.review.decide,rejected,拒绝后可新建请求,human
+SM-TRD-ORDER-REVIEW,TRD,SalesOrder,OrderReview,approved,order.approval.revoke,revoked,阻止新激活，不倒写已激活订单,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,unbound,object_control.bind,bound,任务认领根，CAS 取得绑定；另一任务返回 OBJECT_CONTROL_CONFLICT,system
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,bound,object_control.stop,stopping,TRD 在根事务内递增 control_epoch（唯一写入方）并进入 stopping，围栏立即生效；之后 TSK 记录任务控制变化,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,stopping,（屏障完成）,manual,屏障完成；submitted／unknown 已对账,system
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,manual,object_control.release,unbound,task.control 权限；当前 epoch；无未知在途结果,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,bound,object_control.release,unbound,绑定任务已 completed、closed_unfulfilled 或 cancelled；无在途 submitted／unknown 结果,human
+SM-PUR-DRAFT,PUR,PurchaseDraft,PurchaseDraft,prepared,（时钟派生）,supply_expired,供应有效截止已过；历史读取不改写,system
+SM-PUR-DRAFT,PUR,PurchaseDraft,PurchaseDraft,prepared,purchase.draft.void,voided,未形成采购承诺；授权人工与理由；释放该草稿占用的需求分配余额，保留原记录,human
+SM-PUR-DRAFT,PUR,PurchaseDraft,PurchaseDraft,supply_expired,purchase.draft.void,voided,同上,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,created,task.scope,scoping,输入范围、身份及目标有效；来源防重,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,scoping,task.scope,running,关键缺项清除；目标与动作范围已定,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（进入等待）,waiting,等待输入、审批或外部结果；保存恢复条件,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting,task.resume,running,去重、版本及内容仍适用；先重查上下文,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（进入核验）,verifying,必需动作已有可靠结果,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,goal.verify,completed,全部断言 satisfied；快照版本仍匹配,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,（核验未满足）,waiting,任一断言 unsatisfied／unknown／error：记录未满足项与证据，回到等待,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（暂停）,paused,预算、模型或工具故障、冲突,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.resume,running,原因已处理；副作用已对账,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting,task.take_control,stopping,同 running 接管；等待中的外部结果先对账,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.take_control,stopping,模型不可用或预算耗尽后人工接管；同 running 接管,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,stopping,（屏障完成）,paused,接管或交回：切换 control_mode,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,stopping,task.cancel,cancelled,取消请求且屏障完成,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（拒绝或到期）,closed_unfulfilled,无未决冲突；保存原因,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（不可恢复失败）,failed,已对账副作用；明确原因与后续责任,human
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,（OrderActivated 事件）,consumed,占用未过期；订单与金额一致,system
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,credit.release,released,订单未生效即放弃，或占用到期,human|system
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,consumed,（订单取消、关闭或结清事件）,released,按事件 ID 去重,system
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.decide,clear,授权合规人工；法规与名单版本、有效期,human
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.decide,blocked,授权合规人工；理由与依据,human
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,clear,（订单变更或法规版本更新）,pending,目的国、交易方、商品或法规版本变化,system
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,blocked,trade_compliance.evaluate,pending,事实变化后重新核查（如取得许可证、更换收货方）,human|ai
+SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,credit_exception.decide,released,审批人层级覆盖超额金额且不是销售经办；超过最高阈值须两人,human
+SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,credit_exception.decide,rejected,理由必填,human
+SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,released,（决定有效期届满）,expired,未在有效期内完成占用,system
+SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,（决定有效期届满）,expired,未裁决,system

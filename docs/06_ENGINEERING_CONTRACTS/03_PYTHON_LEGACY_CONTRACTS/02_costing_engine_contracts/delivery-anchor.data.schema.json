@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "enum": [
+        "pending",
+        "verified"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": ".*(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "locator": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "source_id",
+          "locator"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 100
+    }
+  },
+  "required": [
+    "status",
+    "evidence"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "verified"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "occurred_at"
+        ],
+        "properties": {
+          "evidence": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "occurred_at"
+          ]
+        }
+      }
+    }
+  ]
+}

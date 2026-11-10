@@ -1,0 +1,87 @@
+== 2026-11-10T05:32:45Z GOTOOLCHAIN=go1.26.5 CI=true
+go version go1.26.5 linux/amd64
+go1.26.5
+https://goproxy.cn,direct
+go.idp.xyz
+go mod verify
+all modules verified
+go mod tidy -diff
+go vet ./...
+go vet -tags integration ./...
+GOFLAGS= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+0 issues.
+go test -count=1 ./...
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.004s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	0.002s
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.002s
+?   	go.idp.xyz/idp-brant/internal/foundation/bento	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/database	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	0.113s
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.025s
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.003s
+?   	go.idp.xyz/idp-brant/tools/spikes/consistency	[no test files]
+go run ./tools/dependency-check
+dependency-check: 12 packages, 0 allowlisted context relationships, CODEOWNERS covers internal/kernel/, docs/ holds no Go code; no violations
+BRANT_PG_PORT=55471 scripts/dev-postgres.sh
+127.0.0.1:5432 - accepting connections
+PLAN framework:000001_eventing_store               sha256:71eaecb1597bf0b2048ad80328dd03dea9aa8a8cc4f8eda571907bc9f35b4397
+PLAN brant:000001_auth_authority_guard             sha256:a2279df8c7bc3da79384aefb6764d71d5d4b6e1113979b7a4c8196c52d7cbf83
+CONNECTED PostgreSQL 16 as brant_migrator
+DONE: 0 applied, 2 already recorded; Bento schema check passed
+export IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable'
+export IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable'
+CI=true IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable' IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable' go test -tags integration -count=1 ./...
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.064s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	0.008s
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.155s
+ok  	go.idp.xyz/idp-brant/internal/foundation/bento	0.052s
+ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.027s
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	3.881s
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.027s
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.004s
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	4.568s
+CI=true IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable' IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable' go test -tags integration -race -count=1 ./...
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	1.102s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	1.009s
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	1.269s
+ok  	go.idp.xyz/idp-brant/internal/foundation/bento	1.113s
+ok  	go.idp.xyz/idp-brant/internal/foundation/database	1.055s
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	4.983s
+ok  	go.idp.xyz/idp-brant/internal/kernel	1.225s
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	1.013s
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	4.514s
+CI=true IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable' IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable' BRANT_SPIKE_REPORT=/home/tops/workspace/idp-brantgo/bin/spike-consistency.json go test -tags integration -count=1 -v ./tools/spikes/consistency
+=== RUN   TestSC04OptionAPrefetchLeavesACommitWindow
+--- PASS: TestSC04OptionAPrefetchLeavesACommitWindow (0.06s)
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first
+--- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder (0.08s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first (0.01s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first (0.02s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first (0.01s)
+=== RUN   TestSC03CheckThenActWithoutRootLockLetsBothWin
+--- PASS: TestSC03CheckThenActWithoutRootLockLetsBothWin (0.06s)
+=== RUN   TestSC03RootLockLetsExactlyOneWin
+=== RUN   TestSC03RootLockLetsExactlyOneWin/replace_first
+=== RUN   TestSC03RootLockLetsExactlyOneWin/convert_first
+--- PASS: TestSC03RootLockLetsExactlyOneWin (0.08s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/replace_first (0.02s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/convert_first (0.01s)
+=== RUN   TestSC03StressComparesTheTwoImplementations
+    consistency_integration_test.go:617: no root lock: 200 of 200 rounds had two winners
+    consistency_integration_test.go:617: root row FOR UPDATE first: 0 of 200 rounds had two winners
+--- PASS: TestSC03StressComparesTheTwoImplementations (3.25s)
+PASS
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	3.540s
+== exit 0

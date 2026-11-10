@@ -1,0 +1,57 @@
+﻿record,subject,role,decision,outcome,conditions
+SR-01,ADR-BR-IMP-001,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-02,ADR-BR-IMP-002,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-03,ADR-BR-001,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-04,ADR-BR-002,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-05,ADR-BR-003,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-06,ADR-BR-004,R-CA,ACCEPTED,接受方案 B＋方案 A 的事件传播：关系表中守卫锁关系对应的守卫函数在下游事务内调用；order.activate 中成本、配置与汇率的变化按订单审批的风险确认处理，不拒绝；事后风险登记依赖 ADR-BR-015。记录对 Cargo 基线 T3 的受控例外。,
+SR-07,ADR-BR-005,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-08,ADR-BR-006,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-09,ADR-BR-007,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-10,ADR-BR-008,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-11,ADR-BR-009,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-12,ADR-BR-010,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-13,ADR-BR-011,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-14,ADR-BR-012,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-15,ADR-BR-013,R-TRD,ACCEPTED_WITH_CONDITIONS,接受：合同成立以承诺到达时间判定，合同成立后报价到期不阻断订单。,F-02：增加适用法律与争议解决条款（S3-17）
+SR-16,ADR-BR-014,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-17,ADR-BR-015,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-18,ADR-BR-016,R-STL,ACCEPTED_WITH_CONDITIONS,接受先占用、后生效与信用决定分级。,F-04：单证控制下的出运后付款可视为有担保（已修订 TRD-INV-022）
+SR-19,ADR-BR-017,R-PRD,ACCEPTED,产品决定：名单目录由租户在 POL screening_regulation 中启用；默认启用中国名单与联合国综合制裁名单，外国名单默认关闭，租户启用时须登记其法务确认；Brant 提供筛查工具与记录，不提供法律意见。,
+SR-20,ADR-BR-REPO-01,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-21,ADR-BR-REPO-02,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-22,ADR-BR-REPO-03,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-23,ADR-BR-REPO-04,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-24,ADR-BR-REPO-05,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-25,ADR-BR-REPO-06,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-26,ADR-BR-REPO-07,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-27,ADR-BR-REPO-08,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-28,ADR-BR-REPO-09,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-29,ADR-BR-REPO-10,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-30,ADR-BR-REPO-11,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-31,BC-D01,R-PRD,DEFERRED,模拟 G0 走查已完成（3 个虚构业务，6 项发现）；真实客户脱敏资料无法用模拟替代，真实试点前仍须取得。,
+SR-32,BC-D02,R-PRD,ACCEPTED,默认岗位模板：销售经办、跟单、采购、核价、报价审核人、订单审核人、毛利审批人、信用专员、信用经理、质检、单证、资金、合规、税务专员、管理员。职责分离：编制与审核分开；销售不能放行信用决定；合规结论只由合规岗位确定；租户可合并岗位，但不得合并上述禁止组合。,
+SR-33,BC-D03,R-CA,ACCEPTED,按登记的建议决定接受。,
+SR-34,BC-D05,R-PRD,ACCEPTED,最低毛利阈值、毛利例外角色与金额层级为租户配置（默认不启用阈值，启用时必须指定毛利审批人）；税率与可回收率按商品编码从官方来源导入并记录来源与版本，由租户确认；汇率来源（如中国人民银行中间价或开户行牌价）按用途由租户配置。,
+SR-35,BC-D06,R-PRD,ACCEPTED_WITH_CONDITIONS,P0 保留 full_v1；R1 增加参照报价下单（部分与多次），以报价行剩余数量台账控制，每张订单独立确认与审批。,F-01：S6-07 交付参照报价下单；P0 期间返单以复制原报价重新审批
+SR-36,BC-D07,R-SEC,ACCEPTED,模型端点由租户选择；客户原文、成本与价格只在租户授权后发送给模型；日志脱敏，不记录附件全文与凭据；附件留存期限由租户配置。,
+SR-37,BC-D08,R-CA,ACCEPTED,EER／BIP 经防腐层适配，S4 评估；接入前保留人工路径与人工节点计量。,
+SR-38,CN-D01–08,R-CNX,ACCEPTED,产品决定（配置化）：CN-M01 为默认模式；税务办法由租户选择（外贸企业免退；生产企业免抵退属 CN-M02 条件能力）；商品申报参数与退税率按官方来源导入并保存版本；票据核验经人工或获准接口；银行渠道首期人工登记；专业系统接口在 S6；成本税额口径按 CST-INV-007；单证目录与期限按配置。客户适用性在租户开通时确认并留记录。,
+SIGNOFF,PTY,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,CAT,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,POL,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,EVD,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,INQ,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,SUP,R-CST,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,CST,R-CST,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,TRD,R-TRD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,PUR,R-PUR,ACCEPTED,职责、事实权威、边界、聚合与不变量,
+SIGNOFF,MFG,R-OPS,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,QLT,R-OPS,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,STK,R-OPS,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,FUL,R-FUL,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,STL,R-STL,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,CLM,R-OPS,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,CNX,R-CNX,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,CRM,R-PRD,ACCEPTED_WITH_CONDITIONS,职责、事实权威、边界、聚合与不变量,轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计
+SIGNOFF,TSK,R-AI,ACCEPTED,职责、事实权威、边界、聚合与不变量,

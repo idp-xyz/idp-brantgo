@@ -1,0 +1,180 @@
+{
+  "slice": "A23",
+  "version": "V0.27",
+  "contract": "brant.quotation/0.1.0",
+  "query": "action_reconciliation",
+  "scope": [
+    "tenant",
+    "company",
+    "command",
+    "idempotency_key"
+  ],
+  "commands": {
+    "quote.save_draft": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.revise": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.discard_draft": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.freeze": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.submit_review": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.review.approve": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.review.return": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.review.reject": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.approval.revoke": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.activate": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.replace": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.withdraw": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.cancel": {
+      "read_permissions": [
+        "quote.read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.acceptance.verify": {
+      "read_permissions": [
+        "quote.read",
+        "read"
+      ],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.response.record": {
+      "read_permissions": ["quote.read", "read"],
+      "object_access": "quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "quote.response.verify": {
+      "read_permissions": ["quote.read", "read"],
+      "object_access": "response source quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "order.prepare": {
+      "read_permissions": [
+        "quote.read",
+        "read"
+      ],
+      "object_access": "persisted order source quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "order.activate": {
+      "read_permissions": [
+        "quote.read",
+        "read"
+      ],
+      "object_access": "persisted order source quote",
+      "control": "read only; object ownership control does not authorize a mutation",
+      "hash_match_and_conflict_share_access_check": true
+    },
+    "order.approval.revoke": {
+      "read_permissions": [
+        "quote.read",
+        "read"
+      ],
+      "history": "local action_result receipt"
+    },
+    "order.review.request": {
+      "read_permissions": [
+        "quote.read",
+        "read"
+      ],
+      "history": "local action_result receipt"
+    },
+    "order.review.decide": {
+      "read_permissions": [
+        "quote.read",
+        "read"
+      ],
+      "history": "local action_result receipt"
+    }
+  },
+  "external_business_actions": 0,
+  "production_admission": false
+}

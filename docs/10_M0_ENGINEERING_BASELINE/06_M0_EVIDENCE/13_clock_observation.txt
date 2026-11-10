@@ -1,0 +1,25 @@
+IDP Brant M0 · wall-clock observation on the development host (2026-11-07)
+
+Why it matters: the Outbox relay compares wall-clock lease times (Bento stores lease_expires_at =
+claim time + LeaseFor from the worker's clock). A wall clock that steps forward ends leases early.
+
+1. First crash drill (11_relay_drill_test.txt, 11:12 CST)
+   - Go test duration (monotonic clock): 2.03 s for the whole drill, including the worker build.
+   - Second worker log (wall clock): started 11:12:08.962, stopped 11:12:14.040, a 5.08 s span.
+   - Re-delivery came 1.454 s after the first delivery although the lease was 3 s.
+   => the wall clock stepped about 3 s forward during the drill.
+
+2. Time sync on the WSL2 host (11:13 CST)
+   timedatectl: System clock synchronized: yes; NTP service: active
+   systemd-timesyncd: active; chrony, chronyd, ntp: inactive
+   20 s sample of wall clock against monotonic clock: drift 0 s, largest single step 0 s
+   WSL UTC 03:13:13.263, Windows host UTC 03:12:43.121 read right after it: WSL ahead by about 30 s
+   => systemd-timesyncd inside WSL2 and the Hyper-V host time sync pull the clock in different
+      directions; the steps are intermittent.
+
+3. Reruns of the drill (11_relay_drill_test.txt)
+   re-delivered 3.075 s, 3.092 s and 3.016 s after the first delivery (lease 3 s)
+
+Consequence for operations: worker hosts slew their clocks (NTP without stepping after start-up)
+and monitor clock offset; delivery stays at least once either way, but leases shorter than a
+possible clock step re-deliver early.

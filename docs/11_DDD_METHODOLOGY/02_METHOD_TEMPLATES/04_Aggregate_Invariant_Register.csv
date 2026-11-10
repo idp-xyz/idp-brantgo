@@ -1,0 +1,3 @@
+﻿invariant_id,context,aggregate,business_rule,positive_test,negative_test,concurrency_test,evidence_ref,db_test_ref,approver,status
+TRD-INV-010,TRD,QuoteRoot／SalesOrder,同根 full_v1 唯一订单；prepare 同事务占用名额；占用后禁止替代或取消报价,唯一订单草稿,不同键重复 prepare 返回 CONVERSION_SLOT_CONFLICT,replace 与 prepare 并发只有一个结果成立,tests/test_t03_a20_acceptance_order.py,,TRD Domain Owner,PROPOSED
+PUR-INV-002,PUR,DemandAllocation,同一订单行的有效分配合计不超过可分配需求与获批超采量,80＋40 分给两家供应商,再分配 1 件返回 PURCHASE_ALLOCATION_EXCEEDED,并发争用同一订单行只有一个成功,tests/test_t04_a46_purchase_draft.py,,PUR Domain Owner,PROPOSED

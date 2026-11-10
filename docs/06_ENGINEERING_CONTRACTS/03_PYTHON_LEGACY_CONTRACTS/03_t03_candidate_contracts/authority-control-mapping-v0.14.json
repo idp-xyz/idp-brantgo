@@ -1,0 +1,29 @@
+{
+  "version": "0.14",
+  "status": "runtime_slice",
+  "scope": "trusted local T03 quote adapter with read-only JSON query entry",
+  "contract": "brant.quotation/0.1.0",
+  "query_actions": {
+    "quote.query.quote_root": {
+      "permission": ["quote.read"],
+      "human_only": false,
+      "task_control": false,
+      "transaction": "authorization and root read share one SQLite transaction"
+    },
+    "quote.query.quote_ready": {
+      "permission": ["quote.read", "costing.read", "read", "foundation.read"],
+      "human_only": false,
+      "task_control": false,
+      "transaction": "authorization, current qualification and readiness read share one SQLite transaction"
+    }
+  },
+  "unregistered_query_kinds": ["quote_revision", "approval", "document"],
+  "unimplemented": [
+    "external quote write command contract",
+    "enterprise identity provider mapping",
+    "production document storage",
+    "send/delivery/customer acceptance",
+    "order conversion",
+    "commit-unknown reconciliation"
+  ]
+}

@@ -1,0 +1,8 @@
+/* IDP Brant — visual implementation study V1.2; not certified production art. */
+:root {--brant-ink:#111C35;--brant-bg:#F5F7FB;--brant-white:#fff;}
+.brant-mark{display:block;object-fit:contain;width:auto;height:auto;max-width:100%;}
+.brant-mark--header{width:200px;}
+.brant-mark--login{width:min(100%,400px);}
+.brant-mark--hero{width:min(88vw,640px);}
+@media(max-width:640px){.brant-mark--header{width:150px;}}
+/* Icons are square-window previews of a wide silhouette: do not assume legible at 16–24px. */

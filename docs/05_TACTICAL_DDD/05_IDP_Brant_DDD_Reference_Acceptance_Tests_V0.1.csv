@@ -1,0 +1,51 @@
+﻿test_id,context,aggregate,command,given,assertion,class,source,status
+BC-AT01,INQ／SUP／CST／TRD,全链,WF-01,BRC-001 合成样例,报价 960.00、订单 960.00、来源链完整；有效订单唯一,E2E,核心设计 14,SPEC
+BC-AT02,INQ／TRD,CustomerRfq／QuoteRoot,rfq.save_draft／quote.save_draft,询价缺 SKU／交期，报价缺成本,允许保存草稿；ready／submit／activate 明确阻断,Domain,核心设计 14,SPEC
+BC-AT03,SUP／CST,CostScenario,cost_scenario.evaluate,MOQ 不满足或费用范围缺失,展示不可比原因；不自动选最低价,Domain,核心设计 14,SPEC
+BC-AT04,TRD,QuoteRoot,quote.freeze,红 S＝2 DOZEN、96 USD；base_quantity=2,前者 24 PCS／192.00；后者 BASE_QUANTITY_MISMATCH,Domain,核心设计 14,SPEC
+BC-AT05,INQ,CustomerRfq,rfq.confirm_scope,矩阵 120、原文 118,待核实，不改行凑平；未澄清不生效,Domain,核心设计 14,SPEC
+BC-AT06,TRD,QuoteRoot,quote.activate,单价 7.00、成本 660.00,毛利 180／840；普通审核不能放行；毛利例外批准后可激活,Domain,核心设计 14,SPEC
+BC-AT07,CST／TRD,CostScenario／QuoteRoot,evaluate／freeze,行价已含收费又加总,CHARGE_DOUBLE_COUNT；总额不双计,Domain,核心设计 14,SPEC
+BC-AT08,TRD,QuoteRoot,quote.revise,批准 r1 后创建 r2 改价,r1 批准不覆盖 r2；旧 active 不因新草稿替代,Domain,核心设计 14,SPEC
+BC-AT09,TRD,QuoteRoot,metadata 更新,批准后改标签,row_version 变化，business_hash 不变,Domain,核心设计 14,SPEC
+BC-AT10,TRD,CustomerResponse,quote.response.verify,接受但改颜色,只生成 conditional 回复；不生成 Acceptance 或订单,Domain,核心设计 14,SPEC
+BC-AT11,TRD,Acceptance,quote.response.verify,金额相同但客户、联系人或修订错误,ACCEPTANCE_SCOPE_MISMATCH,Domain,核心设计 14,SPEC
+BC-AT12,TRD,QuoteRoot／Acceptance／SalesOrder,verify／prepare／activate,now 恰等于 expires_at,quote.activate 在 now = expires_at 拒绝；承诺按可核实的到达时间判定，邮件自报时间不作到达时间,Domain,核心设计 14,SPEC
+BC-AT13,TRD,SalesOrder,order.activate,prepare 后等待审核至报价到期,合同在有效期内已成立：报价到期后订单仍可审批并生效；未确认的上游风险返回 ORDER_RISK_UNACKNOWLEDGED,Domain,核心设计 14,SPEC
+BC-AT14,ALL,ActionResult,任意写命令,同动作键不同参数,IDEMPOTENCY_PAYLOAD_CONFLICT；无第二次写入,Integration,核心设计 14,SPEC
+BC-AT15,TRD,SalesOrder,order.prepare,两请求键对同根 prepare,唯一订单草稿；另一返回 CONVERSION_SLOT_CONFLICT,Concurrency,核心设计 14,SPEC
+BC-AT16,TRD,QuoteRoot,order.prepare,r2 已批准，r1 已占 full_v1,不能靠新修订再取名额,Domain,核心设计 14,SPEC
+BC-AT17,TRD,QuoteRoot／SalesOrder,replace∥prepare,r1 转单与 r2 替代同时提交,确定事务顺序下处理，无竞态绕过,Concurrency,核心设计 14,SPEC
+BC-AT18,TRD／TSK,SalesOrder,order.activate,提交成功后进程退出再恢复,读取原结果；不重复创建,Recovery,核心设计 14,SPEC
+BC-AT19,TRD,SalesOrder,order.activate,提交前注入异常,业务、名额、动作结果与 Outbox 无部分生效,Recovery,核心设计 14,SPEC
+BC-AT20,TSK／TRD,BusinessTask／ObjectControl,task.take_control∥写命令,AI 提交与接管竞争,已提交保留；旧 epoch 新提交拒绝,Concurrency,核心设计 14,SPEC
+BC-AT21,ALL,—,任意,权限撤销或跨公司访问,拒绝且审计，不泄露存在性或成本,Security,核心设计 14,SPEC
+BC-AT22,TRD,QuoteRoot,quote_ready 查询,r2 引用 r1 正式文档,quote_ready 失败,Domain,核心设计 14,SPEC
+BC-AT23,CAT／TRD,Sku,order.activate,样衣确认 r1，订单要求 r2,行业条件 unknown／unsatisfied,Domain,核心设计 14,SPEC
+BC-AT24,CRM／全链,—,WF-01,关闭 CRM,交易与 Q01 不依赖 CRM,E2E,核心设计 14,SPEC
+BC-AT25,TRD／TSK,SalesOrder,goal 查询,订单完成后报价自然到期,历史完成事实保留；不能继续前向动作,Domain,核心设计 14,SPEC
+BC-AT26,TSK,BusinessTask,task.take_control,模型或渠道不可用,人工接管并标明驱动；不宣称 AI 或自动发信成功,Recovery,核心设计 14,SPEC
+BC-AT27,EVD／INQ,Source,source.register,真实文本／XLSX／PDF 导入并人工核实,字段定位、逐行修正与文件访问可验证,E2E,核心设计 14,SPEC
+BC-AT28,TSK／internal/ai,BusinessTask,WF-01,真实 AI 目标链,记录全部试次、人工修正、实际成本与权威断言,AI-E2E,核心设计 14,SPEC
+SC-03,TRD,QuoteRoot／SalesOrder,replace∥prepare,见 Context Map SC-03,两种顺序都只有一个结果成立,Concurrency-PG16,Context Map,SPEC
+SC-04,CST／TRD,CostSnapshot／SalesOrder,attest_source∥activate,见 Context Map SC-04,否认先提交则拒绝；激活先提交则登记风险,Concurrency-PG16,Context Map,BLOCKED by ADR-BR-004
+T02-S04,CST,CostScenario,evaluate,"150 PCS；[0,100) 5、[100,∞) 4",all_units 600；graduated 700,Domain,T02 规格 11,SPEC
+T02-S07,CST,CostScenario,evaluate,100 USD×7.123456 CNY/USD,712.35 CNY；缺方向或过期不放行,Domain,T02 规格 11,SPEC
+T03-C08,TRD,QuoteRoot,quote.freeze,净销售 100 EUR、EUR→USD 1.1、成本 66 USD,比较净销售 110 USD、毛利 44、毛利率 40%；客户仍付 100 EUR,Domain,T03 规格 5.3,SPEC
+A46-01,PUR,PurchaseDraft,purchase.draft.prepare,两行同条件行、每 100 件计价、graduated 阶梯,先合并计价再按数量最大余数法分摊；正文列出适用阶梯,Domain,A46 报告,SPEC
+TD-AT01,TRD,SalesOrder,order.amendment.apply,BRC-001 订单已出运蓝 M 40 件；变更把蓝 M 改为 36,QUANTITY_BELOW_SHIPPED；改为 44 时生成订单修订 r2 并发布 OrderAmended,Domain,05 阶段战术设计,SPEC
+TD-AT02,TRD,SalesOrder,order.cancel／order.close_remainder,生效订单分别处于未出运与已出运 60 件,未出运可取消；已出运取消返回 ORDER_HAS_SHIPMENTS，短交关闭成功且名额保留,Domain,05 阶段战术设计,SPEC
+TD-AT03,TRD,CustomerResponse,quote.response.verify,报价第 7 天 08:00 到期；客户承诺渠道接收时间为到期时刻,ACCEPTANCE_LATE；登记为迟到回复，不形成 Acceptance,Domain,05 阶段战术设计,SPEC
+TD-AT04,TRD,CustomerResponse,quote.response.verify,客户 PO 与报价 r1 相同但蓝 M 数量为 50,按 conditional 处理；不形成 Acceptance，转新报价修订,Domain,05 阶段战术设计,SPEC
+TD-AT05,PUR,DemandAllocation,purchase.draft.prepare,订单行 120 件：supplier.A 80 件、supplier.B 40 件，再请求 1 件,前两个草稿成功；第三个 PURCHASE_ALLOCATION_EXCEEDED；并发争用只有一个成功,Concurrency-PG16,05 阶段战术设计,SPEC
+TD-AT06,PUR,PurchaseDraft,purchase.draft.void,选错供应条件的草稿未形成承诺,作废成功并释放 80 件分配余额；已形成承诺时返回 PURCHASE_DRAFT_COMMITTED,Domain,05 阶段战术设计,SPEC
+TD-AT07,CST,CostScenario,cost_scenario.evaluate,含税 113 CNY、税率 0.13、partial 可回收率 0.09,成本 104 CNY；可回收率 0.15 返回 TAX_RECOVERY_RATE_INVALID,Domain,05 阶段战术设计,SPEC
+TD-AT08,FUL,CommercialRelease,commercial_release.evaluate,质量已放行；出运前 70% 尾款到账 670.00，差额未解释,COMMERCIAL_RELEASE_BLOCKED；尾款核销足额后放行；例外须授权人工,Integration,05 阶段战术设计,SPEC
+TD-AT09,TRD／PTY,SalesOrder,order.activate,付款方筛查结论为 match,PARTY_SCREENING_NOT_CLEAR；合规人工裁决 clear 后可生效,Domain,05 阶段战术设计,SPEC
+TD-AT10,TSK／TRD,BusinessTask,task.take_control,模型不可用，任务 paused 且根已绑定,接管进入 stopping；TRD 先递增 epoch，旧执行者返回 CONTROL_EPOCH_STALE,Concurrency,05 阶段战术设计,SPEC
+TD-AT11,STL／TRD,CustomerCredit,credit.reserve,"额度 10,000 USD、未结应收 7,000；新订单信用部分 4,000",CREDIT_LIMIT_EXCEEDED；信用例外批准后占用成功；两笔并发占用只有一笔成功,Concurrency-PG16,05 阶段战术设计,SPEC
+TD-AT12,CNX／TRD／FUL,TradeComplianceCheck,order.activate,目的国处于禁运项目，合规结论 blocked,order.activate 与出运放行均返回 TRADE_COMPLIANCE_NOT_CLEAR；普通审批不能覆盖,Domain,05 阶段战术设计,SPEC
+TD-AT13,CNX,ExportLicense,export_license.allocate,"许可 1,000 件；已分配 600，再分配 500；另一许可证已过期",EXPORT_LICENSE_EXCEEDED；过期许可证返回 EXPORT_LICENSE_EXPIRED,Domain,05 阶段战术设计,SPEC
+TD-AT14,PUR／FUL,SupplierDelivery,shipment.confirm,直发：承诺 120 件，核实交付 100 件，另有未核实上报 20 件,出运 120 件返回 SUPPLIER_DELIVERY_INSUFFICIENT；未核实上报不计入,Domain,05 阶段战术设计,SPEC
+TD-AT15,PTY,PartyScreening,party_screening.decide,新客户与名单条目疑似命中；另一主体在负向名单,新客户筛查前为 pending；合规人工判为误报后 clear 并登记正向名单；名单条目更新后正向名单失效；负向名单主体始终 blocked,Domain,05 阶段战术设计（参照 SAP GTS）,SPEC
+TD-AT16,STL,CustomerCredit,credit_exception.decide,"超额 3,000；信用专员层级上限 1,000、信用经理 5,000",信用专员放行返回 CREDIT_DECISION_NOT_AUTHORIZED；信用经理放行后 credit.reserve 成功；决定过期后须重新申请,Domain,05 阶段战术设计（参照 SAP FSCM）,SPEC

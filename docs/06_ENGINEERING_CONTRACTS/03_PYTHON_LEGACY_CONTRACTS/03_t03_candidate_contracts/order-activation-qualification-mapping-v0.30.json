@@ -1,0 +1,85 @@
+{
+  "stage": "A26",
+  "source_version": "V0.30",
+  "contract": "brant.order-source-qualification/0.1.0",
+  "migration": 12,
+  "command": "order.activate",
+  "localized_order_history_schema_fix": [
+    "approval_id is an ID or null",
+    "typed identity/revision/hash references",
+    "registered order status and full_v1 slot"
+  ],
+  "new_activation_only": "draft to active; never accept an advisory query as a token",
+  "base_permissions": [
+    "order.activate",
+    "quote.read",
+    "read"
+  ],
+  "conditional_dependency_permissions": [
+    "costing.read",
+    "foundation.read",
+    "quotation_foundation.read"
+  ],
+  "reviewer_current_permissions": [
+    "quote.review.decide",
+    "quote.read",
+    "read"
+  ],
+  "reviewer_checks": [
+    "human",
+    "source quote access",
+    "not a source commercial contributor"
+  ],
+  "formalization_binding": [
+    "exact source revision/hash",
+    "one persisted commit",
+    "exact commit approval",
+    "approved request and action",
+    "number and file identity",
+    "actual file byte SHA-256"
+  ],
+  "revocation_hold": {
+    "source": "immutable t03_approval_event revoked event for the formalized approval",
+    "scope": "exact formalized quote revision",
+    "automatic_clear": false,
+    "generic_risk_lifecycle_delivered": false
+  },
+  "cost": "Core.costing_snapshot_in_transaction on the exact order writer connection",
+  "foundation_reference_kinds_checked": [
+    "calendar",
+    "company",
+    "conversion",
+    "currency",
+    "fx",
+    "location",
+    "party_profile",
+    "payment_terms",
+    "pricing_policy",
+    "sequence",
+    "sku_profile",
+    "trade_scope",
+    "trade_terms",
+    "unit"
+  ],
+  "quotation_configuration": "frozen A18 binding hashes and current publication/evidence",
+  "time": [
+    "aware timestamp comparison",
+    "quote and approval expiry before checks and immediately before state update",
+    "sales FX purpose, current revision and policy maximum observation age"
+  ],
+  "qualification_evidence": "immutable activated event in the same business transaction",
+  "recovery": "Already active local recovery and public same-key receipt replay preserve the original committed fact; A24 current base authority/control and A25 integrity still apply.",
+  "read_only_reconciliation": "original local ledger fact, not current adoption certification",
+  "not_certified": [
+    "full quote/RFQ/trade-responsibility matrix",
+    "all legacy extension tax references",
+    "all dependency deadlines at the physical COMMIT boundary",
+    "general risk lifecycle",
+    "remote reviewer identity",
+    "complete T04",
+    "production or distributed durability"
+  ],
+  "external_business_actions": 0,
+  "production_admission": false,
+  "product_v1_complete": false
+}

@@ -1,0 +1,30 @@
+{
+  "mapping_version": "brant.quote-authority-control/0.1.0",
+  "contract": "brant.quotation/0.1.0",
+  "status": "design_only",
+  "permissions": [
+    "quote.read", "quote.write", "quote.freeze", "quote.review.request",
+    "quote.review.decide", "quote.approval.revoke", "quote.activate",
+    "quote.replace", "quote.withdraw", "quote.cancel"
+  ],
+  "commands": [
+    {"name":"quote.save_draft","permission":"quote.write","actor_kinds":["human","ai"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.revise","permission":"quote.write","actor_kinds":["human","ai"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.discard_draft","permission":"quote.write","actor_kinds":["human"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.freeze","permission":"quote.freeze","actor_kinds":["human"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.submit_review","permission":"quote.review.request","actor_kinds":["human"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.review.approve","permission":"quote.review.decide","actor_kinds":["human"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.review.return","permission":"quote.review.decide","actor_kinds":["human"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.review.reject","permission":"quote.review.decide","actor_kinds":["human"],"control":"root","epoch":"authority_epoch"},
+    {"name":"quote.approval.revoke","permission":"quote.approval.revoke","actor_kinds":["human"],"control":"root","epoch":"control_epoch"},
+    {"name":"quote.activate","permission":"quote.activate","actor_kinds":["human"],"control":"root","epoch":"authority_epoch+control_epoch"},
+    {"name":"quote.replace","permission":"quote.replace","actor_kinds":["human"],"control":"root","epoch":"authority_epoch+control_epoch"},
+    {"name":"quote.withdraw","permission":"quote.withdraw","actor_kinds":["human"],"control":"root","epoch":"authority_epoch+control_epoch"},
+    {"name":"quote.cancel","permission":"quote.cancel","actor_kinds":["human"],"control":"root","epoch":"authority_epoch+control_epoch"}
+  ],
+  "events": [
+    "quote.draft_saved", "quote.frozen", "quote.review_requested", "quote.review_decided",
+    "quote.approval_revoked", "quote.activated", "quote.replaced", "quote.withdrawn", "quote.cancelled"
+  ],
+  "external_side_effects": []
+}

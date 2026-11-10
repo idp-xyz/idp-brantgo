@@ -1,0 +1,246 @@
+{
+  "archive_version": "1.2",
+  "as_of": "2026-11-09",
+  "builder": "00_START_HERE/tools/build_archive.py",
+  "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；M0 证据文件齐全、一致性实测结论与报告一致、证据对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
+  "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE）；不验证业务正确性、身份或任何外部集成，这些仍为 G1 待办。",
+  "result": "PASS",
+  "checks": [
+    {
+      "check": "全部 JSON 可解析",
+      "result": "PASS",
+      "detail": "80 个 JSON"
+    },
+    {
+      "check": "UL 词条 ID 唯一",
+      "result": "PASS",
+      "detail": "192 个词条"
+    },
+    {
+      "check": "UL 词条上下文均已登记",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "UL 词条规则引用存在",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "UL 命令上下文均已登记",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "关系两端均为已登记上下文",
+      "result": "PASS",
+      "detail": "60 条关系"
+    },
+    {
+      "check": "关系无重复（上游、下游）",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "上下文引用的 UL 不变量存在",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "子域覆盖全部上下文",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "战术模型覆盖全部上下文",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "聚合引用的不变量已登记",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "不变量登记的 UL 引用存在",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "状态机转换的状态均已声明",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "状态机布局覆盖全部状态",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "事件风暴上下文均已登记",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "WBS 依赖均存在",
+      "result": "PASS",
+      "detail": "78 项工作"
+    },
+    {
+      "check": "WBS 阶段均已定义",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "人工专属命令均已登记为上下文命令",
+      "result": "PASS",
+      "detail": "82 条人工专属命令"
+    },
+    {
+      "check": "状态机中只由人工执行的命令均列入人工专属清单",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "人工专属命令在状态机中不由 AI 或系统执行",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "事实权威恰有一个写入方且消费方均有上下游关系",
+      "result": "PASS",
+      "detail": "47 条事实"
+    },
+    {
+      "check": "Context Map 聚合均在战术模型登记",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "集成事件均有生产聚合",
+      "result": "PASS",
+      "detail": "103 个集成事件"
+    },
+    {
+      "check": "不变量、验收与场景引用的错误码均已登记",
+      "result": "PASS",
+      "detail": "143 个错误码"
+    },
+    {
+      "check": "守卫锁边无环（下游以 FOR SHARE 锁上游守卫）",
+      "result": "PASS",
+      "detail": "22 条守卫锁边"
+    },
+    {
+      "check": "SAP 流程参照引用的上下文、命令与事件均存在且状态完整",
+      "result": "PASS",
+      "detail": "41 行参照"
+    },
+    {
+      "check": "模拟 G0 走查引用的命令、事件、发现与 WBS 均存在",
+      "result": "PASS",
+      "detail": "31 步，6 项发现"
+    },
+    {
+      "check": "模拟评审覆盖全部 ADR 与上下文且状态一致",
+      "result": "PASS",
+      "detail": "38 项裁决，18 个上下文"
+    },
+    {
+      "check": "战略 ADR 状态与 ADR 登记一致",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Python 测试映射覆盖全部唯一测试方法",
+      "result": "PASS",
+      "detail": "577 行"
+    },
+    {
+      "check": "Python 测试映射均有目标上下文",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "映射引用的不变量已登记",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "生成页面的本地链接均可解析",
+      "result": "PASS",
+      "detail": "14 个页面"
+    },
+    {
+      "check": "生成页面的锚点均存在",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "参考副本均已收录",
+      "result": "PASS",
+      "detail": "67 个参考副本（90 阶段资料包与 Python 候选契约）"
+    },
+    {
+      "check": "M0 证据文件齐全",
+      "result": "PASS",
+      "detail": "15 个文件"
+    },
+    {
+      "check": "M0 一致性实测结论与报告一致",
+      "result": "PASS",
+      "detail": "9 个场景"
+    },
+    {
+      "check": "M0 实测场景均有中文说明",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "M0 证据对应当前 Go 源码",
+      "result": "PASS",
+      "detail": "39 个 Go 文件与证据快照一致"
+    },
+    {
+      "check": "品牌标志与品牌包 QA 清单逐字节一致且各页均已使用",
+      "result": "PASS",
+      "detail": "4 个品牌文件，14 个页面"
+    }
+  ],
+  "counts": {
+    "ulTerms": 192,
+    "ulBusinessTerms": 174,
+    "ulInvariants": 32,
+    "contexts": 18,
+    "coreContexts": 4,
+    "relationships": 60,
+    "factAuthority": 47,
+    "strategicAdrs": 16,
+    "eventStormingScenarios": 12,
+    "aggregates": 60,
+    "stateMachines": 20,
+    "invariantRegister": 68,
+    "referenceTests": 50,
+    "commands": 156,
+    "events": 103,
+    "errorCodes": 143,
+    "pythonSourceModules": 54,
+    "pythonSourceLines": 21136,
+    "pythonUniqueTests": 577,
+    "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
+    "goTestsPorted": 0,
+    "wbsTasks": 78,
+    "adrs": 38,
+    "g1Controls": 13,
+    "sapReferenceRows": 41,
+    "sapReferenceGaps": 0,
+    "sapReferencePartial": 11,
+    "goPackages": 12,
+    "goSourceLines": 5416,
+    "goTestFunctions": 69,
+    "goIntegrationTests": 19,
+    "goFuzzTargets": 2,
+    "m0DoneLocal": 9,
+    "m0Tasks": 11
+  }
+}

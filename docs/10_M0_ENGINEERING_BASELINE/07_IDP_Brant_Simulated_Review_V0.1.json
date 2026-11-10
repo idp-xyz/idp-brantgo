@@ -1,0 +1,541 @@
+{
+  "artifact": "IDP Brant Simulated Review Board",
+  "version": "0.1",
+  "date": "2026-11-10",
+  "status": "SIMULATED — AI 按角色模拟首席架构师与领域负责人的评审，证据层级 E0；不是真人签核，第 08 章签核记录不据此填写",
+  "method": "由 AI 依次扮演各角色，依据本档案、SAP 标准流程公开资料与中国外贸通行做法，对每项 ADR 与待决项、每个上下文给出接受、附条件接受或暂缓的结论；属于产品决定的直接裁决，取决于具体客户的法律与税务事实改为租户配置并由客户确认；需要真实证据的事项（真实客户样例、远程 CI、OIDC）不能由模拟评审满足。",
+  "inputs": [
+    "02–06 阶段模型与契约",
+    "04 阶段 SAP 标准流程参照",
+    "04 阶段模拟 G0 走查（SIM-01—03）",
+    "10 阶段 M0 本机实测证据"
+  ],
+  "decisionKinds": {
+    "ACCEPTED": "接受",
+    "ACCEPTED_WITH_CONDITIONS": "附条件接受",
+    "DEFERRED": "暂缓（需要真实证据）",
+    "REJECTED": "否决"
+  },
+  "roles": [
+    {
+      "id": "R-CA",
+      "name": "首席架构师（模拟）",
+      "scope": "架构、一致性、仓库与工程 ADR"
+    },
+    {
+      "id": "R-PRD",
+      "name": "产品负责人（模拟）",
+      "scope": "产品范围、订单形成方式、配置默认值"
+    },
+    {
+      "id": "R-MD",
+      "name": "主数据与政策负责人（模拟）",
+      "scope": "PTY、CAT、POL、EVD、INQ"
+    },
+    {
+      "id": "R-CST",
+      "name": "寻源与核价负责人（模拟）",
+      "scope": "SUP、CST"
+    },
+    {
+      "id": "R-TRD",
+      "name": "报价与订单负责人（模拟）",
+      "scope": "TRD"
+    },
+    {
+      "id": "R-PUR",
+      "name": "采购负责人（模拟）",
+      "scope": "PUR"
+    },
+    {
+      "id": "R-FUL",
+      "name": "履约与单证负责人（模拟）",
+      "scope": "FUL"
+    },
+    {
+      "id": "R-STL",
+      "name": "结算与信用负责人（模拟，含财务）",
+      "scope": "STL"
+    },
+    {
+      "id": "R-CNX",
+      "name": "中国协同与合规负责人（模拟）",
+      "scope": "CNX、CN-D"
+    },
+    {
+      "id": "R-OPS",
+      "name": "质量、库存、生产与售后负责人（模拟）",
+      "scope": "QLT、STK、MFG、CLM"
+    },
+    {
+      "id": "R-AI",
+      "name": "任务与 AI 负责人（模拟）",
+      "scope": "TSK、internal/ai"
+    },
+    {
+      "id": "R-SEC",
+      "name": "安全与数据负责人（模拟）",
+      "scope": "身份、数据与模型策略"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "SR-01",
+      "subject": "ADR-BR-IMP-001",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-02",
+      "subject": "ADR-BR-IMP-002",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-03",
+      "subject": "ADR-BR-001",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-04",
+      "subject": "ADR-BR-002",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-05",
+      "subject": "ADR-BR-003",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-06",
+      "subject": "ADR-BR-004",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "接受方案 B＋方案 A 的事件传播：关系表中守卫锁关系对应的守卫函数在下游事务内调用；order.activate 中成本、配置与汇率的变化按订单审批的风险确认处理，不拒绝；事后风险登记依赖 ADR-BR-015。记录对 Cargo 基线 T3 的受控例外。",
+      "conditions": []
+    },
+    {
+      "id": "SR-07",
+      "subject": "ADR-BR-005",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-08",
+      "subject": "ADR-BR-006",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-09",
+      "subject": "ADR-BR-007",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-10",
+      "subject": "ADR-BR-008",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-11",
+      "subject": "ADR-BR-009",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-12",
+      "subject": "ADR-BR-010",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-13",
+      "subject": "ADR-BR-011",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-14",
+      "subject": "ADR-BR-012",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-15",
+      "subject": "ADR-BR-013",
+      "role": "R-TRD",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "接受：合同成立以承诺到达时间判定，合同成立后报价到期不阻断订单。",
+      "conditions": [
+        "F-02：增加适用法律与争议解决条款（S3-17）"
+      ]
+    },
+    {
+      "id": "SR-16",
+      "subject": "ADR-BR-014",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-17",
+      "subject": "ADR-BR-015",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-18",
+      "subject": "ADR-BR-016",
+      "role": "R-STL",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "接受先占用、后生效与信用决定分级。",
+      "conditions": [
+        "F-04：单证控制下的出运后付款可视为有担保（已修订 TRD-INV-022）"
+      ]
+    },
+    {
+      "id": "SR-19",
+      "subject": "ADR-BR-017",
+      "role": "R-PRD",
+      "decision": "ACCEPTED",
+      "outcome": "产品决定：名单目录由租户在 POL screening_regulation 中启用；默认启用中国名单与联合国综合制裁名单，外国名单默认关闭，租户启用时须登记其法务确认；Brant 提供筛查工具与记录，不提供法律意见。",
+      "conditions": []
+    },
+    {
+      "id": "SR-20",
+      "subject": "ADR-BR-REPO-01",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-21",
+      "subject": "ADR-BR-REPO-02",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-22",
+      "subject": "ADR-BR-REPO-03",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-23",
+      "subject": "ADR-BR-REPO-04",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-24",
+      "subject": "ADR-BR-REPO-05",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-25",
+      "subject": "ADR-BR-REPO-06",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-26",
+      "subject": "ADR-BR-REPO-07",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-27",
+      "subject": "ADR-BR-REPO-08",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-28",
+      "subject": "ADR-BR-REPO-09",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-29",
+      "subject": "ADR-BR-REPO-10",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-30",
+      "subject": "ADR-BR-REPO-11",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-31",
+      "subject": "BC-D01",
+      "role": "R-PRD",
+      "decision": "DEFERRED",
+      "outcome": "模拟 G0 走查已完成（3 个虚构业务，6 项发现）；真实客户脱敏资料无法用模拟替代，真实试点前仍须取得。",
+      "conditions": []
+    },
+    {
+      "id": "SR-32",
+      "subject": "BC-D02",
+      "role": "R-PRD",
+      "decision": "ACCEPTED",
+      "outcome": "默认岗位模板：销售经办、跟单、采购、核价、报价审核人、订单审核人、毛利审批人、信用专员、信用经理、质检、单证、资金、合规、税务专员、管理员。职责分离：编制与审核分开；销售不能放行信用决定；合规结论只由合规岗位确定；租户可合并岗位，但不得合并上述禁止组合。",
+      "conditions": []
+    },
+    {
+      "id": "SR-33",
+      "subject": "BC-D03",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "按登记的建议决定接受。",
+      "conditions": []
+    },
+    {
+      "id": "SR-34",
+      "subject": "BC-D05",
+      "role": "R-PRD",
+      "decision": "ACCEPTED",
+      "outcome": "最低毛利阈值、毛利例外角色与金额层级为租户配置（默认不启用阈值，启用时必须指定毛利审批人）；税率与可回收率按商品编码从官方来源导入并记录来源与版本，由租户确认；汇率来源（如中国人民银行中间价或开户行牌价）按用途由租户配置。",
+      "conditions": []
+    },
+    {
+      "id": "SR-35",
+      "subject": "BC-D06",
+      "role": "R-PRD",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "P0 保留 full_v1；R1 增加参照报价下单（部分与多次），以报价行剩余数量台账控制，每张订单独立确认与审批。",
+      "conditions": [
+        "F-01：S6-07 交付参照报价下单；P0 期间返单以复制原报价重新审批"
+      ]
+    },
+    {
+      "id": "SR-36",
+      "subject": "BC-D07",
+      "role": "R-SEC",
+      "decision": "ACCEPTED",
+      "outcome": "模型端点由租户选择；客户原文、成本与价格只在租户授权后发送给模型；日志脱敏，不记录附件全文与凭据；附件留存期限由租户配置。",
+      "conditions": []
+    },
+    {
+      "id": "SR-37",
+      "subject": "BC-D08",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "EER／BIP 经防腐层适配，S4 评估；接入前保留人工路径与人工节点计量。",
+      "conditions": []
+    },
+    {
+      "id": "SR-38",
+      "subject": "CN-D01–08",
+      "role": "R-CNX",
+      "decision": "ACCEPTED",
+      "outcome": "产品决定（配置化）：CN-M01 为默认模式；税务办法由租户选择（外贸企业免退；生产企业免抵退属 CN-M02 条件能力）；商品申报参数与退税率按官方来源导入并保存版本；票据核验经人工或获准接口；银行渠道首期人工登记；专业系统接口在 S6；成本税额口径按 CST-INV-007；单证目录与期限按配置。客户适用性在租户开通时确认并留记录。",
+      "conditions": []
+    }
+  ],
+  "contextSignoffs": [
+    {
+      "context": "PTY",
+      "role": "R-MD",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "CAT",
+      "role": "R-MD",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "POL",
+      "role": "R-MD",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "EVD",
+      "role": "R-MD",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "INQ",
+      "role": "R-MD",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "SUP",
+      "role": "R-CST",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "CST",
+      "role": "R-CST",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "TRD",
+      "role": "R-TRD",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "PUR",
+      "role": "R-PUR",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    },
+    {
+      "context": "MFG",
+      "role": "R-OPS",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "QLT",
+      "role": "R-OPS",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "STK",
+      "role": "R-OPS",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "FUL",
+      "role": "R-FUL",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "STL",
+      "role": "R-STL",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "CLM",
+      "role": "R-OPS",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "CNX",
+      "role": "R-CNX",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "CRM",
+      "role": "R-PRD",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": [
+        "轮廓上下文：对应切片开工前完成状态机、不变量与命令事件契约的详细设计"
+      ]
+    },
+    {
+      "context": "TSK",
+      "role": "R-AI",
+      "decision": "ACCEPTED",
+      "scope": "职责、事实权威、边界、聚合与不变量",
+      "conditions": []
+    }
+  ],
+  "gateOutcome": {
+    "G0": "NO-GO（真实客户证据）；模拟走查完成",
+    "G1": "NO-GO：设计与 ADR 已模拟签核；仍缺远程 CI 与主干保护（C04、C05、C06、C09）、OIDC（C10）、Outbox 死信实现（C13）、AI 红队（C11）"
+  }
+}

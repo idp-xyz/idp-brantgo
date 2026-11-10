@@ -1,0 +1,5006 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "dispatch_target"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "event_type": {
+              "enum": [
+                "quote.activated",
+                "quote.replaced"
+              ]
+            },
+            "customer_ref": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "customer"
+                },
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "row_version": {
+                  "$ref": "#/$defs/positive_version"
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ],
+              "additionalProperties": false
+            },
+            "contact_ref": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "contact"
+                },
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "row_version": {
+                  "$ref": "#/$defs/positive_version"
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ],
+              "additionalProperties": false
+            },
+            "document_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 64
+            },
+            "dispatch_preflight_ready": {
+              "type": "boolean"
+            },
+            "recipient_snapshot_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 128
+            },
+            "recipient_snapshot_hash": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "recipient_snapshot_available": {
+              "type": "boolean"
+            },
+            "local_target_ready": {
+              "type": "boolean"
+            },
+            "target_ready": {
+              "const": false
+            },
+            "channel_status": {
+              "const": "not_configured"
+            },
+            "reason_codes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "CUSTOMER_REFERENCE_MISSING",
+                  "CONTACT_REFERENCE_MISSING",
+                  "RECIPIENT_SNAPSHOT_MISSING",
+                  "RECIPIENT_SNAPSHOT_INTEGRITY_FAILURE",
+                  "DISPATCH_PREFLIGHT_NOT_READY",
+                  "EXTERNAL_CHANNEL_NOT_CONFIGURED"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "external_delivery_status": {
+              "const": "not_started"
+            }
+          },
+          "required": [
+            "event_id",
+            "quote_id",
+            "business_revision",
+            "event_type",
+            "customer_ref",
+            "contact_ref",
+            "document_id",
+            "dispatch_preflight_ready",
+            "recipient_snapshot_id",
+            "recipient_snapshot_hash",
+            "recipient_snapshot_available",
+            "local_target_ready",
+            "target_ready",
+            "channel_status",
+            "reason_codes",
+            "external_delivery_status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "dispatch_preflight"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "event_type": {
+              "enum": [
+                "quote.activated",
+                "quote.replaced"
+              ]
+            },
+            "commit_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 64
+            },
+            "approval_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 64
+            },
+            "document_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 64
+            },
+            "checked_at": {
+              "$ref": "#/$defs/time"
+            },
+            "ready_for_dispatch": {
+              "type": "boolean"
+            },
+            "reason_codes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "OUTBOX_QUEUED",
+                  "COMMIT_EVIDENCE_PRESENT",
+                  "COMMIT_EVIDENCE_MISSING",
+                  "QUOTE_ACTIVE",
+                  "QUOTE_NOT_ACTIVE",
+                  "DOCUMENT_INTACT",
+                  "DOCUMENT_BINDING_MISSING",
+                  "DOCUMENT_INTEGRITY_FAILURE",
+                  "APPROVAL_CURRENT",
+                  "APPROVAL_MISSING",
+                  "APPROVAL_REVOKED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_REFERENCE_MISMATCH",
+                  "BUSINESS_HASH_MISMATCH"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 30,
+              "uniqueItems": true
+            },
+            "external_delivery_status": {
+              "const": "not_started"
+            }
+          },
+          "required": [
+            "event_id",
+            "quote_id",
+            "business_revision",
+            "event_type",
+            "commit_id",
+            "approval_id",
+            "document_id",
+            "checked_at",
+            "ready_for_dispatch",
+            "reason_codes",
+            "external_delivery_status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "commit_history"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "commit_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "business_hash": {
+              "$ref": "#/$defs/hash"
+            },
+            "server_commit_at": {
+              "$ref": "#/$defs/time"
+            },
+            "authority_epoch": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "control_epoch": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "approval_id": {
+              "$ref": "#/$defs/id"
+            },
+            "cost_snapshot_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "created_at": {
+              "$ref": "#/$defs/time"
+            },
+            "result_sha256": {
+              "$ref": "#/$defs/hash"
+            },
+            "formal_number": {
+              "$ref": "#/$defs/text"
+            },
+            "file_sha256": {
+              "$ref": "#/$defs/hash"
+            },
+            "has_cost_qualification": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "commit_id",
+            "quote_id",
+            "business_revision",
+            "business_hash",
+            "server_commit_at",
+            "authority_epoch",
+            "control_epoch",
+            "approval_id",
+            "cost_snapshot_id",
+            "created_at",
+            "result_sha256",
+            "formal_number",
+            "file_sha256",
+            "has_cost_qualification"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "outbox_history"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "event_type": {
+              "enum": [
+                "quote.activated",
+                "quote.replaced"
+              ]
+            },
+            "created_at": {
+              "$ref": "#/$defs/time"
+            },
+            "payload_sha256": {
+              "$ref": "#/$defs/hash"
+            },
+            "dispatch_state": {
+              "const": "queued"
+            },
+            "external_delivery_status": {
+              "const": "not_started"
+            }
+          },
+          "required": [
+            "event_id",
+            "quote_id",
+            "business_revision",
+            "event_type",
+            "created_at",
+            "payload_sha256",
+            "dispatch_state",
+            "external_delivery_status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "document_history"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "business_hash": {
+              "$ref": "#/$defs/hash"
+            },
+            "number_id": {
+              "$ref": "#/$defs/id"
+            },
+            "document_number": {
+              "$ref": "#/$defs/text"
+            },
+            "file_id": {
+              "$ref": "#/$defs/id"
+            },
+            "file_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 512
+            },
+            "file_sha256": {
+              "$ref": "#/$defs/hash"
+            },
+            "mime_type": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "byte_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "created_at": {
+              "$ref": "#/$defs/time"
+            },
+            "number_integrity": {
+              "enum": [
+                "intact",
+                "invalid"
+              ]
+            },
+            "file_integrity": {
+              "enum": [
+                "intact",
+                "invalid"
+              ]
+            },
+            "integrity_status": {
+              "enum": [
+                "intact",
+                "missing",
+                "mismatch"
+              ]
+            },
+            "configuration_bindings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "kind": {
+                    "enum": [
+                      "quote_document_template",
+                      "sales_tax_application"
+                    ]
+                  },
+                  "id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/positive_version"
+                  },
+                  "data_hash": {
+                    "$ref": "#/$defs/hash"
+                  },
+                  "record_hash": {
+                    "$ref": "#/$defs/hash"
+                  },
+                  "publication_hash": {
+                    "$ref": "#/$defs/hash"
+                  },
+                  "created_at": {
+                    "$ref": "#/$defs/time"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "id",
+                  "revision",
+                  "data_hash",
+                  "record_hash",
+                  "publication_hash",
+                  "created_at"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 1000
+            }
+          },
+          "required": [
+            "document_id",
+            "quote_id",
+            "business_revision",
+            "business_hash",
+            "number_id",
+            "document_number",
+            "file_id",
+            "file_name",
+            "file_sha256",
+            "mime_type",
+            "byte_size",
+            "created_at",
+            "number_integrity",
+            "file_integrity",
+            "integrity_status",
+            "configuration_bindings"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "quote_history"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "root_version": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "status": {
+              "enum": [
+                "working",
+                "frozen",
+                "pending_approval",
+                "active",
+                "superseded",
+                "withdrawn",
+                "cancelled"
+              ]
+            },
+            "current_active_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "revision": {
+              "type": "object",
+              "properties": {
+                "business_revision": {
+                  "$ref": "#/$defs/positive_version"
+                },
+                "status": {
+                  "enum": [
+                    "working",
+                    "frozen",
+                    "pending_approval",
+                    "active",
+                    "superseded",
+                    "withdrawn",
+                    "cancelled"
+                  ]
+                },
+                "business_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "issued_at": {
+                  "$ref": "#/$defs/time"
+                },
+                "expires_at": {
+                  "$ref": "#/$defs/time"
+                },
+                "calculation": {
+                  "type": "object",
+                  "properties": {
+                    "net_minor": {
+                      "$ref": "#/$defs/minor"
+                    },
+                    "tax_minor": {
+                      "$ref": "#/$defs/minor"
+                    },
+                    "payable_minor": {
+                      "$ref": "#/$defs/minor"
+                    },
+                    "comparison_revenue_minor": {
+                      "$ref": "#/$defs/minor"
+                    },
+                    "cost_minor": {
+                      "$ref": "#/$defs/minor"
+                    },
+                    "profit_minor": {
+                      "$ref": "#/$defs/signed_minor"
+                    },
+                    "margin_rule": {
+                      "enum": [
+                        "pass",
+                        "requires_approval"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "net_minor",
+                    "tax_minor",
+                    "payable_minor",
+                    "comparison_revenue_minor",
+                    "cost_minor",
+                    "profit_minor",
+                    "margin_rule"
+                  ],
+                  "additionalProperties": false
+                },
+                "current_cost_qualification": {
+                  "type": "object",
+                  "properties": {
+                    "snapshot_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "currently_eligible_for_quote": {
+                      "type": "boolean"
+                    },
+                    "result_hash": {
+                      "$ref": "#/$defs/hash"
+                    },
+                    "eligibility_checked_at": {
+                      "$ref": "#/$defs/time"
+                    },
+                    "reason": {
+                      "$ref": "#/$defs/text"
+                    }
+                  },
+                  "required": [
+                    "snapshot_id",
+                    "currently_eligible_for_quote"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "business_revision",
+                "status",
+                "business_hash"
+              ],
+              "additionalProperties": false
+            },
+            "event_count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          },
+          "required": [
+            "quote_id",
+            "root_version",
+            "status",
+            "revision",
+            "event_count"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "approval_history"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "approval_id": {
+              "$ref": "#/$defs/id"
+            },
+            "review_request_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "business_hash": {
+              "$ref": "#/$defs/hash"
+            },
+            "target_command": {
+              "enum": [
+                "quote.activate",
+                "quote.replace"
+              ]
+            },
+            "reviewer": {
+              "$ref": "#/$defs/id"
+            },
+            "decision": {
+              "enum": [
+                "approved",
+                "returned",
+                "rejected"
+              ]
+            },
+            "decided_at": {
+              "$ref": "#/$defs/time"
+            },
+            "expires_at": {
+              "$ref": "#/$defs/time"
+            },
+            "effectivity": {
+              "enum": [
+                "valid",
+                "revoked"
+              ]
+            },
+            "effectivity_version": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "review_request_status": {
+              "enum": [
+                "open",
+                "approved",
+                "returned",
+                "rejected"
+              ]
+            },
+            "requested_by": {
+              "$ref": "#/$defs/id"
+            },
+            "requested_at": {
+              "$ref": "#/$defs/time"
+            },
+            "event_count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "event_type": {
+                    "enum": [
+                      "approved",
+                      "revoked"
+                    ]
+                  },
+                  "actor": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "effectivity_version": {
+                    "$ref": "#/$defs/positive_version"
+                  },
+                  "recorded_at": {
+                    "$ref": "#/$defs/time"
+                  }
+                },
+                "required": [
+                  "event_type",
+                  "actor",
+                  "effectivity_version",
+                  "recorded_at"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 100000
+            }
+          },
+          "required": [
+            "approval_id",
+            "review_request_id",
+            "quote_id",
+            "business_revision",
+            "business_hash",
+            "target_command",
+            "reviewer",
+            "decision",
+            "decided_at",
+            "expires_at",
+            "effectivity",
+            "effectivity_version",
+            "review_request_status",
+            "requested_by",
+            "requested_at",
+            "event_count",
+            "events"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "quote_root"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "root_version": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "current_active_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "working_generation": {
+              "$ref": "#/$defs/positive_version"
+            }
+          },
+          "required": [
+            "quote_id",
+            "root_version"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "quote_revision"
+        },
+        "value": {
+          "$ref": "#/$defs/revision"
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "quote_ready"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "currently_ready": {
+              "type": "boolean"
+            },
+            "checked_at": {
+              "$ref": "#/$defs/time"
+            },
+            "reason_codes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "UNSUPPORTED_CONTRACT",
+                  "SCHEMA_INVALID",
+                  "PERMISSION_DENIED",
+                  "NOT_FOUND",
+                  "IDEMPOTENCY_PAYLOAD_CONFLICT",
+                  "VERSION_CONFLICT",
+                  "INVALID_STATE",
+                  "DRAFT_NOT_READY",
+                  "REFERENCE_INVALID",
+                  "REFERENCE_STALE",
+                  "QUOTE_NOT_CURRENT",
+                  "QUOTE_EXPIRED",
+                  "COST_SNAPSHOT_NOT_ELIGIBLE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_REVOKED",
+                  "APPROVAL_EXPIRED",
+                  "INDEPENDENT_REVIEW_REQUIRED",
+                  "ROOT_CONVERSION_LOCKED",
+                  "OBJECT_CONTROL_CONFLICT",
+                  "DEPENDENCY_NOT_SUPPORTED",
+                  "CALCULATION_LIMIT_EXCEEDED",
+                  "INVALID_KNOWN_VALUE",
+                  "PAYMENT_TOTAL_MISMATCH",
+                  "CHARGE_SCOPE_UNRESOLVED",
+                  "COMPARISON_BASIS_MISMATCH"
+                ]
+              },
+              "minItems": 0,
+              "maxItems": 50,
+              "uniqueItems": true
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            }
+          },
+          "required": [
+            "quote_id",
+            "currently_ready",
+            "checked_at",
+            "reason_codes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "approval"
+        },
+        "value": {
+          "$ref": "#/$defs/approval"
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "document"
+        },
+        "value": {
+          "$ref": "#/$defs/document"
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "kind": {
+          "enum": [
+            "dispatch_target",
+            "dispatch_preflight",
+            "commit_history",
+            "outbox_history",
+            "document_history",
+            "quote_root",
+            "approval_history",
+            "quote_revision",
+            "quote_ready",
+            "quote_history",
+            "approval",
+            "document",
+            "acceptance_history",
+            "order_history",
+            "action_reconciliation",
+            "order_review",
+            "customer_response"
+          ]
+        },
+        "code": {
+          "enum": [
+            "UNSUPPORTED_CONTRACT",
+            "SCHEMA_INVALID",
+            "PERMISSION_DENIED",
+            "NOT_FOUND",
+            "IDEMPOTENCY_PAYLOAD_CONFLICT",
+            "VERSION_CONFLICT",
+            "INVALID_STATE",
+            "DRAFT_NOT_READY",
+            "REFERENCE_INVALID",
+            "REFERENCE_STALE",
+            "QUOTE_NOT_CURRENT",
+            "QUOTE_EXPIRED",
+            "COST_SNAPSHOT_NOT_ELIGIBLE",
+            "APPROVAL_REQUIRED",
+            "APPROVAL_REVOKED",
+            "APPROVAL_EXPIRED",
+            "INDEPENDENT_REVIEW_REQUIRED",
+            "ROOT_CONVERSION_LOCKED",
+            "OBJECT_CONTROL_CONFLICT",
+            "DEPENDENCY_NOT_SUPPORTED",
+            "CALCULATION_LIMIT_EXCEEDED",
+            "INVALID_KNOWN_VALUE",
+            "PAYMENT_TOTAL_MISMATCH",
+            "CHARGE_SCOPE_UNRESOLVED",
+            "COMPARISON_BASIS_MISMATCH"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "code"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "acceptance_history"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "acceptance_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "business_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "business_hash": {
+              "$ref": "#/$defs/hash"
+            },
+            "customer_ref": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "contact_ref": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "source_ref": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "source_message_id": {
+              "$ref": "#/$defs/id"
+            },
+            "source_author": {
+              "type": "string"
+            },
+            "forward_chain_ref": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "recorded_at": {
+              "$ref": "#/$defs/time"
+            },
+            "verified_at": {
+              "$ref": "#/$defs/time"
+            },
+            "verified_by": {
+              "$ref": "#/$defs/id"
+            },
+            "line_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              }
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            }
+          },
+          "required": [
+            "acceptance_id",
+            "quote_id",
+            "business_revision",
+            "business_hash",
+            "customer_ref",
+            "contact_ref",
+            "kind",
+            "source_ref",
+            "source_message_id",
+            "source_author",
+            "forward_chain_ref",
+            "recorded_at",
+            "verified_at",
+            "verified_by",
+            "line_ids",
+            "events"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "order_history"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "order_id": {
+              "$ref": "#/$defs/id"
+            },
+            "root_quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "conversion_slot": {
+              "const": "full_v1"
+            },
+            "customer_ref": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "source_quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "source_quote_revision": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "source_quote_hash": {
+              "$ref": "#/$defs/hash"
+            },
+            "acceptance_id": {
+              "$ref": "#/$defs/id"
+            },
+            "status": {
+              "enum": [
+                "draft",
+                "active",
+                "cancelled"
+              ]
+            },
+            "row_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "order_hash": {
+              "$ref": "#/$defs/hash"
+            },
+            "approval_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "body": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            }
+          },
+          "required": [
+            "order_id",
+            "root_quote_id",
+            "conversion_slot",
+            "customer_ref",
+            "source_quote_id",
+            "source_quote_revision",
+            "source_quote_hash",
+            "acceptance_id",
+            "status",
+            "row_version",
+            "order_hash",
+            "approval_id",
+            "body",
+            "events"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "action_reconciliation"
+        },
+        "value": {
+          "description": "Local action_result evidence at the serialized read; no external delivery or commit guarantee.",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "enum": [
+                    "quote.save_draft",
+                    "quote.revise",
+                    "quote.discard_draft",
+                    "quote.freeze",
+                    "quote.submit_review",
+                    "quote.review.approve",
+                    "quote.review.return",
+                    "quote.review.reject",
+                    "quote.approval.revoke",
+                    "quote.activate",
+                    "quote.replace",
+                    "quote.withdraw",
+                    "quote.cancel",
+                    "quote.acceptance.verify",
+                    "order.prepare",
+                    "order.activate",
+                    "order.approval.revoke",
+                    "order.review.request",
+                    "order.review.decide",
+                    "quote.response.record",
+                    "quote.response.verify"
+                  ]
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "not_committed"
+                },
+                "action_id": {
+                  "type": "null"
+                },
+                "object_id": {
+                  "type": "null"
+                },
+                "result": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "enum": [
+                    "quote.save_draft",
+                    "quote.revise",
+                    "quote.discard_draft",
+                    "quote.freeze",
+                    "quote.submit_review",
+                    "quote.review.approve",
+                    "quote.review.return",
+                    "quote.review.reject",
+                    "quote.approval.revoke",
+                    "quote.activate",
+                    "quote.replace",
+                    "quote.withdraw",
+                    "quote.cancel",
+                    "quote.acceptance.verify",
+                    "order.prepare",
+                    "order.activate",
+                    "order.approval.revoke",
+                    "order.review.request",
+                    "order.review.decide",
+                    "quote.response.record",
+                    "quote.response.verify"
+                  ]
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "payload_conflict"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.save_draft"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.save_draft"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "draft"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.revise"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.revise"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "draft"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.discard_draft"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.discard_draft"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "discarded"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.freeze"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.freeze"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "frozen"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.submit_review"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.submit_review"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "pending_approval"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash",
+                        "review_request_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.review.approve"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.review.approve"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "pending_approval"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash",
+                        "review_request_id",
+                        "approval_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.review.return"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.review.return"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "frozen"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash",
+                        "review_request_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.review.reject"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.review.reject"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "frozen"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash",
+                        "review_request_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.approval.revoke"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.approval.revoke"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "enum": [
+                            "draft",
+                            "discarded",
+                            "frozen",
+                            "pending_approval",
+                            "active",
+                            "superseded",
+                            "withdrawn",
+                            "cancelled"
+                          ]
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash",
+                        "approval_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.activate"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.activate"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "active"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash",
+                        "approval_id",
+                        "document_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.replace"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.replace"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "active"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash",
+                        "approval_id",
+                        "document_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.withdraw"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.withdraw"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "withdrawn"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.cancel"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.cancel"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "object_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "root_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "status": {
+                          "const": "cancelled"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "review_request_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "document_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "object_id",
+                        "root_version",
+                        "status",
+                        "business_revision",
+                        "business_hash"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.acceptance.verify"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.acceptance.verify"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "acceptance_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "quote_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "business_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "business_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "status": {
+                          "const": "verified"
+                        }
+                      },
+                      "required": [
+                        "acceptance_id",
+                        "quote_id",
+                        "business_revision",
+                        "business_hash",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "order.prepare"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "order.prepare"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "order_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "status": {
+                          "const": "draft"
+                        },
+                        "row_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "source_quote_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "source_quote_revision": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "source_quote_hash": {
+                          "$ref": "#/$defs/hash"
+                        },
+                        "acceptance_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "conversion_slot": {
+                          "const": "full_v1"
+                        }
+                      },
+                      "required": [
+                        "order_id",
+                        "status",
+                        "row_version",
+                        "source_quote_id",
+                        "source_quote_revision",
+                        "source_quote_hash",
+                        "acceptance_id",
+                        "conversion_slot"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "order.activate"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "order.activate"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "order_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "status": {
+                          "const": "active"
+                        },
+                        "row_version": {
+                          "$ref": "#/$defs/positive_version"
+                        },
+                        "approval_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "order_id",
+                        "status",
+                        "row_version",
+                        "approval_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "order.review.request"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "order.review.request"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "order_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "review_id": {
+                          "$ref": "#/$defs/id"
+                        }
+                      },
+                      "required": [
+                        "order_id",
+                        "review_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "order.review.decide"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "order.review.decide"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "review_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "decision": {
+                          "enum": [
+                            "approved",
+                            "rejected"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "review_id",
+                        "decision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "order.approval.revoke"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "order.approval.revoke"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "review_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "revoked": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "review_id",
+                        "revoked"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.response.record"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.response.record"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "response_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "quote_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "classification": {
+                          "enum": [
+                            "full_unconditional",
+                            "conditional",
+                            "partial",
+                            "reject",
+                            "ambiguous"
+                          ]
+                        },
+                        "recorded_at": {
+                          "$ref": "#/$defs/time"
+                        },
+                        "status": {
+                          "const": "recorded"
+                        }
+                      },
+                      "required": [
+                        "response_id",
+                        "quote_id",
+                        "classification",
+                        "recorded_at",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "quote.response.verify"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/id"
+                },
+                "request_hash": {
+                  "$ref": "#/$defs/hash"
+                },
+                "state": {
+                  "const": "committed"
+                },
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "object_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "command": {
+                      "const": "quote.response.verify"
+                    },
+                    "action_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "response_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "acceptance_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "quote_id": {
+                          "$ref": "#/$defs/id"
+                        },
+                        "status": {
+                          "const": "verified"
+                        }
+                      },
+                      "required": [
+                        "response_id",
+                        "acceptance_id",
+                        "quote_id",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "command",
+                    "action_id",
+                    "replayed",
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "command",
+                "idempotency_key",
+                "request_hash",
+                "state",
+                "action_id",
+                "object_id",
+                "result"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "order_review"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "review_id": {
+              "$ref": "#/$defs/id"
+            },
+            "order_id": {
+              "$ref": "#/$defs/id"
+            },
+            "order_hash": {
+              "$ref": "#/$defs/hash"
+            },
+            "order_version": {
+              "$ref": "#/$defs/positive_version"
+            },
+            "requested_by": {
+              "$ref": "#/$defs/id"
+            },
+            "requested_at": {
+              "$ref": "#/$defs/time"
+            },
+            "decision": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "activation": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "revocation": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "decision_state": {
+              "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "expired",
+                "revoked"
+              ]
+            }
+          },
+          "required": [
+            "review_id",
+            "order_id",
+            "order_hash",
+            "order_version",
+            "requested_by",
+            "requested_at",
+            "decision",
+            "activation",
+            "revocation",
+            "decision_state"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "kind": {
+          "const": "customer_response"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "response_id": {
+              "$ref": "#/$defs/id"
+            },
+            "quote_id": {
+              "$ref": "#/$defs/id"
+            },
+            "source_id": {
+              "$ref": "#/$defs/id"
+            },
+            "locator": {
+              "$ref": "#/$defs/text"
+            },
+            "classification": {
+              "enum": [
+                "full_unconditional",
+                "conditional",
+                "partial",
+                "reject",
+                "ambiguous"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "recorded_by": {
+              "$ref": "#/$defs/text"
+            },
+            "recorded_at": {
+              "$ref": "#/$defs/time"
+            },
+            "verification": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "acceptance_id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "verified_by": {
+                      "$ref": "#/$defs/text"
+                    },
+                    "verified_at": {
+                      "$ref": "#/$defs/time"
+                    }
+                  },
+                  "required": [
+                    "acceptance_id",
+                    "verified_by",
+                    "verified_at"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "response_id",
+            "quote_id",
+            "source_id",
+            "locator",
+            "classification",
+            "summary",
+            "recorded_by",
+            "recorded_at",
+            "verification"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "not": {
+        "pattern": "[^A-Za-z0-9._:-]"
+      }
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "positive_version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "hash": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[^0-9a-f]"
+      }
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 27,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
+      "not": {
+        "pattern": "[^0-9T:Z.\\-]"
+      }
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "\\S"
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 5000
+    },
+    "quantity": {
+      "type": "string",
+      "maxLength": 26,
+      "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+      "not": {
+        "pattern": "[^0-9.]"
+      }
+    },
+    "price": {
+      "type": "string",
+      "maxLength": 26,
+      "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,8})?$",
+      "not": {
+        "pattern": "[^0-9.]"
+      }
+    },
+    "ratio": {
+      "type": "string",
+      "maxLength": 26,
+      "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,8})?$",
+      "not": {
+        "pattern": "[^0-9.]"
+      }
+    },
+    "minor": {
+      "type": "string",
+      "maxLength": 24,
+      "pattern": "^(?:0|[1-9][0-9]{0,23})$",
+      "not": {
+        "pattern": "[^0-9]"
+      }
+    },
+    "signed_minor": {
+      "type": "string",
+      "maxLength": 25,
+      "pattern": "^(?:0|-?[1-9][0-9]{0,23})$",
+      "not": {
+        "pattern": "[^0-9-]"
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "$ref": "#/$defs/id"
+        },
+        "locator": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "source_id",
+        "locator"
+      ],
+      "additionalProperties": false
+    },
+    "master_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "customer",
+            "contact",
+            "supplier",
+            "sku"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "row_version": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "row_version"
+      ],
+      "additionalProperties": false
+    },
+    "rfq_ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "row_version": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "id",
+        "row_version"
+      ],
+      "additionalProperties": false
+    },
+    "snapshot_ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "result_hash": {
+          "$ref": "#/$defs/hash"
+        }
+      },
+      "required": [
+        "id",
+        "result_hash"
+      ],
+      "additionalProperties": false
+    },
+    "dependency": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/id"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "version": {
+          "$ref": "#/$defs/positive_version"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/hash"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version",
+        "content_hash"
+      ],
+      "additionalProperties": false
+    },
+    "company_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "company"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "currency_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "currency"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "unit_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "unit"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversion_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "conversion"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "sku_profile_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "sku_profile"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "party_profile_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "party_profile"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "pricing_policy_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "pricing_policy"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "trade_terms_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "trade_terms"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "trade_scope_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "trade_scope"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "location_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "location"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "payment_terms_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "payment_terms"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "calendar_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "calendar"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "delivery_calendar_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "delivery_calendar"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "tax_profile_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "tax_profile"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "fee_type_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "fee_type"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "fx_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "fx"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "sequence_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "sequence"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "quote_document_template_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "quote_document_template"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "sales_tax_application_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "sales_tax_application"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/positive_version"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "fixed"
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "milestone": {
+          "enum": [
+            "goods_ready",
+            "handover",
+            "arrival"
+          ]
+        },
+        "place_ref": {
+          "$ref": "#/$defs/location_ref"
+        },
+        "time_zone": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "kind",
+        "date",
+        "milestone",
+        "place_ref",
+        "time_zone"
+      ],
+      "additionalProperties": false
+    },
+    "line": {
+      "type": "object",
+      "properties": {
+        "line_id": {
+          "$ref": "#/$defs/id"
+        },
+        "rfq_line_id": {
+          "$ref": "#/$defs/id"
+        },
+        "sku_profile_ref": {
+          "$ref": "#/$defs/sku_profile_ref"
+        },
+        "quantity": {
+          "$ref": "#/$defs/quantity"
+        },
+        "unit_ref": {
+          "$ref": "#/$defs/unit_ref"
+        },
+        "unit_price": {
+          "$ref": "#/$defs/price"
+        },
+        "price_basis_quantity": {
+          "$ref": "#/$defs/quantity"
+        },
+        "discount_ratio": {
+          "$ref": "#/$defs/ratio"
+        },
+        "tax_application_ref": {
+          "$ref": "#/$defs/sales_tax_application_ref"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "conversion_ref": {
+          "$ref": "#/$defs/conversion_ref"
+        }
+      },
+      "required": [
+        "line_id",
+        "rfq_line_id",
+        "sku_profile_ref",
+        "quantity",
+        "unit_ref",
+        "unit_price",
+        "price_basis_quantity",
+        "discount_ratio",
+        "tax_application_ref",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "charge": {
+      "type": "object",
+      "properties": {
+        "charge_id": {
+          "$ref": "#/$defs/id"
+        },
+        "fee_type_ref": {
+          "$ref": "#/$defs/fee_type_ref"
+        },
+        "obligation_key": {
+          "$ref": "#/$defs/id"
+        },
+        "amount": {
+          "$ref": "#/$defs/price"
+        },
+        "inclusion": {
+          "enum": [
+            "separate",
+            "included_in_line"
+          ]
+        },
+        "included_line_id": {
+          "$ref": "#/$defs/id"
+        },
+        "tax_application_ref": {
+          "$ref": "#/$defs/sales_tax_application_ref"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "charge_id",
+        "fee_type_ref",
+        "obligation_key",
+        "amount",
+        "inclusion",
+        "tax_application_ref",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "quote_data": {
+      "type": "object",
+      "properties": {
+        "issuer_ref": {
+          "$ref": "#/$defs/company_ref"
+        },
+        "customer_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "contact_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "customer_profile_ref": {
+          "$ref": "#/$defs/party_profile_ref"
+        },
+        "customer_address_id": {
+          "$ref": "#/$defs/id"
+        },
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "snapshot_ref": {
+          "$ref": "#/$defs/snapshot_ref"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "charges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/charge"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "currency_ref": {
+          "$ref": "#/$defs/currency_ref"
+        },
+        "pricing_policy_ref": {
+          "$ref": "#/$defs/pricing_policy_ref"
+        },
+        "sales_fx_ref": {
+          "$ref": "#/$defs/fx_ref"
+        },
+        "trade_terms_ref": {
+          "$ref": "#/$defs/trade_terms_ref"
+        },
+        "trade_scope_ref": {
+          "$ref": "#/$defs/trade_scope_ref"
+        },
+        "named_place_ref": {
+          "$ref": "#/$defs/location_ref"
+        },
+        "payment_terms_ref": {
+          "$ref": "#/$defs/payment_terms_ref"
+        },
+        "delivery": {
+          "$ref": "#/$defs/delivery"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/time"
+        },
+        "document_template_ref": {
+          "$ref": "#/$defs/quote_document_template_ref"
+        },
+        "sequence_ref": {
+          "$ref": "#/$defs/sequence_ref"
+        },
+        "customer_notes": {
+          "$ref": "#/$defs/note"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "issuer_ref",
+        "customer_ref",
+        "contact_ref",
+        "customer_profile_ref",
+        "customer_address_id",
+        "rfq_ref",
+        "snapshot_ref",
+        "lines",
+        "charges",
+        "currency_ref",
+        "pricing_policy_ref",
+        "trade_terms_ref",
+        "trade_scope_ref",
+        "named_place_ref",
+        "payment_terms_ref",
+        "delivery",
+        "expires_at",
+        "document_template_ref",
+        "sequence_ref",
+        "customer_notes",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "quote_draft": {
+      "type": "object",
+      "properties": {
+        "issuer_ref": {
+          "$ref": "#/$defs/company_ref"
+        },
+        "customer_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "contact_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "customer_profile_ref": {
+          "$ref": "#/$defs/party_profile_ref"
+        },
+        "customer_address_id": {
+          "$ref": "#/$defs/id"
+        },
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "snapshot_ref": {
+          "$ref": "#/$defs/snapshot_ref"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "charges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/charge"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "currency_ref": {
+          "$ref": "#/$defs/currency_ref"
+        },
+        "pricing_policy_ref": {
+          "$ref": "#/$defs/pricing_policy_ref"
+        },
+        "sales_fx_ref": {
+          "$ref": "#/$defs/fx_ref"
+        },
+        "trade_terms_ref": {
+          "$ref": "#/$defs/trade_terms_ref"
+        },
+        "trade_scope_ref": {
+          "$ref": "#/$defs/trade_scope_ref"
+        },
+        "named_place_ref": {
+          "$ref": "#/$defs/location_ref"
+        },
+        "payment_terms_ref": {
+          "$ref": "#/$defs/payment_terms_ref"
+        },
+        "delivery": {
+          "$ref": "#/$defs/delivery"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/time"
+        },
+        "document_template_ref": {
+          "$ref": "#/$defs/quote_document_template_ref"
+        },
+        "sequence_ref": {
+          "$ref": "#/$defs/sequence_ref"
+        },
+        "customer_notes": {
+          "$ref": "#/$defs/note"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "amount_line": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "net_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "tax_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "payable_minor": {
+          "$ref": "#/$defs/minor"
+        }
+      },
+      "required": [
+        "id",
+        "net_minor",
+        "tax_minor",
+        "payable_minor"
+      ],
+      "additionalProperties": false
+    },
+    "payment": {
+      "type": "object",
+      "properties": {
+        "stage_id": {
+          "$ref": "#/$defs/id"
+        },
+        "percent": {
+          "$ref": "#/$defs/ratio"
+        },
+        "amount_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "trigger": {
+          "$ref": "#/$defs/text"
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3650
+        },
+        "day_basis": {
+          "enum": [
+            "calendar",
+            "business"
+          ]
+        },
+        "calendar": {
+          "$ref": "#/$defs/calendar_ref"
+        }
+      },
+      "required": [
+        "stage_id",
+        "percent",
+        "amount_minor",
+        "trigger",
+        "days",
+        "day_basis",
+        "calendar"
+      ],
+      "additionalProperties": false
+    },
+    "calculation": {
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/amount_line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "charges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/amount_line"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "net_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "tax_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "payable_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "comparison_currency_ref": {
+          "$ref": "#/$defs/currency_ref"
+        },
+        "comparison_revenue_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "cost_minor": {
+          "$ref": "#/$defs/minor"
+        },
+        "profit_minor": {
+          "$ref": "#/$defs/signed_minor"
+        },
+        "margin_numerator": {
+          "$ref": "#/$defs/signed_minor"
+        },
+        "margin_denominator": {
+          "$ref": "#/$defs/minor"
+        },
+        "margin_rule": {
+          "enum": [
+            "pass",
+            "requires_approval"
+          ]
+        },
+        "cost_basis": {
+          "const": "nominal_direct_cost"
+        },
+        "excluded_cost_categories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 0,
+          "maxItems": 50,
+          "uniqueItems": true
+        },
+        "payments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/payment"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "lines",
+        "charges",
+        "net_minor",
+        "tax_minor",
+        "payable_minor",
+        "comparison_currency_ref",
+        "comparison_revenue_minor",
+        "cost_minor",
+        "profit_minor",
+        "margin_numerator",
+        "margin_denominator",
+        "margin_rule",
+        "cost_basis",
+        "excluded_cost_categories",
+        "payments"
+      ],
+      "additionalProperties": false
+    },
+    "party_snapshots": {
+      "type": "object",
+      "properties": {
+        "issuer": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "name": {
+              "$ref": "#/$defs/text"
+            },
+            "address": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "address"
+          ],
+          "additionalProperties": false
+        },
+        "customer": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "name": {
+              "$ref": "#/$defs/text"
+            },
+            "address": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "address"
+          ],
+          "additionalProperties": false
+        },
+        "contact_name": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "issuer",
+        "customer",
+        "contact_name"
+      ],
+      "additionalProperties": false
+    },
+    "commercial": {
+      "type": "object",
+      "properties": {
+        "quote_id": {
+          "$ref": "#/$defs/id"
+        },
+        "business_revision": {
+          "$ref": "#/$defs/positive_version"
+        },
+        "issued_at": {
+          "$ref": "#/$defs/time"
+        },
+        "data": {
+          "$ref": "#/$defs/quote_data"
+        },
+        "calculation": {
+          "$ref": "#/$defs/calculation"
+        },
+        "party_snapshots": {
+          "$ref": "#/$defs/party_snapshots"
+        },
+        "dependency_manifest": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependency"
+          },
+          "minItems": 1,
+          "maxItems": 5000
+        },
+        "normalization_version": {
+          "const": "brant.quote-normalization/0.1.0"
+        }
+      },
+      "required": [
+        "quote_id",
+        "business_revision",
+        "issued_at",
+        "data",
+        "calculation",
+        "party_snapshots",
+        "dependency_manifest",
+        "normalization_version"
+      ],
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "object",
+      "properties": {
+        "commercial": {
+          "$ref": "#/$defs/commercial"
+        },
+        "business_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "status": {
+          "enum": [
+            "frozen",
+            "pending_approval",
+            "active",
+            "superseded",
+            "withdrawn",
+            "cancelled"
+          ]
+        }
+      },
+      "required": [
+        "commercial",
+        "business_hash",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "approval": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "quote_id": {
+          "$ref": "#/$defs/id"
+        },
+        "business_revision": {
+          "$ref": "#/$defs/positive_version"
+        },
+        "business_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "command": {
+          "enum": [
+            "quote.activate",
+            "quote.replace"
+          ]
+        },
+        "expected_old_active_revision": {
+          "$ref": "#/$defs/positive_version"
+        },
+        "policy_ref": {
+          "$ref": "#/$defs/pricing_policy_ref"
+        },
+        "reviewer": {
+          "$ref": "#/$defs/id"
+        },
+        "decision": {
+          "const": "approved"
+        },
+        "decided_at": {
+          "$ref": "#/$defs/time"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/time"
+        },
+        "effectivity_version": {
+          "$ref": "#/$defs/positive_version"
+        },
+        "effectivity": {
+          "enum": [
+            "valid",
+            "revoked"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "quote_id",
+        "business_revision",
+        "business_hash",
+        "command",
+        "policy_ref",
+        "reviewer",
+        "decision",
+        "decided_at",
+        "expires_at",
+        "effectivity_version",
+        "effectivity"
+      ],
+      "additionalProperties": false
+    },
+    "document": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "quote_id": {
+          "$ref": "#/$defs/id"
+        },
+        "business_revision": {
+          "$ref": "#/$defs/positive_version"
+        },
+        "business_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "document_number": {
+          "$ref": "#/$defs/text"
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "mime_type": {
+          "const": "text/plain"
+        },
+        "template_ref": {
+          "$ref": "#/$defs/quote_document_template_ref"
+        },
+        "renderer_version": {
+          "const": "quote-text/0.1.0"
+        },
+        "content_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1048576
+        }
+      },
+      "required": [
+        "id",
+        "quote_id",
+        "business_revision",
+        "business_hash",
+        "document_number",
+        "content_sha256",
+        "size_bytes",
+        "mime_type",
+        "template_ref",
+        "renderer_version",
+        "content_text"
+      ],
+      "additionalProperties": false
+    },
+    "quote_document_template": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "language": {
+          "enum": [
+            "zh-CN",
+            "en"
+          ]
+        },
+        "renderer_version": {
+          "const": "quote-text/0.1.0"
+        },
+        "title": {
+          "$ref": "#/$defs/text"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "issuer",
+              "recipient",
+              "identity",
+              "lines",
+              "totals",
+              "terms",
+              "delivery",
+              "payments",
+              "validity",
+              "notes"
+            ]
+          },
+          "minItems": 10,
+          "maxItems": 10,
+          "uniqueItems": true
+        },
+        "footer_note": {
+          "$ref": "#/$defs/note"
+        }
+      },
+      "required": [
+        "name",
+        "language",
+        "renderer_version",
+        "title",
+        "sections",
+        "footer_note"
+      ],
+      "additionalProperties": false
+    },
+    "sales_tax_application": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/text"
+            },
+            "business_model": {
+              "const": "CN-M01"
+            },
+            "use": {
+              "const": "quotation_sale"
+            },
+            "subject_kind": {
+              "const": "sku_profile"
+            },
+            "subject_ref": {
+              "$ref": "#/$defs/sku_profile_ref"
+            },
+            "issuer_ref": {
+              "$ref": "#/$defs/company_ref"
+            },
+            "customer_ref": {
+              "$ref": "#/$defs/master_ref"
+            },
+            "tax_profile_ref": {
+              "$ref": "#/$defs/tax_profile_ref"
+            },
+            "jurisdiction": {
+              "$ref": "#/$defs/text"
+            },
+            "basis_note": {
+              "$ref": "#/$defs/text"
+            },
+            "valid_from": {
+              "$ref": "#/$defs/time"
+            },
+            "valid_until": {
+              "$ref": "#/$defs/time"
+            }
+          },
+          "required": [
+            "name",
+            "business_model",
+            "use",
+            "subject_kind",
+            "subject_ref",
+            "issuer_ref",
+            "customer_ref",
+            "tax_profile_ref",
+            "jurisdiction",
+            "basis_note",
+            "valid_from",
+            "valid_until"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/text"
+            },
+            "business_model": {
+              "const": "CN-M01"
+            },
+            "use": {
+              "const": "quotation_sale"
+            },
+            "subject_kind": {
+              "const": "fee_type"
+            },
+            "subject_ref": {
+              "$ref": "#/$defs/fee_type_ref"
+            },
+            "issuer_ref": {
+              "$ref": "#/$defs/company_ref"
+            },
+            "customer_ref": {
+              "$ref": "#/$defs/master_ref"
+            },
+            "tax_profile_ref": {
+              "$ref": "#/$defs/tax_profile_ref"
+            },
+            "jurisdiction": {
+              "$ref": "#/$defs/text"
+            },
+            "basis_note": {
+              "$ref": "#/$defs/text"
+            },
+            "valid_from": {
+              "$ref": "#/$defs/time"
+            },
+            "valid_until": {
+              "$ref": "#/$defs/time"
+            }
+          },
+          "required": [
+            "name",
+            "business_model",
+            "use",
+            "subject_kind",
+            "subject_ref",
+            "issuer_ref",
+            "customer_ref",
+            "tax_profile_ref",
+            "jurisdiction",
+            "basis_note",
+            "valid_from",
+            "valid_until"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

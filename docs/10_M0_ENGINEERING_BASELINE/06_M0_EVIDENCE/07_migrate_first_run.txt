@@ -1,0 +1,9 @@
+127.0.0.1:5432 - accepting connections
+PLAN framework:000001_eventing_store               sha256:71eaecb1597bf0b2048ad80328dd03dea9aa8a8cc4f8eda571907bc9f35b4397
+PLAN brant:000001_auth_authority_guard             sha256:a2279df8c7bc3da79384aefb6764d71d5d4b6e1113979b7a4c8196c52d7cbf83
+CONNECTED PostgreSQL 16 as brant_migrator
+APPLIED framework:000001_eventing_store
+APPLIED brant:000001_auth_authority_guard
+DONE: 2 applied, 0 already recorded; Bento schema check passed
+export IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable'
+export IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable'

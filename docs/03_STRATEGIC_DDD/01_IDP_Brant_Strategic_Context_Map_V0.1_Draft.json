@@ -1,0 +1,2443 @@
+{
+  "artifact": "IDP Brant Strategic Context Map",
+  "version": "0.1-draft",
+  "date": "2026-11-06",
+  "status": "SIMULATED REVIEW ACCEPTED (E0) — AI 模拟评审接受，未经真人签核；G0 NO-GO（真实证据），G1 NO-GO（工程项）",
+  "normative": "本文件是候选战略设计。上下文、分级、关系与事实权威均为设计假设，须经领域负责人与首席架构师裁决；不是组织架构、部署拓扑或已实施接口清单。",
+  "sourceBaseline": {
+    "productScope": "IDP Brant 产品与研发范围基线 V1.0 中国 B2B 出口业务版（2026-10-22 实施映射修订）",
+    "businessCore": "IDP Brant 业务核心详细设计 V0.2（2026-10-21）",
+    "pythonReference": "IDP_Brant_T04_A46采购准备_V0.50（brant_core + t03_candidate，SQLite 本地参考实现）",
+    "standard": "IDP-Cargo 主档案 V2.9：DDD 方法论 Go AI-Native V2.0、仓库结构基线 V1.1"
+  },
+  "contexts": [
+    {
+      "id": "PTY",
+      "name": "交易主体",
+      "english": "Trading Parties",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "维护外部企业或个人主体的公共身份、交易角色、公司级交易档案、联系人与地址的已核实版本。",
+      "scope": "Party、PartyRole（客户／供应商／物流与服务方／工厂）、TradingProfile、Contact、Address 与地址角色、ServicePartyRole；PartyScreening（主体筛查结论）。",
+      "truth": "外部主体身份与角色关系；已核实主数据版本（row_version）及历史快照；主体筛查结论（名单来源与版本、结论、复核人、有效期）。",
+      "aggregates": [
+        "Party",
+        "TradingProfile",
+        "Contact",
+        "PartyScreening"
+      ],
+      "commands": [
+        "party.save_draft",
+        "party.confirm",
+        "party.revise",
+        "party.deactivate",
+        "contact.save_draft",
+        "contact.confirm",
+        "service_role.verify",
+        "party_screening.record",
+        "party_screening.decide",
+        "trading_profile.save_draft",
+        "trading_profile.publish",
+        "party_screening.block"
+      ],
+      "facts": [
+        "PartyConfirmed",
+        "PartyRevised",
+        "PartyDeactivated",
+        "ContactConfirmed",
+        "ServiceRoleVerified",
+        "PartyScreeningDecided",
+        "PartyScreeningBlocked"
+      ],
+      "invariants": [
+        "UL-INV-14",
+        "UL-INV-17",
+        "UL-INV-28"
+      ],
+      "boundary": "不拥有交易单据、信用结论、CRM 商机；筛查结论是登记的专业核实结果，不认定外部主体的法定资格。",
+      "decision": "Python 中 customer／contact／supplier 统一放在 master 表，按 kind 区分；Go 中拆为 Party 聚合加角色，联系人独立聚合并按主体引用。",
+      "legacy": "brant_core/service.py master.*；contracts/BC_T01_reference.sql（master、master_evidence）；foundation_v2_full.sql（master_history）；T03 A29／A30／A31 映射",
+      "stage": "S1",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "CAT",
+      "name": "商品与规格",
+      "english": "Catalog & Specification",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "维护商品与可交易 SKU 的身份、规格修订（技术版本）、客户与供应商货号映射，以及条件启用的样品确认。",
+      "scope": "Item、SKU、SpecificationRevision、ItemCodeMapping、SampleRequest／SampleApproval（条件）、行业模板扩展点。",
+      "truth": "SKU 身份与规格修订；货号映射的已核实版本；样品确认绑定的具体规格版本与范围；商品申报档案（商品编码、申报要素、法定单位、原产地依据）的已核实版本。",
+      "aggregates": [
+        "Item",
+        "Sku",
+        "ItemCodeMapping",
+        "SampleApproval",
+        "DeclarationProfile"
+      ],
+      "commands": [
+        "sku.save_draft",
+        "sku.confirm",
+        "sku.revise_spec",
+        "sku.deactivate",
+        "item_code_mapping.publish",
+        "sample.approve",
+        "declaration_profile.save_draft",
+        "declaration_profile.verify"
+      ],
+      "facts": [
+        "SkuConfirmed",
+        "SpecificationRevised",
+        "SkuDeactivated",
+        "ItemCodeMappingPublished",
+        "SampleApproved",
+        "DeclarationProfileVerified"
+      ],
+      "invariants": [
+        "UL-INV-14"
+      ],
+      "boundary": "不拥有库存与资金归属，不拥有完整 PLM，不自动创建未知 SKU。",
+      "decision": "Python 把 SKU 身份放在 master、把 SKU 规格与货号映射放在 foundation 配置；Go 中统一归 CAT，避免 POL 变成万能配置表。",
+      "legacy": "master kind=sku；foundation 配置类型：SKU 规格、客户／供应商货号映射",
+      "stage": "S1",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "POL",
+      "name": "商业政策与基础配置",
+      "english": "Commercial Policy & Foundation Configuration",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "以不可变修订和独立人工发布治理经营主体档案、币种与单位、用途化汇率、日历、贸易与付款条款、税价口径与税适用、费用分类、核价政策、银行账户、编号序列与单据模板。",
+      "scope": "ConfigurationRoot（按 kind 类型化）、ConfigRevision、Publication／Effectivity、FoundationSnapshot、DocumentNumberSequence、DocumentTemplate（含正式报价模板）。",
+      "truth": "已发布配置修订及其当前效力、有效区间、核实证据；核价基础快照；编号分配事实。",
+      "aggregates": [
+        "ConfigurationRoot",
+        "FoundationSnapshot",
+        "DocumentNumberSequence"
+      ],
+      "commands": [
+        "config.save_draft",
+        "config.publish",
+        "config.retire",
+        "foundation.snapshot",
+        "number.issue",
+        "fx.convert（查询）",
+        "unit.convert（查询）",
+        "tax.preview（查询）",
+        "config.discard_draft"
+      ],
+      "facts": [
+        "ConfigPublished",
+        "ConfigRetired",
+        "ConfigSuperseded",
+        "FoundationSnapshotCaptured",
+        "DocumentNumberIssued"
+      ],
+      "invariants": [
+        "UL-INV-12",
+        "UL-INV-13",
+        "UL-INV-15"
+      ],
+      "boundary": "不拥有交易金额真值、银行成交汇率或法定税务结论；外部机构发布的代码表（ISO 币种、UN/LOCODE、HS 编码）属于 internal/reference，不属于本上下文。",
+      "decision": "Brant 基线称 shared.foundation；为避免与 Go 技术层 internal/foundation 混名，上下文代码定为 POL。保持 Python 的独立发布与不可变修订语义。",
+      "legacy": "brant_core/foundation.py、foundation_storage.py、t03_config.py；brant.foundation/0.1.0；docs/FOUNDATION_SPEC.md",
+      "stage": "S1",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "EVD",
+      "name": "来源证据与业务文件",
+      "english": "Evidence & Business Files",
+      "tier": "Generic",
+      "conditional": false,
+      "role": "登记不可变的来源内容、来源身份、导入记录与业务用途引用，受控保存附件与系统生成的正式文件字节。",
+      "scope": "SourceContent、SourceOrigin、SourceImport、SourceUse、BusinessFile。",
+      "truth": "来源内容哈希与原文、渠道身份声明、导入事实、用途引用；文件字节、哈希、大小与访问控制。",
+      "aggregates": [
+        "Source",
+        "BusinessFile"
+      ],
+      "commands": [
+        "source.register",
+        "source.use",
+        "file.register"
+      ],
+      "facts": [
+        "SourceRegistered",
+        "SourceUsed",
+        "FileRegistered"
+      ],
+      "invariants": [
+        "UL-INV-16"
+      ],
+      "boundary": "哈希不等于真实性；不解析 PDF／XLSX（解析产生候选，属 AI 能力层）；不拥有业务对象的状态。",
+      "decision": "来源四层身份（内容、来源、导入、用途）沿用业务核心设计第 18.2 节。",
+      "legacy": "BC_T01_reference.sql（source_content／source_origin／source_import／source_use）；foundation business_file",
+      "stage": "S1",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "INQ",
+      "name": "客户询价",
+      "english": "Customer Inquiry",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "登记客户需求与逐行来源定位，允许缺项草稿，由人工核实全部来源与完整需求后进入 ready。",
+      "scope": "CustomerRFQ（含 RFQLine、UnresolvedField、Clarification）。",
+      "truth": "客户询价的需求行、来源定位、缺项与澄清、ready 范围及终态。",
+      "aggregates": [
+        "CustomerRfq"
+      ],
+      "commands": [
+        "rfq.save_draft",
+        "rfq.confirm_scope",
+        "rfq.cancel",
+        "rfq.close"
+      ],
+      "facts": [
+        "RfqScopeConfirmed",
+        "RfqCancelled",
+        "RfqClosed"
+      ],
+      "invariants": [
+        "UL-INV-17",
+        "UL-INV-24"
+      ],
+      "boundary": "不拥有成本、报价或客户确认；ready 后的实质变更需要询价修订（尚未设计）。",
+      "decision": "与 Cargo 不同，Brant 的询价是独立对象（Cargo UL 无 Inquiry）；AI 只生成询价候选，ready 必须人工核实。",
+      "legacy": "service.py rfq.*；BC_T01_reference.sql（rfq、rfq_line）；docs/T01_README_V0.1.md",
+      "stage": "S1",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "SUP",
+      "name": "供应寻源与供应条件",
+      "english": "Supply Sourcing & Supply Terms",
+      "tier": "SupportingPlus",
+      "conditional": false,
+      "role": "登记供应商询价的人工发出事实，核实供应报价修订，独立发布可复用采购条件，核实物流报价及服务方适用范围。",
+      "scope": "SupplierRFQ、SupplierOffer（根＋修订）、PurchaseTerms（根＋版本）、LogisticsOffer。",
+      "truth": "供应报价与采购条件的已核实修订、有效区间、MOQ／倍数／阶梯、交期声明与包含费用；物流报价计费规则。",
+      "aggregates": [
+        "SupplierRfq",
+        "SupplierOffer",
+        "PurchaseTerms",
+        "LogisticsOffer"
+      ],
+      "commands": [
+        "supplier_rfq.save_draft",
+        "supplier_rfq.record_issued",
+        "supplier_rfq.close",
+        "supplier_offer.save_draft",
+        "supplier_offer.verify",
+        "supplier_offer.revise",
+        "supplier_offer.withdraw",
+        "purchase_terms.save_draft",
+        "purchase_terms.publish",
+        "purchase_terms.retire",
+        "logistics_offer.save_draft",
+        "logistics_offer.verify",
+        "logistics_offer.withdraw"
+      ],
+      "facts": [
+        "SupplierRfqIssued",
+        "SupplierOfferVerified",
+        "SupplierOfferWithdrawn",
+        "PurchaseTermsPublished",
+        "PurchaseTermsRetired",
+        "LogisticsOfferVerified"
+      ],
+      "invariants": [
+        "UL-INV-25"
+      ],
+      "boundary": "供应报价核实不等于采购承诺（PUR）；不计算场景成本（CST）；不拥有供应商身份（PTY）。",
+      "decision": "Python 把供应条件放在核价引擎（brant.costing）内；Go 中独立为 SUP，因为采购草稿（A46）同样直接绑定供应报价与采购条件。见 ADR-BR-006。",
+      "legacy": "costing_engine/extension_model.py、integrated_model.py；T02_migration.sql（t02_root／t02_revision 按 kind）；docs/T02_CONTRACT_SPEC.md §5、§13.2",
+      "stage": "S2",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "CST",
+      "name": "核价",
+      "english": "Costing",
+      "tier": "Core",
+      "conditional": false,
+      "role": "在核实的询价上下文、供应条件与费用义务上做同口径比较和确定性计算，冻结不可变成本快照并持续判定其当前可采纳资格。",
+      "scope": "CostingContext、MeasurementSnapshot、CostScenario（含 EvaluationResult）、CostSnapshot、SourceAttestation。",
+      "truth": "评估结果、冻结成本快照（组件、分摊、选择依据、输入清单、证据哈希）及其可采纳资格（含来源否认）。",
+      "aggregates": [
+        "CostingContext",
+        "MeasurementSnapshot",
+        "CostScenario",
+        "CostSnapshot"
+      ],
+      "commands": [
+        "costing_context.save_draft",
+        "costing_context.verify",
+        "measurement.record_verified",
+        "cost_scenario.save_draft",
+        "cost_scenario.evaluate",
+        "cost_snapshot.freeze",
+        "costing.attest_source"
+      ],
+      "facts": [
+        "CostScenarioEvaluated",
+        "CostSnapshotFrozen",
+        "CostSourceDenied",
+        "CostSnapshotSuperseded"
+      ],
+      "invariants": [
+        "UL-INV-09",
+        "UL-INV-10",
+        "UL-INV-11",
+        "UL-INV-12",
+        "UL-INV-13"
+      ],
+      "boundary": "不决定售价、不计算毛利（TRD 结合报价计算）；不形成采购承诺；不推导退税。",
+      "decision": "成本快照只追加；更正以 supersedes 引用旧快照；可采纳资格是派生的当前判断，供 TRD／PUR 重查。",
+      "legacy": "brant_core/costing.py、costing_engine/*、costing_registry.py、costing_storage.py；brant.costing/0.1.0",
+      "stage": "S2",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "TRD",
+      "name": "报价与订单（交易核心）",
+      "english": "Trade Core: Quotation, Confirmation & Sales Order",
+      "tier": "Core",
+      "conditional": false,
+      "role": "把冻结成本快照转为可审核、可正式化的对客报价；登记并核实客户回复；以同根唯一转换名额把客户接受转为经独立审批生效的外销订单。",
+      "scope": "QuoteRoot（工作稿、商业修订、效力、审核请求、批准与撤销、毛利例外、正式文档绑定、提交证据、风险暂停、转换名额、对象控制）；CustomerResponse 与 Acceptance（效力账本、承诺到达时间、客户 PO）；SalesOrder（订单修订、订单变更、订单审核、批准撤销、风险确认、外销合同／形式发票、提交证据）。",
+      "truth": "报价商业修订与当前效力、报价批准效力、正式报价文档；客户回复、已核实接受与合同成立；订单商业快照与修订、订单审批、生效、变更与终止；外销合同／形式发票及签署版本。",
+      "aggregates": [
+        "QuoteRoot",
+        "CustomerResponse",
+        "Acceptance",
+        "SalesOrder"
+      ],
+      "commands": [
+        "quote.save_draft",
+        "quote.revise",
+        "quote.discard_draft",
+        "quote.freeze",
+        "quote.submit_review",
+        "quote.review.decide",
+        "quote.approval.revoke",
+        "quote.activate",
+        "quote.replace",
+        "quote.withdraw",
+        "quote.cancel",
+        "quote.response.record",
+        "quote.response.verify",
+        "acceptance.invalidate",
+        "acceptance.mark_disputed",
+        "order.prepare",
+        "order.review.request",
+        "order.review.decide",
+        "order.activate",
+        "order.approval.revoke",
+        "order.cancel",
+        "order.close_unfulfilled",
+        "object_control.bind",
+        "object_control.stop",
+        "object_control.release",
+        "order.close_remainder",
+        "order.close",
+        "order.amendment.prepare",
+        "order.amendment.submit",
+        "order.amendment.decide",
+        "order.amendment.apply",
+        "order.amendment.withdraw",
+        "order.document.generate",
+        "order.document.record_signed"
+      ],
+      "facts": [
+        "QuoteFrozen",
+        "QuoteReviewRequested",
+        "QuoteReviewDecided",
+        "QuoteApprovalRevoked",
+        "QuoteActivated",
+        "QuoteReplaced",
+        "QuoteWithdrawn",
+        "QuoteCancelled",
+        "CustomerResponseRecorded",
+        "AcceptanceVerified",
+        "AcceptanceInvalidated",
+        "OrderPrepared",
+        "OrderReviewDecided",
+        "OrderActivated",
+        "OrderApprovalRevoked",
+        "OrderCancelled",
+        "OrderClosedUnfulfilled",
+        "OrderAmended",
+        "OrderRemainderClosed",
+        "OrderClosed",
+        "OrderDocumentSigned"
+      ],
+      "invariants": [
+        "UL-INV-01",
+        "UL-INV-02",
+        "UL-INV-03",
+        "UL-INV-04",
+        "UL-INV-05",
+        "UL-INV-06",
+        "UL-INV-07",
+        "UL-INV-08",
+        "UL-INV-18",
+        "UL-INV-26",
+        "UL-INV-27"
+      ],
+      "boundary": "不拥有成本计算（CST）、配置（POL）、主体身份（PTY）；报价 active 不等于已发送或客户已接受；订单 active 不等于采购承诺或已出运。",
+      "decision": "报价、确认与订单共享报价根冲突键、统一锁序与同事务资格重查，合并为一个上下文的多个聚合。见 ADR-BR-002。",
+      "legacy": "t03_write.py、t03_storage.py、t03_query.py、t03_order_qualification.py、t03_order_snapshot.py、t03_reconciliation.py、t03_sales_terms.py、t03_trade_parties.py、t03_cost_scope.py、t04_response.py、t04_order_review.py；brant.quotation/0.1.0",
+      "stage": "S3",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "PUR",
+      "name": "采购与供需分配",
+      "english": "Procurement & Supply Allocation",
+      "tier": "Core",
+      "conditional": false,
+      "role": "把生效外销订单行显式绑定到当前有效供应条件，形成不可变、带哈希、可审核的采购草稿；经独立采购承诺审批后登记我方承诺与供应商确认，并受控处理采购变更。",
+      "scope": "DemandAllocation、PurchaseDraft、PurchaseCommitmentApproval、PurchaseCommitment、SupplierConfirmation、PurchaseChange。",
+      "truth": "需求至供给的分配；采购草稿正文与哈希（commitment_state = not_committed）；采购承诺审批；我方承诺与供应商确认两项独立事实；直发路线的供应商交付（经核实的交接数量、地点、时间与证据）。",
+      "aggregates": [
+        "PurchaseDraft",
+        "PurchaseCommitment",
+        "DemandAllocation",
+        "SupplierDelivery"
+      ],
+      "commands": [
+        "purchase.draft.prepare",
+        "purchase.commitment.request",
+        "purchase.commitment.decide",
+        "purchase.commitment.revoke",
+        "purchase.commitment.issue",
+        "purchase.supplier_confirmation.record",
+        "purchase.draft.void",
+        "supplier_delivery.record",
+        "supplier_delivery.verify"
+      ],
+      "facts": [
+        "PurchaseDraftPrepared",
+        "PurchaseCommitmentApproved",
+        "PurchaseCommitmentIssued",
+        "SupplierConfirmationRecorded",
+        "PurchaseDraftVoided",
+        "SupplierDeliveryVerified"
+      ],
+      "invariants": [
+        "UL-INV-20",
+        "UL-INV-32"
+      ],
+      "boundary": "不修改订单、成本或供应条件事实；草稿不是承诺，不发送采购单；不拥有收货与库存（STK）。",
+      "decision": "A46 已实现采购草稿；A47 采购承诺审批只有设计。供需分配（supply.plan）并入本上下文起步，混合供给启用时再评估拆分。",
+      "legacy": "brant_core/t04_purchase.py；docs/T04_A46_PURCHASE_DRAFT_REPORT_V0.1.md（含 A47 设计）",
+      "stage": "S3",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "MFG",
+      "name": "生产协同与委外",
+      "english": "Production Collaboration & Subcontracting",
+      "tier": "Supporting",
+      "conditional": true,
+      "role": "条件启用：维护与外部工厂的协作计划、工序任务、整单或部分委外单及交接引用。",
+      "scope": "CollaborationPlan、OperationTask、SubcontractOrder、MaterialResponsibility。",
+      "truth": "协作计划与委外安排、作业粒度、材料责任、加工费与交接依据。",
+      "aggregates": [
+        "CollaborationPlan",
+        "SubcontractOrder"
+      ],
+      "commands": [
+        "collaboration_plan.publish",
+        "subcontract_order.issue",
+        "operation.record_progress"
+      ],
+      "facts": [
+        "CollaborationPlanPublished",
+        "SubcontractOrderIssued",
+        "OperationProgressRecorded"
+      ],
+      "invariants": [],
+      "boundary": "不拥有自有车间完整制造（MRP／MES）；外厂上报完成只是来源声明，不形成合格库存或客户交付。",
+      "decision": "仅在客户选择供料或工序委外组合时启用；Python 无实现。",
+      "legacy": "无（产品基线第 3.4–3.7、4.8 节）",
+      "stage": "S6",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "QLT",
+      "name": "质量检验与放行",
+      "english": "Quality Inspection & Release",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "记录受检对象的检验、不合格处置与质量放行，放行明确数量、范围、权限与有效性。",
+      "scope": "Inspection、Disposition、QualityRelease、ReleaseRevocation。",
+      "truth": "检验结果、处置决定、质量放行及其撤回。",
+      "aggregates": [
+        "Inspection",
+        "QualityRelease"
+      ],
+      "commands": [
+        "inspection.record",
+        "disposition.decide",
+        "quality_release.grant",
+        "quality_release.revoke"
+      ],
+      "facts": [
+        "InspectionRecorded",
+        "DispositionDecided",
+        "QualityReleased",
+        "QualityReleaseRevoked"
+      ],
+      "invariants": [],
+      "boundary": "检验报告不直接改写库存或交付；标准、抽样与测试按配置确认。",
+      "decision": "出运入口检查有效质量放行（FUL 消费）。",
+      "legacy": "无（产品基线 F26、第 7.5 节）",
+      "stage": "S5",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "STK",
+      "name": "库存与外厂台账",
+      "english": "Stock & Custody Ledger",
+      "tier": "Supporting",
+      "conditional": true,
+      "role": "条件启用：维护本仓、外厂我方物料／在制、受支持在途的库存流水、占用、成本层与批次谱系。",
+      "scope": "StockMovement、Reservation、CostLayer、BatchLineage、CustodyLocation。",
+      "truth": "库存流水与占用、成本层、批次输入输出关系、位置与归属。",
+      "aggregates": [
+        "StockLedger",
+        "Reservation",
+        "BatchLineage"
+      ],
+      "commands": [
+        "stock.receive",
+        "stock.issue",
+        "stock.adjust",
+        "reservation.place",
+        "reservation.release"
+      ],
+      "facts": [
+        "StockReceived",
+        "StockIssued",
+        "ReservationPlaced",
+        "ReservationReleased"
+      ],
+      "invariants": [],
+      "boundary": "纯成品直发不虚构本仓收发；其他模块请求业务动作，不直写库存。",
+      "decision": "代码用 STK 而非 INV，避免与外贸常用的 INV（Invoice）混淆。",
+      "legacy": "无（产品基线 F06、F24、第 4.3–4.4 节）",
+      "stage": "S6",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "FUL",
+      "name": "履约出运",
+      "english": "Fulfillment & Shipment",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "维护交期节点计划与实际、订舱、包装计划与实际装箱、商业条件放行、出运确认、单证放行、出口批次与出运单证明细。",
+      "scope": "MilestonePlan／MilestoneActual、BookingRecord、PackingPlan、ActualPackage、CommercialRelease（质量、付款条件与主体筛查的放行闸门及例外）、Shipment（出运确认）、ExportLot、ShipmentDocumentSet（商业发票、装箱单、提单记录、原产地证引用）。",
+      "truth": "实际出运数量与明细、订舱与装箱、商业条件放行与单证放行决定、出运单证版本、节点实际日期及证据。",
+      "aggregates": [
+        "MilestonePlan",
+        "Shipment",
+        "ExportLot",
+        "CommercialRelease",
+        "ShipmentDocumentSet"
+      ],
+      "commands": [
+        "milestone.plan",
+        "milestone.record_actual",
+        "packing.plan",
+        "shipment.confirm",
+        "export_lot.register",
+        "booking.record",
+        "commercial_release.evaluate",
+        "commercial_release.grant_exception",
+        "shipment_document.issue",
+        "document_release.record"
+      ],
+      "facts": [
+        "MilestoneActualRecorded",
+        "ShipmentConfirmed",
+        "ExportLotRegistered",
+        "CommercialReleaseGranted",
+        "ShipmentDocumentIssued",
+        "DocumentsReleased"
+      ],
+      "invariants": [
+        "UL-INV-21",
+        "UL-INV-28"
+      ],
+      "boundary": "海关放行、实际离境、物流送达与客户验收是不同事实；不拥有库存（STK）与应收（STL）。",
+      "decision": "订单数量不得低于已确认出运数量；出运明细是销售结算默认来源。",
+      "legacy": "无（产品基线 F07、F25、F27）",
+      "stage": "S5",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "STL",
+      "name": "业务结算",
+      "english": "Business Settlement",
+      "tier": "Core",
+      "conditional": false,
+      "role": "维护销售／采购结算单、业务应收应付、实际收付款、预收预付、核销与撤销核销、贷项、费用分配、订单经营结果，以及银行流水与结汇等资金记录。",
+      "scope": "SettlementStatement、Receivable、Payable、FundRecord、Application（核销）、CreditNote、ChargeAllocation、OrderResult、BankTransaction、FxConversion。",
+      "truth": "业务结算台账与核销关系；资金记录与银行核实状态；订单经营结果；合同付款条件满足状态（以守卫函数向 FUL 发布）；客户信用额度、信用占用与信用例外。",
+      "aggregates": [
+        "SettlementStatement",
+        "FundRecord",
+        "Application",
+        "OrderResult",
+        "CustomerCredit"
+      ],
+      "commands": [
+        "settlement.confirm",
+        "fund.record",
+        "application.apply",
+        "application.unapply",
+        "credit.confirm",
+        "charge.allocate",
+        "order_result.close",
+        "credit_limit.publish",
+        "credit.reserve",
+        "credit.release",
+        "credit_exception.decide",
+        "credit_limit.request"
+      ],
+      "facts": [
+        "SettlementConfirmed",
+        "FundRecorded",
+        "Applied",
+        "Unapplied",
+        "CreditConfirmed",
+        "OrderResultClosed",
+        "CreditLimitPublished",
+        "CreditReserved",
+        "CreditReservationReleased",
+        "CreditDecisionOpened"
+      ],
+      "invariants": [
+        "UL-INV-22",
+        "UL-INV-23",
+        "UL-INV-30"
+      ],
+      "boundary": "业务台账不等于法定总账；系统内核销不是行政意义的出口收汇核销；不拥有发票开具与税务确认。",
+      "decision": "同币种核销首期；跨币种核销需专项规则评审。",
+      "legacy": "无（产品基线 F08–F10、第 4.2–4.13 节）",
+      "stage": "S5",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "CLM",
+      "name": "售后与索赔",
+      "english": "Claims & After-sales",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "维护客诉案件、退货事实与贷项／退款／补发／返工追偿的受控关联。",
+      "scope": "ClaimCase、ReturnRecord、Remedy。",
+      "truth": "案件事实、退货核实与补救决定。",
+      "aggregates": [
+        "ClaimCase",
+        "ReturnRecord"
+      ],
+      "commands": [
+        "claim.open",
+        "return.register",
+        "remedy.decide",
+        "claim.close"
+      ],
+      "facts": [
+        "ClaimOpened",
+        "ReturnRegistered",
+        "RemedyDecided",
+        "ClaimClosed"
+      ],
+      "invariants": [],
+      "boundary": "退货不抹去原发货，也不隐式创建补发；财务与库存仍由原模块受控维护。",
+      "decision": "首发最小：客诉、退货／贷项／退款及来源关联。",
+      "legacy": "无（产品基线 F28、第 4.7 节）",
+      "stage": "S6",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "CNX",
+      "name": "中国出口专业协同",
+      "english": "China Export Professional Collaboration",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "组织中国出口（CN-M01）的购进发票、报关、退税、单证资料包与外部对账：保存资料、匹配、差异、责任与外部结果引用。",
+      "scope": "PurchaseInvoice、DeclarationCase（版本与回执）、TaxRefundCase 与用途分配、DocumentBundle、ExternalReconciliation；官方证书结果（原产地证、许可证、检验证书）与目的市场供应链合规证据（如对美服装的棉花来源追溯）的登记与核对。",
+      "truth": "资料准备、匹配关系、差异与责任；外部结果的原文与映射版本（外部系统是权威）；贸易合规核查结论（国别禁运、制裁项目、出口管制与许可证要求）；出口许可证及其用量。",
+      "aggregates": [
+        "PurchaseInvoice",
+        "DeclarationCase",
+        "TaxRefundCase",
+        "DocumentBundle",
+        "TradeComplianceCheck",
+        "ExportLicense"
+      ],
+      "commands": [
+        "purchase_invoice.import",
+        "declaration_case.prepare",
+        "declaration_case.record_receipt",
+        "tax_refund_case.allocate",
+        "document_bundle.check",
+        "external_reconciliation.resolve",
+        "trade_compliance.evaluate",
+        "trade_compliance.decide",
+        "export_license.register",
+        "export_license.allocate",
+        "export_license.release"
+      ],
+      "facts": [
+        "PurchaseInvoiceVerified",
+        "DeclarationReceiptRecorded",
+        "TaxEvidenceAllocated",
+        "DocumentBundleChecked",
+        "TradeComplianceDecided",
+        "ExportLicenseAllocated"
+      ],
+      "invariants": [
+        "UL-INV-31"
+      ],
+      "boundary": "不替代报关、开票、退税申报、银行与外汇办理的法定权威；导出文件或任务完成不冒充专业系统成功。",
+      "decision": "单上下文起步，B0 前按专业责任（发票、报关、退税）评估拆分。见 ADR-BR-009。",
+      "legacy": "无（产品基线第 21–24 章，CN-F01–CN-F08、CN-R01–CN-R15）",
+      "stage": "S5",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "CRM",
+      "name": "轻量客户关系",
+      "english": "Lightweight CRM",
+      "tier": "Optional",
+      "conditional": true,
+      "role": "可选包：维护线索、商机、阶段与跟进；关闭后不影响报价、订单与结算。",
+      "scope": "Lead、Opportunity、FollowUp。",
+      "truth": "销售过程记录。",
+      "aggregates": [
+        "Lead",
+        "Opportunity"
+      ],
+      "commands": [
+        "lead.capture",
+        "opportunity.advance",
+        "follow_up.record"
+      ],
+      "facts": [
+        "OpportunityAdvanced"
+      ],
+      "invariants": [],
+      "boundary": "交易只保留来源关联；CRM 跟进任务不是 BusinessTask。",
+      "decision": "crm.trade.bridge 只保存来源引用，不反向成为交易依赖。",
+      "legacy": "无（产品基线 F12）",
+      "stage": "S6",
+      "status": "CANDIDATE"
+    },
+    {
+      "id": "TSK",
+      "name": "业务任务与执行控制",
+      "english": "Business Task & Execution Control",
+      "tier": "Supporting",
+      "conditional": false,
+      "role": "维护业务任务的目标、生命周期、控制模式与代次、计划步骤、动作执行记录和结果核验证据；人工与 AI 驱动的任务都在这里登记。",
+      "scope": "BusinessTask（GoalSpec、TaskStep、control_mode、control_epoch）、ActionExecution、OutcomeVerification、ContextManifest。",
+      "truth": "任务状态与控制代次、动作执行与对账结果、目标核验结论。",
+      "aggregates": [
+        "BusinessTask",
+        "ActionExecution"
+      ],
+      "commands": [
+        "task.create",
+        "task.scope",
+        "task.take_control",
+        "task.release",
+        "task.handoff",
+        "task.resume",
+        "task.cancel",
+        "goal.verify"
+      ],
+      "facts": [
+        "TaskCreated",
+        "TaskControlChanged",
+        "TaskCompleted",
+        "TaskClosedUnfulfilled"
+      ],
+      "invariants": [
+        "UL-INV-18",
+        "UL-INV-19"
+      ],
+      "boundary": "任务状态不替代报价、订单等业务事实；根级对象控制绑定属于 TRD 的 QuoteRoot；AI 能力网关、委托策略与执行回执属于 internal/ai，不在本上下文。",
+      "decision": "Brant 基线规定 ai.task 拥有任务语义；Cargo 标准规定 AI 能力层不是限界上下文。本稿把与驱动方式无关的业务任务定为上下文，AI 专属能力仍放 internal/ai。见 ADR-BR-003。",
+      "legacy": "Q01 旧包 store.py take_control／verify_and_complete；T03 t03_object_control（bind／stop／unbind）",
+      "stage": "S4",
+      "status": "CANDIDATE"
+    }
+  ],
+  "subdomains": [
+    {
+      "name": "核心域 Core",
+      "type": "Core",
+      "contexts": [
+        "CST",
+        "TRD",
+        "PUR",
+        "STL"
+      ],
+      "why": "核价、报价与订单、采购组织、业务结算决定外贸企业的利润与履约承诺，规则密集且是 Brant 的差异化所在。",
+      "test": "毛利与审批不可绕过；同根唯一订单；采购草稿与承诺分离；核销守恒。"
+    },
+    {
+      "name": "增强支撑 Supporting+",
+      "type": "SupportingPlus",
+      "contexts": [
+        "SUP"
+      ],
+      "why": "供应条件被核价与采购共同消费，MOQ、阶梯、交期与费用口径直接影响成本正确性；是否升级为核心取决于寻源比选能否形成竞争优势。",
+      "test": "MOQ 分组、阶梯模式与费用包含关系可执行且有反例。"
+    },
+    {
+      "name": "支撑域 Supporting",
+      "type": "Supporting",
+      "contexts": [
+        "PTY",
+        "CAT",
+        "POL",
+        "INQ",
+        "QLT",
+        "FUL",
+        "CLM",
+        "CNX",
+        "TSK"
+      ],
+      "why": "业务必需、行业共性较强；在存在生命周期或法律约束处建聚合，其余用轻量应用服务。",
+      "test": "边界清晰、标准化接口、已核实版本可被下游精确引用。"
+    },
+    {
+      "name": "条件支撑 Conditional",
+      "type": "Supporting",
+      "contexts": [
+        "MFG",
+        "STK"
+      ],
+      "why": "仅在客户选择供料、在制或本仓路线时启用；启用即须交付其强制依赖。",
+      "test": "未启用时明确返回不支持，不以字段预留宣称能力。"
+    },
+    {
+      "name": "通用能力 Generic",
+      "type": "Generic",
+      "contexts": [
+        "EVD"
+      ],
+      "why": "来源证据与文件存证没有外贸独有规则，可优先复用平台组件。",
+      "test": "内容不可变、访问按引用对象再鉴权。"
+    },
+    {
+      "name": "可选包 Optional",
+      "type": "Optional",
+      "contexts": [
+        "CRM"
+      ],
+      "why": "销售过程管理，关闭后核心交易与 Q01 仍成立。",
+      "test": "BC-AT24：CRM 关闭时整链可运行。"
+    },
+    {
+      "name": "非上下文能力",
+      "type": "Platform",
+      "contexts": [],
+      "why": "身份（IAM／OIDC）、AI 能力层（internal/ai）、外部参考代码（internal/reference）、共享值对象（internal/kernel）、技术基础（internal/foundation）。",
+      "test": "不拥有业务事实；不被计入限界上下文。"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "R01",
+      "frm": "PTY",
+      "to": "INQ",
+      "pattern": "OHS / Published Language",
+      "fact": "客户与联系人已核实版本",
+      "contract": "PartyRef v1（kind＋id＋row_version）",
+      "authority": "PTY",
+      "risk": "引用已停用主体",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R02",
+      "frm": "CAT",
+      "to": "INQ",
+      "pattern": "OHS / Published Language",
+      "fact": "SKU 与规格修订",
+      "contract": "SkuRef v1",
+      "authority": "CAT",
+      "risk": "自动创建未知 SKU",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R03",
+      "frm": "EVD",
+      "to": "INQ",
+      "pattern": "OHS",
+      "fact": "来源引用与用途登记",
+      "contract": "SourceRef v1",
+      "authority": "EVD",
+      "risk": "无权读取来源仍核实",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R04",
+      "frm": "INQ",
+      "to": "SUP",
+      "pattern": "Customer / Supplier",
+      "fact": "ready 询价行作为供应商询价需求",
+      "contract": "RfqLineRef v1",
+      "authority": "INQ",
+      "risk": "询价修订后供应询价未重核",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R05",
+      "frm": "PTY",
+      "to": "SUP",
+      "pattern": "OHS / Published Language",
+      "fact": "供应商与服务方角色",
+      "contract": "PartyRef v1、ServiceRoleRef v1",
+      "authority": "PTY",
+      "risk": "服务方适用范围被自由文本替代",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R06",
+      "frm": "CAT",
+      "to": "SUP",
+      "pattern": "OHS / Published Language",
+      "fact": "SKU 规格与供应商货号映射",
+      "contract": "SkuRef v1、ItemCodeMappingRef v1",
+      "authority": "CAT",
+      "risk": "仅凭文本相似度匹配商品",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R07",
+      "frm": "POL",
+      "to": "SUP",
+      "pattern": "OHS / Published Language",
+      "fact": "币种、单位、税价口径、贸易与付款条款",
+      "contract": "ConfigRef v1（kind＋id＋revision）",
+      "authority": "POL",
+      "risk": "按同名条款推定相等",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R08",
+      "frm": "INQ",
+      "to": "CST",
+      "pattern": "Customer / Supplier",
+      "fact": "ready 询价与完整行集合",
+      "contract": "RfqRef v1",
+      "authority": "INQ",
+      "risk": "部分行或 what_if 冒充正式核价",
+      "contractStatus": "DESIGN",
+      "guardLock": true
+    },
+    {
+      "id": "R09",
+      "frm": "SUP",
+      "to": "CST",
+      "pattern": "Customer / Supplier + Qualification Guard",
+      "fact": "已核实供应报价、采购条件、物流报价修订及当前效力",
+      "contract": "SupplyConditionRef v1＋SupplyConditionGuard",
+      "authority": "SUP",
+      "risk": "冻结时使用已撤销或过期报价",
+      "contractStatus": "DESIGN — ADR-BR-004",
+      "guardLock": true
+    },
+    {
+      "id": "R10",
+      "frm": "POL",
+      "to": "CST",
+      "pattern": "OHS / Published Language + Qualification Guard",
+      "fact": "cost_estimate 汇率、单位换算、税适用、核价政策、工作日历、基础快照",
+      "contract": "ConfigRef v1＋ConfigGuard、FoundationSnapshotRef v1",
+      "authority": "POL",
+      "risk": "汇率缺失默认 1 或自动反向",
+      "contractStatus": "DESIGN — ADR-BR-004",
+      "guardLock": true
+    },
+    {
+      "id": "R11",
+      "frm": "CST",
+      "to": "TRD",
+      "pattern": "Customer / Supplier + Qualification Guard",
+      "fact": "冻结成本快照及当前可采纳资格",
+      "contract": "CostSnapshotRef v1＋AdoptabilityGuard",
+      "authority": "CST",
+      "risk": "来源否认后仍激活报价或订单",
+      "contractStatus": "DESIGN — ADR-BR-004",
+      "guardLock": true
+    },
+    {
+      "id": "R12",
+      "frm": "INQ",
+      "to": "TRD",
+      "pattern": "Customer / Supplier",
+      "fact": "精确询价版本与完整行",
+      "contract": "RfqRef v1",
+      "authority": "INQ",
+      "risk": "报价未覆盖完整询价行",
+      "contractStatus": "DESIGN",
+      "guardLock": true
+    },
+    {
+      "id": "R13",
+      "frm": "PTY",
+      "to": "TRD",
+      "pattern": "OHS / Published Language + Qualification Guard",
+      "fact": "客户、联系人、交易档案、地址角色的当前版本",
+      "contract": "PartyRef v1、TradingProfileRef v1、AddressRoleRef v1",
+      "authority": "PTY",
+      "risk": "主体停用后仍转单",
+      "contractStatus": "DESIGN — ADR-BR-004",
+      "guardLock": true
+    },
+    {
+      "id": "R14",
+      "frm": "CAT",
+      "to": "TRD",
+      "pattern": "OHS / Published Language + Qualification Guard",
+      "fact": "SKU 规格修订当前有效",
+      "contract": "SkuRef v1",
+      "authority": "CAT",
+      "risk": "技术版本已更新仍按旧版生效",
+      "contractStatus": "DESIGN — ADR-BR-004",
+      "guardLock": true
+    },
+    {
+      "id": "R15",
+      "frm": "POL",
+      "to": "TRD",
+      "pattern": "OHS / Published Language + Qualification Guard",
+      "fact": "报价用途汇率、销售税适用、付款与贸易条款、正式报价模板、编号序列、最低毛利政策",
+      "contract": "ConfigRef v1＋ConfigGuard、NumberIssue v1",
+      "authority": "POL",
+      "risk": "已退役模板或过期汇率仍用于正式化",
+      "contractStatus": "DESIGN — ADR-BR-004",
+      "guardLock": true
+    },
+    {
+      "id": "R16",
+      "frm": "EVD",
+      "to": "TRD",
+      "pattern": "OHS",
+      "fact": "客户回复来源消息与定位；正式文档字节存证",
+      "contract": "SourceRef v1、FileRef v1",
+      "authority": "EVD",
+      "risk": "来源权限撤回后仍返回成功事实",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R17",
+      "frm": "TSK",
+      "to": "TRD",
+      "pattern": "Partnership（受控命令）",
+      "fact": "对象控制绑定、停止与释放",
+      "contract": "ObjectControl commands v1",
+      "authority": "TRD（绑定状态）／TSK（任务状态）",
+      "risk": "省略 task_id 绕过服务端绑定",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R18",
+      "frm": "TRD",
+      "to": "TSK",
+      "pattern": "OHS / Published Language",
+      "fact": "quote_ready 与 order_active 目标核验查询及事实事件",
+      "contract": "GoalReadiness v1、TRD 集成事件 v1",
+      "authority": "TRD",
+      "risk": "以模型自述代替权威记录核验",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R19",
+      "frm": "TRD",
+      "to": "PUR",
+      "pattern": "Customer / Supplier",
+      "fact": "已生效且订单审批未撤销的订单行与商业快照",
+      "contract": "ActiveOrderRef v1",
+      "authority": "TRD",
+      "risk": "订单审批撤销后仍编制草稿",
+      "contractStatus": "DESIGN",
+      "guardLock": true
+    },
+    {
+      "id": "R20",
+      "frm": "SUP",
+      "to": "PUR",
+      "pattern": "Customer / Supplier + Qualification Guard",
+      "fact": "供应条件当前有效版本与条件行",
+      "contract": "SupplyConditionRef v1＋SupplyConditionGuard",
+      "authority": "SUP",
+      "risk": "被替代或过期条件形成草稿",
+      "contractStatus": "DESIGN — ADR-BR-004",
+      "guardLock": true
+    },
+    {
+      "id": "R21",
+      "frm": "CST",
+      "to": "PUR",
+      "pattern": "OHS",
+      "fact": "订单来源报价的成本快照（核价对照，只读，不阻断）",
+      "contract": "CostSnapshotRef v1",
+      "authority": "CST",
+      "risk": "对照结果被误用为阻断规则",
+      "contractStatus": "DESIGN",
+      "guardLock": true
+    },
+    {
+      "id": "R22",
+      "frm": "PTY",
+      "to": "PUR",
+      "pattern": "OHS / Published Language",
+      "fact": "供应商当前主数据版本",
+      "contract": "PartyRef v1",
+      "authority": "PTY",
+      "risk": "供应商停用后仍编制",
+      "contractStatus": "DESIGN",
+      "guardLock": true
+    },
+    {
+      "id": "R23",
+      "frm": "PUR",
+      "to": "MFG",
+      "pattern": "Customer / Supplier（条件）",
+      "fact": "委外或工序需求与材料责任",
+      "contract": "SubcontractDemand v1",
+      "authority": "PUR",
+      "risk": "工序加工量被累加为销售需求",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R24",
+      "frm": "PUR",
+      "to": "QLT",
+      "pattern": "Customer / Supplier",
+      "fact": "受检对象（采购批次、供应商交付）",
+      "contract": "InspectionSubject v1",
+      "authority": "PUR",
+      "risk": "供应商自报合格被当作放行",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R25",
+      "frm": "MFG",
+      "to": "QLT",
+      "pattern": "Customer / Supplier（条件）",
+      "fact": "工序与半成品受检对象",
+      "contract": "InspectionSubject v1",
+      "authority": "MFG",
+      "risk": "外厂完成声明直接形成合格库存",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R26",
+      "frm": "QLT",
+      "to": "FUL",
+      "pattern": "OHS",
+      "fact": "有效质量放行（数量、范围、有效期）",
+      "contract": "QualityReleaseRef v1",
+      "authority": "QLT",
+      "risk": "放行撤回后仍出运",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R27",
+      "frm": "TRD",
+      "to": "FUL",
+      "pattern": "Customer / Supplier",
+      "fact": "生效订单可交付数量与交付条款",
+      "contract": "ActiveOrderRef v1",
+      "authority": "TRD",
+      "risk": "超发或绕过短交关闭",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R28",
+      "frm": "PUR",
+      "to": "STK",
+      "pattern": "Customer / Supplier（条件）",
+      "fact": "收货与外厂我方物料",
+      "contract": "ReceiptRequest v1",
+      "authority": "PUR",
+      "risk": "直发路线虚构本仓收发",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R29",
+      "frm": "STK",
+      "to": "FUL",
+      "pattern": "OHS（条件）",
+      "fact": "可用库存与出库",
+      "contract": "StockAvailability v1",
+      "authority": "STK",
+      "risk": "占用与可用量重复计入",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R30",
+      "frm": "FUL",
+      "to": "STL",
+      "pattern": "Customer / Supplier",
+      "fact": "已确认出运明细（销售结算来源）",
+      "contract": "ShipmentLineRef v1",
+      "authority": "FUL",
+      "risk": "同一出运明细重复结算",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R31",
+      "frm": "PUR",
+      "to": "STL",
+      "pattern": "Customer / Supplier",
+      "fact": "采购承诺与收货或直发交付证据（采购结算来源）",
+      "contract": "PurchaseSettlementSource v1",
+      "authority": "PUR",
+      "risk": "无交付证据形成应付",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R32",
+      "frm": "TRD",
+      "to": "STL",
+      "pattern": "OHS",
+      "fact": "订单商业快照与付款计划（不生成应收）",
+      "contract": "OrderCommercialSnapshot v1",
+      "authority": "TRD",
+      "risk": "付款计划被当作应收或到账",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R33",
+      "frm": "POL",
+      "to": "STL",
+      "pattern": "OHS / Published Language",
+      "fact": "币种、汇率、银行账户、费用分类",
+      "contract": "ConfigRef v1",
+      "authority": "POL",
+      "risk": "报价汇率被用于银行结汇",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R34",
+      "frm": "FUL",
+      "to": "CLM",
+      "pattern": "OHS",
+      "fact": "原出运事实",
+      "contract": "ShipmentLineRef v1",
+      "authority": "FUL",
+      "risk": "退货抹去原发货",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R35",
+      "frm": "CLM",
+      "to": "STL",
+      "pattern": "Customer / Supplier",
+      "fact": "经批准的贷项与退款请求",
+      "contract": "CreditRequest v1",
+      "authority": "CLM",
+      "risk": "同一退货重复贷项",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R36",
+      "frm": "FUL",
+      "to": "CNX",
+      "pattern": "Customer / Supplier",
+      "fact": "出口批次与出运单证明细",
+      "contract": "ExportLotRef v1",
+      "authority": "FUL",
+      "risk": "本地出库被当作海关出口确认",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R37",
+      "frm": "PUR",
+      "to": "CNX",
+      "pattern": "Customer / Supplier",
+      "fact": "采购与收货明细（购进发票匹配）",
+      "contract": "PurchaseLineRef v1",
+      "authority": "PUR",
+      "risk": "红冲作废后匹配未复核",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R38",
+      "frm": "STL",
+      "to": "CNX",
+      "pattern": "OHS",
+      "fact": "资金流水与核销（收汇资料关联）",
+      "contract": "FundRecordRef v1",
+      "authority": "STL",
+      "risk": "商业核销被称为出口收汇核销",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R39",
+      "frm": "CAT",
+      "to": "CNX",
+      "pattern": "OHS / Published Language",
+      "fact": "商品申报档案（编码与申报要素由专业人员核实）",
+      "contract": "DeclarationProfileRef v1",
+      "authority": "CAT（候选）／专业核实",
+      "risk": "AI 商品编码候选被当作合规结论",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R40",
+      "frm": "CRM",
+      "to": "INQ",
+      "pattern": "Conformist（可选）",
+      "fact": "商机来源关联",
+      "contract": "OpportunityRef v1",
+      "authority": "CRM",
+      "risk": "交易链反向依赖 CRM",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R41",
+      "frm": "STK",
+      "to": "STL",
+      "pattern": "OHS（条件）",
+      "fact": "成本层与库存流水",
+      "contract": "CostLayerRef v1",
+      "authority": "STK",
+      "risk": "成本层被报表另建余额",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R42",
+      "frm": "MFG",
+      "to": "STK",
+      "pattern": "Customer / Supplier（条件）",
+      "fact": "材料交接、耗用与在制",
+      "contract": "MaterialHandover v1",
+      "authority": "STK（事实）／MFG（关联）",
+      "risk": "转移、耗用、退回与损耗混同",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R43",
+      "frm": "PTY",
+      "to": "STL",
+      "pattern": "OHS / Published Language",
+      "fact": "客户与供应商结算档案",
+      "contract": "TradingProfileRef v1",
+      "authority": "PTY",
+      "risk": "第二经营主体被隐式放行",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R44",
+      "frm": "PTY",
+      "to": "FUL",
+      "pattern": "Customer／Supplier（守卫函数）",
+      "fact": "主体筛查结论；收货人与通知方身份",
+      "contract": "PartyScreeningGuard v1、PartyRef v1",
+      "authority": "PTY",
+      "risk": "筛查过期或 match 后仍放行",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R45",
+      "frm": "STL",
+      "to": "FUL",
+      "pattern": "Customer／Supplier（守卫函数）",
+      "fact": "合同付款条件满足状态（如出运前尾款已到账并核销）",
+      "contract": "PaymentConditionGuard v1",
+      "authority": "STL",
+      "risk": "撤销核销或退汇后仍放单",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R46",
+      "frm": "TRD",
+      "to": "CNX",
+      "pattern": "OHS / Published Language",
+      "fact": "外销订单、订单修订与外销合同／形式发票",
+      "contract": "SalesOrderRef v1、SalesContractDocumentRef v1",
+      "authority": "TRD",
+      "risk": "报关资料引用旧订单修订",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R47",
+      "frm": "POL",
+      "to": "INQ",
+      "pattern": "OHS / Published Language",
+      "fact": "币种、单位与交易条件配置引用",
+      "contract": "ConfigRef v1",
+      "authority": "POL",
+      "risk": "草稿引用已停用配置",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R48",
+      "frm": "POL",
+      "to": "PUR",
+      "pattern": "OHS / Published Language",
+      "fact": "单位、税价、贸易与付款条件配置",
+      "contract": "ConfigRef v1、ConfigGuard v1",
+      "authority": "POL",
+      "risk": "草稿采用已失效配置",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R49",
+      "frm": "POL",
+      "to": "FUL",
+      "pattern": "OHS / Published Language",
+      "fact": "单证模板、编号规则与贸易条件配置",
+      "contract": "ConfigRef v1",
+      "authority": "POL",
+      "risk": "单证套用错误模板版本",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R50",
+      "frm": "POL",
+      "to": "CNX",
+      "pattern": "OHS / Published Language",
+      "fact": "主体政策、税价口径与申报参数配置",
+      "contract": "ConfigRef v1",
+      "authority": "POL",
+      "risk": "按未冻结政策判定合规",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R51",
+      "frm": "CAT",
+      "to": "CST",
+      "pattern": "OHS / Published Language",
+      "fact": "SKU 与规格修订、单位换算依据",
+      "contract": "SkuRef v1",
+      "authority": "CAT",
+      "risk": "核价引用旧规格",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R52",
+      "frm": "CAT",
+      "to": "PUR",
+      "pattern": "OHS / Published Language",
+      "fact": "SKU 与规格修订",
+      "contract": "SkuRef v1",
+      "authority": "CAT",
+      "risk": "采购规格与订单规格不一致",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R53",
+      "frm": "EVD",
+      "to": "SUP",
+      "pattern": "OHS / Published Language",
+      "fact": "供应报价来源与附件",
+      "contract": "SourceRef v1、FileRef v1",
+      "authority": "EVD",
+      "risk": "未核实来源当作已核实报价",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R54",
+      "frm": "EVD",
+      "to": "CNX",
+      "pattern": "OHS / Published Language",
+      "fact": "票据、报关与证书原件及来源",
+      "contract": "SourceRef v1、FileRef v1",
+      "authority": "EVD",
+      "risk": "附件存在被当作真实性已核实",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R55",
+      "frm": "CNX",
+      "to": "STL",
+      "pattern": "OHS / Published Language",
+      "fact": "退税核准与到账对账引用",
+      "contract": "TaxRefundResultRef v1",
+      "authority": "CNX",
+      "risk": "退税到账重复记为客户收款",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    },
+    {
+      "id": "R56",
+      "frm": "CNX",
+      "to": "FUL",
+      "pattern": "Customer／Supplier（守卫函数）",
+      "fact": "贸易合规结论、许可证用量与官方证书结果引用",
+      "contract": "TradeComplianceGuard v1、ExportLicenseGuard v1、CertificateResultRef v1",
+      "authority": "CNX",
+      "risk": "合规 blocked 或许可证超额后仍放行",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R57",
+      "frm": "STL",
+      "to": "TRD",
+      "pattern": "Customer／Supplier（守卫函数）",
+      "fact": "客户信用占用",
+      "contract": "CreditGuard v1",
+      "authority": "STL",
+      "risk": "无占用或占用不足仍生效赊销订单",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R58",
+      "frm": "CNX",
+      "to": "TRD",
+      "pattern": "Customer／Supplier（守卫函数）",
+      "fact": "贸易合规核查结论",
+      "contract": "TradeComplianceGuard v1",
+      "authority": "CNX",
+      "risk": "禁运或管制结论未 clear 仍生效订单",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R59",
+      "frm": "PUR",
+      "to": "FUL",
+      "pattern": "Customer／Supplier（守卫函数）",
+      "fact": "直发路线的已核实供应商交付",
+      "contract": "SupplierDeliveryGuard v1",
+      "authority": "PUR",
+      "risk": "出运量超过核实交付量",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": true
+    },
+    {
+      "id": "R60",
+      "frm": "POL",
+      "to": "PTY",
+      "pattern": "OHS / Published Language",
+      "fact": "启用的筛查名单与法规配置",
+      "contract": "ConfigRef v1（screening_regulation）",
+      "authority": "POL",
+      "risk": "用未启用或已停用的名单筛查",
+      "contractStatus": "NOT_STARTED",
+      "guardLock": false
+    }
+  ],
+  "externalBoundaries": [
+    {
+      "src": "IAM / OIDC",
+      "target": "foundation/identity",
+      "pattern": "ACL",
+      "rule": "租户、公司与操作者只取自已验证令牌；请求体不得自报。",
+      "boundary": "Brant 维护本地授权投影与 authority_epoch，不宣称与外部 SSO 跨系统原子一致。"
+    },
+    {
+      "src": "EER（AI 执行运行时候选）",
+      "target": "internal/ai",
+      "pattern": "ACL / Adapter",
+      "rule": "模型调用、步骤组织与检查点可由 EER 承担；业务命令仍经 Brant 应用服务。",
+      "boundary": "EER 不拥有报价、订单或账款真值。"
+    },
+    {
+      "src": "BIP（交换与渠道）",
+      "target": "internal/ai／EVD",
+      "pattern": "ACL",
+      "rule": "邮件与外部交换只产生来源与外部结果引用；发送需独立授权与 operation_id。",
+      "boundary": "BIP 承担交换，不能替代核实。"
+    },
+    {
+      "src": "CMI / MCP / Workspace",
+      "target": "internal/ai",
+      "pattern": "Adapter",
+      "rule": "协议互操作与上下文组装按各自边界复用。",
+      "boundary": "MCP 不授予任何业务权限。"
+    },
+    {
+      "src": "海关、税务、银行与外汇等专业系统或授权人员",
+      "target": "CNX／STL",
+      "pattern": "ACL",
+      "rule": "外部回执保存原文及映射版本；unknown 先查证，不盲目重申报。",
+      "boundary": "专业办理结果是外部权威事实。"
+    },
+    {
+      "src": "外部 ERP／总账",
+      "target": "STL",
+      "pattern": "ACL",
+      "rule": "业务台账可导出过账指令；ERP 回执是外部事实。",
+      "boundary": "Brant 不是法定总账。"
+    },
+    {
+      "src": "Q01 P0 V0.1 旧包",
+      "target": "TRD",
+      "pattern": "Legacy projection",
+      "rule": "旧 q01-contracts 0.1.0 的 23 个定义保持不变，新契约通过版本投影兼容。",
+      "boundary": "旧 66 项本地检查不证明新设计通过。"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "SC-01",
+      "title": "BRC-001 主链：询价到采购草稿",
+      "mode": "人工驱动，AI 仅生成候选",
+      "purpose": "验证 INQ→SUP→CST→TRD→PUR 的事实传递与各自守卫。",
+      "given": "company.A；customer.1／contact.1；ST01 四个 SKU 共 120 PCS；supplier.A 5.00 USD 与 supplier.B 5.30 USD；直接费用 60 USD；最低毛利 25%。",
+      "steps": [
+        "INQ 登记并人工核实 120 PCS 询价",
+        "SUP 核实两家供应报价（MOQ 100 按款号合计）",
+        "CST 评估两个场景并冻结 660 USD 成本快照",
+        "TRD 冻结 960 USD 报价修订，独立审核批准后激活并封存正式文档",
+        "TRD 登记客户 full_unconditional 回复并人工核实为 Acceptance",
+        "TRD 准备订单草稿并占用 full_v1，独立订单审批后激活",
+        "PUR 按 supplier.A 报价编制采购草稿（not_committed）"
+      ],
+      "failure": "任何一步缺少人工核实、独立审批或当前资格都必须阻断，不能以任务完成代替。",
+      "accept": "报价 960.00、订单 960.00、成本 660.00、毛利 31.25%、计划付款 288.00＋672.00；有效订单唯一；采购草稿合计 600.00 USD。"
+    },
+    {
+      "id": "SC-02",
+      "title": "低毛利不可被普通审批绕过",
+      "mode": "反例",
+      "purpose": "验证毛利阈值不被普通内容批准绕过，只能由独立的毛利例外批准处理。",
+      "given": "售价 7.00 USD／PCS，成本 660 USD，最低毛利 0.25。",
+      "steps": [
+        "TRD 冻结报价修订（净销售 840）",
+        "提交审核，判定 requires_approval",
+        "审核人批准内容但未批准毛利例外",
+        "具备毛利例外权限的独立审核人批准例外"
+      ],
+      "failure": "毛利 180／840≈21.43% 低于阈值；只有普通批准时 activate 返回 MARGIN_POLICY_REQUIRES_APPROVAL；编制人自批例外返回 MARGIN_EXCEPTION_NOT_AUTHORIZED。",
+      "accept": "普通批准不清空毛利规则结果；例外绑定修订、哈希、规则版本与差额后才可激活。"
+    },
+    {
+      "id": "SC-03",
+      "title": "报价替代与转换名额竞争",
+      "mode": "并发",
+      "purpose": "验证同根单一 active 与 full_v1 永久占用。",
+      "given": "r1 已 active 且已有客户接受；r2 已批准用于 replace。",
+      "steps": [
+        "并发提交 quote.replace(r1→r2) 与 order.prepare(r1)"
+      ],
+      "failure": "replace 先提交则 prepare 返回 QUOTE_NOT_CURRENT；prepare 先提交则 replace 返回 ROOT_CONVERSION_LOCKED。",
+      "accept": "两种顺序都只有一个结果成立，不出现读旧 active 写新订单的竞态。"
+    },
+    {
+      "id": "SC-04",
+      "title": "成本来源否认与当前资格重查",
+      "mode": "并发与跨上下文",
+      "purpose": "验证 CST 的来源否认与 TRD 激活之间的先后裁决。",
+      "given": "报价已批准待激活，其成本快照的供应报价来源被否认。",
+      "steps": [
+        "CST 提交 costing.attest_source(denied)",
+        "TRD 提交 quote.activate 或 order.activate"
+      ],
+      "failure": "否认先提交则新激活拒绝；激活先提交则保留当时合法事实，并登记风险暂停限制后续前向动作。",
+      "accept": "该保证在 Go 中如何实现取决于 ADR-BR-004 的裁决。"
+    },
+    {
+      "id": "SC-05",
+      "title": "AI 执行中的人工接管",
+      "mode": "控制与恢复",
+      "purpose": "验证 control_epoch 围栏与已提交事实保留。",
+      "given": "BusinessTask 由 AI 驱动并已绑定报价根。",
+      "steps": [
+        "人工 task.take_control：TRD object_control.stop 递增 epoch 并进入 stopping，TSK 记录控制变化",
+        "旧执行者以旧 epoch 提交 quote.activate"
+      ],
+      "failure": "旧 epoch 提交返回 CONTROL_EPOCH_STALE；外部 submitted／unknown 结果先对账再切换 manual。",
+      "accept": "已提交事实不回滚；接管不取得跳过审批的特权。"
+    },
+    {
+      "id": "SC-06",
+      "title": "中国出口资料链（B0 候选）",
+      "mode": "多对多匹配",
+      "purpose": "验证出口批次、报关项、购进发票、收汇资料的分用途关联。",
+      "given": "一笔已出运订单，先票后货，客户分两次付款。",
+      "steps": [
+        "FUL 登记出口批次",
+        "CNX 准备报关案件并登记外部回执",
+        "CNX 匹配购进发票行与出口行",
+        "STL 登记两次收款并核销"
+      ],
+      "failure": "海关放行不等于实际离境；商业核销不得称为出口收汇核销；红冲发票使匹配待复核。",
+      "accept": "各用途余额互不混用，外部结果原文可追溯。"
+    },
+    {
+      "id": "SC-07",
+      "title": "有效期内承诺、到期后订单生效",
+      "mode": "时间",
+      "purpose": "验证合同成立以承诺到达时间判定，内部审批时长不否定合同。",
+      "given": "报价 2026-10-28T08:00:00Z 到期；客户承诺渠道接收时间 2026-10-27T10:00:00Z。",
+      "steps": [
+        "TRD 2026-10-29 核实承诺，形成 Acceptance（到达早于到期）",
+        "TRD order.prepare 并占用 full_v1",
+        "CST 在准备后否认一个成本来源",
+        "订单审核人逐项确认该风险后批准",
+        "TRD order.activate"
+      ],
+      "failure": "未确认风险时 activate 返回 ORDER_RISK_UNACKNOWLEDGED；承诺到达时间等于到期时刻返回 ACCEPTANCE_LATE。",
+      "accept": "订单生效；提交证据记录承诺到达时间、风险确认与审批。"
+    },
+    {
+      "id": "SC-08",
+      "title": "尾款未到账不放单",
+      "mode": "反例",
+      "purpose": "验证出运与单证放行同时检查质量、付款条件与主体筛查。",
+      "given": "付款计划 30% 订单时、70% 出运前；质量已放行；尾款到账 670.00，差额 2.00 未解释。",
+      "steps": [
+        "FUL commercial_release.evaluate",
+        "STL 核实差额为我方承担的银行费用并获批处理",
+        "FUL 再次评估并放行",
+        "FUL shipment.confirm 与 document_release.record"
+      ],
+      "failure": "差额未处理前返回 COMMERCIAL_RELEASE_BLOCKED；普通备注不能放行。",
+      "accept": "放行记录绑定质量放行、付款条件与筛查结论版本。"
+    },
+    {
+      "id": "SC-09",
+      "title": "赊销订单的信用占用与禁运目的国",
+      "mode": "反例",
+      "purpose": "验证订单生效前的信用占用与贸易合规核查。",
+      "given": "付款条件出运后 30 天付 70%；客户额度 10,000 USD、未结 7,000；另一订单的目的国处于禁运项目。",
+      "steps": [
+        "STL credit.reserve 4,000",
+        "信用经理批准信用例外后重新占用",
+        "CNX 对另一订单 trade_compliance.decide 为 blocked",
+        "TRD 对两张订单 order.activate"
+      ],
+      "failure": "例外前返回 CREDIT_LIMIT_EXCEEDED；禁运订单返回 TRADE_COMPLIANCE_NOT_CLEAR，普通审批不能覆盖。",
+      "accept": "第一张订单生效且提交证据记录占用与例外；第二张订单保持草稿。"
+    }
+  ],
+  "adrs": [
+    {
+      "id": "ADR-BR-001",
+      "title": "模块化单体与 18 个候选限界上下文",
+      "recommendation": "单仓库、单 Go Module 的模块化单体；18 个候选上下文按 Core／Supporting+／Supporting／Generic／Optional 分级投入；上下文不是部署单元。",
+      "requiredEvidence": "领域负责人对上下文清单与分级的签核；首批切片的编译器边界探针。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-002",
+      "title": "TRD 合并报价、客户确认与外销订单",
+      "recommendation": "报价根、客户接受与订单共享冲突键 root_quote_id、统一锁序和同事务资格重查，作为一个上下文内的多个聚合。order.prepare 在同一事务内创建订单草稿并占用报价根的 full_v1 名额，登记为“同上下文两聚合事务”例外。",
+      "requiredEvidence": "SC-03 并发用例在 PostgreSQL 16 上通过；领域负责人确认不拆分 QUO／ORD。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-003",
+      "title": "TSK 作为业务任务上下文；AI 能力层不是限界上下文",
+      "recommendation": "BusinessTask 与驱动方式无关（人工、AI 都可），作为 Supporting 上下文；AI 能力网关、委托策略、ApprovalGrant、执行回执与评测放 internal/ai，与 Cargo 一致。根级对象控制绑定属于 TRD 的 QuoteRoot。",
+      "requiredEvidence": "AI／领域负责人确认任务语义归属；BC-AT20 接管竞争用例。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-004",
+      "title": "跨上下文“当前资格重查”的一致性策略",
+      "recommendation": "Brant 设计要求正式化、冻结与订单生效在事务内重查上游事实（成本可采纳、配置效力、审核人资格、供应条件效力），而 Cargo 基线 T1／T3 与 idp-bento-go 的事务 owner 机制禁止跨上下文事务内读取。候选方案：A 事务外预取＋事件风险暂停；B 上游发布版本化守卫函数，下游在自身事务内以自身 executor 调用（FOR SHARE），作为 T3 的受控例外；C 合并相关上下文。建议 B＋A 的事件传播。适用范围可按合同成立缩小：quote.activate、quote.replace、cost_snapshot.freeze 发生在对外承诺之前，需要“反证先提交则拒绝”；order.activate 发生在合同成立之后，上游变化只需登记为由订单审批确认的风险（ADR-BR-013），可评估改用方案 A。方案 B 的事后风险登记依赖 ADR-BR-015 的死信与重放。模拟评审已接受（E0），真人签核待登记。",
+      "requiredEvidence": "SC-04 在 PostgreSQL 16 上的竞争实测（M0-10 已完成）；idp-bento-go 事务 owner 行为验证；对 Cargo 基线 T3 例外的签核；ADR-BR-015 裁决。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-005",
+      "title": "审批记录归属拥有决策的上下文",
+      "recommendation": "不设通用审批上下文：报价批准与订单审批在 TRD，采购承诺审批在 PUR，配置发布在 POL，供应报价核实在 SUP。独立性、效力、有效期与撤销作为共享方法在 11 方法论中统一描述。",
+      "requiredEvidence": "Python T03／T04 审批实现与 A47 设计的一致性复核。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-006",
+      "title": "SUP 与 CST 分离",
+      "recommendation": "供应条件被核价与采购草稿共同消费，归 SUP；CST 只拥有场景、评估与冻结快照。",
+      "requiredEvidence": "A46 采购草稿与 T02 冻结在 Go 中分别通过 SUP 守卫读取当前效力。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-007",
+      "title": "POL 为限界上下文，外部代码表进 internal/reference",
+      "recommendation": "公司治理的商业政策（汇率、税价、条款、核价政策、模板）有不可变修订与独立发布生命周期，属于 POL；外部机构发布的代码表只读，放 internal/reference。",
+      "requiredEvidence": "首席架构师确认 reference 归属；POL 独立发布用例。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-008",
+      "title": "行业插件是扩展点而不是限界上下文",
+      "recommendation": "服装等行业包通过 CAT（款色码、规格）、CST（成本 BOM）、QLT（检验参数）、FUL（包装配比）发布的扩展点接入，遵守公共契约与核心不变量。",
+      "requiredEvidence": "服装包最小扩展点清单；单据跨模板混合的拒绝用例。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-009",
+      "title": "CNX 单上下文起步",
+      "recommendation": "B0 前以一个上下文组织发票、报关、退税与资料包协同；按专业责任与变更节奏评估拆分。",
+      "requiredEvidence": "CN-D01–CN-D08 冻结结果；专业角色的评分卡。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-010",
+      "title": "EVD 作为通用子域",
+      "recommendation": "来源四层身份与受控文件归 EVD；文档解析属于 AI 能力层候选生成。",
+      "requiredEvidence": "来源权限撤回后历史读取与重放的拒绝用例。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-011",
+      "title": "PostgreSQL 隔离级别与锁序",
+      "recommendation": "Python 依赖 SQLite BEGIN IMMEDIATE 全库写串行；Go 在 PostgreSQL 16 READ COMMITTED 下以显式行锁实现唯一锁序：本上下文聚合根 FOR UPDATE（多根按 ID 排序）→ 同根下级行（固定顺序）→ 上游守卫行 FOR SHARE（经守卫函数，按上下文代码排序，含公司授权守卫）→ 动作结果、提交证据与 Outbox。上游撤销只锁自己的守卫行；守卫锁边（relationships.guardLock）必须无环，由构建器校验；导入白名单中的双向关系至多一个方向使用守卫锁。并以并发测试固定。",
+      "requiredEvidence": "BC-AT15／17、SC-03、SC-04 的 PG16 并发测试。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-012",
+      "title": "Python V0.50 是行为参考，不是 Go 证据",
+      "recommendation": "Python 测试逐项建立 Go 等价用例映射；映射、移植与通过分别登记；Python 通过数不计入 Go 验收。",
+      "requiredEvidence": "08 阶段映射表完整覆盖；每个移植用例在 Go CI 上实际执行。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-013",
+      "title": "合同成立与内部订单生效分开",
+      "recommendation": "客户承诺以可核实的到达时间判定是否在报价有效期内（民法典第 483 条、CISG 第 18、23 条）；合同成立后，报价到期不阻断订单准备、审批与生效；上游资格变化不否定合同，转为订单审批逐项确认的风险；迟到承诺视为客户新要约。",
+      "requiredEvidence": "TRD-INV-012、TRD-INV-014、TRD-INV-017 的领域测试；G0 真实业务核对承诺渠道与到达时间证据。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-014",
+      "title": "商业条件放行归 FUL；付款条件、主体筛查、贸易合规与直发交付以守卫发布",
+      "recommendation": "FUL 拥有出运与单证放行决定（CommercialRelease），在自身事务中调用 QLT 质量放行、STL 付款条件、PTY 主体筛查、CNX 贸易合规与许可证、PUR 直发交付五类守卫；PTY 记录主体筛查结论，CNX 记录国别禁运、制裁与出口管制核查结论及许可证用量，均不作法律认定。",
+      "requiredEvidence": "FUL-INV-002／003、STL-INV-003、PTY-INV-002、CNX-INV-001／002、PUR-INV-008 的领域与 PG16 并发测试；合规负责人确认名单与法规来源。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-016",
+      "title": "订单信用检查采用先占用、后生效",
+      "recommendation": "客户信用额度与占用归 STL。付款条件含出运后到期部分的订单，先在 STL 自身事务中占用额度（信用根 FOR UPDATE，串行裁决），TRD 在 order.activate 中以 CreditGuard 核对占用；TRD 不写 STL。超额只能由授权人工批准信用例外。超额或逾期超限时生成信用决定（参照 SAP 的 documented credit decision），按 POL credit_policy 的金额层级由信用人员放行或拒绝，超过最高阈值须两人；额度调整经额度申请分级审批；新客户默认额度为 0；额度来源记为内部评估或中信保买方信用限额。",
+      "requiredEvidence": "STL-INV-004、TRD-INV-022 的领域测试；TD-AT11 并发占用在 PG16 上只有一笔成功。",
+      "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "ADR-BR-017",
+      "title": "筛查名单目录与外国制裁名单的启用",
+      "recommendation": "名单内容从合规数据服务商或官方发布源受控导入参考数据，企业按 POL screening_regulation 只启用适用名单（参照 SAP GTS）。候选目录：中国的不可靠实体清单、出口管制管控名单与反外国制裁反制清单；联合国安理会综合制裁名单；按目的市场与资金路径启用：美国 OFAC SDN 与综合名单、BIS 实体清单与未经核实清单、UFLPA 实体清单（对美服装）、欧盟综合制裁名单、英国综合名单。启用外国名单可能与《反外国制裁法》及相关阻断规则冲突，由法务逐项裁决；Brant 只记录结论，不作法律认定。",
+      "requiredEvidence": "法务与合规负责人的书面裁决；名单数据服务商或官方来源的许可与更新频率。",
+      "status": "ACCEPTED（模拟评审）"
+    }
+  ],
+  "gates": [
+    {
+      "id": "G0",
+      "name": "客户场景确认",
+      "passCriteria": "一笔真实业务、岗位及人工基线；选择已支持的经营／供给／交付／材料组合；确认差异及排除；以真实业务核对订单形成方式（客户 PO、PI／外销合同、定金、返单、部分下单）与承诺到达时间证据，并据此裁决 full_v1（BC-D06）。",
+      "approverRole": "产品＋业务／客户代表",
+      "status": "NO-GO（真实客户证据）；模拟走查完成"
+    },
+    {
+      "id": "G1",
+      "name": "详细设计与技术准入",
+      "passCriteria": "对象、状态、命令、事务、不变量、权限、数据及错误语义；冻结 ADR 与受支持契约；选用运行适配的恢复原型。Python 行为移植与等价性报告是 S1–S3 退出与 G2 的前提，不计入 G1。",
+      "approverRole": "领域／架构＋研发＋测试",
+      "status": "NO-GO：设计与 ADR 已模拟签核；仍缺远程 CI 与主干保护（C04、C05、C06、C09）、OIDC（C10）、Outbox 死信实现（C13）、AI 红队（C11）"
+    },
+    {
+      "id": "G2",
+      "name": "业务与 AI 链验收",
+      "passCriteria": "正常、异常、幂等、并发、审核及接管；以真实结果核验任务；适用 AT／AN／CT 有证据。",
+      "approverRole": "研发＋测试＋业务",
+      "status": "NOT_STARTED"
+    },
+    {
+      "id": "G3",
+      "name": "行业与中国配置验收",
+      "passCriteria": "CRM 关闭下核心交易成立；选定行业及中国业务 CN-R／CN-AT 落实；专业接口或人工协同可对账。",
+      "approverRole": "产品＋行业／税务等专业角色＋实施",
+      "status": "NOT_STARTED"
+    },
+    {
+      "id": "G4",
+      "name": "受限试点上线",
+      "passCriteria": "真实客户任务、质量／人工／成本比较；严重缺陷关闭；迁移、权限、容量与恢复演练通过。",
+      "approverRole": "客户代表＋交付＋质量＋运维",
+      "status": "NOT_STARTED"
+    },
+    {
+      "id": "G5",
+      "name": "R1 商业发布",
+      "passCriteria": "公开支持矩阵、授权、部署组合及服务边界；完整回归、实际发布指标与支持机制。",
+      "approverRole": "产品＋研发／交付＋经营负责人",
+      "status": "NOT_STARTED"
+    }
+  ],
+  "factAuthority": [
+    {
+      "id": "MD-01",
+      "fact": "租户与操作者身份",
+      "classification": "身份",
+      "fact_authority": "IAM／OIDC（外部）",
+      "write_owner": "foundation/identity（本地投影）",
+      "consumers": "全部上下文",
+      "invariant": "租户、公司与操作者只取自已验证令牌",
+      "forbidden": "请求体自报 scope、actor 或 grant",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-02",
+      "fact": "内部经营主体与本位币",
+      "classification": "主数据配置",
+      "fact_authority": "POL",
+      "write_owner": "POL（CompanyProfileConfig）",
+      "consumers": "TRD、STL、CNX",
+      "invariant": "首期只允许一个启用主体；本位币产生记录后禁止直接修改",
+      "forbidden": "借外部 Party 隐式启用第二主体",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-03",
+      "fact": "外部主体身份与交易角色",
+      "classification": "主数据",
+      "fact_authority": "PTY",
+      "write_owner": "PTY",
+      "consumers": "INQ、SUP、TRD、PUR、STL",
+      "invariant": "已核实主体不原地修改，修订形成新版本",
+      "forbidden": "下游复制主体档案作为权威",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-04",
+      "fact": "公司级交易档案",
+      "classification": "主数据",
+      "fact_authority": "PTY",
+      "write_owner": "PTY",
+      "consumers": "TRD、STL",
+      "invariant": "结算条件与负责人按公司保存",
+      "forbidden": "跨公司共享交易档案",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-05",
+      "fact": "联系人与地址及其角色",
+      "classification": "主数据",
+      "fact_authority": "PTY",
+      "write_owner": "PTY",
+      "consumers": "INQ、TRD",
+      "invariant": "变更不覆盖历史单据快照",
+      "forbidden": "以邮箱或电话作为唯一身份依据",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-06",
+      "fact": "SKU 身份与规格修订",
+      "classification": "主数据",
+      "fact_authority": "CAT",
+      "write_owner": "CAT",
+      "consumers": "INQ、SUP、CST、TRD、PUR、CNX",
+      "invariant": "SKU 身份与技术版本分开；未知 SKU 不自动创建",
+      "forbidden": "可变主数据覆盖历史行",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-07",
+      "fact": "客户与供应商货号映射",
+      "classification": "主数据",
+      "fact_authority": "CAT",
+      "write_owner": "CAT",
+      "consumers": "INQ、SUP",
+      "invariant": "缺失映射进入待核实",
+      "forbidden": "按自由文本相似度替换 SKU",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-08",
+      "fact": "币种定义与精度",
+      "classification": "配置",
+      "fact_authority": "POL（基于 ISO 4217 参考）",
+      "write_owner": "POL",
+      "consumers": "全部金额上下文",
+      "invariant": "启用后含义不可改变，修改用新 ID",
+      "forbidden": "按显示位数提前舍入",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-09",
+      "fact": "单位定义与 SKU 换算依据",
+      "classification": "配置",
+      "fact_authority": "POL",
+      "write_owner": "POL",
+      "consumers": "INQ、SUP、CST、TRD、PUR",
+      "invariant": "按 SKU、规格与换算版本使用",
+      "forbidden": "把箱／打换算泛化到所有商品",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-10",
+      "fact": "用途化汇率",
+      "classification": "配置",
+      "fact_authority": "POL",
+      "write_owner": "POL",
+      "consumers": "CST（cost_estimate）、TRD（quotation）、STL",
+      "invariant": "明确方向与用途；同币种明确 1",
+      "forbidden": "缺失默认 1、自动反向或交叉推导",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-11",
+      "fact": "贸易条款、指定地点、付款条件与工作日历",
+      "classification": "配置",
+      "fact_authority": "POL",
+      "write_owner": "POL",
+      "consumers": "SUP、CST、TRD、PUR",
+      "invariant": "付款阶段比例合计 100；交期使用日期或锚点＋日历版本",
+      "forbidden": "按同名文字推定条款相等",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-12",
+      "fact": "税价口径与税适用依据",
+      "classification": "配置（需专业核实）",
+      "fact_authority": "POL",
+      "write_owner": "POL",
+      "consumers": "SUP、CST、TRD、PUR、CNX",
+      "invariant": "缺依赖阻断计税路径，不默认零税",
+      "forbidden": "把购进成本税口径冒充销售税适用",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-13",
+      "fact": "核价政策与最低毛利阈值",
+      "classification": "政策",
+      "fact_authority": "POL",
+      "write_owner": "POL",
+      "consumers": "CST、TRD",
+      "invariant": "毛利精确比较 R−C ≥ R×minimum_margin",
+      "forbidden": "按展示百分比舍入结果判定",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-14",
+      "fact": "单据编号分配",
+      "classification": "技术业务",
+      "fact_authority": "POL（序列）",
+      "write_owner": "POL",
+      "consumers": "TRD、PUR、FUL",
+      "invariant": "按公司、类型、年度原子分配；号码不回收；在下游事务之前分配并由下游同事务绑定，回滚留号段空缺",
+      "forbidden": "以连续号证明业务完整",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-15",
+      "fact": "来源内容与来源身份",
+      "classification": "证据",
+      "fact_authority": "EVD",
+      "write_owner": "EVD",
+      "consumers": "INQ、SUP、TRD、CNX",
+      "invariant": "内容与导入证据不可变",
+      "forbidden": "删除已被引用的来源",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-16",
+      "fact": "客户需求与询价范围",
+      "classification": "交易",
+      "fact_authority": "INQ",
+      "write_owner": "INQ",
+      "consumers": "SUP、CST、TRD",
+      "invariant": "ready 需人工核实全部来源与完整需求",
+      "forbidden": "修改某一行凑平源数量冲突",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-17",
+      "fact": "供应报价与采购条件",
+      "classification": "交易",
+      "fact_authority": "SUP",
+      "write_owner": "SUP",
+      "consumers": "CST、PUR",
+      "invariant": "核实后内容冻结，更正生成新修订",
+      "forbidden": "单次回复自动成为永久采购条件",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-18",
+      "fact": "物流报价与服务方适用",
+      "classification": "交易",
+      "fact_authority": "SUP（报价）／PTY（服务方角色）",
+      "write_owner": "SUP",
+      "consumers": "CST",
+      "invariant": "体积重除数须为带单位的核实规则",
+      "forbidden": "默认 6000 或 5000 除数",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-19",
+      "fact": "成本快照与可采纳资格",
+      "classification": "交易",
+      "fact_authority": "CST",
+      "write_owner": "CST",
+      "consumers": "TRD、PUR",
+      "invariant": "冻结须 verified＋comparable＋依赖当前有效",
+      "forbidden": "未核实预览冒充可报价成本",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-20",
+      "fact": "对客报价商业修订与当前效力",
+      "classification": "交易",
+      "fact_authority": "TRD",
+      "write_owner": "TRD",
+      "consumers": "TSK、PUR、STL",
+      "invariant": "同根至多一个 active；冻结内容不可变",
+      "forbidden": "后台自动改写已发报价",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-21",
+      "fact": "报价批准与撤销",
+      "classification": "交易",
+      "fact_authority": "TRD",
+      "write_owner": "TRD",
+      "consumers": "TSK",
+      "invariant": "批准绑定修订、哈希、动作与政策；撤销不删除原批准",
+      "forbidden": "修改批准日期恢复效力",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-22",
+      "fact": "客户回复与已核实接受",
+      "classification": "交易",
+      "fact_authority": "TRD",
+      "write_owner": "TRD",
+      "consumers": "TSK",
+      "invariant": "仅 full_unconditional 经人工核实形成 Acceptance",
+      "forbidden": "AI 自证客户接受",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-23",
+      "fact": "外销订单、生效、变更与终止",
+      "classification": "交易",
+      "fact_authority": "TRD",
+      "write_owner": "TRD",
+      "consumers": "PUR、FUL、STL、TSK",
+      "invariant": "同根 full_v1 唯一订单；生效需独立订单审批；生效后只经独立审批的订单变更修订；数量不低于已确认出运量",
+      "forbidden": "管理员或连接器直接设置 active",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-24",
+      "fact": "订单审批与撤销",
+      "classification": "交易",
+      "fact_authority": "TRD",
+      "write_owner": "TRD",
+      "consumers": "PUR",
+      "invariant": "审核人独立于草稿创建人与申请人",
+      "forbidden": "报价批准冒充订单批准",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-25",
+      "fact": "采购草稿与采购承诺",
+      "classification": "交易",
+      "fact_authority": "PUR",
+      "write_owner": "PUR",
+      "consumers": "STL、CNX、QLT",
+      "invariant": "草稿 not_committed；一订单行至多一个草稿",
+      "forbidden": "草稿被当作已向供应商下单",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-26",
+      "fact": "质量放行",
+      "classification": "交易",
+      "fact_authority": "QLT",
+      "write_owner": "QLT",
+      "consumers": "FUL",
+      "invariant": "放行明确数量、范围与有效期",
+      "forbidden": "供应商自报合格直接放行",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-27",
+      "fact": "实际出运明细",
+      "classification": "交易",
+      "fact_authority": "FUL",
+      "write_owner": "FUL",
+      "consumers": "STL、CLM、CNX",
+      "invariant": "订单数量不低于已确认出运数量",
+      "forbidden": "本地出库等同海关出口确认",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-28",
+      "fact": "库存流水与成本层",
+      "classification": "交易（条件）",
+      "fact_authority": "STK",
+      "write_owner": "STK",
+      "consumers": "FUL、STL",
+      "invariant": "确认出库使用并发安全的数量条件",
+      "forbidden": "直发路线虚构本仓收发",
+      "priority": "P2"
+    },
+    {
+      "id": "MD-29",
+      "fact": "业务应收应付与核销",
+      "classification": "财务业务",
+      "fact_authority": "STL",
+      "write_owner": "STL",
+      "consumers": "CNX、报表",
+      "invariant": "核销不超过来源可用余额与目标未结余额",
+      "forbidden": "报表另建权威余额",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-30",
+      "fact": "报关、发票、退税等专业结果",
+      "classification": "外部事实",
+      "fact_authority": "外部专业系统或授权人员",
+      "write_owner": "CNX（引用与核实）",
+      "consumers": "STL",
+      "invariant": "外部回执保存原文与映射版本",
+      "forbidden": "导出文件或任务完成冒充专业办理成功",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-31",
+      "fact": "业务任务生命周期与控制模式",
+      "classification": "应用控制",
+      "fact_authority": "TSK",
+      "write_owner": "TSK",
+      "consumers": "TRD、internal/ai",
+      "invariant": "completed 只能经目标断言核验；任务记录的 control_epoch 取自 TRD，不是围栏权威",
+      "forbidden": "以模型文本宣告完成",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-32",
+      "fact": "报价根对象控制绑定与 control_epoch 围栏",
+      "classification": "应用控制",
+      "fact_authority": "TRD（QuoteRoot）",
+      "write_owner": "TRD",
+      "consumers": "TSK",
+      "invariant": "接管先由 TRD 递增 control_epoch（唯一写入方，围栏立即生效），TSK 再记录；已绑定根的写入须处于允许模式并携带当前 epoch",
+      "forbidden": "省略 task_id 继续旧任务或抢写",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-33",
+      "fact": "银行流水、到账与结汇结果",
+      "classification": "外部事实",
+      "fact_authority": "银行或授权资金人员",
+      "write_owner": "STL（资金记录与核实）",
+      "consumers": "CNX",
+      "invariant": "原币到账、银行费用与结汇分别记录；结汇不新增客户收款",
+      "forbidden": "凭截图认定到账",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-34",
+      "fact": "客户承诺到达时间与合同成立",
+      "classification": "交易",
+      "fact_authority": "TRD",
+      "write_owner": "TRD",
+      "consumers": "TSK",
+      "invariant": "承诺到达早于报价到期即合同成立；到达时间取可核实的渠道接收时间",
+      "forbidden": "以核实或审批时间否定已成立的合同",
+      "priority": "P0"
+    },
+    {
+      "id": "MD-35",
+      "fact": "外销合同／形式发票及签署版本",
+      "classification": "交易",
+      "fact_authority": "TRD",
+      "write_owner": "TRD",
+      "consumers": "FUL、STL、CNX",
+      "invariant": "绑定订单修订哈希；签署版本不可变",
+      "forbidden": "草稿冒充已签署合同",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-36",
+      "fact": "主体筛查结论",
+      "classification": "合规",
+      "fact_authority": "PTY（登记的专业核实结果）",
+      "write_owner": "PTY",
+      "consumers": "TRD、FUL",
+      "invariant": "名单来源与版本、结论、复核人、有效期；match 由合规人工裁决",
+      "forbidden": "以 AI 判断或过期结论放行",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-37",
+      "fact": "合同付款条件满足状态",
+      "classification": "资金",
+      "fact_authority": "STL",
+      "write_owner": "STL",
+      "consumers": "FUL",
+      "invariant": "按已核销到账判定；撤销核销或退汇后重新判定",
+      "forbidden": "以付款计划冒充到账",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-38",
+      "fact": "商业条件放行与单证放行",
+      "classification": "履约",
+      "fact_authority": "FUL",
+      "write_owner": "FUL",
+      "consumers": "STL、CNX",
+      "invariant": "质量、付款条件与筛查同时满足；例外须授权人工批准",
+      "forbidden": "以普通备注放行",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-39",
+      "fact": "订舱与出运单证（商业发票、装箱单、提单）",
+      "classification": "履约",
+      "fact_authority": "FUL",
+      "write_owner": "FUL",
+      "consumers": "STL、CNX、CLM",
+      "invariant": "逐版本保存并与订单行、出运行、包装行核对",
+      "forbidden": "未核对差异即签发",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-40",
+      "fact": "原产地证与其他官方证书结果",
+      "classification": "外部事实",
+      "fact_authority": "外部签发机构",
+      "write_owner": "CNX（结果引用与核实）",
+      "consumers": "FUL",
+      "invariant": "适用对象、商品、批次、市场与有效期明确",
+      "forbidden": "另一规格或市场的证书直接复用",
+      "priority": "P2"
+    },
+    {
+      "id": "MD-41",
+      "fact": "商品申报档案",
+      "classification": "主数据",
+      "fact_authority": "CAT（专业人员核实）",
+      "write_owner": "CAT",
+      "consumers": "CNX",
+      "invariant": "按 SKU 规格版本与编码表版本保存；候选不能自动生效",
+      "forbidden": "由商品名称或 AI 候选直接认定编码",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-42",
+      "fact": "客户信用额度、信用占用与信用例外",
+      "classification": "资金",
+      "fact_authority": "STL",
+      "write_owner": "STL",
+      "consumers": "TRD",
+      "invariant": "先占用后生效；占用在信用根事务中串行裁决",
+      "forbidden": "以付款计划或口头承诺代替额度检查",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-43",
+      "fact": "贸易合规核查结论（国别禁运、制裁项目、出口管制与许可证要求）",
+      "classification": "合规",
+      "fact_authority": "CNX（授权合规人员确定）",
+      "write_owner": "CNX",
+      "consumers": "TRD、FUL",
+      "invariant": "按订单修订有效；变更或法规更新后须重新核查",
+      "forbidden": "以 AI 判断或旧修订结论放行",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-44",
+      "fact": "出口许可证及其用量",
+      "classification": "合规",
+      "fact_authority": "外部发证机关；CNX 登记与分配",
+      "write_owner": "CNX",
+      "consumers": "FUL",
+      "invariant": "累计分配不超额度；有效期内且目的国与最终用户一致",
+      "forbidden": "凭本地取消恢复已申报用量",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-45",
+      "fact": "直发路线的供应商交付",
+      "classification": "履约",
+      "fact_authority": "PUR（人工核实）",
+      "write_owner": "PUR",
+      "consumers": "FUL、STL",
+      "invariant": "只有核实后的交付计入出运与采购结算",
+      "forbidden": "把供应商上报当作已交付",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-46",
+      "fact": "适用的筛查名单、合规法规与信用政策（启用范围、审批层级、金额阈值）",
+      "classification": "配置",
+      "fact_authority": "POL（独立人工发布）",
+      "write_owner": "POL",
+      "consumers": "PTY、CNX、STL",
+      "invariant": "按版本与有效期使用；启用外国名单须法务批准（ADR-BR-017）",
+      "forbidden": "租户以自由字段改写审批阈值或名单启用",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-47",
+      "fact": "筛查名单内容与版本（外部参考数据）",
+      "classification": "参考数据",
+      "fact_authority": "名单发布机关或合规数据服务商",
+      "write_owner": "internal/reference（brant_ref，受控导入）",
+      "consumers": "PTY、CNX",
+      "invariant": "保存来源、版本、导入时间与哈希；新版本触发复筛",
+      "forbidden": "手工编辑名单条目",
+      "priority": "P1"
+    }
+  ],
+  "counts": {}
+}

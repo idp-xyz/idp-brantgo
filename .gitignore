@@ -1,0 +1,22 @@
+# Build output
+/bin/
+*.test
+*.out
+coverage.*
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# Python caches of the archive tools
+__pycache__/
+*.pyc

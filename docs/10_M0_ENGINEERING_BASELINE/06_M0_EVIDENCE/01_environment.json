@@ -1,0 +1,72 @@
+{
+  "artifact": "IDP Brant M0 evidence environment",
+  "collected": "2026-11-07",
+  "evidence_level": "E2 local execution (author's workstation); no remote CI run, no independent review",
+  "host": {
+    "os": "Windows 10.0.26200 with WSL2 Ubuntu 24.04",
+    "repository": "/home/tops/workspace/idp-brantgo (no git repository and no remote yet; 02_go_source_manifest.txt identifies the sources)"
+  },
+  "go": {
+    "module": "go.idp.xyz/idp-brant",
+    "go_directive": "1.26.0",
+    "toolchain_directive": "go1.26.5",
+    "ci_toolchain_run": "GOTOOLCHAIN=go1.26.5 (the version .github/workflows/ci.yml installs) — 03, 05",
+    "local_default_run": "go1.26.8 linux/amd64 — 04",
+    "goproxy_local": "https://goproxy.cn,direct",
+    "goprivate": "go.idp.xyz (idp-bento-go resolved from its origin, not through a proxy)"
+  },
+  "dependencies": {
+    "go.idp.xyz/idp-bento-go": "v0.1.0-rc.2 h1:W9T1KsbXwuVs3lHTNwSUcEBY0Ids00hUH7I9KuBtCEo= (matches the IDP-Cargo record)",
+    "github.com/jackc/pgx/v5": "v5.10.0",
+    "go.sum": "44 lines, byte-identical to IDP-Cargo go_cargo/go.sum; go mod verify and go mod tidy -diff pass",
+    "lint": "golangci-lint v2.15.0 run through `go run` (not installed)"
+  },
+  "postgres": {
+    "server": "PostgreSQL 16.12 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "image": "public.ecr.aws/docker/library/postgres@sha256:97ff59a4e30e08d1c11bdcd9455e7832368c0572b576c9092cde2df4ae5552a3 (the digest CI pins as postgres:16.12-alpine)",
+    "container": "brant-pg16 on 127.0.0.1:55471, database brant, volume brant-pg16-data",
+    "isolation": "read committed (default; IDP-Bento-Go does not change it)",
+    "roles": {
+      "postgres": "superuser; used only to run deploy/postgres/00_roles.sql",
+      "brant_migrator": "NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE; CREATE on the database; owns bento, brant_auth, brant_migrations",
+      "brant_app": "NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT; owns no schema; grants from deploy/postgres/10_app_grants.sql"
+    },
+    "schemas": [
+      "bento (IDP-Bento-Go framework migration 000001_eventing_store)",
+      "brant_auth (migrations/auth)",
+      "brant_migrations (brant-migrate ledger)"
+    ],
+    "passwords": "development-only values documented in scripts/dev-postgres.sh; the container listens on 127.0.0.1 only"
+  },
+  "observations": [
+    "The WSL2 wall clock ran about 30 s ahead of the Windows host, with systemd-timesyncd active next to the Hyper-V host time sync. During the first crash drill the wall clock stepped about 3 s forward; the relay compares wall-clock lease times, so the delivery was re-claimed 1.454 s into a 3 s lease. Three reruns re-delivered after 3.075, 3.092 and 3.016 s (11, 13).",
+    "A brand kit (brand/, copied 2026-11-06 23:15) sits in the repository root. It is not part of the Go module or of M0 and is excluded from 02_go_source_manifest.txt."
+  ],
+  "not_executed": [
+    "GitHub Actions run of .github/workflows/ci.yml (no remote repository)",
+    "branch protection, required review and signed provenance",
+    "OIDC token verification; roles and data scopes (BC-D02)",
+    "Inbox deduplication, replay and ErrCommitUncertain recovery",
+    "any bounded context, business command or business acceptance test (BC-AT15, BC-AT17 and the rest wait for S1–S3)",
+    "sign-off of ADR-BR-004, ADR-BR-011, ADR-BR-REPO-10"
+  ],
+  "reruns": [
+    {
+      "run": "2026-11-10T05:32:45Z",
+      "command": "GOTOOLCHAIN=go1.26.5 CI=true make ci",
+      "result": "exit 0; no FAIL, no SKIP",
+      "evidence": "14_make_ci_go1.26.5_rerun.txt",
+      "changed_sources": [
+        "tools/dependency-check/main_test.go (relationship count no longer hard-coded)",
+        "tools/dependency-check/allowlist.txt (regenerated from the Context Map; generated file, not listed in 02_go_source_manifest.txt)",
+        "AGENTS.md"
+      ],
+      "not_rerun": [
+        "make ci with go1.26.8 (04)",
+        "verbose integration listing (05)",
+        "kernel fuzzing (06)",
+        "migration, dependency-check negative, spike, relay drill and clock records (07–13)"
+      ]
+    }
+  ]
+}

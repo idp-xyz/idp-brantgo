@@ -1,0 +1,36 @@
+{
+  "version": "0.13",
+  "status": "runtime_slice",
+  "scope": "trusted local T03 quote adapter",
+  "actions": {
+    "quote.save_draft": {"permission": ["quote.write"], "human_only": false, "task_control": true},
+    "quote.revise": {"permission": ["quote.revise", "quote.read"], "human_only": false, "task_control": true},
+    "quote.discard_draft": {"permission": ["quote.discard_draft", "quote.read"], "human_only": true, "task_control": true},
+    "quote.freeze": {"permission": ["quote.freeze", "quote.read", "costing.read", "read", "foundation.read"], "human_only": true, "task_control": true},
+    "quote.submit_review": {"permission": ["quote.review.request", "quote.read"], "human_only": true, "task_control": true},
+    "quote.review.decide": {"permission": ["quote.review.decide", "quote.read"], "human_only": true, "task_control": true},
+    "quote.approval.revoke": {"permission": ["quote.approval.revoke", "quote.read"], "human_only": true, "task_control": true},
+    "quote.activate": {"permission": ["quote.activate", "quote.read", "costing.read", "read", "foundation.read"], "human_only": true, "task_control": true},
+    "quote.replace": {"permission": ["quote.replace", "quote.read", "costing.read", "read", "foundation.read"], "human_only": true, "task_control": true},
+    "quote.withdraw": {"permission": ["quote.withdraw", "quote.read"], "human_only": true, "task_control": true},
+    "quote.cancel": {"permission": ["quote.cancel", "quote.read"], "human_only": true, "task_control": true},
+    "quote.get": {"permission": ["quote.read"], "human_only": false, "task_control": false}
+  },
+  "epochs": {
+    "authority_epoch": "authorization, role, data scope, or record access changes",
+    "control_epoch": "server task binding, stop, or unbind changes",
+    "root_version": "quote root CAS and state pointer changes",
+    "effectivity_version": "approval validity changes"
+  },
+  "read_semantics": {
+    "history": "immutable quote commercial facts remain readable subject to current quote.read",
+    "cost_qualification": "current cost eligibility is returned separately and does not rewrite history",
+    "transaction": "quote.read authorization and quote read occur in one SQLite read transaction"
+  },
+  "unimplemented": [
+    "enterprise identity provider mapping",
+    "external quote command contract",
+    "send/delivery/customer acceptance",
+    "production document storage"
+  ]
+}

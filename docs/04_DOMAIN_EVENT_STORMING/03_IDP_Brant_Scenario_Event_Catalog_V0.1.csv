@@ -1,0 +1,63 @@
+﻿scenario_id,scenario,type,step,actor,command,aggregate,event,policy,hotspot,evidence
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,1,销售经办,source.register,EVD·Source,SourceRegistered,相同内容同 scope 共享；同渠道消息不同正文拒绝,,客户询价邮件原文
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,2,销售经办,party.confirm／contact.confirm,PTY·Party／Contact,PartyConfirmed／ContactConfirmed,人工核实且具备来源读取权限,,customer.1／contact.1
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,3,销售经办,sku.confirm ×4,CAT·Sku,SkuConfirmed,未知 SKU 不自动创建,,ST01 red／blue × S／M，TECH-01-r1
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,4,销售经办／AI 执行身份,rfq.save_draft,INQ·CustomerRfq,（草稿，无集成事件）,整稿替换；缺项可保存,AI 只生成候选行,四行 24／36／12／48
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,5,销售经办,rfq.confirm_scope,INQ·CustomerRfq,RfqScopeConfirmed,人工覆盖全部来源与完整需求,,120 PCS ready
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,6,采购／核价经办,supplier_rfq.record_issued,SUP·SupplierRfq,SupplierRfqIssued,issued 只表示人工发出事实,首批无自动发送,人工外发确认
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,7,采购／核价经办,supplier_offer.verify ×2,SUP·SupplierOffer,SupplierOfferVerified,MOQ 100 按 ST01 款号合计,,supplier.A 5.00、supplier.B 5.30
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,8,采购／核价经办,costing_context.verify,CST·CostingContext,CostingContextVerified,覆盖完整询价行；客户要求与假设分开,,计算币种 USD
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,9,采购／核价经办,cost_scenario.evaluate ×2,CST·CostScenario,CostScenarioEvaluated,comparable 不等于最佳；高价候选保留,,A 660、B 696
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,10,采购／核价经办,cost_snapshot.freeze,CST·CostSnapshot,CostSnapshotFrozen,verified＋comparable＋依赖当前有效,跨上下文依赖重查（ADR-BR-004）,600＋60＝660 USD；选定理由
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,11,销售经办,quote.save_draft → quote.freeze,TRD·QuoteRoot,QuoteFrozen,服务端计算；issued_at、expires_at 入哈希,,960.00 USD；毛利 31.25%；288＋672
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,12,销售经办,quote.submit_review,TRD·QuoteRoot,QuoteReviewRequested,目标 activate；毛利 ≥ 25%,,审核请求
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,13,报价审核人,quote.review.decide(approve),TRD·QuoteRoot,QuoteReviewDecided,审核人独立于编制人；批准到期 ≤ 报价到期,,批准记录
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,14,销售经办,quote.activate,TRD·QuoteRoot,QuoteActivated,同事务重查资格；封存正式文档、编号与提交证据,成本、配置、审核人资格的同事务重查,正式报价文档
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,15,客户确认核实人,quote.response.record → quote.response.verify,TRD·CustomerResponse／Acceptance,CustomerResponseRecorded／AcceptanceVerified,仅 full_unconditional；now < expires_at,,客户回复邮件
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,16,销售经办,order.prepare,TRD·SalesOrder,OrderPrepared,同事务占用 full_v1 名额,,订单草稿
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,17,订单审核人,order.review.request → order.review.decide,TRD·SalesOrder,OrderReviewDecided,审核人独立于草稿创建人与申请人,,订单审批
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,18,销售经办,order.activate,TRD·SalesOrder,OrderActivated,同事务来源资格重查；写提交证据,,960.00 USD 生效订单
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,19,采购编制人,purchase.draft.prepare,PUR·PurchaseDraft,PurchaseDraftPrepared,人工逐行指定 supplier.A 报价；not_committed,采购承诺审批（A47）未实现,600.00 USD 草稿
+ES-02,低毛利：普通审批不能放行，例外须独立批准,counterexample,1,销售经办,quote.freeze,TRD·QuoteRoot,QuoteFrozen,毛利判定 R−C ≥ R×0.25,,单价 7.00，净销售 840
+ES-02,低毛利：普通审批不能放行，例外须独立批准,counterexample,2,销售经办,quote.submit_review,TRD·QuoteRoot,QuoteReviewRequested,毛利 21.43% 为 requires_approval：审核须含毛利例外,,毛利 21.43%
+ES-02,低毛利：普通审批不能放行，例外须独立批准,counterexample,3,报价审核人,quote.review.decide（仅内容）,TRD·QuoteRoot,QuoteReviewDecided,普通批准不清空毛利结果,,
+ES-02,低毛利：普通审批不能放行，例外须独立批准,counterexample,4,获准经办,quote.activate,TRD·QuoteRoot,—（MARGIN_POLICY_REQUIRES_APPROVAL）,缺毛利例外批准,,
+ES-02,低毛利：普通审批不能放行，例外须独立批准,counterexample,5,毛利例外审核人,quote.review.decide（含毛利例外）,TRD·QuoteRoot,QuoteReviewDecided,独立于编制人；绑定修订、哈希、规则版本与差额,例外角色与金额阈值（BC-D05）,
+ES-02,低毛利：普通审批不能放行，例外须独立批准,counterexample,6,获准经办,quote.activate,TRD·QuoteRoot,QuoteActivated,内容批准与毛利例外均有效,,
+ES-03,报价替代与转单竞争,concurrency,1,销售经办,quote.replace(r1→r2),TRD·QuoteRoot,QuoteReplaced,无转换名额；目标为 replace 的有效批准,,
+ES-03,报价替代与转单竞争,concurrency,2,销售经办,order.prepare(r1),TRD·SalesOrder,—（QUOTE_NOT_CURRENT）,根指向 r2，r1 不再当前,两者并发时依赖根行锁顺序,
+ES-04,成本来源否认与当前资格,cross-context,1,采购／核价经办,costing.attest_source(denied),CST·CostSnapshot,CostSourceDenied,否认不改历史数值,,供应商声明报价无效
+ES-04,成本来源否认与当前资格,cross-context,2,销售经办,order.activate,TRD·SalesOrder,—（COST_SNAPSHOT_INELIGIBLE）,新激活重查可采纳资格,Go 中跨上下文同事务重查如何实现（ADR-BR-004）,
+ES-05,客户回复的五类分类,counterexample,1,销售经办,quote.response.record(conditional),TRD·CustomerResponse,CustomerResponseRecorded,分类不创建 Acceptance,AI 分类只是候选,“接受但蓝色改黑色”
+ES-05,客户回复的五类分类,counterexample,2,客户确认核实人,quote.response.verify,TRD·Acceptance,—（ACCEPTANCE_NOT_UNCONDITIONAL）,仅 full_unconditional 可核实,,
+ES-06,AI 执行中的人工接管,control,1,管理员／支持,task.take_control,TSK·BusinessTask,TaskControlChanged,递增 control_epoch；进入 stopping,,
+ES-06,AI 执行中的人工接管,control,2,AI 执行身份,quote.activate（旧 epoch）,TRD·QuoteRoot,—（CONTROL_EPOCH_STALE）,旧代次提交被围栏,外部 submitted／unknown 先对账,
+ES-07,采购草稿反例,counterexample,1,订单审核人,order.approval.revoke,TRD·SalesOrder,OrderApprovalRevoked,阻止新激活与后续采购准备,,
+ES-07,采购草稿反例,counterexample,2,采购编制人,purchase.draft.prepare,PUR·PurchaseDraft,—（ORDER_APPROVAL_REVOKED）,订单审批撤销后拒绝,,
+ES-07,采购草稿反例,counterexample,3,采购编制人,purchase.draft.prepare（交期晚于订单要求）,PUR·PurchaseDraft,—（DELIVERY_LATE）,固定日期交期不晚于订单要求,提前期估算未支持,
+ES-07,采购草稿反例,counterexample,4,采购编制人,purchase.draft.void,PUR·PurchaseDraft,PurchaseDraftVoided,未形成承诺；释放分配余额,,选错供应条件的草稿
+ES-08,有效期内承诺、到期后订单生效,time,1,客户确认核实人,quote.response.verify,TRD·CustomerResponse,AcceptanceVerified,以可核实的承诺到达时间判定（到达第 6 天，到期第 7 天，核实第 8 天）,,渠道接收时间
+ES-08,有效期内承诺、到期后订单生效,time,2,销售经办,order.prepare,TRD·SalesOrder,OrderPrepared,合同已成立；名额永久占用,,
+ES-08,有效期内承诺、到期后订单生效,time,3,订单审核人,order.review.decide,TRD·SalesOrder,OrderReviewDecided,逐项确认准备后出现的上游风险,,
+ES-08,有效期内承诺、到期后订单生效,time,4,订单审核人,order.activate（as_of ≥ quote.expires_at）,TRD·SalesOrder,OrderActivated,合同成立后报价到期不阻断,,
+ES-09,生效订单变更与短交关闭,change,1,销售经办,quote.response.record,TRD·CustomerResponse,CustomerResponseRecorded,客户改量来源登记,,蓝 M 由 48 改为 44
+ES-09,生效订单变更与短交关闭,change,2,销售经办／AI,order.amendment.prepare,TRD·SalesOrder,OrderAmendmentRequested,读取采购承诺、出运与占用形成影响评估,,
+ES-09,生效订单变更与短交关闭,change,3,订单审核人,order.amendment.decide,TRD·SalesOrder,OrderAmendmentDecided,独立于申请人,,
+ES-09,生效订单变更与短交关闭,change,4,获准经办,order.amendment.apply,TRD·SalesOrder,OrderAmended,数量不低于已确认出运量；生成订单修订 r2,,
+ES-09,生效订单变更与短交关闭,change,5,采购编制人,purchase.draft.void,PUR·PurchaseDraft,PurchaseDraftVoided,按 OrderAmended 复核分配,已发出的承诺须供应商确认变更,
+ES-09,生效订单变更与短交关闭,change,6,销售经办,order.close_remainder,TRD·SalesOrder,OrderRemainderClosed,已出运 116 件，剩余 4 件短交关闭,,客户同意短交
+ES-10,出运与单证放行,control,1,质检人员,quality_release.grant,QLT·QualityRelease,QualityReleased,放行数量与范围,,
+ES-10,出运与单证放行,control,2,资金人员,fund.record → application.apply,STL·Application,Applied,出运前尾款到账并核销,,银行入账 672.00
+ES-10,出运与单证放行,control,3,单证员,commercial_release.evaluate,FUL·CommercialRelease,CommercialReleaseGranted,质量、付款条件与筛查守卫均满足,,
+ES-10,出运与单证放行,control,4,单证员,shipment.confirm,FUL·Shipment,ShipmentConfirmed,有效放行,,
+ES-10,出运与单证放行,control,5,单证员,document_release.record,FUL·CommercialRelease,DocumentsReleased,正本提单或电放,,
+ES-11,订单生效前的信用占用与合规核查,control,1,销售经办,order.prepare,TRD·SalesOrder,OrderPrepared,合同已成立,,出运后 30 天付 70%
+ES-11,订单生效前的信用占用与合规核查,control,2,销售经办,credit.reserve,STL·CustomerCredit,CreditDecisionOpened,"未结 7,000＋本次 4,000 超过额度 10,000：生成信用决定，暂不占用",,
+ES-11,订单生效前的信用占用与合规核查,control,3,信用经理,credit_exception.decide,STL·CustomerCredit,CreditExceptionDecided,"层级上限覆盖超额 1,000，且不是销售经办",审批层级与金额阈值由财务确认（POL credit_policy）,
+ES-11,订单生效前的信用占用与合规核查,control,4,销售经办,credit.reserve,STL·CustomerCredit,CreditReserved,例外有效,,
+ES-11,订单生效前的信用占用与合规核查,control,5,合规人员,trade_compliance.decide,CNX·TradeComplianceCheck,TradeComplianceDecided,目的国、交易方与商品核查 clear,,法规与名单版本
+ES-11,订单生效前的信用占用与合规核查,control,6,订单审核人,order.activate,TRD·SalesOrder,OrderActivated,读取 CreditGuard 与 TradeComplianceGuard,,
+ES-12,直发交付与许可证用量,control,1,跟单员,supplier_delivery.record,PUR·SupplierDelivery,—（声明，待核实）,供应商上报 120 件已交货代,,工厂装箱照片与货代收货单
+ES-12,直发交付与许可证用量,control,2,采购编制人,supplier_delivery.verify,PUR·SupplierDelivery,SupplierDeliveryVerified,货代收货单只证实 100 件,,
+ES-12,直发交付与许可证用量,control,3,单证员,export_license.allocate,CNX·ExportLicense,ExportLicenseAllocated,需要许可证的商品；有效期内且不超额度,,
+ES-12,直发交付与许可证用量,control,4,单证员,shipment.confirm,FUL·Shipment,ShipmentConfirmed,出运 100 件，不超核实交付量,,

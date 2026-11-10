@@ -1,0 +1,42 @@
+﻿id,line,sap_process,sap_area,brant_contexts,commands,events,status,note,follow_up,refs
+O2C-01,O2C,客户询价（Inquiry）,SD,INQ,rfq.save_draft；rfq.confirm_scope,RfqScopeConfirmed,COVERED,询价允许缺项草稿，范围由人工核实；比 SAP 询价单多出来源证据与缺项清单。,,基线 F03；INQ-INV-001
+O2C-02,O2C,"报价与有效期（Quotation, validity）",SD,TRD,quote.freeze；quote.submit_review；quote.review.decide；quote.activate,QuoteActivated,COVERED,报价修订不可变；审批绑定内容哈希；有效期严格小于。,,TRD-INV-001—005
+O2C-03,O2C,定价条件：价格、折扣、附加费、税（Pricing conditions）,SD,TRD；CST,quote.freeze；cost_scenario.evaluate,QuoteFrozen；CostScenarioEvaluated,DEVIATION,首发采用固定计价链与服务端计算，不提供 SAP 式通用条件表与条件类型配置；毛利按净销售额精确判定，低毛利须独立例外批准。,,基线 5.3；TRD-INV-007／008
+O2C-04,O2C,参照报价创建销售订单，含部分参照与一个报价多张订单（Order with reference）,SD,TRD,quote.response.verify；order.prepare；order.activate,AcceptanceVerified；OrderActivated,PARTIAL,首发只允许整单一次转换（full_v1），不支持部分参照与多张订单；客户 PO 按与报价的差异分类。,BC-D06 已裁决（模拟评审）：P0 保留 full_v1；R1 由 S6-07 增加参照报价下单（部分与多次）。,TRD-INV-010／011；BC-D06
+O2C-05,O2C,订单确认输出（Order confirmation）,SD,TRD,order.document.generate；order.document.record_signed,OrderDocumentSigned,COVERED,外销合同／形式发票绑定订单修订，签署或回签版本作为证据。,,TRD-INV-020
+O2C-06,O2C,"框架合同与计划协议（Contracts, scheduling agreements）",SD,,,,OUT_OF_SCOPE,首发不支持框架叫货与备货预测。,,基线 3.4
+O2C-07,O2C,信用检查与订单冻结放行（Credit management）,FSCM,STL；TRD；FUL,credit_limit.request；credit.reserve；credit_exception.decide；commercial_release.evaluate,CreditDecisionOpened；CreditReserved；CommercialReleaseGranted,COVERED,订单生效前在 STL 占用额度；超额或逾期超限生成信用决定，按金额层级由非销售的信用人员放行；额度申请分级审批；出运与单证放行再核对付款条件。,,STL-INV-004／005；TRD-INV-022；FUL-INV-002；ADR-BR-016
+O2C-08,O2C,"订单变更与行拒绝（Order change, rejection）",SD,TRD,order.amendment.prepare；order.amendment.decide；order.amendment.apply；order.close_remainder,OrderAmended；OrderRemainderClosed,COVERED,生效订单只经独立审批的订单变更修订；数量不低于已确认出运量；短交关闭保留历史。,,TRD-INV-018／019；SM-TRD-ORDER-AMENDMENT
+O2C-09,O2C,"交货、拣配、包装与发货过账（Outbound delivery, picking, packing, goods issue）",LE,FUL；STK,packing.plan；shipment.confirm；stock.issue,ShipmentConfirmed；StockIssued,PARTIAL,本仓发货是条件能力（F06）；默认成品供应商直发，不虚构本仓出库。,S5 细化 FUL 状态机与装箱核对规则。,基线 F06、F27
+O2C-10,O2C,第三方订单／供应商直发（Third-party order processing）,SD／MM,PUR；FUL,supplier_delivery.verify；purchase.commitment.issue；shipment.confirm,SupplierDeliveryVerified；PurchaseCommitmentIssued；ShipmentConfirmed,COVERED,S01 默认路线；供应商交付由 PUR 记录并经人工核实，FUL 出运引用核实交付量。,,PUR-INV-008；FUL-INV-003；ADR-BR-014
+O2C-11,O2C,"运输计划与订舱（Transportation planning, booking）",TM,FUL,booking.record；milestone.record_actual,MilestoneActualRecorded,PARTIAL,记录订舱与节点；不做运输路线与运力优化。,S5 细化订舱记录字段（船期、截关、箱型、承运人确认）。,补齐矩阵 INT-03／04
+O2C-12,O2C,出口单证输出：商业发票、装箱单、提单（Export documents）,LE／GTS,FUL,shipment_document.issue；document_release.record,ShipmentDocumentIssued；DocumentsReleased,PARTIAL,出运单证套目前是轮廓聚合；正本提单与电放受商业条件放行控制。,S5 定义单证字段映射与差异核对。,BT12；INT-05；FUL-INV-002
+O2C-13,O2C,开票（Billing）,SD／FI,STL,settlement.confirm,SettlementConfirmed,DEVIATION,Brant 的销售结算单是内部业务台账；商业发票由 FUL 出具，税务发票由专业系统开具；不自动过账总账。,,基线 4.2；CN-R06
+O2C-14,O2C,"收款与核销，含预收款、部分付款、银行费用（Incoming payment, cash application）",FI-AR,STL,fund.record；application.apply；application.unapply,FundRecorded；Applied；Unapplied,COVERED,原币到账、银行费用与核销分别记录；首期同币种核销。,,STL-INV-002；CN-AT07
+O2C-15,O2C,"贷项与退货（Credit memo, returns）",SD／FI,CLM；STL,return.register；credit.confirm,ReturnRegistered；CreditConfirmed,PARTIAL,售后为首发最小能力。,S6 细化退货、贷项与退款的状态机。,基线 F28、4.7
+O2C-16,O2C,"收入确认与总账过账（Revenue recognition, GL posting）",FI,,,,DEVIATION,不做法定总账与收入确认；经营结果是内部管理指标。,,基线 2.2、4.5
+O2C-17,O2C,外币评估与汇兑损益（FX valuation）,FI,STL,order_result.close,OrderResultClosed,DEVIATION,业务结算汇率差额单列，不做会计汇兑损益。,,基线 4.5
+P2P-01,P2P,采购申请（Purchase requisition）,MM,PUR,purchase.draft.prepare,PurchaseDraftPrepared,DEVIATION,不设独立采购申请：生效订单行经需求分配直接形成采购草稿。,,PUR-INV-002
+P2P-02,P2P,"询价与报价比较（RFQ, quotation comparison）",MM,SUP；CST,supplier_rfq.record_issued；supplier_offer.verify；cost_scenario.evaluate,SupplierRfqIssued；SupplierOfferVerified；CostScenarioEvaluated,COVERED,同口径比较；不可比时显示原因，不自动选最低价。,,BC-AT03；T02 规格 §7
+P2P-03,P2P,"采购信息记录与价格条件（Purchasing info record, conditions）",MM,SUP,purchase_terms.publish,PurchaseTermsPublished,COVERED,可复用采购条件独立发布；单次报价不自动成为永久条件。,,T02 规格 §5
+P2P-04,P2P,"货源清单与配额（Source list, quota arrangement）",MM,PUR,purchase.draft.prepare,,PARTIAL,人工逐行指定供应条件与分配量，没有自动货源确定与配额。,按 G0 的业务量决定是否需要货源清单。,PUR-INV-002／005
+P2P-05,P2P,"采购订单与审批策略（Purchase order, release strategy）",MM,PUR,purchase.commitment.decide；purchase.commitment.issue,PurchaseCommitmentApproved；PurchaseCommitmentIssued,COVERED,采购草稿与采购承诺分离，承诺经独立审批后发出。,,PUR-INV-001；A47 设计
+P2P-06,P2P,供应商订单确认（Order acknowledgement）,MM,PUR,purchase.supplier_confirmation.record,SupplierConfirmationRecorded,COVERED,供应商确认单独保存来源证据与时间。,,UL PUR-SupplierConfirmation
+P2P-07,P2P,"收货与质检（Goods receipt, inspection lot, usage decision）",MM／QM,STK；QLT,stock.receive；inspection.record；quality_release.grant,StockReceived；InspectionRecorded；QualityReleased,PARTIAL,本仓收货是条件能力；验货与放行已建模，但只有轮廓。,S5 细化 QLT 状态机与放行撤回。,基线 F26；7.5
+P2P-08,P2P,"发票校验与三单匹配（Invoice verification, three-way match）",MM／FI-AP,STL；CNX,settlement.confirm；purchase_invoice.import,SettlementConfirmed；PurchaseInvoiceVerified,PARTIAL,采购结算单按合同、收货或直发证据与供应商账单匹配；增值税专用发票由 CNX 核验。,S5 定义采购结算匹配规则与差异处理。,基线 4.12；CN-R06
+P2P-09,P2P,"付款与预付款（Outgoing payment, down payment）",FI-AP,STL,fund.record；application.apply,FundRecorded；Applied,PARTIAL,首期不自动执行银行付款，只登记资金事实与核销。,银行付款接口按 CN-D05 冻结后另行设计。,基线 6.2、7.3
+P2P-10,P2P,外协加工（Subcontracting）,MM／PP,MFG,subcontract_order.issue,SubcontractOrderIssued,CONDITIONAL,部分委外为条件能力（F23），启用时交付材料与在制台账。,,基线 F23、F24
+GTC-01,GTC,业务伙伴名单筛查（Sanctioned party list screening）,GTS,PTY,party_screening.record；party_screening.decide；party_screening.block,PartyScreeningDecided,COVERED,名单从服务商或官方来源受控导入，只启用适用名单；新主体筛查前 pending；误报放行可登记正向名单，负向名单永久阻断；订单生效与出运放行前读取当前结论。,,PTY-INV-002；TRD-INV-021；ADR-BR-014／017
+GTC-02,GTC,禁运检查（Embargo check）,GTS,CNX；TRD；FUL,trade_compliance.evaluate；trade_compliance.decide,TradeComplianceDecided,COVERED,贸易合规核查按目的国与交易方所在国判断禁运与制裁项目；订单生效与出运放行以守卫读取。,,CNX-INV-001；TRD-INV-023；ADR-BR-014
+GTC-03,GTC,"出口管制与许可证判定（Export control, license determination）",GTS,CNX；CAT,trade_compliance.decide；export_license.register；export_license.allocate；declaration_profile.verify,TradeComplianceDecided；ExportLicenseAllocated；DeclarationProfileVerified,COVERED,出口管制分类与许可证要求由专业人员核实；许可证按出运分配用量，不超额度、不过期。,,CNX-INV-001／002；CN-R14
+GTC-04,GTC,商品归类（Product classification）,GTS,CAT,declaration_profile.verify,DeclarationProfileVerified,COVERED,编码候选（含 AI）不能自动生效；按编码表版本保存。,,CAT-INV-002
+GTC-05,GTC,"原产地与优惠原产地（Origin, preference determination）",GTS,CNX；CAT,document_bundle.check,DocumentBundleChecked,PARTIAL,登记原产地证结果与原产地依据；优惠原产地自动判定在首发以外。,按目的市场需要决定是否引入优惠原产地判定。,补齐矩阵 7.4
+GTC-06,GTC,出口报关（Export customs declaration）,GTS,CNX,declaration_case.prepare；declaration_case.record_receipt,DeclarationReceiptRecorded,COVERED,Brant 组织资料并记录外部结果，正式申报由专业系统或授权人员办理。,,CN-R05／R07
+GTC-07,GTC,"信用证与托收（Letter of credit, documentary collection）",GTS／Treasury,,,,OUT_OF_SCOPE,按客户启用的专项。,,CN-M06
+GTC-08,GTC,"发运跟踪与签收（Shipment tracking, proof of delivery）",TM／LE,FUL,milestone.record_actual,MilestoneActualRecorded,PARTIAL,海关放行、实际离境、送达与客户验收分别记录。,S5 定义节点类型与证据要求。,CN-R07
+CN-01,CN,购进增值税专用发票协同,—（SAP 标准无，依赖本地化）,CNX,purchase_invoice.import,PurchaseInvoiceVerified,LOCAL,票据原件、核验状态与红蓝关系分别记录。,,CN-F02；CN-R06
+CN-02,CN,出口退税资料与用途匹配,—（SAP 标准无，依赖本地化）,CNX,tax_refund_case.allocate,TaxEvidenceAllocated,LOCAL,预计、拟申报、已提交、核准与到账分别记录；核价按经核实的可回收率计算成本。,,CN-F04；CN-R08／R09；CST-INV-007
+CN-03,CN,单一窗口报关资料与回执,—（SAP 标准无，依赖本地化）,CNX,declaration_case.prepare；declaration_case.record_receipt,DeclarationReceiptRecorded,LOCAL,回执原文与映射版本保存；unknown 先查证，不盲目重申报。,,CN-F03；CN-R05
+CN-04,CN,收汇与结汇,—（SAP 标准无，依赖本地化）,STL,fund.record,FundRecorded,LOCAL,结汇只是资金转换，不新增客户收款；系统内核销不是行政意义的出口收汇核销。,,CN-F05；CN-R10／R11
+CN-05,CN,出口批次：销售、出运、报关与退税的关联主线,—（SAP 标准无，依赖本地化）,FUL,export_lot.register,ExportLotRegistered,LOCAL,不复制第二份库存；与出运、发票、报关及退税引用关联。,,基线 22.1
+CN-06,CN,外部专业结果对账,—（SAP 标准无，依赖本地化）,CNX,external_reconciliation.resolve,,LOCAL,外部结果、内部关联、差异、责任与批准调整分别记录。,,CN-R05

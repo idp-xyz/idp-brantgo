@@ -1,0 +1,4550 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:brant:costing:0.1.0:candidate-1",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "not": {
+        "pattern": "[^A-Za-z0-9._:-]"
+      }
+    },
+    "quantity": {
+      "type": "string",
+      "maxLength": 40,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[^0-9.]"
+          }
+        }
+      ],
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+      "not": {
+        "pattern": "^0(\\.0+)?$"
+      }
+    },
+    "price": {
+      "type": "string",
+      "maxLength": 40,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[^0-9.]"
+          }
+        }
+      ],
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,8})?$"
+    },
+    "ratio": {
+      "type": "string",
+      "maxLength": 40,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[^0-9.]"
+          }
+        }
+      ],
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,8})?$"
+    },
+    "amount": {
+      "type": "string",
+      "maxLength": 40,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[^0-9.]"
+          }
+        }
+      ],
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,4})?$"
+    },
+    "rate": {
+      "type": "string",
+      "maxLength": 40,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[^0-9.]"
+          }
+        }
+      ],
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,12})?$",
+      "not": {
+        "pattern": "^0(\\.0+)?$"
+      }
+    },
+    "config_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "master_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "customer",
+            "supplier",
+            "contact",
+            "sku"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "row_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "row_version"
+      ],
+      "additionalProperties": false
+    },
+    "business_ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "rfq_ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "row_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "id",
+        "row_version"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "source_id",
+        "locator"
+      ],
+      "additionalProperties": false
+    },
+    "interval": {
+      "type": "object",
+      "properties": {
+        "valid_from": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": ".*(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": ".*(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      },
+      "required": [
+        "valid_from",
+        "valid_until"
+      ],
+      "additionalProperties": false
+    },
+    "delivery": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "fixed"
+              ]
+            },
+            "date": {
+              "type": "string",
+              "format": "date"
+            },
+            "milestone": {
+              "enum": [
+                "goods_ready",
+                "handover",
+                "arrival"
+              ]
+            },
+            "place_ref": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "location"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "not": {
+                    "pattern": "[^A-Za-z0-9._:-]"
+                  }
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "time_zone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "required": [
+            "kind",
+            "date",
+            "milestone",
+            "place_ref",
+            "time_zone"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "lead_time"
+              ]
+            },
+            "anchor_ref": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "delivery_anchor"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "not": {
+                    "pattern": "[^A-Za-z0-9._:-]"
+                  }
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3650
+            },
+            "day_basis": {
+              "enum": [
+                "calendar",
+                "working"
+              ]
+            },
+            "calendar_ref": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "delivery_calendar"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "not": {
+                    "pattern": "[^A-Za-z0-9._:-]"
+                  }
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "milestone": {
+              "enum": [
+                "goods_ready",
+                "handover",
+                "arrival"
+              ]
+            },
+            "place_ref": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "location"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "not": {
+                    "pattern": "[^A-Za-z0-9._:-]"
+                  }
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "time_zone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "required": [
+            "kind",
+            "anchor_ref",
+            "days",
+            "day_basis",
+            "calendar_ref",
+            "milestone",
+            "place_ref",
+            "time_zone"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "tier": {
+      "type": "object",
+      "properties": {
+        "lower_inclusive": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$"
+        },
+        "upper_exclusive": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+          "not": {
+            "pattern": "^0(\\.0+)?$"
+          }
+        },
+        "unit_price": {
+          "$ref": "#/$defs/price"
+        },
+        "zero_price_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "lower_inclusive",
+        "unit_price"
+      ],
+      "additionalProperties": false
+    },
+    "line": {
+      "type": "object",
+      "properties": {
+        "line_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "sku_profile_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "quantity": {
+          "$ref": "#/$defs/quantity"
+        },
+        "unit_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "conversion_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/config_ref"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "line_id",
+        "sku_profile_ref",
+        "quantity",
+        "unit_ref"
+      ],
+      "additionalProperties": false
+    },
+    "assumption": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "value_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "value_text",
+        "reason",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "context_kind": {
+          "enum": [
+            "actual",
+            "what_if"
+          ]
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "calculation_currency_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "pricing_policy_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "comparison_basis": {
+          "type": "object",
+          "properties": {
+            "specification_basis": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "named_place_ref": {
+              "$ref": "#/$defs/config_ref"
+            },
+            "required_fee_type_refs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/config_ref"
+              },
+              "minItems": 0,
+              "maxItems": 50
+            },
+            "tax_basis": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "delivery": {
+              "$ref": "#/$defs/delivery"
+            },
+            "cost_basis": {
+              "enum": [
+                "nominal_direct_cost"
+              ]
+            },
+            "sales_trade_scope_ref": {
+              "$ref": "#/$defs/config_ref"
+            },
+            "sales_payment_terms_ref": {
+              "$ref": "#/$defs/config_ref"
+            }
+          },
+          "required": [
+            "specification_basis",
+            "named_place_ref",
+            "required_fee_type_refs",
+            "tax_basis",
+            "delivery",
+            "cost_basis",
+            "sales_trade_scope_ref",
+            "sales_payment_terms_ref"
+          ],
+          "additionalProperties": false
+        },
+        "requested_currency_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "requested_trade_terms_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "requested_payment_terms_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assumption"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "rfq_ref",
+        "context_kind",
+        "lines",
+        "calculation_currency_ref",
+        "pricing_policy_ref",
+        "comparison_basis"
+      ],
+      "additionalProperties": false
+    },
+    "moq": {
+      "type": "object",
+      "properties": {
+        "quantity": {
+          "$ref": "#/$defs/quantity"
+        },
+        "unit_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "scope": {
+          "enum": [
+            "sku",
+            "explicit_group"
+          ]
+        },
+        "group_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "member_line_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "quantity",
+        "unit_ref",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "explicit_group"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "group_id",
+              "member_line_ids"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "group_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "member_line_ids"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "condition_line": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "sku_profile_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "supplier_item_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "purchase_unit_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "price_unit_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "price_basis_quantity": {
+          "$ref": "#/$defs/quantity"
+        },
+        "conversion_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/config_ref"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "tier_unit_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "price_tier_scope": {
+          "enum": [
+            "sku"
+          ]
+        },
+        "pricing_mode": {
+          "enum": [
+            "flat",
+            "all_units",
+            "graduated"
+          ]
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tier"
+          },
+          "minItems": 1,
+          "maxItems": 50
+        },
+        "moq": {
+          "$ref": "#/$defs/moq"
+        },
+        "order_multiple": {
+          "$ref": "#/$defs/quantity"
+        },
+        "currency_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "tax_profile_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "trade_terms_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "payment_terms_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "delivery": {
+          "$ref": "#/$defs/delivery"
+        },
+        "included_obligation_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "purchase_trade_scope_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "tax_application_ref": {
+          "$ref": "#/$defs/config_ref"
+        }
+      },
+      "required": [
+        "id",
+        "sku_profile_ref",
+        "purchase_unit_ref",
+        "price_unit_ref",
+        "price_basis_quantity",
+        "tier_unit_ref",
+        "price_tier_scope",
+        "pricing_mode",
+        "tiers",
+        "moq",
+        "currency_ref",
+        "tax_profile_ref",
+        "trade_terms_ref",
+        "payment_terms_ref",
+        "delivery",
+        "included_obligation_ids",
+        "purchase_trade_scope_ref",
+        "tax_application_ref"
+      ],
+      "additionalProperties": false
+    },
+    "offer": {
+      "type": "object",
+      "properties": {
+        "supplier_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "origin": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "in_response_to_rfq"
+                  ]
+                },
+                "supplier_rfq_ref": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                      "not": {
+                        "pattern": "[^A-Za-z0-9._:-]"
+                      }
+                    },
+                    "row_version": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2147483647
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "row_version"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "supplier_rfq_ref"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "unsolicited",
+                    "imported_price_list"
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "rfq_line_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition_line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "supplier_ref",
+        "origin",
+        "rfq_ref",
+        "rfq_line_ids",
+        "interval",
+        "lines",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "purchase_terms": {
+      "type": "object",
+      "properties": {
+        "supplier_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "source_offer_ref": {
+          "$ref": "#/$defs/business_ref"
+        },
+        "validity_mode": {
+          "enum": [
+            "independent_validity",
+            "dependent_validity"
+          ]
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition_line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "supplier_ref",
+        "source_offer_ref",
+        "validity_mode",
+        "interval",
+        "lines",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "service_role": {
+      "type": "object",
+      "properties": {
+        "party_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "role": {
+          "enum": [
+            "forwarder",
+            "carrier",
+            "broker",
+            "inspection",
+            "insurer"
+          ]
+        },
+        "service_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "origin_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "destination_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "party_ref",
+        "role",
+        "service_code",
+        "origin_ref",
+        "destination_ref",
+        "interval",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "supplier_rfq": {
+      "type": "object",
+      "properties": {
+        "supplier_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "rfq_line_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "supplier_ref",
+        "rfq_ref",
+        "rfq_line_ids",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "package": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "length_m": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+          "not": {
+            "pattern": "^0(\\.0+)?$"
+          }
+        },
+        "width_m": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+          "not": {
+            "pattern": "^0(\\.0+)?$"
+          }
+        },
+        "height_m": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+          "not": {
+            "pattern": "^0(\\.0+)?$"
+          }
+        },
+        "net_kg": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+          "not": {
+            "pattern": "^0(\\.0+)?$"
+          }
+        },
+        "gross_kg": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+          "not": {
+            "pattern": "^0(\\.0+)?$"
+          }
+        },
+        "line_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "id",
+        "count",
+        "length_m",
+        "width_m",
+        "height_m",
+        "net_kg",
+        "gross_kg",
+        "line_ids"
+      ],
+      "additionalProperties": false
+    },
+    "measurement": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "measured",
+            "estimated"
+          ]
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": ".*(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/package"
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        },
+        "declared_volume_m3": {
+          "type": "string",
+          "maxLength": 40,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            }
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+          "not": {
+            "pattern": "^0(\\.0+)?$"
+          }
+        },
+        "estimate_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "kind",
+        "observed_at",
+        "packages",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "estimated"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "estimate_reason"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "estimate_reason"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "allocation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "basis": {
+              "enum": [
+                "quantity",
+                "weight",
+                "volume",
+                "amount"
+              ]
+            },
+            "target_line_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "not": {
+                  "pattern": "[^A-Za-z0-9._:-]"
+                }
+              },
+              "minItems": 1,
+              "maxItems": 200
+            },
+            "measurement_ref": {
+              "$ref": "#/$defs/business_ref"
+            }
+          },
+          "required": [
+            "basis",
+            "target_line_ids"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "basis": {
+              "enum": [
+                "explicit"
+              ]
+            },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "line_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                    "not": {
+                      "pattern": "[^A-Za-z0-9._:-]"
+                    }
+                  },
+                  "weight": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "allOf": [
+                      {
+                        "not": {
+                          "pattern": "[^0-9.]"
+                        }
+                      }
+                    ],
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                },
+                "required": [
+                  "line_id",
+                  "weight"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 200
+            }
+          },
+          "required": [
+            "basis",
+            "weights"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "billing": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "fixed"
+              ]
+            },
+            "amount": {
+              "$ref": "#/$defs/price"
+            }
+          },
+          "required": [
+            "kind",
+            "amount"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "per_basis"
+              ]
+            },
+            "rate": {
+              "$ref": "#/$defs/price"
+            },
+            "basis_quantity": {
+              "$ref": "#/$defs/quantity"
+            },
+            "unit_ref": {
+              "$ref": "#/$defs/config_ref"
+            },
+            "minimum_amount": {
+              "$ref": "#/$defs/price"
+            }
+          },
+          "required": [
+            "kind",
+            "rate",
+            "basis_quantity",
+            "unit_ref",
+            "minimum_amount"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "tiered"
+              ]
+            },
+            "pricing_mode": {
+              "enum": [
+                "all_units",
+                "graduated"
+              ]
+            },
+            "tiers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/tier"
+              },
+              "minItems": 1,
+              "maxItems": 50
+            },
+            "basis_quantity": {
+              "$ref": "#/$defs/quantity"
+            },
+            "unit_ref": {
+              "$ref": "#/$defs/config_ref"
+            },
+            "minimum_amount": {
+              "$ref": "#/$defs/price"
+            }
+          },
+          "required": [
+            "kind",
+            "pricing_mode",
+            "tiers",
+            "basis_quantity",
+            "unit_ref",
+            "minimum_amount"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "chargeable": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "fixed"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "actual_weight",
+                "volume"
+              ]
+            },
+            "measurement_ref": {
+              "$ref": "#/$defs/business_ref"
+            },
+            "billing_increment": {
+              "$ref": "#/$defs/quantity"
+            },
+            "rounding_mode": {
+              "enum": [
+                "ceil",
+                "half_up"
+              ]
+            },
+            "rounding_scope": {
+              "enum": [
+                "per_package",
+                "shipment"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "measurement_ref",
+            "billing_increment",
+            "rounding_mode",
+            "rounding_scope"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "max_actual_volumetric"
+              ]
+            },
+            "measurement_ref": {
+              "$ref": "#/$defs/business_ref"
+            },
+            "divisor_m3_per_kg": {
+              "type": "string",
+              "maxLength": 40,
+              "allOf": [
+                {
+                  "not": {
+                    "pattern": "[^0-9.]"
+                  }
+                }
+              ],
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$",
+              "not": {
+                "pattern": "^0(\\.0+)?$"
+              }
+            },
+            "billing_increment": {
+              "$ref": "#/$defs/quantity"
+            },
+            "rounding_mode": {
+              "enum": [
+                "ceil",
+                "half_up"
+              ]
+            },
+            "rounding_scope": {
+              "enum": [
+                "per_package",
+                "shipment"
+              ]
+            },
+            "max_scope": {
+              "enum": [
+                "per_package",
+                "shipment"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "measurement_ref",
+            "divisor_m3_per_kg",
+            "billing_increment",
+            "rounding_mode",
+            "rounding_scope",
+            "max_scope"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "fee": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "obligation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "fee_type_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "responsible_party": {
+          "enum": [
+            "seller",
+            "buyer"
+          ]
+        },
+        "currency_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "tax_profile_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "billing": {
+          "$ref": "#/$defs/billing"
+        },
+        "chargeable": {
+          "$ref": "#/$defs/chargeable"
+        },
+        "included_in_component_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "allocation": {
+          "$ref": "#/$defs/allocation"
+        },
+        "tax_application_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "zero_price_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "id",
+        "obligation_id",
+        "fee_type_ref",
+        "responsible_party",
+        "currency_ref",
+        "tax_profile_ref",
+        "billing",
+        "chargeable",
+        "allocation",
+        "tax_application_ref"
+      ],
+      "additionalProperties": false
+    },
+    "logistics": {
+      "type": "object",
+      "properties": {
+        "service_role_ref": {
+          "$ref": "#/$defs/business_ref"
+        },
+        "service_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "mode": {
+          "enum": [
+            "sea",
+            "air",
+            "road",
+            "rail",
+            "courier"
+          ]
+        },
+        "origin_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "destination_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "fees": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fee"
+          },
+          "minItems": 1,
+          "maxItems": 500
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "service_role_ref",
+        "service_code",
+        "mode",
+        "origin_ref",
+        "destination_ref",
+        "interval",
+        "fees",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "allocation_source": {
+      "type": "object",
+      "properties": {
+        "rfq_line_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "purchase_quantity": {
+          "$ref": "#/$defs/quantity"
+        },
+        "purchase_unit_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "offer",
+                "purchase_terms"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "condition_line_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "revision",
+            "condition_line_id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "rfq_line_id",
+        "purchase_quantity",
+        "purchase_unit_ref",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "scenario": {
+      "type": "object",
+      "properties": {
+        "context_ref": {
+          "$ref": "#/$defs/business_ref"
+        },
+        "allocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/allocation_source"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "logistics_offer_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/business_ref"
+          },
+          "minItems": 0,
+          "maxItems": 200
+        },
+        "fx_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/config_ref"
+          },
+          "minItems": 0,
+          "maxItems": 200
+        },
+        "selection_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "context_ref",
+        "allocations",
+        "logistics_offer_refs",
+        "fx_refs",
+        "selection_reason"
+      ],
+      "additionalProperties": false
+    },
+    "context_draft": {
+      "type": "object",
+      "properties": {
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "context_kind": {
+          "enum": [
+            "actual",
+            "what_if"
+          ]
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "calculation_currency_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "pricing_policy_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "comparison_basis": {
+          "type": "object",
+          "properties": {
+            "specification_basis": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "named_place_ref": {
+              "$ref": "#/$defs/config_ref"
+            },
+            "required_fee_type_refs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/config_ref"
+              },
+              "minItems": 0,
+              "maxItems": 50
+            },
+            "tax_basis": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "delivery": {
+              "$ref": "#/$defs/delivery"
+            },
+            "cost_basis": {
+              "enum": [
+                "nominal_direct_cost"
+              ]
+            },
+            "sales_trade_scope_ref": {
+              "$ref": "#/$defs/config_ref"
+            },
+            "sales_payment_terms_ref": {
+              "$ref": "#/$defs/config_ref"
+            }
+          },
+          "required": [
+            "specification_basis",
+            "named_place_ref",
+            "required_fee_type_refs",
+            "tax_basis",
+            "delivery",
+            "cost_basis",
+            "sales_trade_scope_ref",
+            "sales_payment_terms_ref"
+          ],
+          "additionalProperties": false
+        },
+        "requested_currency_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "requested_trade_terms_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "requested_payment_terms_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assumption"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "offer_draft": {
+      "type": "object",
+      "properties": {
+        "supplier_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "origin": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "in_response_to_rfq"
+                  ]
+                },
+                "supplier_rfq_ref": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                      "not": {
+                        "pattern": "[^A-Za-z0-9._:-]"
+                      }
+                    },
+                    "row_version": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2147483647
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "row_version"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "supplier_rfq_ref"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "unsolicited",
+                    "imported_price_list"
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "rfq_line_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition_line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "purchase_terms_draft": {
+      "type": "object",
+      "properties": {
+        "supplier_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "source_offer_ref": {
+          "$ref": "#/$defs/business_ref"
+        },
+        "validity_mode": {
+          "enum": [
+            "independent_validity",
+            "dependent_validity"
+          ]
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition_line"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "logistics_draft": {
+      "type": "object",
+      "properties": {
+        "service_role_ref": {
+          "$ref": "#/$defs/business_ref"
+        },
+        "service_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "mode": {
+          "enum": [
+            "sea",
+            "air",
+            "road",
+            "rail",
+            "courier"
+          ]
+        },
+        "origin_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "destination_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "fees": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fee"
+          },
+          "minItems": 1,
+          "maxItems": 500
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "service_role_draft": {
+      "type": "object",
+      "properties": {
+        "party_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "role": {
+          "enum": [
+            "forwarder",
+            "carrier",
+            "broker",
+            "inspection",
+            "insurer"
+          ]
+        },
+        "service_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "origin_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "destination_ref": {
+          "$ref": "#/$defs/config_ref"
+        },
+        "interval": {
+          "$ref": "#/$defs/interval"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "supplier_rfq_draft": {
+      "type": "object",
+      "properties": {
+        "supplier_ref": {
+          "$ref": "#/$defs/master_ref"
+        },
+        "rfq_ref": {
+          "$ref": "#/$defs/rfq_ref"
+        },
+        "rfq_line_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "not": {
+              "pattern": "[^A-Za-z0-9._:-]"
+            }
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "scenario_draft": {
+      "type": "object",
+      "properties": {
+        "context_ref": {
+          "$ref": "#/$defs/business_ref"
+        },
+        "allocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/allocation_source"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "logistics_offer_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/business_ref"
+          },
+          "minItems": 0,
+          "maxItems": 200
+        },
+        "fx_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/config_ref"
+          },
+          "minItems": 0,
+          "maxItems": 200
+        },
+        "selection_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "costing_context.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/context_draft"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "costing_context.revise"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "base_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "base_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "costing_context.discard_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "costing_context.verify"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "supersedes_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "costing_context.withdraw"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "target_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "target_revision",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_offer.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/offer_draft"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_offer.revise"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "base_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "base_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_offer.discard_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_offer.verify"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "supersedes_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_offer.withdraw"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "target_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "target_revision",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "purchase_terms.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/purchase_terms_draft"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "purchase_terms.revise"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "base_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "base_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "purchase_terms.discard_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "purchase_terms.publish"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "supersedes_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "purchase_terms.retire"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "target_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "target_revision",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "logistics_offer.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/logistics_draft"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "logistics_offer.revise"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "base_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "base_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "logistics_offer.discard_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "logistics_offer.verify"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "supersedes_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "logistics_offer.withdraw"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "target_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "target_revision",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "service_party_role.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/service_role_draft"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "service_party_role.revise"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "base_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "base_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "service_party_role.discard_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "service_party_role.verify"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "working_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "supersedes_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "working_revision",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "service_party_role.withdraw"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "target_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "target_revision",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_rfq.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/supplier_rfq_draft"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_rfq.record_issued"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "evidence",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "supplier_rfq.close"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "evidence",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "measurement.record_verified"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "const": 0
+            },
+            "data": {
+              "$ref": "#/$defs/measurement"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "measurement.supersede"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "active_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/measurement"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "active_revision",
+            "data",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "measurement.withdraw"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "target_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "target_revision",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "source_denial.record"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "source_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "id",
+            "source_id",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "cost_scenario.save_draft"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "data": {
+              "$ref": "#/$defs/scenario_draft"
+            }
+          },
+          "required": [
+            "id",
+            "expected_version",
+            "data"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "cost_scenario.evaluate"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          },
+          "required": [
+            "id",
+            "expected_version"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "brant.costing/0.1.0"
+        },
+        "command": {
+          "const": "cost_snapshot.freeze"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "scenario_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "expected_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "result_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "result_hash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "selection_reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "scenario_id",
+            "expected_version",
+            "result_id",
+            "result_hash",
+            "selection_reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract",
+        "command",
+        "idempotency_key",
+        "args"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

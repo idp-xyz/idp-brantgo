@@ -1,0 +1,256 @@
+{
+  "archive_version": "1.2",
+  "as_of": "2026-11-09",
+  "product": "IDP Brant · AI-Native Trade Operations Platform（中国 B2B 出口业务版）",
+  "standard": "IDP-Cargo 主档案 V2.9（01–12 阶段、证据分级、门禁与 Go-first 工程基线）",
+  "implementation_language": "Go (Golang)",
+  "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；M0 工程基线已建立，本机 make ci 通过；尚无 git 远程仓库）",
+  "status": "DESIGN_CANDIDATE_ARCHIVE_WITH_M0_ENGINEERING_BASELINE_LOCAL",
+  "production_ready": false,
+  "gates": {
+    "G0": "NO-GO（真实证据）",
+    "G1": "NO-GO",
+    "G2": "NOT_STARTED",
+    "G3": "NOT_STARTED",
+    "G4": "NOT_STARTED",
+    "G5": "NOT_STARTED"
+  },
+  "gate_mapping": "Cargo 主档案的 G0（M0 启动门禁）在 Brant 对应 G1（详细设计与技术准入）；Brant 的 G0 是客户场景确认。两者都为 NO-GO。",
+  "versioning_policy": "Latest means the most recent design candidate, not approved or implemented",
+  "stages": [
+    {
+      "seq": "01",
+      "folder": "01_PRODUCT_BLUEPRINT",
+      "stage": "产品与总体设计",
+      "latest_candidate": "Master Whitepaper · Go AI-Native V1.0",
+      "summary": "AI 原生外贸运营平台定位、首发范围、事实归属与 Go DDD 边界；产品范围基线、业务核心详细设计与补充规格在本仓库维护",
+      "status": "候选；产品基线 V1.0 已锁定范围，白皮书未签核",
+      "primary_file": "01_PRODUCT_BLUEPRINT/03_IDP_Brant_Master_Whitepaper_Go_AI_Native_V1.0.html"
+    },
+    {
+      "seq": "02",
+      "folder": "02_UBIQUITOUS_LANGUAGE",
+      "stage": "统一领域语言",
+      "latest_candidate": "UL V0.1 Draft",
+      "summary": "192 个候选词条、32 条语言不变量、11 组同词异义冲突",
+      "status": "全部 Proposed，待逐条签核",
+      "primary_file": "02_UBIQUITOUS_LANGUAGE/02_IDP_Brant_Ubiquitous_Language_V0.1.html"
+    },
+    {
+      "seq": "03",
+      "folder": "03_STRATEGIC_DDD",
+      "stage": "战略 DDD 与 Context Map",
+      "latest_candidate": "Context Map V0.1 Draft",
+      "summary": "18 个候选上下文（4 个核心域）、60 条关系、47 条事实权威、16 项战略 ADR",
+      "status": "候选；ADR-BR-004 阻断",
+      "primary_file": "03_STRATEGIC_DDD/02_IDP_Brant_Strategic_DDD_Context_Map_V0.1.html"
+    },
+    {
+      "seq": "04",
+      "folder": "04_DOMAIN_EVENT_STORMING",
+      "stage": "领域事件风暴",
+      "latest_candidate": "Event Storming V0.1",
+      "summary": "BRC-001 主链 19 步与 9 个反例、变更与控制场景；7 个热点；SAP 标准流程参照 41 行",
+      "status": "由设计与测试重建，未经真实客户工作坊",
+      "primary_file": "04_DOMAIN_EVENT_STORMING/01_IDP_Brant_Domain_Event_Storming_V0.1.html"
+    },
+    {
+      "seq": "05",
+      "folder": "05_TACTICAL_DDD",
+      "stage": "战术 DDD",
+      "latest_candidate": "Tactical DDD Candidate V0.1",
+      "summary": "60 个候选聚合、20 个状态机、68 条不变量、50 条参考验收",
+      "status": "候选；源自 Python V0.50 已验证规则",
+      "primary_file": "05_TACTICAL_DDD/01_IDP_Brant_DDD_Domain_Design_Master_V0.1.html"
+    },
+    {
+      "seq": "06",
+      "folder": "06_ENGINEERING_CONTRACTS",
+      "stage": "工程契约",
+      "latest_candidate": "Engineering Contracts · Go V0.1",
+      "summary": "命令、事件、错误码目录，事件信封 Schema，PG16 schema 归属；Python 候选契约原件",
+      "status": "候选；无可调用业务接口",
+      "primary_file": "06_ENGINEERING_CONTRACTS/01_IDP_Brant_Engineering_Contracts_Go_V0.1.html"
+    },
+    {
+      "seq": "07",
+      "folder": "07_ENGINEERING_BASELINE_REVIEW",
+      "stage": "工程基线审查",
+      "latest_candidate": "Python Baseline Review V0.50",
+      "summary": "审查 Python V0.50：54 个模块、21,136 行；679 项 unittest 重跑通过；17 项发现",
+      "status": "Python 参考实现的审查，非 Go 证据",
+      "primary_file": "07_ENGINEERING_BASELINE_REVIEW/01_IDP_Brant_Python_Baseline_Review_V0.50.html"
+    },
+    {
+      "seq": "08",
+      "folder": "08_ENGINEERING_READINESS",
+      "stage": "工程就绪度验证",
+      "latest_candidate": "Go Migration Readiness V0.1",
+      "summary": "577 个唯一 Python 测试方法到 Go 用例的逐项映射；14 项集成门禁",
+      "status": "映射已建立，0 项移植；Go 侧就绪项已按 M0 更新",
+      "primary_file": "08_ENGINEERING_READINESS/01_IDP_Brant_Go_Migration_Readiness_V0.1.html"
+    },
+    {
+      "seq": "09",
+      "folder": "09_IMPLEMENTATION_PLAN",
+      "stage": "工程实施总体计划",
+      "latest_candidate": "Implementation Plan · Go V0.1",
+      "summary": "M0 与 S1—S6 共 78 项工作；S1—S3 以 Python V0.50 行为等价为退出条件",
+      "status": "候选；M0 状态已回写；无已批准排期",
+      "primary_file": "09_IMPLEMENTATION_PLAN/01_IDP_Brant_Implementation_Master_Plan_Go_V0.1.html"
+    },
+    {
+      "seq": "10",
+      "folder": "10_M0_ENGINEERING_BASELINE",
+      "stage": "M0 工程基线与 G1 门禁",
+      "latest_candidate": "M0 Go Baseline · G1 Gate V0.1 · M0 Report V1.0",
+      "summary": "13 项技术准入控制、38 条 ADR；M0 执行报告与原始证据；G0、G1 均为 NO-GO",
+      "status": "NO-GO；M0 本机完成 9／11",
+      "primary_file": "10_M0_ENGINEERING_BASELINE/01_IDP_Brant_M0_Go_Baseline_and_G1_Gate_V0.1.html"
+    },
+    {
+      "seq": "11",
+      "folder": "11_DDD_METHODOLOGY",
+      "stage": "DDD 方法论与工程实践",
+      "latest_candidate": "DDD Methodology · Go AI-Native V1.0",
+      "summary": "Brant 版方法论：七步闭环、证据分级、Python→Go 等价纪律与 7 份模板",
+      "status": "候选；沿用 Cargo V2.0 原则",
+      "primary_file": "11_DDD_METHODOLOGY/01_IDP_Brant_DDD_Methodology_Go_AI_Native_V1.0.html"
+    },
+    {
+      "seq": "12",
+      "folder": "12_GO_FIRST_ALIGNMENT",
+      "stage": "Go 技术路线裁决与追踪",
+      "latest_candidate": "Repository Structure Baseline V1.0",
+      "summary": "单仓库单模块、上下文 internal 边界、import 白名单、事务规则与首个纵向切片",
+      "status": "待签核；M0 已建立 go.mod 与工程基线",
+      "primary_file": "12_GO_FIRST_ALIGNMENT/02_IDP_Brant_Repository_Structure_Baseline_V1.0.html"
+    }
+  ],
+  "technical_baseline": {
+    "domain_backend": "Go 1.26.5（go.mod toolchain 指令，与 idp-bento-go 和 CI 一致；本机另以 go1.26.8 复跑）",
+    "runtime_approach": "Modular Monolith + Hexagonal Architecture; 18 candidate bounded contexts are not deployment units",
+    "framework": "go.idp.xyz/idp-bento-go@v0.1.0-rc.2（go.mod 精确引用，h1 与记录一致）",
+    "platform": "go.idp.xyz/idp-platform-go@v0.1.0-rc.1（编号能力是否采用待 IG-09）",
+    "database": "PostgreSQL 16.12（CI 钉住的 digest）；已建 bento、brant_auth、brant_migrations；brant_<bc> 随 S1；brant_proc、brant_ref 候选",
+    "data_access": "pgx/v5（M0 使用）；sqlc 候选",
+    "auth": "本地授权投影与 authority_epoch 守卫（brant_auth，M0 实测）；OIDC 随 S1",
+    "events": "Transactional Outbox（brant-worker 中继，M0 实测）；Inbox 随 S4；idp-brant.<bc> sources",
+    "decimal": "标准库 math/big（ADR-BR-REPO-10 建议，待裁决）",
+    "python_reference": "IDP_Brant_T04_A46采购准备_V0.50 — behaviour reference only; 679 unittest rerun OK on a copy extracted from the 90 ZIP (E2, Python)",
+    "blocking_decisions": [
+      {
+        "id": "ADR-BR-004",
+        "status": "ACCEPTED（模拟评审）",
+        "evidence": "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html 第 05 章；10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE/10_spike_consistency.json（SC-04-A、B1–B3）"
+      },
+      {
+        "id": "ADR-BR-011",
+        "status": "ACCEPTED（模拟评审）",
+        "evidence": "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html 第 06 章；10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE/10_spike_consistency.json（SC-03-*）"
+      },
+      {
+        "id": "ADR-BR-REPO-10",
+        "status": "ACCEPTED（模拟评审）",
+        "evidence": "internal/kernel；10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html 第 04 章；10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE/06_kernel_fuzz.txt"
+      }
+    ]
+  },
+  "m0": {
+    "report": "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html",
+    "evidence": "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE",
+    "evidence_level": "E2 本机执行；无远程 CI 记录",
+    "result": "M0 9／11 项本机完成，其余 PARTIAL；本机 make ci（Go 1.26.5 与 1.26.8）通过",
+    "spike": {
+      "SC-04-A": "violation",
+      "SC-04-B1": "consistent",
+      "SC-04-B2": "consistent",
+      "SC-04-B3": "consistent",
+      "SC-03-NOLOCK": "violation",
+      "SC-03-ROOTLOCK-replace": "consistent",
+      "SC-03-ROOTLOCK-convert": "consistent",
+      "SC-03-STRESS-NOLOCK": "violation",
+      "SC-03-STRESS-ROOTLOCK": "consistent"
+    }
+  },
+  "brand": {
+    "kit": "brand/（仓库根目录）IDP Brant Logo engineering V1.2：视觉已锁定，生产母版尚未授权",
+    "embedded": [
+      {
+        "file": "brand/01_TRANSPARENT_LOCKUPS/full_lockup_white.png",
+        "sha256": "a1cc91562871974dc67b71a0c4d6751ff42e9524b41a92ed5f0ca22221fd3ce9"
+      },
+      {
+        "file": "brand/01_TRANSPARENT_LOCKUPS/lockup_no_tagline_white.png",
+        "sha256": "5f22fcfb10320af5e7bda771d43838c106b482164c7a13abae365642cba4e6fe"
+      },
+      {
+        "file": "brand/02_SYMBOL_AND_FAVICON_PREVIEWS/Brant_Symbol_midnight_32.png",
+        "sha256": "4f4e786576cecf767eebc7703f98369cf351050105d8040af1c665defec3bf4c"
+      },
+      {
+        "file": "brand/02_SYMBOL_AND_FAVICON_PREVIEWS/Brant_Symbol_midnight_64.png",
+        "sha256": "70009842676708abfa89219f48a49c6afdae7053f8915454478452f4f3b8b5a3"
+      }
+    ],
+    "use": "页面主视觉用白色完整组合，侧栏与首页用白色无副标题组合，favicon 用深色方形图标 32／64 px；原样内联为 data URI，不改色、不缩裁、不重绘",
+    "not_authorized": "方形图标只是预览，不是正式签发的 favicon；SVG 描摹不是矢量母版，未使用"
+  },
+  "counts": {
+    "ulTerms": 192,
+    "ulBusinessTerms": 174,
+    "ulInvariants": 32,
+    "contexts": 18,
+    "coreContexts": 4,
+    "relationships": 60,
+    "factAuthority": 47,
+    "strategicAdrs": 16,
+    "eventStormingScenarios": 12,
+    "aggregates": 60,
+    "stateMachines": 20,
+    "invariantRegister": 68,
+    "referenceTests": 50,
+    "commands": 156,
+    "events": 103,
+    "errorCodes": 143,
+    "pythonSourceModules": 54,
+    "pythonSourceLines": 21136,
+    "pythonUniqueTests": 577,
+    "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
+    "goTestsPorted": 0,
+    "wbsTasks": 78,
+    "adrs": 38,
+    "g1Controls": 13,
+    "sapReferenceRows": 41,
+    "sapReferenceGaps": 0,
+    "sapReferencePartial": 11,
+    "goPackages": 12,
+    "goSourceLines": 5416,
+    "goTestFunctions": 69,
+    "goIntegrationTests": 19,
+    "goFuzzTargets": 2,
+    "m0DoneLocal": 9,
+    "m0Tasks": 11
+  },
+  "generated_pages": [
+    "01_PRODUCT_BLUEPRINT/03_IDP_Brant_Master_Whitepaper_Go_AI_Native_V1.0.html",
+    "02_UBIQUITOUS_LANGUAGE/02_IDP_Brant_Ubiquitous_Language_V0.1.html",
+    "03_STRATEGIC_DDD/02_IDP_Brant_Strategic_DDD_Context_Map_V0.1.html",
+    "04_DOMAIN_EVENT_STORMING/01_IDP_Brant_Domain_Event_Storming_V0.1.html",
+    "05_TACTICAL_DDD/01_IDP_Brant_DDD_Domain_Design_Master_V0.1.html",
+    "06_ENGINEERING_CONTRACTS/01_IDP_Brant_Engineering_Contracts_Go_V0.1.html",
+    "07_ENGINEERING_BASELINE_REVIEW/01_IDP_Brant_Python_Baseline_Review_V0.50.html",
+    "08_ENGINEERING_READINESS/01_IDP_Brant_Go_Migration_Readiness_V0.1.html",
+    "09_IMPLEMENTATION_PLAN/01_IDP_Brant_Implementation_Master_Plan_Go_V0.1.html",
+    "10_M0_ENGINEERING_BASELINE/01_IDP_Brant_M0_Go_Baseline_and_G1_Gate_V0.1.html",
+    "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html",
+    "11_DDD_METHODOLOGY/01_IDP_Brant_DDD_Methodology_Go_AI_Native_V1.0.html",
+    "12_GO_FIRST_ALIGNMENT/02_IDP_Brant_Repository_Structure_Baseline_V1.0.html"
+  ],
+  "notes": [
+    "本主档案按 IDP-Cargo 主档案的结构与方法组织，内容来自 Brant 产品基线 V1.0、业务核心详细设计 V0.2 与 Python V0.50。",
+    "全部 DDD 资产为候选设计，未经业务或技术签核。",
+    "V1.1 回写 M0 工程基线的本机证据：Go 模块、kernel、foundation、迁移、依赖检查、Outbox 中继与一致性实测；尚无业务上下文。",
+    "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1 仍为 NO-GO。"
+  ]
+}

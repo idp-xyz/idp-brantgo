@@ -1,0 +1,84 @@
+{
+  "version": "0.24",
+  "status": "runtime_slice",
+  "scope": "Core.execute persistent quotation-foundation configuration lifecycle",
+  "contract": "brant.quotation-foundation/0.1.0",
+  "kinds": [
+    "quote_document_template",
+    "sales_tax_application"
+  ],
+  "commands": {
+    "quotation_foundation.save_draft": {
+      "permission": ["quotation_foundation.save_draft", "quotation_foundation.read"],
+      "human_only": false,
+      "control": "quotation_foundation.{kind}",
+      "root_version_cas": true,
+      "authorization_epoch": true,
+      "idempotent": true
+    },
+    "quotation_foundation.revise": {
+      "permission": ["quotation_foundation.revise", "quotation_foundation.read"],
+      "human_only": false,
+      "control": "quotation_foundation.{kind}",
+      "root_version_cas": true,
+      "authorization_epoch": true,
+      "idempotent": true
+    },
+    "quotation_foundation.discard_draft": {
+      "permission": ["quotation_foundation.discard_draft", "quotation_foundation.read"],
+      "human_only": true,
+      "control": "quotation_foundation.{kind}",
+      "root_version_cas": true,
+      "working_revision_cas": true,
+      "authorization_epoch": true,
+      "idempotent": true
+    },
+    "quotation_foundation.publish": {
+      "permission": ["quotation_foundation.publish", "quotation_foundation.read"],
+      "human_only": true,
+      "control": "quotation_foundation.{kind}",
+      "root_version_cas": true,
+      "working_revision_cas": true,
+      "independent_reviewer": true,
+      "active_policy_required": true,
+      "current_reference_and_evidence_checks": true,
+      "authorization_epoch": true,
+      "idempotent": true
+    },
+    "quotation_foundation.retire": {
+      "permission": ["quotation_foundation.retire", "quotation_foundation.read"],
+      "human_only": true,
+      "control": "quotation_foundation.{kind}",
+      "root_version_cas": true,
+      "target_revision_required": true,
+      "current_evidence_required": true,
+      "authorization_epoch": true,
+      "idempotent": true
+    }
+  },
+  "read_dependencies": ["foundation.read", "read"],
+  "data_scope": "Configuration roots are claimed in record_access as quotation_foundation.{kind}; own/team/company scope is checked on every write, query and replay.",
+  "idempotency": {
+    "scope": ["tenant", "company", "command", "idempotency_key"],
+    "request_hash": "SHA-256 of canonical full request including root and revision CAS fields",
+    "replay": "Rechecks exact action grant, read grant, human requirement, server object control, root data scope, historical references and source readability; does not rerun the action"
+  },
+  "atomic_write_set": [
+    "quotation_config_root and quotation_config_revision",
+    "quotation_config_event",
+    "action_result",
+    "outbox",
+    "audit_event"
+  ],
+  "evidence_boundary": "Source verification state is a trusted local host assertion stored separately with immutable change events. Public JSON cannot mark evidence verified. This does not establish enterprise authenticity, legal tax correctness, or external source truth.",
+  "policy_boundary": "An independent active pricing_policy is selected by a trusted host adapter and rechecked inside each publication transaction.",
+  "external_side_effects": [],
+  "unimplemented": [
+    "quote freeze and document rendering do not yet consume these new persisted configuration rows",
+    "public configuration event-history query",
+    "enterprise identity and source-verification services",
+    "HTTP authentication and raw-byte JSON parser",
+    "production file storage, external sending, delivery, customer acceptance and order conversion",
+    "retry/dead-letter processing and COMMIT unknown reconciliation"
+  ]
+}

@@ -1,0 +1,3 @@
+﻿requirement_id,capability,context,term_refs,scenario_id,aggregate,command,event,invariant,contract_ref,python_test_ref,go_test_ref,evidence_level,business_approval,technical_approval
+REQ-TRD-001,F04,TRD,TRD-SalesOrder；TRD-OrderReview,ES-01,SalesOrder,order.activate,OrderActivated,TRD-INV-013,06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/01_Command_Catalog_V0.1.csv,tests/test_t04_a39_order_gate.py,,E0,PENDING,PENDING
+REQ-PUR-001,F05,PUR,PUR-PurchaseDraft,ES-07,PurchaseDraft,purchase.draft.prepare,PurchaseDraftPrepared,PUR-INV-001,06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/01_Command_Catalog_V0.1.csv,tests/test_t04_a46_purchase_draft.py,,E0,PENDING,PENDING

@@ -1,0 +1,18 @@
+﻿id,severity,area,finding,impact,go_action,ref
+PY-01,High,结构,"t03_storage.py 共 3,992 行，混合报价、确认、订单、采购草稿与第 2–17 版迁移。",无法按上下文边界直接移植；任一改动影响多个聚合。,按 TRD 的 QuoteRoot、CustomerResponse、Acceptance、SalesOrder 与 PUR 的 PurchaseDraft 拆分 adapters/postgres 与 domain 包。,07 模块清单
+PY-02,High,并发,大量守卫的正确性依赖 SQLite BEGIN IMMEDIATE 全库写串行（撤销优先于激活、反证先提交则拒绝）。,PostgreSQL 16 READ COMMITTED 下没有全库写锁，直接移植会出现竞态。,ADR-BR-011：按锁序显式行锁并以 PG16 并发测试固定。,A26、A39；核心设计 9.2
+PY-03,High,一致性,订单激活与报价正式化在同一事务内重查成本快照、配置、审核人资格（costing_snapshot_in_transaction）。,与 Cargo 基线 T1／T3 及 idp-bento-go 事务 owner 机制冲突。,ADR-BR-004 裁决后实现资格守卫。,T03 规格 §7；A26
+PY-04,Medium,数据,多张表以 data_json／body_json 保存业务载荷（t02_record、t03_quote_draft、t04_purchase_draft 等）。,数据库约束只能覆盖部分字段，守卫依赖应用层。,Go 中按聚合设计类型化表与 sqlc 查询；确需 JSONB 的载荷须有封闭契约与校验。,07 表清单
+PY-05,Medium,兼容入口,旧入口 t03_quote_record_acceptance、公共 quote.acceptance.verify 可不经 A37 回复关联创建确认；A38 前的 t03_order_activate 可不经订单审批。,存在绕过新规则的历史路径（A39 已统一订单门禁）。,Go 不保留绕过路径；旧语义只在迁移投影中说明。,A37、A38、A39
+PY-06,Medium,缺口,acceptance.invalidate／mark_disputed、order.cancel／close_unfulfilled 只有设计。,确认纠错与订单处置无法闭环。,S3-06、S3-07 一并实现。,核心设计 6.1、8.2、10.4
+PY-07,Medium,缺口,采购草稿不能作废或替换；采购承诺审批（A47）只有设计。,选错供应条件的订单行无法重新编制。,S5-01 与受控作废同批设计。,A46
+PY-08,Low,契约,部分公共历史查询（body、customer_ref、events）仍为旧宽松形状。,历史查询精度未完全封闭。,Go 查询契约一律封闭。,A26
+PY-09,High,安全,Principal 与授权由受信任本地适配层提供；无真实 SSO、岗位与团队 ACL。,不能据此宣称身份与授权验收。,C10：OIDC＋本地授权投影＋authority_epoch。,T01 README
+PY-10,Info,范围,无 HTTP 服务与网页；execute-local CLI 不得公网发布。,接口与页面全部待 Go 交付。,S1-06、S4。,T01 README
+PY-11,Info,范围,无 PDF／XLSX 解析、无模型调用、无 EER／BIP 适配、无真实渠道发送。,P0 的 AI-Native 退出条件全部未覆盖。,S4-03–S4-07。,核心设计 13
+PY-12,Low,完整性,正文哈希能发现损坏，但不构成对整个 SQLite 文件篡改的密码学防护。,不能作为防篡改证据。,Go 保持同等声明；如需防篡改另立方案。,A45、A46
+PY-13,Info,证据口径,A46 报告的全量 unittest 679 项包含历史模块以导入方式重复发现的用例；静态唯一测试方法为 577 个。,移植与验收若按 679 计数会重复。,Go 移植以唯一测试方法为单位登记。,A45、A46 报告
+PY-14,Medium,契约,候选契约由脚本生成，并保留多版本映射文件（authority-control-mapping v0.12–v0.27 等）。,事实源分散。,C2 规则：进程外契约以 contracts/ 为准，Go 类型由 codegen 或 contract-check 二选一。,t03_candidate/contracts
+PY-15,Low,时间,公共时间统一 UTC Z，本地 getter 保留原始表示。,两种表示并存。,Go 统一 time.Time（UTC）与 RFC 3339 输出。,A45
+PY-16,High,算术,计算混用精确有理数与 50 位 Decimal 上下文（T02 §13.3、§13.9）。,Go 十进制实现若不等价会产生分位差异。,ADR-BR-REPO-10；以 T02、T03 合成样例做独立算术对照。,T02 规格
+PY-17,Medium,资源,入口资源预算（1 MiB、64 层、100000 值、1000 引用等）在 Python 入口与预算模块实现。,Go 入口若遗漏会放宽限制。,transport/http 与应用层实现同等限制并加负向测试。,T03 规格 §10；resource_budget.py

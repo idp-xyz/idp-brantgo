@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.idp.xyz/brant/integration-event-envelope/1.0.0",
+  "title": "IDP Brant integration event envelope (candidate)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "eventType",
+    "schemaVersion",
+    "source",
+    "aggregateType",
+    "aggregateId",
+    "aggregateVersion",
+    "partitionKey",
+    "occurredAt",
+    "recordedAt",
+    "actor",
+    "tenantId",
+    "companyId",
+    "correlationId",
+    "causationId",
+    "payloadHash",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "eventType": {
+      "type": "string",
+      "pattern": "^idp-brant\\.[a-z]{3}\\.[a-z0-9_]+\\.v[0-9]+$"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "idp-brant.pty",
+        "idp-brant.cat",
+        "idp-brant.pol",
+        "idp-brant.evd",
+        "idp-brant.inq",
+        "idp-brant.sup",
+        "idp-brant.cst",
+        "idp-brant.trd",
+        "idp-brant.pur",
+        "idp-brant.mfg",
+        "idp-brant.qlt",
+        "idp-brant.stk",
+        "idp-brant.ful",
+        "idp-brant.stl",
+        "idp-brant.clm",
+        "idp-brant.cnx",
+        "idp-brant.crm",
+        "idp-brant.tsk"
+      ]
+    },
+    "aggregateType": {
+      "type": "string"
+    },
+    "aggregateId": {
+      "type": "string"
+    },
+    "aggregateVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "partitionKey": {
+      "type": "string",
+      "description": "aggregateType:aggregateId；同一聚合的事件按 aggregateVersion 顺序投递"
+    },
+    "businessRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "businessHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "human",
+            "ai",
+            "system"
+          ]
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "tenantId": {
+      "type": "string"
+    },
+    "companyId": {
+      "type": "string"
+    },
+    "correlationId": {
+      "type": "string"
+    },
+    "causationId": {
+      "type": "string"
+    },
+    "idempotencyKey": {
+      "type": "string"
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "taskId",
+        "controlEpoch"
+      ],
+      "properties": {
+        "taskId": {
+          "type": "string"
+        },
+        "controlEpoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50
+    },
+    "payloadHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "payload": {
+      "type": "object",
+      "description": "只含标识与版本，不含法定标识或个人数据；按 eventType 另有封闭 schema"
+    }
+  }
+}

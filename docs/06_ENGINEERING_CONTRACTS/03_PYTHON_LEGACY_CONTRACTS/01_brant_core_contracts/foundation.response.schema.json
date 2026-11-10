@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "action_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "object_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "row_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "active",
+            "retired",
+            "snapshot",
+            "converted",
+            "evaluated",
+            "issued",
+            "registered",
+            "generated"
+          ]
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "business_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "values": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^(?:0|[1-9][0-9]{0,15})(?:\\.[0-9]{1,12})?$",
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            },
+            "quantity": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,12})?$",
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            },
+            "currency": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "unit": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            },
+            "net_amount": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^(?:0|[1-9][0-9]{0,15})(?:\\.[0-9]{1,12})?$",
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            },
+            "tax_amount": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^(?:0|[1-9][0-9]{0,15})(?:\\.[0-9]{1,12})?$",
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            },
+            "gross_amount": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^(?:0|[1-9][0-9]{0,15})(?:\\.[0-9]{1,12})?$",
+              "not": {
+                "pattern": "[^0-9.]"
+              }
+            },
+            "document_number": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "\\S"
+            },
+            "content_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "file_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "not": {
+                "pattern": "[^A-Za-z0-9._:-]"
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "action_id",
+        "object_id",
+        "row_version",
+        "status",
+        "replayed"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "code": {
+          "enum": [
+            "SCHEMA_INVALID",
+            "UNSUPPORTED_CONTRACT",
+            "PERMISSION_DENIED",
+            "NOT_FOUND",
+            "VERSION_CONFLICT",
+            "IDEMPOTENCY_PAYLOAD_CONFLICT",
+            "REFERENCE_INVALID",
+            "INVALID_KNOWN_VALUE",
+            "INVALID_STATE",
+            "DRAFT_NOT_READY",
+            "CONFIG_NOT_ACTIVE",
+            "CONFIG_EXPIRED",
+            "INDEPENDENT_REVIEW_REQUIRED",
+            "FX_SCOPE_MISMATCH",
+            "FX_STALE",
+            "UNIT_SCOPE_MISMATCH",
+            "TAX_POLICY_UNCONFIRMED",
+            "PAYMENT_TOTAL_MISMATCH",
+            "BUSINESS_KEY_CONFLICT",
+            "TEMPLATE_INVALID",
+            "FILE_INVALID",
+            "IMMUTABLE_DEFINITION",
+            "SEQUENCE_EXHAUSTED",
+            "OBJECT_CONTROL_CONFLICT"
+          ]
+        },
+        "field_errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "\\S"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "path",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 200,
+          "uniqueItems": true
+        },
+        "correlation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "not": {
+            "pattern": "[^A-Za-z0-9._:-]"
+          }
+        },
+        "retryable": {
+          "const": false
+        }
+      },
+      "required": [
+        "ok",
+        "code",
+        "field_errors",
+        "correlation_id",
+        "retryable"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

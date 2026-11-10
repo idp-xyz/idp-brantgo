@@ -1,0 +1,17 @@
+﻿topic,idp_cargo,idp_brant,status
+语言与工具链,Go 1.26.5 精确（与 idp-bento-go 一致）,go.mod：go 1.26.0、toolchain go1.26.5；本机以 GOTOOLCHAIN=go1.26.5 复跑 make ci,DONE_LOCAL
+架构,模块化单体＋六边形；13 个上下文,模块化单体＋六边形；18 个候选上下文,PROPOSED
+框架,go.idp.xyz/idp-bento-go v0.1.0-rc.2,go.mod 精确引用 v0.1.0-rc.2；go.sum 与 Cargo 逐字节一致；Outbox Store 与 testkit 已使用,DONE_LOCAL
+平台能力,idp-platform-go 编号（尚未引入）,idp-platform-go v0.1.0-rc.1 在本机缓存；编号是否采用待 IG-09,OPEN
+数据库,PostgreSQL 16，schema cargo_<bc>,PostgreSQL 16.12（与 Cargo CI 同一 digest）；bento、brant_auth、brant_migrations 已建；brant_<bc> 随 S1,PARTIAL
+事务,每上下文独立 owner；跨上下文只在事务外查询（T3）,每上下文独立 owner（AC4 实测）；资格守卫：M0-10 支持方案 B（SECURITY DEFINER 守卫函数），待 ADR-BR-004 裁决,PROPOSED
+隔离级别,READ COMMITTED＋行锁（PartyStore.Load FOR NO KEY UPDATE）,READ COMMITTED＋根行 FOR UPDATE 优先（SC-03 实测），待 ADR-BR-011 裁决,PROPOSED
+事件,idp-cargo.<bc>，主版本后缀,idp-brant.<bc>，主版本后缀,PROPOSED
+进程,cargo-api、cargo-worker、cargo-migrate、cargo-cli,brant-migrate、brant-worker 已实现；brant-api（S1）、brant-cli 待建,PARTIAL
+主档案位置,独立主档案；仓库只发布 go_cargo,主档案在仓库 docs/（负责人选择）；公开时排除,PROPOSED
+金额,固定点 Decimal 或可验证整数编码；禁止 float,标准库 math/big（big.Rat＋big.Int）；Python 向量与模糊测试通过；待 ADR-BR-REPO-10 裁决,PROPOSED
+AI 层,internal/ai，不是第 14 个上下文,internal/ai，不是上下文；业务任务为 TSK 上下文（ADR-BR-003）,PROPOSED
+Python 参考,89 项 Python 参考测试须建立 Go 等价映射,577 个唯一测试方法已映射，0 项整项移植；kernel 复现 6 个测试的数值向量,PARTIAL
+依赖检查,dependency-check：D1–D6、AC2、AC3、AC7；D7 警告,同一工具改写：另加 AC6、AC10、测试支撑包规则（D9）；D5 允许 foundation 内部导入,DONE_LOCAL
+Outbox 中继,cargo-worker＋Relay（V2.9），进程级崩溃演练,brant-worker＋Relay，同样的崩溃演练（本机 PG16）,DONE_LOCAL
+租户与授权,TenantTransactor（app.tenant_id）；业务 Authorizer 端口,ScopeTransactor（app.tenant_id＋app.company_id）；authority_epoch 守卫；人工专属命令；OIDC 待 S1,PARTIAL

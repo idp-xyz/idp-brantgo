@@ -1,0 +1,1057 @@
+{
+  "artifact": "IDP Brant Domain Event Storming Model",
+  "version": "0.1",
+  "date": "2026-11-06",
+  "status": "CANDIDATE — reconstructed from the Brant baseline, business core design V0.2 (BRC-001, BC-AT01–28) and Python V0.50 tests; no live workshop with real customer evidence has been held (G0 NO-GO).",
+  "legend": {
+    "command": "蓝色：命令（意图）",
+    "event": "橙色：领域事件（过去时）",
+    "aggregate": "淡黄：聚合",
+    "policy": "紫色：策略／规则",
+    "hotspot": "红色：热点与未决",
+    "actor": "黄色：执行者"
+  },
+  "actors": [
+    "销售经办",
+    "采购／核价经办",
+    "报价审核人",
+    "客户确认核实人",
+    "订单审核人",
+    "采购编制人",
+    "管理员／支持",
+    "AI 执行身份",
+    "客户（外部）",
+    "供应商（外部）"
+  ],
+  "scenarios": [
+    {
+      "id": "ES-01",
+      "title": "BRC-001 正常主链：询价到采购草稿",
+      "type": "happy-path",
+      "contextFlow": [
+        "EVD",
+        "PTY",
+        "CAT",
+        "INQ",
+        "SUP",
+        "CST",
+        "TRD",
+        "PUR"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售经办",
+          "command": "source.register",
+          "aggregate": "EVD·Source",
+          "event": "SourceRegistered",
+          "policy": "相同内容同 scope 共享；同渠道消息不同正文拒绝",
+          "hotspot": "",
+          "evidence": "客户询价邮件原文"
+        },
+        {
+          "n": 2,
+          "actor": "销售经办",
+          "command": "party.confirm／contact.confirm",
+          "aggregate": "PTY·Party／Contact",
+          "event": "PartyConfirmed／ContactConfirmed",
+          "policy": "人工核实且具备来源读取权限",
+          "hotspot": "",
+          "evidence": "customer.1／contact.1"
+        },
+        {
+          "n": 3,
+          "actor": "销售经办",
+          "command": "sku.confirm ×4",
+          "aggregate": "CAT·Sku",
+          "event": "SkuConfirmed",
+          "policy": "未知 SKU 不自动创建",
+          "hotspot": "",
+          "evidence": "ST01 red／blue × S／M，TECH-01-r1"
+        },
+        {
+          "n": 4,
+          "actor": "销售经办／AI 执行身份",
+          "command": "rfq.save_draft",
+          "aggregate": "INQ·CustomerRfq",
+          "event": "（草稿，无集成事件）",
+          "policy": "整稿替换；缺项可保存",
+          "hotspot": "AI 只生成候选行",
+          "evidence": "四行 24／36／12／48"
+        },
+        {
+          "n": 5,
+          "actor": "销售经办",
+          "command": "rfq.confirm_scope",
+          "aggregate": "INQ·CustomerRfq",
+          "event": "RfqScopeConfirmed",
+          "policy": "人工覆盖全部来源与完整需求",
+          "hotspot": "",
+          "evidence": "120 PCS ready"
+        },
+        {
+          "n": 6,
+          "actor": "采购／核价经办",
+          "command": "supplier_rfq.record_issued",
+          "aggregate": "SUP·SupplierRfq",
+          "event": "SupplierRfqIssued",
+          "policy": "issued 只表示人工发出事实",
+          "hotspot": "首批无自动发送",
+          "evidence": "人工外发确认"
+        },
+        {
+          "n": 7,
+          "actor": "采购／核价经办",
+          "command": "supplier_offer.verify ×2",
+          "aggregate": "SUP·SupplierOffer",
+          "event": "SupplierOfferVerified",
+          "policy": "MOQ 100 按 ST01 款号合计",
+          "hotspot": "",
+          "evidence": "supplier.A 5.00、supplier.B 5.30"
+        },
+        {
+          "n": 8,
+          "actor": "采购／核价经办",
+          "command": "costing_context.verify",
+          "aggregate": "CST·CostingContext",
+          "event": "CostingContextVerified",
+          "policy": "覆盖完整询价行；客户要求与假设分开",
+          "hotspot": "",
+          "evidence": "计算币种 USD"
+        },
+        {
+          "n": 9,
+          "actor": "采购／核价经办",
+          "command": "cost_scenario.evaluate ×2",
+          "aggregate": "CST·CostScenario",
+          "event": "CostScenarioEvaluated",
+          "policy": "comparable 不等于最佳；高价候选保留",
+          "hotspot": "",
+          "evidence": "A 660、B 696"
+        },
+        {
+          "n": 10,
+          "actor": "采购／核价经办",
+          "command": "cost_snapshot.freeze",
+          "aggregate": "CST·CostSnapshot",
+          "event": "CostSnapshotFrozen",
+          "policy": "verified＋comparable＋依赖当前有效",
+          "hotspot": "跨上下文依赖重查（ADR-BR-004）",
+          "evidence": "600＋60＝660 USD；选定理由"
+        },
+        {
+          "n": 11,
+          "actor": "销售经办",
+          "command": "quote.save_draft → quote.freeze",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteFrozen",
+          "policy": "服务端计算；issued_at、expires_at 入哈希",
+          "hotspot": "",
+          "evidence": "960.00 USD；毛利 31.25%；288＋672"
+        },
+        {
+          "n": 12,
+          "actor": "销售经办",
+          "command": "quote.submit_review",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteReviewRequested",
+          "policy": "目标 activate；毛利 ≥ 25%",
+          "hotspot": "",
+          "evidence": "审核请求"
+        },
+        {
+          "n": 13,
+          "actor": "报价审核人",
+          "command": "quote.review.decide(approve)",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteReviewDecided",
+          "policy": "审核人独立于编制人；批准到期 ≤ 报价到期",
+          "hotspot": "",
+          "evidence": "批准记录"
+        },
+        {
+          "n": 14,
+          "actor": "销售经办",
+          "command": "quote.activate",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteActivated",
+          "policy": "同事务重查资格；封存正式文档、编号与提交证据",
+          "hotspot": "成本、配置、审核人资格的同事务重查",
+          "evidence": "正式报价文档"
+        },
+        {
+          "n": 15,
+          "actor": "客户确认核实人",
+          "command": "quote.response.record → quote.response.verify",
+          "aggregate": "TRD·CustomerResponse／Acceptance",
+          "event": "CustomerResponseRecorded／AcceptanceVerified",
+          "policy": "仅 full_unconditional；now < expires_at",
+          "hotspot": "",
+          "evidence": "客户回复邮件"
+        },
+        {
+          "n": 16,
+          "actor": "销售经办",
+          "command": "order.prepare",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderPrepared",
+          "policy": "同事务占用 full_v1 名额",
+          "hotspot": "",
+          "evidence": "订单草稿"
+        },
+        {
+          "n": 17,
+          "actor": "订单审核人",
+          "command": "order.review.request → order.review.decide",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderReviewDecided",
+          "policy": "审核人独立于草稿创建人与申请人",
+          "hotspot": "",
+          "evidence": "订单审批"
+        },
+        {
+          "n": 18,
+          "actor": "销售经办",
+          "command": "order.activate",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderActivated",
+          "policy": "同事务来源资格重查；写提交证据",
+          "hotspot": "",
+          "evidence": "960.00 USD 生效订单"
+        },
+        {
+          "n": 19,
+          "actor": "采购编制人",
+          "command": "purchase.draft.prepare",
+          "aggregate": "PUR·PurchaseDraft",
+          "event": "PurchaseDraftPrepared",
+          "policy": "人工逐行指定 supplier.A 报价；not_committed",
+          "hotspot": "采购承诺审批（A47）未实现",
+          "evidence": "600.00 USD 草稿"
+        }
+      ],
+      "counterexamples": [
+        "任一核实或审批由 AI 执行",
+        "报价覆盖部分询价行",
+        "成本快照来自 what_if 上下文"
+      ],
+      "openQuestions": [
+        "真实客户的报价审核与订单审核是否由同一岗位兼任（BC-D02）"
+      ]
+    },
+    {
+      "id": "ES-02",
+      "title": "低毛利：普通审批不能放行，例外须独立批准",
+      "type": "counterexample",
+      "contextFlow": [
+        "TRD",
+        "POL"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售经办",
+          "command": "quote.freeze",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteFrozen",
+          "policy": "毛利判定 R−C ≥ R×0.25",
+          "hotspot": "",
+          "evidence": "单价 7.00，净销售 840"
+        },
+        {
+          "n": 2,
+          "actor": "销售经办",
+          "command": "quote.submit_review",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteReviewRequested",
+          "policy": "毛利 21.43% 为 requires_approval：审核须含毛利例外",
+          "hotspot": "",
+          "evidence": "毛利 21.43%"
+        },
+        {
+          "n": 3,
+          "actor": "报价审核人",
+          "command": "quote.review.decide（仅内容）",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteReviewDecided",
+          "policy": "普通批准不清空毛利结果",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 4,
+          "actor": "获准经办",
+          "command": "quote.activate",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "—（MARGIN_POLICY_REQUIRES_APPROVAL）",
+          "policy": "缺毛利例外批准",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 5,
+          "actor": "毛利例外审核人",
+          "command": "quote.review.decide（含毛利例外）",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteReviewDecided",
+          "policy": "独立于编制人；绑定修订、哈希、规则版本与差额",
+          "hotspot": "例外角色与金额阈值（BC-D05）",
+          "evidence": ""
+        },
+        {
+          "n": 6,
+          "actor": "获准经办",
+          "command": "quote.activate",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteActivated",
+          "policy": "内容批准与毛利例外均有效",
+          "hotspot": "",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "界面显示 25.00% 但精确值 879.99／660 不通过",
+        "编制人自批例外：MARGIN_EXCEPTION_NOT_AUTHORIZED"
+      ],
+      "openQuestions": [
+        "例外审批的独立角色与金额阈值（BC-D05）"
+      ]
+    },
+    {
+      "id": "ES-03",
+      "title": "报价替代与转单竞争",
+      "type": "concurrency",
+      "contextFlow": [
+        "TRD"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售经办",
+          "command": "quote.replace(r1→r2)",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "QuoteReplaced",
+          "policy": "无转换名额；目标为 replace 的有效批准",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 2,
+          "actor": "销售经办",
+          "command": "order.prepare(r1)",
+          "aggregate": "TRD·SalesOrder",
+          "event": "—（QUOTE_NOT_CURRENT）",
+          "policy": "根指向 r2，r1 不再当前",
+          "hotspot": "两者并发时依赖根行锁顺序",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "prepare 先提交，则 replace 返回 ROOT_CONVERSION_LOCKED"
+      ],
+      "openQuestions": [
+        "PG16 下根行锁与订单唯一约束的组合是否足够（ADR-BR-011）"
+      ]
+    },
+    {
+      "id": "ES-04",
+      "title": "成本来源否认与当前资格",
+      "type": "cross-context",
+      "contextFlow": [
+        "CST",
+        "TRD"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "采购／核价经办",
+          "command": "costing.attest_source(denied)",
+          "aggregate": "CST·CostSnapshot",
+          "event": "CostSourceDenied",
+          "policy": "否认不改历史数值",
+          "hotspot": "",
+          "evidence": "供应商声明报价无效"
+        },
+        {
+          "n": 2,
+          "actor": "销售经办",
+          "command": "order.activate",
+          "aggregate": "TRD·SalesOrder",
+          "event": "—（COST_SNAPSHOT_INELIGIBLE）",
+          "policy": "新激活重查可采纳资格",
+          "hotspot": "Go 中跨上下文同事务重查如何实现（ADR-BR-004）",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "激活先提交：保留当时合法事实并登记风险暂停"
+      ],
+      "openQuestions": [
+        "事后检测是否可被业务接受"
+      ]
+    },
+    {
+      "id": "ES-05",
+      "title": "客户回复的五类分类",
+      "type": "counterexample",
+      "contextFlow": [
+        "EVD",
+        "TRD"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售经办",
+          "command": "quote.response.record(conditional)",
+          "aggregate": "TRD·CustomerResponse",
+          "event": "CustomerResponseRecorded",
+          "policy": "分类不创建 Acceptance",
+          "hotspot": "AI 分类只是候选",
+          "evidence": "“接受但蓝色改黑色”"
+        },
+        {
+          "n": 2,
+          "actor": "客户确认核实人",
+          "command": "quote.response.verify",
+          "aggregate": "TRD·Acceptance",
+          "event": "—（ACCEPTANCE_NOT_UNCONDITIONAL）",
+          "policy": "仅 full_unconditional 可核实",
+          "hotspot": "",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "金额相同但联系人错误：ACCEPTANCE_SCOPE_MISMATCH"
+      ],
+      "openQuestions": [
+        "部分接受与多订单转单是否进入 B0（范围变更）"
+      ]
+    },
+    {
+      "id": "ES-06",
+      "title": "AI 执行中的人工接管",
+      "type": "control",
+      "contextFlow": [
+        "TSK",
+        "TRD"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "管理员／支持",
+          "command": "task.take_control",
+          "aggregate": "TSK·BusinessTask",
+          "event": "TaskControlChanged",
+          "policy": "递增 control_epoch；进入 stopping",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 2,
+          "actor": "AI 执行身份",
+          "command": "quote.activate（旧 epoch）",
+          "aggregate": "TRD·QuoteRoot",
+          "event": "—（CONTROL_EPOCH_STALE）",
+          "policy": "旧代次提交被围栏",
+          "hotspot": "外部 submitted／unknown 先对账",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "时间到期强制接管后盲目重复发送"
+      ],
+      "openQuestions": [
+        "EER 是否提供可核实的停止屏障"
+      ]
+    },
+    {
+      "id": "ES-07",
+      "title": "采购草稿反例",
+      "type": "counterexample",
+      "contextFlow": [
+        "TRD",
+        "SUP",
+        "PUR"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "订单审核人",
+          "command": "order.approval.revoke",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderApprovalRevoked",
+          "policy": "阻止新激活与后续采购准备",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 2,
+          "actor": "采购编制人",
+          "command": "purchase.draft.prepare",
+          "aggregate": "PUR·PurchaseDraft",
+          "event": "—（ORDER_APPROVAL_REVOKED）",
+          "policy": "订单审批撤销后拒绝",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 3,
+          "actor": "采购编制人",
+          "command": "purchase.draft.prepare（交期晚于订单要求）",
+          "aggregate": "PUR·PurchaseDraft",
+          "event": "—（DELIVERY_LATE）",
+          "policy": "固定日期交期不晚于订单要求",
+          "hotspot": "提前期估算未支持",
+          "evidence": ""
+        },
+        {
+          "n": 4,
+          "actor": "采购编制人",
+          "command": "purchase.draft.void",
+          "aggregate": "PUR·PurchaseDraft",
+          "event": "PurchaseDraftVoided",
+          "policy": "未形成承诺；释放分配余额",
+          "hotspot": "",
+          "evidence": "选错供应条件的草稿"
+        }
+      ],
+      "counterexamples": [
+        "混合两个供应商：SUPPLIER_MISMATCH",
+        "同一订单行分配超出余额：PURCHASE_ALLOCATION_EXCEEDED",
+        "已形成承诺的草稿作废：PURCHASE_DRAFT_COMMITTED"
+      ],
+      "openQuestions": [
+        "超采与损耗的批准阈值"
+      ]
+    },
+    {
+      "id": "ES-08",
+      "title": "有效期内承诺、到期后订单生效",
+      "type": "time",
+      "contextFlow": [
+        "TRD"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "客户确认核实人",
+          "command": "quote.response.verify",
+          "aggregate": "TRD·CustomerResponse",
+          "event": "AcceptanceVerified",
+          "policy": "以可核实的承诺到达时间判定（到达第 6 天，到期第 7 天，核实第 8 天）",
+          "hotspot": "",
+          "evidence": "渠道接收时间"
+        },
+        {
+          "n": 2,
+          "actor": "销售经办",
+          "command": "order.prepare",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderPrepared",
+          "policy": "合同已成立；名额永久占用",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 3,
+          "actor": "订单审核人",
+          "command": "order.review.decide",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderReviewDecided",
+          "policy": "逐项确认准备后出现的上游风险",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 4,
+          "actor": "订单审核人",
+          "command": "order.activate（as_of ≥ quote.expires_at）",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderActivated",
+          "policy": "合同成立后报价到期不阻断",
+          "hotspot": "",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "在 activate 时延长原报价有效期",
+        "承诺到达时间恰等于到期时刻：ACCEPTANCE_LATE，按客户新要约处理",
+        "只有邮件自报时间：以服务端核实时间判定"
+      ],
+      "openQuestions": [
+        "取消后重建订单是否启用（BC-D06）"
+      ]
+    },
+    {
+      "id": "ES-09",
+      "title": "生效订单变更与短交关闭",
+      "type": "change",
+      "contextFlow": [
+        "TRD",
+        "PUR",
+        "FUL",
+        "STL"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售经办",
+          "command": "quote.response.record",
+          "aggregate": "TRD·CustomerResponse",
+          "event": "CustomerResponseRecorded",
+          "policy": "客户改量来源登记",
+          "hotspot": "",
+          "evidence": "蓝 M 由 48 改为 44"
+        },
+        {
+          "n": 2,
+          "actor": "销售经办／AI",
+          "command": "order.amendment.prepare",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderAmendmentRequested",
+          "policy": "读取采购承诺、出运与占用形成影响评估",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 3,
+          "actor": "订单审核人",
+          "command": "order.amendment.decide",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderAmendmentDecided",
+          "policy": "独立于申请人",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 4,
+          "actor": "获准经办",
+          "command": "order.amendment.apply",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderAmended",
+          "policy": "数量不低于已确认出运量；生成订单修订 r2",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 5,
+          "actor": "采购编制人",
+          "command": "purchase.draft.void",
+          "aggregate": "PUR·PurchaseDraft",
+          "event": "PurchaseDraftVoided",
+          "policy": "按 OrderAmended 复核分配",
+          "hotspot": "已发出的承诺须供应商确认变更",
+          "evidence": ""
+        },
+        {
+          "n": 6,
+          "actor": "销售经办",
+          "command": "order.close_remainder",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderRemainderClosed",
+          "policy": "已出运 116 件，剩余 4 件短交关闭",
+          "hotspot": "",
+          "evidence": "客户同意短交"
+        }
+      ],
+      "counterexamples": [
+        "减量低于已出运量：QUANTITY_BELOW_SHIPPED",
+        "已出运订单取消：ORDER_HAS_SHIPMENTS"
+      ],
+      "openQuestions": [
+        "价格变更的客户确认证据形式"
+      ]
+    },
+    {
+      "id": "ES-10",
+      "title": "出运与单证放行",
+      "type": "control",
+      "contextFlow": [
+        "QLT",
+        "STL",
+        "PTY",
+        "FUL"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "质检人员",
+          "command": "quality_release.grant",
+          "aggregate": "QLT·QualityRelease",
+          "event": "QualityReleased",
+          "policy": "放行数量与范围",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 2,
+          "actor": "资金人员",
+          "command": "fund.record → application.apply",
+          "aggregate": "STL·Application",
+          "event": "Applied",
+          "policy": "出运前尾款到账并核销",
+          "hotspot": "",
+          "evidence": "银行入账 672.00"
+        },
+        {
+          "n": 3,
+          "actor": "单证员",
+          "command": "commercial_release.evaluate",
+          "aggregate": "FUL·CommercialRelease",
+          "event": "CommercialReleaseGranted",
+          "policy": "质量、付款条件与筛查守卫均满足",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 4,
+          "actor": "单证员",
+          "command": "shipment.confirm",
+          "aggregate": "FUL·Shipment",
+          "event": "ShipmentConfirmed",
+          "policy": "有效放行",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 5,
+          "actor": "单证员",
+          "command": "document_release.record",
+          "aggregate": "FUL·CommercialRelease",
+          "event": "DocumentsReleased",
+          "policy": "正本提单或电放",
+          "hotspot": "",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "尾款未到账：COMMERCIAL_RELEASE_BLOCKED，例外须授权人工批准",
+        "付款方筛查为 match：PARTY_SCREENING_NOT_CLEAR"
+      ],
+      "openQuestions": [
+        "信用放行（赊销额度）的政策来源（FND-09）"
+      ]
+    },
+    {
+      "id": "ES-11",
+      "title": "订单生效前的信用占用与合规核查",
+      "type": "control",
+      "contextFlow": [
+        "TRD",
+        "STL",
+        "CNX"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "销售经办",
+          "command": "order.prepare",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderPrepared",
+          "policy": "合同已成立",
+          "hotspot": "",
+          "evidence": "出运后 30 天付 70%"
+        },
+        {
+          "n": 2,
+          "actor": "销售经办",
+          "command": "credit.reserve",
+          "aggregate": "STL·CustomerCredit",
+          "event": "CreditDecisionOpened",
+          "policy": "未结 7,000＋本次 4,000 超过额度 10,000：生成信用决定，暂不占用",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 3,
+          "actor": "信用经理",
+          "command": "credit_exception.decide",
+          "aggregate": "STL·CustomerCredit",
+          "event": "CreditExceptionDecided",
+          "policy": "层级上限覆盖超额 1,000，且不是销售经办",
+          "hotspot": "审批层级与金额阈值由财务确认（POL credit_policy）",
+          "evidence": ""
+        },
+        {
+          "n": 4,
+          "actor": "销售经办",
+          "command": "credit.reserve",
+          "aggregate": "STL·CustomerCredit",
+          "event": "CreditReserved",
+          "policy": "例外有效",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 5,
+          "actor": "合规人员",
+          "command": "trade_compliance.decide",
+          "aggregate": "CNX·TradeComplianceCheck",
+          "event": "TradeComplianceDecided",
+          "policy": "目的国、交易方与商品核查 clear",
+          "hotspot": "",
+          "evidence": "法规与名单版本"
+        },
+        {
+          "n": 6,
+          "actor": "订单审核人",
+          "command": "order.activate",
+          "aggregate": "TRD·SalesOrder",
+          "event": "OrderActivated",
+          "policy": "读取 CreditGuard 与 TradeComplianceGuard",
+          "hotspot": "",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "目的国处于禁运项目：TRADE_COMPLIANCE_NOT_CLEAR，普通审批不能覆盖",
+        "无占用生效赊销订单：CREDIT_RESERVATION_REQUIRED",
+        "信用专员层级不足：CREDIT_DECISION_NOT_AUTHORIZED",
+        "最早逾期超过容忍天数：CREDIT_OVERDUE_EXCEEDED"
+      ],
+      "openQuestions": [
+        "名单与法规来源及外国名单的启用（ADR-BR-017，法务）",
+        "信用层级与阈值、额度来源是否以中信保限额为准（财务）"
+      ]
+    },
+    {
+      "id": "ES-12",
+      "title": "直发交付与许可证用量",
+      "type": "control",
+      "contextFlow": [
+        "PUR",
+        "CNX",
+        "FUL"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "actor": "跟单员",
+          "command": "supplier_delivery.record",
+          "aggregate": "PUR·SupplierDelivery",
+          "event": "—（声明，待核实）",
+          "policy": "供应商上报 120 件已交货代",
+          "hotspot": "",
+          "evidence": "工厂装箱照片与货代收货单"
+        },
+        {
+          "n": 2,
+          "actor": "采购编制人",
+          "command": "supplier_delivery.verify",
+          "aggregate": "PUR·SupplierDelivery",
+          "event": "SupplierDeliveryVerified",
+          "policy": "货代收货单只证实 100 件",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 3,
+          "actor": "单证员",
+          "command": "export_license.allocate",
+          "aggregate": "CNX·ExportLicense",
+          "event": "ExportLicenseAllocated",
+          "policy": "需要许可证的商品；有效期内且不超额度",
+          "hotspot": "",
+          "evidence": ""
+        },
+        {
+          "n": 4,
+          "actor": "单证员",
+          "command": "shipment.confirm",
+          "aggregate": "FUL·Shipment",
+          "event": "ShipmentConfirmed",
+          "policy": "出运 100 件，不超核实交付量",
+          "hotspot": "",
+          "evidence": ""
+        }
+      ],
+      "counterexamples": [
+        "出运 120 件：SUPPLIER_DELIVERY_INSUFFICIENT",
+        "许可证过期：EXPORT_LICENSE_EXPIRED"
+      ],
+      "openQuestions": [
+        "直发交付的证据清单（货代收货单、装柜单、照片）由谁确认"
+      ]
+    }
+  ],
+  "hotspots": [
+    {
+      "id": "HS-01",
+      "title": "跨上下文同事务资格重查",
+      "context": "CST／POL／PTY／CAT／SUP→TRD／PUR",
+      "issue": "Python 依赖单库单事务串行化；Go 基线禁止跨上下文事务内读取。",
+      "proposal": "ADR-BR-004 三方案对比与竞争实测。",
+      "owner": "首席架构师",
+      "status": "OPEN"
+    },
+    {
+      "id": "HS-02",
+      "title": "SQLite 串行化到 PG16 行锁",
+      "context": "全部",
+      "issue": "BEGIN IMMEDIATE 全库写锁在 PG READ COMMITTED 下不存在。",
+      "proposal": "ADR-BR-011：按锁序显式行锁并以并发测试固定。",
+      "owner": "技术负责人＋DBA",
+      "status": "OPEN"
+    },
+    {
+      "id": "HS-03",
+      "title": "毛利例外审批",
+      "context": "TRD",
+      "issue": "低毛利报价需要受控的例外通道；例外角色与金额阈值尚未确定。",
+      "proposal": "TRD-INV-007：独立的毛利例外批准；角色与阈值随 BC-D05 确认。",
+      "owner": "业务／财务",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "HS-04",
+      "title": "接受纠错与订单取消命令未实现",
+      "context": "TRD",
+      "issue": "acceptance.invalidate／mark_disputed、order.cancel／close_unfulfilled 只有设计。",
+      "proposal": "SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT 覆盖生效订单的变更、取消、短交关闭与关闭；接受纠错见 SM-TRD-ACCEPTANCE。",
+      "owner": "TRD Owner",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "HS-05",
+      "title": "采购草稿不可作废",
+      "context": "PUR",
+      "issue": "选错供应条件无法重新编制。",
+      "proposal": "purchase.draft.void：未形成承诺的草稿可作废并释放分配余额（PUR-INV-007）。",
+      "owner": "PUR Owner",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "HS-06",
+      "title": "AI 任务与对象控制尚无 V0.50 实现",
+      "context": "TSK",
+      "issue": "V0.50 有对象控制表，但任务生命周期只在 Q01 旧包。",
+      "proposal": "S4 以基线第 16 章为准实现。",
+      "owner": "AI Owner",
+      "status": "OPEN"
+    },
+    {
+      "id": "HS-07",
+      "title": "真实客户样例缺失",
+      "context": "全部",
+      "issue": "BRC-001 为合成样例。",
+      "proposal": "G0：取得一笔普通与一笔异常业务的脱敏资料。",
+      "owner": "产品＋客户代表",
+      "status": "OPEN"
+    },
+    {
+      "id": "HS-08",
+      "title": "外国制裁名单与中国阻断规则的冲突",
+      "context": "PTY／CNX",
+      "issue": "启用美国、欧盟等外国名单可能与《反外国制裁法》及相关阻断规则冲突。",
+      "proposal": "ADR-BR-017：由法务逐项裁决启用范围；Brant 只记录结论。",
+      "owner": "法务＋合规负责人",
+      "status": "OPEN"
+    }
+  ],
+  "policies": [
+    {
+      "id": "PL-01",
+      "when": "RfqScopeConfirmed",
+      "then": "可创建核价上下文（人工或 AI 发起）",
+      "owner": "CST"
+    },
+    {
+      "id": "PL-02",
+      "when": "CostSnapshotFrozen",
+      "then": "可组装报价工作稿；不自动报价",
+      "owner": "TRD"
+    },
+    {
+      "id": "PL-03",
+      "when": "QuoteReviewDecided(approved)",
+      "then": "等待人工或获准执行身份激活；批准不自动激活",
+      "owner": "TRD"
+    },
+    {
+      "id": "PL-04",
+      "when": "QuoteActivated",
+      "then": "quote_ready 可核验；发送需独立授权",
+      "owner": "TRD／TSK"
+    },
+    {
+      "id": "PL-05",
+      "when": "AcceptanceVerified",
+      "then": "可 order.prepare；不自动准备",
+      "owner": "TRD"
+    },
+    {
+      "id": "PL-06",
+      "when": "OrderActivated",
+      "then": "order_active 可核验；可编制采购草稿",
+      "owner": "TSK／PUR"
+    },
+    {
+      "id": "PL-07",
+      "when": "CostSourceDenied",
+      "then": "依赖快照的新动作拒绝；已生效对象登记风险（候选）",
+      "owner": "CST→TRD／PUR"
+    },
+    {
+      "id": "PL-08",
+      "when": "QuoteApprovalRevoked（生效后）",
+      "then": "登记风险暂停，限制新的前向动作",
+      "owner": "TRD"
+    },
+    {
+      "id": "PL-09",
+      "when": "OrderAmended",
+      "then": "PUR、FUL、STL 按订单修订复核受影响的分配、承诺、装箱、订舱与付款计划",
+      "owner": "PUR／FUL／STL"
+    },
+    {
+      "id": "PL-10",
+      "when": "Applied／Unapplied／FundRecorded",
+      "then": "STL 重新判定付款条件满足，FUL 放行守卫读取最新结果",
+      "owner": "STL"
+    },
+    {
+      "id": "PL-11",
+      "when": "PartyScreeningDecided",
+      "then": "TRD 与 FUL 的新动作按最新筛查结论判定",
+      "owner": "PTY"
+    },
+    {
+      "id": "PL-12",
+      "when": "OrderActivated",
+      "then": "STL 把对应信用占用转为已使用",
+      "owner": "STL"
+    },
+    {
+      "id": "PL-13",
+      "when": "OrderCancelled／OrderClosed／结清",
+      "then": "STL 释放信用占用",
+      "owner": "STL"
+    },
+    {
+      "id": "PL-14",
+      "when": "OrderAmended（目的国、交易方或商品变化）",
+      "then": "CNX 对新订单修订重新核查贸易合规",
+      "owner": "CNX"
+    }
+  ],
+  "languageDeltaProposals": [
+    {
+      "id": "ESD-01",
+      "term": "Inquiry",
+      "proposal": "保留 CustomerRFQ 为独立对象（Cargo 无此术语）。",
+      "status": "Proposed"
+    },
+    {
+      "id": "ESD-02",
+      "term": "QuoteReady",
+      "proposal": "作为可核验目标而非状态值。",
+      "status": "Proposed"
+    },
+    {
+      "id": "ESD-03",
+      "term": "RiskHold",
+      "proposal": "统一表达来源否认、批准撤销后的暂停。",
+      "status": "Proposed"
+    }
+  ]
+}

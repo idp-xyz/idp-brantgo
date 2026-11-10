@@ -1,0 +1,19 @@
+== allowlist with cst, pur, trd present
+pur cst
+pur trd
+trd cst
+== check (must fail)
+warning D7 internal/contexts/cst/internal/application/app.go: import go.idp.xyz/idp-brant/internal/contexts/trd/api as trdapi
+warning D7 internal/contexts/trd/internal/application/app.go: import go.idp.xyz/idp-brant/internal/contexts/cst/api as cstapi
+AC10 docs/90: the master archive under docs/ holds no Go packages
+AC6 tests/e2e: imports internal/kernel; root tests/ drive the system through its processes and published contracts
+D1 internal/contexts/cst/internal/application: imports internal/contexts/trd/api; trd is not an upstream of cst in the allowlist generated from the Context Map (AC2)
+D2 internal/contexts/cst/api: imports go.idp.xyz/idp-bento-go/eventing; api packages import only the standard library and the kernel (AC3)
+AC10 docs/90/stray.go: the master archive under docs/ holds no Go code
+AC7 internal/contexts/cst/: CODEOWNERS needs an explicit entry with an owner for this directory
+AC7 internal/contexts/pur/: CODEOWNERS needs an explicit entry with an owner for this directory
+AC7 internal/contexts/trd/: CODEOWNERS needs an explicit entry with an owner for this directory
+dependency-check: 8 violation(s)
+exit status 1
+exit status: 1
+NEGATIVE CHECK OK: violations fail the build

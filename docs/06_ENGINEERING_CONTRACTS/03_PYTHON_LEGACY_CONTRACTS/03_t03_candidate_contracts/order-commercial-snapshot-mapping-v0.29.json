@@ -1,0 +1,66 @@
+{
+  "stage": "A25",
+  "source_version": "V0.29",
+  "snapshot_contract": "brant.order-commercial-snapshot/0.1.0",
+  "source": "exact persisted t03_quote_revision data_json and calculation_json",
+  "source_identity": [
+    "tenant",
+    "company",
+    "quote_id",
+    "business_revision",
+    "business_hash"
+  ],
+  "whole_source_copy": "source_quote_snapshot",
+  "term_projection": [
+    "trade_terms_ref",
+    "trade_scope_ref",
+    "named_place_ref",
+    "payment_terms_ref",
+    "delivery",
+    "issued_at",
+    "expires_at"
+  ],
+  "projections": [
+    "customer_ref",
+    "contact_ref",
+    "currency_ref",
+    "lines",
+    "charges",
+    "calculation"
+  ],
+  "checked_at": [
+    "new preparation",
+    "local existing preparation",
+    "local activation and replay",
+    "public preparation/activation same-key success receipt replay"
+  ],
+  "checks": [
+    "source hash recomputation",
+    "exact source/projection equality",
+    "order body hash",
+    "order column identity",
+    "acceptance identity/customer/contact/full line set",
+    "line/charge calculation IDs",
+    "line/charge amount and total conservation",
+    "payment amount conservation"
+  ],
+  "legacy_body": "readable; no automatic rewrite or new-contract certification; write/replay rejected",
+  "reconciliation": "original local committed fact only; not snapshot certification",
+  "migration": 12,
+  "migration_changes": [
+    "immutable commercial order columns",
+    "order delete guard",
+    "primary-key and root-slot replacement guard"
+  ],
+  "not_certified": [
+    "full quotation combinations",
+    "full source schema",
+    "current commercial dependency eligibility",
+    "T04 full business admission",
+    "external order",
+    "production durability"
+  ],
+  "external_business_actions": 0,
+  "production_admission": false,
+  "product_v1_complete": false
+}

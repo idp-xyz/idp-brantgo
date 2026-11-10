@@ -1,0 +1,13 @@
+{
+  "artifact": "IDP Brant DDD Quality Gate Template",
+  "version": "1.0-candidate",
+  "projectGateStatus": {"G0": "NO-GO", "G1": "NO-GO"},
+  "gates": [
+    {"id": "D1", "name": "领域真实性", "must_have": ["真实脱敏业务单据", "正常与异常场景", "反例", "专家评审"], "approver": "产品＋业务／客户代表", "state": "NOT_ASSESSED"},
+    {"id": "D2", "name": "战略语义", "must_have": ["UL 逐条签核", "事实权威矩阵", "Context Map", "冲突 ADR"], "approver": "Domain Owner＋首席架构师", "state": "NOT_ASSESSED"},
+    {"id": "D3", "name": "战术有效性", "must_have": ["聚合与不变量", "状态机", "守卫负向测试", "锁序与并发规则"], "approver": "领域工程负责人＋QA", "state": "NOT_ASSESSED"},
+    {"id": "D4", "name": "契约保真", "must_have": ["版本化 Schema", "provider／consumer 契约测试", "错误码目录"], "approver": "接口负责人", "state": "NOT_ASSESSED"},
+    {"id": "D5", "name": "集成证据", "must_have": ["PostgreSQL 16 执行", "OIDC 与 authority_epoch", "Outbox／Inbox", "Python 行为等价报告"], "approver": "研发负责人＋SRE", "state": "NOT_ASSESSED"},
+    {"id": "D6", "name": "发布", "must_have": ["业务 UAT", "税务与财务签核", "回滚方案", "AI 评测报告"], "approver": "发布委员会", "state": "NOT_ASSESSED"}
+  ]
+}

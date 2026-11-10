@@ -1,0 +1,46 @@
+=== RUN   TestRelayPublishesInClaimOrder
+--- PASS: TestRelayPublishesInClaimOrder (0.00s)
+=== RUN   TestRelayRecordsFailureWithBackoff
+--- PASS: TestRelayRecordsFailureWithBackoff (0.00s)
+=== RUN   TestRelayRecordsFailureWhenPublishTimesOut
+--- PASS: TestRelayRecordsFailureWhenPublishTimesOut (0.02s)
+=== RUN   TestRelayAbandonsRejectedAndInvalidDeliveries
+--- PASS: TestRelayAbandonsRejectedAndInvalidDeliveries (0.00s)
+=== RUN   TestRelayTreatsLostLeaseAsSettled
+--- PASS: TestRelayTreatsLostLeaseAsSettled (0.00s)
+=== RUN   TestRelayLeavesDeliveryLeasedWhenStopping
+--- PASS: TestRelayLeavesDeliveryLeasedWhenStopping (0.00s)
+=== RUN   TestRelayBackoffDoublesUpToMax
+--- PASS: TestRelayBackoffDoublesUpToMax (0.00s)
+=== RUN   TestRelayRejectsMisconfiguration
+--- PASS: TestRelayRejectsMisconfiguration (0.00s)
+=== RUN   TestWebhookPostsEnvelopeWithIdempotencyKey
+--- PASS: TestWebhookPostsEnvelopeWithIdempotencyKey (0.03s)
+=== RUN   TestWebhookClassifiesSinkAnswers
+--- PASS: TestWebhookClassifiesSinkAnswers (0.06s)
+=== RUN   TestRelayRetriesFailedPublishThenSucceeds
+--- PASS: TestRelayRetriesFailedPublishThenSucceeds (0.11s)
+=== RUN   TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition
+--- PASS: TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition (0.10s)
+=== RUN   TestWorkerCrashRecoveryDrill
+    relay_integration_test.go:278: re-delivered 1.454s after the first delivery (lease 3s)
+    relay_integration_test.go:279: second worker:
+        time=2026-11-07T11:12:08.962+08:00 level=INFO msg="relaying outbox" schema=brant_t_outbox_3d7727ccf3b9 sink=http://127.0.0.1:45761 lease=3s
+        time=2026-11-07T11:12:14.040+08:00 level=INFO msg=stopped
+--- PASS: TestWorkerCrashRecoveryDrill (2.03s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	2.364s
+=== RUN   TestOpenRequiresADSN
+--- PASS: TestOpenRequiresADSN (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	0.002s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+    relay_integration_test.go:278: re-delivered 3.075s after the first delivery (lease 3s)
+--- PASS: TestWorkerCrashRecoveryDrill (3.65s)
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	3.654s
+    relay_integration_test.go:278: re-delivered 3.092s after the first delivery (lease 3s)
+--- PASS: TestWorkerCrashRecoveryDrill (3.87s)
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	3.878s
+    relay_integration_test.go:278: re-delivered 3.016s after the first delivery (lease 3s)
+--- PASS: TestWorkerCrashRecoveryDrill (4.18s)
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	4.187s

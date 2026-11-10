@@ -1,0 +1,27 @@
+{
+  "version": "0.23",
+  "status": "runtime_slice",
+  "scope": "Core.execute local JSON quotation write-command adapter over persisted T03 state machine",
+  "contract": "brant.quotation/0.1.0",
+  "commands": {
+    "quote.save_draft": {"permission": ["quote.write"], "human_only": false, "control": "quote_root", "authorization_epoch": true, "idempotent": true},
+    "quote.revise": {"permission": ["quote.revise", "quote.read"], "human_only": false, "control": "quote_root", "authorization_epoch": true, "idempotent": true},
+    "quote.discard_draft": {"permission": ["quote.discard_draft", "quote.read", "read"], "human_only": true, "control": "quote_root", "authorization_epoch": true, "idempotent": true},
+    "quote.freeze": {"permission": ["quote.freeze", "quote.read", "costing.read", "read", "foundation.read"], "human_only": true, "control": "quote_root", "authorization_epoch": true, "idempotent": true},
+    "quote.submit_review": {"permission": ["quote.review.request", "quote.read"], "human_only": true, "control": "quote_root", "authorization_epoch": true, "idempotent": true},
+    "quote.review.approve": {"permission": ["quote.review.decide", "quote.read", "read"], "human_only": true, "control": "quote_root", "independent_reviewer": true, "authorization_epoch": true, "idempotent": true},
+    "quote.review.return": {"permission": ["quote.review.decide", "quote.read", "read"], "human_only": true, "control": "quote_root", "independent_reviewer": true, "authorization_epoch": true, "idempotent": true},
+    "quote.review.reject": {"permission": ["quote.review.decide", "quote.read", "read"], "human_only": true, "control": "quote_root", "independent_reviewer": true, "authorization_epoch": true, "idempotent": true},
+    "quote.approval.revoke": {"permission": ["quote.approval.revoke", "quote.read", "read"], "human_only": true, "control": "quote_root", "approval_effectivity_version_cas": true, "authorization_epoch": true, "idempotent": true},
+    "quote.activate": {"permission": ["quote.activate", "quote.read", "costing.read", "read", "foundation.read"], "human_only": true, "control": "quote_root", "root_version_cas": true, "approval_effectivity_version_cas": true, "authorization_epoch": true, "idempotent": true},
+    "quote.replace": {"permission": ["quote.replace", "quote.read", "costing.read", "read", "foundation.read"], "human_only": true, "control": "quote_root", "root_version_cas": true, "approval_effectivity_version_cas": true, "authorization_epoch": true, "idempotent": true},
+    "quote.withdraw": {"permission": ["quote.withdraw", "quote.read", "read"], "human_only": true, "control": "quote_root", "root_version_cas": true, "authorization_epoch": true, "idempotent": true},
+    "quote.cancel": {"permission": ["quote.cancel", "quote.read", "read"], "human_only": true, "control": "quote_root", "root_version_cas": true, "authorization_epoch": true, "idempotent": true}
+  },
+  "atomic_write_set": ["quote state/revision and event", "action_result idempotency record", "audit_event", "formal document/number/commit evidence/internal quote outbox when activating or replacing"],
+  "data_scope": "quote roots are server-claimed in record_access as kind=quote; reads and writes resolve own/team/company scope using current actor_access and recorded owner/team; legacy roots are backfilled from the earliest revision creator by migration 8",
+  "idempotency": {"scope": ["tenant", "company", "command", "idempotency_key"], "request_hash": "SHA-256 of canonical full request including CAS fields", "replay": "current command authorization and server object-control checks precede replay; action body is not re-executed"},
+  "evidence_access": "when a request includes evidence, the current actor also needs read permission and scoped source_origin access; evidence is stored as a reference and locator, not asserted as authentic",
+  "external_side_effects": [],
+  "unimplemented": ["remote HTTP authentication and raw-byte JSON parser", "quotation-foundation write commands", "full quote_revision/approval/document public views", "enterprise SSO and role mapping", "production file storage", "external channel configuration/send/delivery/customer acceptance", "retry/dead-letter processing", "order conversion", "COMMIT unknown reconciliation"]
+}

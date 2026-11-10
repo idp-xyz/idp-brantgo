@@ -1,0 +1,10 @@
+# Owners per bounded context, the shared kernel and the platform foundation (repository structure
+# baseline, AC7). Kernel changes need the chief architect and every affected context owner. Until
+# those roles are assigned, the repository maintainer owns every path. Each context directory gets
+# its own line when its first code lands; tools/dependency-check fails without it.
+*                      @idpxyz
+/internal/kernel/      @idpxyz
+/internal/foundation/  @idpxyz
+/migrations/           @idpxyz
+/deploy/               @idpxyz
+/docs/                 @idpxyz

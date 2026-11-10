@@ -1,0 +1,866 @@
+{
+  "artifact": "IDP Brant SAP Standard Process Reference",
+  "version": "0.1",
+  "date": "2026-11-10",
+  "status": "CANDIDATE — reference for process coverage only; not reviewed by an SAP practitioner; G0 NO-GO",
+  "purpose": "以 SAP 标准流程为流程覆盖基准，逐步核对 Brant 是否遗漏步骤、异常与逆向流程。参照只用来查漏，不决定 Brant 必须怎么做；最终以 G0 真实业务为准。",
+  "caveat": "SAP 流程与模块取公开、通用的名称（SD、LE、FSCM、FI-AR、FI-AP、MM、QM、PP、TM、GTS），未核对具体 SAP 版本的范围项编号，须由熟悉 SAP 的人员复核。不复制 SAP Best Practices 或 Signavio 的原文模型，对外不宣称与 SAP 兼容。中国出口本地流程 SAP 标准产品没有，另列为本地补充，以中国法规与 05 阶段 CN 规则为准。",
+  "statuses": {
+    "COVERED": "已设计覆盖（候选设计，尚未实现）",
+    "PARTIAL": "部分覆盖；followUp 写明缺什么及在哪个切片补",
+    "DEVIATION": "有意与 SAP 不同；note 写明理由",
+    "CONDITIONAL": "条件能力，启用时交付",
+    "OUT_OF_SCOPE": "首发以外；refs 引用登记处",
+    "GAP": "缺口；followUp 写明处置",
+    "LOCAL": "中国本地补充，SAP 标准产品无对应"
+  },
+  "lines": [
+    {
+      "id": "O2C",
+      "name": "订单到收款（Order-to-Cash）"
+    },
+    {
+      "id": "P2P",
+      "name": "采购到付款（Procure-to-Pay）"
+    },
+    {
+      "id": "GTC",
+      "name": "发运与贸易合规（Shipping & Trade Compliance）"
+    },
+    {
+      "id": "CN",
+      "name": "中国出口本地补充"
+    }
+  ],
+  "rows": [
+    {
+      "id": "O2C-01",
+      "line": "O2C",
+      "sapProcess": "客户询价（Inquiry）",
+      "sapArea": "SD",
+      "contexts": [
+        "INQ"
+      ],
+      "commands": [
+        "rfq.save_draft",
+        "rfq.confirm_scope"
+      ],
+      "events": [
+        "RfqScopeConfirmed"
+      ],
+      "status": "COVERED",
+      "note": "询价允许缺项草稿，范围由人工核实；比 SAP 询价单多出来源证据与缺项清单。",
+      "refs": "基线 F03；INQ-INV-001",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-02",
+      "line": "O2C",
+      "sapProcess": "报价与有效期（Quotation, validity）",
+      "sapArea": "SD",
+      "contexts": [
+        "TRD"
+      ],
+      "commands": [
+        "quote.freeze",
+        "quote.submit_review",
+        "quote.review.decide",
+        "quote.activate"
+      ],
+      "events": [
+        "QuoteActivated"
+      ],
+      "status": "COVERED",
+      "note": "报价修订不可变；审批绑定内容哈希；有效期严格小于。",
+      "refs": "TRD-INV-001—005",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-03",
+      "line": "O2C",
+      "sapProcess": "定价条件：价格、折扣、附加费、税（Pricing conditions）",
+      "sapArea": "SD",
+      "contexts": [
+        "TRD",
+        "CST"
+      ],
+      "commands": [
+        "quote.freeze",
+        "cost_scenario.evaluate"
+      ],
+      "events": [
+        "QuoteFrozen",
+        "CostScenarioEvaluated"
+      ],
+      "status": "DEVIATION",
+      "note": "首发采用固定计价链与服务端计算，不提供 SAP 式通用条件表与条件类型配置；毛利按净销售额精确判定，低毛利须独立例外批准。",
+      "refs": "基线 5.3；TRD-INV-007／008",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-04",
+      "line": "O2C",
+      "sapProcess": "参照报价创建销售订单，含部分参照与一个报价多张订单（Order with reference）",
+      "sapArea": "SD",
+      "contexts": [
+        "TRD"
+      ],
+      "commands": [
+        "quote.response.verify",
+        "order.prepare",
+        "order.activate"
+      ],
+      "events": [
+        "AcceptanceVerified",
+        "OrderActivated"
+      ],
+      "status": "PARTIAL",
+      "note": "首发只允许整单一次转换（full_v1），不支持部分参照与多张订单；客户 PO 按与报价的差异分类。",
+      "refs": "TRD-INV-010／011；BC-D06",
+      "followUp": "BC-D06 已裁决（模拟评审）：P0 保留 full_v1；R1 由 S6-07 增加参照报价下单（部分与多次）。"
+    },
+    {
+      "id": "O2C-05",
+      "line": "O2C",
+      "sapProcess": "订单确认输出（Order confirmation）",
+      "sapArea": "SD",
+      "contexts": [
+        "TRD"
+      ],
+      "commands": [
+        "order.document.generate",
+        "order.document.record_signed"
+      ],
+      "events": [
+        "OrderDocumentSigned"
+      ],
+      "status": "COVERED",
+      "note": "外销合同／形式发票绑定订单修订，签署或回签版本作为证据。",
+      "refs": "TRD-INV-020",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-06",
+      "line": "O2C",
+      "sapProcess": "框架合同与计划协议（Contracts, scheduling agreements）",
+      "sapArea": "SD",
+      "contexts": [],
+      "commands": [],
+      "events": [],
+      "status": "OUT_OF_SCOPE",
+      "note": "首发不支持框架叫货与备货预测。",
+      "refs": "基线 3.4",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-07",
+      "line": "O2C",
+      "sapProcess": "信用检查与订单冻结放行（Credit management）",
+      "sapArea": "FSCM",
+      "contexts": [
+        "STL",
+        "TRD",
+        "FUL"
+      ],
+      "commands": [
+        "credit_limit.request",
+        "credit.reserve",
+        "credit_exception.decide",
+        "commercial_release.evaluate"
+      ],
+      "events": [
+        "CreditDecisionOpened",
+        "CreditReserved",
+        "CommercialReleaseGranted"
+      ],
+      "status": "COVERED",
+      "note": "订单生效前在 STL 占用额度；超额或逾期超限生成信用决定，按金额层级由非销售的信用人员放行；额度申请分级审批；出运与单证放行再核对付款条件。",
+      "refs": "STL-INV-004／005；TRD-INV-022；FUL-INV-002；ADR-BR-016",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-08",
+      "line": "O2C",
+      "sapProcess": "订单变更与行拒绝（Order change, rejection）",
+      "sapArea": "SD",
+      "contexts": [
+        "TRD"
+      ],
+      "commands": [
+        "order.amendment.prepare",
+        "order.amendment.decide",
+        "order.amendment.apply",
+        "order.close_remainder"
+      ],
+      "events": [
+        "OrderAmended",
+        "OrderRemainderClosed"
+      ],
+      "status": "COVERED",
+      "note": "生效订单只经独立审批的订单变更修订；数量不低于已确认出运量；短交关闭保留历史。",
+      "refs": "TRD-INV-018／019；SM-TRD-ORDER-AMENDMENT",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-09",
+      "line": "O2C",
+      "sapProcess": "交货、拣配、包装与发货过账（Outbound delivery, picking, packing, goods issue）",
+      "sapArea": "LE",
+      "contexts": [
+        "FUL",
+        "STK"
+      ],
+      "commands": [
+        "packing.plan",
+        "shipment.confirm",
+        "stock.issue"
+      ],
+      "events": [
+        "ShipmentConfirmed",
+        "StockIssued"
+      ],
+      "status": "PARTIAL",
+      "note": "本仓发货是条件能力（F06）；默认成品供应商直发，不虚构本仓出库。",
+      "refs": "基线 F06、F27",
+      "followUp": "S5 细化 FUL 状态机与装箱核对规则。"
+    },
+    {
+      "id": "O2C-10",
+      "line": "O2C",
+      "sapProcess": "第三方订单／供应商直发（Third-party order processing）",
+      "sapArea": "SD／MM",
+      "contexts": [
+        "PUR",
+        "FUL"
+      ],
+      "commands": [
+        "supplier_delivery.verify",
+        "purchase.commitment.issue",
+        "shipment.confirm"
+      ],
+      "events": [
+        "SupplierDeliveryVerified",
+        "PurchaseCommitmentIssued",
+        "ShipmentConfirmed"
+      ],
+      "status": "COVERED",
+      "note": "S01 默认路线；供应商交付由 PUR 记录并经人工核实，FUL 出运引用核实交付量。",
+      "refs": "PUR-INV-008；FUL-INV-003；ADR-BR-014",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-11",
+      "line": "O2C",
+      "sapProcess": "运输计划与订舱（Transportation planning, booking）",
+      "sapArea": "TM",
+      "contexts": [
+        "FUL"
+      ],
+      "commands": [
+        "booking.record",
+        "milestone.record_actual"
+      ],
+      "events": [
+        "MilestoneActualRecorded"
+      ],
+      "status": "PARTIAL",
+      "note": "记录订舱与节点；不做运输路线与运力优化。",
+      "refs": "补齐矩阵 INT-03／04",
+      "followUp": "S5 细化订舱记录字段（船期、截关、箱型、承运人确认）。"
+    },
+    {
+      "id": "O2C-12",
+      "line": "O2C",
+      "sapProcess": "出口单证输出：商业发票、装箱单、提单（Export documents）",
+      "sapArea": "LE／GTS",
+      "contexts": [
+        "FUL"
+      ],
+      "commands": [
+        "shipment_document.issue",
+        "document_release.record"
+      ],
+      "events": [
+        "ShipmentDocumentIssued",
+        "DocumentsReleased"
+      ],
+      "status": "PARTIAL",
+      "note": "出运单证套目前是轮廓聚合；正本提单与电放受商业条件放行控制。",
+      "refs": "BT12；INT-05；FUL-INV-002",
+      "followUp": "S5 定义单证字段映射与差异核对。"
+    },
+    {
+      "id": "O2C-13",
+      "line": "O2C",
+      "sapProcess": "开票（Billing）",
+      "sapArea": "SD／FI",
+      "contexts": [
+        "STL"
+      ],
+      "commands": [
+        "settlement.confirm"
+      ],
+      "events": [
+        "SettlementConfirmed"
+      ],
+      "status": "DEVIATION",
+      "note": "Brant 的销售结算单是内部业务台账；商业发票由 FUL 出具，税务发票由专业系统开具；不自动过账总账。",
+      "refs": "基线 4.2；CN-R06",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-14",
+      "line": "O2C",
+      "sapProcess": "收款与核销，含预收款、部分付款、银行费用（Incoming payment, cash application）",
+      "sapArea": "FI-AR",
+      "contexts": [
+        "STL"
+      ],
+      "commands": [
+        "fund.record",
+        "application.apply",
+        "application.unapply"
+      ],
+      "events": [
+        "FundRecorded",
+        "Applied",
+        "Unapplied"
+      ],
+      "status": "COVERED",
+      "note": "原币到账、银行费用与核销分别记录；首期同币种核销。",
+      "refs": "STL-INV-002；CN-AT07",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-15",
+      "line": "O2C",
+      "sapProcess": "贷项与退货（Credit memo, returns）",
+      "sapArea": "SD／FI",
+      "contexts": [
+        "CLM",
+        "STL"
+      ],
+      "commands": [
+        "return.register",
+        "credit.confirm"
+      ],
+      "events": [
+        "ReturnRegistered",
+        "CreditConfirmed"
+      ],
+      "status": "PARTIAL",
+      "note": "售后为首发最小能力。",
+      "refs": "基线 F28、4.7",
+      "followUp": "S6 细化退货、贷项与退款的状态机。"
+    },
+    {
+      "id": "O2C-16",
+      "line": "O2C",
+      "sapProcess": "收入确认与总账过账（Revenue recognition, GL posting）",
+      "sapArea": "FI",
+      "contexts": [],
+      "commands": [],
+      "events": [],
+      "status": "DEVIATION",
+      "note": "不做法定总账与收入确认；经营结果是内部管理指标。",
+      "refs": "基线 2.2、4.5",
+      "followUp": ""
+    },
+    {
+      "id": "O2C-17",
+      "line": "O2C",
+      "sapProcess": "外币评估与汇兑损益（FX valuation）",
+      "sapArea": "FI",
+      "contexts": [
+        "STL"
+      ],
+      "commands": [
+        "order_result.close"
+      ],
+      "events": [
+        "OrderResultClosed"
+      ],
+      "status": "DEVIATION",
+      "note": "业务结算汇率差额单列，不做会计汇兑损益。",
+      "refs": "基线 4.5",
+      "followUp": ""
+    },
+    {
+      "id": "P2P-01",
+      "line": "P2P",
+      "sapProcess": "采购申请（Purchase requisition）",
+      "sapArea": "MM",
+      "contexts": [
+        "PUR"
+      ],
+      "commands": [
+        "purchase.draft.prepare"
+      ],
+      "events": [
+        "PurchaseDraftPrepared"
+      ],
+      "status": "DEVIATION",
+      "note": "不设独立采购申请：生效订单行经需求分配直接形成采购草稿。",
+      "refs": "PUR-INV-002",
+      "followUp": ""
+    },
+    {
+      "id": "P2P-02",
+      "line": "P2P",
+      "sapProcess": "询价与报价比较（RFQ, quotation comparison）",
+      "sapArea": "MM",
+      "contexts": [
+        "SUP",
+        "CST"
+      ],
+      "commands": [
+        "supplier_rfq.record_issued",
+        "supplier_offer.verify",
+        "cost_scenario.evaluate"
+      ],
+      "events": [
+        "SupplierRfqIssued",
+        "SupplierOfferVerified",
+        "CostScenarioEvaluated"
+      ],
+      "status": "COVERED",
+      "note": "同口径比较；不可比时显示原因，不自动选最低价。",
+      "refs": "BC-AT03；T02 规格 §7",
+      "followUp": ""
+    },
+    {
+      "id": "P2P-03",
+      "line": "P2P",
+      "sapProcess": "采购信息记录与价格条件（Purchasing info record, conditions）",
+      "sapArea": "MM",
+      "contexts": [
+        "SUP"
+      ],
+      "commands": [
+        "purchase_terms.publish"
+      ],
+      "events": [
+        "PurchaseTermsPublished"
+      ],
+      "status": "COVERED",
+      "note": "可复用采购条件独立发布；单次报价不自动成为永久条件。",
+      "refs": "T02 规格 §5",
+      "followUp": ""
+    },
+    {
+      "id": "P2P-04",
+      "line": "P2P",
+      "sapProcess": "货源清单与配额（Source list, quota arrangement）",
+      "sapArea": "MM",
+      "contexts": [
+        "PUR"
+      ],
+      "commands": [
+        "purchase.draft.prepare"
+      ],
+      "events": [],
+      "status": "PARTIAL",
+      "note": "人工逐行指定供应条件与分配量，没有自动货源确定与配额。",
+      "refs": "PUR-INV-002／005",
+      "followUp": "按 G0 的业务量决定是否需要货源清单。"
+    },
+    {
+      "id": "P2P-05",
+      "line": "P2P",
+      "sapProcess": "采购订单与审批策略（Purchase order, release strategy）",
+      "sapArea": "MM",
+      "contexts": [
+        "PUR"
+      ],
+      "commands": [
+        "purchase.commitment.decide",
+        "purchase.commitment.issue"
+      ],
+      "events": [
+        "PurchaseCommitmentApproved",
+        "PurchaseCommitmentIssued"
+      ],
+      "status": "COVERED",
+      "note": "采购草稿与采购承诺分离，承诺经独立审批后发出。",
+      "refs": "PUR-INV-001；A47 设计",
+      "followUp": ""
+    },
+    {
+      "id": "P2P-06",
+      "line": "P2P",
+      "sapProcess": "供应商订单确认（Order acknowledgement）",
+      "sapArea": "MM",
+      "contexts": [
+        "PUR"
+      ],
+      "commands": [
+        "purchase.supplier_confirmation.record"
+      ],
+      "events": [
+        "SupplierConfirmationRecorded"
+      ],
+      "status": "COVERED",
+      "note": "供应商确认单独保存来源证据与时间。",
+      "refs": "UL PUR-SupplierConfirmation",
+      "followUp": ""
+    },
+    {
+      "id": "P2P-07",
+      "line": "P2P",
+      "sapProcess": "收货与质检（Goods receipt, inspection lot, usage decision）",
+      "sapArea": "MM／QM",
+      "contexts": [
+        "STK",
+        "QLT"
+      ],
+      "commands": [
+        "stock.receive",
+        "inspection.record",
+        "quality_release.grant"
+      ],
+      "events": [
+        "StockReceived",
+        "InspectionRecorded",
+        "QualityReleased"
+      ],
+      "status": "PARTIAL",
+      "note": "本仓收货是条件能力；验货与放行已建模，但只有轮廓。",
+      "refs": "基线 F26；7.5",
+      "followUp": "S5 细化 QLT 状态机与放行撤回。"
+    },
+    {
+      "id": "P2P-08",
+      "line": "P2P",
+      "sapProcess": "发票校验与三单匹配（Invoice verification, three-way match）",
+      "sapArea": "MM／FI-AP",
+      "contexts": [
+        "STL",
+        "CNX"
+      ],
+      "commands": [
+        "settlement.confirm",
+        "purchase_invoice.import"
+      ],
+      "events": [
+        "SettlementConfirmed",
+        "PurchaseInvoiceVerified"
+      ],
+      "status": "PARTIAL",
+      "note": "采购结算单按合同、收货或直发证据与供应商账单匹配；增值税专用发票由 CNX 核验。",
+      "refs": "基线 4.12；CN-R06",
+      "followUp": "S5 定义采购结算匹配规则与差异处理。"
+    },
+    {
+      "id": "P2P-09",
+      "line": "P2P",
+      "sapProcess": "付款与预付款（Outgoing payment, down payment）",
+      "sapArea": "FI-AP",
+      "contexts": [
+        "STL"
+      ],
+      "commands": [
+        "fund.record",
+        "application.apply"
+      ],
+      "events": [
+        "FundRecorded",
+        "Applied"
+      ],
+      "status": "PARTIAL",
+      "note": "首期不自动执行银行付款，只登记资金事实与核销。",
+      "refs": "基线 6.2、7.3",
+      "followUp": "银行付款接口按 CN-D05 冻结后另行设计。"
+    },
+    {
+      "id": "P2P-10",
+      "line": "P2P",
+      "sapProcess": "外协加工（Subcontracting）",
+      "sapArea": "MM／PP",
+      "contexts": [
+        "MFG"
+      ],
+      "commands": [
+        "subcontract_order.issue"
+      ],
+      "events": [
+        "SubcontractOrderIssued"
+      ],
+      "status": "CONDITIONAL",
+      "note": "部分委外为条件能力（F23），启用时交付材料与在制台账。",
+      "refs": "基线 F23、F24",
+      "followUp": ""
+    },
+    {
+      "id": "GTC-01",
+      "line": "GTC",
+      "sapProcess": "业务伙伴名单筛查（Sanctioned party list screening）",
+      "sapArea": "GTS",
+      "contexts": [
+        "PTY"
+      ],
+      "commands": [
+        "party_screening.record",
+        "party_screening.decide",
+        "party_screening.block"
+      ],
+      "events": [
+        "PartyScreeningDecided"
+      ],
+      "status": "COVERED",
+      "note": "名单从服务商或官方来源受控导入，只启用适用名单；新主体筛查前 pending；误报放行可登记正向名单，负向名单永久阻断；订单生效与出运放行前读取当前结论。",
+      "refs": "PTY-INV-002；TRD-INV-021；ADR-BR-014／017",
+      "followUp": ""
+    },
+    {
+      "id": "GTC-02",
+      "line": "GTC",
+      "sapProcess": "禁运检查（Embargo check）",
+      "sapArea": "GTS",
+      "contexts": [
+        "CNX",
+        "TRD",
+        "FUL"
+      ],
+      "commands": [
+        "trade_compliance.evaluate",
+        "trade_compliance.decide"
+      ],
+      "events": [
+        "TradeComplianceDecided"
+      ],
+      "status": "COVERED",
+      "note": "贸易合规核查按目的国与交易方所在国判断禁运与制裁项目；订单生效与出运放行以守卫读取。",
+      "refs": "CNX-INV-001；TRD-INV-023；ADR-BR-014",
+      "followUp": ""
+    },
+    {
+      "id": "GTC-03",
+      "line": "GTC",
+      "sapProcess": "出口管制与许可证判定（Export control, license determination）",
+      "sapArea": "GTS",
+      "contexts": [
+        "CNX",
+        "CAT"
+      ],
+      "commands": [
+        "trade_compliance.decide",
+        "export_license.register",
+        "export_license.allocate",
+        "declaration_profile.verify"
+      ],
+      "events": [
+        "TradeComplianceDecided",
+        "ExportLicenseAllocated",
+        "DeclarationProfileVerified"
+      ],
+      "status": "COVERED",
+      "note": "出口管制分类与许可证要求由专业人员核实；许可证按出运分配用量，不超额度、不过期。",
+      "refs": "CNX-INV-001／002；CN-R14",
+      "followUp": ""
+    },
+    {
+      "id": "GTC-04",
+      "line": "GTC",
+      "sapProcess": "商品归类（Product classification）",
+      "sapArea": "GTS",
+      "contexts": [
+        "CAT"
+      ],
+      "commands": [
+        "declaration_profile.verify"
+      ],
+      "events": [
+        "DeclarationProfileVerified"
+      ],
+      "status": "COVERED",
+      "note": "编码候选（含 AI）不能自动生效；按编码表版本保存。",
+      "refs": "CAT-INV-002",
+      "followUp": ""
+    },
+    {
+      "id": "GTC-05",
+      "line": "GTC",
+      "sapProcess": "原产地与优惠原产地（Origin, preference determination）",
+      "sapArea": "GTS",
+      "contexts": [
+        "CNX",
+        "CAT"
+      ],
+      "commands": [
+        "document_bundle.check"
+      ],
+      "events": [
+        "DocumentBundleChecked"
+      ],
+      "status": "PARTIAL",
+      "note": "登记原产地证结果与原产地依据；优惠原产地自动判定在首发以外。",
+      "refs": "补齐矩阵 7.4",
+      "followUp": "按目的市场需要决定是否引入优惠原产地判定。"
+    },
+    {
+      "id": "GTC-06",
+      "line": "GTC",
+      "sapProcess": "出口报关（Export customs declaration）",
+      "sapArea": "GTS",
+      "contexts": [
+        "CNX"
+      ],
+      "commands": [
+        "declaration_case.prepare",
+        "declaration_case.record_receipt"
+      ],
+      "events": [
+        "DeclarationReceiptRecorded"
+      ],
+      "status": "COVERED",
+      "note": "Brant 组织资料并记录外部结果，正式申报由专业系统或授权人员办理。",
+      "refs": "CN-R05／R07",
+      "followUp": ""
+    },
+    {
+      "id": "GTC-07",
+      "line": "GTC",
+      "sapProcess": "信用证与托收（Letter of credit, documentary collection）",
+      "sapArea": "GTS／Treasury",
+      "contexts": [],
+      "commands": [],
+      "events": [],
+      "status": "OUT_OF_SCOPE",
+      "note": "按客户启用的专项。",
+      "refs": "CN-M06",
+      "followUp": ""
+    },
+    {
+      "id": "GTC-08",
+      "line": "GTC",
+      "sapProcess": "发运跟踪与签收（Shipment tracking, proof of delivery）",
+      "sapArea": "TM／LE",
+      "contexts": [
+        "FUL"
+      ],
+      "commands": [
+        "milestone.record_actual"
+      ],
+      "events": [
+        "MilestoneActualRecorded"
+      ],
+      "status": "PARTIAL",
+      "note": "海关放行、实际离境、送达与客户验收分别记录。",
+      "refs": "CN-R07",
+      "followUp": "S5 定义节点类型与证据要求。"
+    },
+    {
+      "id": "CN-01",
+      "line": "CN",
+      "sapProcess": "购进增值税专用发票协同",
+      "sapArea": "—（SAP 标准无，依赖本地化）",
+      "contexts": [
+        "CNX"
+      ],
+      "commands": [
+        "purchase_invoice.import"
+      ],
+      "events": [
+        "PurchaseInvoiceVerified"
+      ],
+      "status": "LOCAL",
+      "note": "票据原件、核验状态与红蓝关系分别记录。",
+      "refs": "CN-F02；CN-R06",
+      "followUp": ""
+    },
+    {
+      "id": "CN-02",
+      "line": "CN",
+      "sapProcess": "出口退税资料与用途匹配",
+      "sapArea": "—（SAP 标准无，依赖本地化）",
+      "contexts": [
+        "CNX"
+      ],
+      "commands": [
+        "tax_refund_case.allocate"
+      ],
+      "events": [
+        "TaxEvidenceAllocated"
+      ],
+      "status": "LOCAL",
+      "note": "预计、拟申报、已提交、核准与到账分别记录；核价按经核实的可回收率计算成本。",
+      "refs": "CN-F04；CN-R08／R09；CST-INV-007",
+      "followUp": ""
+    },
+    {
+      "id": "CN-03",
+      "line": "CN",
+      "sapProcess": "单一窗口报关资料与回执",
+      "sapArea": "—（SAP 标准无，依赖本地化）",
+      "contexts": [
+        "CNX"
+      ],
+      "commands": [
+        "declaration_case.prepare",
+        "declaration_case.record_receipt"
+      ],
+      "events": [
+        "DeclarationReceiptRecorded"
+      ],
+      "status": "LOCAL",
+      "note": "回执原文与映射版本保存；unknown 先查证，不盲目重申报。",
+      "refs": "CN-F03；CN-R05",
+      "followUp": ""
+    },
+    {
+      "id": "CN-04",
+      "line": "CN",
+      "sapProcess": "收汇与结汇",
+      "sapArea": "—（SAP 标准无，依赖本地化）",
+      "contexts": [
+        "STL"
+      ],
+      "commands": [
+        "fund.record"
+      ],
+      "events": [
+        "FundRecorded"
+      ],
+      "status": "LOCAL",
+      "note": "结汇只是资金转换，不新增客户收款；系统内核销不是行政意义的出口收汇核销。",
+      "refs": "CN-F05；CN-R10／R11",
+      "followUp": ""
+    },
+    {
+      "id": "CN-05",
+      "line": "CN",
+      "sapProcess": "出口批次：销售、出运、报关与退税的关联主线",
+      "sapArea": "—（SAP 标准无，依赖本地化）",
+      "contexts": [
+        "FUL"
+      ],
+      "commands": [
+        "export_lot.register"
+      ],
+      "events": [
+        "ExportLotRegistered"
+      ],
+      "status": "LOCAL",
+      "note": "不复制第二份库存；与出运、发票、报关及退税引用关联。",
+      "refs": "基线 22.1",
+      "followUp": ""
+    },
+    {
+      "id": "CN-06",
+      "line": "CN",
+      "sapProcess": "外部专业结果对账",
+      "sapArea": "—（SAP 标准无，依赖本地化）",
+      "contexts": [
+        "CNX"
+      ],
+      "commands": [
+        "external_reconciliation.resolve"
+      ],
+      "events": [],
+      "status": "LOCAL",
+      "note": "外部结果、内部关联、差异、责任与批准调整分别记录。",
+      "refs": "CN-R05",
+      "followUp": ""
+    }
+  ]
+}

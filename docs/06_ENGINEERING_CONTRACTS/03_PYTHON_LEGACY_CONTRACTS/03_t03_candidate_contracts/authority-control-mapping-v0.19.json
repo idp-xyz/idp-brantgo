@@ -1,0 +1,17 @@
+{
+  "version": "0.19",
+  "status": "runtime_slice",
+  "scope": "trusted local T03 quote, approval, document, outbox and commit evidence read adapter",
+  "contract": "brant.quotation/0.1.0",
+  "query_actions": {
+    "quote.query.quote_root": {"permission": ["quote.read"], "human_only": false, "task_control": false},
+    "quote.query.quote_ready": {"permission": ["quote.read", "costing.read", "read", "foundation.read"], "human_only": false, "task_control": false},
+    "quote.query.quote_history": {"permission": ["quote.read", "costing.read", "read", "foundation.read"], "human_only": false, "task_control": false, "revision_selector": "business_revision is required", "response": "compact metadata and qualification summary; no raw internal payload"},
+    "quote.query.approval_history": {"permission": ["quote.read"], "human_only": false, "task_control": false, "selector": "approval_id is required", "response": "approval/effectivity metadata and payload-free event summary"},
+    "quote.query.document_history": {"permission": ["quote.read", "read", "foundation.read"], "human_only": false, "task_control": false, "selector": "document_id is required", "response": "formal binding metadata and number/file integrity summary; no content"},
+    "quote.query.outbox_history": {"permission": ["quote.read", "read", "foundation.read"], "human_only": false, "task_control": false, "selector": "event_id is required", "response": "queued internal event metadata and payload hash; no dispatch or delivery claim"},
+    "quote.query.commit_history": {"permission": ["quote.read", "read", "foundation.read"], "human_only": false, "task_control": false, "selector": "commit_id is required", "response": "server commit evidence metadata and result hash; no signature or delivery claim"}
+  },
+  "unregistered_query_kinds": ["quote_revision", "approval", "document"],
+  "unimplemented": ["external quote write command contract", "enterprise identity provider mapping", "production document storage", "send/delivery/customer acceptance", "retry/dead-letter processing", "order conversion", "commit-unknown reconciliation"]
+}

@@ -1,0 +1,119 @@
+{
+  "generated": "2026-11-07T03:30:16.984512Z",
+  "server": "PostgreSQL 16.12 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit; default isolation read committed",
+  "results": [
+    {
+      "id": "SC-04-A",
+      "adr": "ADR-BR-004",
+      "option": "A: prefetch outside the transaction",
+      "sequence": "TRD reads adoptable; CST denial commits; TRD activates",
+      "outcomes": {
+        "activation": "committed",
+        "denial": "committed"
+      },
+      "expected": "activation rejected (the denial committed first)",
+      "verdict": "violation",
+      "detail": "1 order active on a snapshot denied before activation; only an event-driven risk pause can catch it afterwards"
+    },
+    {
+      "id": "SC-04-B1",
+      "adr": "ADR-BR-004",
+      "option": "B: guard in the downstream transaction",
+      "sequence": "CST denial commits; TRD activates through the guard",
+      "outcomes": {
+        "activation": "rejected",
+        "denial": "committed"
+      },
+      "expected": "activation rejected",
+      "verdict": "consistent"
+    },
+    {
+      "id": "SC-04-B2",
+      "adr": "ADR-BR-004",
+      "option": "B: guard in the downstream transaction",
+      "sequence": "TRD guard passes and holds FOR SHARE; CST denial starts and waits on the lock; TRD commits; denial commits",
+      "outcomes": {
+        "activation": "committed",
+        "denial": "committed"
+      },
+      "expected": "activation stands (it committed first); the denial follows and raises the risk event",
+      "verdict": "consistent",
+      "detail": "the denial waited on the guard row and its UPDATE returned 2.321ms after the activation went on to commit"
+    },
+    {
+      "id": "SC-04-B3",
+      "adr": "ADR-BR-004",
+      "option": "B: guard in the downstream transaction",
+      "sequence": "CST denial updates and holds the row; TRD guard waits; denial commits; guard re-reads",
+      "outcomes": {
+        "activation": "rejected",
+        "denial": "committed"
+      },
+      "expected": "activation rejected",
+      "verdict": "consistent"
+    },
+    {
+      "id": "SC-03-NOLOCK",
+      "adr": "ADR-BR-011",
+      "option": "check then act, no root lock",
+      "sequence": "replace and convert both read active; both write; both commit",
+      "outcomes": {
+        "convert": "committed",
+        "replace": "committed"
+      },
+      "expected": "exactly one succeeds",
+      "verdict": "violation",
+      "detail": "final status converted with 1 order(s): a replaced quote was also converted"
+    },
+    {
+      "id": "SC-03-ROOTLOCK-replace",
+      "adr": "ADR-BR-011",
+      "option": "root row FOR UPDATE first",
+      "sequence": "replace locks the root; the other request waits on the lock; replace commits; the other re-reads",
+      "outcomes": {
+        "other": "rejected",
+        "replace": "committed"
+      },
+      "expected": "exactly one succeeds",
+      "verdict": "consistent",
+      "detail": "final status replaced with 0 order(s)"
+    },
+    {
+      "id": "SC-03-ROOTLOCK-convert",
+      "adr": "ADR-BR-011",
+      "option": "root row FOR UPDATE first",
+      "sequence": "convert locks the root; the other request waits on the lock; convert commits; the other re-reads",
+      "outcomes": {
+        "convert": "committed",
+        "other": "rejected"
+      },
+      "expected": "exactly one succeeds",
+      "verdict": "consistent",
+      "detail": "final status converted with 1 order(s)"
+    },
+    {
+      "id": "SC-03-STRESS-NOLOCK",
+      "adr": "ADR-BR-011",
+      "option": "no root lock",
+      "sequence": "200 unsynchronized replace/convert races, 2 ms of work between check and write",
+      "outcomes": {
+        "rounds_with_no_winner": "0",
+        "rounds_with_two_winners": "200"
+      },
+      "expected": "exactly one winner in every round",
+      "verdict": "violation"
+    },
+    {
+      "id": "SC-03-STRESS-ROOTLOCK",
+      "adr": "ADR-BR-011",
+      "option": "root row FOR UPDATE first",
+      "sequence": "200 unsynchronized replace/convert races, 2 ms of work between check and write",
+      "outcomes": {
+        "rounds_with_no_winner": "0",
+        "rounds_with_two_winners": "0"
+      },
+      "expected": "exactly one winner in every round",
+      "verdict": "consistent"
+    }
+  ]
+}

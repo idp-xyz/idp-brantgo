@@ -1,0 +1,53 @@
+{
+  "stage": "A28",
+  "source_version": "V0.32",
+  "contract": "brant.quote-sales-terms/0.1.0",
+  "core_version": "0.5.1",
+  "migration": 12,
+  "applies_to": "structured quotation payloads with complete product lines",
+  "same_connection": "existing caller-owned SQLite writer transaction; no commit, rollback, or repricing",
+  "issuer_and_customer": [
+    "exact current company issuer reference and Foundation record",
+    "current confirmed customer row version",
+    "issuer/customer-bound dedicated quotation_sale applicability"
+  ],
+  "sales_tax": [
+    "dedicated sales_tax_application only; purchase-cost tax_application is rejected",
+    "exact CN-M01, quotation_sale, issuer, customer, subject kind and subject revision",
+    "current published application, policy, evidence, source verification and object control",
+    "current tax profile with finite rate in [0,1], known recovery treatment and explicit basis",
+    "not_applicable is accepted only at zero rate",
+    "inclusive/exclusive split uses exact rational arithmetic then per-line HALF_UP minor rounding"
+  ],
+  "seller_charges": [
+    "current fee_type side sales_charge and exact configured separate/included_in_line value",
+    "one fixed income obligation per fee_type ID in a quote; duplicate IDs, keys, or fee reuse are rejected",
+    "explicit nonempty charge_id, obligation_key, positive bounded amount and current verified source evidence",
+    "separate amounts are added once; included amounts are not added or taxed a second time",
+    "included charge must bind an existing line, share its exact tax_profile revision, and aggregate no higher than its unrounded discounted line base",
+    "no negative, agency, pass-through, layered inclusion, split obligation, or multiple obligations of one fee type"
+  ],
+  "frozen_evidence": "calculation.sales_terms_binding with issuer/customer, publication/source hashes, tax bindings, charge bindings, and deterministic binding_hash",
+  "current_rechecks": [
+    "quote.freeze",
+    "quote.activate",
+    "quote.replace",
+    "new order.activate",
+    "informational quote_ready"
+  ],
+  "historical_behavior": "old calculations remain readable; missing or mismatched sales certificate cannot authorize a new formalization or order adoption; committed recovery does not rewrite history",
+  "arithmetic": "exact Fraction input composition, HALF_UP minor-unit boundaries, existing 24-digit minor-unit limit",
+  "fixture_classification": "synthetic",
+  "external_business_actions": 0,
+  "tax_law_conclusion": false,
+  "production_admission": false,
+  "product_v1_complete": false,
+  "not_certified": [
+    "tax law or actual jurisdictional application",
+    "multiple income obligations per fee type and cross-configuration economic deduplication",
+    "customer trade-profile/address completeness and full quotation runtime",
+    "all physical-commit dependency deadlines, general risk lifecycle, and production recovery",
+    "all Q03-01..48 scenarios or G01..G06 gates",
+    "full T04 or product V1.0"
+  ]
+}

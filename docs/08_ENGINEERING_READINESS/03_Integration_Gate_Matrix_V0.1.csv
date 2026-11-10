@@ -1,0 +1,15 @@
+﻿id,gate,name,evidence,owner,state
+IG-01,G1,PG16 迁移与回滚,brant-migrate 空库、重复、篡改、失败回滚（本机 PG16 实测）,DBA,DONE_LOCAL
+IG-02,G1,RLS 与数据库角色负向测试,跨租户、跨公司、brant_app 无 DDL（brant_auth 负向测试，本机 PG16）,DBA＋安全,DONE_LOCAL
+IG-03,G1,同根并发（SC-03、BC-AT15、BC-AT17）,SC-03 已实测（根行 FOR UPDATE）；BC-AT15、BC-AT17 随 S3,TRD Owner＋技术负责人,PARTIAL
+IG-04,G1,跨上下文资格重查（SC-04）,M0-10 实测支持方案 B；待 ADR-BR-004 裁决，生产守卫随 S2-06,首席架构师,PARTIAL
+IG-05,G1,Outbox 中继与崩溃演练,SIGKILL 后重投、SIGTERM 正常退出（本机 PG16）,技术负责人,DONE_LOCAL
+IG-06,G2,Inbox 去重与重放,事件 ID 去重、乱序与重复投递,技术负责人,NOT_STARTED
+IG-07,G1,OIDC 身份与 authority_epoch,撤权与生效竞争、AI 人工命令拒绝已实测；OIDC 未做,安全负责人,PARTIAL
+IG-08,G2,文件存储与正式文档字节,同事务封存、字节完整性读取校验,TRD Owner,NOT_STARTED
+IG-09,G2,编号服务（POL 或 idp-platform-go）,原子分配、幂等、号段不回收,POL Owner＋平台负责人,NOT_STARTED
+IG-10,G2,EER 执行适配,停止屏障、恢复、预算强制,集成负责人,NOT_STARTED
+IG-11,G2,BIP／邮件渠道,外发授权、operation_id、unknown 对账,集成负责人,NOT_STARTED
+IG-12,G2,真实模型调用与评测（BC-AT28）,试次、修正、成本与权威断言,AI Owner,NOT_STARTED
+IG-13,G3,中国专业系统或人工路径对账（CN-AT）,外部回执原文与映射版本,CNX Owner＋专业角色,NOT_STARTED
+IG-14,G4,备份恢复与升级演练,一致性备份、恢复后再次升级,SRE＋DBA,NOT_STARTED

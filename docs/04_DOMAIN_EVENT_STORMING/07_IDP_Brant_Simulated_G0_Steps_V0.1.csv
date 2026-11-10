@@ -1,0 +1,32 @@
+﻿case_id,step,actor,action,commands,events,fit,finding
+SIM-01,1,销售,客户邮件询价，附款式与尺码配比,source.register；rfq.save_draft；rfq.confirm_scope,RfqScopeConfirmed,FIT,
+SIM-01,2,采购,向两家工厂询价并比价,supplier_rfq.record_issued；supplier_offer.verify；cost_scenario.evaluate,SupplierOfferVerified；CostScenarioEvaluated,FIT,
+SIM-01,3,核价,按含税采购价、可回收税额与 FOB 前的内陆和港杂费核价,cost_snapshot.freeze,CostSnapshotFrozen,FIT,
+SIM-01,4,销售／报价审核人,报价审批后发给客户,quote.freeze；quote.review.decide；quote.activate,QuoteActivated,FIT,
+SIM-01,5,销售,客户回 PO，与报价逐行一致,quote.response.record；quote.response.verify,AcceptanceVerified,FIT,
+SIM-01,6,销售,生成 PI，客户回签,order.prepare；order.document.generate；order.document.record_signed,OrderDocumentSigned,FIT,
+SIM-01,7,订单审核人,订单审批生效；70% 见提单副本付款且正本提单由我方控制,order.review.decide；order.activate,OrderActivated,PARTIAL,F-04
+SIM-01,8,财务,"收到 30% 定金 USD 2,340",fund.record；application.apply,FundRecorded；Applied,FIT,
+SIM-01,9,采购,向工厂下采购单并取得确认,purchase.draft.prepare；purchase.commitment.decide；purchase.commitment.issue；purchase.supplier_confirmation.record,PurchaseCommitmentIssued；SupplierConfirmationRecorded,FIT,
+SIM-01,10,跟单,产前样确认与大货进度跟踪,sample.approve；milestone.plan；milestone.record_actual,SampleApproved；MilestoneActualRecorded,FIT,
+SIM-01,11,跟单／质检,尾期验货（第三方验货报告）并放行,inspection.record；quality_release.grant,InspectionRecorded；QualityReleased,PARTIAL,F-06
+SIM-01,12,单证,"订舱；工厂装柜直送堆场，货代收货单证实 1,200 件",booking.record；supplier_delivery.verify,SupplierDeliveryVerified,FIT,
+SIM-01,13,合规／单证,贸易合规核查与出口报关,trade_compliance.decide；declaration_case.prepare；declaration_case.record_receipt,TradeComplianceDecided；DeclarationReceiptRecorded,FIT,
+SIM-01,14,单证,出运确认，出具商业发票、装箱单，取得提单,commercial_release.evaluate；shipment.confirm；shipment_document.issue,ShipmentConfirmed；ShipmentDocumentIssued,FIT,
+SIM-01,15,财务,"客户见提单副本付 70%，到账 USD 5,435（中间行扣费 25，经批准由我方承担）",fund.record；application.apply,FundRecorded；Applied,FIT,
+SIM-01,16,单证,尾款核销足额后电放,document_release.record,DocumentsReleased,FIT,
+SIM-01,17,财务／税务,工厂开增值税专票，登记退税资料,purchase_invoice.import；tax_refund_case.allocate,PurchaseInvoiceVerified；TaxEvidenceAllocated,FIT,
+SIM-01,18,财务,结汇并关闭订单经营结果,fund.record；order_result.close,FundRecorded；OrderResultClosed,FIT,
+SIM-02,1,销售,客户 PO 把一个颜色改为藏青，构成反要约,quote.response.record,CustomerResponseRecorded,FIT,
+SIM-02,2,销售／报价审核人,按新颜色形成报价新修订并审批，客户确认,quote.freeze；quote.review.decide；quote.replace；quote.response.verify,QuoteReplaced；AcceptanceVerified,FIT,
+SIM-02,3,销售,PO 条款约定适用德国法与汉堡仲裁,,,GAP,F-02
+SIM-02,4,销售／信用经理,O/A 60 天：信用占用超额，生成信用决定，信用经理在权限内放行,credit.reserve；credit_exception.decide,CreditDecisionOpened；CreditReserved,FIT,
+SIM-02,5,合规,收货人与名单疑似命中，核实为误报并登记正向名单,party_screening.decide,PartyScreeningDecided,FIT,
+SIM-02,6,订单审核人,订单生效,order.review.decide；order.activate,OrderActivated,FIT,
+SIM-02,7,销售／采购,客户减量 10%：订单变更，作废多余的采购分配,order.amendment.prepare；order.amendment.decide；order.amendment.apply；purchase.draft.void,OrderAmended；PurchaseDraftVoided,FIT,
+SIM-02,8,单证,CIF 投保：按 CIF 价的 110% 投保并取得保险单,,,GAP,F-03
+SIM-02,9,采购／单证,工厂只交 850 件（变更后 900 件），出运 850 件并短交关闭余量,supplier_delivery.verify；shipment.confirm；order.close_remainder,SupplierDeliveryVerified；ShipmentConfirmed；OrderRemainderClosed,FIT,
+SIM-02,10,销售,到港后客户投诉色差，协商折让并形成贷项,claim.open；remedy.decide；credit.confirm,ClaimOpened；RemedyDecided；CreditConfirmed,PARTIAL,F-05
+SIM-02,11,财务,60 天后部分到账，余款逾期；该客户下一张订单的占用因逾期被拦,fund.record；application.apply；credit.reserve,FundRecorded；Applied；CreditDecisionOpened,FIT,
+SIM-03,1,销售,登记第二张 PO 并准备订单,quote.response.verify；order.prepare,AcceptanceVerified,GAP,F-01
+SIM-03,2,销售／报价审核人,临时做法：复制原报价形成新报价根并重新审批,quote.save_draft；quote.freeze；quote.review.decide；quote.activate,QuoteActivated,PARTIAL,F-01

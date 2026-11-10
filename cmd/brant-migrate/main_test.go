@@ -1,0 +1,87 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func write(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManifestOrdersDirectories(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "migrations")
+	manifest := filepath.Join(root, "manifest", "contexts.txt")
+	write(t, manifest, "# order\nauth\n\nevd\n")
+	dirs, err := readManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(root, "auth") + "," + filepath.Join(root, "evd"); strings.Join(dirs, ",") != want {
+		t.Fatalf("dirs = %v, want %s", dirs, want)
+	}
+	for _, bad := range []string{"auth\nauth\n", "../auth\n", "a.b\n", "# nothing\n", "two words\n"} {
+		write(t, manifest, bad)
+		if _, err := readManifest(manifest); err == nil {
+			t.Errorf("manifest %q must be rejected", bad)
+		}
+	}
+}
+
+func TestMigrationFilesAreContiguousAndCarryTheirDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "evd")
+	write(t, filepath.Join(dir, "000001_evd_sources.sql"), "SELECT 1;\r\n")
+	items, err := loadDirectory(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != "brant:000001_evd_sources" || items[0].SQL != "SELECT 1;\n" || items[0].Checksum != checksum("SELECT 1;\n") {
+		t.Fatalf("items = %+v", items)
+	}
+	write(t, filepath.Join(dir, "000003_evd_files.sql"), "SELECT 3;")
+	if _, err := loadDirectory(dir); err == nil {
+		t.Fatal("a gap in the numbering must be rejected")
+	}
+	other := filepath.Join(t.TempDir(), "pty")
+	write(t, filepath.Join(other, "000001_evd_sources.sql"), "SELECT 1;")
+	if _, err := loadDirectory(other); err == nil {
+		t.Fatal("a file named for another directory must be rejected")
+	}
+	empty := filepath.Join(t.TempDir(), "cat")
+	write(t, filepath.Join(empty, "000001_cat_items.sql"), " \n")
+	if _, err := loadDirectory(empty); err == nil {
+		t.Fatal("an empty migration must be rejected")
+	}
+}
+
+func TestRepositoryManifestLoads(t *testing.T) {
+	dirs, err := readManifest(filepath.Join("..", "..", "migrations", "manifest", "contexts.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, d := range dirs {
+		items, err := loadDirectory(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range items {
+			ids = append(ids, m.ID)
+		}
+	}
+	if got := strings.Join(ids, " "); got != "brant:000001_auth_authority_guard" {
+		t.Fatalf("migration order = %s", got)
+	}
+	framework, err := frameworkMigrations()
+	if err != nil || len(framework) == 0 || !strings.HasPrefix(framework[0].ID, "framework:") || len(framework[0].Checksum) != 64 {
+		t.Fatalf("framework migrations = %+v, %v", framework, err)
+	}
+}

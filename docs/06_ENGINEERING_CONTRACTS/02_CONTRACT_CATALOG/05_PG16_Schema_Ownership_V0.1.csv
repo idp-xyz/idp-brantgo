@@ -1,0 +1,22 @@
+﻿context,schema,migrations,event_source,aggregates,stage
+PTY,brant_pty,migrations/pty,idp-brant.pty,Party；TradingProfile；Contact；PartyScreening,S1
+CAT,brant_cat,migrations/cat,idp-brant.cat,Item；Sku；ItemCodeMapping；SampleApproval；DeclarationProfile,S1
+POL,brant_pol,migrations/pol,idp-brant.pol,ConfigurationRoot；FoundationSnapshot；DocumentNumberSequence,S1
+EVD,brant_evd,migrations/evd,idp-brant.evd,Source；BusinessFile,S1
+INQ,brant_inq,migrations/inq,idp-brant.inq,CustomerRfq,S1
+SUP,brant_sup,migrations/sup,idp-brant.sup,SupplierRfq；SupplierOffer；PurchaseTerms；LogisticsOffer,S2
+CST,brant_cst,migrations/cst,idp-brant.cst,CostingContext；MeasurementSnapshot；CostScenario；CostSnapshot,S2
+TRD,brant_trd,migrations/trd,idp-brant.trd,QuoteRoot；CustomerResponse；Acceptance；SalesOrder,S3
+PUR,brant_pur,migrations/pur,idp-brant.pur,PurchaseDraft；PurchaseCommitment；DemandAllocation；SupplierDelivery,S3
+MFG,brant_mfg,migrations/mfg,idp-brant.mfg,CollaborationPlan；SubcontractOrder,S6
+QLT,brant_qlt,migrations/qlt,idp-brant.qlt,Inspection；QualityRelease,S5
+STK,brant_stk,migrations/stk,idp-brant.stk,StockLedger；Reservation；BatchLineage,S6
+FUL,brant_ful,migrations/ful,idp-brant.ful,MilestonePlan；Shipment；ExportLot；CommercialRelease；ShipmentDocumentSet,S5
+STL,brant_stl,migrations/stl,idp-brant.stl,SettlementStatement；FundRecord；Application；OrderResult；CustomerCredit,S5
+CLM,brant_clm,migrations/clm,idp-brant.clm,ClaimCase；ReturnRecord,S6
+CNX,brant_cnx,migrations/cnx,idp-brant.cnx,PurchaseInvoice；DeclarationCase；TaxRefundCase；DocumentBundle；TradeComplianceCheck；ExportLicense,S5
+CRM,brant_crm,migrations/crm,idp-brant.crm,Lead；Opportunity,S6
+TSK,brant_tsk,migrations/tsk,idp-brant.tsk,BusinessTask；ActionExecution,S4
+IDP-Bento-Go,bento,Bento 框架迁移（brant-migrate 渲染）,—,Outbox；Inbox,M0（已建）
+foundation/authorization,brant_auth,migrations/auth,—,AuthorityScope；ActorGrant,M0（已建）
+cmd/brant-migrate,brant_migrations,迁移台账（brant-migrate 自建）,—,—,M0（已建）
