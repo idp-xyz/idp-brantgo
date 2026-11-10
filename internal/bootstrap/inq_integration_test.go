@@ -458,3 +458,58 @@ func TestBRC001FrontReachesReady(t *testing.T) {
 		t.Fatalf("BRC-001 front: %+v, quantities %v, total %s", r, got, total)
 	}
 }
+
+// BC-AT02 (INQ half): a draft missing a SKU and the delivery date is saved; ready is refused until
+// both are known.
+func TestBCAT02DraftMissingSkuAndDeliverySavesButIsNotReady(t *testing.T) {
+	w := newWorld(t)
+	ctx := w.actor("human.1", allPermissions...)
+	args := w.readyArgs(ctx)
+	args.Lines[0].SkuID = ""
+	args.Lines[0].RequestedItem = "ST01 红色 S 码"
+	args.UnresolvedFields = []string{"交期"}
+	_, err := w.save(ctx, args)
+	w.must(err)
+	_, err = w.confirm(ctx, "rfq.1", 1, "src.1")
+	if code(err) != kernel.CodeDraftNotReady || path(err) != "/args/unresolved_fields" {
+		t.Fatalf("unresolved delivery: %v at %s", err, path(err))
+	}
+	args.ExpectedVersion, args.UnresolvedFields = 1, []string{}
+	_, err = w.save(ctx, args)
+	w.must(err)
+	_, err = w.confirm(ctx, "rfq.1", 2, "src.1")
+	if code(err) != kernel.CodeDraftNotReady || path(err) != "/args/lines/0/sku_id" {
+		t.Fatalf("missing SKU: %v at %s", err, path(err))
+	}
+}
+
+// BC-AT05: the matrix says 120, the original text 118. The conflict is recorded as unresolved and
+// the lines are not adjusted to make the numbers agree; the RFQ is ready only after a clarification
+// source settles it and the confirmation covers that source.
+func TestBCAT05QuantityConflictIsNotPaperedOver(t *testing.T) {
+	w := newWorld(t)
+	ctx := w.actor("human.1", allPermissions...)
+	args := w.readyArgs(ctx)
+	args.UnresolvedFields = []string{"数量冲突：矩阵 120、原文 118"}
+	_, err := w.save(ctx, args)
+	w.must(err)
+	_, err = w.confirm(ctx, "rfq.1", 1, "src.1")
+	w.want(err, kernel.CodeDraftNotReady)
+	v, err := w.c.INQ.GetRfq(ctx, "rfq.1")
+	w.must(err)
+	if v.Status != inqapi.StatusDraft || v.Lines[0].Quantity != "120" {
+		t.Fatalf("the refused confirmation changed the RFQ: %+v", v)
+	}
+	w.source(ctx, "clarification.1", "客户确认：数量以 120 件为准")
+	args.ExpectedVersion, args.UnresolvedFields = 1, []string{}
+	args.SourceIDs = []string{"src.1", "clarification.1"}
+	_, err = w.save(ctx, args)
+	w.must(err)
+	_, err = w.confirm(ctx, "rfq.1", 2, "src.1")
+	w.want(err, kernel.CodeDraftNotReady) // the clarification must be covered too
+	r, err := w.confirm(ctx, "rfq.1", 2, "src.1", "clarification.1")
+	w.must(err)
+	if r.Status != inqapi.StatusReady {
+		t.Fatalf("confirm %+v", r)
+	}
+}
