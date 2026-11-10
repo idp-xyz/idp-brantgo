@@ -10,6 +10,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -210,4 +211,23 @@ func (p *Platform) Provision(ctx context.Context, g Grant) (int64, error) {
 		return err
 	})
 	return epoch, err
+}
+
+// ProvisionActor is Provision from plain operator input, for cmd/brant-admin.
+func (p *Platform) ProvisionActor(ctx context.Context, tenant, company, actorID, kind string, permissions []string, dataScope, team string) (int64, error) {
+	scope, err := kernel.NewScope(tenant, company)
+	if err != nil {
+		return 0, err
+	}
+	actor, err := kernel.NewActorRef(kernel.ActorKind(kind), actorID)
+	if err != nil {
+		return 0, err
+	}
+	if dataScope != "" && !authorization.DataScope(dataScope).Valid() {
+		return 0, fmt.Errorf("bootstrap: data scope %q is not own, team or company", dataScope)
+	}
+	if permissions == nil {
+		permissions = []string{}
+	}
+	return p.Provision(ctx, Grant{Scope: scope, Actor: actor, Permissions: permissions, DataScope: authorization.DataScope(dataScope), Team: team})
 }
