@@ -61,6 +61,7 @@
     "quote.save_draft",
     "quote.submit_review",
     "quote.withdraw",
+    "ref.read",
     "return.register",
     "rfq.cancel",
     "rfq.close",
@@ -121,6 +122,7 @@
     "pty.read",
     "pur.read",
     "qlt.read",
+    "ref.read",
     "reservation.place",
     "reservation.release",
     "return.register",
@@ -178,6 +180,7 @@
     "purchase_terms.retire",
     "purchase_terms.save_draft",
     "qlt.read",
+    "ref.read",
     "sku.revise_spec",
     "sku.save_draft",
     "source.register",
@@ -237,6 +240,7 @@
     "pty.read",
     "pur.read",
     "qlt.read",
+    "ref.read",
     "source.register",
     "source.use",
     "stk.read",
@@ -273,6 +277,7 @@
     "qlt.read",
     "quote.approval.revoke",
     "quote.review.decide",
+    "ref.read",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -305,6 +310,7 @@
     "purchase.commitment.decide",
     "purchase.commitment.revoke",
     "qlt.read",
+    "ref.read",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -331,6 +337,7 @@
     "pur.read",
     "qlt.read",
     "quote.margin_exception.approve",
+    "ref.read",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -359,6 +366,7 @@
     "pty.read",
     "pur.read",
     "qlt.read",
+    "ref.read",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -388,6 +396,7 @@
     "pty.read",
     "pur.read",
     "qlt.read",
+    "ref.read",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -418,6 +427,7 @@
     "qlt.read",
     "quality_release.grant",
     "quality_release.revoke",
+    "ref.read",
     "sample.approve",
     "source.register",
     "source.use",
@@ -458,6 +468,7 @@
     "pty.read",
     "pur.read",
     "qlt.read",
+    "ref.read",
     "shipment_document.issue",
     "source.register",
     "source.use",
@@ -487,9 +498,11 @@
     "mfg.read",
     "order_result.close",
     "pol.read",
+    "pol.read_sensitive",
     "pty.read",
     "pur.read",
     "qlt.read",
+    "ref.read",
     "settlement.confirm",
     "stk.read",
     "stl.read",
@@ -532,6 +545,9 @@
     "pur.read",
     "qlt.audit",
     "qlt.read",
+    "ref.audit",
+    "ref.read",
+    "screening_list.import",
     "stk.audit",
     "stk.read",
     "stl.audit",
@@ -567,6 +583,7 @@
     "pur.read",
     "purchase_invoice.import",
     "qlt.read",
+    "ref.read",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -611,12 +628,15 @@
     "party.deactivate",
     "pol.audit",
     "pol.read",
+    "pol.read_sensitive",
     "pty.audit",
     "pty.read",
     "pur.audit",
     "pur.read",
     "qlt.audit",
     "qlt.read",
+    "ref.audit",
+    "ref.read",
     "remedy.decide",
     "service_role.verify",
     "sku.confirm",
@@ -788,6 +808,22 @@
   {
    "permission": "tsk.audit",
    "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "screening_list.import",
+   "meaning": "参考数据命令：导入一个筛查名单版本（来源、发布日期、文件 SHA-256、条目数；人工专属）。参考数据不是限界上下文，不在上下文命令目录中（S1-11）"
+  },
+  {
+   "permission": "ref.read",
+   "meaning": "读取参考数据（筛查名单及其版本与条目）"
+  },
+  {
+   "permission": "ref.audit",
+   "meaning": "读取参考数据的审计记录"
+  },
+  {
+   "permission": "pol.read_sensitive",
+   "meaning": "读取 POL 敏感配置的完整内容（如银行账号；无此权限只见末四位）"
   }
  ],
  "forbiddenCombinations": [
@@ -876,6 +912,11 @@
    "permission": "commercial_release.grant_exception",
    "template": "credit_manager",
    "rule": "销售不能放行信用决定"
+  },
+  {
+   "permission": "screening_list.import",
+   "template": "compliance",
+   "rule": "名单来源由合规负责人确认（S1-09）"
   }
  ],
  "independence": [

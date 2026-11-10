@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
+	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
 type fixedClock struct{}
@@ -70,7 +72,7 @@ func (f *fakeINQ) GetRfq(_ context.Context, id string) (inqapi.RfqView, error) {
 
 func newServer(t *testing.T, inq *fakeINQ) http.Handler {
 	t.Helper()
-	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: inq, POL: struct{ POL }{},
+	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: inq, POL: struct{ POL }{}, REF: struct{ REF }{},
 		Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +246,7 @@ func TestDeadLetterReplayRoute(t *testing.T) {
 		{messaging.ErrAlreadyReplayed, 422, "INVALID_STATE"},
 		{messaging.ErrReplayFailed, 502, ""},
 	} {
-		h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{},
+		h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: struct{ REF }{},
 			Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{}), Replayer: fakeReplayer{c.err}})
 		if err != nil {
 			t.Fatal(err)
@@ -256,5 +258,53 @@ func TestDeadLetterReplayRoute(t *testing.T) {
 	}
 	if a := call(t, newServer(t, &fakeINQ{}), "POST", "/api/brant/v1/msg/dead_letters/x/y/replay", "Bearer good", ""); a.status != 404 || a.body["code"] != "NOT_FOUND" {
 		t.Fatalf("no replayer configured: %d", a.status)
+	}
+}
+
+// fakeREF records the list imports it receives.
+type fakeREF struct {
+	REF
+	entries int
+}
+
+func (f *fakeREF) ImportScreeningList(_ context.Context, cmd refapi.ImportScreeningList) (refapi.Receipt, error) {
+	f.entries = len(cmd.Entries)
+	return refapi.Receipt{ActionID: "act-1", ObjectID: refapi.ObjectID(cmd.ListCode, cmd.Version), RowVersion: 1, Status: refapi.StatusImported}, nil
+}
+
+func (f *fakeREF) AuditRejected(context.Context, string, string, string) error { return nil }
+
+// screening_list.import has its own ingress limits: a list beyond 1 MiB and 100,000 JSON values is
+// admitted there and nowhere else.
+func TestListImportHasItsOwnIngressLimits(t *testing.T) {
+	ref := &fakeREF{}
+	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: ref,
+		Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries strings.Builder
+	const n = 30000 // 7 values each: 210,000 values, about 3 MiB
+	for i := range n {
+		if i > 0 {
+			entries.WriteByte(',')
+		}
+		fmt.Fprintf(&entries, `{"entry_id":"E%05d","primary_name":"Synthetic entity %05d with a long registered name","aliases":["Alias %05d"],"entity_type":"entity","country":"CN"}`, i, i, i)
+	}
+	args := `{"list_code":"un.sc","jurisdiction":"UN","version":"v1","source_name":"s","source_url":"https://example.org/l","published_on":"2026-11-01",` +
+		`"file_sha256":"` + strings.Repeat("a", 64) + `","entry_count":30000,"entries":[` + entries.String() + `]}`
+	if len(args) <= MaxBody {
+		t.Fatalf("args are %d bytes", len(args))
+	}
+	body := func(bc, contract, command string) string {
+		return `{"contract":"` + contract + `","command":"` + command + `","idempotency_key":"k1","args":` + args + `}`
+	}
+	a := call(t, h, "POST", "/api/brant/v1/ref/commands/screening_list.import", "Bearer good", body("ref", refapi.Contract, refapi.CommandImportScreeningList))
+	if a.status != 200 || a.body["object_id"] != "un.sc:v1" || ref.entries != n {
+		t.Fatalf("%d %v (%d entries)", a.status, a.body, ref.entries)
+	}
+	a = call(t, h, "POST", saveRoute, "Bearer good", body("inq", inqapi.Contract, inqapi.CommandSaveRfq))
+	if a.status != 413 || a.body["code"] != "REQUEST_TOO_LARGE" {
+		t.Fatalf("%d %v", a.status, a.body)
 	}
 }

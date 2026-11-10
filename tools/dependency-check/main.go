@@ -323,9 +323,9 @@ func judge(module string, from class, imp string, allow map[[2]string]bool) (fin
 		}
 	case layerInbound:
 		ok := to.layer == layerKernel || to.layer == layerFoundation || to.layer == layerInbound ||
-			(to.layer == layerContext && to.part == partAPI)
+			((to.layer == layerContext || to.layer == layerReference) && to.part == partAPI)
 		if !ok {
-			return bad("D6", "imports "+target+"; transport, ai and processes import only context api packages, kernel and foundation")
+			return bad("D6", "imports "+target+"; transport, ai and processes import only context and reference data api packages, kernel and foundation")
 		}
 	case layerContext:
 		return judgeContext(from, to, target, allow)

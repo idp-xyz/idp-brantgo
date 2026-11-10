@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
 )
 
 // OpenAPIPath is where the generated candidate OpenAPI 3.1 document is kept.
@@ -19,7 +21,7 @@ const OpenAPIPath = "contracts/openapi/brant-api.openapi.json"
 // answers.
 func OpenAPI() ([]byte, error) {
 	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
-		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{})}
+		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{})}
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -42,15 +44,15 @@ func OpenAPI() ([]byte, error) {
 				}
 				args["properties"].(map[string]any)["data"] = map[string]any{"description": "The closed structure of the configuration kind named by kind.", "oneOf": oneOf}
 			}
-			limit := MaxBody
-			if l := set.limits[n]; l > int64(limit) {
-				limit = int(l)
+			limit, values := MaxBody, strictjson.DefaultMaxValues
+			if l := set.limits[n]; l.MaxBytes > int64(limit) {
+				limit, values = int(l.MaxBytes), max(l.MaxValues, values)
 			}
 			paths["/api/brant/v1/"+set.bc+"/commands/"+n] = map[string]any{"post": map[string]any{
 				"operationId": set.bc + "." + n,
 				"tags":        []string{set.bc},
 				"summary":     n,
-				"description": "Request bodies are at most " + bytesText(limit) + "; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+				"description": "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
 				"requestBody": map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
 					"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "args"},
 					"properties": map[string]any{
@@ -114,11 +116,18 @@ var reads = []readRoute{
 	{"/api/brant/v1/evd/sources/{id}", "evd.source.get", "evd", "A source with its content and imports", []string{"id"}, false},
 	{"/api/brant/v1/evd/files/{id}", "evd.file.get", "evd", "A business file with its bytes in Base64", []string{"id"}, false},
 	{"/api/brant/v1/pty/parties/{id}", "pty.party.get", "pty", "A party and its confirmed revisions", []string{"id"}, false},
+	{"/api/brant/v1/pty/parties/{id}/screening", "pty.party_screening.get", "pty",
+		"A party's screening: its status now as the guard decides it, every conclusion, positive and negative list entries", []string{"id"}, false},
+	{"/api/brant/v1/pty/screenings/due", "pty.party_screening.due", "pty",
+		"Confirmed parties whose screening is due at ?at= (a UTC timestamp, now by default)", nil, false},
 	{"/api/brant/v1/pty/contacts/{id}", "pty.contact.get", "pty", "A contact", []string{"id"}, false},
 	{"/api/brant/v1/cat/skus/{id}", "cat.sku.get", "cat", "A SKU and its specification revisions", []string{"id"}, false},
 	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
 	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
 	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
+	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
+	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
+		"One imported version of a screening list with its entries", []string{"id", "version"}, false},
 	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
 		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)", []string{"source", "event_id"}, true},
 }

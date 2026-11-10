@@ -18,6 +18,7 @@ import (
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
 	"go.idp.xyz/idp-brant/internal/kernel"
+	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
 // receipt is the closed success branch of a command response (Python BC_T01_response.schema.json).
@@ -46,18 +47,18 @@ type commandSet struct {
 	bc       string
 	contract string
 	commands map[string]commandFunc
-	// limits raises the body limit of a command above the transport's default.
-	limits  map[string]int64
+	// limits raises the ingress limits of a command above the transport's defaults.
+	limits  map[string]strictjson.Limits
 	auditor interface {
 		AuditRejected(ctx context.Context, command, objectID, code string) error
 	}
 	audit func(context.Context) ([]kernel.AuditEntry, error)
 }
 
-// commandFunc decodes args of type args and runs the command.
+// commandFunc decodes args of type args within maxValues JSON values and runs the command.
 type commandFunc struct {
 	args reflect.Type
-	call func(ctx context.Context, key string, args json.RawMessage) (receipt, error)
+	call func(ctx context.Context, key string, args json.RawMessage, maxValues int) (receipt, error)
 }
 
 // envelope is the uniform command request. Presence is checked field by field, so the members are
@@ -120,9 +121,9 @@ func unwrapExecuted(err error) error {
 }
 
 func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run commandFunc) (receipt, error) {
-	limit := s.cfg.MaxBodyBytes
-	if l := set.limits[name]; l > limit {
-		limit = l
+	limit, values := s.cfg.MaxBodyBytes, strictjson.DefaultMaxValues
+	if l := set.limits[name]; l.MaxBytes > limit {
+		limit, values = l.MaxBytes, max(l.MaxValues, values)
 	}
 	body := http.MaxBytesReader(nil, r.Body, limit+1)
 	raw, err := io.ReadAll(body)
@@ -134,7 +135,7 @@ func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run
 		return receipt{}, err
 	}
 	var env envelope
-	if err = strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit}); err != nil {
+	if err = strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit, MaxValues: values}); err != nil {
 		return receipt{}, err
 	}
 	switch {
@@ -151,7 +152,7 @@ func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run
 		// Every string of these contracts has at least one character; an unknown value is omitted.
 		return receipt{}, kernel.Reject(kernel.CodeSchemaInvalid, p, "empty string")
 	}
-	res, err := run.call(r.Context(), *env.IdempotencyKey, env.Args)
+	res, err := run.call(r.Context(), *env.IdempotencyKey, env.Args, values)
 	if err != nil {
 		var schema schemaError
 		if errors.As(err, &schema) {
@@ -169,8 +170,8 @@ func (e schemaError) Error() string { return e.rejection.Error() }
 
 // decodeArgs decodes args into a as a closed structure: exact-case member names, no unknown fields,
 // types checked with their paths, which become paths under /args.
-func decodeArgs(args json.RawMessage, a any) error {
-	if err := strictjson.Unmarshal(args, a, strictjson.Limits{MaxBytes: int64(len(args))}); err != nil {
+func decodeArgs(args json.RawMessage, a any, maxValues int) error {
+	if err := strictjson.Unmarshal(args, a, strictjson.Limits{MaxBytes: int64(len(args)), MaxValues: maxValues}); err != nil {
 		rej, ok := kernel.AsRejection(err)
 		if !ok {
 			return err
@@ -223,9 +224,9 @@ func findEmpty(v any, path string) string {
 
 // handle builds a commandFunc that decodes A, converts it to the context's command C and runs it.
 func handle[A any, C any, R result](build func(key string, a A) (C, error), call func(context.Context, C) (R, error)) commandFunc {
-	return commandFunc{args: reflect.TypeFor[A](), call: func(ctx context.Context, key string, args json.RawMessage) (receipt, error) {
+	return commandFunc{args: reflect.TypeFor[A](), call: func(ctx context.Context, key string, args json.RawMessage, maxValues int) (receipt, error) {
 		var a A
-		if err := decodeArgs(args, &a); err != nil {
+		if err := decodeArgs(args, &a, maxValues); err != nil {
 			return receipt{}, err
 		}
 		c, err := build(key, a)
@@ -274,7 +275,7 @@ func evdCommands(c EVD) *commandSet {
 	}
 	return &commandSet{bc: "evd", contract: evdapi.Contract, auditor: c, audit: c.Audit,
 		// A 10 MiB file is about 13.4 MiB of Base64 (Python allows 15 MiB for this contract).
-		limits: map[string]int64{evdapi.CommandRegisterFile: MaxFileBody},
+		limits: map[string]strictjson.Limits{evdapi.CommandRegisterFile: {MaxBytes: MaxFileBody}},
 		commands: map[string]commandFunc{
 			evdapi.CommandRegisterSource: handle(func(key string, a registerSource) (evdapi.RegisterSource, error) {
 				return evdapi.RegisterSource{IdempotencyKey: key, SourceID: a.ID, ContentText: a.ContentText, SourceKind: a.SourceKind,
@@ -337,7 +338,81 @@ func ptyCommands(c PTY) *commandSet {
 			v, err := version(a.ExpectedVersion)
 			return ptyapi.ConfirmContact{IdempotencyKey: key, ContactID: a.ID, ExpectedVersion: v, EvidenceIDs: a.EvidenceIDs}, err
 		}, c.ConfirmContact),
+		ptyapi.CommandRecordScreening: handle(func(key string, a recordScreening) (ptyapi.RecordScreening, error) {
+			v, err := version(a.ExpectedVersion)
+			return ptyapi.RecordScreening{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, RegulationID: a.RegulationID,
+				RegulationRevision: a.RegulationRevision}, err
+		}, c.RecordScreening),
+		ptyapi.CommandDecideScreening: handle(func(key string, a decideScreening) (ptyapi.DecideScreening, error) {
+			v, err := version(a.ExpectedVersion)
+			return ptyapi.DecideScreening{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, ScreeningID: a.ScreeningID,
+				Decision: a.Decision, Reason: a.Reason, RegisterPositive: a.RegisterPositive}, err
+		}, c.DecideScreening),
+		ptyapi.CommandBlockParty: handle(func(key string, a reasoned) (ptyapi.BlockParty, error) {
+			v, err := version(a.ExpectedVersion)
+			return ptyapi.BlockParty{IdempotencyKey: key, PartyID: a.ID, ExpectedVersion: v, Reason: a.Reason}, err
+		}, c.BlockParty),
 	}}
+}
+
+type recordScreening struct {
+	ID                 string `json:"id"`
+	ExpectedVersion    *int64 `json:"expected_version"`
+	RegulationID       string `json:"regulation_id"`
+	RegulationRevision int64  `json:"regulation_revision"`
+}
+
+type decideScreening struct {
+	ID               string `json:"id"`
+	ExpectedVersion  *int64 `json:"expected_version"`
+	ScreeningID      string `json:"screening_id"`
+	Decision         string `json:"decision"`
+	Reason           string `json:"reason"`
+	RegisterPositive bool   `json:"register_positive"`
+}
+
+// MaxListImportBody and MaxListImportValues are the ingress limits of screening_list.import: up
+// to refapi.MaxEntries entries with their aliases. Published lists are far smaller (the UN list
+// about 1,000 entries, the OFAC SDN list about 18,000).
+const (
+	MaxListImportBody   = 32 << 20
+	MaxListImportValues = 1_000_000
+)
+
+func refCommands(c REF) *commandSet {
+	type entry struct {
+		EntryID     string   `json:"entry_id"`
+		PrimaryName string   `json:"primary_name"`
+		Aliases     []string `json:"aliases"`
+		EntityType  string   `json:"entity_type"`
+		Country     string   `json:"country"`
+	}
+	type importList struct {
+		ListCode     string  `json:"list_code"`
+		Jurisdiction string  `json:"jurisdiction"`
+		Version      string  `json:"version"`
+		SourceName   string  `json:"source_name"`
+		SourceURL    string  `json:"source_url"`
+		PublishedOn  string  `json:"published_on"`
+		FileSHA256   string  `json:"file_sha256"`
+		EntryCount   int     `json:"entry_count"`
+		Entries      []entry `json:"entries"`
+	}
+	return &commandSet{bc: "ref", contract: refapi.Contract, auditor: c, audit: c.Audit,
+		limits: map[string]strictjson.Limits{refapi.CommandImportScreeningList: {MaxBytes: MaxListImportBody, MaxValues: MaxListImportValues}},
+		commands: map[string]commandFunc{
+			refapi.CommandImportScreeningList: handle(func(key string, a importList) (refapi.ImportScreeningList, error) {
+				cmd := refapi.ImportScreeningList{IdempotencyKey: key, ListCode: a.ListCode, Jurisdiction: a.Jurisdiction, Version: a.Version,
+					SourceName: a.SourceName, SourceURL: a.SourceURL, PublishedOn: a.PublishedOn, FileSHA256: a.FileSHA256, EntryCount: a.EntryCount}
+				if a.Entries != nil {
+					cmd.Entries = make([]refapi.ScreeningEntry, len(a.Entries))
+					for i, e := range a.Entries {
+						cmd.Entries[i] = refapi.ScreeningEntry(e)
+					}
+				}
+				return cmd, nil
+			}, c.ImportScreeningList),
+		}}
 }
 
 func catCommands(c CAT) *commandSet {

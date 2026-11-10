@@ -23,6 +23,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
+	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
 // Verifier turns a bearer token into the verified principal of the request.
@@ -30,7 +31,8 @@ type Verifier interface {
 	Verify(ctx context.Context, token string) (identity.Principal, error)
 }
 
-// EVD, PTY, CAT and INQ are what the transport needs from each context.
+// EVD, PTY, CAT and INQ are what the transport needs from each context; REF what it needs from
+// reference data.
 type (
 	EVD interface {
 		evdapi.Commands
@@ -40,6 +42,8 @@ type (
 	PTY interface {
 		ptyapi.Commands
 		ptyapi.Queries
+		ptyapi.ScreeningCommands
+		ptyapi.ScreeningQueries
 		ptyapi.Auditor
 	}
 	CAT interface {
@@ -51,6 +55,13 @@ type (
 		inqapi.Commands
 		inqapi.Queries
 		inqapi.Auditor
+	}
+	REF interface {
+		refapi.Commands
+		refapi.Auditor
+		GetList(ctx context.Context, listCode string) (refapi.ListView, error)
+		GetListVersion(ctx context.Context, listCode, version string) (refapi.ListVersionView, error)
+		Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 	}
 )
 
@@ -66,6 +77,7 @@ type Config struct {
 	CAT      CAT
 	INQ      INQ
 	POL      POL
+	REF      REF
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -84,7 +96,8 @@ const (
 
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
-	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.Verifier == nil || cfg.Clock == nil {
+	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.Verifier == nil ||
+		cfg.Clock == nil {
 		return nil, errors.New("httpapi: contexts, verifier and clock are required")
 	}
 	if cfg.Logger == nil {
@@ -94,7 +107,8 @@ func New(cfg Config) (http.Handler, error) {
 		cfg.MaxBodyBytes = MaxBody
 	}
 	s := &server{cfg: cfg, contexts: map[string]*commandSet{}}
-	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL)} {
+	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL),
+		refCommands(cfg.REF)} {
 		s.contexts[set.bc] = set
 	}
 	mux := http.NewServeMux()
@@ -112,11 +126,15 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/evd/sources/{id}", s.authenticated(read(s, cfg.EVD.GetSource, sourceView)))
 	mux.Handle("GET /api/brant/v1/evd/files/{id}", s.authenticated(read(s, cfg.EVD.GetFile, fileView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}", s.authenticated(read(s, cfg.PTY.GetParty, partyView)))
+	mux.Handle("GET /api/brant/v1/pty/parties/{id}/screening", s.authenticated(read(s, cfg.PTY.GetScreening, okView[ptyapi.ScreeningView])))
+	mux.Handle("GET /api/brant/v1/pty/screenings/due", s.authenticated(s.screeningsDue))
 	mux.Handle("GET /api/brant/v1/pty/contacts/{id}", s.authenticated(read(s, cfg.PTY.GetContact, contactView)))
 	mux.Handle("GET /api/brant/v1/cat/skus/{id}", s.authenticated(read(s, cfg.CAT.GetSku, skuView)))
 	mux.Handle("GET /api/brant/v1/inq/rfqs/{id}", s.authenticated(read(s, cfg.INQ.GetRfq, rfqView)))
 	mux.Handle("GET /api/brant/v1/pol/configs/{kind}/{id}", s.authenticated(s.configRead))
 	mux.Handle("GET /api/brant/v1/pol/snapshots/{id}", s.authenticated(read(s, cfg.POL.GetSnapshot, snapshotView)))
+	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
+	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	return s.correlated(mux), nil
 }
 
@@ -288,4 +306,37 @@ func (s *server) replay(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.fail(w, r, err)
 	}
+}
+
+// screeningsDue answers GET /api/brant/v1/pty/screenings/due[?at=<UTC timestamp>]: the parties the
+// caller sees whose screening is due at that instant, now by default.
+func (s *server) screeningsDue(w http.ResponseWriter, r *http.Request) {
+	at := s.cfg.Clock.Now()
+	if q := r.URL.Query(); q.Has("at") {
+		t, err := kernel.ParseTimestamp(q.Get("at"))
+		if err != nil || len(q["at"]) != 1 {
+			s.reject(w, r, kernel.Reject(kernel.CodeSchemaInvalid, "/at", "UTC timestamp"))
+			return
+		}
+		at = t
+	}
+	due, err := s.cfg.PTY.ScreeningsDue(r.Context(), at)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if due == nil {
+		due = []ptyapi.ScreeningDue{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "at": timestamp(at), "due": wire(due)})
+}
+
+// listVersion answers GET /api/brant/v1/ref/screening_lists/<code>/versions/<version>.
+func (s *server) listVersion(w http.ResponseWriter, r *http.Request) {
+	v, err := s.cfg.REF.GetListVersion(r.Context(), r.PathValue("id"), r.PathValue("version"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, okView(v))
 }

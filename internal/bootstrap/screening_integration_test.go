@@ -25,8 +25,8 @@ import (
 // no party screening ("—（Python 未实现）"), so no Python test is ported; the vectors come from the
 // tactical model's TD-AT15 and PTY-INV-002.
 
-// compliancePermissions is what the compliance role template holds for screening, plus the list
-// import this change proposes for it.
+// compliancePermissions is what the compliance role template holds for screening and the list
+// import, with the reads the suite needs.
 var compliancePermissions = []string{"party_screening.record", "party_screening.decide", "party_screening.block",
 	"screening_list.import", "pty.read", "pty.audit", "ref.read", "ref.audit", "evd.read", "pol.read"}
 
