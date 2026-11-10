@@ -170,12 +170,38 @@ type Receipt struct {
 	Replayed   bool
 }
 
-// Commands is INQ's command entry point. Errors are *kernel.Rejection for refusals.
+// Commands is INQ's command entry point. Errors are *kernel.Rejection for refusals. An error that
+// is application.ErrCommitUncertain from IDP-Bento-Go means the outcome is unknown: the caller
+// reconciles (Reconciler) or sends the same command with the same idempotency key again.
 type Commands interface {
 	SaveRfq(ctx context.Context, cmd SaveRfq) (Receipt, error)
 	ConfirmRfqScope(ctx context.Context, cmd ConfirmRfqScope) (Receipt, error)
 	CancelRfq(ctx context.Context, cmd CancelRfq) (Receipt, error)
 	CloseRfq(ctx context.Context, cmd CloseRfq) (Receipt, error)
+}
+
+// Command is one of INQ's commands: SaveRfq, ConfirmRfqScope, CancelRfq or CloseRfq.
+type Command interface{ inqCommand() }
+
+func (SaveRfq) inqCommand()         {}
+func (ConfirmRfqScope) inqCommand() {}
+func (CancelRfq) inqCommand()       {}
+func (CloseRfq) inqCommand()        {}
+
+// Reconciliation is what became of a command whose answer the caller lost.
+type Reconciliation struct {
+	State    kernel.ReconcileState
+	ActionID string   // committed and payload_conflict
+	ObjectID string   // committed and payload_conflict
+	Receipt  *Receipt // the stored receipt; committed only
+}
+
+// Reconciler recovers from an unknown outcome without executing anything (contract 06, 动作对账).
+// The caller passes the command exactly as it sent it, idempotency key included; INQ hashes it as
+// the command did. Reconciling needs the read permission of RFQs, not the command's own, and
+// re-checks it and the caller's data scope now: PERMISSION_DENIED and NOT_FOUND as for a read.
+type Reconciler interface {
+	Reconcile(ctx context.Context, cmd Command) (Reconciliation, error)
 }
 
 // RfqLineView is a stored line; SkuSpecRevision is the SKU revision the confirmation saw (0 before).

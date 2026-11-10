@@ -67,7 +67,7 @@ type Service struct {
 	Upstream Upstream
 }
 
-func (s Service) run(ctx context.Context, cmd action.Command, args any, validation error, h action.Handler) (api.Receipt, error) {
+func (s Service) run(ctx context.Context, cmd action.Command, req api.Command, validation error, h action.Handler) (api.Receipt, error) {
 	if validation != nil {
 		if rej, ok := kernel.AsRejection(validation); ok {
 			if err := s.Ledger.AuditRejected(ctx, cmd.Name, cmd.ObjectID, rej.Code); err != nil {
@@ -76,6 +76,7 @@ func (s Service) run(ctx context.Context, cmd action.Command, args any, validati
 		}
 		return api.Receipt{}, validation
 	}
+	_, _, args := request(req)
 	hash, err := action.RequestHash(args)
 	if err != nil {
 		return api.Receipt{}, err
@@ -135,8 +136,6 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 			sources = append(sources, l.SourceID)
 		}
 	}
-	args := cmd
-	args.IdempotencyKey, args.ExpectedVersion = "", 0
 	h := &rfqCommand{s: s, id: cmd.RfqID}
 	h.prepare = func(ctx context.Context) (err error) {
 		h.facts, err = s.facts(ctx, cmd.CustomerID, cmd.ContactID, skus, sources)
@@ -157,7 +156,7 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 		h.rfq.ReplaceDraft(content)
 		return h.save(ctx, exec, true, "")
 	}
-	return s.run(ctx, action.Command{Name: api.CommandSaveRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, args, cmd.Validate(), &prepared{h})
+	return s.run(ctx, action.Command{Name: api.CommandSaveRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, cmd, cmd.Validate(), &prepared{h})
 }
 
 // ConfirmRfqScope makes a complete draft ready (Python rfq.confirm_scope).
@@ -205,24 +204,22 @@ func (s Service) ConfirmRfqScope(ctx context.Context, cmd api.ConfirmRfqScope) (
 		}
 		return h.save(ctx, exec, true, api.EventRfqScopeConfirmed)
 	}
-	args := cmd
-	args.IdempotencyKey, args.ExpectedVersion = "", 0
-	return s.run(ctx, action.Command{Name: api.CommandConfirmRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, args, cmd.Validate(), &prepared{h})
+	return s.run(ctx, action.Command{Name: api.CommandConfirmRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, cmd, cmd.Validate(), &prepared{h})
 }
 
 // CancelRfq cancels a draft or ready RFQ (Python rfq.cancel).
 func (s Service) CancelRfq(ctx context.Context, cmd api.CancelRfq) (api.Receipt, error) {
-	return s.terminal(ctx, api.CommandCancelRfq, cmd.IdempotencyKey, cmd.RfqID, cmd.ExpectedVersion, cmd.Reason, cmd.Validate(),
+	return s.terminal(ctx, cmd, api.CommandCancelRfq, cmd.IdempotencyKey, cmd.RfqID, cmd.ExpectedVersion, cmd.Reason, cmd.Validate(),
 		api.EventRfqCancelled, (*rfq.Rfq).Cancel, rfq.Draft, rfq.Ready)
 }
 
 // CloseRfq closes a ready RFQ (Python rfq.close).
 func (s Service) CloseRfq(ctx context.Context, cmd api.CloseRfq) (api.Receipt, error) {
-	return s.terminal(ctx, api.CommandCloseRfq, cmd.IdempotencyKey, cmd.RfqID, cmd.ExpectedVersion, cmd.Reason, cmd.Validate(),
+	return s.terminal(ctx, cmd, api.CommandCloseRfq, cmd.IdempotencyKey, cmd.RfqID, cmd.ExpectedVersion, cmd.Reason, cmd.Validate(),
 		api.EventRfqClosed, (*rfq.Rfq).Close, rfq.Ready)
 }
 
-func (s Service) terminal(ctx context.Context, command, key, id string, expected int64, reason string, validation error, event string,
+func (s Service) terminal(ctx context.Context, req api.Command, command, key, id string, expected int64, reason string, validation error, event string,
 	move func(*rfq.Rfq), allowed ...rfq.Status) (api.Receipt, error) {
 	h := &rfqCommand{s: s, id: id}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
@@ -232,8 +229,50 @@ func (s Service) terminal(ctx context.Context, command, key, id string, expected
 		move(h.rfq)
 		return h.save(ctx, exec, false, event)
 	}
-	return s.run(ctx, action.Command{Name: command, IdempotencyKey: key, ObjectID: id, Reason: reason},
-		struct{ ID, Reason string }{id, reason}, validation, h)
+	return s.run(ctx, action.Command{Name: command, IdempotencyKey: key, ObjectID: id, Reason: reason}, req, validation, h)
+}
+
+// request returns the name, the idempotency key and the business arguments of cmd, which its
+// request hash covers: everything but the key and the expected version, so a replay with another
+// CAS value still matches (Python test_replay_ignores_changed_cas_but_not_changed_business_fields).
+// Execution and reconciliation hash through it alike.
+func request(cmd api.Command) (name, key string, args any) {
+	switch c := cmd.(type) {
+	case api.SaveRfq:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandSaveRfq, key, c
+	case api.ConfirmRfqScope:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandConfirmRfq, key, c
+	case api.CancelRfq:
+		return api.CommandCancelRfq, c.IdempotencyKey, struct{ ID, Reason string }{c.RfqID, c.Reason}
+	case api.CloseRfq:
+		return api.CommandCloseRfq, c.IdempotencyKey, struct{ ID, Reason string }{c.RfqID, c.Reason}
+	}
+	return "", "", nil
+}
+
+// Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
+// it (api.Reconciler; contract 06, 动作对账).
+func (s Service) Reconcile(ctx context.Context, cmd api.Command) (api.Reconciliation, error) {
+	name, key, args := request(cmd)
+	if name == "" {
+		return api.Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
+	}
+	hash, err := action.RequestHash(args)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	r, err := s.Ledger.Reconcile(ctx, name, key, hash)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	out := api.Reconciliation{State: r.State, ActionID: r.ActionID, ObjectID: r.ObjectID}
+	if r.Result != nil {
+		receipt := api.Receipt(*r.Result)
+		out.Receipt = &receipt
+	}
+	return out, nil
 }
 
 // rfqCommand locks the RFQ root and applies one command.
