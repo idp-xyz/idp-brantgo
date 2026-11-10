@@ -4,8 +4,11 @@
 package pol
 
 import (
+	"errors"
+
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pol/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pol/internal/application"
@@ -25,8 +28,12 @@ var (
 	_ api.Auditor  = (*Module)(nil)
 )
 
-// New wires POL to db, a transaction owner that belongs to POL alone. POL has no upstream context.
-func New(db *bentopg.DB) (*Module, error) {
+// New wires POL to db, a transaction owner that belongs to POL alone, and to EVD's queries for the
+// evidence a publication cites (Context Map R63).
+func New(db *bentopg.DB, sources evdapi.Queries) (*Module, error) {
+	if sources == nil {
+		return nil, errors.New("pol: module needs EVD's queries")
+	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {
 		return nil, err
@@ -36,7 +43,7 @@ func New(db *bentopg.DB) (*Module, error) {
 		return nil, err
 	}
 	clock := bento.SystemClock{}
-	return &Module{application.Service{Clock: clock, Ledger: &action.Ledger{
+	return &Module{application.Service{Clock: clock, Sources: sources, Ledger: &action.Ledger{
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 		Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetConfig, Visible: application.Visible,
 	}}}, nil

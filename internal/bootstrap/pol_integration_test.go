@@ -32,7 +32,11 @@ func (w *world) polActors() (editor, reviewer context.Context) {
 		return w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: id},
 			Permissions: allPermissions, DataScope: "company", Team: "trade"})
 	}
-	return grant("editor"), grant("reviewer")
+	editor, reviewer = grant("editor"), grant("reviewer")
+	// The verification evidence every publication of the suite cites (Python FoundationTests
+	// registers it in setUp); both actors read it through their company data scope.
+	w.source(editor, "evidence", "合成配置核实依据")
+	return editor, reviewer
 }
 
 func (w *world) saveConfig(ctx context.Context, kind, id string, expected int64, from, until time.Time, data polapi.ConfigData) (polapi.Receipt, error) {
@@ -598,5 +602,31 @@ func TestUnimplementedKindsAreRefusedAndAudited(t *testing.T) {
 	w.must(err)
 	if last := audit[len(audit)-1]; last.Code != kernel.CodeUnsupportedContract || last.ObjectID != "calendar:cal" {
 		t.Fatalf("audit %+v", last)
+	}
+}
+
+// Python test_foundation.py publish (core._sources): the publisher must be able to read every
+// source it cites (Context Map R63 EVD->POL).
+func TestPublicationEvidenceMustBeReadable(t *testing.T) {
+	w := newWorld(t)
+	editor, reviewer := w.polActors()
+	win := newWindow()
+	w.configure(editor, reviewer, polapi.KindCurrency, "USD", 0, win.from, time.Time{}, currencyData("USD", 2, "USD"), false)
+	pub := polapi.Publish{IdempotencyKey: w.key(), Kind: polapi.KindCurrency, ConfigID: "USD", ExpectedVersion: 1, Revision: 1,
+		EvidenceIDs: []string{"evidence", "missing"}, Reason: "核实"}
+	_, err := w.c.POL.Publish(reviewer, pub)
+	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/evidence_ids/1" {
+		t.Fatalf("unreadable evidence: %v at %s", err, path(err))
+	}
+	// A publisher without the EVD read permission is refused before anything else.
+	noRead := w.actor("no.read", "config.publish", "pol.read")
+	pub.IdempotencyKey, pub.EvidenceIDs = w.key(), []string{"evidence"}
+	_, err = w.c.POL.Publish(noRead, pub)
+	w.want(err, kernel.CodePermissionDenied)
+	pub.IdempotencyKey = w.key()
+	r, err := w.c.POL.Publish(reviewer, pub)
+	w.must(err)
+	if r.Status != polapi.StatusActive {
+		t.Fatalf("publish %+v", r)
 	}
 }

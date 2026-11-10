@@ -172,7 +172,7 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.POL, err = pol.New(db)
+		c.POL, err = pol.New(db, c.EVD)
 	}
 	if err == nil {
 		db, err = p.newDB()

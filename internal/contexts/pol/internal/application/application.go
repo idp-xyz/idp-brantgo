@@ -13,6 +13,7 @@ import (
 
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pol/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/config"
@@ -63,8 +64,9 @@ func Visible(context.Context, bentopg.Executor, authorization.Decision, string, 
 
 // Service runs POL's use cases.
 type Service struct {
-	Ledger *action.Ledger
-	Clock  application.Clock
+	Ledger  *action.Ledger
+	Clock   application.Clock
+	Sources evdapi.Queries // the evidence a publication cites (Context Map R63)
 }
 
 func (s Service) run(ctx context.Context, cmd action.Command, args any, validation error, h action.Handler) (api.Receipt, error) {
@@ -145,7 +147,11 @@ func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt,
 func (s Service) Publish(ctx context.Context, cmd api.Publish) (api.Receipt, error) {
 	args := cmd
 	args.IdempotencyKey, args.ExpectedVersion = "", 0
-	h := &configCommand{kind: cmd.Kind, id: cmd.ConfigID}
+	var evidence map[string]evdapi.SourceRef
+	h := &configCommand{kind: cmd.Kind, id: cmd.ConfigID, prepare: func(ctx context.Context) (err error) {
+		evidence, err = s.Sources.ResolveSources(ctx, cmd.EvidenceIDs)
+		return err
+	}}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 		if err := config.Check(h.root, cmd.ExpectedVersion); err != nil {
 			return action.Outcome{}, err
@@ -161,6 +167,13 @@ func (s Service) Publish(ctx context.Context, cmd api.Publish) (api.Receipt, err
 		superseded, err := h.root.Publish(cmd.Revision, f, d.Actor, d.Epoch, cmd.EvidenceIDs, now)
 		if err != nil {
 			return action.Outcome{}, err
+		}
+		// The publisher must be able to read every source it cites (Python publish: _sources after
+		// the state, independence and validity checks).
+		for i, id := range cmd.EvidenceIDs {
+			if _, ok := evidence[id]; !ok {
+				return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/evidence_ids/"+strconv.Itoa(i), "Source is not accessible")
+			}
 		}
 		sc, active := scope(ctx), h.root.Active
 		events := []action.Event{h.event(api.EventConfigPublished, active, nil)}
@@ -178,8 +191,13 @@ func (s Service) Publish(ctx context.Context, cmd api.Publish) (api.Receipt, err
 		return h.outcome(active, events...), err
 	}
 	return s.run(ctx, action.Command{Name: api.CommandPublish, IdempotencyKey: cmd.IdempotencyKey, ObjectID: api.ObjectID(cmd.Kind, cmd.ConfigID),
-		Reason: cmd.Reason}, args, cmd.Validate(), h)
+		Reason: cmd.Reason}, args, cmd.Validate(), &preparedConfig{h})
 }
+
+// preparedConfig reads upstream contexts before POL's transaction (the ledger's Preparer).
+type preparedConfig struct{ *configCommand }
+
+func (p *preparedConfig) Prepare(ctx context.Context) error { return p.prepare(ctx) }
 
 // Retire ends the active revision (Python foundation.retire).
 func (s Service) Retire(ctx context.Context, cmd api.Retire) (api.Receipt, error) {
@@ -221,11 +239,12 @@ func (s Service) end(ctx context.Context, command, key, kind, id string, expecte
 
 // configCommand locks a configuration root and applies one command.
 type configCommand struct {
-	kind  string
-	id    string
-	root  *config.Root
-	from  int64
-	apply func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error)
+	kind    string
+	id      string
+	root    *config.Root
+	from    int64
+	prepare func(ctx context.Context) error
+	apply   func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error)
 }
 
 func (h *configCommand) Lock(ctx context.Context, exec bentopg.Executor) error {

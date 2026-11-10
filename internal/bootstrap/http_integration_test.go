@@ -197,7 +197,8 @@ func TestBRC001FrontOverHTTPWithOIDCTokens(t *testing.T) {
 		t.Fatalf("a token of another issuer key: %d", status)
 	}
 	// POL over HTTP: the editor cannot publish its own draft (POL-INV-001); another human can.
-	w.actor("reviewer.demo", allPermissions...)
+	// The reviewer must read the evidence it cites (R63), so it sees the company's sources.
+	w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: actorRef("human", "reviewer.demo"), Permissions: allPermissions, DataScope: "company"})
 	reviewer := &client{t: t, base: api.URL, token: is.token(w.tenant, "company.A", "reviewer.demo", "human")}
 	from := kernel.FormatTimestamp(time.Now().Add(-time.Hour))
 	human.command("pol", "brant.pol/0.1.0", "config.save_draft", map[string]any{"kind": "currency", "id": "USD", "expected_version": 0,
