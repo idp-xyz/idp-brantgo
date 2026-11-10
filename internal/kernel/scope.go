@@ -3,6 +3,7 @@ package kernel
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -55,6 +56,15 @@ func (s Scope) Valid() bool {
 }
 
 func (s Scope) String() string { return string(s.Tenant) + "/" + string(s.Company) }
+
+// ParseScope parses the "<tenant>/<company>" form that String returns, as event envelopes carry it.
+func ParseScope(s string) (Scope, error) {
+	tenant, company, ok := strings.Cut(s, "/")
+	if !ok {
+		return Scope{}, fmt.Errorf("%w: %q has no tenant/company separator", ErrInvalidScope, s)
+	}
+	return NewScope(tenant, company)
+}
 
 // ActorKind tells who issued a command. Human-only commands reject ai and system actors.
 type ActorKind string

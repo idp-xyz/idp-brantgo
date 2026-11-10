@@ -37,6 +37,22 @@ func TestScopeAndActor(t *testing.T) {
 	}
 }
 
+func TestParseScopeReadsStringForm(t *testing.T) {
+	s, err := ParseScope("tenant.demo/company:1")
+	if err != nil || s != (Scope{Tenant: "tenant.demo", Company: "company:1"}) {
+		t.Fatalf("ParseScope = %v, %v", s, err)
+	}
+	if back, err := ParseScope(s.String()); err != nil || back != s {
+		t.Fatalf("round trip = %v, %v", back, err)
+	}
+	for _, bad := range []string{"", "tenant.demo", "tenant.demo/", "/company.demo", "tenant.demo/company.demo/x",
+		"tenant demo/company.demo", "test-scope", " tenant.demo/company.demo", "tenant.demo\\company.demo"} {
+		if _, err := ParseScope(bad); !errors.Is(err, ErrInvalidScope) {
+			t.Errorf("ParseScope(%q) = %v, want ErrInvalidScope", bad, err)
+		}
+	}
+}
+
 func TestValidityIsHalfOpen(t *testing.T) {
 	at := func(h int) time.Time { return time.Date(2026, 10, 22, h, 0, 0, 0, time.UTC) }
 	v, err := NewValidityInterval(at(0), at(12))

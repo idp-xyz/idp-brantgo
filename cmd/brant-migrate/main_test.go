@@ -77,7 +77,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 			ids = append(ids, m.ID)
 		}
 	}
-	if got := strings.Join(ids, " "); got != "brant:000001_auth_authority_guard" {
+	if got := strings.Join(ids, " "); got != "brant:000001_auth_authority_guard brant:000001_msg_dead_letter" {
 		t.Fatalf("migration order = %s", got)
 	}
 	framework, err := frameworkMigrations()
