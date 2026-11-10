@@ -58,7 +58,7 @@ R56,CNX,FUL,Customer／Supplier（守卫函数）,贸易合规结论、许可证
 R57,STL,TRD,Customer／Supplier（守卫函数）,客户信用占用,CreditGuard v1,STL,无占用或占用不足仍生效赊销订单,NOT_STARTED,yes
 R58,CNX,TRD,Customer／Supplier（守卫函数）,贸易合规核查结论,TradeComplianceGuard v1,CNX,禁运或管制结论未 clear 仍生效订单,NOT_STARTED,yes
 R59,PUR,FUL,Customer／Supplier（守卫函数）,直发路线的已核实供应商交付,SupplierDeliveryGuard v1,PUR,出运量超过核实交付量,NOT_STARTED,yes
-R60,POL,PTY,OHS / Published Language,启用的筛查名单与法规配置,ConfigRef v1（screening_regulation）,POL,用未启用或已停用的名单筛查,NOT_STARTED,no
+R60,POL,PTY,OHS / Published Language,启用的筛查名单与法规配置,ConfigRef v1（screening_regulation；交易档案的 payment_terms、trade_terms）,POL,用未启用或已停用的名单筛查,NOT_STARTED,no
 R61,EVD,PTY,OHS / Published Language,主体与联系人核实所依据的来源及其读取权限,SourceRef v1,EVD,无权读取来源仍核实主数据,DESIGN,no
 R62,EVD,CAT,OHS / Published Language,SKU 核实所依据的来源及其读取权限,SourceRef v1,EVD,无权读取来源仍核实 SKU,DESIGN,no
 R63,EVD,POL,OHS / Published Language,配置发布核实所依据的来源及其读取权限,SourceRef v1,EVD,发布人无权读取核实证据仍发布配置,DESIGN,no

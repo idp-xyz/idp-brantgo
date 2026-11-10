@@ -29,7 +29,9 @@ func snake(name string) string {
 		if unicode.IsUpper(c) && i > 0 {
 			prevLower := unicode.IsLower(r[i-1]) || unicode.IsDigit(r[i-1])
 			nextLower := i+1 < len(r) && unicode.IsLower(r[i+1])
-			if prevLower || (unicode.IsUpper(r[i-1]) && nextLower) {
+			// A plural acronym keeps its s: EvidenceIDs is evidence_ids, not evidence_i_ds.
+			plural := nextLower && r[i+1] == 's' && (i+2 == len(r) || unicode.IsUpper(r[i+2]))
+			if prevLower || (unicode.IsUpper(r[i-1]) && nextLower && !plural) {
 				b.WriteByte('_')
 			}
 		}
@@ -68,7 +70,8 @@ func taggedKind(t reflect.Type) reflect.Type {
 				continue
 			}
 			name := snake(f.Name)
-			if t == reflect.TypeFor[polapi.ConfigRef]() && f.Name == "ConfigID" {
+			if _, hasID := t.FieldByName("ID"); f.Name == "ConfigID" && !hasID {
+				// A configuration reference is {"kind","id","revision"} wherever it appears.
 				name = "id"
 			}
 			tag := `json:"` + name + `"`

@@ -44,6 +44,8 @@ type (
 		ptyapi.Queries
 		ptyapi.ScreeningCommands
 		ptyapi.ScreeningQueries
+		ptyapi.ProfileCommands
+		GetTradingProfile(ctx context.Context, partyID string) (ptyapi.TradingProfileView, error)
 		ptyapi.Auditor
 	}
 	CAT interface {
@@ -128,8 +130,10 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}", s.authenticated(read(s, cfg.PTY.GetParty, partyView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}/screening", s.authenticated(read(s, cfg.PTY.GetScreening, okView[ptyapi.ScreeningView])))
 	mux.Handle("GET /api/brant/v1/pty/screenings/due", s.authenticated(s.screeningsDue))
+	mux.Handle("GET /api/brant/v1/pty/parties/{id}/trading_profile", s.authenticated(read(s, cfg.PTY.GetTradingProfile, okView[ptyapi.TradingProfileView])))
 	mux.Handle("GET /api/brant/v1/pty/contacts/{id}", s.authenticated(read(s, cfg.PTY.GetContact, contactView)))
 	mux.Handle("GET /api/brant/v1/cat/skus/{id}", s.authenticated(read(s, cfg.CAT.GetSku, skuView)))
+	mux.Handle("GET /api/brant/v1/cat/item_code_mappings/{id}", s.authenticated(read(s, cfg.CAT.GetItemCodeMapping, okView[catapi.ItemCodeMappingView])))
 	mux.Handle("GET /api/brant/v1/inq/rfqs/{id}", s.authenticated(read(s, cfg.INQ.GetRfq, rfqView)))
 	mux.Handle("GET /api/brant/v1/pol/configs/{kind}/{id}", s.authenticated(s.configRead))
 	mux.Handle("GET /api/brant/v1/pol/snapshots/{id}", s.authenticated(read(s, cfg.POL.GetSnapshot, snapshotView)))
