@@ -10,6 +10,10 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA bento TO brant_app;
 -- foundation/authorization: grants are deactivated, never deleted.
 GRANT USAGE ON SCHEMA brant_auth TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_auth.authority_scope, brant_auth.actor_grant TO brant_app;
+-- Roles are redefined in place; role assignments are ended, never deleted.
+GRANT SELECT, INSERT, UPDATE ON brant_auth.role TO brant_app;
+GRANT SELECT, INSERT ON brant_auth.actor_role TO brant_app;
+GRANT UPDATE (removed_epoch, removed_at) ON brant_auth.actor_role TO brant_app;
 
 -- foundation/messaging: dead letters are replayed, never deleted, and their envelope never changes.
 GRANT USAGE ON SCHEMA brant_msg TO brant_app;

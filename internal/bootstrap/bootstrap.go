@@ -290,3 +290,71 @@ func (p *Platform) VerifyIssuer(ctx context.Context) error {
 	}
 	return p.verifier.Refresh(ctx)
 }
+
+// AssignRoles gives an actor exactly roles (role templates or tenant roles, BC-D02) and derives its
+// permissions; a forbidden combination is refused with authorization.ErrSeparationOfDuties. It is
+// an operator's change like Provision; dataScope and team are set as Provision sets them.
+func (p *Platform) AssignRoles(ctx context.Context, scope kernel.Scope, actor kernel.ActorRef, roles []string, dataScope authorization.DataScope, team string) (int64, error) {
+	return p.inAuthority(ctx, scope, func(ctx context.Context, exec bentopg.Executor, g authorization.Grants, now time.Time) (int64, error) {
+		if err := g.Provision(ctx, exec, scope); err != nil {
+			return 0, err
+		}
+		epoch, err := g.AssignRoles(ctx, exec, scope, actor, roles, now)
+		if err == nil && dataScope != "" {
+			epoch, err = g.SetDataScope(ctx, exec, scope, actor.ID, dataScope, team, now)
+		}
+		return epoch, err
+	})
+}
+
+// DefineRole defines a tenant role that merges role templates; a forbidden combination is refused.
+func (p *Platform) DefineRole(ctx context.Context, scope kernel.Scope, code, name string, templates []string) (int64, error) {
+	return p.inAuthority(ctx, scope, func(ctx context.Context, exec bentopg.Executor, g authorization.Grants, now time.Time) (int64, error) {
+		if err := g.Provision(ctx, exec, scope); err != nil {
+			return 0, err
+		}
+		return g.DefineRole(ctx, exec, scope, code, name, templates, now)
+	})
+}
+
+func (p *Platform) inAuthority(ctx context.Context, scope kernel.Scope, fn func(context.Context, bentopg.Executor, authorization.Grants, time.Time) (int64, error)) (int64, error) {
+	db, err := p.newDB()
+	if err != nil {
+		return 0, err
+	}
+	var epoch int64
+	err = bento.ScopeTransactor{DB: db, Scope: scope}.WithinTransaction(ctx, func(ctx context.Context) error {
+		exec, err := db.RequireExecutor(ctx)
+		if err != nil {
+			return err
+		}
+		epoch, err = fn(ctx, exec, authorization.Grants{}, bento.SystemClock{}.Now())
+		return err
+	})
+	return epoch, err
+}
+
+// AssignRolesFor is AssignRoles from plain operator input, for cmd/brant-admin.
+func (p *Platform) AssignRolesFor(ctx context.Context, tenant, company, actorID, kind string, roles []string, dataScope, team string) (int64, error) {
+	scope, err := kernel.NewScope(tenant, company)
+	if err != nil {
+		return 0, err
+	}
+	actor, err := kernel.NewActorRef(kernel.ActorKind(kind), actorID)
+	if err != nil {
+		return 0, err
+	}
+	if dataScope != "" && !authorization.DataScope(dataScope).Valid() {
+		return 0, fmt.Errorf("bootstrap: data scope %q is not own, team or company", dataScope)
+	}
+	return p.AssignRoles(ctx, scope, actor, roles, authorization.DataScope(dataScope), team)
+}
+
+// DefineRoleFor is DefineRole from plain operator input, for cmd/brant-admin.
+func (p *Platform) DefineRoleFor(ctx context.Context, tenant, company, code, name string, templates []string) (int64, error) {
+	scope, err := kernel.NewScope(tenant, company)
+	if err != nil {
+		return 0, err
+	}
+	return p.DefineRole(ctx, scope, code, name, templates)
+}

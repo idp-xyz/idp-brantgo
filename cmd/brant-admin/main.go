@@ -4,6 +4,11 @@
 // process own access in production.
 //
 //	brant-admin grant -tenant t -company c -actor alice -kind human -permissions rfq.save_draft,inq.read -data-scope company
+//	brant-admin role -tenant t -company c -role trade.clerk -name 外贸业务员 -templates sales_clerk,merchandiser
+//	brant-admin assign -tenant t -company c -actor alice -kind human -roles trade.clerk -data-scope team -team east
+//
+// Roles and their templates are BC-D02: templates come from the master archive; a forbidden
+// combination (separation of duties) is refused.
 package main
 
 import (
@@ -26,8 +31,11 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && (args[0] == "role" || args[0] == "assign") {
+		return roles(args)
+	}
 	if len(args) == 0 || args[0] != "grant" {
-		return errors.New("usage: brant-admin grant -tenant ... -company ... -actor ... -kind human|ai|system -permissions a,b [-data-scope own|team|company] [-team ...]")
+		return errors.New("usage: brant-admin grant|role|assign -tenant ... -company ... (see the package comment)")
 	}
 	fs := flag.NewFlagSet("grant", flag.ContinueOnError)
 	tenant := fs.String("tenant", "", "tenant ID")
@@ -63,4 +71,54 @@ func run(args []string) error {
 	}
 	fmt.Printf("GRANTED %s/%s %s:%s %d permissions, authority epoch %d\n", *tenant, *company, *kind, *actor, len(perms), epoch)
 	return nil
+}
+
+// roles runs `role` (define a tenant role from templates) and `assign` (give an actor roles).
+func roles(args []string) error {
+	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	tenant := fs.String("tenant", "", "tenant ID")
+	company := fs.String("company", "", "company ID")
+	role := fs.String("role", "", "role: tenant role code to define")
+	name := fs.String("name", "", "role: display name")
+	templates := fs.String("templates", "", "role: comma-separated role templates to merge")
+	actor := fs.String("actor", "", "assign: actor ID")
+	kind := fs.String("kind", "", "assign: actor kind human, ai or system")
+	assigned := fs.String("roles", "", "assign: comma-separated roles (templates or tenant roles); the actor gets exactly these")
+	dataScope := fs.String("data-scope", "", "assign: own, team or company")
+	team := fs.String("team", "", "assign: team ID for -data-scope team")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	dsn := os.Getenv("IDP_BRANT_POSTGRES_DSN")
+	if dsn == "" {
+		return errors.New("IDP_BRANT_POSTGRES_DSN is required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	platform, err := bootstrap.Open(ctx, bootstrap.Config{PostgresDSN: dsn})
+	if err != nil {
+		return err
+	}
+	defer platform.Close()
+	var epoch int64
+	if args[0] == "role" {
+		epoch, err = platform.DefineRoleFor(ctx, *tenant, *company, *role, *name, split(*templates))
+	} else {
+		epoch, err = platform.AssignRolesFor(ctx, *tenant, *company, *actor, *kind, split(*assigned), *dataScope, *team)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Printf("DONE %s %s/%s, authority epoch %d\n", args[0], *tenant, *company, epoch)
+	return nil
+}
+
+func split(list string) []string {
+	var out []string
+	for _, s := range strings.Split(list, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }

@@ -1,0 +1,919 @@
+{
+ "artifact": "IDP Brant Role Templates and Separation of Duties",
+ "version": "0.1",
+ "date": "2026-11-10",
+ "status": "岗位模板与职责分离规则按模拟评审 SR-32（BC-D02）接受；岗位到命令权限的映射为候选（E0），真实客户开通时由租户确认或合并岗位",
+ "source": "10_M0_ENGINEERING_BASELINE/07_IDP_Brant_Simulated_Review_V0.1.json SR-32",
+ "principles": [
+  "权限即命令名；读取与审计为 <bc>.read、<bc>.audit；能力权限（如毛利例外）由命令内部检查。",
+  "岗位模板是产品默认；租户可把多个模板合并为自己的岗位，但不得合并禁止组合，也不得给操作者分配构成禁止组合的岗位。",
+  "人工专属命令仍只接受人工身份：岗位不会让 AI 或 system 身份获得人工专属命令。",
+  "同一对象的编制与审核分开由命令自身检查（independence），岗位层面的禁止组合是第二道防线。"
+ ],
+ "templates": [
+  {
+   "code": "sales_clerk",
+   "name": "销售经办",
+   "duties": "客户询价、报价编制与提交、客户回复登记、订单准备与生效、订单变更编制、客户主体与联系人草稿",
+   "permissions": [
+    "acceptance.mark_disputed",
+    "cat.read",
+    "claim.open",
+    "clm.read",
+    "cnx.read",
+    "contact.save_draft",
+    "credit_limit.request",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "file.register",
+    "follow_up.record",
+    "ful.read",
+    "goal.verify",
+    "inq.read",
+    "lead.capture",
+    "mfg.read",
+    "object_control.bind",
+    "opportunity.advance",
+    "order.activate",
+    "order.amendment.prepare",
+    "order.amendment.submit",
+    "order.amendment.withdraw",
+    "order.cancel",
+    "order.document.generate",
+    "order.document.record_signed",
+    "order.prepare",
+    "order.review.request",
+    "party.revise",
+    "party.save_draft",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "quote.activate",
+    "quote.cancel",
+    "quote.discard_draft",
+    "quote.freeze",
+    "quote.replace",
+    "quote.response.record",
+    "quote.response.verify",
+    "quote.revise",
+    "quote.save_draft",
+    "quote.submit_review",
+    "quote.withdraw",
+    "return.register",
+    "rfq.cancel",
+    "rfq.close",
+    "rfq.confirm_scope",
+    "rfq.save_draft",
+    "source.register",
+    "source.use",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "task.cancel",
+    "task.create",
+    "task.handoff",
+    "task.release",
+    "task.resume",
+    "task.scope",
+    "task.take_control",
+    "trading_profile.save_draft",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "merchandiser",
+   "name": "跟单",
+   "duties": "订单履约跟进：里程碑、装箱、订舱、出运确认、供应交付登记、生产进度、订单关闭",
+   "permissions": [
+    "booking.record",
+    "cat.read",
+    "claim.close",
+    "claim.open",
+    "clm.read",
+    "cnx.read",
+    "collaboration_plan.publish",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "export_lot.register",
+    "file.register",
+    "ful.read",
+    "goal.verify",
+    "inq.read",
+    "mfg.read",
+    "milestone.plan",
+    "milestone.record_actual",
+    "object_control.release",
+    "object_control.stop",
+    "operation.record_progress",
+    "order.amendment.prepare",
+    "order.amendment.submit",
+    "order.amendment.withdraw",
+    "order.close",
+    "order.close_remainder",
+    "order.close_unfulfilled",
+    "order.document.generate",
+    "packing.plan",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "reservation.place",
+    "reservation.release",
+    "return.register",
+    "rfq.save_draft",
+    "shipment.confirm",
+    "source.register",
+    "source.use",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "supplier_delivery.record",
+    "task.cancel",
+    "task.create",
+    "task.handoff",
+    "task.release",
+    "task.resume",
+    "task.scope",
+    "task.take_control",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "purchaser",
+   "name": "采购",
+   "duties": "供应商询价与报价核实、采购条款、采购草稿与承诺申请、供应商确认与交付、供应商主体与 SKU 草稿",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "contact.save_draft",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "file.register",
+    "ful.read",
+    "goal.verify",
+    "inq.read",
+    "logistics_offer.save_draft",
+    "logistics_offer.verify",
+    "logistics_offer.withdraw",
+    "mfg.read",
+    "party.revise",
+    "party.save_draft",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "purchase.commitment.issue",
+    "purchase.commitment.request",
+    "purchase.draft.prepare",
+    "purchase.draft.void",
+    "purchase.supplier_confirmation.record",
+    "purchase_invoice.import",
+    "purchase_terms.publish",
+    "purchase_terms.retire",
+    "purchase_terms.save_draft",
+    "qlt.read",
+    "sku.revise_spec",
+    "sku.save_draft",
+    "source.register",
+    "source.use",
+    "stk.read",
+    "stl.read",
+    "stock.issue",
+    "stock.receive",
+    "subcontract_order.issue",
+    "sup.read",
+    "supplier_delivery.record",
+    "supplier_delivery.verify",
+    "supplier_offer.revise",
+    "supplier_offer.save_draft",
+    "supplier_offer.verify",
+    "supplier_offer.withdraw",
+    "supplier_rfq.close",
+    "supplier_rfq.record_issued",
+    "supplier_rfq.save_draft",
+    "task.cancel",
+    "task.create",
+    "task.handoff",
+    "task.release",
+    "task.resume",
+    "task.scope",
+    "task.take_control",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "costing",
+   "name": "核价",
+   "duties": "核价上下文、实测、成本场景与快照冻结、来源证明；汇率与税价配置草稿",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "config.save_draft",
+    "cost_scenario.evaluate",
+    "cost_scenario.save_draft",
+    "cost_snapshot.freeze",
+    "costing.attest_source",
+    "costing_context.save_draft",
+    "costing_context.verify",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "file.register",
+    "foundation.snapshot",
+    "ful.read",
+    "goal.verify",
+    "inq.read",
+    "measurement.record_verified",
+    "mfg.read",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "source.register",
+    "source.use",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "task.cancel",
+    "task.create",
+    "task.handoff",
+    "task.release",
+    "task.resume",
+    "task.scope",
+    "task.take_control",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "quote_reviewer",
+   "name": "报价审核人",
+   "duties": "报价内容审核与撤销批准；不编制报价",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "ful.read",
+    "inq.read",
+    "mfg.read",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "quote.approval.revoke",
+    "quote.review.decide",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "order_reviewer",
+   "name": "订单审核人",
+   "duties": "订单与订单变更审核、撤销批准、合同成立的否认处理；采购承诺审批（A47 设计待定）",
+   "permissions": [
+    "acceptance.invalidate",
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "ful.read",
+    "inq.read",
+    "mfg.read",
+    "order.amendment.apply",
+    "order.amendment.decide",
+    "order.approval.revoke",
+    "order.review.decide",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "purchase.commitment.decide",
+    "purchase.commitment.revoke",
+    "qlt.read",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "margin_approver",
+   "name": "毛利审批人",
+   "duties": "最低毛利例外的独立批准（报价审核决定中的毛利例外部分）",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "ful.read",
+    "inq.read",
+    "mfg.read",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "quote.margin_exception.approve",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "credit_officer",
+   "name": "信用专员",
+   "duties": "信用占用与释放、费用分摊；不作信用决定",
+   "permissions": [
+    "cat.read",
+    "charge.allocate",
+    "clm.read",
+    "cnx.read",
+    "credit.release",
+    "credit.reserve",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "ful.read",
+    "inq.read",
+    "mfg.read",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "credit_manager",
+   "name": "信用经理",
+   "duties": "信用额度发布、信用确认与例外、商业放行例外",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "commercial_release.grant_exception",
+    "credit.confirm",
+    "credit_exception.decide",
+    "credit_limit.publish",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "ful.read",
+    "inq.read",
+    "mfg.read",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "quality_inspector",
+   "name": "质检",
+   "duties": "验货登记、处置决定、质量放行与撤销、样品批准",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "crm.read",
+    "cst.read",
+    "disposition.decide",
+    "evd.read",
+    "file.register",
+    "ful.read",
+    "inq.read",
+    "inspection.record",
+    "mfg.read",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "quality_release.grant",
+    "quality_release.revoke",
+    "sample.approve",
+    "source.register",
+    "source.use",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "documentation",
+   "name": "单证",
+   "duties": "出运单证、单证放行、商业放行评估、报关案件与资料包、出口许可、商品申报档案",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "commercial_release.evaluate",
+    "crm.read",
+    "cst.read",
+    "declaration_case.prepare",
+    "declaration_case.record_receipt",
+    "declaration_profile.save_draft",
+    "declaration_profile.verify",
+    "document_bundle.check",
+    "document_release.record",
+    "evd.read",
+    "export_license.allocate",
+    "export_license.register",
+    "export_license.release",
+    "file.register",
+    "ful.read",
+    "inq.read",
+    "mfg.read",
+    "order.document.generate",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "shipment_document.issue",
+    "source.register",
+    "source.use",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "treasury",
+   "name": "资金",
+   "duties": "收付款登记与核销、结算确认、订单结果关闭",
+   "permissions": [
+    "application.apply",
+    "application.unapply",
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "ful.read",
+    "fund.record",
+    "inq.read",
+    "mfg.read",
+    "order_result.close",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "qlt.read",
+    "settlement.confirm",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "compliance",
+   "name": "合规",
+   "duties": "主体筛查记录、裁决与阻断，贸易合规评估与决定；只由本岗位给出合规结论",
+   "permissions": [
+    "cat.audit",
+    "cat.read",
+    "clm.audit",
+    "clm.read",
+    "cnx.audit",
+    "cnx.read",
+    "crm.audit",
+    "crm.read",
+    "cst.audit",
+    "cst.read",
+    "evd.audit",
+    "evd.read",
+    "ful.audit",
+    "ful.read",
+    "inq.audit",
+    "inq.read",
+    "mfg.audit",
+    "mfg.read",
+    "party_screening.block",
+    "party_screening.decide",
+    "party_screening.record",
+    "pol.audit",
+    "pol.read",
+    "pty.audit",
+    "pty.read",
+    "pur.audit",
+    "pur.read",
+    "qlt.audit",
+    "qlt.read",
+    "stk.audit",
+    "stk.read",
+    "stl.audit",
+    "stl.read",
+    "sup.audit",
+    "sup.read",
+    "trade_compliance.decide",
+    "trade_compliance.evaluate",
+    "trd.audit",
+    "trd.read",
+    "tsk.audit",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "tax_specialist",
+   "name": "税务专员",
+   "duties": "进项票、退税分配、外部对账；税务配置草稿",
+   "permissions": [
+    "cat.read",
+    "clm.read",
+    "cnx.read",
+    "config.save_draft",
+    "crm.read",
+    "cst.read",
+    "evd.read",
+    "external_reconciliation.resolve",
+    "ful.read",
+    "inq.read",
+    "mfg.read",
+    "pol.read",
+    "pty.read",
+    "pur.read",
+    "purchase_invoice.import",
+    "qlt.read",
+    "stk.read",
+    "stl.read",
+    "sup.read",
+    "tax_refund_case.allocate",
+    "trd.read",
+    "tsk.read"
+   ]
+  },
+  {
+   "code": "administrator",
+   "name": "管理员",
+   "duties": "主数据核实与停用、服务方核实、交易档案发布、配置发布与退役、编号、Outbox 死信重放、审计查阅；不作业务审批与合规结论",
+   "permissions": [
+    "cat.audit",
+    "cat.read",
+    "clm.audit",
+    "clm.read",
+    "cnx.audit",
+    "cnx.read",
+    "config.discard_draft",
+    "config.publish",
+    "config.retire",
+    "config.save_draft",
+    "contact.confirm",
+    "crm.audit",
+    "crm.read",
+    "cst.audit",
+    "cst.read",
+    "dead_letter.replay",
+    "evd.audit",
+    "evd.read",
+    "foundation.snapshot",
+    "ful.audit",
+    "ful.read",
+    "inq.audit",
+    "inq.read",
+    "item_code_mapping.publish",
+    "mfg.audit",
+    "mfg.read",
+    "number.issue",
+    "party.confirm",
+    "party.deactivate",
+    "pol.audit",
+    "pol.read",
+    "pty.audit",
+    "pty.read",
+    "pur.audit",
+    "pur.read",
+    "qlt.audit",
+    "qlt.read",
+    "remedy.decide",
+    "service_role.verify",
+    "sku.confirm",
+    "sku.deactivate",
+    "stk.audit",
+    "stk.read",
+    "stl.audit",
+    "stl.read",
+    "stock.adjust",
+    "sup.audit",
+    "sup.read",
+    "trading_profile.publish",
+    "trd.audit",
+    "trd.read",
+    "tsk.audit",
+    "tsk.read"
+   ]
+  }
+ ],
+ "capabilities": [
+  {
+   "permission": "quote.margin_exception.approve",
+   "meaning": "报价审核决定覆盖最低毛利例外时，决定人须另有此权限（TRD 在 quote.review.decide 中检查）"
+  },
+  {
+   "permission": "dead_letter.replay",
+   "meaning": "按事件 ID 重放 Outbox 死信（ADR-BR-015），人工专属"
+  },
+  {
+   "permission": "evd.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "pty.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "cat.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "pol.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "inq.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "sup.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "cst.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "trd.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "pur.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "mfg.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "qlt.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "stk.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "ful.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "stl.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "clm.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "cnx.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "crm.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "tsk.read",
+   "meaning": "读取该上下文的对象（受数据范围约束）"
+  },
+  {
+   "permission": "evd.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "pty.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "cat.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "pol.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "inq.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "sup.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "cst.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "trd.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "pur.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "mfg.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "qlt.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "stk.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "ful.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "stl.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "clm.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "cnx.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "crm.audit",
+   "meaning": "查阅该上下文的审计记录"
+  },
+  {
+   "permission": "tsk.audit",
+   "meaning": "查阅该上下文的审计记录"
+  }
+ ],
+ "forbiddenCombinations": [
+  {
+   "templates": [
+    "sales_clerk",
+    "quote_reviewer"
+   ],
+   "rule": "编制与审核分开：报价的编制人不得兼任报价审核人"
+  },
+  {
+   "templates": [
+    "sales_clerk",
+    "order_reviewer"
+   ],
+   "rule": "编制与审核分开：订单与订单变更的编制人不得兼任订单审核人"
+  },
+  {
+   "templates": [
+    "sales_clerk",
+    "margin_approver"
+   ],
+   "rule": "编制与审核分开：报价编制人不得批准自己的毛利例外"
+  },
+  {
+   "templates": [
+    "costing",
+    "margin_approver"
+   ],
+   "rule": "编制与审核分开：成本编制人不得批准建立在其成本上的毛利例外"
+  },
+  {
+   "templates": [
+    "purchaser",
+    "order_reviewer"
+   ],
+   "rule": "编制与审核分开：采购承诺的申请人不得兼任其审批人"
+  },
+  {
+   "templates": [
+    "sales_clerk",
+    "credit_officer"
+   ],
+   "rule": "销售不能放行信用决定"
+  },
+  {
+   "templates": [
+    "sales_clerk",
+    "credit_manager"
+   ],
+   "rule": "销售不能放行信用决定"
+  }
+ ],
+ "exclusivePermissions": [
+  {
+   "permission": "party_screening.decide",
+   "template": "compliance",
+   "rule": "合规结论只由合规岗位确定"
+  },
+  {
+   "permission": "party_screening.block",
+   "template": "compliance",
+   "rule": "合规结论只由合规岗位确定"
+  },
+  {
+   "permission": "trade_compliance.decide",
+   "template": "compliance",
+   "rule": "合规结论只由合规岗位确定"
+  },
+  {
+   "permission": "credit_exception.decide",
+   "template": "credit_manager",
+   "rule": "销售不能放行信用决定"
+  },
+  {
+   "permission": "credit.confirm",
+   "template": "credit_manager",
+   "rule": "销售不能放行信用决定"
+  },
+  {
+   "permission": "credit_limit.publish",
+   "template": "credit_manager",
+   "rule": "销售不能放行信用决定"
+  },
+  {
+   "permission": "commercial_release.grant_exception",
+   "template": "credit_manager",
+   "rule": "销售不能放行信用决定"
+  }
+ ],
+ "independence": [
+  {
+   "command": "config.publish",
+   "independentOf": "该修订的最后编辑人",
+   "context": "POL",
+   "state": "IMPLEMENTED"
+  },
+  {
+   "command": "quote.review.decide",
+   "independentOf": "报价的编制人与提交人",
+   "context": "TRD",
+   "state": "SPEC"
+  },
+  {
+   "command": "order.review.decide",
+   "independentOf": "订单准备人与审核申请人",
+   "context": "TRD",
+   "state": "SPEC"
+  },
+  {
+   "command": "order.amendment.decide",
+   "independentOf": "变更的编制人与提交人",
+   "context": "TRD",
+   "state": "SPEC"
+  },
+  {
+   "command": "purchase.commitment.decide",
+   "independentOf": "承诺申请人",
+   "context": "PUR",
+   "state": "SPEC"
+  },
+  {
+   "command": "credit_exception.decide",
+   "independentOf": "例外申请人",
+   "context": "STL",
+   "state": "SPEC"
+  }
+ ]
+}

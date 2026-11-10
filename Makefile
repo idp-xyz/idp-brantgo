@@ -5,6 +5,7 @@
 #   make integration  unit and PostgreSQL 16 integration tests against brant-pg16
 #   make race         the same with the race detector
 #   make spike        the M0-10 consistency spikes, report in bin/spike-consistency.json
+#   make roles        regenerate the role templates from the archive (BC-D02)
 #   make ci           everything above
 
 GO ?= go
@@ -17,7 +18,7 @@ DB_ENV = CI=true \
 	IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
 	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable'
 
-.PHONY: check fmt fmt-check vet lint test deps allowlist modules db integration race spike build ci
+.PHONY: check fmt fmt-check vet lint test deps allowlist roles modules db integration race spike build ci
 
 check: modules fmt-check vet lint test deps
 
@@ -42,6 +43,9 @@ deps:
 
 allowlist:
 	$(GO) run ./tools/dependency-check -generate $(CONTEXT_MAP)
+
+roles:
+	$(GO) run ./tools/rolegen
 
 modules:
 	$(GO) mod verify
