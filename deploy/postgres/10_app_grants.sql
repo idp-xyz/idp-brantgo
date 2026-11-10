@@ -15,3 +15,8 @@ GRANT SELECT, INSERT, UPDATE ON brant_auth.authority_scope, brant_auth.actor_gra
 GRANT USAGE ON SCHEMA brant_evd TO brant_app;
 GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant_evd.source_import,
     brant_evd.action_result, brant_evd.audit_event TO brant_app;
+
+-- PTY: parties and contacts change through their lifecycle; confirmed revisions and the ledger only grow.
+GRANT USAGE ON SCHEMA brant_pty TO brant_app;
+GRANT SELECT, INSERT, UPDATE ON brant_pty.party, brant_pty.contact TO brant_app;
+GRANT SELECT, INSERT ON brant_pty.party_revision, brant_pty.contact_revision, brant_pty.action_result, brant_pty.audit_event TO brant_app;

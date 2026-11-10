@@ -6,3 +6,4 @@
 # upstream relationships: evd before pty and cat, all three before inq.
 auth
 evd
+pty

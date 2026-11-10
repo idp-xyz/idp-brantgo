@@ -9,3 +9,4 @@
 /deploy/               @idpxyz
 /docs/                 @idpxyz
 /internal/contexts/evd/ @idpxyz
+/internal/contexts/pty/ @idpxyz

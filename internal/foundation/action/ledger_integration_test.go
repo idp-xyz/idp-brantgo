@@ -324,7 +324,9 @@ func TestReplayRechecksVisibility(t *testing.T) {
 
 type failingOutbox struct{}
 
-func (failingOutbox) Enqueue(context.Context, eventing.Envelope) error { return errors.New("injected outbox failure") }
+func (failingOutbox) Enqueue(context.Context, eventing.Envelope) error {
+	return errors.New("injected outbox failure")
+}
 
 // Python test_rollback_when_storage_rejects_outbox_write.
 func TestOutboxFailureRollsBackEverything(t *testing.T) {

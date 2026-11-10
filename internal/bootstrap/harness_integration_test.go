@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -23,6 +24,8 @@ import (
 // every S1 permission, Python's "*".
 var allPermissions = []string{
 	"source.register", "evd.read", "evd.audit",
+	"party.save_draft", "party.confirm", "party.revise", "party.deactivate", "contact.save_draft", "contact.confirm",
+	"pty.read", "pty.audit",
 }
 
 type world struct {
@@ -108,6 +111,53 @@ func (w *world) want(err error, wantCode string) {
 	if got := code(err); got != wantCode {
 		w.t.Fatalf("want %s, got %s", wantCode, got)
 	}
+}
+
+// exec runs sql as the application role in company's scope.
+func (w *world) exec(company, sql string) error {
+	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return bento.ScopeTransactor{DB: db, Scope: w.scope(company)}.WithinTransaction(context.Background(), func(ctx context.Context) error {
+		exec, err := db.RequireExecutor(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = exec.Exec(ctx, sql)
+		return err
+	})
+}
+
+type event struct {
+	Type    string
+	Payload map[string]any
+}
+
+// events returns the Outbox events of source in company, oldest first.
+func (w *world) events(company, source string) []event {
+	w.t.Helper()
+	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	q, err := db.ReadExecutor(context.Background())
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	rows, err := q.Query(context.Background(), `SELECT event_type, payload FROM bento.outbox WHERE source = $1 AND scope = $2
+		ORDER BY enqueued_seq`, source, w.scope(company).String())
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (event, error) {
+		var e event
+		return e, row.Scan(&e.Type, &e.Payload)
+	})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return out
 }
 
 // count returns the rows of table in company, read as the application role through the scope's

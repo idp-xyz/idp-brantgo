@@ -17,6 +17,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
+	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database"
@@ -105,19 +106,26 @@ func (p *Platform) newDB() (*bentopg.DB, error) {
 // Contexts are the bounded contexts of a process, each on a transaction owner of its own.
 type Contexts struct {
 	EVD *evd.Module
+	PTY *pty.Module
 }
 
-// Contexts wires every bounded context. Call it once per process.
+// Contexts wires every bounded context, upstream first. Call it once per process.
 func (p *Platform) Contexts() (*Contexts, error) {
-	evdDB, err := p.newDB()
+	var c Contexts
+	db, err := p.newDB()
+	if err == nil {
+		c.EVD, err = evd.New(db)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.PTY, err = pty.New(db, c.EVD)
+	}
 	if err != nil {
 		return nil, err
 	}
-	evdModule, err := evd.New(evdDB)
-	if err != nil {
-		return nil, err
-	}
-	return &Contexts{EVD: evdModule}, nil
+	return &c, nil
 }
 
 // Grant is an operator's change to one actor's access in a tenant and company. It is not a user
