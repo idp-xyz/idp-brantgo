@@ -20,7 +20,7 @@ GRANT UPDATE (state, replay_attempts, last_replay_at, last_replay_error, replaye
 -- EVD: sources are immutable; the ledger tables only grow.
 GRANT USAGE ON SCHEMA brant_evd TO brant_app;
 GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant_evd.source_import,
-    brant_evd.action_result, brant_evd.audit_event TO brant_app;
+    brant_evd.business_file, brant_evd.action_result, brant_evd.audit_event TO brant_app;
 
 -- PTY: parties and contacts change through their lifecycle; confirmed revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_pty TO brant_app;

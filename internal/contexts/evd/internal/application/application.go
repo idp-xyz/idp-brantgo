@@ -11,6 +11,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/file"
 	"go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/source"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -20,6 +21,7 @@ import (
 
 // Read commands and their rules.
 const (
+	CommandGetFile        = "file.get"
 	CommandGetSource      = "source.get"
 	CommandResolveSources = "source.resolve"
 	CommandAudit          = "evd.audit"
@@ -33,15 +35,21 @@ var anyActor = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.Acto
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandRegisterSource, Permission: api.CommandRegisterSource, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
+		{Command: api.CommandRegisterFile, Permission: api.CommandRegisterFile, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 		{Command: CommandGetSource, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetFile, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandResolveSources, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 }
 
-// Visible reports whether d's actor sees the source origin a stored result names.
-func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, _, id string) (bool, error) {
+// Visible reports whether d's actor sees the source origin or file a stored result names.
+func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	scope, _ := bento.ScopeFromContext(ctx)
+	if command == api.CommandRegisterFile {
+		f, err := postgres.LoadFile(ctx, exec, scope, id, false)
+		return err == nil && f != nil && d.Sees(f.OwnerActor, f.OwnerTeam), err
+	}
 	o, err := postgres.OriginByID(ctx, exec, scope, id)
 	return err == nil && o != nil && d.Sees(o.OwnerActor, o.OwnerTeam), err
 }
@@ -193,4 +201,91 @@ func (s Service) Audit(ctx context.Context) ([]kernel.AuditEntry, error) {
 // AuditRejected records a request an inbound adapter refused before it became a command.
 func (s Service) AuditRejected(ctx context.Context, command, objectID, code string) error {
 	return s.Ledger.AuditRejected(ctx, command, objectID, code)
+}
+
+// RegisterFile registers an immutable business file (Python foundation.file_register).
+func (s Service) RegisterFile(ctx context.Context, cmd api.RegisterFile) (api.Receipt, error) {
+	if err := cmd.Validate(); err != nil {
+		return api.Receipt{}, s.rejectEarly(ctx, api.CommandRegisterFile, cmd.FileID, err)
+	}
+	args := cmd
+	args.IdempotencyKey = ""
+	hash, err := action.RequestHash(args)
+	if err != nil {
+		return api.Receipt{}, err
+	}
+	res, err := s.Ledger.Execute(ctx, action.Command{Name: api.CommandRegisterFile, IdempotencyKey: cmd.IdempotencyKey, RequestHash: hash, ObjectID: cmd.FileID},
+		&registerFile{clock: s.Clock, cmd: cmd})
+	return api.Receipt(res), err
+}
+
+type registerFile struct {
+	clock application.Clock
+	cmd   api.RegisterFile
+}
+
+// Lock locks nothing: files are immutable, and a second successor of one file meets the unique
+// index on supersedes_file_id (the ledger retries once and then sees the conflict).
+func (h *registerFile) Lock(context.Context, bentopg.Executor) error { return nil }
+
+func (h *registerFile) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+	scope, _ := bento.ScopeFromContext(ctx)
+	conflict := func(path string) error {
+		return kernel.RejectAs(api.CodeBusinessKeyConflict, kernel.CategoryConflict, path, "")
+	}
+	exists, err := postgres.FileExists(ctx, exec, scope, h.cmd.FileID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	if exists {
+		return action.Outcome{}, conflict("/args/id")
+	}
+	content, sum, err := file.Decode(h.cmd.FileName, h.cmd.MimeType, h.cmd.ContentBase64, api.MaxFileBytes)
+	if err != nil {
+		return action.Outcome{}, kernel.RejectAs(api.CodeFileInvalid, kernel.CategoryInvalid, "/args/content_base64", "")
+	}
+	if prev := h.cmd.SupersedesFileID; prev != "" {
+		f, err := postgres.LoadFile(ctx, exec, scope, prev, false)
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		if f == nil || !d.Sees(f.OwnerActor, f.OwnerTeam) {
+			return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/supersedes_file_id", "")
+		}
+		taken, err := postgres.HasSuccessor(ctx, exec, scope, prev)
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		if taken {
+			return action.Outcome{}, conflict("/args/supersedes_file_id")
+		}
+	}
+	f := postgres.File{ID: h.cmd.FileID, Name: h.cmd.FileName, MimeType: h.cmd.MimeType, Content: content, SHA256: sum,
+		SupersedesFileID: h.cmd.SupersedesFileID, OwnerActor: d.Actor.ID, OwnerTeam: d.Team, RegisteredAt: h.clock.Now()}
+	if err = postgres.InsertFile(ctx, exec, scope, f); err != nil {
+		return action.Outcome{}, err
+	}
+	return action.Outcome{ObjectID: f.ID, RowVersion: 1, Status: "registered", Events: []action.Event{{
+		Type: api.EventFileRegistered, AggregateType: "BusinessFile", AggregateID: f.ID, AggregateVersion: 1,
+		Fields: map[string]any{"file_id": f.ID, "content_sha256": sum, "byte_size": len(content), "supersedes_file_id": f.SupersedesFileID},
+	}}}, nil
+}
+
+// GetFile returns a business file the caller sees, audited.
+func (s Service) GetFile(ctx context.Context, id string) (api.FileView, error) {
+	var v api.FileView
+	err := s.Ledger.Read(ctx, CommandGetFile, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		scope, _ := bento.ScopeFromContext(ctx)
+		f, err := postgres.LoadFile(ctx, exec, scope, id, true)
+		if err != nil {
+			return err
+		}
+		if f == nil || !d.Sees(f.OwnerActor, f.OwnerTeam) {
+			return kernel.Reject(kernel.CodeNotFound, "/id", "")
+		}
+		v = api.FileView{FileID: f.ID, FileName: f.Name, MimeType: f.MimeType, Content: f.Content, ContentSHA256: f.SHA256,
+			SupersedesFileID: f.SupersedesFileID, RegisteredAt: f.RegisteredAt}
+		return nil
+	})
+	return v, err
 }

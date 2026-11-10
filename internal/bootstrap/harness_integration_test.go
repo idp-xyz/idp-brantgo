@@ -24,7 +24,7 @@ import (
 
 // every S1 permission, Python's "*".
 var allPermissions = []string{
-	"source.register", "evd.read", "evd.audit",
+	"source.register", "file.register", "evd.read", "evd.audit",
 	"party.save_draft", "party.confirm", "party.revise", "party.deactivate", "contact.save_draft", "contact.confirm",
 	"pty.read", "pty.audit",
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "cat.read", "cat.audit",

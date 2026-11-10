@@ -65,8 +65,11 @@ type Config struct {
 	MaxBodyBytes int64
 }
 
-// MaxBody is the default request body limit.
-const MaxBody = 1 << 20
+// MaxBody is the default request body limit; MaxFileBody the limit of file.register.
+const (
+	MaxBody     = 1 << 20
+	MaxFileBody = 15 << 20
+)
 
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
@@ -90,6 +93,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("POST /api/brant/v1/{bc}/commands/{command}", s.authenticated(s.command))
 	mux.Handle("GET /api/brant/v1/{bc}/audit", s.authenticated(s.audit))
 	mux.Handle("GET /api/brant/v1/evd/sources/{id}", s.authenticated(read(s, cfg.EVD.GetSource, sourceView)))
+	mux.Handle("GET /api/brant/v1/evd/files/{id}", s.authenticated(read(s, cfg.EVD.GetFile, fileView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}", s.authenticated(read(s, cfg.PTY.GetParty, partyView)))
 	mux.Handle("GET /api/brant/v1/pty/contacts/{id}", s.authenticated(read(s, cfg.PTY.GetContact, contactView)))
 	mux.Handle("GET /api/brant/v1/cat/skus/{id}", s.authenticated(read(s, cfg.CAT.GetSku, skuView)))

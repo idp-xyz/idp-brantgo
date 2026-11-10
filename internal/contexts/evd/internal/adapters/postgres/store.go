@@ -145,3 +145,60 @@ func Origins(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, ids
 		return *o, nil
 	})
 }
+
+// File is a stored business file.
+type File struct {
+	ID               string
+	Name             string
+	MimeType         string
+	Content          []byte
+	SHA256           string
+	SupersedesFileID string
+	OwnerActor       string
+	OwnerTeam        string
+	RegisteredAt     time.Time
+}
+
+// FileExists reports whether a file id exists in the scope, whoever owns it (Python
+// file_register: BUSINESS_KEY_CONFLICT before any access check).
+func FileExists(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) (bool, error) {
+	var ok bool
+	err := exec.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM brant_evd.business_file WHERE tenant_id = $1 AND company_id = $2 AND file_id = $3)`,
+		string(scope.Tenant), string(scope.Company), id).Scan(&ok)
+	return ok, err
+}
+
+// HasSuccessor reports whether a file already has a successor.
+func HasSuccessor(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) (bool, error) {
+	var ok bool
+	err := exec.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM brant_evd.business_file WHERE tenant_id = $1 AND company_id = $2
+		AND supersedes_file_id = $3)`, string(scope.Tenant), string(scope.Company), id).Scan(&ok)
+	return ok, err
+}
+
+// LoadFile returns the file id, or nil; withContent also reads its bytes.
+func LoadFile(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string, withContent bool) (*File, error) {
+	content := "NULL::bytea"
+	if withContent {
+		content = "content"
+	}
+	var f File
+	err := exec.QueryRow(ctx, `SELECT file_id, file_name, mime_type, `+content+`, sha256, coalesce(supersedes_file_id, ''),
+		owner_actor_id, coalesce(owner_team_id, ''), registered_at FROM brant_evd.business_file
+		WHERE tenant_id = $1 AND company_id = $2 AND file_id = $3`, string(scope.Tenant), string(scope.Company), id).
+		Scan(&f.ID, &f.Name, &f.MimeType, &f.Content, &f.SHA256, &f.SupersedesFileID, &f.OwnerActor, &f.OwnerTeam, &f.RegisteredAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return &f, err
+}
+
+// InsertFile stores a business file.
+func InsertFile(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, f File) error {
+	_, err := exec.Exec(ctx, `INSERT INTO brant_evd.business_file (tenant_id, company_id, file_id, file_name, mime_type, content, sha256,
+		byte_size, supersedes_file_id, owner_actor_id, owner_team_id, registered_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, nullif($9, ''), $10, nullif($11, ''), $12)`,
+		string(scope.Tenant), string(scope.Company), f.ID, f.Name, f.MimeType, f.Content, f.SHA256, len(f.Content), f.SupersedesFileID,
+		f.OwnerActor, f.OwnerTeam, f.RegisteredAt)
+	return err
+}

@@ -45,7 +45,9 @@ type commandSet struct {
 	bc       string
 	contract string
 	commands map[string]commandFunc
-	auditor  interface {
+	// limits raises the body limit of a command above the transport's default.
+	limits  map[string]int64
+	auditor interface {
 		AuditRejected(ctx context.Context, command, objectID, code string) error
 	}
 	audit func(context.Context) ([]kernel.AuditEntry, error)
@@ -114,7 +116,11 @@ func unwrapExecuted(err error) error {
 }
 
 func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run commandFunc) (receipt, error) {
-	body := http.MaxBytesReader(nil, r.Body, s.cfg.MaxBodyBytes+1)
+	limit := s.cfg.MaxBodyBytes
+	if l := set.limits[name]; l > limit {
+		limit = l
+	}
+	body := http.MaxBytesReader(nil, r.Body, limit+1)
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		var tooLarge *http.MaxBytesError
@@ -124,7 +130,7 @@ func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run
 		return receipt{}, err
 	}
 	var env envelope
-	if err = strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: s.cfg.MaxBodyBytes}); err != nil {
+	if err = strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit}); err != nil {
 		return receipt{}, err
 	}
 	switch {
@@ -160,7 +166,7 @@ func (e schemaError) Error() string { return e.rejection.Error() }
 // decodeArgs decodes args into a as a closed structure: exact-case member names, no unknown fields,
 // types checked with their paths, which become paths under /args.
 func decodeArgs(args json.RawMessage, a any) error {
-	if err := strictjson.Unmarshal(args, a, strictjson.Limits{}); err != nil {
+	if err := strictjson.Unmarshal(args, a, strictjson.Limits{MaxBytes: int64(len(args))}); err != nil {
 		rej, ok := kernel.AsRejection(err)
 		if !ok {
 			return err
@@ -255,12 +261,26 @@ func evdCommands(c EVD) *commandSet {
 		ExternalMessageID string `json:"external_message_id"`
 		AuthorClaim       string `json:"author_claim"`
 	}
-	return &commandSet{bc: "evd", contract: evdapi.Contract, auditor: c, audit: c.Audit, commands: map[string]commandFunc{
-		evdapi.CommandRegisterSource: handle(func(key string, a registerSource) (evdapi.RegisterSource, error) {
-			return evdapi.RegisterSource{IdempotencyKey: key, SourceID: a.ID, ContentText: a.ContentText, SourceKind: a.SourceKind,
-				Provider: a.Provider, AccountRef: a.AccountRef, ExternalMessageID: a.ExternalMessageID, AuthorClaim: a.AuthorClaim}, nil
-		}, c.RegisterSource),
-	}}
+	type registerFile struct {
+		ID               string `json:"id"`
+		FileName         string `json:"file_name"`
+		MimeType         string `json:"mime_type"`
+		ContentBase64    string `json:"content_base64"`
+		SupersedesFileID string `json:"supersedes_file_id"`
+	}
+	return &commandSet{bc: "evd", contract: evdapi.Contract, auditor: c, audit: c.Audit,
+		// A 10 MiB file is about 13.4 MiB of Base64 (Python allows 15 MiB for this contract).
+		limits: map[string]int64{evdapi.CommandRegisterFile: MaxFileBody},
+		commands: map[string]commandFunc{
+			evdapi.CommandRegisterSource: handle(func(key string, a registerSource) (evdapi.RegisterSource, error) {
+				return evdapi.RegisterSource{IdempotencyKey: key, SourceID: a.ID, ContentText: a.ContentText, SourceKind: a.SourceKind,
+					Provider: a.Provider, AccountRef: a.AccountRef, ExternalMessageID: a.ExternalMessageID, AuthorClaim: a.AuthorClaim}, nil
+			}, c.RegisterSource),
+			evdapi.CommandRegisterFile: handle(func(key string, a registerFile) (evdapi.RegisterFile, error) {
+				return evdapi.RegisterFile{IdempotencyKey: key, FileID: a.ID, FileName: a.FileName, MimeType: a.MimeType,
+					ContentBase64: a.ContentBase64, SupersedesFileID: a.SupersedesFileID}, nil
+			}, c.RegisterFile),
+		}}
 }
 
 type evidenced struct {

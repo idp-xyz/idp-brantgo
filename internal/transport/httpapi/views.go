@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"encoding/base64"
+
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
@@ -55,6 +57,22 @@ func sourceView(v evdapi.SourceView) sourceJSON {
 		out.Imports = append(out.Imports, importView{ImportID: i.ImportID, Actor: actorView{string(i.Actor.Kind), i.Actor.ID}, ImportedAt: timestamp(i.ImportedAt)})
 	}
 	return out
+}
+
+type fileJSON struct {
+	OK               bool   `json:"ok"`
+	FileID           string `json:"file_id"`
+	FileName         string `json:"file_name"`
+	MimeType         string `json:"mime_type"`
+	ContentBase64    string `json:"content_base64"`
+	ContentSHA256    string `json:"content_sha256"`
+	SupersedesFileID string `json:"supersedes_file_id,omitempty"`
+	RegisteredAt     string `json:"registered_at"`
+}
+
+func fileView(v evdapi.FileView) fileJSON {
+	return fileJSON{OK: true, FileID: v.FileID, FileName: v.FileName, MimeType: v.MimeType, ContentBase64: base64.StdEncoding.EncodeToString(v.Content),
+		ContentSHA256: v.ContentSHA256, SupersedesFileID: v.SupersedesFileID, RegisteredAt: timestamp(v.RegisteredAt)}
 }
 
 type revisionView struct {

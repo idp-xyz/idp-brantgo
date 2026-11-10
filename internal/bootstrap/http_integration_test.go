@@ -7,10 +7,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,6 +136,14 @@ func TestBRC001FrontOverHTTPWithOIDCTokens(t *testing.T) {
 
 	human.command("evd", "brant.evd/0.1.0", "source.register", map[string]any{"id": "source.1", "source_kind": "manual_text",
 		"content_text": "合成样例：ST01四个SKU，24、36、12、48件，合计120 PCS。"})
+	// file.register has its own body limit: a 1.1 MiB file passes the 1 MiB default.
+	large := strings.Repeat("A", 1100*1024)
+	human.command("evd", "brant.evd/0.1.0", "file.register", map[string]any{"id": "inquiry.file", "file_name": "inquiry.txt",
+		"mime_type": "text/plain", "content_base64": base64.StdEncoding.EncodeToString([]byte(large))})
+	if status, f := human.do("GET", "/api/brant/v1/evd/files/inquiry.file", nil); status != http.StatusOK ||
+		f["content_sha256"] != fmt.Sprintf("%x", sha256.Sum256([]byte(large))) {
+		t.Fatalf("file read %d", status)
+	}
 	human.command("pty", "brant.pty/0.1.0", "party.save_draft", map[string]any{"id": "customer.1", "expected_version": 0, "name": "customer.1", "roles": []string{"customer"}})
 	human.command("pty", "brant.pty/0.1.0", "party.confirm", map[string]any{"id": "customer.1", "expected_version": 1, "evidence_ids": []string{"source.1"}})
 	human.command("pty", "brant.pty/0.1.0", "contact.save_draft", map[string]any{"id": "contact.1", "expected_version": 0, "name": "contact.1", "party_id": "customer.1"})

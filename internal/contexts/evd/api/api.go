@@ -17,12 +17,26 @@ const (
 	Source = "idp-brant.evd"
 	// EventSourceRegistered is published when a new source origin is registered.
 	EventSourceRegistered = "idp-brant.evd.source_registered.v1"
+	// EventFileRegistered is published when a business file is registered.
+	EventFileRegistered = "idp-brant.evd.file_registered.v1"
 
 	CommandRegisterSource = "source.register"
+	CommandRegisterFile   = "file.register"
 
 	// CodeSourceIdentityConflict: the source ID or the channel message is known with other content
 	// or another channel identity (EVD-INV-001).
 	CodeSourceIdentityConflict = "SOURCE_IDENTITY_CONFLICT"
+	// CodeFileInvalid: the bytes are not valid Base64, empty, too large, or not of the declared type.
+	CodeFileInvalid = "FILE_INVALID"
+	// CodeBusinessKeyConflict: the file ID exists, or the superseded file already has a successor.
+	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT"
+
+	MimeText = "text/plain"
+	MimePDF  = "application/pdf"
+	MimeXLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+	// MaxFileBytes bounds a business file (Python foundation.file.register: 10 MiB).
+	MaxFileBytes = 10 << 20
 
 	KindManualText = "manual_text"
 	KindEmailText  = "email_text"
@@ -84,6 +98,37 @@ type Auditor interface {
 	AuditRejected(ctx context.Context, command, objectID, code string) error
 }
 
+// RegisterFile registers an immutable business file. A new version names the file it supersedes;
+// a file has at most one successor, so versions never branch.
+type RegisterFile struct {
+	IdempotencyKey   string
+	FileID           string // args.id
+	FileName         string
+	MimeType         string // text/plain, application/pdf or the XLSX type
+	ContentBase64    string // standard Base64 of at most MaxFileBytes bytes
+	SupersedesFileID string
+}
+
+// Validate checks the closed contract (Python foundation.commands.schema.json, file.register).
+// Whether the bytes match the type is a FILE_INVALID decision of the context.
+func (c RegisterFile) Validate() error {
+	switch {
+	case !kernel.ValidIdentifier(c.IdempotencyKey):
+		return schema("/idempotency_key")
+	case !kernel.ValidIdentifier(c.FileID):
+		return schema("/args/id")
+	case !text(c.FileName, 255):
+		return schema("/args/file_name")
+	case c.MimeType != MimeText && c.MimeType != MimePDF && c.MimeType != MimeXLSX:
+		return schema("/args/mime_type")
+	case c.ContentBase64 == "":
+		return schema("/args/content_base64")
+	case c.SupersedesFileID != "" && !kernel.ValidIdentifier(c.SupersedesFileID):
+		return schema("/args/supersedes_file_id")
+	}
+	return nil
+}
+
 // Receipt is the closed success answer of a command.
 type Receipt struct {
 	ActionID   string
@@ -97,6 +142,7 @@ type Receipt struct {
 // is an infrastructure failure.
 type Commands interface {
 	RegisterSource(ctx context.Context, cmd RegisterSource) (Receipt, error)
+	RegisterFile(ctx context.Context, cmd RegisterFile) (Receipt, error)
 }
 
 // SourceRef is SourceRef v1: a source origin and the hash of its content.
@@ -126,8 +172,21 @@ type SourceView struct {
 	Imports           []SourceImport
 }
 
+// FileView is a business file with its bytes, for a reader allowed to see it.
+type FileView struct {
+	FileID           string
+	FileName         string
+	MimeType         string
+	Content          []byte
+	ContentSHA256    string
+	SupersedesFileID string
+	RegisteredAt     time.Time
+}
+
 // Queries is EVD's read side.
 type Queries interface {
+	// GetFile returns a business file the caller sees; the read is audited.
+	GetFile(ctx context.Context, fileID string) (FileView, error)
 	// GetSource returns a source the caller sees; the read is audited. NOT_FOUND hides sources of
 	// other owners as well as missing ones.
 	GetSource(ctx context.Context, sourceID string) (SourceView, error)

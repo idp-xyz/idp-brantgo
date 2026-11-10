@@ -4,6 +4,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"sync"
 	"testing"
@@ -264,4 +265,65 @@ func TestAuditWaitsForAPriorRevocation(t *testing.T) {
 	close(release)
 	w.must(<-done)
 	w.want(<-read, kernel.CodePermissionDenied)
+}
+
+func (w *world) file(ctx context.Context, id, name, mime, content, supersedes string) (evdapi.Receipt, error) {
+	return w.c.EVD.RegisterFile(ctx, evdapi.RegisterFile{IdempotencyKey: w.key(), FileID: id, FileName: name, MimeType: mime,
+		ContentBase64: base64.StdEncoding.EncodeToString([]byte(content)), SupersedesFileID: supersedes})
+}
+
+// Python test_foundation.py test_attachment_immutable_versions_and_access.
+func TestFilesAreImmutableVersionsWithAccess(t *testing.T) {
+	w := newWorld(t)
+	editor := w.actor("editor", allPermissions...)
+	r, err := w.file(editor, "f1", "evidence.txt", evdapi.MimeText, "原文", "")
+	w.must(err)
+	if r.Status != "registered" {
+		t.Fatalf("register %+v", r)
+	}
+	_, err = w.file(editor, "f2", "evidence.txt", evdapi.MimeText, "new", "f1")
+	w.must(err)
+	f, err := w.c.EVD.GetFile(editor, "f1")
+	w.must(err)
+	if string(f.Content) != "原文" {
+		t.Fatalf("f1 content %q", f.Content)
+	}
+	outsider := w.actor("outsider", allPermissions...)
+	_, err = w.c.EVD.GetFile(outsider, "f1")
+	w.want(err, kernel.CodeNotFound)
+	_, err = w.c.EVD.RegisterFile(editor, evdapi.RegisterFile{IdempotencyKey: w.key(), FileID: "invalid", FileName: "evidence.txt",
+		MimeType: evdapi.MimeText, ContentBase64: "%%%bad"})
+	w.want(err, evdapi.CodeFileInvalid)
+	if err = w.exec("company.A", `UPDATE brant_evd.business_file SET file_name = 'x.txt'`); err == nil {
+		t.Fatal("business files must be immutable")
+	}
+	if ev := w.events("company.A", evdapi.Source); len(ev) != 2 || ev[1].Payload["supersedes_file_id"] != "f1" {
+		t.Fatalf("events %+v", ev)
+	}
+}
+
+// Python test_foundation.py test_file_signature_size_and_branching_are_explicit.
+func TestFileSignatureAndBranchingAreExplicit(t *testing.T) {
+	w := newWorld(t)
+	ctx := w.actor("editor", allPermissions...)
+	_, err := w.file(ctx, "pdf", "x.pdf", evdapi.MimePDF, "not a pdf", "")
+	w.want(err, evdapi.CodeFileInvalid)
+	_, err = w.file(ctx, "root", "a.txt", evdapi.MimeText, "original", "")
+	w.must(err)
+	_, err = w.file(ctx, "version2", "a.txt", evdapi.MimeText, "original", "root")
+	w.must(err)
+	_, err = w.file(ctx, "branch", "a.txt", evdapi.MimeText, "original", "root")
+	w.want(err, evdapi.CodeBusinessKeyConflict)
+	_, err = w.file(ctx, "root", "a.txt", evdapi.MimeText, "again", "")
+	w.want(err, evdapi.CodeBusinessKeyConflict)
+}
+
+// Python test_foundation.py test_attachment_limit_and_large_valid_content.
+func TestFileSizeLimit(t *testing.T) {
+	w := newWorld(t)
+	ctx := w.actor("editor", allPermissions...)
+	_, err := w.file(ctx, "large", "large.txt", evdapi.MimeText, strings.Repeat("A", 1100*1024), "")
+	w.must(err)
+	_, err = w.file(ctx, "too.large", "large.txt", evdapi.MimeText, strings.Repeat("A", evdapi.MaxFileBytes+1), "")
+	w.want(err, evdapi.CodeFileInvalid)
 }
