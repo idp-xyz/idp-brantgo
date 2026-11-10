@@ -13,4 +13,4 @@
 | 05_github_actions_runs.json.txt | GitHub Actions 运行记录：编号、分支、提交、每一步结果 | M0-09、G1 C04–C06、C09 |
 | 06_strictjson_fuzz.txt | 严格 JSON 解码模糊测试 30 秒的结果 | S1-06 |
 
-未执行：受保护主干、必需评审与签名溯源（GitHub 免费版私有仓库不提供分支保护）；真实身份提供方（测试使用本地签发者）；岗位模板与职责分离（BC-D02）；Inbox 去重与 ErrCommitUncertain 恢复（S4-06）；OpenAPI 3.1 候选；POL 的 ConfigGuard 与其余 13 种配置类型；主体筛查（S1-09）与名单导入（S1-11）；真实客户样例。
+未执行：受保护主干、必需评审与签名溯源（GitHub 免费版私有仓库不提供，负责人决定不配置）；真实身份提供方（测试使用本地签发者）；岗位模板与职责分离（BC-D02）；Inbox 去重与 ErrCommitUncertain 恢复（S4-06）；OpenAPI 3.1 候选；POL 的 ConfigGuard 与其余 13 种配置类型；主体筛查（S1-09）与名单导入（S1-11）；真实客户样例。

@@ -81,7 +81,7 @@ Against another PostgreSQL 16:
 
 ## Status of evidence
 
-S1, 2026-11-10: GitHub Actions runs the workflow on the private repository `idpxyz/idp-brantgo`; the S1 branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). Branch protection and required reviews are not configured: GitHub does not offer them for private repositories on the Free plan. The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
+S1, 2026-11-10: GitHub Actions runs the workflow on the private repository `idpxyz/idp-brantgo`; the S1 branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). Branch protection and required reviews are not configured: GitHub does not offer them for private repositories on the Free plan, and the owner decided on 2026-11-10 to go without them (G1 control C09 is not blocking). Contributors open pull requests and merge only after the CI check passes. The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
 
 - The command ledger orders a command as the Python service does (contract, permission, stored result, CAS and state, references) and commits the change, the action result, the audit entry and the Outbox events together; replays re-check the current permission and visibility.
 - 53 Python V0.50 tests of T01 and the shared foundation are ported (08 stage mapping); the front of BRC-001 (four lines, 120 PCS, ready) replays on PostgreSQL 16 directly and over HTTP with OIDC access tokens.

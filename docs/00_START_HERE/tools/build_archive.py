@@ -1256,7 +1256,7 @@ def write_registry(pages: list[str]) -> None:
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "product": "IDP Brant · AI-Native Trade Operations Platform（中国 B2B 出口业务版）",
         "standard": "IDP-Cargo 主档案 V2.9（01–12 阶段、证据分级、门禁与 Go-first 工程基线）",
         "implementation_language": "Go (Golang)",
-        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；私有远程仓库 idpxyz/idp-brantgo，GitHub Actions 通过；M0 完成，S1 部分完成；未配置受保护主干）",
+        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；私有远程仓库 idpxyz/idp-brantgo，GitHub Actions 通过；M0 完成，S1 部分完成；按负责人决定不配置受保护主干）",
         "status": "DESIGN_CANDIDATE_ARCHIVE_WITH_M0_BASELINE_AND_S1_PARTIAL", "production_ready": False,
         "gates": G1["productGates"], "gate_mapping": G1["gateMapping"],
         "versioning_policy": "Latest means the most recent design candidate, not approved or implemented",
@@ -1288,7 +1288,7 @@ def write_registry(pages: list[str]) -> None:
             "本主档案按 IDP-Cargo 主档案的结构与方法组织，内容来自 Brant 产品基线 V1.0、业务核心详细设计 V0.2 与 Python V0.50。",
             "全部 DDD 资产为候选设计，未经业务或技术签核。",
             "V1.1 回写 M0 工程基线的本机证据：Go 模块、kernel、foundation、迁移、依赖检查、Outbox 中继与一致性实测；尚无业务上下文。",
-            "V1.3 远程 CI 跑通并回写 S1 第一批：命令账本、EVD、PTY、CAT、INQ、POL（首批 5 种配置）、HTTP 入口与 OIDC、Outbox 死信；主体筛查与受保护主干未完成。",
+            "V1.3 远程 CI 跑通并回写 S1 第一批：命令账本、EVD、PTY、CAT、INQ、POL（首批 5 种配置）、HTTP 入口与 OIDC、Outbox 死信；主体筛查未完成，受保护主干按负责人决定不配置。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1 仍为 NO-GO。",
         ],
     }
