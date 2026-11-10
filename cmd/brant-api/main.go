@@ -32,6 +32,8 @@ func run() error {
 	audience := flag.String("oidc-audience", "", "audience the access tokens must name")
 	jwks := flag.String("oidc-jwks", "", "JWKS URL; empty discovers it from the issuer")
 	insecure := flag.Bool("oidc-insecure-http", false, "accept an http:// issuer and JWKS on a loopback host (local development only)")
+	replaySink := flag.String("replay-sink", "", "HTTP sink for dead-letter replay by an authorized human; empty disables the route")
+	replayTimeout := flag.Duration("replay-timeout", 5*time.Second, "timeout for one replayed publish")
 	types := flag.String("oidc-token-types", "", "comma-separated accepted JWT typ values; empty accepts at+jwt (RFC 9068) only")
 	flag.Parse()
 	dsn := os.Getenv("IDP_BRANT_POSTGRES_DSN")
@@ -48,7 +50,8 @@ func run() error {
 	}
 	defer platform.Close()
 	handler, err := platform.API(bootstrap.APIConfig{
-		Issuer: *issuer, Audience: *audience, JWKSURL: *jwks, TokenTypes: split(*types), AllowInsecureHTTP: *insecure, Logger: logger,
+		Issuer: *issuer, Audience: *audience, JWKSURL: *jwks, TokenTypes: split(*types), AllowInsecureHTTP: *insecure,
+		ReplaySinkURL: *replaySink, ReplayPublishTimeout: *replayTimeout, Logger: logger,
 	})
 	if err != nil {
 		return err

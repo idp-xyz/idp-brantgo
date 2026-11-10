@@ -243,7 +243,11 @@ type APIConfig struct {
 	JWKSURL           string   // empty discovers it from the issuer
 	TokenTypes        []string // accepted "typ" header values; empty means "at+jwt" (RFC 9068)
 	AllowInsecureHTTP bool     // http:// issuer on a loopback host, for local tests only
-	Logger            *slog.Logger
+	// ReplaySinkURL enables dead-letter replay over the API (ADR-BR-015): the HTTP sink that
+	// receives replayed envelopes, normally the relay's sink. Empty leaves the route out.
+	ReplaySinkURL        string
+	ReplayPublishTimeout time.Duration
+	Logger               *slog.Logger
 }
 
 // API wires every context behind the HTTP transport with an OIDC verifier. It makes no network
@@ -259,8 +263,16 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.New(httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, Verifier: oidc.HeaderVerifier{Tokens: verifier},
-		Clock: bento.SystemClock{}, Logger: cfg.Logger})
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+		Clock: bento.SystemClock{}, Logger: cfg.Logger}
+	if cfg.ReplaySinkURL != "" {
+		replayer, err := p.Replayer(ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout})
+		if err != nil {
+			return nil, err
+		}
+		tc.Replayer = replayer
+	}
+	return httpapi.New(tc)
 }
 
 // VerifyIssuer loads the issuer's keys now, so a wrong issuer or JWKS URL fails at start-up.

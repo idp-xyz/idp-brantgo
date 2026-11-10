@@ -19,7 +19,9 @@ import (
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -52,6 +54,11 @@ type (
 	}
 )
 
+// DeadLetterReplayer republishes a dead letter by event ID in the scope of the Principal in ctx.
+type DeadLetterReplayer interface {
+	Replay(ctx context.Context, source, eventID string) (messaging.ReplayResult, error)
+}
+
 // Config wires the transport.
 type Config struct {
 	EVD      EVD
@@ -59,6 +66,9 @@ type Config struct {
 	CAT      CAT
 	INQ      INQ
 	Verifier Verifier
+	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
+	// route out.
+	Replayer DeadLetterReplayer
 	Clock    application.Clock
 	Logger   *slog.Logger
 	// MaxBodyBytes bounds a request body (default 1 MiB, the contracts' limit).
@@ -87,11 +97,17 @@ func New(cfg Config) (http.Handler, error) {
 		s.contexts[set.bc] = set
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/", "no such route"))
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 	mux.Handle("POST /api/brant/v1/{bc}/commands/{command}", s.authenticated(s.command))
 	mux.Handle("GET /api/brant/v1/{bc}/audit", s.authenticated(s.audit))
+	if cfg.Replayer != nil {
+		mux.Handle("POST /api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", s.authenticated(s.replay))
+	}
 	mux.Handle("GET /api/brant/v1/evd/sources/{id}", s.authenticated(read(s, cfg.EVD.GetSource, sourceView)))
 	mux.Handle("GET /api/brant/v1/evd/files/{id}", s.authenticated(read(s, cfg.EVD.GetFile, fileView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}", s.authenticated(read(s, cfg.PTY.GetParty, partyView)))
@@ -247,3 +263,26 @@ func read[V any, O any](s *server, get func(context.Context, string) (V, error),
 
 // timestamp formats a stored instant as RFC 3339 UTC with microseconds.
 func timestamp(t time.Time) string { return kernel.Instant(t).Format("2006-01-02T15:04:05.000000Z") }
+
+// replay answers POST /api/brant/v1/msg/dead_letters/<source>/<event_id>/replay. The letter goes
+// out again with its original event ID, so consumers deduplicate it.
+func (s *server) replay(w http.ResponseWriter, r *http.Request) {
+	res, err := s.cfg.Replayer.Replay(r.Context(), r.PathValue("source"), r.PathValue("event_id"))
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "source": res.Source, "event_id": string(res.EventID),
+			"replayed_at": timestamp(res.ReplayedAt), "authority_epoch": res.AuthorityEpoch, "attempts": res.Attempts})
+	case errors.Is(err, authorization.ErrForbidden), errors.Is(err, authorization.ErrActorKindDenied),
+		errors.Is(err, authorization.ErrUnknownCommand), errors.Is(err, authorization.ErrScopeMismatch):
+		s.reject(w, r, kernel.Reject(kernel.CodePermissionDenied, "/", ""))
+	case errors.Is(err, messaging.ErrDeadLetterNotFound):
+		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/event_id", ""))
+	case errors.Is(err, messaging.ErrAlreadyReplayed):
+		s.reject(w, r, kernel.Reject(kernel.CodeInvalidState, "/event_id", "already replayed"))
+	case errors.Is(err, messaging.ErrReplayFailed):
+		s.cfg.Logger.Warn("dead letter replay failed", "correlation_id", action.Correlation(r.Context()), "error", err)
+		writeJSON(w, http.StatusBadGateway, transportError{Error: "REPLAY_FAILED", CorrelationID: action.Correlation(r.Context())})
+	default:
+		s.fail(w, r, err)
+	}
+}

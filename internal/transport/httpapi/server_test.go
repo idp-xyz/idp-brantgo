@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -219,5 +222,39 @@ func TestReadsAnswerViewsAndRejections(t *testing.T) {
 	}
 	if a = call(t, h, "POST", "/api/brant/v1/xyz/commands/rfq.save_draft", "Bearer good", request(`{}`)); a.status != 400 {
 		t.Fatalf("unknown context %d %v", a.status, a.body)
+	}
+}
+
+type fakeReplayer struct{ err error }
+
+func (f fakeReplayer) Replay(_ context.Context, source, eventID string) (messaging.ReplayResult, error) {
+	return messaging.ReplayResult{Source: source, EventID: eventing.EventID(eventID), AuthorityEpoch: 3, Attempts: 1}, f.err
+}
+
+// ADR-BR-015: the replay route maps each outcome to a status and never reveals the cause.
+func TestDeadLetterReplayRoute(t *testing.T) {
+	for _, c := range []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{nil, 200, ""},
+		{authorization.ErrActorKindDenied, 403, "PERMISSION_DENIED"},
+		{messaging.ErrDeadLetterNotFound, 404, "NOT_FOUND"},
+		{messaging.ErrAlreadyReplayed, 422, "INVALID_STATE"},
+		{messaging.ErrReplayFailed, 502, ""},
+	} {
+		h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{},
+			Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{}), Replayer: fakeReplayer{c.err}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := call(t, h, "POST", "/api/brant/v1/msg/dead_letters/idp-brant.inq/evt-1/replay", "Bearer good", "")
+		if a.status != c.status || (c.code != "" && a.body["code"] != c.code) || (c.err == nil && a.body["event_id"] != "evt-1") {
+			t.Fatalf("%v: %d %v", c.err, a.status, a.body)
+		}
+	}
+	if a := call(t, newServer(t, &fakeINQ{}), "POST", "/api/brant/v1/msg/dead_letters/x/y/replay", "Bearer good", ""); a.status != 404 || a.body["code"] != "NOT_FOUND" {
+		t.Fatalf("no replayer configured: %d", a.status)
 	}
 }
