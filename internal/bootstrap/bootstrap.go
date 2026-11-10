@@ -20,6 +20,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
+	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
@@ -139,6 +140,7 @@ type Contexts struct {
 	EVD *evd.Module
 	PTY *pty.Module
 	CAT *cat.Module
+	POL *pol.Module
 	INQ *inq.Module
 }
 
@@ -160,6 +162,12 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		c.CAT, err = cat.New(db, c.EVD)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.POL, err = pol.New(db)
 	}
 	if err == nil {
 		db, err = p.newDB()

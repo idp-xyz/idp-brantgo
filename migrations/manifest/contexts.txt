@@ -4,10 +4,11 @@
 #
 # auth: foundation/authorization (brant_auth). msg: foundation/messaging, the Outbox dead letters
 # (brant_msg). Bounded contexts follow in the order of their upstream relationships: evd before pty
-# and cat, all three before inq.
+# and cat, all three before inq; pol has no upstream and precedes inq, its first downstream with code.
 auth
 msg
 evd
 pty
 cat
+pol
 inq
