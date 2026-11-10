@@ -64,7 +64,9 @@ jobs:
       - name: Migrations on an empty database (operator-only tool)
         run: go run ./cmd/brant-migrate -apply
       - name: Migrations are idempotent
-        run: go run ./cmd/brant-migrate -apply | tee /tmp/second-run.txt && grep -q '^DONE: 0 applied' /tmp/second-run.txt
+        run: |
+          go run ./cmd/brant-migrate -apply | tee /tmp/second-run.txt
+          grep -q '^DONE: 0 applied' /tmp/second-run.txt
       - name: Application grants
         env:
           PGPASSWORD: ci-migrator-only
