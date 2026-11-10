@@ -82,16 +82,51 @@ func (w *world) currency(editor, reviewer context.Context, code string, win wind
 	return w.configure(editor, reviewer, polapi.KindCurrency, code, 0, win.from, time.Time{}, currencyData(code, 2, code), true)
 }
 
-// fxSetup publishes USD, CNY and the cost_estimate rate usd.cny 7.123456 observed at the window's
-// start (Python FoundationTests.fx_setup; its tax profile and pricing policy are later kinds).
-func (w *world) fxSetup(editor, reviewer context.Context, win window) (usd, cny, fx polapi.ConfigRef) {
+func taxData(recovery string) polapi.ConfigData {
+	return polapi.ConfigData{TaxProfile: &polapi.TaxProfile{Name: "SYNTHETIC TAX", Rate: "0.13", PriceBasis: polapi.PriceBasisInclusive,
+		RecoveryTreatment: recovery, PolicyBasis: "test only, not a legal determination"}}
+}
+
+// tax publishes the synthetic 13 % inclusive tax profile id for the window (Python
+// FoundationTests.tax).
+func (w *world) tax(editor, reviewer context.Context, recovery, id string, win window) polapi.ConfigRef {
+	return w.configure(editor, reviewer, polapi.KindTaxProfile, id, 0, win.from, win.until, taxData(recovery), true)
+}
+
+func policyData(tax polapi.ConfigRef, maxFXAge int64) polapi.ConfigData {
+	return polapi.ConfigData{PricingPolicy: &polapi.PricingPolicy{Name: "test", CalculationCurrency: "CNY", MinimumMargin: "0.25",
+		QuoteValidDays: 7, MaxFXAgeSeconds: maxFXAge, TaxProfile: tax}}
+}
+
+// fxSetup publishes USD, CNY, a nonrecoverable tax profile, the pricing policy "policy" calculating
+// in CNY with rates up to a day old, and the cost_estimate rate usd.cny 7.123456 observed at the
+// window's start (Python FoundationTests.fx_setup).
+func (w *world) fxSetup(editor, reviewer context.Context, win window) (usd, cny, policy, fx polapi.ConfigRef) {
 	usd, cny = w.currency(editor, reviewer, "USD", win), w.currency(editor, reviewer, "CNY", win)
+	tax := w.tax(editor, reviewer, polapi.RecoveryNonrecoverable, "tax", win)
+	policy = w.configure(editor, reviewer, polapi.KindPricingPolicy, "policy", 0, win.from, time.Time{}, policyData(tax, 86400), true)
 	fx = w.configure(editor, reviewer, polapi.KindFXRate, "usd.cny", 0, win.from, win.until, fxData("7.123456", polapi.PurposeCostEstimate, win.from), true)
-	return usd, cny, fx
+	return usd, cny, policy, fx
+}
+
+func companyData(baseCurrency string) polapi.ConfigData {
+	return polapi.ConfigData{CompanyProfile: &polapi.CompanyProfile{LegalName: "合成企业", RegistrationNo: "SYNTHETIC-NOT-REAL", Country: "CN",
+		Address: "合成地址", BaseCurrency: baseCurrency, TimeZone: "Asia/Shanghai", PolicyScope: "synthetic general trade test"}}
+}
+
+// company publishes the profile of company.A with base currency CNY (Python FoundationTests.company).
+func (w *world) company(editor, reviewer context.Context, win window) polapi.ConfigRef {
+	return w.configure(editor, reviewer, polapi.KindCompanyProfile, "company.A", 0, win.from, time.Time{}, companyData("CNY"), true)
 }
 
 func fxQuery(from, to, purpose string, rate *polapi.ConfigRef) polapi.FXQuery {
 	return polapi.FXQuery{FromCurrency: from, ToCurrency: to, Purpose: purpose, At: time.Now(), Rate: rate}
+}
+
+// withPolicy is q for the calculation of pricing policy p (Python fx.convert's policy argument).
+func withPolicy(q polapi.FXQuery, p polapi.ConfigRef) polapi.FXQuery {
+	q.Policy = &p
+	return q
 }
 
 // Python test_foundation.py test_independent_publication_and_ai_guard.
@@ -135,8 +170,8 @@ func TestFXDirectionPurposeRoundingAndExpiry(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()
 	win := newWindow()
-	_, _, fx := w.fxSetup(editor, reviewer, win)
-	rate, err := w.c.POL.LookupFX(editor, fxQuery("USD", "CNY", polapi.PurposeCostEstimate, &fx))
+	_, _, policy, fx := w.fxSetup(editor, reviewer, win)
+	rate, err := w.c.POL.LookupFX(editor, withPolicy(fxQuery("USD", "CNY", polapi.PurposeCostEstimate, &fx), policy))
 	w.must(err)
 	ten, _ := kernel.ParseAmount(rate.Value.From(), "10")
 	cny, err := rate.Value.Convert(ten)
@@ -144,47 +179,85 @@ func TestFXDirectionPurposeRoundingAndExpiry(t *testing.T) {
 	if cny.String() != "71.23 CNY" || rate.Rate != fx || len(rate.ContentHash) != 64 || !rate.ObservedAt.Equal(win.from) {
 		t.Fatalf("10 USD = %s at %+v", cny, rate)
 	}
-	_, err = w.c.POL.LookupFX(editor, fxQuery("USD", "CNY", polapi.PurposeQuotation, &fx))
+	_, err = w.c.POL.LookupFX(editor, withPolicy(fxQuery("USD", "CNY", polapi.PurposeQuotation, &fx), policy))
 	w.want(err, polapi.CodeFXScopeMismatch)
+	_, err = w.c.POL.LookupFX(editor, withPolicy(fxQuery("CNY", "USD", polapi.PurposeCostEstimate, &fx), policy))
+	if code(err) != polapi.CodeFXScopeMismatch || path(err) != "/policy" {
+		t.Fatalf("the policy calculates in CNY: %v", err)
+	}
 	_, err = w.c.POL.LookupFX(editor, fxQuery("CNY", "USD", polapi.PurposeCostEstimate, &fx))
 	w.want(err, polapi.CodeFXScopeMismatch)
-	expired := fxQuery("USD", "CNY", polapi.PurposeCostEstimate, &fx)
+	expired := withPolicy(fxQuery("USD", "CNY", polapi.PurposeCostEstimate, &fx), policy)
 	expired.At = win.until
+	_, err = w.c.POL.LookupFX(editor, expired)
+	if code(err) != polapi.CodeConfigExpired || path(err) != "/policy" {
+		// The tax profile of the policy expires with the window, before the rate is looked at.
+		t.Fatalf("expired policy dependency: %v", err)
+	}
+	expired.Policy = nil
 	_, err = w.c.POL.LookupFX(editor, expired)
 	w.want(err, polapi.CodeFXStale)
 }
 
-// Python test_foundation.py test_payment_stage_total_and_declared_calendar (payment-stage half;
-// the declared calendar arrives with the calendar kind).
-func TestPaymentStageTotal(t *testing.T) {
+// Python test_foundation.py test_payment_stage_total_and_declared_calendar. The calendar is declared
+// once for the payment terms, not per stage (the stage shape stays as published before).
+func TestPaymentStageTotalAndDeclaredCalendar(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()
 	win := newWindow()
+	cal := w.configure(editor, reviewer, polapi.KindCalendar, "calendar", 0, win.from, time.Time{}, polapi.ConfigData{Calendar: &polapi.Calendar{
+		TimeZone: "Asia/Shanghai", WorkingWeekdays: []int{1, 2, 3, 4, 5}, Holidays: []string{"2026-10-01"}}}, true)
 	stage := polapi.PaymentStage{StageID: "deposit", Percent: "30", Trigger: polapi.TriggerOrderConfirmed}
 	_, err := w.saveConfig(editor, polapi.KindPaymentTerms, "payment", 0, win.from, time.Time{},
-		polapi.ConfigData{PaymentTerms: &polapi.PaymentTerms{Name: "test", Stages: []polapi.PaymentStage{stage}}})
+		polapi.ConfigData{PaymentTerms: &polapi.PaymentTerms{Name: "test", Stages: []polapi.PaymentStage{stage}, DayBasis: polapi.DayBasisCalendar,
+			Calendar: &cal}})
 	if code(err) != polapi.CodePaymentTotalMismatch || path(err) != "/args/data/stages" {
 		t.Fatalf("30 alone: %v", err)
 	}
 	balance := polapi.PaymentStage{StageID: "balance", Percent: "70", Trigger: polapi.TriggerBeforeShipment, Days: 0}
 	full := w.configure(editor, reviewer, polapi.KindPaymentTerms, "payment", 0, win.from, time.Time{},
-		polapi.ConfigData{PaymentTerms: &polapi.PaymentTerms{Name: "30/70", Stages: []polapi.PaymentStage{stage, balance}}}, true)
+		polapi.ConfigData{PaymentTerms: &polapi.PaymentTerms{Name: "30/70", Stages: []polapi.PaymentStage{stage, balance},
+			DayBasis: polapi.DayBasisCalendar, Calendar: &cal}}, true)
 	v, err := w.c.POL.GetConfig(editor, polapi.KindPaymentTerms, full.ConfigID)
 	w.must(err)
-	if v.Revisions[0].Data.PaymentTerms.Stages[1].Percent != "70" {
+	if p := v.Revisions[0].Data.PaymentTerms; p.Stages[1].Percent != "70" || *p.Calendar != cal {
 		t.Fatalf("stages %+v", v.Revisions[0].Data.PaymentTerms)
+	}
+	c, err := w.c.POL.GetConfig(editor, polapi.KindCalendar, "calendar")
+	w.must(err)
+	if d := c.Revisions[0].Data.Calendar; !slices.Equal(d.WorkingWeekdays, []int{1, 2, 3, 4, 5}) || !slices.Equal(d.Holidays, []string{"2026-10-01"}) {
+		t.Fatalf("calendar %+v", d)
+	}
+	// A declared calendar must be in force: a calendar draft that nobody published is not.
+	draft := w.configure(editor, reviewer, polapi.KindCalendar, "draft.cal", 0, win.from, time.Time{}, polapi.ConfigData{Calendar: &polapi.Calendar{
+		TimeZone: "Asia/Shanghai", WorkingWeekdays: []int{1, 2, 3, 4, 5, 6}}}, false)
+	_, err = w.saveConfig(editor, polapi.KindPaymentTerms, "payment.2", 0, win.from, time.Time{},
+		polapi.ConfigData{PaymentTerms: &polapi.PaymentTerms{Name: "100", Stages: []polapi.PaymentStage{{StageID: "all", Percent: "100",
+			Trigger: polapi.TriggerBeforeShipment}}, DayBasis: polapi.DayBasisWorking, Calendar: &draft}})
+	if code(err) != polapi.CodeConfigNotActive || path(err) != "/args/data/calendar" {
+		t.Fatalf("unpublished calendar: %v", err)
 	}
 }
 
-// Python test_foundation.py test_company_identity_and_immutable_currency_semantics (currency half;
-// company profiles are a later kind).
-func TestImmutableCurrencySemantics(t *testing.T) {
+// Python test_foundation.py test_company_identity_and_immutable_currency_semantics.
+func TestCompanyIdentityAndImmutableCurrencySemantics(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()
 	win := newWindow()
 	w.currency(editor, reviewer, "CNY", win)
+	w.company(editor, reviewer, win)
+	profile, err := w.c.POL.GetConfig(editor, polapi.KindCompanyProfile, "company.A")
+	w.must(err)
+	_, err = w.saveConfig(editor, polapi.KindCompanyProfile, "company.B", 0, win.from, time.Time{}, profile.Revisions[0].Data)
+	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/id" {
+		t.Fatalf("a profile identifies the current company: %v", err)
+	}
+	if err = w.exec("company.A", `INSERT INTO brant_pol.config_root (tenant_id, company_id, kind, config_id, root_version, last_revision,
+		created_at, updated_at) VALUES (current_setting('app.tenant_id'), 'company.A', 'company_profile', 'company.B', 1, 1, now(), now())`); err == nil {
+		t.Fatal("the database refuses a profile of another company")
+	}
 	draft := w.configure(editor, reviewer, polapi.KindCurrency, "CNY", 2, win.from, time.Time{}, currencyData("CNY", 3, "changed"), false)
-	_, err := w.publish(reviewer, polapi.KindCurrency, "CNY", 3, draft.Revision)
+	_, err = w.publish(reviewer, polapi.KindCurrency, "CNY", 3, draft.Revision)
 	w.want(err, polapi.CodeImmutableDefinition)
 	_, err = w.saveConfig(editor, polapi.KindCurrency, "RMB", 0, win.from, time.Time{}, currencyData("CNY", 2, "人民币"))
 	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/id" {
@@ -215,19 +288,33 @@ func TestConfigurationCASAndCrossCompanyReference(t *testing.T) {
 	}
 }
 
-// Python test_foundation.py test_stale_fx_is_not_silently_reused_and_no_reciprocal. The age limit
-// comes from the caller until the pricing policy kind lands; Python's snapshot half needs that kind.
+// Python test_foundation.py test_stale_fx_is_not_silently_reused_and_no_reciprocal: a policy
+// revision allowing rates a minute old makes the rate observed an hour ago stale, in a lookup and
+// in a snapshot.
 func TestStaleFXIsNotSilentlyReusedAndNoReciprocal(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()
 	win := newWindow()
-	_, _, fx := w.fxSetup(editor, reviewer, win)
+	_, _, policy, fx := w.fxSetup(editor, reviewer, win)
+	old, err := w.c.POL.GetConfig(editor, polapi.KindPricingPolicy, policy.ConfigID)
+	w.must(err)
+	data := old.Revisions[0].Data
+	data.PricingPolicy.MaxFXAgeSeconds = 60
+	newPolicy := w.configure(editor, reviewer, polapi.KindPricingPolicy, policy.ConfigID, 2, win.from, time.Time{}, data, true)
+	_, err = w.c.POL.LookupFX(editor, withPolicy(fxQuery("USD", "CNY", polapi.PurposeCostEstimate, &fx), newPolicy))
+	w.want(err, polapi.CodeFXStale)
 	q := fxQuery("USD", "CNY", polapi.PurposeCostEstimate, &fx)
 	q.MaxObservationAge = time.Minute
-	_, err := w.c.POL.LookupFX(editor, q)
+	_, err = w.c.POL.LookupFX(editor, q)
 	w.want(err, polapi.CodeFXStale)
 	_, err = w.c.POL.LookupFX(editor, fxQuery("CNY", "USD", polapi.PurposeCostEstimate, nil))
 	w.want(err, polapi.CodeFXScopeMismatch)
+	company := w.company(editor, reviewer, win)
+	_, err = w.c.POL.CaptureSnapshot(editor, polapi.CaptureSnapshot{IdempotencyKey: w.key(), SnapshotID: "stale.snapshot",
+		Purpose: polapi.PurposeCostEstimate, Refs: []polapi.ConfigRef{company, newPolicy, fx}})
+	if code(err) != polapi.CodeFXStale || path(err) != "/args/refs/2" {
+		t.Fatalf("stale rate in a snapshot: %v", err)
+	}
 }
 
 // Python test_foundation.py test_retired_currency_cannot_be_redefined.
@@ -311,17 +398,17 @@ func TestSameCurrencyExplicitOneAndMissingCrossRateBlocks(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()
 	win := newWindow()
-	_, _, fx := w.fxSetup(editor, reviewer, win)
-	same, err := w.c.POL.LookupFX(editor, fxQuery("CNY", "CNY", polapi.PurposeCostEstimate, nil))
+	_, _, policy, fx := w.fxSetup(editor, reviewer, win)
+	same, err := w.c.POL.LookupFX(editor, withPolicy(fxQuery("CNY", "CNY", polapi.PurposeCostEstimate, nil), policy))
 	w.must(err)
 	amount, err := kernel.RoundMoney(same.Value.To(), kernel.MustDecimal("10.005").Mul(same.Value.Rate()))
 	w.must(err)
 	if amount.Amount() != "10.01" || !same.Value.Rate().Equal(kernel.DecimalFromInt(1)) || same.Rate != (polapi.ConfigRef{}) {
 		t.Fatalf("same currency %+v: %s", same, amount)
 	}
-	_, err = w.c.POL.LookupFX(editor, fxQuery("USD", "CNY", polapi.PurposeCostEstimate, nil))
+	_, err = w.c.POL.LookupFX(editor, withPolicy(fxQuery("USD", "CNY", polapi.PurposeCostEstimate, nil), policy))
 	w.want(err, polapi.CodeFXScopeMismatch)
-	_, err = w.c.POL.LookupFX(editor, fxQuery("CNY", "CNY", polapi.PurposeCostEstimate, &fx))
+	_, err = w.c.POL.LookupFX(editor, withPolicy(fxQuery("CNY", "CNY", polapi.PurposeCostEstimate, &fx), policy))
 	w.want(err, polapi.CodeFXScopeMismatch)
 }
 
@@ -331,7 +418,7 @@ func TestExpiredAndFuturePublicationCannotReplaceActiveRate(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()
 	win := newWindow()
-	_, _, fx := w.fxSetup(editor, reviewer, win)
+	_, _, _, fx := w.fxSetup(editor, reviewer, win)
 	for i, shift := range []time.Duration{-72 * time.Hour, 72 * time.Hour} {
 		from := win.from.Add(shift)
 		expected := int64(2 + i)
@@ -544,64 +631,6 @@ func TestSameBusinessReferenceKeepsItsNumber(t *testing.T) {
 	w.must(err)
 	if kept.ObjectID != first.ObjectID {
 		t.Fatalf("a retry after retirement keeps its number: %+v", kept)
-	}
-}
-
-// Python test_foundation.py test_reference_deactivation_blocks_new_work_but_preserves_snapshot
-// (without the company profile and pricing policy, which are later kinds): a snapshot keeps the
-// exact revisions and hashes it adopted after the rate is retired, which blocks new use.
-func TestSnapshotSurvivesRetirementThatBlocksNewWork(t *testing.T) {
-	w := newWorld(t)
-	editor, reviewer := w.polActors()
-	win := newWindow()
-	usd, cny, fx := w.fxSetup(editor, reviewer, win)
-	r, err := w.c.POL.CaptureSnapshot(editor, polapi.CaptureSnapshot{IdempotencyKey: w.key(), SnapshotID: "old", Purpose: polapi.PurposeCostEstimate,
-		Refs: []polapi.ConfigRef{fx}})
-	w.must(err)
-	if r.Status != polapi.StatusCaptured || r.ObjectID != "old" {
-		t.Fatalf("capture %+v", r)
-	}
-	_, err = w.c.POL.CaptureSnapshot(editor, polapi.CaptureSnapshot{IdempotencyKey: w.key(), SnapshotID: "old", Purpose: polapi.PurposeCostEstimate,
-		Refs: []polapi.ConfigRef{usd}})
-	w.want(err, polapi.CodeBusinessKeyConflict)
-	_, err = w.c.POL.CaptureSnapshot(editor, polapi.CaptureSnapshot{IdempotencyKey: w.key(), SnapshotID: "quote", Purpose: polapi.PurposeQuotation,
-		Refs: []polapi.ConfigRef{fx}})
-	if code(err) != polapi.CodeFXScopeMismatch || path(err) != "/args/refs/0" {
-		t.Fatalf("a cost estimate rate in a quotation snapshot: %v", err)
-	}
-	_, err = w.c.POL.Retire(reviewer, polapi.Retire{IdempotencyKey: w.key(), Kind: polapi.KindFXRate, ConfigID: fx.ConfigID, ExpectedVersion: 2, Reason: "撤销来源"})
-	w.must(err)
-	_, err = w.c.POL.LookupFX(editor, fxQuery("USD", "CNY", polapi.PurposeCostEstimate, &fx))
-	w.want(err, polapi.CodeConfigNotActive)
-	s, err := w.c.POL.GetSnapshot(editor, "old")
-	w.must(err)
-	var refs []polapi.ConfigRef
-	for _, e := range s.Entries {
-		refs = append(refs, e.Ref)
-		if len(e.ContentHash) != 64 {
-			t.Fatalf("entry %+v", e)
-		}
-	}
-	if s.Purpose != polapi.PurposeCostEstimate || len(s.ContentHash) != 64 || !slices.Equal(refs, []polapi.ConfigRef{cny, usd, fx}) {
-		t.Fatalf("snapshot %+v", s)
-	}
-	if err = w.exec("company.A", `DELETE FROM brant_pol.snapshot_entry`); err == nil {
-		t.Fatal("snapshots are append-only")
-	}
-}
-
-func TestUnimplementedKindsAreRefusedAndAudited(t *testing.T) {
-	w := newWorld(t)
-	editor, _ := w.polActors()
-	_, err := w.c.POL.SaveDraft(editor, polapi.SaveDraft{IdempotencyKey: w.key(), Kind: polapi.KindCalendar, ConfigID: "cal",
-		ValidFrom: kernel.FormatTimestamp(time.Now())})
-	if code(err) != kernel.CodeUnsupportedContract || path(err) != "/args/kind" {
-		t.Fatalf("calendar: %v", err)
-	}
-	audit, err := w.c.POL.Audit(editor)
-	w.must(err)
-	if last := audit[len(audit)-1]; last.Code != kernel.CodeUnsupportedContract || last.ObjectID != "calendar:cal" {
-		t.Fatalf("audit %+v", last)
 	}
 }
 

@@ -1,7 +1,8 @@
 // Package application runs POL's commands and queries on the command ledger. Configuration rules
 // live in domain/config, numbering in domain/numbering and snapshots in domain/snapshot; SQL lives
-// in adapters/postgres. POL has no upstream context (every POL relationship of the Context Map is
-// downstream), so no command reads another context; the queries serve POL's downstream contexts.
+// in adapters/postgres. POL's only upstream is EVD (Context Map R63: a publication's evidence must
+// be readable), read before POL's transaction; the queries serve POL's downstream contexts, which
+// re-check adopted revisions inside their own transactions through ConfigGuard v1 (package api).
 package application
 
 import (
@@ -27,20 +28,25 @@ import (
 
 // Read commands and permissions.
 const (
-	CommandGetConfig   = "config.get"
-	CommandGetSnapshot = "snapshot.get"
-	CommandAudit       = "pol.audit"
-	PermissionRead     = "pol.read"
-	PermissionAudit    = "pol.audit"
+	CommandGetConfig        = "config.get"
+	CommandGetSnapshot      = "snapshot.get"
+	CommandAudit            = "pol.audit"
+	CommandReadSensitive    = "config.read_sensitive"
+	PermissionRead          = "pol.read"
+	PermissionAudit         = "pol.audit"
+	PermissionReadSensitive = "pol.read_sensitive"
 )
 
 var (
-	anyActor     = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}
-	humanOrAgent = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}
+	anyActor       = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}
+	humanOrAgent   = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}
+	humanOrProcess = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}
 )
 
 // Rules is POL's authorization policy (05 stage humanOnlyCommands: config.publish, config.retire,
-// config.discard_draft). Drafts, numbers and snapshots are open to AI agents with the grant.
+// config.discard_draft). Drafts, numbers and snapshots are open to AI agents with the grant. Whole
+// bank account numbers need pol.read_sensitive besides the read permission (Python
+// foundation.sensitive.read), and an AI agent never sees them.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandSaveDraft, Permission: api.CommandSaveDraft, ActorKinds: humanOrAgent},
@@ -52,6 +58,7 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetConfig, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
+		{Command: CommandReadSensitive, Permission: PermissionReadSensitive, ActorKinds: humanOrProcess},
 	}
 }
 
@@ -114,7 +121,7 @@ func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt,
 		if err != nil {
 			return action.Outcome{}, err
 		}
-		if err = config.CheckReferences(c, f); err != nil {
+		if err = config.CheckReferences(cmd.ConfigID, c, f); err != nil {
 			return action.Outcome{}, err
 		}
 		created := h.root == nil
@@ -273,55 +280,6 @@ func (h *configCommand) event(typ string, rev *config.Revision, fields map[strin
 		AggregateVersion: h.root.Version, Fields: f}
 }
 
-// facts reads, at instant at, the currencies an exchange rate names.
-func facts(ctx context.Context, exec bentopg.Executor, c config.Content, at time.Time) (config.Facts, error) {
-	f := config.Facts{Currencies: map[string]error{}}
-	if c.Kind != config.KindFXRate {
-		return f, nil
-	}
-	for _, code := range []string{c.FXRate.FromCurrency, c.FXRate.ToCurrency} {
-		cur, err := currencyAt(ctx, exec, code, at)
-		if err != nil {
-			return f, err
-		}
-		if cur.known {
-			f.Currencies[code] = cur.refused
-		}
-	}
-	return f, nil
-}
-
-// currency is a currency configuration at an instant: whether it is configured at all, and either
-// its revision in force or what InForce says against it.
-type currency struct {
-	known   bool
-	rev     *config.Revision
-	refused error
-}
-
-// check returns nil for a currency in force and the rejection against it at path otherwise.
-func (c currency) check(path string) error {
-	switch {
-	case !c.known:
-		return kernel.Reject(kernel.CodeReferenceInvalid, path, "")
-	case c.refused != nil:
-		return config.Repath(c.refused, path)
-	}
-	return nil
-}
-
-func currencyAt(ctx context.Context, exec bentopg.Executor, code string, at time.Time) (currency, error) {
-	rev, known, err := postgres.PublishedAt(ctx, exec, scope(ctx), string(config.KindCurrency), code, at)
-	if err != nil || !known {
-		return currency{}, err
-	}
-	c := currency{known: true, refused: config.InForce(rev, at)}
-	if c.refused == nil {
-		c.rev = rev
-	}
-	return c, nil
-}
-
 // IssueNumber issues the next document number of a sequence (Python foundation.number.issue).
 func (s Service) IssueNumber(ctx context.Context, cmd api.IssueNumber) (api.Receipt, error) {
 	args := cmd
@@ -411,8 +369,11 @@ type snapshotCommand struct {
 
 func (h *snapshotCommand) Lock(context.Context, bentopg.Executor) error { return nil }
 
-// Apply adopts every reference in force now and, for an exchange rate, requires the snapshot's
-// purpose and a rate that is not stale (POL-INV-003) and adopts the revisions of its currencies.
+// Apply adopts every reference in force now with every revision it depends on (Python
+// foundation.capture): never a bank account; an exchange rate only for the snapshot's purpose and
+// while it is not stale (POL-INV-003); then the rules of a pricing foundation
+// (snapshot.CheckFoundation). A dependency that is not in force is refused at the path of the
+// reference that brought it.
 func (h *snapshotCommand) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 	sc := scope(ctx)
 	taken, err := postgres.SnapshotExists(ctx, exec, sc, h.cmd.SnapshotID)
@@ -431,35 +392,30 @@ func (h *snapshotCommand) Apply(ctx context.Context, exec bentopg.Executor, d au
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	var entries []snapshot.Entry
+	adopted := newAdoption(now, func(rev *config.Revision, path string) error {
+		if x := rev.Content.FXRate; x != nil {
+			use := config.FXUse{From: x.FromCurrency, To: x.ToCurrency, Purpose: h.cmd.Purpose, At: now}
+			if _, err := config.DecideFX(use, rev); err != nil {
+				return config.Repath(err, path)
+			}
+		}
+		return nil
+	})
 	for i, ref := range h.cmd.Refs {
 		path := "/args/refs/" + strconv.Itoa(i)
-		rev := found[keys[i]]
-		if rev == nil {
-			return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, path, "")
+		if err = snapshot.CheckAdoptable(ref.Kind, path); err != nil {
+			return action.Outcome{}, err
 		}
-		if err = config.InForce(rev, now); err != nil {
-			return action.Outcome{}, config.Repath(err, path)
+		if err = adopted.adoptRef(ctx, exec, keys[i], found[keys[i]], path); err != nil {
+			return action.Outcome{}, err
 		}
-		entries = append(entries, snapshot.Entry{Kind: ref.Kind, ConfigID: ref.ConfigID, Revision: ref.Revision, ContentHash: rev.Hash})
-		if rev.Content.Kind != config.KindFXRate {
-			continue
-		}
-		x := rev.Content.FXRate
-		use := config.FXUse{From: x.FromCurrency, To: x.ToCurrency, Purpose: h.cmd.Purpose, At: now}
-		if _, err = config.DecideFX(use, rev); err != nil {
-			return action.Outcome{}, config.Repath(err, path)
-		}
-		for _, code := range []string{x.FromCurrency, x.ToCurrency} {
-			cur, err := currencyAt(ctx, exec, code, now)
-			if err == nil {
-				err = cur.check(path)
-			}
-			if err != nil {
-				return action.Outcome{}, err
-			}
-			entries = append(entries, snapshot.Entry{Kind: string(config.KindCurrency), ConfigID: code, Revision: cur.rev.Number, ContentHash: cur.rev.Hash})
-		}
+	}
+	if err = snapshot.CheckFoundation(adopted.list, now); err != nil {
+		return action.Outcome{}, err
+	}
+	entries := make([]snapshot.Entry, len(adopted.list))
+	for i, a := range adopted.list {
+		entries[i] = a.Entry
 	}
 	snap, err := snapshot.Capture(h.cmd.SnapshotID, h.cmd.Purpose, now, d.Actor, d.Epoch, entries)
 	if err != nil {
@@ -469,153 +425,4 @@ func (h *snapshotCommand) Apply(ctx context.Context, exec bentopg.Executor, d au
 	return action.Outcome{ObjectID: snap.ID, RowVersion: 1, Status: api.StatusCaptured, Events: []action.Event{{
 		Type: api.EventSnapshotCaptured, AggregateType: "FoundationSnapshot", AggregateID: snap.ID, AggregateVersion: 1,
 		Fields: map[string]any{"snapshot_id": snap.ID, "purpose": snap.Purpose, "content_hash": snap.Hash, "entries": len(snap.Entries)}}}}, err
-}
-
-// GetConfig returns a configuration and all its revisions, audited (Python foundation_get).
-func (s Service) GetConfig(ctx context.Context, kind, id string) (api.ConfigView, error) {
-	var v api.ConfigView
-	err := s.Ledger.Read(ctx, CommandGetConfig, api.ObjectID(kind, id), func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
-		if !api.KindKnown(kind) || !api.ValidConfigID(id) {
-			return kernel.Reject(kernel.CodeNotFound, "/id", "")
-		}
-		sc := scope(ctx)
-		root, err := postgres.LoadRoot(ctx, exec, sc, kind, id, false)
-		if err != nil {
-			return err
-		}
-		if root == nil {
-			return kernel.Reject(kernel.CodeNotFound, "/id", "")
-		}
-		v = api.ConfigView{Kind: kind, ConfigID: id, RootVersion: root.Version}
-		if root.Working != nil {
-			v.WorkingRevision = root.Working.Number
-		}
-		if root.Active != nil {
-			v.ActiveRevision = root.Active.Number
-		}
-		revisions, err := postgres.Revisions(ctx, exec, sc, kind, id)
-		for _, r := range revisions {
-			v.Revisions = append(v.Revisions, revisionView(r.Rev))
-		}
-		return err
-	})
-	return v, err
-}
-
-// ResolveConfigs answers ConfigRef v1 lookups of downstream contexts at an instant.
-func (s Service) ResolveConfigs(ctx context.Context, refs []api.ConfigRef, at time.Time) (map[api.ConfigRef]api.ResolvedConfig, error) {
-	out := map[api.ConfigRef]api.ResolvedConfig{}
-	if err := api.ValidateRefs(refs); err != nil {
-		return out, err
-	}
-	if at.IsZero() {
-		return out, kernel.Reject(kernel.CodeSchemaInvalid, "/at", "")
-	}
-	if len(refs) == 0 {
-		return out, nil
-	}
-	at = kernel.Instant(at)
-	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
-		keys := make([]postgres.Key, len(refs))
-		for i, r := range refs {
-			keys[i] = postgres.Key(r)
-		}
-		found, err := postgres.RevisionsByKey(ctx, exec, scope(ctx), keys)
-		for i, ref := range refs {
-			rev := found[keys[i]]
-			if rev == nil {
-				continue
-			}
-			r := api.ResolvedConfig{Ref: ref, Status: string(rev.Status), ContentHash: rev.Hash, ValidFrom: rev.Content.ValidFrom,
-				ValidUntil: rev.Content.ValidUntil, Data: data(rev.Content)}
-			if rej, ok := kernel.AsRejection(config.InForce(rev, at)); ok {
-				r.Code = rej.Code
-			}
-			out[ref] = r
-		}
-		return err
-	})
-	return out, err
-}
-
-// LookupFX applies POL-INV-003 to one use of an exchange rate.
-func (s Service) LookupFX(ctx context.Context, q api.FXQuery) (api.ExchangeRate, error) {
-	if err := q.Validate(); err != nil {
-		return api.ExchangeRate{}, err
-	}
-	at := kernel.Instant(q.At)
-	var out api.ExchangeRate
-	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
-		var currencies [2]kernel.Currency
-		for i, c := range []struct{ code, path string }{{q.FromCurrency, "/from_currency"}, {q.ToCurrency, "/to_currency"}} {
-			cur, err := currencyAt(ctx, exec, c.code, at)
-			if err == nil {
-				err = cur.check(c.path)
-			}
-			if err != nil {
-				return err
-			}
-			if currencies[i], err = kernel.NewCurrency(cur.rev.Content.Currency.Code, cur.rev.Content.Currency.MinorUnits); err != nil {
-				return err
-			}
-		}
-		var rate *config.Revision
-		if q.Rate != nil {
-			var err error
-			if rate, err = postgres.LoadRevision(ctx, exec, scope(ctx), postgres.Key(*q.Rate)); err != nil {
-				return err
-			}
-			if rate == nil {
-				return kernel.Reject(kernel.CodeReferenceInvalid, "/rate", "")
-			}
-		}
-		value, err := config.DecideFX(config.FXUse{From: q.FromCurrency, To: q.ToCurrency, Purpose: q.Purpose, At: at, MaxAge: q.MaxObservationAge}, rate)
-		if err != nil {
-			return err
-		}
-		if out.Value, err = kernel.NewExchangeRate(currencies[0], currencies[1], value); err != nil {
-			return err
-		}
-		if rate != nil {
-			out.Rate, out.ContentHash = *q.Rate, rate.Hash
-			out.ObservedAt, err = kernel.ParseTimestamp(rate.Content.FXRate.ObservedAt)
-		}
-		return err
-	})
-	if err != nil {
-		return api.ExchangeRate{}, err
-	}
-	return out, nil
-}
-
-// GetSnapshot returns a FoundationSnapshot, audited.
-func (s Service) GetSnapshot(ctx context.Context, id string) (api.SnapshotView, error) {
-	var v api.SnapshotView
-	err := s.Ledger.Read(ctx, CommandGetSnapshot, id, func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
-		snap, err := postgres.LoadSnapshot(ctx, exec, scope(ctx), id)
-		if err != nil {
-			return err
-		}
-		if snap == nil {
-			return kernel.Reject(kernel.CodeNotFound, "/id", "")
-		}
-		v = api.SnapshotView{SnapshotID: snap.ID, Purpose: snap.Purpose, CapturedAt: snap.CapturedAt, CapturedBy: snap.CapturedBy,
-			ContentHash: snap.Hash}
-		for _, e := range snap.Entries {
-			v.Entries = append(v.Entries, api.SnapshotEntry{Ref: api.ConfigRef{Kind: e.Kind, ConfigID: e.ConfigID, Revision: e.Revision},
-				ContentHash: e.ContentHash})
-		}
-		return nil
-	})
-	return v, err
-}
-
-// Audit returns POL's audit trail.
-func (s Service) Audit(ctx context.Context) ([]kernel.AuditEntry, error) {
-	return s.Ledger.Audit(ctx, CommandAudit)
-}
-
-// AuditRejected records a request an inbound adapter refused before it became a command.
-func (s Service) AuditRejected(ctx context.Context, command, objectID, code string) error {
-	return s.Ledger.AuditRejected(ctx, command, objectID, code)
 }

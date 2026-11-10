@@ -47,6 +47,8 @@ GRANT UPDATE (status, data, content_hash, valid_from, valid_until, saved_by_kind
 GRANT UPDATE (last_value, updated_at) ON brant_pol.number_counter TO brant_app;
 GRANT SELECT, INSERT ON brant_pol.issued_number, brant_pol.foundation_snapshot, brant_pol.snapshot_entry,
     brant_pol.action_result, brant_pol.audit_event TO brant_app;
+-- ConfigGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_pol.guard_config_in_force_v1(text, text, bigint, timestamptz) TO brant_app;
 
 -- INQ: a draft's lines and sources are replaced whole; the ledger only grows.
 GRANT USAGE ON SCHEMA brant_inq TO brant_app;

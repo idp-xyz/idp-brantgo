@@ -17,8 +17,28 @@ var (
 	reviewer = kernel.ActorRef{Kind: kernel.ActorHuman, ID: "reviewer"}
 
 	// both currencies of the exchange-rate vectors are configured and in force
-	currenciesInForce = Facts{Currencies: map[string]error{"USD": nil, "CNY": nil}}
+	currenciesInForce = facts(currencyFact("USD", 2), currencyFact("CNY", 2))
 )
+
+// fact is a referenced configuration and what the facts say about it.
+type fact struct {
+	target Target
+	Fact
+}
+
+// facts returns the facts of company.A with entries.
+func facts(entries ...fact) Facts {
+	f := Facts{Company: "company.A", Configs: map[Target]Fact{}}
+	for _, e := range entries {
+		f.Configs[e.target] = e.Fact
+	}
+	return f
+}
+
+// currencyFact is a currency in force with minor units.
+func currencyFact(code string, minor int) fact {
+	return fact{Target{Kind: KindCurrency, ID: code}, Fact{Rev: &Revision{Number: 1, Status: Active, Content: currency(code, minor, code)}}}
+}
 
 func code(err error) string {
 	if r, ok := kernel.AsRejection(err); ok {
@@ -245,14 +265,15 @@ func TestExpiredAndFutureRevisionsCannotReplaceTheActiveRate(t *testing.T) {
 
 func TestExchangeRateReferencesMustBeConfiguredAndInForce(t *testing.T) {
 	c := fx("USD", "CNY", "7.123456", "cost_estimate")
-	if got := code(CheckReferences(c, Facts{Currencies: map[string]error{"USD": nil}})); got != "REFERENCE_INVALID /args/data/to_currency" {
+	if got := code(CheckReferences("r", c, facts(currencyFact("USD", 2)))); got != "REFERENCE_INVALID /args/data/to_currency" {
 		t.Fatal(got)
 	}
-	retired := reject(CodeConfigNotActive, "/")
-	if got := code(CheckReferences(c, Facts{Currencies: map[string]error{"USD": nil, "CNY": retired}})); got != "CONFIG_NOT_ACTIVE /args/data/to_currency" {
+	retired := currencyFact("CNY", 2)
+	retired.Refused = reject(CodeConfigNotActive, "/")
+	if got := code(CheckReferences("r", c, facts(currencyFact("USD", 2), retired))); got != "CONFIG_NOT_ACTIVE /args/data/to_currency" {
 		t.Fatal(got)
 	}
-	if got := code(CheckReferences(c, Facts{Currencies: map[string]error{"USD": nil, "CNY": nil}})); got != "OK" {
+	if got := code(CheckReferences("r", c, currenciesInForce)); got != "OK" {
 		t.Fatal(got)
 	}
 }
