@@ -118,7 +118,9 @@ func (w *world) want(err error, wantCode string) {
 
 func authorizationScope(s string) authorization.DataScope { return authorization.DataScope(s) }
 
-func actorRef(kind, id string) kernel.ActorRef { return kernel.ActorRef{Kind: kernel.ActorKind(kind), ID: id} }
+func actorRef(kind, id string) kernel.ActorRef {
+	return kernel.ActorRef{Kind: kernel.ActorKind(kind), ID: id}
+}
 
 // exec runs sql as the application role in company's scope.
 func (w *world) exec(company, sql string) error {

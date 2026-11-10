@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,8 +26,11 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database"
+	"go.idp.xyz/idp-brant/internal/foundation/identity"
+	"go.idp.xyz/idp-brant/internal/foundation/identity/oidc"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
+	"go.idp.xyz/idp-brant/internal/transport/httpapi"
 )
 
 // Config is what every Brant process needs to reach PostgreSQL.
@@ -230,4 +234,40 @@ func (p *Platform) ProvisionActor(ctx context.Context, tenant, company, actorID,
 		permissions = []string{}
 	}
 	return p.Provision(ctx, Grant{Scope: scope, Actor: actor, Permissions: permissions, DataScope: authorization.DataScope(dataScope), Team: team})
+}
+
+// APIConfig configures the HTTP API process: the OIDC issuer whose access tokens it accepts.
+type APIConfig struct {
+	Issuer            string
+	Audience          string
+	JWKSURL           string   // empty discovers it from the issuer
+	TokenTypes        []string // accepted "typ" header values; empty means "at+jwt" (RFC 9068)
+	AllowInsecureHTTP bool     // http:// issuer on a loopback host, for local tests only
+	Logger            *slog.Logger
+}
+
+// API wires every context behind the HTTP transport with an OIDC verifier.
+func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
+	verifier, err := oidc.New(oidc.Config{Issuer: cfg.Issuer, Audience: cfg.Audience, JWKSURL: cfg.JWKSURL,
+		TokenTypes: cfg.TokenTypes, AllowInsecureHTTP: cfg.AllowInsecureHTTP})
+	if err != nil {
+		return nil, err
+	}
+	c, err := p.Contexts()
+	if err != nil {
+		return nil, err
+	}
+	return httpapi.New(httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, Verifier: bearer{verifier},
+		Clock: bento.SystemClock{}, Logger: cfg.Logger})
+}
+
+// bearer verifies the token of an Authorization header.
+type bearer struct{ v *oidc.Verifier }
+
+func (b bearer) Verify(ctx context.Context, header string) (identity.Principal, error) {
+	token, err := oidc.BearerToken(header)
+	if err != nil {
+		return identity.Principal{}, err
+	}
+	return b.v.Verify(ctx, token)
 }
