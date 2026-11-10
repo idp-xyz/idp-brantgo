@@ -1,5 +1,6 @@
-// Package cat assembles the CAT bounded context (catalog: SKUs and specification revisions). Code
-// outside CAT uses it through package api; everything under internal/ is private to CAT.
+// Package cat assembles the CAT bounded context (catalog: SKUs and specification revisions, item
+// code mappings). Code outside CAT uses it through package api; everything under internal/ is
+// private to CAT.
 package cat
 
 import (

@@ -1,5 +1,6 @@
 // Package api is the contract of the CAT bounded context (catalog: tradeable SKUs and their
-// specification revisions) for transports, the AI layer and the contexts downstream of CAT.
+// specification revisions, and the mappings of customers' and suppliers' item codes to SKUs) for
+// transports, the AI layer and the contexts downstream of CAT. It exposes no CAT domain type.
 package api
 
 import (
@@ -133,12 +134,17 @@ type Receipt struct {
 	Replayed   bool
 }
 
-// Commands is CAT's command entry point. Errors are *kernel.Rejection for refusals.
+// Commands is CAT's command entry point. Errors are *kernel.Rejection for refusals. For item code
+// mapping commands the receipt's ObjectID is the mapping ID, RowVersion the root version and Status
+// the status of the revision the command wrote (draft or active); GetItemCodeMapping shows the
+// revision numbers.
 type Commands interface {
 	SaveSku(ctx context.Context, cmd SaveSku) (Receipt, error)
 	ConfirmSku(ctx context.Context, cmd ConfirmSku) (Receipt, error)
 	ReviseSpec(ctx context.Context, cmd ReviseSpec) (Receipt, error)
 	DeactivateSku(ctx context.Context, cmd DeactivateSku) (Receipt, error)
+	SaveItemCodeMapping(ctx context.Context, cmd SaveItemCodeMapping) (Receipt, error)
+	PublishItemCodeMapping(ctx context.Context, cmd PublishItemCodeMapping) (Receipt, error)
 }
 
 // SkuRef is SkuRef v1: a SKU, its specification revision (0 before the first confirmation) and
@@ -176,6 +182,17 @@ type Queries interface {
 	// ResolveSkus answers reference lookups of downstream contexts; SKUs outside the caller's data
 	// scope are absent. Ask before opening your own transaction.
 	ResolveSkus(ctx context.Context, ids []string) (map[string]SkuRef, error)
+	// ResolveSpecs tells downstream contexts whether each specification revision is the SKU's
+	// current confirmed one, for new use; every reference asked is answered. It needs no permission
+	// beyond an active grant. Ask before opening your own transaction.
+	ResolveSpecs(ctx context.Context, refs []SpecRef) (map[SpecRef]SpecStanding, error)
+	// GetItemCodeMapping returns a mapping and its revisions, audited as item_code_mapping.get.
+	GetItemCodeMapping(ctx context.Context, mappingID string) (ItemCodeMappingView, error)
+	// ResolveItemCodes resolves ItemCodeMappingRef v1 by item code: every code asked is answered,
+	// mapped to the active revision of its published mapping or unmapped. Mappings belong to the
+	// company; it needs no permission beyond an active grant. Ask before opening your own
+	// transaction.
+	ResolveItemCodes(ctx context.Context, codes []ItemCode) (map[ItemCode]ResolvedItemCode, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 }
 

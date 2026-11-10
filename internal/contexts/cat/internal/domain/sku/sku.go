@@ -93,3 +93,26 @@ func (s *Sku) move(status Status) {
 	s.Status = status
 	s.RowVersion++
 }
+
+// CodeReferenceStale is the error catalog's REFERENCE_STALE (409, refresh the reference and
+// resubmit); package api declares the same code for callers.
+const CodeReferenceStale = "REFERENCE_STALE"
+
+// CheckSpec decides whether specification revision rev of s is current for new use (CAT-INV-001:
+// a reference names the SKU and its revision separately, and only a confirmed revision is
+// referenced). It returns nil while s is confirmed at rev; REFERENCE_STALE when rev was confirmed
+// but the SKU has since been reopened for revision or confirmed again; REFERENCE_INVALID when the
+// SKU does not exist or is not visible, has stopped (inactive: no revision of it is current for
+// new business), or rev was never confirmed. Paths are /sku_id and /spec_revision; callers place
+// them in their own request.
+func CheckSpec(s *Sku, visible bool, rev int64) error {
+	switch {
+	case s == nil || !visible || s.Status == Inactive:
+		return kernel.Reject(kernel.CodeReferenceInvalid, "/sku_id", "")
+	case rev < 1 || rev > s.Revision:
+		return kernel.Reject(kernel.CodeReferenceInvalid, "/spec_revision", "Specification revision was never confirmed")
+	case rev < s.Revision || s.Status != Confirmed:
+		return kernel.RejectAs(CodeReferenceStale, kernel.CategoryConflict, "/spec_revision", "Specification revision is no longer current")
+	}
+	return nil
+}

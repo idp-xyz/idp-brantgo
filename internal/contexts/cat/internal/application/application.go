@@ -1,6 +1,7 @@
 // Package application runs CAT's commands and queries on the command ledger. SKU rules live in
-// domain/sku; SQL lives in adapters/postgres. Confirmations read their evidence through EVD's api
-// before CAT's transaction begins (Context Map R62).
+// domain/sku, item code mapping rules in domain/mapping; SQL lives in adapters/postgres.
+// Confirmations and publications read their evidence through EVD's api before CAT's transaction
+// begins (Context Map R62).
 package application
 
 import (
@@ -34,20 +35,29 @@ var (
 	humanOrAgent = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}
 )
 
-// Rules is CAT's authorization policy (05 stage humanOnlyCommands: sku.confirm, sku.deactivate).
+// Rules is CAT's authorization policy (05 stage humanOnlyCommands: sku.confirm, sku.deactivate,
+// item_code_mapping.publish). AI agents with the grant draft SKUs and mappings.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandSaveSku, Permission: api.CommandSaveSku, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandConfirmSku, api.CommandConfirmSku),
 		{Command: api.CommandReviseSpec, Permission: api.CommandReviseSpec, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandDeactivateSku, api.CommandDeactivateSku),
+		{Command: api.CommandSaveItemCodeMapping, Permission: api.CommandSaveItemCodeMapping, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandPublishItemCodeMapping, api.CommandPublishItemCodeMapping),
 		{Command: CommandGetSku, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetItemCodeMapping, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 }
 
-// Visible reports whether d's actor sees the SKU a stored result names.
-func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, _, id string) (bool, error) {
+// Visible reports whether d's actor sees the object a stored result names. A SKU has an owner; an
+// item code mapping belongs to the company (Python foundation_root has no owner), so the read
+// permission the ledger checks before a replay is its only restriction.
+func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
+	if command == api.CommandSaveItemCodeMapping || command == api.CommandPublishItemCodeMapping {
+		return true, nil
+	}
 	scope, _ := bento.ScopeFromContext(ctx)
 	s, err := postgres.Load(ctx, exec, scope, id, false)
 	return err == nil && s != nil && d.Sees(s.OwnerActor, s.OwnerTeam), err
