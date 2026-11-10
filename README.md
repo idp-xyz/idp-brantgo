@@ -22,9 +22,10 @@ internal/foundation/bento/        ScopeTransactor (app.tenant_id and app.company
 internal/foundation/database/     PostgreSQL 16 pool with server and application-role checks; pgtest for integration tests
 internal/foundation/identity/     Principal (actor and scope from a verified token) in the Go context
 internal/foundation/authorization/ command rules (human-only commands), authority guard and grants in brant_auth
-internal/foundation/messaging/    Outbox relay and HTTP webhook publisher
+internal/foundation/messaging/    Outbox relay, HTTP webhook publisher, dead letters with alerts and human replay (ADR-BR-015)
 migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
+migrations/msg/                   brant_msg: dead letters of the Outbox relay (FORCE RLS)
 deploy/postgres/                  roles (brant_migrator, brant_app) and application grants
 scripts/dev-postgres.sh           development PostgreSQL 16 container brant-pg16 on 127.0.0.1:55471
 tools/dependency-check/           package rules; cross-context allowlist generated from the Context Map
@@ -74,6 +75,7 @@ Local runs on 2026-11-07 against the dedicated container (PostgreSQL 16.12, Go 1
 - Each context has its own Bento transaction owner. A context reads another context before it opens its transaction, or re-checks a qualification through a guard function the upstream context publishes, called with its own executor (ADR-BR-004 option B, pending decision).
 - Lock order (ADR-BR-011, pending decision): a command locks its own aggregate root `FOR UPDATE` first, then upstream guard rows `FOR SHARE`; upstream contexts never lock downstream rows.
 - The relay delivers at least once; consumers deduplicate by event ID (`Idempotency-Key`). Leases compare wall-clock readings, so worker hosts need clocks that are slewed, not stepped: a WSL2 development host stepped its wall clock during one drill and re-delivered 1.45 s into a 3 s lease.
+- A delivery the relay gives up on is abandoned and stored as a dead letter in `brant_msg` in one transaction, then alerted; revocation, repudiation and risk event types alert as critical. A human holding `dead_letter.replay` replays it by event ID with the same event ID, so consumers deduplicate the replay like any redelivery.
 - Applied migrations are never edited; every change is a new numbered file.
 
 ## Dependency lock qualification

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
@@ -79,9 +80,15 @@ type RelayConfig struct {
 	RetryMax       time.Duration
 	IdleWait       time.Duration
 	Logger         *slog.Logger
+	// Alerter is told about each dead letter; nil logs it at ERROR on Logger.
+	Alerter messaging.Alerter
+	// Critical marks revocation, repudiation and risk event types; nil means
+	// messaging.CriticalEventType.
+	Critical func(eventing.EventType) bool
 }
 
-// Relay assembles the Outbox relay on a transaction owner of its own.
+// Relay assembles the Outbox relay on a transaction owner of its own. The dead letters share it,
+// so an abandonment and its dead letter commit together.
 func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
 	db, err := p.newDB()
 	if err != nil {
@@ -92,10 +99,32 @@ func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
 		return messaging.Relay{}, err
 	}
 	return messaging.Relay{
-		Outbox: store, Publisher: messaging.Webhook{URL: cfg.SinkURL}, Clock: bento.SystemClock{},
+		Outbox: store, DeadLetters: messaging.DeadLetterStore{DB: db}, Alerter: cfg.Alerter, Critical: cfg.Critical,
+		Publisher: messaging.Webhook{URL: cfg.SinkURL}, Clock: bento.SystemClock{},
 		Batch: cfg.Batch, LeaseFor: cfg.LeaseFor, PublishTimeout: cfg.PublishTimeout,
 		MaxAttempts: cfg.MaxAttempts, MaxFailures: cfg.MaxFailures,
 		RetryBase: cfg.RetryBase, RetryMax: cfg.RetryMax, IdleWait: cfg.IdleWait, Logger: cfg.Logger,
+	}, nil
+}
+
+// ReplayConfig configures the replay of dead letters to the relay's HTTP sink.
+type ReplayConfig struct {
+	SinkURL        string
+	PublishTimeout time.Duration
+}
+
+// Replayer assembles dead-letter replay on a transaction owner of its own. Its caller puts the
+// verified Principal of the operator in the context of each Replay.
+func (p *Platform) Replayer(cfg ReplayConfig) (messaging.Replayer, error) {
+	if cfg.SinkURL == "" || cfg.PublishTimeout <= 0 {
+		return messaging.Replayer{}, errors.New("bootstrap: replay needs a sink URL and a publish timeout")
+	}
+	db, err := p.newDB()
+	if err != nil {
+		return messaging.Replayer{}, err
+	}
+	return messaging.Replayer{
+		DB: db, Publisher: messaging.Webhook{URL: cfg.SinkURL}, Clock: bento.SystemClock{}, PublishTimeout: cfg.PublishTimeout,
 	}, nil
 }
 

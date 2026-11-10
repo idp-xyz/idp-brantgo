@@ -106,9 +106,9 @@ func enqueueAll(t *testing.T, db *bentopg.DB, store *bentooutbox.Store, envelope
 	}
 }
 
-func testRelay(store *bentooutbox.Store, publisher eventing.Publisher, clock application.Clock, maxFailures uint32) messaging.Relay {
+func testRelay(db *bentopg.DB, store *bentooutbox.Store, publisher eventing.Publisher, clock application.Clock, maxFailures uint32) messaging.Relay {
 	return messaging.Relay{
-		Outbox: store, Publisher: publisher, Clock: clock,
+		Outbox: store, DeadLetters: messaging.DeadLetterStore{DB: db}, Publisher: publisher, Clock: clock,
 		Batch: 10, LeaseFor: 30 * time.Second, PublishTimeout: 2 * time.Second, MaxAttempts: 10, MaxFailures: maxFailures,
 		RetryBase: time.Second, RetryMax: time.Minute, IdleWait: 50 * time.Millisecond,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -147,7 +147,7 @@ func TestRelayRetriesFailedPublishThenSucceeds(t *testing.T) {
 		return nil
 	})
 	clock := &testClock{now: at.Add(time.Minute)}
-	relay := testRelay(store, publisher, clock, 5)
+	relay := testRelay(db, store, publisher, clock, 5)
 	runOnce(t, relay, 1) // first attempt fails; retry due one second later
 	runOnce(t, relay, 0) // not due yet
 	clock.now = clock.now.Add(2 * time.Second)
@@ -162,6 +162,7 @@ func TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition(t *testing.T) {
 	store := newStore(t, db)
 	at := time.Date(2026, 11, 7, 8, 0, 0, 0, time.UTC)
 	poison := probe("relay-poison", "probe-1", at)
+	poison.Scope = uniqueScope(t).String() // its dead letter outlives the test schema
 	next := probe("relay-next", "probe-1", at.Add(time.Second))
 	enqueueAll(t, db, store, poison, next)
 	var delivered []eventing.EventID
@@ -173,7 +174,7 @@ func TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition(t *testing.T) {
 		return nil
 	})
 	clock := &testClock{now: at.Add(time.Minute)}
-	relay := testRelay(store, publisher, clock, 2)
+	relay := testRelay(db, store, publisher, clock, 2)
 	runOnce(t, relay, 1) // poison: failure 1
 	clock.now = clock.now.Add(time.Minute)
 	runOnce(t, relay, 1) // poison: failure 2 exhausts the budget
