@@ -1,4 +1,4 @@
-# IDP Brant · Go + DDD + Bento-Go · M0 engineering baseline
+# IDP Brant · Go + DDD + Bento-Go · M0 baseline and S1 in progress
 
 **IDP Brant is one product repository and one Go module. Business code will be organized by DDD bounded context; IDP-Bento-Go stays a separate repository referenced as a Go module version.**
 
@@ -7,26 +7,37 @@
 - Go `1.26.5` (`toolchain` directive); PostgreSQL 16.
 - The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is not published with the code. `docs/00_START_HERE/00_INDEX.html` is its entry page.
 
-M0 builds the engineering baseline only. No bounded context exists yet; S1 adds EVD, PTY, CAT, POL and INQ.
+M0 built the engineering baseline. S1 (master data and inquiry) is in progress: EVD, PTY, CAT and INQ run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens; POL, party screening and screening-list import are not done yet.
 
 ## Layout
 
 ```
+cmd/brant-api/                    HTTP API: S1 command routes and audited reads behind OIDC access tokens
+cmd/brant-admin/                  operator-only grants: authority row, permissions and data scope of one actor
 cmd/brant-migrate/                operator-only migrations: Bento schema, framework migration, then each manifest directory in order
 cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink, settle; at least once
 internal/bootstrap/               composition root: one connection pool, a Bento transaction owner per context and for the relay
+internal/contexts/evd/            EVD: text sources (content, origin, import), immutable; SourceRef lookup
+internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup
+internal/contexts/cat/            CAT: SKUs and specification revisions; SkuRef lookup
+internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed
+internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping
 internal/kernel/                  value objects shared by every context; standard library only
                                   Decimal (math/big), Money in minor units, largest-remainder allocation, tax splits,
-                                  ExchangeRate, Quantity, Ratio, ValidityInterval, timestamps, Scope, ActorRef
+                                  ExchangeRate, Quantity, Ratio, ValidityInterval, timestamps, Scope, ActorRef,
+                                  Rejection (error codes and categories), AuditEntry
 internal/foundation/bento/        ScopeTransactor (app.tenant_id and app.company_id per transaction), SystemClock
 internal/foundation/database/     PostgreSQL 16 pool with server and application-role checks; pgtest for integration tests
+internal/foundation/action/       command ledger: idempotent action results, replay, audit and Outbox in one transaction
 internal/foundation/identity/     Principal (actor and scope from a verified token) in the Go context
-internal/foundation/authorization/ command rules (human-only commands), authority guard and grants in brant_auth
+internal/foundation/identity/oidc/ OIDC access-token verifier (discovery, JWKS, iss, aud, exp, tenant, company, actor kind)
+internal/foundation/authorization/ command rules (human-only commands), authority guard, grants and data scope in brant_auth
 internal/foundation/messaging/    Outbox relay, HTTP webhook publisher, dead letters with alerts and human replay (ADR-BR-015)
 internal/foundation/strictjson/   closed-structure request decoding (C7): 1 MiB, 64 levels, 100,000 values; no duplicate keys, null, floats, unknown fields
 migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
 migrations/msg/                   brant_msg: dead letters of the Outbox relay (FORCE RLS)
+migrations/{evd,pty,cat,inq}/     brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
 deploy/postgres/                  roles (brant_migrator, brant_app) and application grants
 scripts/dev-postgres.sh           development PostgreSQL 16 container brant-pg16 on 127.0.0.1:55471
 tools/dependency-check/           package rules; cross-context allowlist generated from the Context Map
@@ -35,7 +46,7 @@ tools/spikes/consistency/         M0-10 spikes for ADR-BR-004 and ADR-BR-011 (in
 .github/CODEOWNERS                an owner for the kernel, the foundation and, from S1, every context directory
 ```
 
-A bounded context will live in `internal/contexts/<bc>/` as `module.go`, `api/` and `internal/{domain,application,adapters,integration}`. Other code reaches it through its `api` package only; the compiler rejects imports of its `internal/`, and `tools/dependency-check` rejects every import the layering and the Context Map do not allow.
+A bounded context lives in `internal/contexts/<bc>/` as `module.go`, `api/` and `internal/{domain,application,adapters,integration}`. Other code reaches it through its `api` package only; the compiler rejects imports of its `internal/`, and `tools/dependency-check` rejects every import the layering and the Context Map do not allow.
 
 ## Run locally
 
@@ -46,6 +57,14 @@ make integration  # unit and PostgreSQL 16 integration tests; CI=true forbids sk
 make race         # the same with the race detector
 make spike        # consistency spikes; JSON report in bin/spike-consistency.json
 make ci           # all of the above, as .github/workflows/ci.yml runs them
+```
+
+Serving the API locally needs an OIDC issuer whose access tokens carry `brant_tenant`, `brant_company`, `brant_actor_kind` (`human`, `ai` or `system`) and `sub`:
+
+```
+IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-admin grant -tenant t -company c -actor alice -kind human \
+    -permissions source.register,evd.read,party.save_draft,party.confirm,pty.read,rfq.save_draft,rfq.confirm_scope,inq.read
+IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-api -oidc-issuer https://issuer.example -oidc-audience brant-api
 ```
 
 `scripts/dev-postgres.sh` pulls PostgreSQL 16.12 by the digest CI pins. Set `BRANT_PG_IMAGE` to pull the same digest from another registry and `BRANT_PG_PORT` for another port.
@@ -59,7 +78,13 @@ Against another PostgreSQL 16:
 
 ## Status of evidence
 
-Local runs on 2026-11-07 against the dedicated container (PostgreSQL 16.12, Go 1.26.8 with the 1.26.5 toolchain floor): `make ci` passed. There is no remote repository yet, so the GitHub Actions workflow has not run and branch protection is not configured; both wait for the owner to create the repository.
+S1, 2026-11-10: GitHub Actions runs the workflow on the private repository `idpxyz/idp-brantgo`; the S1 branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). Branch protection and required reviews are not configured: GitHub does not offer them for private repositories on the Free plan. The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
+
+- The command ledger orders a command as the Python service does (contract, permission, stored result, CAS and state, references) and commits the change, the action result, the audit entry and the Outbox events together; replays re-check the current permission and visibility.
+- 41 Python V0.50 tests of T01 and the shared foundation are ported (08 stage mapping); the front of BRC-001 (four lines, 120 PCS, ready) replays on PostgreSQL 16 directly and over HTTP with OIDC access tokens.
+- `go.sum` adds one module for S1: `github.com/go-jose/go-jose/v4` (JWS verification of access tokens).
+
+M0, local runs on 2026-11-07 against the dedicated container (PostgreSQL 16.12, Go 1.26.8 with the 1.26.5 toolchain floor): `make ci` passed. There is no remote repository yet, so the GitHub Actions workflow has not run and branch protection is not configured; both wait for the owner to create the repository.
 
 - `go.sum` is the complete graph from `go mod tidy` and identical to IDP-Cargo's; the Bento `h1:` sum matches the recorded one and `go mod verify` passes.
 - Kernel arithmetic reproduces the Python V0.50 vectors (BRC-001 960.00 / 660.00 / 300.00 / 31.25 % / 288.00 + 672.00 / 600.00; per-line rounding 1 + 1 = 2 minor units; 960.00 inclusive of 13 % = 849.56 + 110.44; 100 USD at 7.123456 = 712.35 CNY; payment tail 2 / 1 / 2; tiers 700.00 vs 600.00; margin floor at 880.00 vs 879.99). Two fuzz targets ran 30 s each against independent digit oracles.
@@ -71,14 +96,14 @@ Local runs on 2026-11-07 against the dedicated container (PostgreSQL 16.12, Go 1
 
 ## Important boundaries
 
-- Actor, tenant and company come from a verified token, never from a request body. The OIDC adapter arrives with the HTTP transport in S1; until then `identity.Principal` is only as trustworthy as its caller.
+- Actor, tenant and company come from a verified OIDC access token, never from a request body. The verifier requires an explicit actor kind claim; a missing kind is never taken as human. No real identity provider has been connected yet; the tests use a local issuer.
 - FORCE RLS on `app.tenant_id` and `app.company_id` protects against a missing or wrong scope in a query. SQL injection that can run `set_config` is outside its boundary.
-- Each context has its own Bento transaction owner. A context reads another context before it opens its transaction, or re-checks a qualification through a guard function the upstream context publishes, called with its own executor (ADR-BR-004 option B, pending decision).
-- Lock order (ADR-BR-011, pending decision): a command locks its own aggregate root `FOR UPDATE` first, then upstream guard rows `FOR SHARE`; upstream contexts never lock downstream rows.
+- Each context has its own Bento transaction owner. A context reads another context before it opens its transaction, or re-checks a qualification through a guard function the upstream context publishes, called with its own executor (ADR-BR-004 option B, accepted in the simulated review). INQ reads PTY, CAT and EVD before its transaction (no guard lock on R01–R03).
+- Lock order (ADR-BR-011, accepted in the simulated review): a command locks its own aggregate root `FOR UPDATE` first, then upstream guard rows `FOR SHARE`; upstream contexts never lock downstream rows.
 - The relay delivers at least once; consumers deduplicate by event ID (`Idempotency-Key`). Leases compare wall-clock readings, so worker hosts need clocks that are slewed, not stepped: a WSL2 development host stepped its wall clock during one drill and re-delivered 1.45 s into a 3 s lease.
 - A delivery the relay gives up on is abandoned and stored as a dead letter in `brant_msg` in one transaction, then alerted; revocation, repudiation and risk event types alert as critical. A human holding `dead_letter.replay` replays it by event ID with the same event ID, so consumers deduplicate the replay like any redelivery.
 - Applied migrations are never edited; every change is a new numbered file.
 
 ## Dependency lock qualification
 
-`go.sum` is the complete module graph from `go mod tidy`. CI resolves it with `GOPROXY=direct` and runs `go mod verify` and `go mod tidy -diff`. Promotion to an approved supply-chain baseline still needs review.
+`go.sum` is the complete module graph from `go mod tidy`; S1 added `github.com/go-jose/go-jose/v4`, so it is no longer identical to IDP-Cargo's. CI resolves it with `GOPROXY=direct` and runs `go mod verify` and `go mod tidy -diff`. Promotion to an approved supply-chain baseline still needs review.

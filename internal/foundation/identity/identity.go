@@ -15,8 +15,8 @@ var (
 )
 
 // Principal is the verified caller of a request: the actor and the tenant and company it acts
-// in. Only a verified token yields a Principal; request bodies never supply actor, tenant or
-// company. The OIDC adapter that verifies tokens arrives with the HTTP transport (S1).
+// in. Only a verified token yields a Principal (package oidc for HTTP requests); request bodies
+// never supply actor, tenant or company.
 type Principal struct {
 	Actor kernel.ActorRef
 	Scope kernel.Scope

@@ -26,7 +26,6 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database"
-	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/foundation/identity/oidc"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -41,8 +40,9 @@ type Config struct {
 
 // Platform holds the connection pool that all transaction owners share.
 type Platform struct {
-	pool   *pgxpool.Pool
-	schema string
+	pool     *pgxpool.Pool
+	schema   string
+	verifier *oidc.Verifier
 }
 
 // Open connects as the application role, refuses servers other than PostgreSQL 16 and privileged
@@ -246,28 +246,27 @@ type APIConfig struct {
 	Logger            *slog.Logger
 }
 
-// API wires every context behind the HTTP transport with an OIDC verifier.
+// API wires every context behind the HTTP transport with an OIDC verifier. It makes no network
+// request; keys load on first use, or earlier through VerifyIssuer.
 func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	verifier, err := oidc.New(oidc.Config{Issuer: cfg.Issuer, Audience: cfg.Audience, JWKSURL: cfg.JWKSURL,
 		TokenTypes: cfg.TokenTypes, AllowInsecureHTTP: cfg.AllowInsecureHTTP})
 	if err != nil {
 		return nil, err
 	}
+	p.verifier = verifier
 	c, err := p.Contexts()
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.New(httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, Verifier: bearer{verifier},
+	return httpapi.New(httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger})
 }
 
-// bearer verifies the token of an Authorization header.
-type bearer struct{ v *oidc.Verifier }
-
-func (b bearer) Verify(ctx context.Context, header string) (identity.Principal, error) {
-	token, err := oidc.BearerToken(header)
-	if err != nil {
-		return identity.Principal{}, err
+// VerifyIssuer loads the issuer's keys now, so a wrong issuer or JWKS URL fails at start-up.
+func (p *Platform) VerifyIssuer(ctx context.Context) error {
+	if p.verifier == nil {
+		return errors.New("bootstrap: API not built")
 	}
-	return b.v.Verify(ctx, token)
+	return p.verifier.Refresh(ctx)
 }

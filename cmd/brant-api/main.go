@@ -53,6 +53,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if err = platform.VerifyIssuer(ctx); err != nil {
+		return err
+	}
 	srv := &http.Server{
 		Addr: *listen, Handler: handler, ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second,
