@@ -20,3 +20,8 @@ GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant
 GRANT USAGE ON SCHEMA brant_pty TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_pty.party, brant_pty.contact TO brant_app;
 GRANT SELECT, INSERT ON brant_pty.party_revision, brant_pty.contact_revision, brant_pty.action_result, brant_pty.audit_event TO brant_app;
+
+-- CAT: SKUs change through their lifecycle; specification revisions and the ledger only grow.
+GRANT USAGE ON SCHEMA brant_cat TO brant_app;
+GRANT SELECT, INSERT, UPDATE ON brant_cat.sku TO brant_app;
+GRANT SELECT, INSERT ON brant_cat.sku_revision, brant_cat.action_result, brant_cat.audit_event TO brant_app;
