@@ -91,3 +91,19 @@ GRANT USAGE ON SCHEMA brant_inq TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_inq.customer_rfq TO brant_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON brant_inq.rfq_line, brant_inq.rfq_source TO brant_app;
 GRANT SELECT, INSERT ON brant_inq.action_result, brant_inq.audit_event TO brant_app;
+-- RfqGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_inq.guard_rfq_ready_v1(text, bigint, text) TO brant_app;
+
+-- CST: roots move their version; revisions are written as the triggers allow (a working revision
+-- is edited, sealed and ended revisions only change state), never deleted; the ledger only grows.
+GRANT USAGE ON SCHEMA brant_cst TO brant_app;
+GRANT SELECT, INSERT ON brant_cst.costing_context, brant_cst.costing_context_revision, brant_cst.measurement,
+    brant_cst.measurement_revision, brant_cst.action_result, brant_cst.audit_event TO brant_app;
+GRANT UPDATE (root_version, last_revision, updated_at) ON brant_cst.costing_context, brant_cst.measurement TO brant_app;
+GRANT UPDATE (status, base_revision, data, content_hash, contributors, provenance, saved_by_kind, saved_by_id, saved_epoch,
+              saved_at, verified_by_kind, verified_by_id, verify_epoch, verified_at, verification_evidence, rfq_id,
+              rfq_row_version, rfq_lines_hash, rfq_lines, superseded_at, ended_by_kind, ended_by_id, end_epoch, ended_at, end_reason,
+              end_evidence)
+    ON brant_cst.costing_context_revision TO brant_app;
+GRANT UPDATE (status, superseded_at, withdrawn_by_id, withdraw_epoch, withdrawn_at, withdraw_reason, withdraw_evidence)
+    ON brant_cst.measurement_revision TO brant_app;

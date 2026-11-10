@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -367,6 +368,43 @@ func (s Service) GetRfq(ctx context.Context, id string) (api.RfqView, error) {
 		return nil
 	})
 	return v, err
+}
+
+// ResolveRfqs answers RfqRef v1 lookups of downstream contexts (api.RfqLookups): each RFQ the
+// caller sees, at its current row version, with its lines in line-ID order and their hash. It needs
+// no permission beyond an active grant and is not audited; the downstream command records its own
+// outcome.
+func (s Service) ResolveRfqs(ctx context.Context, ids []string) (map[string]api.RfqRef, error) {
+	out := map[string]api.RfqRef{}
+	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		scope, _ := bento.ScopeFromContext(ctx)
+		for _, id := range ids {
+			if !kernel.ValidIdentifier(id) {
+				continue
+			}
+			r, err := postgres.Load(ctx, exec, scope, id, false)
+			if err != nil {
+				return err
+			}
+			if r == nil || !d.Sees(r.OwnerActor, r.OwnerTeam) {
+				continue
+			}
+			ref := api.RfqRef{RfqID: r.ID, RowVersion: r.RowVersion, Status: string(r.Status), Lines: []api.RfqRefLine{}}
+			for _, l := range r.Lines {
+				ref.Lines = append(ref.Lines, api.RfqRefLine{LineID: l.ID, SkuID: l.SkuID, SkuSpecRevision: l.SkuSpecRevision,
+					Quantity: l.Quantity, UOM: l.UOM})
+			}
+			slices.SortFunc(ref.Lines, func(a, b api.RfqRefLine) int { return strings.Compare(a.LineID, b.LineID) })
+			ref.LinesHash = api.RfqLinesHash(ref.Lines)
+			out[id] = ref
+		}
+		return nil
+	})
+	return out, err
 }
 
 // Audit returns INQ's audit trail.
