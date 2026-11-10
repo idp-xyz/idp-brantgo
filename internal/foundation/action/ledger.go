@@ -229,8 +229,23 @@ func (l *Ledger) execute(ctx context.Context, p identity.Principal, cmd Command,
 		// second attempt sees its result or its row.
 		res, err = l.write(ctx, p, cmd, h)
 		if uniqueViolation(err) {
-			return Result{}, kernel.Reject(kernel.CodeVersionConflict, "/args/id", "")
+			err = kernel.Reject(kernel.CodeVersionConflict, "/args/id", "")
 		}
+	}
+	if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodeVersionConflict {
+		// The stored result is looked up before the root is locked, so a command with the same key
+		// that commits in between shows here as a version conflict. Python checks both under one
+		// lock: the stored result answers, or the payload conflicts.
+		var stored Result
+		var replayed bool
+		if rerr := l.inScope(ctx, p, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			stored, replayed, err = l.replay(ctx, exec, p, cmd)
+			return err
+		}); rerr != nil || replayed {
+			return stored, rerr
+		}
+		return Result{}, rej
 	}
 	return res, err
 }

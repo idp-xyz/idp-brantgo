@@ -352,6 +352,51 @@ func TestOutboxFailureRollsBackEverything(t *testing.T) {
 	}
 }
 
+// interleaved runs before at its first Lock: inside the write transaction, after the ledger looked
+// for a stored result and before the root is read.
+type interleaved struct {
+	*saveNote
+	before func()
+}
+
+func (h *interleaved) Lock(ctx context.Context, exec bentopg.Executor) error {
+	if before := h.before; before != nil {
+		h.before = nil
+		before()
+	}
+	return h.saveNote.Lock(ctx, exec)
+}
+
+// Python test_concurrent_duplicate_import_is_single_action, with the interleaving forced: the same
+// key commits after this command looked for a stored result and before it read the row. The stored
+// result answers; with another payload the key conflicts. Neither is a version conflict (GitHub
+// Actions run 42815414128 hit this window under the race detector).
+func TestSameKeyCommittedDuringTheCommand(t *testing.T) {
+	r := newRig(t)
+	ctx := r.as(human)
+	for _, c := range []struct{ body, want string }{{"hello", ""}, {"other", kernel.CodeIdempotencyPayloadConflict}} {
+		id, key := "n."+c.body, "same."+c.body
+		var first action.Result
+		h := &interleaved{saveNote: &saveNote{r: r, id: id, body: c.body}, before: func() {
+			var err error
+			if first, err = r.save(ctx, key, id, "hello", 0); err != nil {
+				t.Fatal(err)
+			}
+		}}
+		hash, err := action.RequestHash(struct{ ID, Body string }{id, c.body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := r.ledger.Execute(ctx, action.Command{Name: "note.save", IdempotencyKey: key, RequestHash: hash, ObjectID: id}, h)
+		switch {
+		case c.want != "" && code(err) != c.want:
+			t.Fatalf("%s: want %s, got %+v %v", c.body, c.want, res, err)
+		case c.want == "" && (err != nil || !res.Replayed || res.ActionID != first.ActionID):
+			t.Fatalf("%s: want the replay of %+v, got %+v %v", c.body, first, res, err)
+		}
+	}
+}
+
 // Python test_concurrent_duplicate_import_is_single_action and
 // test_concurrent_edit_has_one_winner_and_one_version_conflict.
 func TestConcurrentCommands(t *testing.T) {
