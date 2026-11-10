@@ -81,7 +81,7 @@ foot: Repository Structure Baseline V1.0 · 2026-11-06
 |---|---|---|---|
 | 入口 | cmd/ | brant-api、brant-worker、brant-migrate、brant-cli | internal/bootstrap |
 | 组合根 | internal/bootstrap | 读取配置、建立连接池、为每个上下文创建独立 bentopg.DB、装配模块、注册入站协议与订阅 | 全部内部包（唯一例外） |
-| 入站与编排 | internal/transport · internal/ai · internal/processes | 协议适配；AI 能力网关；无单一 Owner 的流程 | 各上下文 api/、kernel、foundation |
+| 入站与编排 | internal/transport · internal/ai · internal/processes | 协议适配；AI 能力网关；无单一 Owner 的流程 | 各上下文 api/、reference/api、kernel、foundation |
 | 业务 | internal/contexts/<bc> | 18 个候选上下文 | 已登记上游的 api/、kernel、reference/api、foundation |
 | 共享 | internal/kernel · internal/reference | 共享值对象；外部机构代码表 | kernel 只依赖标准库（或已批准的十进制库） |
 | 技术基础 | internal/foundation | bento、identity、authorization、database、messaging、configuration、telemetry、interop | 外部 Module、标准库、kernel；禁止依赖任何上下文 |
@@ -110,7 +110,7 @@ idp-brantgo/
 │   │   ├── qlt/ ful/ stl/ cnx/                                               S5
 │   │   └── stk/ mfg/ clm/ crm/                                               S6
 │   ├── kernel/                    Money · Quantity · Ratio · ValidityInterval · Scope   M0
-│   ├── reference/                 外部机构代码表（只读）                        待决定
+│   ├── reference/                 外部机构代码表与筛查名单（受控导入，上下文只读）  S1（归属待决定）
 │   ├── processes/                 仅无单一 Owner 的端到端流程                   按需
 │   ├── ai/                        capability · gateway · policy · approvalgrant · execution · executionevidence   S4
 │   ├── transport/http/            服务器 · 路由 · 中间件 · 入口资源限制          S1
@@ -178,7 +178,7 @@ Go 的 internal 规则只阻止越界导入，不限制方向；方向由 Contex
 | D3 | api 包不得以类型别名、嵌入或返回值暴露内部类型 | 必须 | dependency-check＋评审 |
 | D4 | 上下文不得导入 transport、ai、processes、bootstrap | 必须 | dependency-check |
 | D5 | foundation 只导入外部 Module、标准库、kernel 与其他 foundation 包，不导入任何上下文、bootstrap 与入站层（M0 澄清，ADR-BR-REPO-11） | 必须 | dependency-check |
-| D6 | transport、ai、processes 只导入各上下文的 api；Module 实例由 bootstrap 注入 | 必须 | 编译器＋dependency-check |
+| D6 | transport、ai、processes 只导入各上下文与参考数据的 api（S1 起含 reference/api）；Module 实例由 bootstrap 注入 | 必须 | 编译器＋dependency-check |
 | D7 | 导入其他上下文的 api 时使用 <bc>api 别名（如 cstapi、polapi） | 应 | dependency-check 警告 |
 | D8 | 引用其他上下文的标识时使用本包定义的类型或 kernel 类型 | 必须 | 编译器 |
 | D9 | internal/foundation/database/pgtest 等测试支撑包只允许测试文件导入（M0 新增） | 必须 | dependency-check |
@@ -250,7 +250,7 @@ processes/<name> 的准入条件：具名业务 Owner 并写入 CODEOWNERS；状
 |---|---|
 | 只在一个上下文内共享（如 TRD 四个聚合共用的 QuoteID 与错误） | 该上下文的 domain 根包 |
 | 跨上下文、语义完全一致的值对象：Money、Quantity、Ratio、ExchangeRate、ValidityInterval、Scope、ActorRef | internal/kernel |
-| 外部机构发布、需要版本与生效日期的代码表：ISO 币种与国家、UN/LOCODE、HS 编码 | internal/reference（brant_ref，归属待决定） |
+| 外部机构发布、需要版本与生效日期的代码表：ISO 币种与国家、UN/LOCODE、HS 编码、筛查名单（S1 已建） | internal/reference（brant_ref，归属待决定） |
 | 某上下文拥有、其他上下文引用的业务事实：PartyRef、SkuRef、ConfigRef、CostSnapshotRef | 拥有方的 api/，不进 kernel |
 
 kernel 只依赖标准库（或经 ADR-BR-REPO-10 批准的十进制库）；CODEOWNERS 要求首席架构师与受影响的上下文 Owner 共同评审。租户与公司身份的权威是 IAM 与 POL，kernel 中的 Scope 只是值类型，总是从已验证令牌中取得。

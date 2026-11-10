@@ -28,7 +28,7 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.3"
+ARCHIVE_VERSION = "1.4"
 ARCHIVE_DATE = "2026-11-10"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
@@ -1304,6 +1304,7 @@ def write_registry(pages: list[str]) -> None:
             "全部 DDD 资产为候选设计，未经业务或技术签核。",
             "V1.1 回写 M0 工程基线的本机证据：Go 模块、kernel、foundation、迁移、依赖检查、Outbox 中继与一致性实测；尚无业务上下文。",
             "V1.3 远程 CI 跑通并回写 S1 第一批：命令账本、EVD、PTY、CAT、INQ、POL（首批 5 种配置）、HTTP 入口与 OIDC、Outbox 死信；主体筛查未完成，受保护主干按负责人决定不配置。",
+            "V1.4 回写 S1 第二批：POL 全部 18 种配置与 ConfigGuard、主体筛查与筛查名单、岗位模板、OpenAPI 候选、Inbox 去重与提交结果未知对账；G1 的 C07 为 MET，真实身份提供方接入延后。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1 仍为 NO-GO。",
         ],
     }

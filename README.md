@@ -7,41 +7,49 @@
 - Go `1.26.5` (`toolchain` directive); PostgreSQL 16.
 - The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is not published with the code. `docs/00_START_HERE/00_INDEX.html` is its entry page.
 
-M0 built the engineering baseline. S1 (master data and inquiry) is in progress: EVD, PTY, CAT, INQ and POL (first five configuration kinds) run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens; party screening and screening-list import are not done yet.
+M0 built the engineering baseline. S1 (master data and inquiry) is in progress: EVD, PTY with party screening, CAT, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. Trading profiles, addresses and service roles of parties, item-code mapping and the connection to a real identity provider (deferred to the B0 pilot gate) are not done yet.
 
 ## Layout
 
 ```
 cmd/brant-api/                    HTTP API: S1 command routes and audited reads behind OIDC access tokens
-cmd/brant-admin/                  operator-only grants: authority row, permissions and data scope of one actor
+cmd/brant-admin/                  operator-only grants and roles: authority row, permissions, data scope, role definitions and assignments
 cmd/brant-migrate/                operator-only migrations: Bento schema, framework migration, then each manifest directory in order
 cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink, settle; at least once
 internal/bootstrap/               composition root: one connection pool, a Bento transaction owner per context and for the relay
 internal/contexts/evd/            EVD: text sources (content, origin, import) and business files, immutable; SourceRef lookup
-internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup
+internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup;
+                                  party screening with positive and negative lists and PartyScreeningGuard v1
 internal/contexts/cat/            CAT: SKUs and specification revisions; SkuRef lookup
 internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed
-internal/contexts/pol/            POL: configuration roots with independent publication, FX lookup, document numbers, snapshots
-internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping
+internal/contexts/pol/            POL: eighteen configuration kinds with independent publication, ConfigGuard v1, FX, tax and
+                                  unit lookups, document numbers, foundation snapshots
+internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
+internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only
                                   Decimal (math/big), Money in minor units, largest-remainder allocation, tax splits,
                                   ExchangeRate, Quantity, Ratio, ValidityInterval, timestamps, Scope, ActorRef,
                                   Rejection (error codes and categories), AuditEntry
 internal/foundation/bento/        ScopeTransactor (app.tenant_id and app.company_id per transaction), SystemClock
 internal/foundation/database/     PostgreSQL 16 pool with server and application-role checks; pgtest for integration tests
-internal/foundation/action/       command ledger: idempotent action results, replay, audit and Outbox in one transaction
+internal/foundation/action/       command ledger: idempotent action results, replay, reconciliation, audit and Outbox in one transaction
 internal/foundation/identity/     Principal (actor and scope from a verified token) in the Go context
 internal/foundation/identity/oidc/ OIDC access-token verifier (discovery, JWKS, iss, aud, exp, tenant, company, actor kind)
-internal/foundation/authorization/ command rules (human-only commands), authority guard, grants and data scope in brant_auth
-internal/foundation/messaging/    Outbox relay, HTTP webhook publisher, dead letters with alerts and human replay (ADR-BR-015)
+internal/foundation/authorization/ command rules (human-only commands), authority guard, grants, data scope, role templates
+                                  and separation of duties in brant_auth
+internal/foundation/messaging/    Outbox relay, HTTP webhook publisher, dead letters with alerts and human replay (ADR-BR-015);
+                                  Inbox consumer that deduplicates by event ID
 internal/foundation/strictjson/   closed-structure request decoding (C7): 1 MiB, 64 levels, 100,000 values; no duplicate keys, null, floats, unknown fields
 migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
 migrations/msg/                   brant_msg: dead letters of the Outbox relay (FORCE RLS)
+migrations/ref/                   brant_ref: screening list versions and entries, immutable (FORCE RLS)
 migrations/{evd,pty,cat,pol,inq}/     brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
 deploy/postgres/                  roles (brant_migrator, brant_app) and application grants
 scripts/dev-postgres.sh           development PostgreSQL 16 container brant-pg16 on 127.0.0.1:55471
+contracts/openapi/                candidate OpenAPI 3.1 document, generated by tools/openapigen
 tools/dependency-check/           package rules; cross-context allowlist generated from the Context Map
+tools/rolegen/ tools/openapigen/  generators: role templates from the archive, OpenAPI from the transport
 tools/spikes/consistency/         M0-10 spikes for ADR-BR-004 and ADR-BR-011 (integration tests)
 .github/workflows/ci.yml          required check: formatting, vet, lint, package rules, migrations, PG16 tests, race detector
 .github/CODEOWNERS                an owner for the kernel, the foundation and, from S1, every context directory
