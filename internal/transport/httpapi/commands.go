@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,8 +54,11 @@ type commandSet struct {
 	audit func(context.Context) ([]kernel.AuditEntry, error)
 }
 
-// commandFunc decodes args and runs the command.
-type commandFunc func(ctx context.Context, key string, args json.RawMessage) (receipt, error)
+// commandFunc decodes args of type args and runs the command.
+type commandFunc struct {
+	args reflect.Type
+	call func(ctx context.Context, key string, args json.RawMessage) (receipt, error)
+}
 
 // envelope is the uniform command request. Presence is checked field by field, so the members are
 // pointers; args stays raw until the command is known.
@@ -136,7 +140,7 @@ func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run
 	switch {
 	case env.Contract == nil || *env.Contract != set.contract:
 		return receipt{}, kernel.Reject(kernel.CodeUnsupportedContract, "/contract", "")
-	case env.Command == nil || *env.Command != name || run == nil:
+	case env.Command == nil || *env.Command != name || run.call == nil:
 		return receipt{}, kernel.Reject(kernel.CodeUnsupportedContract, "/command", "")
 	case env.IdempotencyKey == nil:
 		return receipt{}, kernel.Reject(kernel.CodeSchemaInvalid, "/idempotency_key", "required")
@@ -147,7 +151,7 @@ func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run
 		// Every string of these contracts has at least one character; an unknown value is omitted.
 		return receipt{}, kernel.Reject(kernel.CodeSchemaInvalid, p, "empty string")
 	}
-	res, err := run(r.Context(), *env.IdempotencyKey, env.Args)
+	res, err := run.call(r.Context(), *env.IdempotencyKey, env.Args)
 	if err != nil {
 		var schema schemaError
 		if errors.As(err, &schema) {
@@ -219,7 +223,7 @@ func findEmpty(v any, path string) string {
 
 // handle builds a commandFunc that decodes A, converts it to the context's command C and runs it.
 func handle[A any, C any, R result](build func(key string, a A) (C, error), call func(context.Context, C) (R, error)) commandFunc {
-	return func(ctx context.Context, key string, args json.RawMessage) (receipt, error) {
+	return commandFunc{args: reflect.TypeFor[A](), call: func(ctx context.Context, key string, args json.RawMessage) (receipt, error) {
 		var a A
 		if err := decodeArgs(args, &a); err != nil {
 			return receipt{}, err
@@ -240,7 +244,7 @@ func handle[A any, C any, R result](build func(key string, a A) (C, error), call
 			Replayed   bool
 		}(r)
 		return receipt{ActionID: v.ActionID, ObjectID: v.ObjectID, RowVersion: v.RowVersion, Status: v.Status, Replayed: v.Replayed}, nil
-	}
+	}}
 }
 
 // version returns a required expected_version.

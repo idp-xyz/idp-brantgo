@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
@@ -67,6 +68,16 @@ type numberSequenceJSON struct {
 	Width        int    `json:"width"`
 	Reset        string `json:"reset"`
 	TimeZone     string `json:"time_zone"`
+}
+
+// configDataTypes are the data structures of the configuration kinds the transport maps, for the
+// OpenAPI document.
+var configDataTypes = map[string]reflect.Type{
+	polapi.KindCurrency:       reflect.TypeFor[currencyJSON](),
+	polapi.KindUnit:           reflect.TypeFor[unitJSON](),
+	polapi.KindFXRate:         reflect.TypeFor[fxRateJSON](),
+	polapi.KindPaymentTerms:   reflect.TypeFor[paymentTermsJSON](),
+	polapi.KindNumberSequence: reflect.TypeFor[numberSequenceJSON](),
 }
 
 // configData decodes data as the closed structure of kind. A kind POL does not implement yet is
