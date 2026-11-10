@@ -14,6 +14,7 @@ M0 built the engineering baseline. S1 (master data and inquiry) is in progress: 
 ```
 cmd/brant-api/                    HTTP API: S1 command routes and audited reads behind OIDC access tokens
 cmd/brant-admin/                  operator-only grants and roles: authority row, permissions, data scope, role definitions and assignments
+cmd/brant-cli/                    local operations and demo: foundation-demo publishes synthetic POL configurations in a fresh company
 cmd/brant-migrate/                operator-only migrations: Bento schema, framework migration, then each manifest directory in order
 cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink, settle; at least once
 internal/bootstrap/               composition root: one connection pool, a Bento transaction owner per context and for the relay
