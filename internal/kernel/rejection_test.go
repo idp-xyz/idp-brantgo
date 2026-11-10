@@ -28,7 +28,7 @@ func TestRejectPanicsOnAnUnsharedCode(t *testing.T) {
 			t.Fatal("want a panic")
 		}
 	}()
-	Reject("SOURCE_IDENTITY_CONFLICT", "/", "")
+	_ = Reject("SOURCE_IDENTITY_CONFLICT", "/", "")
 }
 
 func TestFieldTextIsLimitedTo200Characters(t *testing.T) {

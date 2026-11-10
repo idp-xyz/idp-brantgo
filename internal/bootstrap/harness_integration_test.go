@@ -11,6 +11,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
@@ -27,6 +28,7 @@ var allPermissions = []string{
 	"party.save_draft", "party.confirm", "party.revise", "party.deactivate", "contact.save_draft", "contact.confirm",
 	"pty.read", "pty.audit",
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "cat.read", "cat.audit",
+	"rfq.save_draft", "rfq.confirm_scope", "rfq.cancel", "rfq.close", "inq.read", "inq.audit",
 }
 
 type world struct {
@@ -113,6 +115,8 @@ func (w *world) want(err error, wantCode string) {
 		w.t.Fatalf("want %s, got %s", wantCode, got)
 	}
 }
+
+func authorizationScope(s string) authorization.DataScope { return authorization.DataScope(s) }
 
 // exec runs sql as the application role in company's scope.
 func (w *world) exec(company, sql string) error {

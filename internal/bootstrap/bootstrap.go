@@ -19,6 +19,7 @@ import (
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
+	"go.idp.xyz/idp-brant/internal/contexts/inq"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
@@ -138,6 +139,7 @@ type Contexts struct {
 	EVD *evd.Module
 	PTY *pty.Module
 	CAT *cat.Module
+	INQ *inq.Module
 }
 
 // Contexts wires every bounded context, upstream first. Call it once per process.
@@ -158,6 +160,12 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		c.CAT, err = cat.New(db, c.EVD)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.INQ, err = inq.New(db, c.EVD, c.PTY, c.CAT)
 	}
 	if err != nil {
 		return nil, err

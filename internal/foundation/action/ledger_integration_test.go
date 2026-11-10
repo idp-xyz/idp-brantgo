@@ -386,7 +386,7 @@ func TestConcurrentCommands(t *testing.T) {
 	if won != 1 {
 		t.Fatalf("want one winner, got %d: %+v %v", won, res, errs)
 	}
-	res, errs = run(2, func(i int) (action.Result, error) {
+	_, errs = run(2, func(i int) (action.Result, error) {
 		return r.save(ctx, "create."+string(rune('a'+i)), "n2", "new", 0)
 	})
 	if (errs[0] == nil) == (errs[1] == nil) {

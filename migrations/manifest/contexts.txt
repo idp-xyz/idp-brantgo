@@ -10,3 +10,4 @@ msg
 evd
 pty
 cat
+inq

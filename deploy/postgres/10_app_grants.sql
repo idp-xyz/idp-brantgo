@@ -31,3 +31,9 @@ GRANT SELECT, INSERT ON brant_pty.party_revision, brant_pty.contact_revision, br
 GRANT USAGE ON SCHEMA brant_cat TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_cat.sku TO brant_app;
 GRANT SELECT, INSERT ON brant_cat.sku_revision, brant_cat.action_result, brant_cat.audit_event TO brant_app;
+
+-- INQ: a draft's lines and sources are replaced whole; the ledger only grows.
+GRANT USAGE ON SCHEMA brant_inq TO brant_app;
+GRANT SELECT, INSERT, UPDATE ON brant_inq.customer_rfq TO brant_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON brant_inq.rfq_line, brant_inq.rfq_source TO brant_app;
+GRANT SELECT, INSERT ON brant_inq.action_result, brant_inq.audit_event TO brant_app;
