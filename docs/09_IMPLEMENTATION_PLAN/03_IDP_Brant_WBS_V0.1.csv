@@ -10,16 +10,16 @@ M0-08,M0,工具,tools/dependency-check：由 Context Map V0.1 关系生成 impor
 M0-09,M0,CI,CI：gofmt、vet、test -race、PG16 集成、dependency-check；受保护主干与必需评审,P0,M0-05;M0-08,.github/workflows 与分支保护,PR 必须通过必需检查；直接推送 main 被拒绝,研发负责人,,PARTIAL
 M0-10,M0,ADR,ADR-BR-004／011 裁决原型：SC-03、SC-04 在 PG16 上的竞争实测（方案 A 与方案 B 对比）,P0,M0-04;M0-05,spike 代码与实测报告,两种提交顺序的结果与业务核心设计一致；结论提交首席架构师裁决,首席架构师＋TRD／CST Owner,T03 A26；核心设计 9.2,DONE_LOCAL
 M0-11,M0,messaging,Outbox 中继：cmd/brant-worker 与 foundation/messaging（沿用 Cargo V2.9 模式）,P1,M0-04,中继与崩溃演练,失败退避、放弃不阻塞分区、SIGKILL 后重投,技术负责人,Python 本地 outbox 表,DONE_LOCAL
-S1-01,S1,EVD,来源四层身份与业务文件,P0,M0-04;M0-07,internal/contexts/evd,EVD-INV-001；同渠道异正文拒绝；来源权限撤回后读取拒绝,EVD Owner,T01 source.register；foundation.file.register,NOT_STARTED
-S1-02,S1,PTY,主体、联系人、交易档案、地址角色与服务方角色,P0,S1-01,internal/contexts/pty；PartyRef v1,PTY-INV-001；人工核实；修订保留旧快照,PTY Owner,master.*；A29–A31,NOT_STARTED
-S1-03,S1,CAT,SKU、规格修订与货号映射,P0,S1-01,internal/contexts/cat；SkuRef v1,CAT-INV-001；未知 SKU 拒绝,CAT Owner,master(kind=sku)；foundation SKU 规格,NOT_STARTED
+S1-01,S1,EVD,来源四层身份与业务文件,P0,M0-04;M0-07,internal/contexts/evd,EVD-INV-001；同渠道异正文拒绝；来源权限撤回后读取拒绝,EVD Owner,T01 source.register；foundation.file.register,PARTIAL
+S1-02,S1,PTY,主体、联系人、交易档案、地址角色与服务方角色,P0,S1-01,internal/contexts/pty；PartyRef v1,PTY-INV-001；人工核实；修订保留旧快照,PTY Owner,master.*；A29–A31,PARTIAL
+S1-03,S1,CAT,SKU、规格修订与货号映射,P0,S1-01,internal/contexts/cat；SkuRef v1,CAT-INV-001；未知 SKU 拒绝,CAT Owner,master(kind=sku)；foundation SKU 规格,PARTIAL
 S1-04,S1,POL,配置根、修订、独立发布、基础快照与编号（首批 13 类配置）,P0,M0-03;M0-07,internal/contexts/pol；ConfigRef v1,POL-INV-001–005；汇率方向用途；付款比例 100,POL Owner＋财务,共享基础 V0.2；brant.foundation/0.1.0,NOT_STARTED
-S1-05,S1,INQ,客户询价 draft／ready／cancelled／closed,P0,S1-02;S1-03,internal/contexts/inq；RfqRef v1,INQ-INV-001–002；BC-AT02、05 组件断言,INQ Owner,rfq.*,NOT_STARTED
-S1-06,S1,transport,transport/http 最小命令路由与查询、cmd/brant-api、入口资源限制,P0,S1-05,OpenAPI 3.1 候选；1 MiB／64 层等限制,重复 JSON 键、浮点数、额外字段被拒绝,接口负责人,__main__.py 入口限制；T03 规格 §10,NOT_STARTED
-S1-07,S1,测试,移植 T01 与共享基础测试（test_core、test_storage、test_foundation、test_cli、test_contracts）,P0,S1-01;S1-02;S1-03;S1-04;S1-05,Go 等价用例与映射状态更新,08 阶段映射表对应行改为 PORTED 且 Go CI 通过,QA,73 个 Python 测试方法（08 阶段映射）,NOT_STARTED
-S1-08,S1,演示,BRC-001 前段：四行 120 PCS 询价 ready 在 PG16 重放,P1,S1-06;S1-07,可重放脚本与证据,结果与 Python demo 一致,QA,python -m brant_core demo,NOT_STARTED
+S1-05,S1,INQ,客户询价 draft／ready／cancelled／closed,P0,S1-02;S1-03,internal/contexts/inq；RfqRef v1,INQ-INV-001–002；BC-AT02、05 组件断言,INQ Owner,rfq.*,DONE_CI
+S1-06,S1,transport,transport/http 最小命令路由与查询、cmd/brant-api、入口资源限制,P0,S1-05,OpenAPI 3.1 候选；1 MiB／64 层等限制,重复 JSON 键、浮点数、额外字段被拒绝,接口负责人,__main__.py 入口限制；T03 规格 §10,PARTIAL
+S1-07,S1,测试,移植 T01 与共享基础测试（test_core、test_storage、test_foundation、test_cli、test_contracts）,P0,S1-01;S1-02;S1-03;S1-04;S1-05,Go 等价用例与映射状态更新,08 阶段映射表对应行改为 PORTED 且 Go CI 通过,QA,73 个 Python 测试方法（08 阶段映射）,PARTIAL
+S1-08,S1,演示,BRC-001 前段：四行 120 PCS 询价 ready 在 PG16 重放,P1,S1-06;S1-07,可重放脚本与证据,结果与 Python demo 一致,QA,python -m brant_core demo,DONE_CI
 S1-09,S1,PTY,主体筛查结论与 PartyScreeningGuard（名单来源由合规负责人确认）,P1,S1-02;S1-11,PartyScreening 聚合、守卫函数与复筛触发,PTY-INV-002；TD-AT15：新主体 pending、误报放行与正向名单失效、负向名单永久阻断；AI 与 system 身份裁决 match 被拒,PTY Owner＋合规负责人,—（Python 未实现）,NOT_STARTED
-S1-10,S1,消息,Outbox 死信、告警与重放（ADR-BR-015）,P0,M0-11,死信状态、告警与按事件 ID 的授权重放,预算耗尽的消息进入死信并告警；重放后消费方按事件 ID 去重；撤销与风险类事件不静默丢失,技术负责人＋运维,—（Python 未实现）,NOT_STARTED
+S1-10,S1,消息,Outbox 死信、告警与重放（ADR-BR-015）,P0,M0-11,死信状态、告警与按事件 ID 的授权重放,预算耗尽的消息进入死信并告警；重放后消费方按事件 ID 去重；撤销与风险类事件不静默丢失,技术负责人＋运维,—（Python 未实现）,DONE_CI
 S1-11,S1,reference,筛查名单参考数据的受控导入（来源、版本、导入时间、哈希）与 POL screening_regulation,P1,S1-04,internal/reference 名单版本与导入命令；适用配置,新版本导入触发复筛；条目不可手工编辑；启用外国名单前须 ADR-BR-017 裁决,合规负责人＋研发,—（Python 未实现）,NOT_STARTED
 S2-01,S2,SUP,供应商询价与供应报价修订、核实、撤回,P0,S1-05,internal/contexts/sup,SUP-INV-001–002,SUP Owner,T02 §5、§13.2,NOT_STARTED
 S2-02,S2,SUP,采购条件独立发布、物流报价、服务方适用,P0,S2-01,PurchaseTerms、LogisticsOffer,SUP-INV-003；依附型与独立型条件,SUP Owner,T02 §6、§13.1；A46,NOT_STARTED

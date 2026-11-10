@@ -1,0 +1,173 @@
+# 2026-11-10T11:04:51Z GOTOOLCHAIN=go1.26.5 make ci (CI=true)
+go mod verify
+all modules verified
+go mod tidy -diff
+go vet ./...
+go vet -tags integration ./...
+GOFLAGS= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+0 issues.
+go test -count=1 ./...
+?   	go.idp.xyz/idp-brant/cmd/brant-admin	[no test files]
+?   	go.idp.xyz/idp-brant/cmd/brant-api	[no test files]
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.004s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	0.002s
+?   	go.idp.xyz/idp-brant/internal/contexts/cat	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/application	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	0.006s
+?   	go.idp.xyz/idp-brant/internal/contexts/evd	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/source	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/application	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/inq/internal/domain/rfq	0.001s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/contact	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	0.002s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/party	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/action	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.002s
+?   	go.idp.xyz/idp-brant/internal/foundation/bento	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/database	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	0.776s
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	0.158s
+ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	0.080s
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.029s
+ok  	go.idp.xyz/idp-brant/internal/transport/httpapi	0.007s
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.003s
+?   	go.idp.xyz/idp-brant/tools/spikes/consistency	[no test files]
+go run ./tools/dependency-check
+dependency-check: 40 packages, 5 allowlisted context relationships, CODEOWNERS covers internal/contexts/cat/, internal/contexts/evd/, internal/contexts/inq/, internal/contexts/pty/, internal/kernel/, docs/ holds no Go code; no violations
+BRANT_PG_PORT=55471 scripts/dev-postgres.sh
+127.0.0.1:5432 - accepting connections
+PLAN framework:000001_eventing_store               sha256:71eaecb1597bf0b2048ad80328dd03dea9aa8a8cc4f8eda571907bc9f35b4397
+PLAN brant:000001_auth_authority_guard             sha256:a2279df8c7bc3da79384aefb6764d71d5d4b6e1113979b7a4c8196c52d7cbf83
+PLAN brant:000002_auth_data_scope                  sha256:61c39696c546e2aac4cb831dd1566da1a87468747668610a6459ef815e61c960
+PLAN brant:000001_msg_dead_letter                  sha256:18dbeacde2b140ed957f1b2f142590053b1d4769829707e027a4641f55127caf
+PLAN brant:000001_evd_sources                      sha256:9fc29174b29bc1497a7055c5cb0774e61179c30cf2d729550986718acfc3fd63
+PLAN brant:000001_pty_parties                      sha256:60d88c4dbe9ba665e5d9b3f4384352dfbec021216642f3bdc17cd4682a50c7fd
+PLAN brant:000001_cat_skus                         sha256:2a46530779bcc15121c39ff8d7408fff61a76aa607e2e5747c0115d844528ffa
+PLAN brant:000001_inq_customer_rfqs                sha256:802ed5b4f0fd787c7d30fc8d8e874965bc3d302cd3213a09af2dd4f3f902a193
+CONNECTED PostgreSQL 16 as brant_migrator
+DONE: 0 applied, 8 already recorded; Bento schema check passed
+export IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable'
+export IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable'
+CI=true IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable' IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable' go test -tags integration -count=1 ./...
+?   	go.idp.xyz/idp-brant/cmd/brant-admin	[no test files]
+?   	go.idp.xyz/idp-brant/cmd/brant-api	[no test files]
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.071s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	5.455s
+?   	go.idp.xyz/idp-brant/internal/contexts/cat	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/application	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	0.001s
+?   	go.idp.xyz/idp-brant/internal/contexts/evd	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/source	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/application	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/inq/internal/domain/rfq	0.002s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/contact	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	0.002s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/party	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/action	1.244s
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.298s
+ok  	go.idp.xyz/idp-brant/internal/foundation/bento	0.083s
+ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.041s
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	0.813s
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	5.064s
+ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	0.096s
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.033s
+ok  	go.idp.xyz/idp-brant/internal/transport/httpapi	0.016s
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.004s
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	4.217s
+CI=true IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable' IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable' go test -tags integration -race -count=1 ./...
+?   	go.idp.xyz/idp-brant/cmd/brant-admin	[no test files]
+?   	go.idp.xyz/idp-brant/cmd/brant-api	[no test files]
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	1.069s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	6.680s
+?   	go.idp.xyz/idp-brant/internal/contexts/cat	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/application	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	1.009s
+?   	go.idp.xyz/idp-brant/internal/contexts/evd	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/source	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/application	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/inq/internal/domain/rfq	1.009s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/contact	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	1.008s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/party	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/action	2.293s
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	1.306s
+ok  	go.idp.xyz/idp-brant/internal/foundation/bento	1.085s
+ok  	go.idp.xyz/idp-brant/internal/foundation/database	1.078s
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	2.019s
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	4.477s
+ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	1.516s
+ok  	go.idp.xyz/idp-brant/internal/kernel	1.250s
+ok  	go.idp.xyz/idp-brant/internal/transport/httpapi	1.065s
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	1.016s
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	4.862s
+CI=true IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:55471/brant?sslmode=disable' IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:55471/brant?sslmode=disable' BRANT_SPIKE_REPORT=/home/tops/workspace/idp-brantgo/bin/spike-consistency.json go test -tags integration -count=1 -v ./tools/spikes/consistency
+=== RUN   TestSC04OptionAPrefetchLeavesACommitWindow
+--- PASS: TestSC04OptionAPrefetchLeavesACommitWindow (0.06s)
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first
+--- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder (0.09s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first (0.01s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first (0.02s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first (0.01s)
+=== RUN   TestSC03CheckThenActWithoutRootLockLetsBothWin
+--- PASS: TestSC03CheckThenActWithoutRootLockLetsBothWin (0.07s)
+=== RUN   TestSC03RootLockLetsExactlyOneWin
+=== RUN   TestSC03RootLockLetsExactlyOneWin/replace_first
+=== RUN   TestSC03RootLockLetsExactlyOneWin/convert_first
+--- PASS: TestSC03RootLockLetsExactlyOneWin (0.09s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/replace_first (0.03s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/convert_first (0.01s)
+=== RUN   TestSC03StressComparesTheTwoImplementations
+    consistency_integration_test.go:617: no root lock: 200 of 200 rounds had two winners
+    consistency_integration_test.go:617: root row FOR UPDATE first: 0 of 200 rounds had two winners
+--- PASS: TestSC03StressComparesTheTwoImplementations (3.18s)
+PASS
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	3.496s
+exit=0

@@ -1,0 +1,1029 @@
+# 2026-11-10T11:05:20Z go test -tags integration -count=1 -v ./... (CI=true, Go 1.26.5)
+?   	go.idp.xyz/idp-brant/cmd/brant-admin	[no test files]
+?   	go.idp.xyz/idp-brant/cmd/brant-api	[no test files]
+=== RUN   TestManifestOrdersDirectories
+--- PASS: TestManifestOrdersDirectories (0.00s)
+=== RUN   TestMigrationFilesAreContiguousAndCarryTheirDirectory
+--- PASS: TestMigrationFilesAreContiguousAndCarryTheirDirectory (0.00s)
+=== RUN   TestRepositoryManifestLoads
+--- PASS: TestRepositoryManifestLoads (0.00s)
+=== RUN   TestApplyIsIdempotentAndRefusesTampering
+APPLIED brant:000001_t_schema
+APPLIED brant:000002_t_table
+--- PASS: TestApplyIsIdempotentAndRefusesTampering (0.06s)
+PASS
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.061s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+=== RUN   TestAssembledRelayDeadLettersAndReplayerReplays
+2026/11/10 04:05:20 WARN outbox delivery rejected by sink event_id=boot-1 error="eventing: publish rejected: sink answered 422 Unprocessable Entity"
+--- PASS: TestAssembledRelayDeadLettersAndReplayerReplays (0.18s)
+=== RUN   TestOpenRequiresADSN
+--- PASS: TestOpenRequiresADSN (0.00s)
+=== RUN   TestReplayerRequiresSinkAndTimeout
+--- PASS: TestReplayerRequiresSinkAndTimeout (0.00s)
+=== RUN   TestSkuSpecificationRevisions
+--- PASS: TestSkuSpecificationRevisions (0.13s)
+=== RUN   TestSkuDeactivationIsHumanOnlyAndFinal
+--- PASS: TestSkuDeactivationIsHumanOnlyAndFinal (0.10s)
+=== RUN   TestSameKeyReplaysWithoutRepeatingImportAndDifferentContentConflicts
+--- PASS: TestSameKeyReplaysWithoutRepeatingImportAndDifferentContentConflicts (0.06s)
+=== RUN   TestEmailIdentityDeduplicatesOriginButPreservesImports
+--- PASS: TestEmailIdentityDeduplicatesOriginButPreservesImports (0.08s)
+=== RUN   TestSameContentIsSharedWithinACompanyOnly
+--- PASS: TestSameContentIsSharedWithinACompanyOnly (0.11s)
+=== RUN   TestConcurrentDuplicateImportIsSingleAction
+--- PASS: TestConcurrentDuplicateImportIsSingleAction (0.06s)
+=== RUN   TestLimitsAndClosedSchemaAndNoContentInAudit
+--- PASS: TestLimitsAndClosedSchemaAndNoContentInAudit (0.06s)
+=== RUN   TestSourceReadsAreAuditedAndDeniedReadsToo
+--- PASS: TestSourceReadsAreAuditedAndDeniedReadsToo (0.08s)
+=== RUN   TestSourceDeduplicationReplayUsesCanonicalID
+--- PASS: TestSourceDeduplicationReplayUsesCanonicalID (0.06s)
+=== RUN   TestPrivateSourceCannotBeProbed
+--- PASS: TestPrivateSourceCannotBeProbed (0.08s)
+=== RUN   TestAuditWaitsForAPriorRevocation
+--- PASS: TestAuditWaitsForAPriorRevocation (0.35s)
+=== RUN   TestBRC001FrontOverHTTPWithOIDCTokens
+2026/11/10 04:05:22 INFO request not authenticated correlation_id=corr-01a1c522-4dd9-7f17-9e6b-4c77338c7e9b reason="identity: unauthenticated: oidc: authorization header is not a bearer token"
+2026/11/10 04:05:22 INFO request not authenticated correlation_id=corr-01a1c522-4e41-7657-8799-80f602021ad3 reason="identity: unauthenticated: oidc: invalid signature"
+--- PASS: TestBRC001FrontOverHTTPWithOIDCTokens (0.40s)
+=== RUN   TestIncompleteRfqIsSavedWithoutInventedFacts
+--- PASS: TestIncompleteRfqIsSavedWithoutInventedFacts (0.07s)
+=== RUN   TestCompleteRfqBecomesReadyAndClosesWithReason
+--- PASS: TestCompleteRfqBecomesReadyAndClosesWithReason (0.15s)
+=== RUN   TestDraftRejectionsHaveExactCodesAndPaths
+--- PASS: TestDraftRejectionsHaveExactCodesAndPaths (0.07s)
+=== RUN   TestOmissionReplacesDraftAndStaleVersionDoesNotOverwrite
+--- PASS: TestOmissionReplacesDraftAndStaleVersionDoesNotOverwrite (0.06s)
+=== RUN   TestSameContentDifferentOriginsSupportDifferentRfqs
+--- PASS: TestSameContentDifferentOriginsSupportDifferentRfqs (0.07s)
+=== RUN   TestCrossCompanyReferenceIsRejectedWithoutExistenceLeak
+--- PASS: TestCrossCompanyReferenceIsRejectedWithoutExistenceLeak (0.05s)
+=== RUN   TestRevokedActorCannotReplayAnRfqSave
+--- PASS: TestRevokedActorCannotReplayAnRfqSave (0.05s)
+=== RUN   TestInactiveSkuBlocksReady
+--- PASS: TestInactiveSkuBlocksReady (0.15s)
+=== RUN   TestRevisedCustomerBlocksReadyUntilReconfirmed
+--- PASS: TestRevisedCustomerBlocksReadyUntilReconfirmed (0.16s)
+=== RUN   TestAgentPreparesAndOnlyAHumanConfirms
+--- PASS: TestAgentPreparesAndOnlyAHumanConfirms (0.14s)
+=== RUN   TestConcurrentRfqEditsHaveOneWinner
+--- PASS: TestConcurrentRfqEditsHaveOneWinner (0.06s)
+=== RUN   TestAnotherProcessSeesCommittedData
+--- PASS: TestAnotherProcessSeesCommittedData (0.08s)
+=== RUN   TestContactMustMatchCustomerAndReferenceKindsAreChecked
+--- PASS: TestContactMustMatchCustomerAndReferenceKindsAreChecked (0.13s)
+=== RUN   TestConfirmationRequiresAllSourcesAndNoUnresolvedFields
+--- PASS: TestConfirmationRequiresAllSourcesAndNoUnresolvedFields (0.16s)
+=== RUN   TestTerminalRfqCannotBeReopenedBySave
+--- PASS: TestTerminalRfqCannotBeReopenedBySave (0.05s)
+=== RUN   TestReplayIgnoresCASButNotBusinessFields
+--- PASS: TestReplayIgnoresCASButNotBusinessFields (0.04s)
+=== RUN   TestSupplementalConfirmationEvidenceIsRetained
+--- PASS: TestSupplementalConfirmationEvidenceIsRetained (0.15s)
+=== RUN   TestTeamScopeAndReplayDoNotLeak
+--- PASS: TestTeamScopeAndReplayDoNotLeak (0.06s)
+=== RUN   TestBRC001FrontReachesReady
+--- PASS: TestBRC001FrontReachesReady (0.16s)
+=== RUN   TestBCAT02DraftMissingSkuAndDeliverySavesButIsNotReady
+--- PASS: TestBCAT02DraftMissingSkuAndDeliverySavesButIsNotReady (0.15s)
+=== RUN   TestBCAT05QuantityConflictIsNotPaperedOver
+--- PASS: TestBCAT05QuantityConflictIsNotPaperedOver (0.21s)
+=== RUN   TestConfirmedPartyCannotBeEdited
+--- PASS: TestConfirmedPartyCannotBeEdited (0.08s)
+=== RUN   TestDatabaseRefusesEditingAConfirmedParty
+--- PASS: TestDatabaseRefusesEditingAConfirmedParty (0.08s)
+=== RUN   TestAICannotConfirmEvenWithTheGrant
+--- PASS: TestAICannotConfirmEvenWithTheGrant (0.06s)
+=== RUN   TestConfirmationRequiresSourceReadPermission
+--- PASS: TestConfirmationRequiresSourceReadPermission (0.08s)
+=== RUN   TestRevisionPreservesTheConfirmedRecord
+--- PASS: TestRevisionPreservesTheConfirmedRecord (0.09s)
+=== RUN   TestContactBelongsToACustomerAndConfirmsOnlyUnderAConfirmedOne
+--- PASS: TestContactBelongsToACustomerAndConfirmsOnlyUnderAConfirmedOne (0.11s)
+=== RUN   TestConcurrentRevisionsHaveOneWinner
+--- PASS: TestConcurrentRevisionsHaveOneWinner (0.07s)
+=== RUN   TestConfirmationPublishesAnEventWithIdentifiersOnly
+--- PASS: TestConfirmationPublishesAnEventWithIdentifiersOnly (0.06s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	4.632s
+?   	go.idp.xyz/idp-brant/internal/contexts/cat	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/application	[no test files]
+=== RUN   TestConfirmationNeedsNameAndPCSAndCountsRevisions
+--- PASS: TestConfirmationNeedsNameAndPCSAndCountsRevisions (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	0.001s
+?   	go.idp.xyz/idp-brant/internal/contexts/evd	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/source	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/application	[no test files]
+=== RUN   TestDraftChecksHaveExactCodesAndPaths
+--- PASS: TestDraftChecksHaveExactCodesAndPaths (0.00s)
+=== RUN   TestConfirmationNeedsCompleteCurrentContentAndCoveringEvidence
+--- PASS: TestConfirmationNeedsCompleteCurrentContentAndCoveringEvidence (0.00s)
+=== RUN   TestChecksRunInContractOrder
+--- PASS: TestChecksRunInContractOrder (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/inq/internal/domain/rfq	0.001s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/api	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/application	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/contact	[no test files]
+=== RUN   TestChecksRunInContractOrder
+--- PASS: TestChecksRunInContractOrder (0.00s)
+=== RUN   TestMoveCountsVersionsAndConfirmations
+--- PASS: TestMoveCountsVersionsAndConfirmations (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	0.001s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/party	[no test files]
+=== RUN   TestCommandCommitsResultAuditAndEventTogether
+--- PASS: TestCommandCommitsResultAuditAndEventTogether (0.14s)
+=== RUN   TestSameKeyReplaysAndDifferentPayloadConflicts
+--- PASS: TestSameKeyReplaysAndDifferentPayloadConflicts (0.14s)
+=== RUN   TestRevocationBlocksReplayAndIsAudited
+--- PASS: TestRevocationBlocksReplayAndIsAudited (0.15s)
+=== RUN   TestHumanOnlyRuleRefusesAIBeforeTheDatabase
+--- PASS: TestHumanOnlyRuleRefusesAIBeforeTheDatabase (0.11s)
+=== RUN   TestReplayRechecksVisibility
+--- PASS: TestReplayRechecksVisibility (0.17s)
+=== RUN   TestOutboxFailureRollsBackEverything
+--- PASS: TestOutboxFailureRollsBackEverything (0.14s)
+=== RUN   TestConcurrentCommands
+--- PASS: TestConcurrentCommands (0.17s)
+=== RUN   TestReadIsAuditedAndDeniedReadToo
+--- PASS: TestReadIsAuditedAndDeniedReadToo (0.15s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/action	1.179s
+=== RUN   TestHumanOnlyCommandsRefuseAIAndSystemActors
+--- PASS: TestHumanOnlyCommandsRefuseAIAndSystemActors (0.00s)
+=== RUN   TestPolicyRejectsInvalidRules
+--- PASS: TestPolicyRejectsInvalidRules (0.00s)
+=== RUN   TestDataScopeDecidesWhichRecordsAnActorSees
+--- PASS: TestDataScopeDecidesWhichRecordsAnActorSees (0.00s)
+=== RUN   TestAIIsRefusedHumanOnlyCommandsEvenWithTheGrant
+--- PASS: TestAIIsRefusedHumanOnlyCommandsEvenWithTheGrant (0.03s)
+=== RUN   TestMissingGrantsAndUnknownCommandsAreDenied
+--- PASS: TestMissingGrantsAndUnknownCommandsAreDenied (0.02s)
+=== RUN   TestEpochChangesOnlyWhenAccessChanges
+--- PASS: TestEpochChangesOnlyWhenAccessChanges (0.03s)
+=== RUN   TestScopesAreIsolatedByRowLevelSecurity
+--- PASS: TestScopesAreIsolatedByRowLevelSecurity (0.02s)
+=== RUN   TestCommandHoldingTheGuardCommitsBeforeARevocation
+--- PASS: TestCommandHoldingTheGuardCommitsBeforeARevocation (0.03s)
+=== RUN   TestRevocationHoldingTheGuardDeniesTheWaitingCommand
+--- PASS: TestRevocationHoldingTheGuardDeniesTheWaitingCommand (0.03s)
+=== RUN   TestDataScopeChangesBumpTheEpochAndReachTheDecision
+--- PASS: TestDataScopeChangesBumpTheEpochAndReachTheDecision (0.03s)
+=== RUN   TestAccessNeedsAnActiveGrantButNoPermission
+--- PASS: TestAccessNeedsAnActiveGrantButNoPermission (0.03s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.229s
+=== RUN   TestContextsNeverJoinEachOthersTransactions
+--- PASS: TestContextsNeverJoinEachOthersTransactions (0.04s)
+=== RUN   TestScopeBindsTheTransaction
+--- PASS: TestScopeBindsTheTransaction (0.02s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/bento	0.065s
+=== RUN   TestApplicationRoleIsUnprivileged
+--- PASS: TestApplicationRoleIsUnprivileged (0.02s)
+=== RUN   TestApplicationRoleCannotRunDDL
+--- PASS: TestApplicationRoleCannotRunDDL (0.01s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.036s
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+=== RUN   TestBearerToken
+--- PASS: TestBearerToken (0.00s)
+=== RUN   TestVerifyHumanToken
+--- PASS: TestVerifyHumanToken (0.18s)
+=== RUN   TestHeaderVerifier
+--- PASS: TestHeaderVerifier (0.01s)
+=== RUN   TestVerifySigningAlgorithms
+=== RUN   TestVerifySigningAlgorithms/RS256
+=== RUN   TestVerifySigningAlgorithms/PS256
+=== RUN   TestVerifySigningAlgorithms/ES256
+=== RUN   TestVerifySigningAlgorithms/EdDSA
+--- PASS: TestVerifySigningAlgorithms (0.01s)
+    --- PASS: TestVerifySigningAlgorithms/RS256 (0.00s)
+    --- PASS: TestVerifySigningAlgorithms/PS256 (0.00s)
+    --- PASS: TestVerifySigningAlgorithms/ES256 (0.00s)
+    --- PASS: TestVerifySigningAlgorithms/EdDSA (0.00s)
+=== RUN   TestActorKindsAndHumanOnlyRules
+=== RUN   TestActorKindsAndHumanOnlyRules/human
+=== RUN   TestActorKindsAndHumanOnlyRules/ai
+=== RUN   TestActorKindsAndHumanOnlyRules/system
+--- PASS: TestActorKindsAndHumanOnlyRules (0.02s)
+    --- PASS: TestActorKindsAndHumanOnlyRules/human (0.00s)
+    --- PASS: TestActorKindsAndHumanOnlyRules/ai (0.00s)
+    --- PASS: TestActorKindsAndHumanOnlyRules/system (0.00s)
+=== RUN   TestRefusedClaims
+=== RUN   TestRefusedClaims/missing_actor_kind
+=== RUN   TestRefusedClaims/empty_actor_kind
+=== RUN   TestRefusedClaims/capitalised_actor_kind
+=== RUN   TestRefusedClaims/unknown_actor_kind
+=== RUN   TestRefusedClaims/padded_actor_kind
+=== RUN   TestRefusedClaims/actor_kind_true
+=== RUN   TestRefusedClaims/actor_kind_list
+=== RUN   TestRefusedClaims/actor_kind_null
+=== RUN   TestRefusedClaims/missing_issuer
+=== RUN   TestRefusedClaims/other_issuer
+=== RUN   TestRefusedClaims/issuer_with_trailing_slash
+=== RUN   TestRefusedClaims/missing_audience
+=== RUN   TestRefusedClaims/other_audience
+=== RUN   TestRefusedClaims/audience_list_without_ours
+=== RUN   TestRefusedClaims/empty_audience_list
+=== RUN   TestRefusedClaims/audience_number
+=== RUN   TestRefusedClaims/audience_null
+=== RUN   TestRefusedClaims/missing_exp
+=== RUN   TestRefusedClaims/expired
+=== RUN   TestRefusedClaims/exp_string
+=== RUN   TestRefusedClaims/exp_exponent
+=== RUN   TestRefusedClaims/exp_negative
+=== RUN   TestRefusedClaims/exp_beyond_year_9999
+=== RUN   TestRefusedClaims/nbf_in_the_future
+=== RUN   TestRefusedClaims/iat_in_the_future
+=== RUN   TestRefusedClaims/missing_sub
+=== RUN   TestRefusedClaims/sub_with_space
+=== RUN   TestRefusedClaims/sub_too_long
+=== RUN   TestRefusedClaims/missing_tenant
+=== RUN   TestRefusedClaims/tenant_with_slash
+=== RUN   TestRefusedClaims/tenant_starting_with_dash
+=== RUN   TestRefusedClaims/empty_tenant
+=== RUN   TestRefusedClaims/tenant_number
+=== RUN   TestRefusedClaims/missing_company
+=== RUN   TestRefusedClaims/company_too_long
+=== RUN   TestRefusedClaims/company_not_ascii
+--- PASS: TestRefusedClaims (0.03s)
+    --- PASS: TestRefusedClaims/missing_actor_kind (0.00s)
+    --- PASS: TestRefusedClaims/empty_actor_kind (0.00s)
+    --- PASS: TestRefusedClaims/capitalised_actor_kind (0.00s)
+    --- PASS: TestRefusedClaims/unknown_actor_kind (0.00s)
+    --- PASS: TestRefusedClaims/padded_actor_kind (0.00s)
+    --- PASS: TestRefusedClaims/actor_kind_true (0.00s)
+    --- PASS: TestRefusedClaims/actor_kind_list (0.00s)
+    --- PASS: TestRefusedClaims/actor_kind_null (0.00s)
+    --- PASS: TestRefusedClaims/missing_issuer (0.00s)
+    --- PASS: TestRefusedClaims/other_issuer (0.00s)
+    --- PASS: TestRefusedClaims/issuer_with_trailing_slash (0.00s)
+    --- PASS: TestRefusedClaims/missing_audience (0.00s)
+    --- PASS: TestRefusedClaims/other_audience (0.00s)
+    --- PASS: TestRefusedClaims/audience_list_without_ours (0.00s)
+    --- PASS: TestRefusedClaims/empty_audience_list (0.00s)
+    --- PASS: TestRefusedClaims/audience_number (0.00s)
+    --- PASS: TestRefusedClaims/audience_null (0.00s)
+    --- PASS: TestRefusedClaims/missing_exp (0.00s)
+    --- PASS: TestRefusedClaims/expired (0.00s)
+    --- PASS: TestRefusedClaims/exp_string (0.00s)
+    --- PASS: TestRefusedClaims/exp_exponent (0.00s)
+    --- PASS: TestRefusedClaims/exp_negative (0.00s)
+    --- PASS: TestRefusedClaims/exp_beyond_year_9999 (0.00s)
+    --- PASS: TestRefusedClaims/nbf_in_the_future (0.00s)
+    --- PASS: TestRefusedClaims/iat_in_the_future (0.00s)
+    --- PASS: TestRefusedClaims/missing_sub (0.00s)
+    --- PASS: TestRefusedClaims/sub_with_space (0.00s)
+    --- PASS: TestRefusedClaims/sub_too_long (0.00s)
+    --- PASS: TestRefusedClaims/missing_tenant (0.00s)
+    --- PASS: TestRefusedClaims/tenant_with_slash (0.00s)
+    --- PASS: TestRefusedClaims/tenant_starting_with_dash (0.00s)
+    --- PASS: TestRefusedClaims/empty_tenant (0.00s)
+    --- PASS: TestRefusedClaims/tenant_number (0.00s)
+    --- PASS: TestRefusedClaims/missing_company (0.00s)
+    --- PASS: TestRefusedClaims/company_too_long (0.00s)
+    --- PASS: TestRefusedClaims/company_not_ascii (0.00s)
+=== RUN   TestAudienceList
+--- PASS: TestAudienceList (0.01s)
+=== RUN   TestLeewayBoundaries
+=== RUN   TestLeewayBoundaries/exp_one_second_inside_the_leeway
+=== RUN   TestLeewayBoundaries/exp_half_a_second_inside_the_leeway
+=== RUN   TestLeewayBoundaries/exp_exactly_at_the_leeway
+=== RUN   TestLeewayBoundaries/nbf_exactly_at_the_leeway
+=== RUN   TestLeewayBoundaries/nbf_one_second_beyond_the_leeway
+=== RUN   TestLeewayBoundaries/iat_exactly_at_the_leeway
+=== RUN   TestLeewayBoundaries/iat_one_second_beyond_the_leeway
+=== RUN   TestLeewayBoundaries/configured_leeway,_exp_inside
+=== RUN   TestLeewayBoundaries/configured_leeway,_exp_outside
+=== RUN   TestLeewayBoundaries/configured_leeway,_nbf_outside
+--- PASS: TestLeewayBoundaries (0.02s)
+    --- PASS: TestLeewayBoundaries/exp_one_second_inside_the_leeway (0.00s)
+    --- PASS: TestLeewayBoundaries/exp_half_a_second_inside_the_leeway (0.00s)
+    --- PASS: TestLeewayBoundaries/exp_exactly_at_the_leeway (0.00s)
+    --- PASS: TestLeewayBoundaries/nbf_exactly_at_the_leeway (0.00s)
+    --- PASS: TestLeewayBoundaries/nbf_one_second_beyond_the_leeway (0.00s)
+    --- PASS: TestLeewayBoundaries/iat_exactly_at_the_leeway (0.00s)
+    --- PASS: TestLeewayBoundaries/iat_one_second_beyond_the_leeway (0.00s)
+    --- PASS: TestLeewayBoundaries/configured_leeway,_exp_inside (0.00s)
+    --- PASS: TestLeewayBoundaries/configured_leeway,_exp_outside (0.00s)
+    --- PASS: TestLeewayBoundaries/configured_leeway,_nbf_outside (0.00s)
+=== RUN   TestRefusedAlgorithms
+=== RUN   TestRefusedAlgorithms/none
+=== RUN   TestRefusedAlgorithms/none_with_a_copied_signature
+=== RUN   TestRefusedAlgorithms/NONE
+=== RUN   TestRefusedAlgorithms/HS256_keyed_with_the_public_key_DER
+=== RUN   TestRefusedAlgorithms/HS256_keyed_with_the_public_key_PEM
+=== RUN   TestRefusedAlgorithms/HS512_keyed_with_the_public_key_DER
+=== RUN   TestRefusedAlgorithms/RS384,_not_configured
+--- PASS: TestRefusedAlgorithms (0.02s)
+    --- PASS: TestRefusedAlgorithms/none (0.00s)
+    --- PASS: TestRefusedAlgorithms/none_with_a_copied_signature (0.00s)
+    --- PASS: TestRefusedAlgorithms/NONE (0.00s)
+    --- PASS: TestRefusedAlgorithms/HS256_keyed_with_the_public_key_DER (0.00s)
+    --- PASS: TestRefusedAlgorithms/HS256_keyed_with_the_public_key_PEM (0.00s)
+    --- PASS: TestRefusedAlgorithms/HS512_keyed_with_the_public_key_DER (0.00s)
+    --- PASS: TestRefusedAlgorithms/RS384,_not_configured (0.00s)
+=== RUN   TestNewRefusesNoneAndHMAC
+=== RUN   TestNewRefusesNoneAndHMAC/none
+=== RUN   TestNewRefusesNoneAndHMAC/None
+=== RUN   TestNewRefusesNoneAndHMAC/HS256
+=== RUN   TestNewRefusesNoneAndHMAC/HS384
+=== RUN   TestNewRefusesNoneAndHMAC/HS512
+=== RUN   TestNewRefusesNoneAndHMAC/hs256
+=== RUN   TestNewRefusesNoneAndHMAC/ES256K
+=== RUN   TestNewRefusesNoneAndHMAC/RSA-OAEP
+=== RUN   TestNewRefusesNoneAndHMAC/#00
+--- PASS: TestNewRefusesNoneAndHMAC (0.01s)
+    --- PASS: TestNewRefusesNoneAndHMAC/none (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/None (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/HS256 (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/HS384 (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/HS512 (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/hs256 (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/ES256K (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/RSA-OAEP (0.00s)
+    --- PASS: TestNewRefusesNoneAndHMAC/#00 (0.00s)
+=== RUN   TestSignatureByAnotherKeyWithTheSameKid
+--- PASS: TestSignatureByAnotherKeyWithTheSameKid (0.01s)
+=== RUN   TestTamperedToken
+--- PASS: TestTamperedToken (0.01s)
+=== RUN   TestKeyRotationRefreshesOnce
+--- PASS: TestKeyRotationRefreshesOnce (0.02s)
+=== RUN   TestUnknownKidsRefreshAtMostOncePerInterval
+--- PASS: TestUnknownKidsRefreshAtMostOncePerInterval (0.06s)
+=== RUN   TestConcurrentFirstUseFetchesOnce
+--- PASS: TestConcurrentFirstUseFetchesOnce (0.02s)
+=== RUN   TestUnavailableKeySetRetriesSparingly
+--- PASS: TestUnavailableKeySetRetriesSparingly (0.02s)
+=== RUN   TestKeySetMaxAgeWithdrawsKeys
+--- PASS: TestKeySetMaxAgeWithdrawsKeys (0.02s)
+=== RUN   TestStaleKeySetStaysInUseWhenTheIssuerFails
+--- PASS: TestStaleKeySetStaysInUseWhenTheIssuerFails (0.02s)
+=== RUN   TestOversizedToken
+--- PASS: TestOversizedToken (0.02s)
+=== RUN   TestMalformedTokens
+=== RUN   TestMalformedTokens/two_parts
+=== RUN   TestMalformedTokens/three_garbage
+=== RUN   TestMalformedTokens/JSON_serialized
+=== RUN   TestMalformedTokens/four_parts
+=== RUN   TestMalformedTokens/inner_space
+=== RUN   TestMalformedTokens/empty
+=== RUN   TestMalformedTokens/one_part
+--- PASS: TestMalformedTokens (0.01s)
+    --- PASS: TestMalformedTokens/two_parts (0.00s)
+    --- PASS: TestMalformedTokens/three_garbage (0.00s)
+    --- PASS: TestMalformedTokens/JSON_serialized (0.00s)
+    --- PASS: TestMalformedTokens/four_parts (0.00s)
+    --- PASS: TestMalformedTokens/inner_space (0.00s)
+    --- PASS: TestMalformedTokens/empty (0.00s)
+    --- PASS: TestMalformedTokens/one_part (0.00s)
+=== RUN   TestHeaderChecks
+=== RUN   TestHeaderChecks/no_typ
+=== RUN   TestHeaderChecks/typ_JWT
+=== RUN   TestHeaderChecks/typ_id_token
+=== RUN   TestHeaderChecks/crit
+=== RUN   TestHeaderChecks/b64
+--- PASS: TestHeaderChecks (0.02s)
+    --- PASS: TestHeaderChecks/no_typ (0.00s)
+    --- PASS: TestHeaderChecks/typ_JWT (0.00s)
+    --- PASS: TestHeaderChecks/typ_id_token (0.00s)
+    --- PASS: TestHeaderChecks/crit (0.00s)
+    --- PASS: TestHeaderChecks/b64 (0.00s)
+=== RUN   TestKeyMustFitTheAlgorithm
+=== RUN   TestKeyMustFitTheAlgorithm/ES256_under_an_RSA_kid
+=== RUN   TestKeyMustFitTheAlgorithm/EdDSA_under_an_EC_kid
+=== RUN   TestKeyMustFitTheAlgorithm/RS256_under_an_Ed25519_kid
+=== RUN   TestKeyMustFitTheAlgorithm/PS256_with_a_key_limited_to_RS256
+--- PASS: TestKeyMustFitTheAlgorithm (0.02s)
+    --- PASS: TestKeyMustFitTheAlgorithm/ES256_under_an_RSA_kid (0.00s)
+    --- PASS: TestKeyMustFitTheAlgorithm/EdDSA_under_an_EC_kid (0.00s)
+    --- PASS: TestKeyMustFitTheAlgorithm/RS256_under_an_Ed25519_kid (0.00s)
+    --- PASS: TestKeyMustFitTheAlgorithm/PS256_with_a_key_limited_to_RS256 (0.00s)
+=== RUN   TestECDSACurveMustFitTheAlgorithm
+--- PASS: TestECDSACurveMustFitTheAlgorithm (0.02s)
+=== RUN   TestKeySetSkipsUnusableKeys
+=== RUN   TestKeySetSkipsUnusableKeys/use_enc
+=== RUN   TestKeySetSkipsUnusableKeys/private_key_in_JWKS
+=== RUN   TestKeySetSkipsUnusableKeys/RSA_below_2048_bits
+=== RUN   TestKeySetSkipsUnusableKeys/two_RSA_keys_one_kid
+--- PASS: TestKeySetSkipsUnusableKeys (0.02s)
+    --- PASS: TestKeySetSkipsUnusableKeys/use_enc (0.00s)
+    --- PASS: TestKeySetSkipsUnusableKeys/private_key_in_JWKS (0.00s)
+    --- PASS: TestKeySetSkipsUnusableKeys/RSA_below_2048_bits (0.00s)
+    --- PASS: TestKeySetSkipsUnusableKeys/two_RSA_keys_one_kid (0.00s)
+=== RUN   TestKeySetWithoutUsableKeys
+--- PASS: TestKeySetWithoutUsableKeys (0.01s)
+=== RUN   TestDuplicateClaimsAndNonObjects
+--- PASS: TestDuplicateClaimsAndNonObjects (0.02s)
+=== RUN   TestDiscovery
+=== RUN   TestDiscovery/issuer_mismatch
+=== RUN   TestDiscovery/http_jwks_uri
+=== RUN   TestDiscovery/redirect
+=== RUN   TestDiscovery/oversized_response
+=== RUN   TestDiscovery/configured_JWKS_URL_skips_discovery
+=== RUN   TestDiscovery/refresh_at_start-up
+--- PASS: TestDiscovery (0.11s)
+    --- PASS: TestDiscovery/issuer_mismatch (0.02s)
+    --- PASS: TestDiscovery/http_jwks_uri (0.03s)
+    --- PASS: TestDiscovery/redirect (0.03s)
+    --- PASS: TestDiscovery/oversized_response (0.01s)
+    --- PASS: TestDiscovery/configured_JWKS_URL_skips_discovery (0.01s)
+    --- PASS: TestDiscovery/refresh_at_start-up (0.01s)
+=== RUN   TestInsecureHTTPIsOptInAndLoopbackOnly
+--- PASS: TestInsecureHTTPIsOptInAndLoopbackOnly (0.02s)
+=== RUN   TestNewRefusesInvalidConfig
+=== RUN   TestNewRefusesInvalidConfig/issuer_with_fragment
+=== RUN   TestNewRefusesInvalidConfig/issuer_with_userinfo
+=== RUN   TestNewRefusesInvalidConfig/kind_claim_is_sub
+=== RUN   TestNewRefusesInvalidConfig/negative_leeway
+=== RUN   TestNewRefusesInvalidConfig/negative_token_size
+=== RUN   TestNewRefusesInvalidConfig/empty_token_type
+=== RUN   TestNewRefusesInvalidConfig/no_issuer
+=== RUN   TestNewRefusesInvalidConfig/relative_issuer
+=== RUN   TestNewRefusesInvalidConfig/issuer_with_query
+=== RUN   TestNewRefusesInvalidConfig/no_audience
+=== RUN   TestNewRefusesInvalidConfig/same_claim_twice
+=== RUN   TestNewRefusesInvalidConfig/leeway_too_large
+--- PASS: TestNewRefusesInvalidConfig (0.01s)
+    --- PASS: TestNewRefusesInvalidConfig/issuer_with_fragment (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/issuer_with_userinfo (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/kind_claim_is_sub (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/negative_leeway (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/negative_token_size (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/empty_token_type (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/no_issuer (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/relative_issuer (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/issuer_with_query (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/no_audience (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/same_claim_twice (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/leeway_too_large (0.00s)
+=== RUN   TestCustomClaimNames
+--- PASS: TestCustomClaimNames (0.01s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	0.796s
+=== RUN   TestCriticalEventTypes
+--- PASS: TestCriticalEventTypes (0.00s)
+=== RUN   TestSlogAlerterLogsAtError
+--- PASS: TestSlogAlerterLogsAtError (0.00s)
+=== RUN   TestEncodeEnvelopeUsesBentoEncoding
+--- PASS: TestEncodeEnvelopeUsesBentoEncoding (0.00s)
+=== RUN   TestEncodeEnvelopeKeepsInvalidEnvelope
+--- PASS: TestEncodeEnvelopeKeepsInvalidEnvelope (0.00s)
+=== RUN   TestCutTextKeepsValidUTF8
+--- PASS: TestCutTextKeepsValidUTF8 (0.00s)
+=== RUN   TestRelayPublishesInClaimOrder
+--- PASS: TestRelayPublishesInClaimOrder (0.00s)
+=== RUN   TestRelayRecordsFailureWithBackoff
+--- PASS: TestRelayRecordsFailureWithBackoff (0.00s)
+=== RUN   TestRelayRecordsFailureWhenPublishTimesOut
+--- PASS: TestRelayRecordsFailureWhenPublishTimesOut (0.02s)
+=== RUN   TestRelayDeadLettersRejectedDelivery
+--- PASS: TestRelayDeadLettersRejectedDelivery (0.00s)
+=== RUN   TestRelayDeadLettersInvalidEnvelopeWithoutPublishing
+--- PASS: TestRelayDeadLettersInvalidEnvelopeWithoutPublishing (0.00s)
+=== RUN   TestRelayDeadLettersWhenFailureBudgetIsSpent
+--- PASS: TestRelayDeadLettersWhenFailureBudgetIsSpent (0.00s)
+=== RUN   TestRelayDeadLettersWhenLastAttemptFails
+--- PASS: TestRelayDeadLettersWhenLastAttemptFails (0.00s)
+=== RUN   TestRelayDeadLettersDeliveryClaimedBeyondAttemptBudget
+--- PASS: TestRelayDeadLettersDeliveryClaimedBeyondAttemptBudget (0.00s)
+=== RUN   TestRelayMarksRevocationAndRiskDeadLettersCritical
+--- PASS: TestRelayMarksRevocationAndRiskDeadLettersCritical (0.00s)
+=== RUN   TestRelayAbandonsUnscopedEnvelopeWithCriticalAlert
+--- PASS: TestRelayAbandonsUnscopedEnvelopeWithCriticalAlert (0.00s)
+=== RUN   TestRelayDoesNotAlertWhenAnotherWorkerOwnsTheDelivery
+--- PASS: TestRelayDoesNotAlertWhenAnotherWorkerOwnsTheDelivery (0.00s)
+=== RUN   TestRelayFailsRoundWhenDeadLetterCannotBeStored
+--- PASS: TestRelayFailsRoundWhenDeadLetterCannotBeStored (0.00s)
+=== RUN   TestRelayTreatsLostLeaseAsSettled
+--- PASS: TestRelayTreatsLostLeaseAsSettled (0.00s)
+=== RUN   TestRelayLeavesDeliveryLeasedWhenStopping
+--- PASS: TestRelayLeavesDeliveryLeasedWhenStopping (0.00s)
+=== RUN   TestRelayBackoffDoublesUpToMax
+--- PASS: TestRelayBackoffDoublesUpToMax (0.00s)
+=== RUN   TestRelayRejectsMisconfiguration
+--- PASS: TestRelayRejectsMisconfiguration (0.00s)
+=== RUN   TestWebhookPostsEnvelopeWithIdempotencyKey
+--- PASS: TestWebhookPostsEnvelopeWithIdempotencyKey (0.03s)
+=== RUN   TestWebhookClassifiesSinkAnswers
+--- PASS: TestWebhookClassifiesSinkAnswers (0.07s)
+=== RUN   TestBudgetExhaustionStoresDeadLetter
+--- PASS: TestBudgetExhaustionStoresDeadLetter (0.13s)
+=== RUN   TestAbandonmentCommitsWithItsDeadLetter
+--- PASS: TestAbandonmentCommitsWithItsDeadLetter (0.14s)
+=== RUN   TestDeliveryBeyondAttemptBudgetIsDeadLettered
+--- PASS: TestDeliveryBeyondAttemptBudgetIsDeadLettered (0.13s)
+=== RUN   TestDeadLettersAreIsolatedByScope
+--- PASS: TestDeadLettersAreIsolatedByScope (0.18s)
+=== RUN   TestHumanReplayRepublishesWithSameEventID
+--- PASS: TestHumanReplayRepublishesWithSameEventID (0.17s)
+=== RUN   TestConcurrentReplaysAreHarmless
+--- PASS: TestConcurrentReplaysAreHarmless (0.18s)
+=== RUN   TestRelayRetriesFailedPublishThenSucceeds
+--- PASS: TestRelayRetriesFailedPublishThenSucceeds (0.11s)
+=== RUN   TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition
+--- PASS: TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition (0.12s)
+=== RUN   TestWorkerCrashRecoveryDrill
+    relay_integration_test.go:279: re-delivered 3.067s after the first delivery (lease 3s)
+    relay_integration_test.go:280: second worker:
+        time=2026-11-10T04:05:22.242-07:00 level=INFO msg="relaying outbox" schema=brant_t_outbox_9c2521ccb123 sink=http://127.0.0.1:44631 lease=3s
+        time=2026-11-10T04:05:25.336-07:00 level=INFO msg=stopped
+--- PASS: TestWorkerCrashRecoveryDrill (3.59s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	4.865s
+=== RUN   TestDecodeRejects
+=== RUN   TestDecodeRejects/duplicate_key_(V0.50_test_cli)
+=== RUN   TestDecodeRejects/duplicate_key_in_an_array_element
+=== RUN   TestDecodeRejects/duplicate_key_spelled_with_an_escape
+=== RUN   TestDecodeRejects/duplicate_key_in_a_free-form_map
+=== RUN   TestDecodeRejects/null_at_top_level
+=== RUN   TestDecodeRejects/null_member_(V0.50_test_core_customer_id)
+=== RUN   TestDecodeRejects/null_array_element
+=== RUN   TestDecodeRejects/null_inside_a_free-form_value
+=== RUN   TestDecodeRejects/float_120.0_(V0.50_test_core_quantity)
+=== RUN   TestDecodeRejects/exponent_1e3
+=== RUN   TestDecodeRejects/fraction_-0.5
+=== RUN   TestDecodeRejects/exponent_1E+2
+=== RUN   TestDecodeRejects/exponent_0e0
+=== RUN   TestDecodeRejects/beyond_int64
+=== RUN   TestDecodeRejects/below_int64
+=== RUN   TestDecodeRejects/float_in_a_free-form_value
+=== RUN   TestDecodeRejects/NaN
+=== RUN   TestDecodeRejects/Infinity
+=== RUN   TestDecodeRejects/-Infinity
+=== RUN   TestDecodeRejects/leading_zero
+=== RUN   TestDecodeRejects/invalid_UTF-8_in_a_string
+=== RUN   TestDecodeRejects/invalid_UTF-8_in_a_key
+=== RUN   TestDecodeRejects/invalid_UTF-8_outside_strings
+=== RUN   TestDecodeRejects/overlong_encoding
+=== RUN   TestDecodeRejects/encoded_surrogate
+=== RUN   TestDecodeRejects/truncated_sequence
+=== RUN   TestDecodeRejects/lone_high_surrogate_escape
+=== RUN   TestDecodeRejects/lone_low_surrogate_escape
+=== RUN   TestDecodeRejects/high_surrogate_before_a_non-surrogate
+=== RUN   TestDecodeRejects/lone_surrogate_escape_in_a_key
+=== RUN   TestDecodeRejects/trailing_object
+=== RUN   TestDecodeRejects/trailing_garbage
+=== RUN   TestDecodeRejects/trailing_bracket
+=== RUN   TestDecodeRejects/top-level_array
+=== RUN   TestDecodeRejects/top-level_string
+=== RUN   TestDecodeRejects/top-level_number
+=== RUN   TestDecodeRejects/empty_body
+=== RUN   TestDecodeRejects/whitespace_only
+=== RUN   TestDecodeRejects/byte_order_mark
+=== RUN   TestDecodeRejects/trailing_comma
+=== RUN   TestDecodeRejects/missing_colon
+=== RUN   TestDecodeRejects/truncated
+=== RUN   TestDecodeRejects/unknown_field_status_(V0.50_test_core)
+=== RUN   TestDecodeRejects/scope_field_tenant_id_(V0.50_test_core)
+=== RUN   TestDecodeRejects/unknown_field_at_top_level
+=== RUN   TestDecodeRejects/unknown_field_in_an_array_element
+=== RUN   TestDecodeRejects/key_differing_in_case
+=== RUN   TestDecodeRejects/case_variant_after_the_exact_key
+=== RUN   TestDecodeRejects/Kelvin_sign_folding_to_k
+=== RUN   TestDecodeRejects/keys_with_/_and_~
+=== RUN   TestDecodeRejects/unknown_key_with_/_and_~
+=== RUN   TestDecodeRejects/unknown_key_that_looks_escaped
+=== RUN   TestDecodeRejects/number_where_a_string_is_expected
+=== RUN   TestDecodeRejects/string_where_an_integer_is_expected
+=== RUN   TestDecodeRejects/boolean_where_a_string_is_expected
+=== RUN   TestDecodeRejects/string_where_a_boolean_is_expected
+=== RUN   TestDecodeRejects/object_where_an_array_is_expected
+=== RUN   TestDecodeRejects/array_where_an_object_is_expected
+=== RUN   TestDecodeRejects/object_where_a_string_is_expected
+=== RUN   TestDecodeRejects/int32_overflow
+=== RUN   TestDecodeRejects/int32_underflow
+=== RUN   TestDecodeRejects/negative_unsigned
+=== RUN   TestDecodeRejects/uint16_overflow
+=== RUN   TestDecodeRejects/fixed_array_overflow
+--- PASS: TestDecodeRejects (0.00s)
+    --- PASS: TestDecodeRejects/duplicate_key_(V0.50_test_cli) (0.00s)
+    --- PASS: TestDecodeRejects/duplicate_key_in_an_array_element (0.00s)
+    --- PASS: TestDecodeRejects/duplicate_key_spelled_with_an_escape (0.00s)
+    --- PASS: TestDecodeRejects/duplicate_key_in_a_free-form_map (0.00s)
+    --- PASS: TestDecodeRejects/null_at_top_level (0.00s)
+    --- PASS: TestDecodeRejects/null_member_(V0.50_test_core_customer_id) (0.00s)
+    --- PASS: TestDecodeRejects/null_array_element (0.00s)
+    --- PASS: TestDecodeRejects/null_inside_a_free-form_value (0.00s)
+    --- PASS: TestDecodeRejects/float_120.0_(V0.50_test_core_quantity) (0.00s)
+    --- PASS: TestDecodeRejects/exponent_1e3 (0.00s)
+    --- PASS: TestDecodeRejects/fraction_-0.5 (0.00s)
+    --- PASS: TestDecodeRejects/exponent_1E+2 (0.00s)
+    --- PASS: TestDecodeRejects/exponent_0e0 (0.00s)
+    --- PASS: TestDecodeRejects/beyond_int64 (0.00s)
+    --- PASS: TestDecodeRejects/below_int64 (0.00s)
+    --- PASS: TestDecodeRejects/float_in_a_free-form_value (0.00s)
+    --- PASS: TestDecodeRejects/NaN (0.00s)
+    --- PASS: TestDecodeRejects/Infinity (0.00s)
+    --- PASS: TestDecodeRejects/-Infinity (0.00s)
+    --- PASS: TestDecodeRejects/leading_zero (0.00s)
+    --- PASS: TestDecodeRejects/invalid_UTF-8_in_a_string (0.00s)
+    --- PASS: TestDecodeRejects/invalid_UTF-8_in_a_key (0.00s)
+    --- PASS: TestDecodeRejects/invalid_UTF-8_outside_strings (0.00s)
+    --- PASS: TestDecodeRejects/overlong_encoding (0.00s)
+    --- PASS: TestDecodeRejects/encoded_surrogate (0.00s)
+    --- PASS: TestDecodeRejects/truncated_sequence (0.00s)
+    --- PASS: TestDecodeRejects/lone_high_surrogate_escape (0.00s)
+    --- PASS: TestDecodeRejects/lone_low_surrogate_escape (0.00s)
+    --- PASS: TestDecodeRejects/high_surrogate_before_a_non-surrogate (0.00s)
+    --- PASS: TestDecodeRejects/lone_surrogate_escape_in_a_key (0.00s)
+    --- PASS: TestDecodeRejects/trailing_object (0.00s)
+    --- PASS: TestDecodeRejects/trailing_garbage (0.00s)
+    --- PASS: TestDecodeRejects/trailing_bracket (0.00s)
+    --- PASS: TestDecodeRejects/top-level_array (0.00s)
+    --- PASS: TestDecodeRejects/top-level_string (0.00s)
+    --- PASS: TestDecodeRejects/top-level_number (0.00s)
+    --- PASS: TestDecodeRejects/empty_body (0.00s)
+    --- PASS: TestDecodeRejects/whitespace_only (0.00s)
+    --- PASS: TestDecodeRejects/byte_order_mark (0.00s)
+    --- PASS: TestDecodeRejects/trailing_comma (0.00s)
+    --- PASS: TestDecodeRejects/missing_colon (0.00s)
+    --- PASS: TestDecodeRejects/truncated (0.00s)
+    --- PASS: TestDecodeRejects/unknown_field_status_(V0.50_test_core) (0.00s)
+    --- PASS: TestDecodeRejects/scope_field_tenant_id_(V0.50_test_core) (0.00s)
+    --- PASS: TestDecodeRejects/unknown_field_at_top_level (0.00s)
+    --- PASS: TestDecodeRejects/unknown_field_in_an_array_element (0.00s)
+    --- PASS: TestDecodeRejects/key_differing_in_case (0.00s)
+    --- PASS: TestDecodeRejects/case_variant_after_the_exact_key (0.00s)
+    --- PASS: TestDecodeRejects/Kelvin_sign_folding_to_k (0.00s)
+    --- PASS: TestDecodeRejects/keys_with_/_and_~ (0.00s)
+    --- PASS: TestDecodeRejects/unknown_key_with_/_and_~ (0.00s)
+    --- PASS: TestDecodeRejects/unknown_key_that_looks_escaped (0.00s)
+    --- PASS: TestDecodeRejects/number_where_a_string_is_expected (0.00s)
+    --- PASS: TestDecodeRejects/string_where_an_integer_is_expected (0.00s)
+    --- PASS: TestDecodeRejects/boolean_where_a_string_is_expected (0.00s)
+    --- PASS: TestDecodeRejects/string_where_a_boolean_is_expected (0.00s)
+    --- PASS: TestDecodeRejects/object_where_an_array_is_expected (0.00s)
+    --- PASS: TestDecodeRejects/array_where_an_object_is_expected (0.00s)
+    --- PASS: TestDecodeRejects/object_where_a_string_is_expected (0.00s)
+    --- PASS: TestDecodeRejects/int32_overflow (0.00s)
+    --- PASS: TestDecodeRejects/int32_underflow (0.00s)
+    --- PASS: TestDecodeRejects/negative_unsigned (0.00s)
+    --- PASS: TestDecodeRejects/uint16_overflow (0.00s)
+    --- PASS: TestDecodeRejects/fixed_array_overflow (0.00s)
+=== RUN   TestDecodeAcceptsAClosedRequest
+--- PASS: TestDecodeAcceptsAClosedRequest (0.00s)
+=== RUN   TestDecodeKeepsPresence
+--- PASS: TestDecodeKeepsPresence (0.00s)
+=== RUN   TestDecodeNestingLimit
+--- PASS: TestDecodeNestingLimit (0.00s)
+=== RUN   TestDecodeValueLimit
+--- PASS: TestDecodeValueLimit (0.05s)
+=== RUN   TestDecodeSizeLimit
+=== RUN   TestDecodeSizeLimit/1_MiB_+_1_spaces_(V0.50_test_cli)
+=== RUN   TestDecodeSizeLimit/1_MiB_+_1_valid_request
+=== RUN   TestDecodeSizeLimit/far_beyond
+--- PASS: TestDecodeSizeLimit (0.01s)
+    --- PASS: TestDecodeSizeLimit/1_MiB_+_1_spaces_(V0.50_test_cli) (0.00s)
+    --- PASS: TestDecodeSizeLimit/1_MiB_+_1_valid_request (0.00s)
+    --- PASS: TestDecodeSizeLimit/far_beyond (0.00s)
+=== RUN   TestDecodeReadsAtMostOneByteBeyondTheLimit
+--- PASS: TestDecodeReadsAtMostOneByteBeyondTheLimit (0.00s)
+=== RUN   TestDecodeReadFailures
+--- PASS: TestDecodeReadFailures (0.00s)
+=== RUN   TestDecodeNeedsANonNilPointer
+--- PASS: TestDecodeNeedsANonNilPointer (0.00s)
+=== RUN   TestDecodeResolvesFieldsLikeEncodingJSON
+--- PASS: TestDecodeResolvesFieldsLikeEncodingJSON (0.00s)
+=== RUN   TestDecodeResolvesUnusualTagsLikeEncodingJSON
+--- PASS: TestDecodeResolvesUnusualTagsLikeEncodingJSON (0.00s)
+=== RUN   TestDecodeHonoursCustomUnmarshalers
+--- PASS: TestDecodeHonoursCustomUnmarshalers (0.00s)
+=== RUN   TestDecodeIntoInterface
+--- PASS: TestDecodeIntoInterface (0.00s)
+=== RUN   TestPointerEscaping
+--- PASS: TestPointerEscaping (0.00s)
+=== RUN   FuzzDecode
+=== RUN   FuzzDecode/seed#0
+=== RUN   FuzzDecode/seed#1
+=== RUN   FuzzDecode/seed#2
+=== RUN   FuzzDecode/seed#3
+=== RUN   FuzzDecode/seed#4
+=== RUN   FuzzDecode/seed#5
+=== RUN   FuzzDecode/seed#6
+=== RUN   FuzzDecode/seed#7
+=== RUN   FuzzDecode/seed#8
+=== RUN   FuzzDecode/seed#9
+=== RUN   FuzzDecode/seed#10
+=== RUN   FuzzDecode/seed#11
+=== RUN   FuzzDecode/seed#12
+=== RUN   FuzzDecode/seed#13
+=== RUN   FuzzDecode/seed#14
+=== RUN   FuzzDecode/seed#15
+=== RUN   FuzzDecode/seed#16
+=== RUN   FuzzDecode/seed#17
+=== RUN   FuzzDecode/seed#18
+=== RUN   FuzzDecode/seed#19
+=== RUN   FuzzDecode/seed#20
+=== RUN   FuzzDecode/seed#21
+=== RUN   FuzzDecode/seed#22
+=== RUN   FuzzDecode/seed#23
+=== RUN   FuzzDecode/seed#24
+=== RUN   FuzzDecode/seed#25
+=== RUN   FuzzDecode/seed#26
+=== RUN   FuzzDecode/seed#27
+=== RUN   FuzzDecode/seed#28
+=== RUN   FuzzDecode/seed#29
+=== RUN   FuzzDecode/seed#30
+=== RUN   FuzzDecode/seed#31
+=== RUN   FuzzDecode/seed#32
+=== RUN   FuzzDecode/seed#33
+=== RUN   FuzzDecode/seed#34
+=== RUN   FuzzDecode/seed#35
+=== RUN   FuzzDecode/seed#36
+=== RUN   FuzzDecode/seed#37
+=== RUN   FuzzDecode/seed#38
+=== RUN   FuzzDecode/seed#39
+=== RUN   FuzzDecode/seed#40
+=== RUN   FuzzDecode/seed#41
+=== RUN   FuzzDecode/seed#42
+=== RUN   FuzzDecode/seed#43
+=== RUN   FuzzDecode/seed#44
+=== RUN   FuzzDecode/seed#45
+=== RUN   FuzzDecode/seed#46
+=== RUN   FuzzDecode/seed#47
+=== RUN   FuzzDecode/seed#48
+=== RUN   FuzzDecode/seed#49
+=== RUN   FuzzDecode/seed#50
+=== RUN   FuzzDecode/seed#51
+=== RUN   FuzzDecode/seed#52
+=== RUN   FuzzDecode/seed#53
+=== RUN   FuzzDecode/seed#54
+=== RUN   FuzzDecode/seed#55
+=== RUN   FuzzDecode/seed#56
+=== RUN   FuzzDecode/seed#57
+=== RUN   FuzzDecode/seed#58
+=== RUN   FuzzDecode/seed#59
+=== RUN   FuzzDecode/seed#60
+=== RUN   FuzzDecode/seed#61
+=== RUN   FuzzDecode/seed#62
+=== RUN   FuzzDecode/seed#63
+=== RUN   FuzzDecode/seed#64
+=== RUN   FuzzDecode/seed#65
+=== RUN   FuzzDecode/seed#66
+=== RUN   FuzzDecode/seed#67
+=== RUN   FuzzDecode/seed#68
+--- PASS: FuzzDecode (0.00s)
+    --- PASS: FuzzDecode/seed#0 (0.00s)
+    --- PASS: FuzzDecode/seed#1 (0.00s)
+    --- PASS: FuzzDecode/seed#2 (0.00s)
+    --- PASS: FuzzDecode/seed#3 (0.00s)
+    --- PASS: FuzzDecode/seed#4 (0.00s)
+    --- PASS: FuzzDecode/seed#5 (0.00s)
+    --- PASS: FuzzDecode/seed#6 (0.00s)
+    --- PASS: FuzzDecode/seed#7 (0.00s)
+    --- PASS: FuzzDecode/seed#8 (0.00s)
+    --- PASS: FuzzDecode/seed#9 (0.00s)
+    --- PASS: FuzzDecode/seed#10 (0.00s)
+    --- PASS: FuzzDecode/seed#11 (0.00s)
+    --- PASS: FuzzDecode/seed#12 (0.00s)
+    --- PASS: FuzzDecode/seed#13 (0.00s)
+    --- PASS: FuzzDecode/seed#14 (0.00s)
+    --- PASS: FuzzDecode/seed#15 (0.00s)
+    --- PASS: FuzzDecode/seed#16 (0.00s)
+    --- PASS: FuzzDecode/seed#17 (0.00s)
+    --- PASS: FuzzDecode/seed#18 (0.00s)
+    --- PASS: FuzzDecode/seed#19 (0.00s)
+    --- PASS: FuzzDecode/seed#20 (0.00s)
+    --- PASS: FuzzDecode/seed#21 (0.00s)
+    --- PASS: FuzzDecode/seed#22 (0.00s)
+    --- PASS: FuzzDecode/seed#23 (0.00s)
+    --- PASS: FuzzDecode/seed#24 (0.00s)
+    --- PASS: FuzzDecode/seed#25 (0.00s)
+    --- PASS: FuzzDecode/seed#26 (0.00s)
+    --- PASS: FuzzDecode/seed#27 (0.00s)
+    --- PASS: FuzzDecode/seed#28 (0.00s)
+    --- PASS: FuzzDecode/seed#29 (0.00s)
+    --- PASS: FuzzDecode/seed#30 (0.00s)
+    --- PASS: FuzzDecode/seed#31 (0.00s)
+    --- PASS: FuzzDecode/seed#32 (0.00s)
+    --- PASS: FuzzDecode/seed#33 (0.00s)
+    --- PASS: FuzzDecode/seed#34 (0.00s)
+    --- PASS: FuzzDecode/seed#35 (0.00s)
+    --- PASS: FuzzDecode/seed#36 (0.00s)
+    --- PASS: FuzzDecode/seed#37 (0.00s)
+    --- PASS: FuzzDecode/seed#38 (0.00s)
+    --- PASS: FuzzDecode/seed#39 (0.00s)
+    --- PASS: FuzzDecode/seed#40 (0.00s)
+    --- PASS: FuzzDecode/seed#41 (0.00s)
+    --- PASS: FuzzDecode/seed#42 (0.00s)
+    --- PASS: FuzzDecode/seed#43 (0.00s)
+    --- PASS: FuzzDecode/seed#44 (0.00s)
+    --- PASS: FuzzDecode/seed#45 (0.00s)
+    --- PASS: FuzzDecode/seed#46 (0.00s)
+    --- PASS: FuzzDecode/seed#47 (0.00s)
+    --- PASS: FuzzDecode/seed#48 (0.00s)
+    --- PASS: FuzzDecode/seed#49 (0.00s)
+    --- PASS: FuzzDecode/seed#50 (0.00s)
+    --- PASS: FuzzDecode/seed#51 (0.00s)
+    --- PASS: FuzzDecode/seed#52 (0.00s)
+    --- PASS: FuzzDecode/seed#53 (0.00s)
+    --- PASS: FuzzDecode/seed#54 (0.00s)
+    --- PASS: FuzzDecode/seed#55 (0.00s)
+    --- PASS: FuzzDecode/seed#56 (0.00s)
+    --- PASS: FuzzDecode/seed#57 (0.00s)
+    --- PASS: FuzzDecode/seed#58 (0.00s)
+    --- PASS: FuzzDecode/seed#59 (0.00s)
+    --- PASS: FuzzDecode/seed#60 (0.00s)
+    --- PASS: FuzzDecode/seed#61 (0.00s)
+    --- PASS: FuzzDecode/seed#62 (0.00s)
+    --- PASS: FuzzDecode/seed#63 (0.00s)
+    --- PASS: FuzzDecode/seed#64 (0.00s)
+    --- PASS: FuzzDecode/seed#65 (0.00s)
+    --- PASS: FuzzDecode/seed#66 (0.00s)
+    --- PASS: FuzzDecode/seed#67 (0.00s)
+    --- PASS: FuzzDecode/seed#68 (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	0.072s
+=== RUN   TestPaymentTailFollowsRemainderOrder
+--- PASS: TestPaymentTailFollowsRemainderOrder (0.00s)
+=== RUN   TestTiesGoToTheSmallerID
+--- PASS: TestTiesGoToTheSmallerID (0.00s)
+=== RUN   TestAllocationRejectsInvalidInput
+--- PASS: TestAllocationRejectsInvalidInput (0.00s)
+=== RUN   TestAllocationProperties
+--- PASS: TestAllocationProperties (0.03s)
+=== RUN   TestParseDecimalAcceptsContractForms
+--- PASS: TestParseDecimalAcceptsContractForms (0.00s)
+=== RUN   TestParseDecimalRejectsEverythingElse
+--- PASS: TestParseDecimalRejectsEverythingElse (0.00s)
+=== RUN   TestRoundHalfUpIsExact
+--- PASS: TestRoundHalfUpIsExact (0.00s)
+=== RUN   TestExactAndString
+--- PASS: TestExactAndString (0.00s)
+=== RUN   TestQuoByZero
+--- PASS: TestQuoByZero (0.00s)
+=== RUN   TestCurrencyForm
+--- PASS: TestCurrencyForm (0.00s)
+=== RUN   TestParseMinorFollowsTheContractPattern
+--- PASS: TestParseMinorFollowsTheContractPattern (0.00s)
+=== RUN   TestParseAmountNeverRounds
+--- PASS: TestParseAmountNeverRounds (0.00s)
+=== RUN   TestAmountsOfDifferentCurrenciesNeverCombine
+--- PASS: TestAmountsOfDifferentCurrenciesNeverCombine (0.00s)
+=== RUN   TestAmountLimitIsTheCalculationLimit
+--- PASS: TestAmountLimitIsTheCalculationLimit (0.00s)
+=== RUN   TestMoneyIsImmutable
+--- PASS: TestMoneyIsImmutable (0.00s)
+=== RUN   TestLinesRoundBeforeAggregation
+--- PASS: TestLinesRoundBeforeAggregation (0.00s)
+=== RUN   TestBRC001Arithmetic
+--- PASS: TestBRC001Arithmetic (0.00s)
+=== RUN   TestTaxSplits
+--- PASS: TestTaxSplits (0.00s)
+=== RUN   TestExchangeRateConversion
+--- PASS: TestExchangeRateConversion (0.00s)
+=== RUN   TestTierArithmetic
+--- PASS: TestTierArithmetic (0.00s)
+=== RUN   TestMarginFloorIsComparedExactly
+--- PASS: TestMarginFloorIsComparedExactly (0.00s)
+=== RUN   TestUnitConversionUsesThePublishedFactor
+--- PASS: TestUnitConversionUsesThePublishedFactor (0.00s)
+=== RUN   TestRejectUsesTheCatalogCategoryAndPythonDefaults
+--- PASS: TestRejectUsesTheCatalogCategoryAndPythonDefaults (0.00s)
+=== RUN   TestRejectPanicsOnAnUnsharedCode
+--- PASS: TestRejectPanicsOnAnUnsharedCode (0.00s)
+=== RUN   TestFieldTextIsLimitedTo200Characters
+--- PASS: TestFieldTextIsLimitedTo200Characters (0.00s)
+=== RUN   TestIdentifierRule
+--- PASS: TestIdentifierRule (0.00s)
+=== RUN   TestScopeAndActor
+--- PASS: TestScopeAndActor (0.00s)
+=== RUN   TestParseScopeReadsStringForm
+--- PASS: TestParseScopeReadsStringForm (0.00s)
+=== RUN   TestValidityIsHalfOpen
+--- PASS: TestValidityIsHalfOpen (0.00s)
+=== RUN   TestTimestampsHaveMicrosecondPrecision
+--- PASS: TestTimestampsHaveMicrosecondPrecision (0.00s)
+=== RUN   FuzzParseDecimal
+=== RUN   FuzzParseDecimal/seed#0
+=== RUN   FuzzParseDecimal/seed#1
+=== RUN   FuzzParseDecimal/seed#2
+=== RUN   FuzzParseDecimal/seed#3
+=== RUN   FuzzParseDecimal/seed#4
+=== RUN   FuzzParseDecimal/seed#5
+=== RUN   FuzzParseDecimal/seed#6
+=== RUN   FuzzParseDecimal/seed#7
+=== RUN   FuzzParseDecimal/seed#8
+--- PASS: FuzzParseDecimal (0.00s)
+    --- PASS: FuzzParseDecimal/seed#0 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#1 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#2 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#3 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#4 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#5 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#6 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#7 (0.00s)
+    --- PASS: FuzzParseDecimal/seed#8 (0.00s)
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle/seed#0
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle/seed#1
+=== RUN   FuzzRoundHalfUpAgainstDigitOracle/seed#2
+--- PASS: FuzzRoundHalfUpAgainstDigitOracle (0.00s)
+    --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#0 (0.00s)
+    --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#1 (0.00s)
+    --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#2 (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.037s
+=== RUN   TestCommandReachesTheContextWithTheTokenPrincipal
+--- PASS: TestCommandReachesTheContextWithTheTokenPrincipal (0.00s)
+=== RUN   TestEnvelopeRejections
+=== RUN   TestEnvelopeRejections/null
+=== RUN   TestEnvelopeRejections/extra_field
+=== RUN   TestEnvelopeRejections/scope_in_body
+=== RUN   TestEnvelopeRejections/float
+=== RUN   TestEnvelopeRejections/duplicate_key
+=== RUN   TestEnvelopeRejections/unknown_contract
+=== RUN   TestEnvelopeRejections/command_differs_from_route
+=== RUN   TestEnvelopeRejections/member_name_case
+=== RUN   TestEnvelopeRejections/nested_float
+=== RUN   TestEnvelopeRejections/empty_string
+=== RUN   TestEnvelopeRejections/missing_version
+=== RUN   TestEnvelopeRejections/wrong_type
+=== RUN   TestEnvelopeRejections/missing_args
+=== RUN   TestEnvelopeRejections/too_large
+--- PASS: TestEnvelopeRejections (0.00s)
+    --- PASS: TestEnvelopeRejections/null (0.00s)
+    --- PASS: TestEnvelopeRejections/extra_field (0.00s)
+    --- PASS: TestEnvelopeRejections/scope_in_body (0.00s)
+    --- PASS: TestEnvelopeRejections/float (0.00s)
+    --- PASS: TestEnvelopeRejections/duplicate_key (0.00s)
+    --- PASS: TestEnvelopeRejections/unknown_contract (0.00s)
+    --- PASS: TestEnvelopeRejections/command_differs_from_route (0.00s)
+    --- PASS: TestEnvelopeRejections/member_name_case (0.00s)
+    --- PASS: TestEnvelopeRejections/nested_float (0.00s)
+    --- PASS: TestEnvelopeRejections/empty_string (0.00s)
+    --- PASS: TestEnvelopeRejections/missing_version (0.00s)
+    --- PASS: TestEnvelopeRejections/wrong_type (0.00s)
+    --- PASS: TestEnvelopeRejections/missing_args (0.00s)
+    --- PASS: TestEnvelopeRejections/too_large (0.00s)
+=== RUN   TestUnauthenticatedRequestsAreRefusedBeforeAnything
+2026/11/10 04:05:20 INFO request not authenticated correlation_id=corr-01a1c478-9800-7fd8-b148-979fa21bc09f reason="identity: unauthenticated"
+2026/11/10 04:05:20 INFO request not authenticated correlation_id=corr-01a1c478-9800-7472-8a28-672f38e4caf8 reason="identity: unauthenticated"
+--- PASS: TestUnauthenticatedRequestsAreRefusedBeforeAnything (0.00s)
+=== RUN   TestContextOutcomesMapByCategory
+2026/11/10 04:05:20 ERROR request failed correlation_id=corr-01a1c478-9800-737e-b3a2-6223796608f1 error="connection refused to 10.0.0.1"
+2026/11/10 04:05:20 ERROR commit outcome uncertain correlation_id=corr-01a1c478-9800-75af-b92d-62ce1317e24f error="application: transaction commit outcome uncertain\neof"
+--- PASS: TestContextOutcomesMapByCategory (0.00s)
+=== RUN   TestReadsAnswerViewsAndRejections
+--- PASS: TestReadsAnswerViewsAndRejections (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/transport/httpapi	0.008s
+=== RUN   TestClassify
+--- PASS: TestClassify (0.00s)
+=== RUN   TestImportRules
+--- PASS: TestImportRules (0.00s)
+=== RUN   TestPackagesOutsideTheLayersAreReported
+--- PASS: TestPackagesOutsideTheLayersAreReported (0.00s)
+=== RUN   TestTestSupportIsForTestFilesOnly
+--- PASS: TestTestSupportIsForTestFilesOnly (0.00s)
+=== RUN   TestDocsHoldNoGoCode
+--- PASS: TestDocsHoldNoGoCode (0.00s)
+=== RUN   TestGeneratedAllowlistCoversPresentContextsOnly
+--- PASS: TestGeneratedAllowlistCoversPresentContextsOnly (0.00s)
+=== RUN   TestArchiveContextMapIsReadable
+--- PASS: TestArchiveContextMapIsReadable (0.00s)
+=== RUN   TestCodeownersMustNameEveryContextAndTheKernel
+--- PASS: TestCodeownersMustNameEveryContextAndTheKernel (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.003s
+=== RUN   TestSC04OptionAPrefetchLeavesACommitWindow
+--- PASS: TestSC04OptionAPrefetchLeavesACommitWindow (0.07s)
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first
+=== RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first
+--- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder (0.08s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first (0.01s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first (0.02s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first (0.01s)
+=== RUN   TestSC03CheckThenActWithoutRootLockLetsBothWin
+--- PASS: TestSC03CheckThenActWithoutRootLockLetsBothWin (0.07s)
+=== RUN   TestSC03RootLockLetsExactlyOneWin
+=== RUN   TestSC03RootLockLetsExactlyOneWin/replace_first
+=== RUN   TestSC03RootLockLetsExactlyOneWin/convert_first
+--- PASS: TestSC03RootLockLetsExactlyOneWin (0.07s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/replace_first (0.02s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/convert_first (0.01s)
+=== RUN   TestSC03StressComparesTheTwoImplementations
+    consistency_integration_test.go:617: no root lock: 200 of 200 rounds had two winners
+    consistency_integration_test.go:617: root row FOR UPDATE first: 0 of 200 rounds had two winners
+--- PASS: TestSC03StressComparesTheTwoImplementations (3.22s)
+PASS
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	3.516s
+exit=0
