@@ -15,12 +15,12 @@ foot: S1 Execution Report V0.1 · 2026-11-10
 
 <h2>远程 CI 已跑通；询价主链在 PostgreSQL 16 上从来源走到 ready，并能经 HTTP 与 OIDC 令牌重放</h2>
 
-<p class="lede">2026-11-10，修复了使 GitHub Actions 无法解析的工作流文件，远程 CI 在私有仓库 idpxyz/idp-brantgo 上首次通过。S1 建立了命令账本（幂等、重放、审计与 Outbox 同一事务）和 EVD、PTY、CAT、INQ 四个上下文，HTTP 入口以 OIDC 访问令牌认证，Outbox 有了死信、告警与人工重放。BRC-001 前段（四行合计 120 PCS 的询价确认为 ready）在 PostgreSQL 16 上直接调用和经 HTTP 都已重放。POL、主体筛查与名单导入尚未完成；G1 仍为 NO-GO。</p>
+<p class="lede">2026-11-10，修复了使 GitHub Actions 无法解析的工作流文件，远程 CI 在私有仓库 idpxyz/idp-brantgo 上首次通过。S1 建立了命令账本（幂等、重放、审计与 Outbox 同一事务）和 EVD、PTY、CAT、INQ、POL 五个上下文，HTTP 入口以 OIDC 访问令牌认证，Outbox 有了死信、告警与人工重放。BRC-001 前段（四行合计 120 PCS 的询价确认为 ready）在 PostgreSQL 16 上直接调用和经 HTTP 都已重放。POL 完成首批 5 种配置类型；主体筛查与名单导入尚未开始；G1 仍为 NO-GO。</p>
 
 ::: cover
-- 结论 | S1 部分完成：S1-05、S1-08、S1-10 完成并有远程 CI 记录；S1-01、02、03、06、07 部分完成；S1-04、09、11 未完成或进行中。
+- 结论 | S1 部分完成：S1-01、S1-05、S1-08、S1-10 完成并有远程 CI 记录；S1-02、03、04、06、07 部分完成；S1-09、11 未开始。
 - 证据 | 05_S1_EVIDENCE：环境、源文件 SHA-256 快照、make ci、逐项测试日志、GitHub Actions 运行记录、严格 JSON 模糊测试。
-- 未执行 | 受保护主干与必需评审（GitHub 免费版私有仓库不提供）、真实身份提供方、岗位模板（BC-D02）、Inbox 与 ErrCommitUncertain 恢复、OpenAPI 3.1 候选、真实客户样例。
+- 未执行 | 受保护主干与必需评审（GitHub 免费版私有仓库不提供）、真实身份提供方、岗位模板（BC-D02）、Inbox 与 ErrCommitUncertain 恢复、POL 的 ConfigGuard 与其余 13 种配置、OpenAPI 3.1 候选、真实客户样例。
 :::
 
 ## 01 结论摘要 {#s1}
@@ -29,10 +29,11 @@ foot: S1 Execution Report V0.1 · 2026-11-10
 - G1 · C04、C05、C06 | 远程 CI 跑通 | 工作流文件第 67 行的 YAML 解析错误使首次推送 0 秒失败；修复后 GitHub Actions 全部 17 步通过，S1 分支每次推送都在全新 PostgreSQL 16.12 上迁移并运行集成与竞态测试。
 - G1 · C09 | 受保护主干未配置 | GitHub 免费版的私有仓库不提供分支保护与规则集（API 返回 403）。需要升级 Pro／Team 或改用其他托管，由负责人决定。
 - S1 公共骨架 | 命令账本 | 契约、权限、已存幂等结果、CAS 与状态、引用的准入顺序沿用 Python；业务变化、动作结果、审计与 Outbox 同一事务提交；重放重查当前权限与可见性；拒绝一律审计。
-- S1-01 | EVD 来源四层身份 | 内容按 SHA-256 在公司内去重；邮件按渠道、账户与消息 ID 识别，同消息不同正文拒绝；来源不可变（触发器与权限）；猜正文探测不到他人私有来源。
+- S1-01 | EVD 来源四层身份与业务文件 | 内容按 SHA-256 在公司内去重；邮件按渠道、账户与消息 ID 识别，同消息不同正文拒绝；来源不可变；猜正文探测不到他人私有来源。业务文件最多 10 MiB，校验类型与文件头，版本链不分叉。
 - S1-02 · 03 | PTY 主体与联系人、CAT 的 SKU | 整稿草稿、人工核实、修订回到草稿并保留已核实版本、停用；主体用角色集合，同一主体可同时是客户与供应商；SKU 每次核实固定一个规格修订号。
 - S1-05 · 08 | INQ 客户询价 | draft／ready／cancelled／closed；确认只限人工，须覆盖全部来源；记录确认时客户、联系人行版本与每行 SKU 规格修订号。BRC-001 前段四行 120 PCS 确认为 ready，直接调用与经 HTTP 各重放一次。
 - S1-06 · C10 | HTTP 入口与 OIDC | 1 MiB、64 层、10 万个值；拒绝重复键、null、浮点数、未知字段、大小写不同的键名与空字符串；访问令牌须有签发者、受众、有效期、租户、公司与显式的操作者类型。
+- S1-04 | POL 配置根与编号 | 配置的修订、发布须由编制人以外的人工执行（数据库约束同样强制）、原子替代、退役；首批 currency、unit、fx_rate、payment_terms、number_sequence；汇率按方向与用途、不推导反向、过期即阻断；单据编号按公司、类型、年度原子分配，同业务引用返回原号；基础快照只追加。
 - S1-10 · C13 | Outbox 死信、告警与重放 | 四条放弃路径（含 Bento 在领取次数超限时的静默放弃）都写入死信并告警；撤销、否认与风险类事件为关键告警；人工按事件 ID 以原事件 ID 重放。
 :::
 
@@ -54,10 +55,15 @@ foot: S1 Execution Report V0.1 · 2026-11-10
 | S1-D08 | 草稿保存不发布集成事件；核实、修订、停用、确认、取消、关闭发布 | 06 阶段事件目录 | Python 每条命令写一条本地 outbox 行 |
 | S1-D09 | 访问令牌默认只接受 typ=at+jwt，须带 kid；操作者类型声明必填，缺失从不当作人工 | RFC 9068；人工专属命令的安全前提 | Python 由本地适配器注入身份 |
 | S1-D10 | 重复 JSON 键返回 SCHEMA_INVALID（HTTP 422） | 错误码目录 | Python CLI 返回 transport_error INVALID_INPUT |
+| S1-D11 | POL 每个配置根只有一个编制中修订，保存为整稿替换；修订号单调且不复用 | SM-POL-REVISION | Python 每次保存产生新草稿修订 |
+| S1-D12 | POL 配置类型按战术模型命名（fx_rate、number_sequence 等）；每个修订都有有效区间，fx_rate 必须有截止 | 05 阶段战术模型 | Python 为 fx、sequence，只有部分类型有有效期 |
+| S1-D13 | 汇率以币种代码引用币种（币种语义按 POL-INV-002 不可变）；不设汇率上限；缺少交叉汇率返回 FX_SCOPE_MISMATCH，使用时过期返回 FX_STALE；换算由调用方用 kernel.ExchangeRate 一次舍入 | POL-INV-002、003；错误码目录 | Python 固定币种修订、汇率上限 1000、DRAFT_NOT_READY、CONFIG_EXPIRED，并提供 fx.convert 命令 |
+| S1-D14 | 同一业务引用在同一编号序列下返回原编号；序列的年份按其时区计算 | POL-INV-005 | Python 对重复业务引用返回 BUSINESS_KEY_CONFLICT，年份取公司档案 |
+| S1-D15 | 配置、编号与快照属于公司，不设数据范围归属；下游查询只需有效授权 | 事实权威：POL 为公司级配置 | Python 对编号与快照记录归属 |
 
 ## 03 Python 测试移植 {#s3}
 
-08 阶段映射表中 T01 与共享基础 V0.2 的 73 个测试方法：41 个已移植（PORTED），3 个为 SQLite 专属（NOT_APPLICABLE），其余等待 POL 与业务文件（S1-04、S1-01 的 file.register）。每个 Go 测试在注释中引用其 Python 来源。
+08 阶段映射表中 T01 与共享基础 V0.2 的 73 个测试方法：53 个已移植（PORTED），3 个为 SQLite 专属（NOT_APPLICABLE），17 个未移植；其中 4 个已移植一半（备注写明另一半所需的配置类型），其余依赖尚未实现的配置类型（company_profile、unit_conversion、tax、pricing_policy、document_template、bank_account、party_profile）。每个 Go 测试在注释中引用其 Python 来源。
 
 {{s1_ported}}
 
@@ -75,4 +81,7 @@ foot: S1 Execution Report V0.1 · 2026-11-10
 {{s1_evidence}}
 
 > [!warn] 尚未执行
-> 受保护主干、必需评审与签名溯源；真实身份提供方；岗位模板与职责分离（BC-D02）；Inbox 去重与 ErrCommitUncertain 恢复（S4-06）；OpenAPI 3.1 候选；主体筛查与名单导入（S1-09、S1-11）；业务文件 file.register；真实客户样例。G0、G1 仍为 NO-GO。
+> 受保护主干、必需评审与签名溯源；真实身份提供方；岗位模板与职责分离（BC-D02）；Inbox 去重与 ErrCommitUncertain 恢复（S4-06）；OpenAPI 3.1 候选；主体筛查与名单导入（S1-09、S1-11）；POL 的 ConfigGuard（ADR-BR-004 守卫函数）与其余 13 种配置类型；真实客户样例。G0、G1 仍为 NO-GO。
+
+> [!decision] 待裁决：配置发布的核实证据是否须可读
+> POL 发布要求核实证据 ID 并原样记录，但不校验这些来源可读：Context Map 没有 EVD→POL 关系。Python 在保存、发布与使用时都重查来源可读。若要求可读，需新增 EVD→POL 关系（与 R61、R62 同类），由 POL Owner 与首席架构师决定。

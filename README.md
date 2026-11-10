@@ -7,7 +7,7 @@
 - Go `1.26.5` (`toolchain` directive); PostgreSQL 16.
 - The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is not published with the code. `docs/00_START_HERE/00_INDEX.html` is its entry page.
 
-M0 built the engineering baseline. S1 (master data and inquiry) is in progress: EVD, PTY, CAT and INQ run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens; POL, party screening and screening-list import are not done yet.
+M0 built the engineering baseline. S1 (master data and inquiry) is in progress: EVD, PTY, CAT, INQ and POL (first five configuration kinds) run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens; party screening and screening-list import are not done yet.
 
 ## Layout
 
@@ -21,6 +21,7 @@ internal/contexts/evd/            EVD: text sources (content, origin, import) an
 internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup
 internal/contexts/cat/            CAT: SKUs and specification revisions; SkuRef lookup
 internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed
+internal/contexts/pol/            POL: configuration roots with independent publication, FX lookup, document numbers, snapshots
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping
 internal/kernel/                  value objects shared by every context; standard library only
                                   Decimal (math/big), Money in minor units, largest-remainder allocation, tax splits,
@@ -37,7 +38,7 @@ internal/foundation/strictjson/   closed-structure request decoding (C7): 1 MiB,
 migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
 migrations/msg/                   brant_msg: dead letters of the Outbox relay (FORCE RLS)
-migrations/{evd,pty,cat,inq}/     brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
+migrations/{evd,pty,cat,pol,inq}/     brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
 deploy/postgres/                  roles (brant_migrator, brant_app) and application grants
 scripts/dev-postgres.sh           development PostgreSQL 16 container brant-pg16 on 127.0.0.1:55471
 tools/dependency-check/           package rules; cross-context allowlist generated from the Context Map
@@ -83,7 +84,7 @@ Against another PostgreSQL 16:
 S1, 2026-11-10: GitHub Actions runs the workflow on the private repository `idpxyz/idp-brantgo`; the S1 branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). Branch protection and required reviews are not configured: GitHub does not offer them for private repositories on the Free plan. The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
 
 - The command ledger orders a command as the Python service does (contract, permission, stored result, CAS and state, references) and commits the change, the action result, the audit entry and the Outbox events together; replays re-check the current permission and visibility.
-- 41 Python V0.50 tests of T01 and the shared foundation are ported (08 stage mapping); the front of BRC-001 (four lines, 120 PCS, ready) replays on PostgreSQL 16 directly and over HTTP with OIDC access tokens.
+- 53 Python V0.50 tests of T01 and the shared foundation are ported (08 stage mapping); the front of BRC-001 (four lines, 120 PCS, ready) replays on PostgreSQL 16 directly and over HTTP with OIDC access tokens.
 - `go.sum` adds one module for S1: `github.com/go-jose/go-jose/v4` (JWS verification of access tokens).
 
 M0, local runs on 2026-11-07 against the dedicated container (PostgreSQL 16.12, Go 1.26.8 with the 1.26.5 toolchain floor): `make ci` passed. There is no remote repository yet, so the GitHub Actions workflow has not run and branch protection is not configured; both wait for the owner to create the repository.
