@@ -33,6 +33,12 @@ func dsn(t testing.TB, env string) string {
 	return v
 }
 
+// AppDSN returns the DSN of the application role, for tests that open Brant through bootstrap.
+func AppDSN(t testing.TB) string {
+	t.Helper()
+	return dsn(t, AppDSNEnv)
+}
+
 // AppPool returns a pool for the application role after database.Open's server and role checks.
 func AppPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()

@@ -19,13 +19,13 @@
     {"id": "PY-17", "severity": "Medium", "area": "资源", "finding": "入口资源预算（1 MiB、64 层、100000 值、1000 引用等）在 Python 入口与预算模块实现。", "impact": "Go 入口若遗漏会放宽限制。", "goAction": "transport/http 与应用层实现同等限制并加负向测试。", "ref": "T03 规格 §10；resource_budget.py"}
   ],
   "integrationGates": [
-    {"id": "IG-01", "gate": "G1", "name": "PG16 迁移与回滚", "evidence": "brant-migrate 空库、重复、篡改、失败回滚（本机 PG16 实测）", "owner": "DBA", "state": "DONE_LOCAL"},
-    {"id": "IG-02", "gate": "G1", "name": "RLS 与数据库角色负向测试", "evidence": "跨租户、跨公司、brant_app 无 DDL（brant_auth 负向测试，本机 PG16）", "owner": "DBA＋安全", "state": "DONE_LOCAL"},
+    {"id": "IG-01", "gate": "G1", "name": "PG16 迁移与回滚", "evidence": "brant-migrate 空库、重复、篡改、失败回滚（本机 PG16 实测）；GitHub Actions 每次运行在全新 PG16 上迁移并复跑幂等（S1 证据 05）", "owner": "DBA", "state": "DONE_CI"},
+    {"id": "IG-02", "gate": "G1", "name": "RLS 与数据库角色负向测试", "evidence": "跨租户、跨公司、brant_app 无 DDL（brant_auth、brant_msg 负向测试；S1 上下文跨公司隔离），本机 PG16 与 GitHub Actions", "owner": "DBA＋安全", "state": "DONE_CI"},
     {"id": "IG-03", "gate": "G1", "name": "同根并发（SC-03、BC-AT15、BC-AT17）", "evidence": "SC-03 已实测（根行 FOR UPDATE）；BC-AT15、BC-AT17 随 S3", "owner": "TRD Owner＋技术负责人", "state": "PARTIAL"},
     {"id": "IG-04", "gate": "G1", "name": "跨上下文资格重查（SC-04）", "evidence": "M0-10 实测支持方案 B；待 ADR-BR-004 裁决，生产守卫随 S2-06", "owner": "首席架构师", "state": "PARTIAL"},
-    {"id": "IG-05", "gate": "G1", "name": "Outbox 中继与崩溃演练", "evidence": "SIGKILL 后重投、SIGTERM 正常退出（本机 PG16）", "owner": "技术负责人", "state": "DONE_LOCAL"},
+    {"id": "IG-05", "gate": "G1", "name": "Outbox 中继与崩溃演练", "evidence": "SIGKILL 后重投、SIGTERM 正常退出；四条放弃路径写入死信并告警、人工重放（本机 PG16 与 GitHub Actions）", "owner": "技术负责人", "state": "DONE_CI"},
     {"id": "IG-06", "gate": "G2", "name": "Inbox 去重与重放", "evidence": "事件 ID 去重、乱序与重复投递", "owner": "技术负责人", "state": "NOT_STARTED"},
-    {"id": "IG-07", "gate": "G1", "name": "OIDC 身份与 authority_epoch", "evidence": "撤权与生效竞争、AI 人工命令拒绝已实测；OIDC 未做", "owner": "安全负责人", "state": "PARTIAL"},
+    {"id": "IG-07", "gate": "G1", "name": "OIDC 身份与 authority_epoch", "evidence": "撤权与生效竞争、AI 人工命令拒绝已实测；OIDC 访问令牌校验与经 HTTP 的端到端测试通过（本地签发者）；未接入真实身份提供方", "owner": "安全负责人", "state": "PARTIAL"},
     {"id": "IG-08", "gate": "G2", "name": "文件存储与正式文档字节", "evidence": "同事务封存、字节完整性读取校验", "owner": "TRD Owner", "state": "NOT_STARTED"},
     {"id": "IG-09", "gate": "G2", "name": "编号服务（POL 或 idp-platform-go）", "evidence": "原子分配、幂等、号段不回收", "owner": "POL Owner＋平台负责人", "state": "NOT_STARTED"},
     {"id": "IG-10", "gate": "G2", "name": "EER 执行适配", "evidence": "停止屏障、恢复、预算强制", "owner": "集成负责人", "state": "NOT_STARTED"},

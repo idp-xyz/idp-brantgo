@@ -345,3 +345,69 @@ func TestRevocationHoldingTheGuardDeniesTheWaitingCommand(t *testing.T) {
 		t.Fatalf("command that waited for the revocation: %v, want ErrForbidden", err)
 	}
 }
+
+func TestDataScopeChangesBumpTheEpochAndReachTheDecision(t *testing.T) {
+	f := newFixture(t)
+	before, err := f.authorize(alice, "quote.save_draft")
+	if err != nil || before.DataScope != authorization.DataScopeOwn || before.Actor != alice {
+		t.Fatalf("default decision %+v, %v", before, err)
+	}
+	set := func(scope authorization.DataScope, team string) (int64, error) {
+		var epoch int64
+		err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			epoch, err = authorization.Grants{}.SetDataScope(ctx, exec, f.scope, alice.ID, scope, team, time.Now())
+			return err
+		})
+		return epoch, err
+	}
+	epoch, err := set(authorization.DataScopeTeam, "team.east")
+	if err != nil || epoch != before.Epoch+1 {
+		t.Fatalf("team scope: epoch %d, %v", epoch, err)
+	}
+	if again, err := set(authorization.DataScopeTeam, "team.east"); err != nil || again != epoch {
+		t.Fatalf("an unchanged data scope must keep the epoch: %d, %v", again, err)
+	}
+	if _, err = set(authorization.DataScopeTeam, ""); !errors.Is(err, authorization.ErrInvalidPolicy) {
+		t.Fatalf("team scope without a team: %v", err)
+	}
+	if _, err = set(authorization.DataScopeOwn, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = set(authorization.DataScopeTeam, "team.east"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := f.authorize(alice, "quote.save_draft")
+	if err != nil || d.DataScope != authorization.DataScopeTeam || d.Team != "team.east" {
+		t.Fatalf("decision after the change %+v, %v", d, err)
+	}
+}
+
+func TestAccessNeedsAnActiveGrantButNoPermission(t *testing.T) {
+	f := newFixture(t)
+	access := func(actor kernel.ActorRef) (authorization.Decision, error) {
+		var d authorization.Decision
+		err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			d, err = f.auth.Access(f.as(ctx, actor), exec)
+			return err
+		})
+		return d, err
+	}
+	if d, err := access(agent); err != nil || d.Actor != agent || d.Epoch < 1 {
+		t.Fatalf("AI with a grant: %+v, %v", d, err)
+	}
+	if _, err := access(bob); !errors.Is(err, authorization.ErrForbidden) {
+		t.Fatalf("actor without a grant: %v", err)
+	}
+	err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+		_, err := authorization.Grants{}.Revoke(ctx, exec, f.scope, alice.ID, time.Now())
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := access(alice); !errors.Is(err, authorization.ErrForbidden) {
+		t.Fatalf("revoked actor: %v", err)
+	}
+}

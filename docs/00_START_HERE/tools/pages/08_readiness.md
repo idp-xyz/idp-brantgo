@@ -66,7 +66,7 @@ foot: Go Migration Readiness V0.1 · 2026-11-06
 | idp-bento-go | v0.1.0-rc.2 由 go.mod 精确引用，h1 与 Cargo 记录一致；Outbox Store 与 testkit 已在 M0 使用 | go.sum；06_M0_EVIDENCE 01 |
 | idp-platform-go | v0.1.0-rc.1 在本机模块缓存中，尚未引用 | 待 IG-09 |
 | 事务语义 | 另一 owner 的事务中返回 transactionConflict（AC4 已在 PG16 实测）；隔离级别 READ COMMITTED | internal/foundation/bento 集成测试 |
-| 产品仓库 | idp-brantgo 根目录为 Go Module（M0 工程基线，尚无业务上下文）；docs/ 为本主档案；尚无远程仓库 | [M0 执行报告](../10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html) |
+| 产品仓库 | idp-brantgo 根目录为 Go Module（M0 完成；S1 部分完成：EVD、PTY、CAT、INQ、POL、HTTP 入口与 OIDC）；docs/ 为本主档案；私有远程仓库 idpxyz/idp-brantgo，GitHub Actions 通过 | [S1 执行报告](../09_IMPLEMENTATION_PLAN/04_IDP_Brant_S1_Execution_Report_V0.1.html) |
 | PostgreSQL 16 | 专用开发容器 brant-pg16（16.12，与 CI 同一 digest）；迁移、角色与 RLS 已实测 | 06_M0_EVIDENCE 05、07、08 |
 | CI | .github/workflows/ci.yml 已定义，本机等价 make ci 通过；远程运行待仓库创建 | 06_M0_EVIDENCE 03 |
 
@@ -87,4 +87,4 @@ foot: Go Migration Readiness V0.1 · 2026-11-06
 ## 08 就绪结论 {#s8}
 
 > [!warn] 结论：尚未就绪
-> 设计与映射已覆盖 Python V0.50 的全部唯一测试方法。M0 已在本机建立产品仓库、PostgreSQL 16 迁移与 FORCE RLS、授权守卫与 Outbox 中继；CI 已定义但尚无远程仓库运行；OIDC 身份、ADR-BR-004 一致性策略与 Outbox 死信（ADR-BR-015）未就绪，Go 移植数为 0。按 Cargo 标准，这一状态对应“参考层完备、真实实现未开始”，G1 保持 NO-GO。
+> 设计与映射已覆盖 Python V0.50 的全部唯一测试方法。M0 建立了产品仓库、PostgreSQL 16 迁移与 FORCE RLS、授权守卫与 Outbox 中继；S1 第一批（2026-11-10）加入命令账本、EVD、PTY、CAT、INQ、POL（首批 5 种配置）、HTTP 入口、OIDC 令牌校验与 Outbox 死信，远程 CI 通过，Go 移植数为 {{=goTestsPorted}}。真实身份提供方、受保护主干与 Inbox 尚未就绪，G1 保持 NO-GO。

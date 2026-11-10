@@ -21,12 +21,16 @@ import (
 const (
 	lockScopeShared = `SELECT authority_epoch FROM brant_auth.authority_scope
 		WHERE tenant_id = $1 AND company_id = $2 FOR SHARE`
-	lockGrantShared = `SELECT actor_kind, active, $4 = ANY (permissions) FROM brant_auth.actor_grant
-		WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3 FOR SHARE`
+	lockGrantShared = `SELECT actor_kind, active, $4 = ANY (permissions), data_scope, coalesce(team_id, '')
+		FROM brant_auth.actor_grant WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3 FOR SHARE`
 	lockScopeForChange = `SELECT authority_epoch FROM brant_auth.authority_scope
 		WHERE tenant_id = $1 AND company_id = $2 FOR NO KEY UPDATE`
 	readGrant = `SELECT actor_kind, active, permissions FROM brant_auth.actor_grant
 		WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3`
+	readDataScope = `SELECT data_scope, coalesce(team_id, '') FROM brant_auth.actor_grant
+		WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3`
+	setDataScope = `UPDATE brant_auth.actor_grant SET data_scope = $4, team_id = nullif($5, ''), changed_epoch = $6,
+		changed_at = $7 WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3`
 	bumpEpoch = `UPDATE brant_auth.authority_scope SET authority_epoch = authority_epoch + 1
 		WHERE tenant_id = $1 AND company_id = $2 RETURNING authority_epoch`
 	upsertGrant = `INSERT INTO brant_auth.actor_grant
@@ -41,10 +45,41 @@ const (
 		ON CONFLICT DO NOTHING`
 )
 
+// DataScope is the part of a company's records an actor sees (BC-D02).
+type DataScope string
+
+const (
+	DataScopeOwn     DataScope = "own"     // records the actor owns
+	DataScopeTeam    DataScope = "team"    // and records its team owns
+	DataScopeCompany DataScope = "company" // every record of the company
+)
+
+// Valid reports whether s is one of the three data scopes.
+func (s DataScope) Valid() bool {
+	return s == DataScopeOwn || s == DataScopeTeam || s == DataScopeCompany
+}
+
 // Decision is a granted check. Epoch is the scope's authority epoch the command saw; the command
-// records it with its result.
+// records it with its result. Actor, DataScope and Team decide which records the actor sees.
 type Decision struct {
-	Epoch int64
+	Epoch     int64
+	Actor     kernel.ActorRef
+	DataScope DataScope
+	Team      string
+}
+
+// Sees reports whether the actor may see a record owned by ownerActor, whose team was ownerTeam
+// when it took ownership. Records outside the data scope are reported as not found.
+func (d Decision) Sees(ownerActor, ownerTeam string) bool {
+	switch {
+	case ownerActor != "" && ownerActor == d.Actor.ID:
+		return true
+	case d.DataScope == DataScopeCompany:
+		return true
+	case d.DataScope == DataScopeTeam:
+		return d.Team != "" && d.Team == ownerTeam
+	}
+	return false
 }
 
 // Authorizer admits commands by Policy and re-checks grants through the caller's transaction.
@@ -65,30 +100,52 @@ func (a Authorizer) Authorize(ctx context.Context, exec bentopg.Executor, comman
 	if err != nil {
 		return Decision{}, err
 	}
+	return guard(ctx, exec, p, rule.Permission, command)
+}
+
+// Access is Authorize without a command: it holds the same guard rows FOR SHARE and returns the
+// actor's data scope as long as the actor has an active grant of the right kind. A context uses it
+// to answer reference lookups from downstream contexts, which need no permission of their own
+// beyond seeing the record (Python _master_ref).
+func (a Authorizer) Access(ctx context.Context, exec bentopg.Executor) (Decision, error) {
+	p, err := identity.FromContext(ctx)
+	if err != nil {
+		return Decision{}, err
+	}
+	if err = p.Validate(); err != nil {
+		return Decision{}, err
+	}
+	return guard(ctx, exec, p, "", "access")
+}
+
+// guard locks the scope's guard row and then the actor's grant row FOR SHARE. An empty permission
+// asks only for an active grant.
+func guard(ctx context.Context, exec bentopg.Executor, p identity.Principal, permission, command string) (Decision, error) {
 	if scope, ok := bento.ScopeFromContext(ctx); !ok || scope != p.Scope {
 		return Decision{}, fmt.Errorf("%w: principal %s, transaction %s", ErrScopeMismatch, p.Scope, scope)
 	}
 	tenant, company := string(p.Scope.Tenant), string(p.Scope.Company)
-	var d Decision
-	err = exec.QueryRow(ctx, lockScopeShared, tenant, company).Scan(&d.Epoch)
+	d := Decision{Actor: p.Actor}
+	err := exec.QueryRow(ctx, lockScopeShared, tenant, company).Scan(&d.Epoch)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Decision{}, fmt.Errorf("%w: scope %s has no authority row", ErrForbidden, p.Scope)
 	}
 	if err != nil {
 		return Decision{}, err
 	}
-	var kind string
+	var kind, dataScope string
 	var active, holds bool
-	err = exec.QueryRow(ctx, lockGrantShared, tenant, company, p.Actor.ID, rule.Permission).Scan(&kind, &active, &holds)
+	err = exec.QueryRow(ctx, lockGrantShared, tenant, company, p.Actor.ID, permission).Scan(&kind, &active, &holds, &dataScope, &d.Team)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Decision{}, fmt.Errorf("%w: %s has no grant in %s", ErrForbidden, p.Actor, p.Scope)
 	}
 	if err != nil {
 		return Decision{}, err
 	}
-	if !active || !holds || kernel.ActorKind(kind) != p.Actor.Kind {
-		return Decision{}, fmt.Errorf("%w: %s lacks %s for %s", ErrForbidden, p.Actor, rule.Permission, command)
+	if !active || (permission != "" && !holds) || kernel.ActorKind(kind) != p.Actor.Kind {
+		return Decision{}, fmt.Errorf("%w: %s lacks %q for %s", ErrForbidden, p.Actor, permission, command)
 	}
+	d.DataScope = DataScope(dataScope)
 	return d, nil
 }
 
@@ -158,6 +215,35 @@ func (Grants) Revoke(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 		return 0, err
 	}
 	_, err = exec.Exec(ctx, deactivateGrant, string(scope.Tenant), string(scope.Company), actorID, epoch, kernel.Instant(at))
+	return epoch, err
+}
+
+// SetDataScope gives the actor's grant a data scope and, for DataScopeTeam, a team; team is
+// recorded with the other scopes too. It returns the scope's epoch after the call, which is
+// unchanged when nothing changes.
+func (Grants) SetDataScope(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, actorID string, dataScope DataScope, team string, at time.Time) (int64, error) {
+	if !dataScope.Valid() || (team != "" && !kernel.ValidIdentifier(team)) || (dataScope == DataScopeTeam && team == "") {
+		return 0, fmt.Errorf("%w: data scope %q, team %q", ErrInvalidPolicy, dataScope, team)
+	}
+	epoch, err := lockForChange(ctx, exec, scope)
+	if err != nil {
+		return 0, err
+	}
+	var current, currentTeam string
+	err = exec.QueryRow(ctx, readDataScope, string(scope.Tenant), string(scope.Company), actorID).Scan(&current, &currentTeam)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("%w: %s has no grant in %s", ErrForbidden, actorID, scope)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if DataScope(current) == dataScope && currentTeam == team {
+		return epoch, nil
+	}
+	if epoch, err = bump(ctx, exec, scope); err != nil {
+		return 0, err
+	}
+	_, err = exec.Exec(ctx, setDataScope, string(scope.Tenant), string(scope.Company), actorID, string(dataScope), team, epoch, kernel.Instant(at))
 	return epoch, err
 }
 

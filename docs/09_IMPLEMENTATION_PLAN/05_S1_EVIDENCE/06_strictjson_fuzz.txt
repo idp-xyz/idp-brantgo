@@ -1,0 +1,6 @@
+# go test -run=^$ -fuzz=FuzzDecode -fuzztime=30s ./internal/foundation/strictjson
+fuzz: elapsed: 27s, execs: 333077 (0/sec), new interesting: 11 (total: 284)
+fuzz: elapsed: 30s, execs: 333077 (0/sec), new interesting: 11 (total: 284)
+fuzz: elapsed: 31s, execs: 333077 (0/sec), new interesting: 11 (total: 284)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	31.037s

@@ -1575,6 +1575,42 @@
       "risk": "用未启用或已停用的名单筛查",
       "contractStatus": "NOT_STARTED",
       "guardLock": false
+    },
+    {
+      "id": "R61",
+      "frm": "EVD",
+      "to": "PTY",
+      "pattern": "OHS / Published Language",
+      "fact": "主体与联系人核实所依据的来源及其读取权限",
+      "contract": "SourceRef v1",
+      "authority": "EVD",
+      "risk": "无权读取来源仍核实主数据",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R62",
+      "frm": "EVD",
+      "to": "CAT",
+      "pattern": "OHS / Published Language",
+      "fact": "SKU 核实所依据的来源及其读取权限",
+      "contract": "SourceRef v1",
+      "authority": "EVD",
+      "risk": "无权读取来源仍核实 SKU",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R63",
+      "frm": "EVD",
+      "to": "POL",
+      "pattern": "OHS / Published Language",
+      "fact": "配置发布核实所依据的来源及其读取权限",
+      "contract": "SourceRef v1",
+      "authority": "EVD",
+      "risk": "发布人无权读取核实证据仍发布配置",
+      "contractStatus": "DESIGN",
+      "guardLock": false
     }
   ],
   "externalBoundaries": [

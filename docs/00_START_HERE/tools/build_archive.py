@@ -28,15 +28,20 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.2"
-ARCHIVE_DATE = "2026-11-09"
+ARCHIVE_VERSION = "1.3"
+ARCHIVE_DATE = "2026-11-10"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
+S1_EVIDENCE = "09_IMPLEMENTATION_PLAN/05_S1_EVIDENCE"
 M0_EVIDENCE_FILES = [
     "README.md", "01_environment.json", "02_go_source_manifest.txt", "03_make_ci_go1.26.5.txt", "04_make_ci_go1.26.8.txt",
     "05_integration_verbose_go1.26.5.txt", "06_kernel_fuzz.txt", "07_migrate_first_run.txt", "08_migrate_second_run.txt",
     "09_dependency_check_negative.txt", "10_spike_consistency.json", "11_relay_drill_test.txt", "12_golangci_lint.txt",
     "13_clock_observation.txt", "14_make_ci_go1.26.5_rerun.txt",
+]
+S1_EVIDENCE_FILES = [
+    "README.md", "01_environment.json", "02_go_source_manifest.txt", "03_make_ci_go1.26.5.txt",
+    "04_integration_verbose_go1.26.5.txt", "05_github_actions_runs.json.txt", "06_strictjson_fuzz.txt",
 ]
 # Spike outcomes the M0 report states; the build fails if the evidence says otherwise.
 SPIKE_EXPECTED = {
@@ -778,6 +783,15 @@ def inc_rd_kpis(a):
     return kpis([(len(rows), "唯一 Python 测试方法"), (len({r["python_test_file"] for r in rows}), "测试文件"), (len(ctxs), "映射到的上下文组"), (ported, "已移植到 Go")])
 
 
+def inc_s1_ported(a):
+    rows = [r for r in _mapping_rows() if r["slice"] in ("T01", "共享基础 V0.2")]
+    tid = "s1-ported"
+    body = [[r["mapping_id"], code(r["python_test_file"] + "::" + r["python_test_method"]), tag(r["go_status"]),
+             code(r["target_go_package"]) if r["go_status"] == "PORTED" else "—",
+             codes(r["proposed_go_test"].split(";")) if r["go_status"] == "PORTED" else "—"] for r in rows]
+    return filter_bar(tid, "按编号、Python 测试、状态或 Go 测试过滤", len(body)) + table(["编号", "Python 测试", "移植状态", "Go 包", "Go 测试"], body, "compact", tid)
+
+
 def inc_rd_by_context(a):
     rows = [[chips(k), v] for k, v in PYSUM["testMethodsByContext"].items()]
     return table(["目标上下文", "测试方法数"], rows, "compact")
@@ -879,10 +893,14 @@ def inc_m0_tests(a):
     return table(["Go 包目录", "源文件", "行数", "单元测试函数", "PG16 集成测试函数", "模糊测试"], rows, "compact")
 
 
-def inc_m0_evidence(a):
-    base = DOCS / M0_EVIDENCE
+def inc_s1_evidence(a):
+    return inc_m0_evidence(a, S1_EVIDENCE, S1_EVIDENCE_FILES)
+
+
+def inc_m0_evidence(a, folder=M0_EVIDENCE, files=M0_EVIDENCE_FILES):
+    base = DOCS / folder
     rows = []
-    for name in M0_EVIDENCE_FILES:
+    for name in files:
         p = base / name
         if p.exists():
             href = os.path.relpath(p, DOCS / a["_page_dir"])
@@ -1221,7 +1239,7 @@ def counts() -> dict:
         "stateMachines": len(TD["stateMachines"]), "invariantRegister": len(TD["invariantRegister"]), "referenceTests": len(TD["testCatalog"]),
         "commands": len(command_rows()), "events": len(event_rows()), "errorCodes": len(ERRORS["codes"]),
         "pythonSourceModules": PYSUM["sourceModules"], "pythonSourceLines": PYSUM["sourceLines"], "pythonUniqueTests": PYSUM["testMethodsStatic"],
-        "pythonUnittestRerun": RERUN.get("summary", ""), "goTestsPorted": 0, "wbsTasks": len(WBS["tasks"]), "adrs": len(ADR["adrs"]),
+        "pythonUnittestRerun": RERUN.get("summary", ""), "goTestsPorted": sum(1 for r in _mapping_rows() if r["go_status"] == "PORTED"), "wbsTasks": len(WBS["tasks"]), "adrs": len(ADR["adrs"]),
         "g1Controls": len(G1["controls"]),
         "sapReferenceRows": len(SAPREF["rows"]), "sapReferenceGaps": sum(1 for r in SAPREF["rows"] if r["status"] == "GAP"),
         "sapReferencePartial": sum(1 for r in SAPREF["rows"] if r["status"] == "PARTIAL"),
@@ -1238,8 +1256,8 @@ def write_registry(pages: list[str]) -> None:
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "product": "IDP Brant · AI-Native Trade Operations Platform（中国 B2B 出口业务版）",
         "standard": "IDP-Cargo 主档案 V2.9（01–12 阶段、证据分级、门禁与 Go-first 工程基线）",
         "implementation_language": "Go (Golang)",
-        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；M0 工程基线已建立，本机 make ci 通过；尚无 git 远程仓库）",
-        "status": "DESIGN_CANDIDATE_ARCHIVE_WITH_M0_ENGINEERING_BASELINE_LOCAL", "production_ready": False,
+        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；私有远程仓库 idpxyz/idp-brantgo，GitHub Actions 通过；M0 完成，S1 部分完成；按负责人决定不配置受保护主干）",
+        "status": "DESIGN_CANDIDATE_ARCHIVE_WITH_M0_BASELINE_AND_S1_PARTIAL", "production_ready": False,
         "gates": G1["productGates"], "gate_mapping": G1["gateMapping"],
         "versioning_policy": "Latest means the most recent design candidate, not approved or implemented",
         "stages": [{"seq": s["seq"], "folder": s["folder"], "stage": s["title"], "latest_candidate": s["kicker"], "summary": s["desc"], "status": s["status"], "primary_file": s["primary"]} for s in fill_tree(ARCHIVE)["stages"]],
@@ -1270,6 +1288,7 @@ def write_registry(pages: list[str]) -> None:
             "本主档案按 IDP-Cargo 主档案的结构与方法组织，内容来自 Brant 产品基线 V1.0、业务核心详细设计 V0.2 与 Python V0.50。",
             "全部 DDD 资产为候选设计，未经业务或技术签核。",
             "V1.1 回写 M0 工程基线的本机证据：Go 模块、kernel、foundation、迁移、依赖检查、Outbox 中继与一致性实测；尚无业务上下文。",
+            "V1.3 远程 CI 跑通并回写 S1 第一批：命令账本、EVD、PTY、CAT、INQ、POL（首批 5 种配置）、HTTP 入口与 OIDC、Outbox 死信；主体筛查未完成，受保护主干按负责人决定不配置。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1 仍为 NO-GO。",
         ],
     }
@@ -1410,13 +1429,17 @@ def validate(pages: list[str]) -> list[dict]:
     check("生成页面的锚点均存在", bad_anchor)
     check("参考副本均已收录", MISSING_SOURCES, f"{len(COPIED)} 个参考副本（90 阶段资料包与 Python 候选契约）")
     check("M0 证据文件齐全", [f for f in M0_EVIDENCE_FILES if not (DOCS / M0_EVIDENCE / f).exists()], f"{len(M0_EVIDENCE_FILES)} 个文件")
+    check("S1 证据文件齐全", [f for f in S1_EVIDENCE_FILES if not (DOCS / S1_EVIDENCE / f).exists()], f"{len(S1_EVIDENCE_FILES)} 个文件")
     got = {r["id"]: r["verdict"] for r in SPIKE["results"]}
     check("M0 一致性实测结论与报告一致", [f"{k}: {got.get(k)}≠{v}" for k, v in SPIKE_EXPECTED.items() if got.get(k) != v] + sorted(set(got) - set(SPIKE_EXPECTED)),
           f"{len(got)} 个场景")
     check("M0 实测场景均有中文说明", sorted(set(got) - set(SPIKE_CN)) + [f"{r['id']}: {k}" for r in SPIKE["results"] for k in list(r["outcomes"]) + list(r["outcomes"].values()) if k not in SPIKE_WORDS and not k.isdigit()])
     # Evidence was produced from the sources listed in the manifest; code that changed since then needs new evidence.
+    # The latest evidence snapshot is the one the current code must match: S1 once it exists, else M0.
     drift = []
-    manifest = DOCS / M0_EVIDENCE / "02_go_source_manifest.txt"
+    manifest = DOCS / S1_EVIDENCE / "02_go_source_manifest.txt"
+    if not manifest.exists():
+        manifest = DOCS / M0_EVIDENCE / "02_go_source_manifest.txt"
     if manifest.exists():
         for ln in manifest.read_text(encoding="utf-8").splitlines():
             digest, rel = ln.split(None, 1)
@@ -1429,7 +1452,7 @@ def validate(pages: list[str]) -> list[dict]:
         drift += [f"新增 {d}/{n}" for d in GO for n in [p.name for p in (GO_REPO / d).glob("*.go")] if f"{d}/{n}" not in listed]
     else:
         drift.append("缺少 02_go_source_manifest.txt")
-    check("M0 证据对应当前 Go 源码", drift, f"{sum(x['files'] for x in GO.values())} 个 Go 文件与证据快照一致")
+    check("最新证据快照对应当前 Go 源码", drift, f"{sum(x['files'] for x in GO.values())} 个 Go 文件与 {manifest.parent.name} 快照一致")
     if BRAND:
         qa = json.loads((BRAND_DIR / "05_QA/sha256_manifest.json").read_text(encoding="utf-8"))
         bad = [rel for rel, _, _ in BRAND_FILES.values() if qa.get(rel) != sha256(BRAND_DIR / rel)]
@@ -1477,8 +1500,8 @@ def main() -> int:
     report = {
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "builder": "00_START_HERE/tools/build_archive.py",
         "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；"
-                 "M0 证据文件齐全、一致性实测结论与报告一致、证据对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
-        "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE）；不验证业务正确性、身份或任何外部集成，这些仍为 G1 待办。",
+                 "M0 与 S1 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
+        "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
         "result": "PASS" if not failed else "FAIL", "checks": results, "counts": counts(),
     }
     (DOCS / "00_START_HERE/05_VALIDATION_REPORT.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

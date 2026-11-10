@@ -56,7 +56,7 @@ foot: M0 Execution Report V1.0 · 2026-11-07
 | M0-10 | tools/spikes/consistency | 5 个测试、9 个场景 | 10 |
 | M0-11 | internal/foundation/messaging、internal/bootstrap、cmd/brant-worker | TestWorkerCrashRecoveryDrill 等 13 个测试 | 11、13 |
 
-证据列的编号对应 06_M0_EVIDENCE 中的文件序号。仓库共有 {{=goPackages}} 个 Go 包目录、{{=goSourceLines}} 行 Go 代码，{{=goTestFunctions}} 个测试函数（其中 {{=goIntegrationTests}} 个需要 PostgreSQL 16）与 {{=goFuzzTargets}} 个模糊测试。M0 的测试不是 Python 测试的移植，08 阶段映射表的移植数仍为 {{=goTestsPorted}}。
+证据列的编号对应 06_M0_EVIDENCE 中的文件序号。M0 结束时仓库有 69 个测试函数与 2 个模糊测试（证据 05）；它们不是 Python 测试的移植，当时 08 阶段映射表的移植数为 0。S1 之后的数字见 09 阶段 S1 执行报告。
 
 {{m0_tests}}
 

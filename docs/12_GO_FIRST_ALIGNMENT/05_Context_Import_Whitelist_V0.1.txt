@@ -1,8 +1,8 @@
 # tools/dependency-check 规则由 Context Map V0.1 的 relationships 生成，不手工编辑
-# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（60 条关系）
-allow internal/contexts/pty/... -> internal/contexts/pol/api
-# cat：无已登记上游（只依赖 kernel、reference/api、foundation）
-# pol：无已登记上游（只依赖 kernel、reference/api、foundation）
+# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（63 条关系）
+allow internal/contexts/pty/... -> internal/contexts/{evd,pol}/api
+allow internal/contexts/cat/... -> internal/contexts/evd/api
+allow internal/contexts/pol/... -> internal/contexts/evd/api
 # evd：无已登记上游（只依赖 kernel、reference/api、foundation）
 allow internal/contexts/inq/... -> internal/contexts/{cat,crm,evd,pol,pty}/api
 allow internal/contexts/sup/... -> internal/contexts/{cat,evd,inq,pol,pty}/api

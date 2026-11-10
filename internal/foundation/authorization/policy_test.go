@@ -54,3 +54,26 @@ func TestPolicyRejectsInvalidRules(t *testing.T) {
 		}
 	}
 }
+
+// Python Core._access: owner, team or company data scope (BC-D02).
+func TestDataScopeDecidesWhichRecordsAnActorSees(t *testing.T) {
+	alice := kernel.ActorRef{Kind: kernel.ActorHuman, ID: "alice"}
+	for _, c := range []struct {
+		d                Decision
+		owner, ownerTeam string
+		want             bool
+	}{
+		{Decision{Actor: alice, DataScope: DataScopeOwn}, "alice", "", true},
+		{Decision{Actor: alice, DataScope: DataScopeOwn, Team: "t1"}, "bob", "t1", false},
+		{Decision{Actor: alice, DataScope: DataScopeTeam, Team: "t1"}, "bob", "t1", true},
+		{Decision{Actor: alice, DataScope: DataScopeTeam, Team: "t1"}, "bob", "t2", false},
+		{Decision{Actor: alice, DataScope: DataScopeTeam}, "bob", "", false},
+		{Decision{Actor: alice, DataScope: DataScopeCompany}, "bob", "", true},
+		{Decision{Actor: alice, DataScope: DataScopeCompany}, "", "", true},
+		{Decision{Actor: kernel.ActorRef{}, DataScope: DataScopeOwn}, "", "", false},
+	} {
+		if got := c.d.Sees(c.owner, c.ownerTeam); got != c.want {
+			t.Errorf("%+v sees %s/%s = %v, want %v", c.d, c.owner, c.ownerTeam, got, c.want)
+		}
+	}
+}
