@@ -274,6 +274,7 @@ PY_RENAMES = {
 
 
 HUMAN_ONLY = set(TD["humanOnlyCommands"])
+ROLES = load("05_TACTICAL_DDD/06_IDP_Brant_Role_Templates_V0.1.json")
 
 
 def sm_actors():
@@ -484,6 +485,20 @@ def inc_human_only(a):
             by_ctx[r[0]].append(r[1])
     rows = [[Raw(chip(cid)), Raw(codes(cmds))] for cid, cmds in by_ctx.items()]
     return table(["上下文", f"人工专属命令（共 {sum(len(v) for v in by_ctx.values())} 条）"], rows, "compact")
+
+
+def inc_role_templates(a):
+    held = {t["code"]: t for t in ROLES["templates"]}
+    rows = []
+    for t in ROLES["templates"]:
+        cmds = [p for p in t["permissions"] if "." in p and not p.endswith((".read", ".audit"))]
+        human = [p for p in cmds if p in HUMAN_ONLY]
+        rows.append([t["name"], code(t["code"]), t["duties"], len(cmds), len(human)])
+    out = table(["岗位模板", "代码", "职责", "命令与能力权限", "其中人工专属"], rows, "compact")
+    out += table(["禁止合并的岗位", "规则"], [[Raw(" ＋ ".join(held[c]["name"] for c in f["templates"])), f["rule"]] for f in ROLES["forbiddenCombinations"]], "compact")
+    out += table(["专属权限", "唯一岗位", "规则"], [[code(e["permission"]), held[e["template"]]["name"], e["rule"]] for e in ROLES["exclusivePermissions"]], "compact")
+    out += table(["命令", "须独立于", "上下文", "状态"], [[code(i["command"]), i["independentOf"], Raw(chip(i["context"])), tag(i["state"])] for i in ROLES["independence"]], "compact")
+    return out
 
 
 def inc_cm_external(a):
@@ -1332,6 +1347,17 @@ def validate(pages: list[str]) -> list[dict]:
     check("事件风暴上下文均已登记", [f"{s['id']}:{c}" for s in ES["scenarios"] for c in s["contextFlow"] if c not in ids])
     tids = {t["id"] for t in WBS["tasks"]}
     check("WBS 依赖均存在", [f"{t['id']}->{d}" for t in WBS["tasks"] for d in t["dependencies"] if d not in tids], f"{len(tids)} 项工作")
+    commands = {r[1] for r in command_rows()}
+    granted = {p for t in ROLES["templates"] for p in t["permissions"]}
+    declared = {c["permission"] for c in ROLES["capabilities"]}
+    codes_ = {t["code"] for t in ROLES["templates"]}
+    check("岗位模板覆盖全部命令", sorted(commands - granted), f"{len(ROLES['templates'])} 个岗位模板，{len(commands)} 条命令")
+    check("岗位模板的权限均为已登记命令或能力权限", sorted(granted - commands - declared))
+    check("岗位禁止组合引用已登记模板且无模板自相冲突",
+          [str(f["templates"]) for f in ROLES["forbiddenCombinations"] if not set(f["templates"]) <= codes_]
+          + [t["code"] for t in ROLES["templates"] for f in ROLES["forbiddenCombinations"] if f["templates"][0] == t["code"] and f["templates"][1] == t["code"]])
+    check("专属权限只由其岗位持有",
+          [e["permission"] for e in ROLES["exclusivePermissions"] if [t["code"] for t in ROLES["templates"] if e["permission"] in t["permissions"]] != [e["template"]]])
     check("WBS 阶段均已定义", [t["id"] for t in WBS["tasks"] if t["phase"] not in {p["id"] for p in WBS["phases"]}])
     # cross-document semantics
     cm_cmds = {cmd for c in CM["contexts"] for cmd in c["commands"]}
