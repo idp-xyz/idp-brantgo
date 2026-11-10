@@ -204,7 +204,7 @@
     {
       "check": "最新证据快照对应当前 Go 源码",
       "result": "PASS",
-      "detail": "99 个 Go 文件与 05_S1_EVIDENCE 快照一致"
+      "detail": "116 个 Go 文件与 05_S1_EVIDENCE 快照一致"
     },
     {
       "check": "品牌标志与品牌包 QA 清单逐字节一致且各页均已使用",
@@ -233,17 +233,17 @@
     "pythonSourceLines": 21136,
     "pythonUniqueTests": 577,
     "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
-    "goTestsPorted": 41,
+    "goTestsPorted": 53,
     "wbsTasks": 78,
     "adrs": 38,
     "g1Controls": 13,
     "sapReferenceRows": 41,
     "sapReferenceGaps": 0,
     "sapReferencePartial": 11,
-    "goPackages": 40,
-    "goSourceLines": 18145,
-    "goTestFunctions": 201,
-    "goIntegrationTests": 77,
+    "goPackages": 48,
+    "goSourceLines": 22635,
+    "goTestFunctions": 240,
+    "goIntegrationTests": 97,
     "goFuzzTargets": 3,
     "m0DoneLocal": 9,
     "m0Tasks": 11
