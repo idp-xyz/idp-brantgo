@@ -29,8 +29,10 @@ var allPermissions = []string{
 	"pty.read", "pty.audit",
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "cat.read", "cat.audit",
 	"config.save_draft", "config.discard_draft", "config.publish", "config.retire", "number.issue", "foundation.snapshot",
-	"pol.read", "pol.audit",
+	"pol.read", "pol.audit", "pol.read_sensitive",
 	"rfq.save_draft", "rfq.confirm_scope", "rfq.cancel", "rfq.close", "inq.read", "inq.audit",
+	"party_screening.record", "party_screening.decide", "party_screening.block",
+	"screening_list.import", "ref.read", "ref.audit",
 }
 
 type world struct {

@@ -1,0 +1,208 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
+)
+
+// OpenAPIPath is where the generated candidate OpenAPI 3.1 document is kept.
+const OpenAPIPath = "contracts/openapi/brant-api.openapi.json"
+
+// OpenAPI returns the candidate OpenAPI 3.1 document of the HTTP API, generated from the command
+// tables and request structures the transport decodes, so it cannot drift from the code. Field
+// formats (identifier patterns, lengths, decimal strings) and which fields a command requires are
+// checked by the contexts' api packages; the document states the closed shape, the routes and the
+// answers.
+func OpenAPI() ([]byte, error) {
+	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
+		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{})}
+	paths := map[string]any{}
+	for _, set := range sets {
+		names := make([]string, 0, len(set.commands))
+		for n := range set.commands {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			args := schemaOf(set.commands[n].args)
+			if set.bc == "pol" && n == "config.save_draft" {
+				types := configDataTypes()
+				kinds := make([]string, 0, len(types))
+				for k := range types {
+					kinds = append(kinds, k)
+				}
+				sort.Strings(kinds)
+				var oneOf []any
+				for _, k := range kinds {
+					oneOf = append(oneOf, map[string]any{"title": k, "$ref": "#/components/schemas/pol." + k})
+				}
+				args["properties"].(map[string]any)["data"] = map[string]any{"description": "The closed structure of the configuration kind named by kind.", "oneOf": oneOf}
+			}
+			limit, values := MaxBody, strictjson.DefaultMaxValues
+			if l := set.limits[n]; l.MaxBytes > int64(limit) {
+				limit, values = int(l.MaxBytes), max(l.MaxValues, values)
+			}
+			paths["/api/brant/v1/"+set.bc+"/commands/"+n] = map[string]any{"post": map[string]any{
+				"operationId": set.bc + "." + n,
+				"tags":        []string{set.bc},
+				"summary":     n,
+				"description": "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+				"requestBody": map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
+					"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "args"},
+					"properties": map[string]any{
+						"contract":        map[string]any{"const": set.contract},
+						"command":         map[string]any{"const": n},
+						"idempotency_key": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
+						"args":            args,
+					}}}}},
+				"responses": commandResponses(),
+			}}
+		}
+	}
+	for _, r := range reads {
+		get := map[string]any{"operationId": r.id, "tags": []string{r.tag}, "summary": r.summary, "responses": readResponses()}
+		var params []any
+		for _, p := range r.params {
+			params = append(params, map[string]any{"name": p, "in": "path", "required": true, "schema": map[string]any{"type": "string"}})
+		}
+		if params != nil {
+			get["parameters"] = params
+		}
+		method := "get"
+		if r.post {
+			method = "post"
+		}
+		paths[r.path] = map[string]any{method: get}
+	}
+	paths["/healthz"] = map[string]any{"get": map[string]any{"operationId": "healthz", "security": []any{}, "responses": map[string]any{
+		"200": map[string]any{"description": "The process serves requests."}}}}
+	schemas := map[string]any{
+		"Receipt":        schemaOf(reflect.TypeFor[receipt]()),
+		"Rejection":      schemaOf(reflect.TypeFor[rejection]()),
+		"TransportError": schemaOf(reflect.TypeFor[transportError]()),
+	}
+	for k, t := range configDataTypes() {
+		schemas["pol."+k] = schemaOf(t)
+	}
+	doc := map[string]any{
+		"openapi": "3.1.0",
+		"info": map[string]any{"title": "IDP Brant API", "version": "0.1.0-candidate",
+			"description": "Candidate contract generated from internal/transport/httpapi (S1). Not a published interface."},
+		"security": []any{map[string]any{"bearer": []any{}}},
+		"paths":    paths,
+		"components": map[string]any{
+			"schemas":         schemas,
+			"securitySchemes": map[string]any{"bearer": map[string]any{"type": "http", "scheme": "bearer", "bearerFormat": "JWT (OIDC access token, typ at+jwt)"}},
+		},
+	}
+	b, err := json.MarshalIndent(doc, "", "  ")
+	return append(b, '\n'), err
+}
+
+type readRoute struct {
+	path, id, tag, summary string
+	params                 []string
+	post                   bool
+}
+
+var reads = []readRoute{
+	{"/api/brant/v1/{bc}/audit", "audit", "audit", "The audit trail of one context in the caller's scope", []string{"bc"}, false},
+	{"/api/brant/v1/evd/sources/{id}", "evd.source.get", "evd", "A source with its content and imports", []string{"id"}, false},
+	{"/api/brant/v1/evd/files/{id}", "evd.file.get", "evd", "A business file with its bytes in Base64", []string{"id"}, false},
+	{"/api/brant/v1/pty/parties/{id}", "pty.party.get", "pty", "A party and its confirmed revisions", []string{"id"}, false},
+	{"/api/brant/v1/pty/parties/{id}/screening", "pty.party_screening.get", "pty",
+		"A party's screening: its status now as the guard decides it, every conclusion, positive and negative list entries", []string{"id"}, false},
+	{"/api/brant/v1/pty/screenings/due", "pty.party_screening.due", "pty",
+		"Confirmed parties whose screening is due at ?at= (a UTC timestamp, now by default)", nil, false},
+	{"/api/brant/v1/pty/contacts/{id}", "pty.contact.get", "pty", "A contact", []string{"id"}, false},
+	{"/api/brant/v1/cat/skus/{id}", "cat.sku.get", "cat", "A SKU and its specification revisions", []string{"id"}, false},
+	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
+	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
+	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
+	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
+	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
+		"One imported version of a screening list with its entries", []string{"id", "version"}, false},
+	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
+		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)", []string{"source", "event_id"}, true},
+}
+
+func commandResponses() map[string]any {
+	ref := func(name, desc string) map[string]any {
+		return map[string]any{"description": desc, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/" + name}}}}
+	}
+	out := readResponses()
+	out["200"] = ref("Receipt", "Committed, or the stored result of the same idempotency key (replayed: true).")
+	out["400"] = ref("Rejection", "UNSUPPORTED_CONTRACT")
+	out["409"] = ref("Rejection", "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code")
+	out["413"] = ref("Rejection", "REQUEST_TOO_LARGE")
+	return out
+}
+
+func readResponses() map[string]any {
+	ref := func(name, desc string) map[string]any {
+		return map[string]any{"description": desc, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/" + name}}}}
+	}
+	return map[string]any{
+		"200": map[string]any{"description": "The object as the caller may see it."},
+		"401": ref("Rejection", "UNAUTHENTICATED: no valid bearer token"),
+		"403": ref("Rejection", "PERMISSION_DENIED"),
+		"404": ref("Rejection", "NOT_FOUND: missing or outside the caller's data scope"),
+		"422": ref("Rejection", "SCHEMA_INVALID or a business rejection"),
+		"503": ref("TransportError", "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"),
+	}
+}
+
+// schemaOf describes a request or response structure as JSON Schema.
+func schemaOf(t reflect.Type) map[string]any {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch {
+	case t == reflect.TypeFor[json.RawMessage]():
+		return map[string]any{"type": "object"}
+	case t == reflect.TypeFor[time.Time]():
+		return map[string]any{"type": "string", "format": "date-time"}
+	}
+	switch t.Kind() {
+	case reflect.String:
+		return map[string]any{"type": "string", "minLength": 1}
+	case reflect.Bool:
+		return map[string]any{"type": "boolean"}
+	case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint32:
+		return map[string]any{"type": "integer"}
+	case reflect.Slice:
+		return map[string]any{"type": "array", "items": schemaOf(t.Elem())}
+	case reflect.Struct:
+		props := map[string]any{}
+		var required []string
+		for f := range t.Fields() {
+			name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+			if name == "" || name == "-" || !f.IsExported() {
+				continue
+			}
+			props[name] = schemaOf(f.Type)
+			if name == "id" || (name == "expected_version" && f.Type.Kind() == reflect.Pointer) {
+				required = append(required, name)
+			}
+		}
+		out := map[string]any{"type": "object", "additionalProperties": false, "properties": props}
+		if required != nil {
+			out["required"] = required
+		}
+		return out
+	}
+	return map[string]any{}
+}
+
+func bytesText(n int) string {
+	if n%(1<<20) == 0 {
+		return strconv.Itoa(n>>20) + " MiB"
+	}
+	return strconv.Itoa(n) + " bytes"
+}

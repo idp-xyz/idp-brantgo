@@ -1,4 +1,4 @@
-# IDP Brant 唯一主档案 V1.2 · 请先阅读
+# IDP Brant 唯一主档案 V1.4 · 请先阅读
 
 **首先用浏览器打开 `00_START_HERE/00_INDEX.html`。** 这是本档案唯一的导航首页。
 
@@ -12,7 +12,7 @@
 
 全部档案内容与工具的输入都在本仓库（idp-brantgo）内。
 
-V1.1（2026-11-07）回写了 M0 工程基线的本机执行证据：报告在 10 阶段 `05_IDP_Brant_M0_Execution_Report_V1.0.html`，原始证据在 `10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE/`。V1.2（2026-11-09）在全部页面使用品牌标志与 favicon。
+V1.1（2026-11-07）回写了 M0 工程基线的本机执行证据：报告在 10 阶段 `05_IDP_Brant_M0_Execution_Report_V1.0.html`，原始证据在 `10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE/`。V1.2（2026-11-09）在全部页面使用品牌标志与 favicon。V1.3 与 V1.4（2026-11-10）回写 S1 两批的执行证据：报告在 09 阶段 `04_IDP_Brant_S1_Execution_Report_V0.1.html`，原始证据在 `09_IMPLEMENTATION_PLAN/05_S1_EVIDENCE/`。
 
 ## 阅读顺序
 
@@ -29,10 +29,10 @@ V1.1（2026-11-07）回写了 M0 工程基线的本机执行证据：报告在 1
 ## 当前状态
 
 - 全部 DDD 资产已经过 **AI 模拟评审**（2026-11-10，证据层级 E0，10 阶段第 09 章）：38 项 ADR 与待决项中 37 项接受或附条件接受、1 项（真实客户样例）暂缓，18 个上下文签核为接受或附条件接受。尚无真人签核。
-- **G0 客户场景确认 NO-GO**：模拟 G0 走查已完成（04 阶段第 08 章，3 个虚构业务、6 项发现均已处置），但没有真实客户资料。**G1 详细设计与技术准入 NO-GO**：设计与 ADR 已模拟签核，远程 CI、OIDC 令牌校验与 Outbox 死信已实现（2026-11-10），仍缺真实身份提供方与岗位模板、Inbox 与 AI 红队；受保护主干按负责人 2026-11-10 的决定不配置（GitHub 免费版私有仓库不提供；C09 非阻断）（Cargo 的 G0 在 Brant 对应 G1）。
-- **阻断项**：原三项阻断 ADR（ADR-BR-004、ADR-BR-011、ADR-BR-REPO-10）已按 M0 实测在模拟评审中接受；G1 剩余阻断为工程项 C10（真实身份提供方与岗位模板）；C04、C05、C06、C13 已有远程 CI 证据。
-- **Go 侧**：M0 工程基线 2026-11-07 在本机完成 9／11 项；S1 第一批 2026-11-10 完成命令账本、EVD、PTY、CAT、INQ、POL（首批 5 种配置）、HTTP 入口与 OIDC、Outbox 死信，私有仓库 idpxyz/idp-brantgo 的 GitHub Actions 通过（09 阶段 S1 执行报告）。主体筛查与名单导入尚无。
-- Python V0.50 的 679 项 unittest 已于 2026-11-10 在 90 阶段 V0.50 ZIP 解压的副本上重跑通过，这只说明参考行为可复现，不计入 Go 验收；08 阶段映射的 577 个测试方法中，S1 已移植 53 个。
+- **G0 客户场景确认 NO-GO**：模拟 G0 走查已完成（04 阶段第 08 章，3 个虚构业务、6 项发现均已处置），但没有真实客户资料。**G1 详细设计与技术准入 NO-GO**：设计与 ADR 已模拟签核；远程 CI、OIDC 令牌校验、岗位模板、Outbox 死信与 Inbox 去重已实现（2026-11-10），13 项控制中 11 项 MET；C01—C03 只有模拟评审、没有真人签核；真实身份提供方接入按负责人决定延后至 B0 试点门之前；AI 红队（C11，非阻断）未做；受保护主干按负责人 2026-11-10 的决定不配置（GitHub 免费版私有仓库不提供；C09 非阻断）（Cargo 的 G0 在 Brant 对应 G1）。
+- **阻断项**：原三项阻断 ADR（ADR-BR-004、ADR-BR-011、ADR-BR-REPO-10）已按 M0 实测在模拟评审中接受；G1 的工程阻断项均已满足：C04、C05、C06、C10、C13 有远程 CI 证据（C10 的真实身份提供方接入延后）；G1 的 NO-GO 来自审批只有模拟评审。
+- **Go 侧**：M0 工程基线 2026-11-07 在本机完成 9／11 项；S1 两批 2026-11-10 完成命令账本、EVD、PTY（含主体筛查）、CAT、INQ、POL（全部 18 种配置与 ConfigGuard）、筛查名单参考数据、HTTP 入口、OIDC 与 OpenAPI 候选、岗位模板、Outbox 死信与 Inbox 去重，私有仓库 idpxyz/idp-brantgo 的 GitHub Actions 通过（09 阶段 S1 执行报告）。主体交易档案、地址与服务方角色和货号映射尚无。
+- Python V0.50 的 679 项 unittest 已于 2026-11-10 在 90 阶段 V0.50 ZIP 解压的副本上重跑通过，这只说明参考行为可复现，不计入 Go 验收；08 阶段映射的 577 个测试方法中，S1 已移植 63 个。
 
 ## 如何重新生成与校验
 
@@ -42,7 +42,7 @@ python3 docs/00_START_HERE/tools/build_archive.py          # 重新生成页面�
 make ci                                                    # 在仓库根目录运行 Go 侧的全部检查（需要 Docker）
 ```
 
-构建器只读取本仓库内的各阶段 JSON、`tools/data/*.json` 与 `tools/pages/*.md`；90 阶段资料包与 06 阶段 Python 候选契约是冻结的参考副本，只登记哈希。使用 `03_FILE_MANIFEST.csv` 与 `04_SHA256SUMS.txt` 逐文件校验（清单不包含其自身）；`05_VALIDATION_REPORT.json` 记录结构与交叉引用校验结果及其适用范围。构建器还核对 M0 证据与当前 Go 源码一致：Go 代码改动后，须重新运行 `make ci` 并更新 `06_M0_EVIDENCE`，否则校验失败。
+构建器只读取本仓库内的各阶段 JSON、`tools/data/*.json` 与 `tools/pages/*.md`；90 阶段资料包与 06 阶段 Python 候选契约是冻结的参考副本，只登记哈希。使用 `03_FILE_MANIFEST.csv` 与 `04_SHA256SUMS.txt` 逐文件校验（清单不包含其自身）；`05_VALIDATION_REPORT.json` 记录结构与交叉引用校验结果及其适用范围。构建器还核对最新一次证据快照（S1 起为 `09_IMPLEMENTATION_PLAN/05_S1_EVIDENCE`）与当前 Go 源码一致：Go 代码改动后，须重新运行 `make ci` 并更新该证据，否则校验失败。
 
 ## 如何避免版本混乱
 

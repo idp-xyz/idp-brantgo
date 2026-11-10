@@ -67,6 +67,8 @@ func TestImportRules(t *testing.T) {
 		{"internal/transport/http", mod + "/internal/contexts/trd/api", ""},
 		{"internal/transport/http", mod + "/internal/contexts/trd", "D6"},
 		{"internal/transport/http", mod + "/internal/contexts/trd/internal/domain", "D6"},
+		{"internal/transport/http", mod + "/internal/reference/api", ""},
+		{"internal/transport/http", mod + "/internal/reference/internal/lists", "D6"},
 		{"cmd/brant-worker", mod + "/internal/bootstrap", ""},
 		{"cmd/brant-worker", mod + "/internal/foundation/messaging", "entry"},
 		{"cmd/brant-worker", "github.com/jackc/pgx/v5", ""},

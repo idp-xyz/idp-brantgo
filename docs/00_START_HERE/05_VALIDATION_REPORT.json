@@ -1,5 +1,5 @@
 {
-  "archive_version": "1.3",
+  "archive_version": "1.4",
   "as_of": "2026-11-10",
   "builder": "00_START_HERE/tools/build_archive.py",
   "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；M0 与 S1 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
@@ -9,7 +9,7 @@
     {
       "check": "全部 JSON 可解析",
       "result": "PASS",
-      "detail": "81 个 JSON"
+      "detail": "82 个 JSON"
     },
     {
       "check": "UL 词条 ID 唯一",
@@ -85,6 +85,26 @@
       "check": "WBS 依赖均存在",
       "result": "PASS",
       "detail": "78 项工作"
+    },
+    {
+      "check": "岗位模板覆盖全部命令",
+      "result": "PASS",
+      "detail": "15 个岗位模板，156 条命令"
+    },
+    {
+      "check": "岗位模板的权限均为已登记命令或能力权限",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "岗位禁止组合引用已登记模板且无模板自相冲突",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "专属权限只由其岗位持有",
+      "result": "PASS",
+      "detail": ""
     },
     {
       "check": "WBS 阶段均已定义",
@@ -204,7 +224,7 @@
     {
       "check": "最新证据快照对应当前 Go 源码",
       "result": "PASS",
-      "detail": "116 个 Go 文件与 05_S1_EVIDENCE 快照一致"
+      "detail": "163 个 Go 文件与 05_S1_EVIDENCE 快照一致"
     },
     {
       "check": "品牌标志与品牌包 QA 清单逐字节一致且各页均已使用",
@@ -233,17 +253,17 @@
     "pythonSourceLines": 21136,
     "pythonUniqueTests": 577,
     "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
-    "goTestsPorted": 53,
+    "goTestsPorted": 63,
     "wbsTasks": 78,
     "adrs": 38,
     "g1Controls": 13,
     "sapReferenceRows": 41,
     "sapReferenceGaps": 0,
     "sapReferencePartial": 11,
-    "goPackages": 48,
-    "goSourceLines": 22692,
-    "goTestFunctions": 241,
-    "goIntegrationTests": 98,
+    "goPackages": 56,
+    "goSourceLines": 33447,
+    "goTestFunctions": 337,
+    "goIntegrationTests": 139,
     "goFuzzTargets": 3,
     "m0DoneLocal": 9,
     "m0Tasks": 11

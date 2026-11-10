@@ -411,3 +411,77 @@ func TestAccessNeedsAnActiveGrantButNoPermission(t *testing.T) {
 		t.Fatalf("revoked actor: %v", err)
 	}
 }
+
+// BC-D02: roles derive permissions; tenant roles merge templates; forbidden combinations are
+// refused at definition and at assignment; assignments keep their history.
+func TestRolesDerivePermissionsAndKeepSeparationOfDuties(t *testing.T) {
+	f := newFixture(t)
+	g := authorization.Grants{}
+	var epoch int64
+	run := func(fn func(context.Context, bentopg.Executor) (int64, error)) error {
+		return f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			epoch, err = fn(ctx, exec)
+			return err
+		})
+	}
+	err := run(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.AssignRoles(ctx, exec, f.scope, bob, []string{"sales_clerk"}, time.Now())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	salesEpoch := epoch
+	err = run(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.AssignRoles(ctx, exec, f.scope, bob, []string{"sales_clerk", "credit_manager"}, time.Now())
+	})
+	if !errors.Is(err, authorization.ErrSeparationOfDuties) {
+		t.Fatalf("sales with credit decisions: %v", err)
+	}
+	err = run(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.DefineRole(ctx, exec, f.scope, "self.review", "自审", []string{"sales_clerk", "quote_reviewer"}, time.Now())
+	})
+	if !errors.Is(err, authorization.ErrSeparationOfDuties) {
+		t.Fatalf("a role that reviews its own quotes: %v", err)
+	}
+	err = run(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.DefineRole(ctx, exec, f.scope, "trade.clerk", "外贸业务员", []string{"sales_clerk", "merchandiser"}, time.Now())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = run(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.AssignRoles(ctx, exec, f.scope, bob, []string{"trade.clerk"}, time.Now())
+	})
+	if err != nil || epoch <= salesEpoch {
+		t.Fatalf("merged role: epoch %d after %d, %v", epoch, salesEpoch, err)
+	}
+	err = run(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.AssignRoles(ctx, exec, f.scope, bob, []string{"trade.clerk", "credit_officer"}, time.Now())
+	})
+	if !errors.Is(err, authorization.ErrSeparationOfDuties) {
+		t.Fatalf("a merged role still keeps sales from credit: %v", err)
+	}
+	// Redefining the role re-derives the holder's permissions.
+	err = run(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.DefineRole(ctx, exec, f.scope, "trade.clerk", "外贸业务员", []string{"sales_clerk"}, time.Now())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var history, current int
+	err = f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+		return exec.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE removed_epoch IS NULL) FROM brant_auth.actor_role
+			WHERE actor_id = $1`, bob.ID).Scan(&history, &current)
+	})
+	if err != nil || history != 2 || current != 1 {
+		t.Fatalf("assignment history %d, current %d, %v", history, current, err)
+	}
+	var holds bool
+	err = f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+		return exec.QueryRow(ctx, `SELECT 'shipment.confirm' = ANY (permissions) FROM brant_auth.actor_grant WHERE actor_id = $1`, bob.ID).Scan(&holds)
+	})
+	if err != nil || holds {
+		t.Fatalf("the redefined role no longer grants merchandiser permissions: %v %v", holds, err)
+	}
+}

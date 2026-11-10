@@ -8,6 +8,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/jackc/pgx/v5 v5.10.0
 	go.idp.xyz/idp-bento-go v0.1.0-rc.2
+	golang.org/x/text v0.29.0
 )
 
 require (
@@ -19,5 +20,4 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
 )

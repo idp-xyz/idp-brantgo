@@ -100,7 +100,10 @@ type Ledger struct {
 	Visible    Visibility
 }
 
-var schemaName = regexp.MustCompile(`^brant_[a-z][a-z0-9_]{1,40}$`)
+var (
+	schemaName  = regexp.MustCompile(`^brant_[a-z][a-z0-9_]{1,40}$`)
+	hashPattern = regexp.MustCompile(`^[0-9a-f]{64}$`) // the action_result CHECK
+)
 
 // ResultsDDL returns the action-result and audit tables of schema, with FORCE RLS on the scope.
 // A context's first migration contains this DDL verbatim; the ledger's tests create it with this
@@ -167,6 +170,11 @@ func (l *Ledger) check() error {
 
 // Execute runs cmd through h. It returns the committed or replayed result, a *kernel.Rejection, or
 // an infrastructure error. Every rejection is audited.
+//
+// When the database cannot tell whether the commit happened, the error is
+// application.ErrCommitUncertain as Bento reports it: not a rejection, not audited, with a zero
+// Result. The caller does not execute the command again blindly; it reconciles (Reconcile) or
+// replays the same idempotency key, which returns the stored result if the commit happened.
 func (l *Ledger) Execute(ctx context.Context, cmd Command, h Handler) (Result, error) {
 	if err := l.check(); err != nil {
 		return Result{}, err
@@ -177,16 +185,21 @@ func (l *Ledger) Execute(ctx context.Context, cmd Command, h Handler) (Result, e
 	}
 	ctx = ensureCorrelation(ctx)
 	res, err := l.execute(ctx, p, cmd, h)
+	if err == nil {
+		return res, nil
+	}
 	if rej, ok := kernel.AsRejection(err); ok {
 		if auditErr := l.auditRejected(ctx, p, cmd.Name, cmd.ObjectID, rej.Code); auditErr != nil {
 			return Result{}, errors.Join(rej, auditErr)
 		}
 	}
-	return res, err
+	// A failed command has no result; with ErrCommitUncertain, the one prepared before the commit
+	// may or may not exist, so it is not handed out either.
+	return Result{}, err
 }
 
 func (l *Ledger) execute(ctx context.Context, p identity.Principal, cmd Command, h Handler) (Result, error) {
-	if !kernel.ValidIdentifier(cmd.IdempotencyKey) || len(cmd.RequestHash) != 64 || cmd.Name == "" {
+	if !kernel.ValidIdentifier(cmd.IdempotencyKey) || !hashPattern.MatchString(cmd.RequestHash) || cmd.Name == "" {
 		return Result{}, kernel.Reject(kernel.CodeSchemaInvalid, "/idempotency_key", "")
 	}
 	if _, err := l.Authorizer.Policy.Admit(p, cmd.Name); err != nil {
@@ -216,8 +229,23 @@ func (l *Ledger) execute(ctx context.Context, p identity.Principal, cmd Command,
 		// second attempt sees its result or its row.
 		res, err = l.write(ctx, p, cmd, h)
 		if uniqueViolation(err) {
-			return Result{}, kernel.Reject(kernel.CodeVersionConflict, "/args/id", "")
+			err = kernel.Reject(kernel.CodeVersionConflict, "/args/id", "")
 		}
+	}
+	if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodeVersionConflict {
+		// The stored result is looked up before the root is locked, so a command with the same key
+		// that commits in between shows here as a version conflict. Python checks both under one
+		// lock: the stored result answers, or the payload conflicts.
+		var stored Result
+		var replayed bool
+		if rerr := l.inScope(ctx, p, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			stored, replayed, err = l.replay(ctx, exec, p, cmd)
+			return err
+		}); rerr != nil || replayed {
+			return stored, rerr
+		}
+		return Result{}, rej
 	}
 	return res, err
 }
@@ -271,16 +299,8 @@ func (l *Ledger) write(ctx context.Context, p identity.Principal, cmd Command, h
 // the current permission for the command, the payload, the read permission and the visibility of
 // the object: a revoked or narrowed grant never receives a stored success.
 func (l *Ledger) replay(ctx context.Context, exec bentopg.Executor, p identity.Principal, cmd Command) (Result, bool, error) {
-	var hash string
-	var res Result
-	err := exec.QueryRow(ctx, `SELECT request_hash, action_id, object_id, row_version, status FROM `+l.Schema+`.action_result
-		WHERE tenant_id = $1 AND company_id = $2 AND command = $3 AND idempotency_key = $4`,
-		string(p.Scope.Tenant), string(p.Scope.Company), cmd.Name, cmd.IdempotencyKey).
-		Scan(&hash, &res.ActionID, &res.ObjectID, &res.RowVersion, &res.Status)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Result{}, false, nil
-	}
-	if err != nil {
+	hash, res, found, err := l.stored(ctx, exec, p, cmd.Name, cmd.IdempotencyKey)
+	if err != nil || !found {
 		return Result{}, false, err
 	}
 	if _, err = l.Authorizer.Authorize(ctx, exec, cmd.Name); err != nil {
@@ -302,6 +322,115 @@ func (l *Ledger) replay(ctx context.Context, exec bentopg.Executor, p identity.P
 	}
 	res.Replayed = true
 	return res, true, l.audit(ctx, exec, p, cmd.Name, res.ObjectID, "replayed", "", "", d.Epoch)
+}
+
+// stored reads the action result of command and key in p's scope, with the request hash it was
+// stored for.
+func (l *Ledger) stored(ctx context.Context, exec bentopg.Executor, p identity.Principal, command, key string) (string, Result, bool, error) {
+	var hash string
+	var res Result
+	err := exec.QueryRow(ctx, `SELECT request_hash, action_id, object_id, row_version, status FROM `+l.Schema+`.action_result
+		WHERE tenant_id = $1 AND company_id = $2 AND command = $3 AND idempotency_key = $4`,
+		string(p.Scope.Tenant), string(p.Scope.Company), command, key).
+		Scan(&hash, &res.ActionID, &res.ObjectID, &res.RowVersion, &res.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", Result{}, false, nil
+	}
+	if err != nil {
+		return "", Result{}, false, err
+	}
+	return hash, res, true, nil
+}
+
+// ReconcileQuery is the name a reconciliation has in the audit trail (Python audits
+// quote.query.action_reconciliation).
+const ReconcileQuery = "action.reconcile"
+
+// Reconciliation is what became of a command whose caller lost the answer.
+type Reconciliation struct {
+	State    kernel.ReconcileState
+	ActionID string  // committed and payload_conflict
+	ObjectID string  // committed and payload_conflict
+	Result   *Result // the stored result; committed only
+}
+
+// Reconcile tells a caller that lost the answer to a command, for instance after
+// application.ErrCommitUncertain, what became of command under idempotencyKey: committed (with the
+// stored result), payload_conflict (the key committed another request) or not_committed. It
+// executes nothing (contract 06, 动作对账; Python t03_reconciliation.reconcile). After committed,
+// a replay of the same key returns the same result; after not_committed, the caller sends the
+// command again with the same key, and it executes once.
+//
+// Reconciliation is an audited read. It re-checks, in the caller's own scope and now, the
+// business read permission a replay needs (ReplayRead) and the visibility of the object; a
+// revoked grant is PERMISSION_DENIED and an object outside the data scope NOT_FOUND, whether
+// the hash matches or not. It does not require the command's own permission: historical results
+// need read grants, never a grant to repeat the write (Python READ_PERMISSIONS, test
+// test_readers_can_recover_receipts_without_write_grants). The ledger of another tenant or company
+// is never read, so a key committed there is not_committed here.
+func (l *Ledger) Reconcile(ctx context.Context, command, idempotencyKey, requestHash string) (Reconciliation, error) {
+	if err := l.check(); err != nil {
+		return Reconciliation{}, err
+	}
+	p, err := identity.FromContext(ctx)
+	if err != nil {
+		return Reconciliation{}, err
+	}
+	ctx = ensureCorrelation(ctx)
+	rec, err := l.reconcile(ctx, p, command, idempotencyKey, requestHash)
+	if err == nil {
+		return rec, nil
+	}
+	if rej, ok := kernel.AsRejection(err); ok {
+		if auditErr := l.auditRejected(ctx, p, ReconcileQuery, "", rej.Code); auditErr != nil {
+			return Reconciliation{}, errors.Join(rej, auditErr)
+		}
+	}
+	return Reconciliation{}, err
+}
+
+func (l *Ledger) reconcile(ctx context.Context, p identity.Principal, command, key, hash string) (Reconciliation, error) {
+	switch {
+	case !kernel.ValidIdentifier(key):
+		return Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args/idempotency_key", "")
+	case !hashPattern.MatchString(hash):
+		return Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args/request_hash", "")
+	}
+	if _, err := l.Authorizer.Policy.Rule(command); err != nil {
+		return Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args/command", "")
+	}
+	var rec Reconciliation
+	err := l.inScope(ctx, p, func(ctx context.Context, exec bentopg.Executor) error {
+		d, err := l.Authorizer.Authorize(ctx, exec, l.ReplayRead)
+		if err != nil {
+			return denied(err)
+		}
+		storedHash, res, found, err := l.stored(ctx, exec, p, command, key)
+		if err != nil {
+			return err
+		}
+		rec = Reconciliation{State: kernel.ReconcileNotCommitted}
+		if found {
+			visible, err := l.Visible(ctx, exec, d, command, res.ObjectID)
+			if err != nil {
+				return err
+			}
+			if !visible {
+				// The same answer for a matching and a conflicting hash: a conflict must not reveal
+				// another owner's action either.
+				return kernel.Reject(kernel.CodeNotFound, "/args/idempotency_key", "")
+			}
+			rec = Reconciliation{State: kernel.ReconcilePayloadConflict, ActionID: res.ActionID, ObjectID: res.ObjectID}
+			if storedHash == hash {
+				rec.State, rec.Result = kernel.ReconcileCommitted, &res
+			}
+		}
+		return l.audit(ctx, exec, p, ReconcileQuery, rec.ObjectID, "read", "", "", d.Epoch)
+	})
+	if err != nil {
+		return Reconciliation{}, err
+	}
+	return rec, nil
 }
 
 // Read runs an audited read: it authorizes command, runs fn and records the read. fn returns a

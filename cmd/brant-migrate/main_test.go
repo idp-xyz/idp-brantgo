@@ -78,8 +78,9 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		}
 	}
 	want := []string{
-		"brant:000001_auth_authority_guard", "brant:000002_auth_data_scope", "brant:000001_msg_dead_letter", "brant:000001_evd_sources",
-		"brant:000002_evd_business_files", "brant:000001_pty_parties", "brant:000001_cat_skus", "brant:000001_pol_configuration",
+		"brant:000001_auth_authority_guard", "brant:000002_auth_data_scope", "brant:000003_auth_roles", "brant:000001_msg_dead_letter",
+		"brant:000001_ref_screening_lists", "brant:000001_evd_sources", "brant:000002_evd_business_files", "brant:000001_pty_parties",
+		"brant:000002_pty_party_screening", "brant:000001_cat_skus", "brant:000001_pol_configuration", "brant:000002_pol_config_guard",
 		"brant:000001_inq_customer_rfqs",
 	}
 	if got := strings.Join(ids, " "); got != strings.Join(want, " ") {

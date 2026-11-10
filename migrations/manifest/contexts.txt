@@ -3,10 +3,12 @@
 # numbered from 000001 without gaps; applied files are never edited.
 #
 # auth: foundation/authorization (brant_auth). msg: foundation/messaging, the Outbox dead letters
-# (brant_msg). Bounded contexts follow in the order of their upstream relationships: evd before pty
-# and cat, all three before inq; pol has no upstream and precedes inq, its first downstream with code.
+# (brant_msg). ref: reference data, the screening lists (brant_ref); PTY's screening guard calls its
+# guard function, so it precedes pty. Bounded contexts follow in the order of their upstream
+# relationships: evd before pty, cat and pol (R63), all four before inq.
 auth
 msg
+ref
 evd
 pty
 cat

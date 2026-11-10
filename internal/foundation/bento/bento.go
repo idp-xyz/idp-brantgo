@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -43,6 +44,10 @@ type ScopeTransactor struct {
 	Scope kernel.Scope
 }
 
+// WithinTransaction runs fn in a transaction of t.DB bound to t.Scope, or joins the transaction of
+// the same DB and scope that ctx carries. A commit whose outcome the database cannot confirm is
+// application.ErrCommitUncertain (see commitLost); the caller reconciles instead of executing
+// again.
 func (t ScopeTransactor) WithinTransaction(ctx context.Context, fn application.TxFunc) error {
 	if t.DB == nil || !t.Scope.Valid() || fn == nil {
 		return ErrNotConfigured
@@ -50,7 +55,8 @@ func (t ScopeTransactor) WithinTransaction(ctx context.Context, fn application.T
 	if current, ok := ScopeFromContext(ctx); ok && current != t.Scope {
 		return fmt.Errorf("%w: %s inside %s", ErrScopeConflict, t.Scope, current)
 	}
-	return t.DB.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+	var done bool // fn succeeded; an error after it comes from ending the transaction
+	err := t.DB.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
 		exec, err := t.DB.RequireExecutor(txCtx)
 		if err != nil {
 			return err
@@ -60,8 +66,27 @@ func (t ScopeTransactor) WithinTransaction(ctx context.Context, fn application.T
 		if err != nil {
 			return fmt.Errorf("bento: bind scope %s: %w", t.Scope, err)
 		}
-		return fn(context.WithValue(txCtx, scopeKey{}, t.Scope))
+		if err = fn(context.WithValue(txCtx, scopeKey{}, t.Scope)); err != nil {
+			return err
+		}
+		done = true
+		return nil
 	})
+	if done && commitLost(err) {
+		return errors.Join(application.ErrCommitUncertain, err)
+	}
+	return err
+}
+
+// commitLost reports a commit whose connection closed before its answer arrived. Bento
+// (v0.1.0-rc.2) reports ErrCommitUncertain only for commit errors that pgconn.SafeToRetry calls
+// unsafe, but pgx v5.10.0 turns a failed read of the COMMIT answer into pgconn.ErrConnClosed,
+// which claims to be safe to retry: MultiResultReader.NextResult drops the read error and the
+// next receive finds the connection closed. The COMMIT may have reached the server, so the
+// outcome is uncertain. A connection that closed before the COMMIT was sent is reported the same
+// way, which only makes the caller reconcile.
+func commitLost(err error) bool {
+	return err != nil && !errors.Is(err, application.ErrCommitUncertain) && errors.Is(err, pgconn.ErrConnClosed)
 }
 
 // ScopeFromContext returns the scope of the ScopeTransactor transaction ctx runs in.

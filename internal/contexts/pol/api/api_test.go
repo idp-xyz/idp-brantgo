@@ -28,7 +28,6 @@ func TestSaveDraftContract(t *testing.T) {
 		want string
 	}{
 		{func(*SaveDraft) {}, "OK"},
-		{func(c *SaveDraft) { c.Kind = "calendar" }, "UNSUPPORTED_CONTRACT /args/kind"},
 		{func(c *SaveDraft) { c.Kind = "fx" }, "SCHEMA_INVALID /args/kind"},
 		{func(c *SaveDraft) { c.ConfigID = strings.Repeat("x", MaxConfigIDLength+1) }, "SCHEMA_INVALID /args/id"},
 		{func(c *SaveDraft) { c.ValidFrom = "2026-10-22T00:00:00+08:00" }, "SCHEMA_INVALID /args/valid_from"},

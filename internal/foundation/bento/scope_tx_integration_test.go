@@ -5,8 +5,11 @@ package bento_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
@@ -102,5 +105,60 @@ func TestScopeBindsTheTransaction(t *testing.T) {
 	}
 	if err := (bento.ScopeTransactor{DB: db}).WithinTransaction(context.Background(), func(context.Context) error { return nil }); !errors.Is(err, bento.ErrNotConfigured) {
 		t.Fatalf("missing scope: %v", err)
+	}
+}
+
+// A COMMIT whose answer never arrives is application.ErrCommitUncertain, whether the server
+// committed or not. pgx v5.10.0 reports the lost answer as pgconn.ErrConnClosed, which Bento
+// v0.1.0-rc.2 would pass on as a certain failure. A callback's own error is never reclassified.
+func TestLostCommitIsUncertain(t *testing.T) {
+	fault := &pgtest.CommitFault{}
+	db, err := bentopg.NewDB(pgtest.FaultyAppPool(t, fault))
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer := newDB(t)
+	ctx := context.Background()
+	tx := bento.ScopeTransactor{DB: db, Scope: scope}
+	for _, c := range []struct {
+		mode pgtest.FaultMode
+		want string // txid_status of the transaction as the server decided it
+	}{{pgtest.LoseAnswer, "committed"}, {pgtest.LoseCommit, "aborted"}} {
+		fault.Arm(c.mode)
+		var xid int64
+		err := tx.WithinTransaction(ctx, func(ctx context.Context) error {
+			exec, err := db.RequireExecutor(ctx)
+			if err != nil {
+				return err
+			}
+			return exec.QueryRow(ctx, "SELECT txid_current()").Scan(&xid)
+		})
+		if !errors.Is(err, application.ErrCommitUncertain) || !fault.Fired() {
+			t.Fatalf("mode %d: %v (fired %v); want ErrCommitUncertain", c.mode, err, fault.Fired())
+		}
+		if fault.Committed() != (c.mode == pgtest.LoseAnswer) {
+			t.Fatalf("mode %d: the server answered CommandComplete: %v", c.mode, fault.Committed())
+		}
+		q, err := observer.ReadExecutor(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		status := "in progress"
+		for deadline := time.Now().Add(10 * time.Second); status == "in progress" && time.Now().Before(deadline); {
+			if err = q.QueryRow(ctx, "SELECT txid_status($1)", xid).Scan(&status); err != nil {
+				t.Fatal(err)
+			}
+			if status == "in progress" {
+				time.Sleep(20 * time.Millisecond) // the backend rolls back once it sees the connection close
+			}
+		}
+		if status != c.want {
+			t.Fatalf("mode %d: transaction %d is %s on the server, want %s", c.mode, xid, status, c.want)
+		}
+	}
+	fault.Arm(0)
+	own := fmt.Errorf("callback failed: %w", pgconn.ErrConnClosed)
+	if err := tx.WithinTransaction(ctx, func(context.Context) error { return own }); !errors.Is(err, own) || errors.Is(err, application.ErrCommitUncertain) {
+		t.Fatalf("callback error: %v; want it unchanged", err)
 	}
 }

@@ -12,6 +12,11 @@
 // exchange rate applies only in its direction and for its purpose (POL-INV-003); payment stages are
 // positive and sum to 100 (POL-INV-004). Checks run in the Python order: existence, root version,
 // state, independence, content, validity, references, definition.
+//
+// A content refers to other configurations in two ways (kinds.go, References): a definition whose
+// meaning POL-INV-002 fixes (a currency, a unit) by its code, resolved to the revision in force when
+// it is used; a configuration whose content may change (a tax profile, a calendar) by its exact
+// revision, a ConfigRef v1 the publisher reviewed.
 package config
 
 import (
@@ -20,7 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-	_ "time/tzdata" // sequence time zones do not depend on the host's zone database
+	_ "time/tzdata" // time zones do not depend on the host's zone database
 
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -35,6 +40,9 @@ const (
 	CodePaymentTotalMismatch      = "PAYMENT_TOTAL_MISMATCH"
 	CodeConfigNotActive           = "CONFIG_NOT_ACTIVE"
 	CodeConfigExpired             = "CONFIG_EXPIRED"
+	CodeUnitScopeMismatch         = "UNIT_SCOPE_MISMATCH"
+	CodeTaxPolicyUnconfirmed      = "TAX_POLICY_UNCONFIRMED"
+	CodeTemplateInvalid           = "TEMPLATE_INVALID"
 )
 
 // Categories are the categories of the codes above (all 422 in the error catalog).
@@ -46,9 +54,15 @@ var Categories = map[string]kernel.Category{
 	CodePaymentTotalMismatch:      kernel.CategoryInvalid,
 	CodeConfigNotActive:           kernel.CategoryInvalid,
 	CodeConfigExpired:             kernel.CategoryInvalid,
+	CodeUnitScopeMismatch:         kernel.CategoryInvalid,
+	CodeTaxPolicyUnconfirmed:      kernel.CategoryInvalid,
+	CodeTemplateInvalid:           kernel.CategoryInvalid,
 }
 
-func reject(code, path string) error { return kernel.RejectAs(code, Categories[code], path, "") }
+// Reject returns a rejection with one of the codes above at path.
+func Reject(code, path string) error { return kernel.RejectAs(code, Categories[code], path, "") }
+
+func reject(code, path string) error { return Reject(code, path) }
 
 // Repath returns the rejection in err at path instead of its own; other errors pass unchanged.
 func Repath(err error, path string) error {
@@ -57,17 +71,6 @@ func Repath(err error, path string) error {
 	}
 	return err
 }
-
-// Kind is a configuration kind. The domain knows the kinds it has rules for.
-type Kind string
-
-const (
-	KindCurrency       Kind = "currency"
-	KindUnit           Kind = "unit"
-	KindFXRate         Kind = "fx_rate"
-	KindPaymentTerms   Kind = "payment_terms"
-	KindNumberSequence Kind = "number_sequence"
-)
 
 // Status of a revision.
 type Status string
@@ -80,67 +83,30 @@ const (
 	Discarded  Status = "discarded"
 )
 
-// Currency is an ISO 4217 currency; code, minor units and rounding are its meaning.
-type Currency struct {
-	Code       string `json:"code"`
-	Name       string `json:"name"`
-	MinorUnits int    `json:"minor_units"`
-	Rounding   string `json:"rounding"`
-}
-
-// Unit is a unit of measure; code, dimension and precision are its meaning.
-type Unit struct {
-	Code      string `json:"code"`
-	Name      string `json:"name"`
-	Dimension string `json:"dimension"`
-	Precision int    `json:"precision"`
-}
-
-// FXRate is one unit of FromCurrency in ToCurrency, for one purpose. ObservedAt is a canonical
-// timestamp (kernel.FormatTimestamp).
-type FXRate struct {
-	FromCurrency string `json:"from_currency"`
-	ToCurrency   string `json:"to_currency"`
-	Rate         string `json:"rate"`
-	Purpose      string `json:"purpose"`
-	SourceName   string `json:"source_name"`
-	ObservedAt   string `json:"observed_at"`
-}
-
-// PaymentTerms are payment stages.
-type PaymentTerms struct {
-	Name   string         `json:"name"`
-	Stages []PaymentStage `json:"stages"`
-}
-
-// PaymentStage is one stage of PaymentTerms.
-type PaymentStage struct {
-	StageID string `json:"stage_id"`
-	Percent string `json:"percent"`
-	Trigger string `json:"trigger"`
-	Days    int    `json:"days"`
-}
-
-// NumberSequence is how document numbers of one document type are formed.
-type NumberSequence struct {
-	DocumentType string `json:"document_type"`
-	Prefix       string `json:"prefix"`
-	Width        int    `json:"width"`
-	Reset        string `json:"reset"`
-	TimeZone     string `json:"time_zone"`
-}
-
 // Content is the whole content of a revision: its kind, its validity interval and the data of its
 // kind, of which exactly the member of Kind is set. Times are kernel.Instant values.
 type Content struct {
-	Kind           Kind
-	ValidFrom      time.Time
-	ValidUntil     time.Time // zero: open-ended
-	Currency       *Currency
-	Unit           *Unit
-	FXRate         *FXRate
-	PaymentTerms   *PaymentTerms
-	NumberSequence *NumberSequence
+	Kind                  Kind
+	ValidFrom             time.Time
+	ValidUntil            time.Time // zero: open-ended
+	CompanyProfile        *CompanyProfile
+	Currency              *Currency
+	Unit                  *Unit
+	UnitConversion        *UnitConversion
+	FXRate                *FXRate
+	Calendar              *Calendar
+	TradeTerms            *TradeTerms
+	PaymentTerms          *PaymentTerms
+	TaxProfile            *TaxProfile
+	TaxApplication        *TaxApplication
+	FeeCategory           *FeeCategory
+	PricingPolicy         *PricingPolicy
+	BankAccount           *BankAccount
+	NumberSequence        *NumberSequence
+	DocumentTemplate      *DocumentTemplate
+	QuoteDocumentTemplate *QuoteDocumentTemplate
+	CreditPolicy          *CreditPolicy
+	ScreeningRegulation   *ScreeningRegulation
 }
 
 // Validity returns the revision's validity interval.
@@ -148,29 +114,64 @@ func (c Content) Validity() kernel.ValidityInterval {
 	return kernel.ValidityInterval{From: c.ValidFrom, Until: c.ValidUntil}
 }
 
-// Data returns the member of c.Kind.
+// present returns p as an interface, and nil (not a typed nil pointer) when p is nil.
+func present[T any](p *T) any {
+	if p == nil {
+		return nil
+	}
+	return p
+}
+
+// Data returns the member of c.Kind, or nil when it is not set.
 func (c Content) Data() any {
 	switch c.Kind {
+	case KindCompanyProfile:
+		return present(c.CompanyProfile)
 	case KindCurrency:
-		return c.Currency
+		return present(c.Currency)
 	case KindUnit:
-		return c.Unit
+		return present(c.Unit)
+	case KindUnitConversion:
+		return present(c.UnitConversion)
 	case KindFXRate:
-		return c.FXRate
+		return present(c.FXRate)
+	case KindCalendar:
+		return present(c.Calendar)
+	case KindTradeTerms:
+		return present(c.TradeTerms)
 	case KindPaymentTerms:
-		return c.PaymentTerms
+		return present(c.PaymentTerms)
+	case KindTaxProfile:
+		return present(c.TaxProfile)
+	case KindTaxApplication:
+		return present(c.TaxApplication)
+	case KindFeeCategory:
+		return present(c.FeeCategory)
+	case KindPricingPolicy:
+		return present(c.PricingPolicy)
+	case KindBankAccount:
+		return present(c.BankAccount)
 	case KindNumberSequence:
-		return c.NumberSequence
+		return present(c.NumberSequence)
+	case KindDocumentTemplate:
+		return present(c.DocumentTemplate)
+	case KindQuoteDocumentTemplate:
+		return present(c.QuoteDocumentTemplate)
+	case KindCreditPolicy:
+		return present(c.CreditPolicy)
+	case KindScreeningRegulation:
+		return present(c.ScreeningRegulation)
 	}
 	return nil
 }
 
 // DataJSON returns the data of c as stored.
 func (c Content) DataJSON() ([]byte, error) {
-	if c.Data() == nil {
+	data := c.Data()
+	if data == nil {
 		return nil, fmt.Errorf("pol: kind %q has no data", c.Kind)
 	}
-	return json.Marshal(c.Data())
+	return json.Marshal(data)
 }
 
 // Hash returns the content hash: the SHA-256 of the canonical JSON of kind, validity and data.
@@ -197,102 +198,56 @@ func (c Content) Hash() (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func decode[T any](raw []byte, member **T) error {
+	v := new(T)
+	if err := json.Unmarshal(raw, v); err != nil {
+		return err
+	}
+	*member = v
+	return nil
+}
+
 // DecodeData sets the member of c.Kind from stored data.
 func (c *Content) DecodeData(raw []byte) error {
-	var target any
 	switch c.Kind {
+	case KindCompanyProfile:
+		return decode(raw, &c.CompanyProfile)
 	case KindCurrency:
-		c.Currency = &Currency{}
-		target = c.Currency
+		return decode(raw, &c.Currency)
 	case KindUnit:
-		c.Unit = &Unit{}
-		target = c.Unit
+		return decode(raw, &c.Unit)
+	case KindUnitConversion:
+		return decode(raw, &c.UnitConversion)
 	case KindFXRate:
-		c.FXRate = &FXRate{}
-		target = c.FXRate
+		return decode(raw, &c.FXRate)
+	case KindCalendar:
+		return decode(raw, &c.Calendar)
+	case KindTradeTerms:
+		return decode(raw, &c.TradeTerms)
 	case KindPaymentTerms:
-		c.PaymentTerms = &PaymentTerms{}
-		target = c.PaymentTerms
+		return decode(raw, &c.PaymentTerms)
+	case KindTaxProfile:
+		return decode(raw, &c.TaxProfile)
+	case KindTaxApplication:
+		return decode(raw, &c.TaxApplication)
+	case KindFeeCategory:
+		return decode(raw, &c.FeeCategory)
+	case KindPricingPolicy:
+		return decode(raw, &c.PricingPolicy)
+	case KindBankAccount:
+		return decode(raw, &c.BankAccount)
 	case KindNumberSequence:
-		c.NumberSequence = &NumberSequence{}
-		target = c.NumberSequence
-	default:
-		return fmt.Errorf("pol: no data of kind %q", c.Kind)
+		return decode(raw, &c.NumberSequence)
+	case KindDocumentTemplate:
+		return decode(raw, &c.DocumentTemplate)
+	case KindQuoteDocumentTemplate:
+		return decode(raw, &c.QuoteDocumentTemplate)
+	case KindCreditPolicy:
+		return decode(raw, &c.CreditPolicy)
+	case KindScreeningRegulation:
+		return decode(raw, &c.ScreeningRegulation)
 	}
-	return json.Unmarshal(raw, target)
-}
-
-// Validate judges content the contract admitted (Python foundation.validate): a bounded validity
-// that ends after it starts, a currency or unit whose config_id is its code, an exchange rate
-// between two currencies with a positive rate observed no later than it becomes valid, payment
-// stages with distinct IDs and positive percentages summing to 100, and a sequence time zone that
-// exists.
-func Validate(id string, c Content) error {
-	if c.Data() == nil {
-		return kernel.Reject(kernel.CodeSchemaInvalid, "/args/data", "")
-	}
-	if !c.Validity().Valid() {
-		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/valid_until", "")
-	}
-	switch c.Kind {
-	case KindCurrency:
-		if id != c.Currency.Code {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/id", "Currency id must equal its code")
-		}
-	case KindUnit:
-		if id != c.Unit.Code {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/id", "Unit id must equal its code")
-		}
-	case KindFXRate:
-		x := c.FXRate
-		if x.FromCurrency == x.ToCurrency {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/to_currency", "Same currency is an explicit 1, not a rate")
-		}
-		if rate, err := kernel.ParseDecimal(x.Rate, kernel.FactorFormat); err != nil || rate.Sign() <= 0 {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/rate", "")
-		}
-		if c.ValidUntil.IsZero() {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/valid_until", "An exchange rate expires")
-		}
-		observed, err := kernel.ParseTimestamp(x.ObservedAt)
-		if err != nil || observed.After(c.ValidFrom) {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/observed_at", "")
-		}
-	case KindPaymentTerms:
-		return checkStages(c.PaymentTerms.Stages)
-	case KindNumberSequence:
-		if tz := c.NumberSequence.TimeZone; tz == "Local" {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/time_zone", "")
-		} else if _, err := time.LoadLocation(tz); err != nil {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/time_zone", "")
-		}
-	}
-	return nil
-}
-
-// checkStages enforces POL-INV-004: distinct stage IDs, every percentage above 0 and exactly 100 in
-// total, compared exactly.
-func checkStages(stages []PaymentStage) error {
-	seen := map[string]bool{}
-	for _, s := range stages {
-		if seen[s.StageID] {
-			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/stages", "Stage IDs must be distinct")
-		}
-		seen[s.StageID] = true
-	}
-	total := kernel.DecimalFromInt(0)
-	for _, s := range stages {
-		// The contract admitted PercentFormat; FactorFormat accepts every such string.
-		p, err := kernel.ParseDecimal(s.Percent, kernel.FactorFormat)
-		if err != nil || p.Sign() <= 0 {
-			return reject(CodePaymentTotalMismatch, "/args/data/stages")
-		}
-		total = total.Add(p)
-	}
-	if !total.Equal(kernel.DecimalFromInt(100)) {
-		return reject(CodePaymentTotalMismatch, "/args/data/stages")
-	}
-	return nil
+	return fmt.Errorf("pol: no data of kind %q", c.Kind)
 }
 
 // Publication is the independent review that made a revision active.
@@ -373,38 +328,12 @@ func (r *Root) Save(c Content, by kernel.ActorRef, epoch int64, at time.Time) (*
 	return w, created, nil
 }
 
-// Facts are the states of the configurations a content refers to, at the instant of a save or a
-// publication: for each currency code an exchange rate names, what InForce said of that currency
-// (nil when in force). A code without an entry is not a configured currency.
-type Facts struct {
-	Currencies map[string]error
-}
-
-// CheckReferences requires the currencies of an exchange rate to be configured and in force
-// (Python: every child reference is active at save and publication).
-func CheckReferences(c Content, f Facts) error {
-	if c.Kind != KindFXRate {
-		return nil
-	}
-	for _, ref := range []struct{ code, path string }{
-		{c.FXRate.FromCurrency, "/args/data/from_currency"}, {c.FXRate.ToCurrency, "/args/data/to_currency"},
-	} {
-		state, known := f.Currencies[ref.code]
-		if !known {
-			return kernel.Reject(kernel.CodeReferenceInvalid, ref.path, "")
-		}
-		if state != nil {
-			return Repath(state, ref.path)
-		}
-	}
-	return nil
-}
-
 // Publish makes working revision number active for the human by, superseding the active revision.
 // Its last editor may not publish it (POL-INV-001); its content must still be valid, its validity
 // must contain at (CONFIG_EXPIRED: an expired or future revision never replaces the active one), its
-// references must be in force, and a currency or unit keeps the definition of its latest
-// publication, retired or not (POL-INV-002). It returns the superseded revision, if any.
+// references must be in force, a screening regulation's legal confirmations must be among the
+// evidence, and a currency or unit keeps the definition of its latest publication, retired or not
+// (POL-INV-002). It returns the superseded revision, if any.
 func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, evidence []string, at time.Time) (*Revision, error) {
 	w := r.Working
 	switch {
@@ -421,7 +350,10 @@ func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, e
 	if !w.Content.Validity().Contains(at) {
 		return nil, reject(CodeConfigExpired, "/args/revision")
 	}
-	if err := CheckReferences(w.Content, f); err != nil {
+	if err := CheckReferences(r.ID, w.Content, f); err != nil {
+		return nil, err
+	}
+	if err := CheckLegalConfirmations(w.Content, evidence); err != nil {
 		return nil, err
 	}
 	if d := r.Definition; d != nil && !sameDefinition(d.Content, w.Content) {

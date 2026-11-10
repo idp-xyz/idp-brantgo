@@ -13,14 +13,14 @@ M0-11,M0,messaging,Outbox 中继：cmd/brant-worker 与 foundation/messaging（�
 S1-01,S1,EVD,来源四层身份与业务文件,P0,M0-04;M0-07,internal/contexts/evd,EVD-INV-001；同渠道异正文拒绝；来源权限撤回后读取拒绝,EVD Owner,T01 source.register；foundation.file.register,DONE_CI
 S1-02,S1,PTY,主体、联系人、交易档案、地址角色与服务方角色,P0,S1-01,internal/contexts/pty；PartyRef v1,PTY-INV-001；人工核实；修订保留旧快照,PTY Owner,master.*；A29–A31,PARTIAL
 S1-03,S1,CAT,SKU、规格修订与货号映射,P0,S1-01,internal/contexts/cat；SkuRef v1,CAT-INV-001；未知 SKU 拒绝,CAT Owner,master(kind=sku)；foundation SKU 规格,PARTIAL
-S1-04,S1,POL,配置根、修订、独立发布、基础快照与编号（首批 13 类配置）,P0,M0-03;M0-07,internal/contexts/pol；ConfigRef v1,POL-INV-001–005；汇率方向用途；付款比例 100,POL Owner＋财务,共享基础 V0.2；brant.foundation/0.1.0,PARTIAL
+S1-04,S1,POL,配置根、修订、独立发布、基础快照与编号（首批 13 类配置）,P0,M0-03;M0-07,internal/contexts/pol；ConfigRef v1,POL-INV-001–005；汇率方向用途；付款比例 100,POL Owner＋财务,共享基础 V0.2；brant.foundation/0.1.0,DONE_CI
 S1-05,S1,INQ,客户询价 draft／ready／cancelled／closed,P0,S1-02;S1-03,internal/contexts/inq；RfqRef v1,INQ-INV-001–002；BC-AT02、05 组件断言,INQ Owner,rfq.*,DONE_CI
-S1-06,S1,transport,transport/http 最小命令路由与查询、cmd/brant-api、入口资源限制,P0,S1-05,OpenAPI 3.1 候选；1 MiB／64 层等限制,重复 JSON 键、浮点数、额外字段被拒绝,接口负责人,__main__.py 入口限制；T03 规格 §10,PARTIAL
+S1-06,S1,transport,transport/http 最小命令路由与查询、cmd/brant-api、入口资源限制,P0,S1-05,OpenAPI 3.1 候选；1 MiB／64 层等限制,重复 JSON 键、浮点数、额外字段被拒绝,接口负责人,__main__.py 入口限制；T03 规格 §10,DONE_CI
 S1-07,S1,测试,移植 T01 与共享基础测试（test_core、test_storage、test_foundation、test_cli、test_contracts）,P0,S1-01;S1-02;S1-03;S1-04;S1-05,Go 等价用例与映射状态更新,08 阶段映射表对应行改为 PORTED 且 Go CI 通过,QA,73 个 Python 测试方法（08 阶段映射）,PARTIAL
 S1-08,S1,演示,BRC-001 前段：四行 120 PCS 询价 ready 在 PG16 重放,P1,S1-06;S1-07,可重放脚本与证据,结果与 Python demo 一致,QA,python -m brant_core demo,DONE_CI
-S1-09,S1,PTY,主体筛查结论与 PartyScreeningGuard（名单来源由合规负责人确认）,P1,S1-02;S1-11,PartyScreening 聚合、守卫函数与复筛触发,PTY-INV-002；TD-AT15：新主体 pending、误报放行与正向名单失效、负向名单永久阻断；AI 与 system 身份裁决 match 被拒,PTY Owner＋合规负责人,—（Python 未实现）,NOT_STARTED
+S1-09,S1,PTY,主体筛查结论与 PartyScreeningGuard（名单来源由合规负责人确认）,P1,S1-02;S1-11,PartyScreening 聚合、守卫函数与复筛触发,PTY-INV-002；TD-AT15：新主体 pending、误报放行与正向名单失效、负向名单永久阻断；AI 与 system 身份裁决 match 被拒,PTY Owner＋合规负责人,—（Python 未实现）,DONE_CI
 S1-10,S1,消息,Outbox 死信、告警与重放（ADR-BR-015）,P0,M0-11,死信状态、告警与按事件 ID 的授权重放,预算耗尽的消息进入死信并告警；重放后消费方按事件 ID 去重；撤销与风险类事件不静默丢失,技术负责人＋运维,—（Python 未实现）,DONE_CI
-S1-11,S1,reference,筛查名单参考数据的受控导入（来源、版本、导入时间、哈希）与 POL screening_regulation,P1,S1-04,internal/reference 名单版本与导入命令；适用配置,新版本导入触发复筛；条目不可手工编辑；启用外国名单前须 ADR-BR-017 裁决,合规负责人＋研发,—（Python 未实现）,NOT_STARTED
+S1-11,S1,reference,筛查名单参考数据的受控导入（来源、版本、导入时间、哈希）与 POL screening_regulation,P1,S1-04,internal/reference 名单版本与导入命令；适用配置,新版本导入触发复筛；条目不可手工编辑；启用外国名单前须 ADR-BR-017 裁决,合规负责人＋研发,—（Python 未实现）,DONE_CI
 S2-01,S2,SUP,供应商询价与供应报价修订、核实、撤回,P0,S1-05,internal/contexts/sup,SUP-INV-001–002,SUP Owner,T02 §5、§13.2,NOT_STARTED
 S2-02,S2,SUP,采购条件独立发布、物流报价、服务方适用,P0,S2-01,PurchaseTerms、LogisticsOffer,SUP-INV-003；依附型与独立型条件,SUP Owner,T02 §6、§13.1；A46,NOT_STARTED
 S2-03,S2,CST,核价上下文、测算假设与测量快照,P0,S1-05;S1-04,CostingContext、MeasurementSnapshot,完整询价行覆盖；provisional 不可冻结,CST Owner,T02 §4、§13.1,NOT_STARTED
@@ -51,7 +51,7 @@ S4-02,S4,TSK,动作执行与对账；提交后断连恢复,P0,S4-01,ActionExecut
 S4-03,S4,ai,internal/ai：capability、gateway、policy、approvalgrant、execution、executionevidence,P0,S4-01;S1-06,AI 能力层,无授权默认拒绝；AI 只调用 api 命令,AI Owner＋安全负责人,,NOT_STARTED
 S4-04,S4,ai,受限文件导入、来源定位与候选生成,P0,S4-03,解析适配（候选）,BC-AT27,AI Owner,,NOT_STARTED
 S4-05,S4,集成,EER／BIP 适配评估与接入（ACL）,P1,S4-03,"adapters/{eer,bip}",停止屏障、恢复、unknown 对账证据,集成负责人,BC-D08,NOT_STARTED
-S4-06,S4,messaging,Inbox 分发与订阅登记,P0,M0-11,foundation/messaging Inbox,事件 ID 去重；重放；WF-03 风险传播,技术负责人,,NOT_STARTED
+S4-06,S4,messaging,Inbox 分发与订阅登记,P0,M0-11,foundation/messaging Inbox,事件 ID 去重；重放；WF-03 风险传播,技术负责人,,PARTIAL
 S4-07,S4,评测,tests/ai-evaluation 与 BC-AT28 真实 AI 目标链,P0,S4-03;S4-04,评测套件与试次记录,记录全部试次、人工修正、实际成本与权威断言,AI Owner＋QA,,NOT_STARTED
 S4-08,S4,门禁,P0 退出评审（G2 证据包）,P0,S4-02;S4-06;S4-07;S3-12,G2 评审记录,适用 AT／AN／CT 有证据；未执行项逐项说明,研发＋测试＋业务,,NOT_STARTED
 S5-01,S5,PUR,采购承诺审批（A47）、承诺发出与供应商确认,P1,S3-10,PurchaseCommitment,A47 最低验收,PUR Owner,A47 设计,NOT_STARTED

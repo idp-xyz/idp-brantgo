@@ -10,6 +10,10 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA bento TO brant_app;
 -- foundation/authorization: grants are deactivated, never deleted.
 GRANT USAGE ON SCHEMA brant_auth TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_auth.authority_scope, brant_auth.actor_grant TO brant_app;
+-- Roles are redefined in place; role assignments are ended, never deleted.
+GRANT SELECT, INSERT, UPDATE ON brant_auth.role TO brant_app;
+GRANT SELECT, INSERT ON brant_auth.actor_role TO brant_app;
+GRANT UPDATE (removed_epoch, removed_at) ON brant_auth.actor_role TO brant_app;
 
 -- foundation/messaging: dead letters are replayed, never deleted, and their envelope never changes.
 GRANT USAGE ON SCHEMA brant_msg TO brant_app;
@@ -22,10 +26,27 @@ GRANT USAGE ON SCHEMA brant_evd TO brant_app;
 GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant_evd.source_import,
     brant_evd.business_file, brant_evd.action_result, brant_evd.audit_event TO brant_app;
 
+-- REF: screening list reference data. An import moves a list's current version; versions, entries and
+-- name keys are never updated or deleted; the ledger only grows. The list guard function is executed
+-- by PTY's screening guard and by PTY's screening commands.
+GRANT USAGE ON SCHEMA brant_ref TO brant_app;
+GRANT SELECT, INSERT ON brant_ref.screening_list, brant_ref.screening_list_version, brant_ref.screening_list_entry,
+    brant_ref.screening_entry_name, brant_ref.action_result, brant_ref.audit_event TO brant_app;
+GRANT UPDATE (current_version, row_version, updated_at) ON brant_ref.screening_list TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_ref.screening_list_current_v1(text, boolean) TO brant_app;
+
 -- PTY: parties and contacts change through their lifecycle; confirmed revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_pty TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_pty.party, brant_pty.contact TO brant_app;
 GRANT SELECT, INSERT ON brant_pty.party_revision, brant_pty.contact_revision, brant_pty.action_result, brant_pty.audit_event TO brant_app;
+-- PTY screening: the root moves its current conclusion and status and never leaves the negative list
+-- (trigger); conclusions, list versions used, hits, decisions and positive and negative list entries
+-- only grow. PartyScreeningGuard v1 is executed by downstream contexts in their own transactions.
+GRANT SELECT, INSERT ON brant_pty.party_screening, brant_pty.screening_result, brant_pty.screening_list_used,
+    brant_pty.screening_hit, brant_pty.screening_decision, brant_pty.positive_list_entry, brant_pty.negative_list_entry TO brant_app;
+GRANT UPDATE (row_version, current_screening_id, status, negative, updated_at) ON brant_pty.party_screening TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pty.party_screening_state(text, timestamptz, boolean),
+    brant_pty.party_screening_guard_v1(text, timestamptz) TO brant_app;
 
 -- CAT: SKUs change through their lifecycle; specification revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_cat TO brant_app;
@@ -43,6 +64,8 @@ GRANT UPDATE (status, data, content_hash, valid_from, valid_until, saved_by_kind
 GRANT UPDATE (last_value, updated_at) ON brant_pol.number_counter TO brant_app;
 GRANT SELECT, INSERT ON brant_pol.issued_number, brant_pol.foundation_snapshot, brant_pol.snapshot_entry,
     brant_pol.action_result, brant_pol.audit_event TO brant_app;
+-- ConfigGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_pol.guard_config_in_force_v1(text, text, bigint, timestamptz) TO brant_app;
 
 -- INQ: a draft's lines and sources are replaced whole; the ledger only grows.
 GRANT USAGE ON SCHEMA brant_inq TO brant_app;

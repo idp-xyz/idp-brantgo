@@ -1,5 +1,5 @@
-// Package pty assembles the PTY bounded context (trading parties and contacts). Code outside PTY
-// uses it through package api; everything under internal/ is private to PTY.
+// Package pty assembles the PTY bounded context (trading parties, contacts and party screening).
+// Code outside PTY uses it through package api; everything under internal/ is private to PTY.
 package pty
 
 import (
@@ -8,12 +8,14 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pty/internal/application"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
 // Module is PTY wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -22,16 +24,19 @@ type Module struct {
 }
 
 var (
-	_ api.Commands = (*Module)(nil)
-	_ api.Queries  = (*Module)(nil)
-	_ api.Auditor  = (*Module)(nil)
+	_ api.Commands          = (*Module)(nil)
+	_ api.Queries           = (*Module)(nil)
+	_ api.ScreeningCommands = (*Module)(nil)
+	_ api.ScreeningQueries  = (*Module)(nil)
+	_ api.Auditor           = (*Module)(nil)
 )
 
-// New wires PTY to db, a transaction owner that belongs to PTY alone, and to EVD's queries for the
-// evidence of confirmations.
-func New(db *bentopg.DB, sources evdapi.Queries) (*Module, error) {
-	if sources == nil {
-		return nil, errors.New("pty: module needs EVD's queries")
+// New wires PTY to db, a transaction owner that belongs to PTY alone, to EVD's queries for the
+// evidence of confirmations, to POL's queries for the screening_regulation (R60) and to the
+// screening lists of reference data.
+func New(db *bentopg.DB, sources evdapi.Queries, configs polapi.Queries, lists refapi.Queries) (*Module, error) {
+	if sources == nil || configs == nil || lists == nil {
+		return nil, errors.New("pty: module needs EVD's and POL's queries and the screening lists")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {
@@ -42,7 +47,7 @@ func New(db *bentopg.DB, sources evdapi.Queries) (*Module, error) {
 		return nil, err
 	}
 	clock := bento.SystemClock{}
-	return &Module{application.Service{Clock: clock, Sources: sources, Ledger: &action.Ledger{
+	return &Module{application.Service{Clock: clock, Sources: sources, Configs: configs, Lists: lists, Ledger: &action.Ledger{
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 		Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetParty, Visible: application.Visible,
 	}}}, nil

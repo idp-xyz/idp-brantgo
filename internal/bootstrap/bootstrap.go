@@ -30,6 +30,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/identity/oidc"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
+	"go.idp.xyz/idp-brant/internal/reference"
 	"go.idp.xyz/idp-brant/internal/transport/httpapi"
 )
 
@@ -140,8 +141,10 @@ func (p *Platform) newDB() (*bentopg.DB, error) {
 	return bentopg.NewDB(p.pool, bentopg.WithSchema(p.schema))
 }
 
-// Contexts are the bounded contexts of a process, each on a transaction owner of its own.
+// Contexts are the bounded contexts of a process and its reference data, each on a transaction
+// owner of its own.
 type Contexts struct {
+	REF *reference.Module // screening lists; not a bounded context
 	EVD *evd.Module
 	PTY *pty.Module
 	CAT *cat.Module
@@ -149,10 +152,17 @@ type Contexts struct {
 	INQ *inq.Module
 }
 
-// Contexts wires every bounded context, upstream first. Call it once per process.
+// Contexts wires reference data and every bounded context, upstream first. Call it once per
+// process.
 func (p *Platform) Contexts() (*Contexts, error) {
 	var c Contexts
 	db, err := p.newDB()
+	if err == nil {
+		c.REF, err = reference.New(db)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
 	if err == nil {
 		c.EVD, err = evd.New(db)
 	}
@@ -160,19 +170,19 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.PTY, err = pty.New(db, c.EVD)
+		c.POL, err = pol.New(db, c.EVD)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.PTY, err = pty.New(db, c.EVD, c.POL, c.REF)
 	}
 	if err == nil {
 		db, err = p.newDB()
 	}
 	if err == nil {
 		c.CAT, err = cat.New(db, c.EVD)
-	}
-	if err == nil {
-		db, err = p.newDB()
-	}
-	if err == nil {
-		c.POL, err = pol.New(db, c.EVD)
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -271,7 +281,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
 	if cfg.ReplaySinkURL != "" {
 		replayer, err := p.Replayer(ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout})
@@ -289,4 +299,72 @@ func (p *Platform) VerifyIssuer(ctx context.Context) error {
 		return errors.New("bootstrap: API not built")
 	}
 	return p.verifier.Refresh(ctx)
+}
+
+// AssignRoles gives an actor exactly roles (role templates or tenant roles, BC-D02) and derives its
+// permissions; a forbidden combination is refused with authorization.ErrSeparationOfDuties. It is
+// an operator's change like Provision; dataScope and team are set as Provision sets them.
+func (p *Platform) AssignRoles(ctx context.Context, scope kernel.Scope, actor kernel.ActorRef, roles []string, dataScope authorization.DataScope, team string) (int64, error) {
+	return p.inAuthority(ctx, scope, func(ctx context.Context, exec bentopg.Executor, g authorization.Grants, now time.Time) (int64, error) {
+		if err := g.Provision(ctx, exec, scope); err != nil {
+			return 0, err
+		}
+		epoch, err := g.AssignRoles(ctx, exec, scope, actor, roles, now)
+		if err == nil && dataScope != "" {
+			epoch, err = g.SetDataScope(ctx, exec, scope, actor.ID, dataScope, team, now)
+		}
+		return epoch, err
+	})
+}
+
+// DefineRole defines a tenant role that merges role templates; a forbidden combination is refused.
+func (p *Platform) DefineRole(ctx context.Context, scope kernel.Scope, code, name string, templates []string) (int64, error) {
+	return p.inAuthority(ctx, scope, func(ctx context.Context, exec bentopg.Executor, g authorization.Grants, now time.Time) (int64, error) {
+		if err := g.Provision(ctx, exec, scope); err != nil {
+			return 0, err
+		}
+		return g.DefineRole(ctx, exec, scope, code, name, templates, now)
+	})
+}
+
+func (p *Platform) inAuthority(ctx context.Context, scope kernel.Scope, fn func(context.Context, bentopg.Executor, authorization.Grants, time.Time) (int64, error)) (int64, error) {
+	db, err := p.newDB()
+	if err != nil {
+		return 0, err
+	}
+	var epoch int64
+	err = bento.ScopeTransactor{DB: db, Scope: scope}.WithinTransaction(ctx, func(ctx context.Context) error {
+		exec, err := db.RequireExecutor(ctx)
+		if err != nil {
+			return err
+		}
+		epoch, err = fn(ctx, exec, authorization.Grants{}, bento.SystemClock{}.Now())
+		return err
+	})
+	return epoch, err
+}
+
+// AssignRolesFor is AssignRoles from plain operator input, for cmd/brant-admin.
+func (p *Platform) AssignRolesFor(ctx context.Context, tenant, company, actorID, kind string, roles []string, dataScope, team string) (int64, error) {
+	scope, err := kernel.NewScope(tenant, company)
+	if err != nil {
+		return 0, err
+	}
+	actor, err := kernel.NewActorRef(kernel.ActorKind(kind), actorID)
+	if err != nil {
+		return 0, err
+	}
+	if dataScope != "" && !authorization.DataScope(dataScope).Valid() {
+		return 0, fmt.Errorf("bootstrap: data scope %q is not own, team or company", dataScope)
+	}
+	return p.AssignRoles(ctx, scope, actor, roles, authorization.DataScope(dataScope), team)
+}
+
+// DefineRoleFor is DefineRole from plain operator input, for cmd/brant-admin.
+func (p *Platform) DefineRoleFor(ctx context.Context, tenant, company, code, name string, templates []string) (int64, error) {
+	scope, err := kernel.NewScope(tenant, company)
+	if err != nil {
+		return 0, err
+	}
+	return p.DefineRole(ctx, scope, code, name, templates)
 }
