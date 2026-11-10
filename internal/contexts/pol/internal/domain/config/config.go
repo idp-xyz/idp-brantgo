@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 	_ "time/tzdata" // sequence time zones do not depend on the host's zone database
 
@@ -67,7 +68,13 @@ const (
 	KindFXRate         Kind = "fx_rate"
 	KindPaymentTerms   Kind = "payment_terms"
 	KindNumberSequence Kind = "number_sequence"
+
+	KindScreeningRegulation Kind = "screening_regulation"
 )
+
+// JurisdictionForeign is the jurisdiction of a screening list a tenant enables only with its legal
+// confirmation (ADR-BR-017, SR-19).
+const JurisdictionForeign = "foreign"
 
 // Status of a revision.
 type Status string
@@ -130,6 +137,20 @@ type NumberSequence struct {
 	TimeZone     string `json:"time_zone"`
 }
 
+// ScreeningRegulation is the screening lists a company enables and its re-screening interval.
+type ScreeningRegulation struct {
+	Lists                []ScreeningList `json:"lists"`
+	RescreenIntervalDays int             `json:"rescreen_interval_days"`
+}
+
+// ScreeningList is one enabled list; a foreign list carries the EVD source of the tenant's legal
+// confirmation.
+type ScreeningList struct {
+	ListCode                    string `json:"list_code"`
+	Jurisdiction                string `json:"jurisdiction"`
+	LegalConfirmationEvidenceID string `json:"legal_confirmation_evidence_id,omitempty"`
+}
+
 // Content is the whole content of a revision: its kind, its validity interval and the data of its
 // kind, of which exactly the member of Kind is set. Times are kernel.Instant values.
 type Content struct {
@@ -141,6 +162,8 @@ type Content struct {
 	FXRate         *FXRate
 	PaymentTerms   *PaymentTerms
 	NumberSequence *NumberSequence
+
+	ScreeningRegulation *ScreeningRegulation
 }
 
 // Validity returns the revision's validity interval.
@@ -161,6 +184,8 @@ func (c Content) Data() any {
 		return c.PaymentTerms
 	case KindNumberSequence:
 		return c.NumberSequence
+	case KindScreeningRegulation:
+		return c.ScreeningRegulation
 	}
 	return nil
 }
@@ -216,6 +241,9 @@ func (c *Content) DecodeData(raw []byte) error {
 	case KindNumberSequence:
 		c.NumberSequence = &NumberSequence{}
 		target = c.NumberSequence
+	case KindScreeningRegulation:
+		c.ScreeningRegulation = &ScreeningRegulation{}
+		target = c.ScreeningRegulation
 	default:
 		return fmt.Errorf("pol: no data of kind %q", c.Kind)
 	}
@@ -265,6 +293,29 @@ func Validate(id string, c Content) error {
 			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/time_zone", "")
 		} else if _, err := time.LoadLocation(tz); err != nil {
 			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/time_zone", "")
+		}
+	case KindScreeningRegulation:
+		for i, l := range c.ScreeningRegulation.Lists {
+			if l.Jurisdiction == JurisdictionForeign && l.LegalConfirmationEvidenceID == "" {
+				return kernel.Reject(kernel.CodeInvalidKnownValue, fmt.Sprintf("/args/data/lists/%d/legal_confirmation_evidence_id", i),
+					"A foreign list needs the tenant's legal confirmation")
+			}
+		}
+	}
+	return nil
+}
+
+// CheckLegalConfirmations requires a screening regulation's publication to cite, among its
+// evidence, the legal confirmation of every list that has one, so the publisher must be able to
+// read it like the rest of the evidence (ADR-BR-017, Context Map R63).
+func CheckLegalConfirmations(c Content, evidence []string) error {
+	if c.Kind != KindScreeningRegulation {
+		return nil
+	}
+	for _, l := range c.ScreeningRegulation.Lists {
+		if id := l.LegalConfirmationEvidenceID; id != "" && !slices.Contains(evidence, id) {
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/evidence_ids",
+				"Cite the legal confirmation of screening list "+l.ListCode)
 		}
 	}
 	return nil
@@ -403,8 +454,9 @@ func CheckReferences(c Content, f Facts) error {
 // Publish makes working revision number active for the human by, superseding the active revision.
 // Its last editor may not publish it (POL-INV-001); its content must still be valid, its validity
 // must contain at (CONFIG_EXPIRED: an expired or future revision never replaces the active one), its
-// references must be in force, and a currency or unit keeps the definition of its latest
-// publication, retired or not (POL-INV-002). It returns the superseded revision, if any.
+// references must be in force, a screening regulation's legal confirmations must be among the
+// evidence, and a currency or unit keeps the definition of its latest publication, retired or not
+// (POL-INV-002). It returns the superseded revision, if any.
 func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, evidence []string, at time.Time) (*Revision, error) {
 	w := r.Working
 	switch {
@@ -422,6 +474,9 @@ func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, e
 		return nil, reject(CodeConfigExpired, "/args/revision")
 	}
 	if err := CheckReferences(w.Content, f); err != nil {
+		return nil, err
+	}
+	if err := CheckLegalConfirmations(w.Content, evidence); err != nil {
 		return nil, err
 	}
 	if d := r.Definition; d != nil && !sameDefinition(d.Content, w.Content) {

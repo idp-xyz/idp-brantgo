@@ -99,6 +99,11 @@ const (
 	DocumentTypeOrder         = "order"
 	DocumentTypePurchaseOrder = "purchase_order"
 	DocumentTypeInvoice       = "invoice"
+
+	// Jurisdictions of a screening list a screening_regulation enables (ADR-BR-017).
+	JurisdictionCN      = "CN"
+	JurisdictionUN      = "UN"
+	JurisdictionForeign = "foreign"
 )
 
 // Limits of the contract.
@@ -108,6 +113,7 @@ const (
 	MaxRefs           = 200
 	MaxEvidence       = 200
 	MaxPaymentStages  = 20
+	MaxScreeningLists = 100
 
 	maxVersion            = 2147483647
 	maxNameCharacters     = 500
@@ -118,17 +124,20 @@ const (
 	minSequenceWidth      = 4
 	maxSequenceWidth      = 12
 	maxSequencePrefix     = 16
+	maxListCodeLength     = 32
+	maxRescreenDays       = 3650
 )
 
 var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
 		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy}
-	implemented   = []string{KindCurrency, KindUnit, KindFXRate, KindPaymentTerms, KindNumberSequence}
+	implemented   = []string{KindCurrency, KindUnit, KindFXRate, KindPaymentTerms, KindNumberSequence, KindScreeningRegulation}
 	purposes      = []string{PurposeCostEstimate, PurposeQuotation}
 	dimensions    = []string{DimensionCount, DimensionMass, DimensionLength, DimensionVolume}
 	triggers      = []string{TriggerOrderConfirmed, TriggerBeforeShipment, TriggerAfterShipment, TriggerAfterInvoice}
 	documentTypes = []string{DocumentTypeRfq, DocumentTypeQuote, DocumentTypeOrder, DocumentTypePurchaseOrder, DocumentTypeInvoice}
+	jurisdictions = []string{JurisdictionCN, JurisdictionUN, JurisdictionForeign}
 )
 
 // PercentFormat is the lexical form of a payment stage's percentage.
@@ -352,6 +361,8 @@ type ConfigData struct {
 	FXRate         *FXRate
 	PaymentTerms   *PaymentTerms
 	NumberSequence *NumberSequence
+
+	ScreeningRegulation *ScreeningRegulation
 }
 
 // Currency is an ISO 4217 currency; its config_id is its code. Code, minor units and rounding are
@@ -408,9 +419,28 @@ type NumberSequence struct {
 	TimeZone     string // IANA time zone the year is counted in, such as Asia/Shanghai
 }
 
+// ScreeningRegulation is the screening lists a company enables and how often a party is screened
+// again (ADR-BR-017, Context Map R60 POL->PTY). PTY screens only against the lists named here; a
+// conclusion stays valid RescreenIntervalDays after the screening. Brant records the lists and the
+// legal confirmations; it gives no legal opinion.
+type ScreeningRegulation struct {
+	Lists                []ScreeningList
+	RescreenIntervalDays int // 1–3650
+}
+
+// ScreeningList is one enabled list. A foreign list needs LegalConfirmationEvidenceID: the EVD
+// source of the tenant's legal confirmation, which the publication must cite among its evidence,
+// so the publisher must be able to read it (R63).
+type ScreeningList struct {
+	ListCode                    string // the list code reference data imports it under
+	Jurisdiction                string // CN, UN or foreign
+	LegalConfirmationEvidenceID string // required for a foreign list
+}
+
 func (d ConfigData) validate(kind string) error {
 	set := map[string]bool{KindCurrency: d.Currency != nil, KindUnit: d.Unit != nil, KindFXRate: d.FXRate != nil,
-		KindPaymentTerms: d.PaymentTerms != nil, KindNumberSequence: d.NumberSequence != nil}
+		KindPaymentTerms: d.PaymentTerms != nil, KindNumberSequence: d.NumberSequence != nil,
+		KindScreeningRegulation: d.ScreeningRegulation != nil}
 	for k, present := range set {
 		if present != (k == kind) {
 			return schema("/args/data")
@@ -493,6 +523,34 @@ func (d ConfigData) validate(kind string) error {
 		case !text(n.TimeZone, maxTimeZoneCharacters):
 			return schema("/args/data/time_zone")
 		}
+	case KindScreeningRegulation:
+		return d.ScreeningRegulation.validate()
+	}
+	return nil
+}
+
+func (r *ScreeningRegulation) validate() error {
+	if len(r.Lists) < 1 || len(r.Lists) > MaxScreeningLists {
+		return schema("/args/data/lists")
+	}
+	seen := map[string]bool{}
+	for i, l := range r.Lists {
+		at := "/args/data/lists/" + strconv.Itoa(i)
+		switch {
+		case len(l.ListCode) > maxListCodeLength || !kernel.ValidIdentifier(l.ListCode) || seen[l.ListCode]:
+			return schema(at + "/list_code")
+		case !slices.Contains(jurisdictions, l.Jurisdiction):
+			return schema(at + "/jurisdiction")
+		case l.LegalConfirmationEvidenceID != "" && !kernel.ValidIdentifier(l.LegalConfirmationEvidenceID):
+			return schema(at + "/legal_confirmation_evidence_id")
+		case l.Jurisdiction == JurisdictionForeign && l.LegalConfirmationEvidenceID == "":
+			// A foreign list is off unless the tenant registers its legal confirmation (SR-19).
+			return schema(at + "/legal_confirmation_evidence_id")
+		}
+		seen[l.ListCode] = true
+	}
+	if r.RescreenIntervalDays < 1 || r.RescreenIntervalDays > maxRescreenDays {
+		return schema("/args/data/rescreen_interval_days")
 	}
 	return nil
 }

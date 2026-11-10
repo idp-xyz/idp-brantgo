@@ -22,10 +22,27 @@ GRANT USAGE ON SCHEMA brant_evd TO brant_app;
 GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant_evd.source_import,
     brant_evd.business_file, brant_evd.action_result, brant_evd.audit_event TO brant_app;
 
+-- REF: screening list reference data. An import moves a list's current version; versions, entries and
+-- name keys are never updated or deleted; the ledger only grows. The list guard function is executed
+-- by PTY's screening guard and by PTY's screening commands.
+GRANT USAGE ON SCHEMA brant_ref TO brant_app;
+GRANT SELECT, INSERT ON brant_ref.screening_list, brant_ref.screening_list_version, brant_ref.screening_list_entry,
+    brant_ref.screening_entry_name, brant_ref.action_result, brant_ref.audit_event TO brant_app;
+GRANT UPDATE (current_version, row_version, updated_at) ON brant_ref.screening_list TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_ref.screening_list_current_v1(text, boolean) TO brant_app;
+
 -- PTY: parties and contacts change through their lifecycle; confirmed revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_pty TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_pty.party, brant_pty.contact TO brant_app;
 GRANT SELECT, INSERT ON brant_pty.party_revision, brant_pty.contact_revision, brant_pty.action_result, brant_pty.audit_event TO brant_app;
+-- PTY screening: the root moves its current conclusion and status and never leaves the negative list
+-- (trigger); conclusions, list versions used, hits, decisions and positive and negative list entries
+-- only grow. PartyScreeningGuard v1 is executed by downstream contexts in their own transactions.
+GRANT SELECT, INSERT ON brant_pty.party_screening, brant_pty.screening_result, brant_pty.screening_list_used,
+    brant_pty.screening_hit, brant_pty.screening_decision, brant_pty.positive_list_entry, brant_pty.negative_list_entry TO brant_app;
+GRANT UPDATE (row_version, current_screening_id, status, negative, updated_at) ON brant_pty.party_screening TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pty.party_screening_state(text, timestamptz, boolean),
+    brant_pty.party_screening_guard_v1(text, timestamptz) TO brant_app;
 
 -- CAT: SKUs change through their lifecycle; specification revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_cat TO brant_app;

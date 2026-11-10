@@ -1,6 +1,9 @@
 // Package application runs PTY's commands and queries on the command ledger. Lifecycle and
 // confirmation rules live in domain; SQL lives in adapters/postgres. Evidence sources are EVD's: a
 // confirmation reads them through EVD's api before PTY's transaction begins (Context Map R61).
+// A screening reads its screening_regulation from POL (R60) and the screening lists from reference
+// data before PTY's transaction, then re-checks the list versions through reference data's guard
+// function inside it.
 package application
 
 import (
@@ -13,6 +16,7 @@ import (
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/contact"
@@ -22,6 +26,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/kernel"
+	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
 // Read commands and permissions.
@@ -39,7 +44,9 @@ var (
 )
 
 // Rules is PTY's authorization policy. Confirming and deactivating are human only (05 stage
-// humanOnlyCommands); saving and revising drafts are open to AI agents with the grant.
+// humanOnlyCommands); saving and revising drafts are open to AI agents with the grant. Screening is
+// open to AI agents; deciding a suspected match and blocking a party are human only, and their
+// permissions belong to the compliance template alone.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandSaveParty, Permission: api.CommandSaveParty, ActorKinds: humanOrAgent},
@@ -48,6 +55,11 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandDeactivateParty, api.CommandDeactivateParty),
 		{Command: api.CommandSaveContact, Permission: api.CommandSaveContact, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandConfirmContact, api.CommandConfirmContact),
+		{Command: api.CommandRecordScreening, Permission: api.CommandRecordScreening, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandDecideScreening, api.CommandDecideScreening),
+		authorization.HumanOnly(api.CommandBlockParty, api.CommandBlockParty),
+		{Command: CommandGetScreening, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandScreeningsDue, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetParty, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetContact, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
@@ -70,6 +82,8 @@ type Service struct {
 	Ledger  *action.Ledger
 	Clock   application.Clock
 	Sources evdapi.Queries
+	Configs polapi.Queries // the screening_regulation a screening follows (R60)
+	Lists   refapi.Queries // screening list reference data
 }
 
 func (s Service) run(ctx context.Context, cmd action.Command, args any, validation error, h action.Handler) (api.Receipt, error) {
