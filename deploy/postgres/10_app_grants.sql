@@ -10,3 +10,8 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA bento TO brant_app;
 -- foundation/authorization: grants are deactivated, never deleted.
 GRANT USAGE ON SCHEMA brant_auth TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_auth.authority_scope, brant_auth.actor_grant TO brant_app;
+
+-- EVD: sources are immutable; the ledger tables only grow.
+GRANT USAGE ON SCHEMA brant_evd TO brant_app;
+GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant_evd.source_import,
+    brant_evd.action_result, brant_evd.audit_event TO brant_app;

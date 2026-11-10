@@ -2,6 +2,7 @@
 # Each entry names a directory under migrations/. A directory holds NNNNNN_<entry>_<topic>.sql files
 # numbered from 000001 without gaps; applied files are never edited.
 #
-# auth: foundation/authorization (brant_auth). Bounded contexts follow from S1 in the order of their
-# upstream relationships: evd, pty, cat, pol, inq, ...
+# auth: foundation/authorization (brant_auth). Bounded contexts follow in the order of their
+# upstream relationships: evd before pty and cat, all three before inq.
 auth
+evd

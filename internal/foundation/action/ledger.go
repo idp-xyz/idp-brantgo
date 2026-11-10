@@ -373,19 +373,8 @@ func (l *Ledger) AuditRejected(ctx context.Context, command, objectID, code stri
 	return l.auditRejected(ensureCorrelation(ctx), p, command, objectID, code)
 }
 
-// AuditEntry is one line of a context's audit trail. It never holds request content.
-type AuditEntry struct {
-	Seq            int64
-	Actor          kernel.ActorRef
-	Command        string
-	ObjectID       string
-	Outcome        string
-	Code           string
-	CorrelationID  string
-	RecordedAt     time.Time
-	Reason         string
-	AuthorityEpoch int64
-}
+// AuditEntry is one line of a context's audit trail.
+type AuditEntry = kernel.AuditEntry
 
 // Audit returns the scope's audit trail in order; command is the read command that guards it.
 func (l *Ledger) Audit(ctx context.Context, command string) ([]AuditEntry, error) {
