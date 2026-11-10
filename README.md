@@ -23,6 +23,7 @@ internal/foundation/database/     PostgreSQL 16 pool with server and application
 internal/foundation/identity/     Principal (actor and scope from a verified token) in the Go context
 internal/foundation/authorization/ command rules (human-only commands), authority guard and grants in brant_auth
 internal/foundation/messaging/    Outbox relay, HTTP webhook publisher, dead letters with alerts and human replay (ADR-BR-015)
+internal/foundation/strictjson/   closed-structure request decoding (C7): 1 MiB, 64 levels, 100,000 values; no duplicate keys, null, floats, unknown fields
 migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
 migrations/msg/                   brant_msg: dead letters of the Outbox relay (FORCE RLS)
