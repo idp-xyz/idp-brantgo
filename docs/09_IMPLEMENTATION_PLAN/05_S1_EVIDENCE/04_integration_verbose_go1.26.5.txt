@@ -1,6 +1,16 @@
-# 2026-11-10T13:21:28Z go test -tags integration -count=1 -v ./... (CI=true, Go 1.26.5)
+# 2026-11-10T14:27:43Z go test -tags integration -count=1 -v ./... (CI=true, Go 1.26.5)
 ?   	go.idp.xyz/idp-brant/cmd/brant-admin	[no test files]
 ?   	go.idp.xyz/idp-brant/cmd/brant-api	[no test files]
+=== RUN   TestFoundationDemoHasExplicitSyntheticTruthValues
+--- PASS: TestFoundationDemoHasExplicitSyntheticTruthValues (0.91s)
+=== RUN   TestUsageIsCheckedBeforeTheDatabase
+flag provided but not defined: -unknown
+Usage of foundation-demo:
+  -directory string
+    	directory for foundation-demo-result.json; empty creates a temporary one
+--- PASS: TestUsageIsCheckedBeforeTheDatabase (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/cmd/brant-cli	0.915s
 === RUN   TestManifestOrdersDirectories
 --- PASS: TestManifestOrdersDirectories (0.00s)
 === RUN   TestMigrationFilesAreContiguousAndCarryTheirDirectory
@@ -10,13 +20,13 @@
 === RUN   TestApplyIsIdempotentAndRefusesTampering
 APPLIED brant:000001_t_schema
 APPLIED brant:000002_t_table
---- PASS: TestApplyIsIdempotentAndRefusesTampering (0.06s)
+--- PASS: TestApplyIsIdempotentAndRefusesTampering (0.05s)
 PASS
-ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.069s
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.063s
 ?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
 === RUN   TestAssembledRelayDeadLettersAndReplayerReplays
-2026/11/10 06:21:29 WARN outbox delivery rejected by sink event_id=boot-1 error="eventing: publish rejected: sink answered 422 Unprocessable Entity"
---- PASS: TestAssembledRelayDeadLettersAndReplayerReplays (0.23s)
+2026/11/10 07:27:44 WARN outbox delivery rejected by sink event_id=boot-1 error="eventing: publish rejected: sink answered 422 Unprocessable Entity"
+--- PASS: TestAssembledRelayDeadLettersAndReplayerReplays (0.26s)
 === RUN   TestOpenRequiresADSN
 --- PASS: TestOpenRequiresADSN (0.00s)
 === RUN   TestReplayerRequiresSinkAndTimeout
@@ -24,23 +34,33 @@ ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.069s
 === RUN   TestSkuSpecificationRevisions
 --- PASS: TestSkuSpecificationRevisions (0.18s)
 === RUN   TestSkuDeactivationIsHumanOnlyAndFinal
---- PASS: TestSkuDeactivationIsHumanOnlyAndFinal (0.10s)
+--- PASS: TestSkuDeactivationIsHumanOnlyAndFinal (0.11s)
+=== RUN   TestSupplierItemCodeMappingResolvesAndIsPublishedOnce
+--- PASS: TestSupplierItemCodeMappingResolvesAndIsPublishedOnce (0.22s)
+=== RUN   TestRevisedSkuSpecificationIsStaleForNewUse
+--- PASS: TestRevisedSkuSpecificationIsStaleForNewUse (0.23s)
+=== RUN   TestItemCodeMappingRevisionsAndPublication
+--- PASS: TestItemCodeMappingRevisionsAndPublication (0.37s)
+=== RUN   TestConcurrentPublicationOfOneItemCodeHasOneWinner
+--- PASS: TestConcurrentPublicationOfOneItemCodeHasOneWinner (0.52s)
+=== RUN   TestPublicationWaitingOnThePublishedKeyIsBusinessKeyConflict
+--- PASS: TestPublicationWaitingOnThePublishedKeyIsBusinessKeyConflict (0.22s)
 === RUN   TestSameKeyReplaysWithoutRepeatingImportAndDifferentContentConflicts
---- PASS: TestSameKeyReplaysWithoutRepeatingImportAndDifferentContentConflicts (0.07s)
+--- PASS: TestSameKeyReplaysWithoutRepeatingImportAndDifferentContentConflicts (0.09s)
 === RUN   TestEmailIdentityDeduplicatesOriginButPreservesImports
---- PASS: TestEmailIdentityDeduplicatesOriginButPreservesImports (0.08s)
+--- PASS: TestEmailIdentityDeduplicatesOriginButPreservesImports (0.10s)
 === RUN   TestSameContentIsSharedWithinACompanyOnly
---- PASS: TestSameContentIsSharedWithinACompanyOnly (0.10s)
+--- PASS: TestSameContentIsSharedWithinACompanyOnly (0.13s)
 === RUN   TestConcurrentDuplicateImportIsSingleAction
---- PASS: TestConcurrentDuplicateImportIsSingleAction (0.07s)
+--- PASS: TestConcurrentDuplicateImportIsSingleAction (0.08s)
 === RUN   TestLimitsAndClosedSchemaAndNoContentInAudit
---- PASS: TestLimitsAndClosedSchemaAndNoContentInAudit (0.07s)
+--- PASS: TestLimitsAndClosedSchemaAndNoContentInAudit (0.06s)
 === RUN   TestSourceReadsAreAuditedAndDeniedReadsToo
---- PASS: TestSourceReadsAreAuditedAndDeniedReadsToo (0.07s)
+--- PASS: TestSourceReadsAreAuditedAndDeniedReadsToo (0.09s)
 === RUN   TestSourceDeduplicationReplayUsesCanonicalID
---- PASS: TestSourceDeduplicationReplayUsesCanonicalID (0.06s)
+--- PASS: TestSourceDeduplicationReplayUsesCanonicalID (0.08s)
 === RUN   TestPrivateSourceCannotBeProbed
---- PASS: TestPrivateSourceCannotBeProbed (0.08s)
+--- PASS: TestPrivateSourceCannotBeProbed (0.10s)
 === RUN   TestAuditWaitsForAPriorRevocation
 --- PASS: TestAuditWaitsForAPriorRevocation (0.35s)
 === RUN   TestFilesAreImmutableVersionsWithAccess
@@ -49,120 +69,122 @@ ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.069s
 --- PASS: TestFileSignatureAndBranchingAreExplicit (0.06s)
 === RUN   TestFileSizeLimit
 --- PASS: TestFileSizeLimit (0.10s)
+=== RUN   TestFoundationDemoPublishesEveryKindIndependently
+--- PASS: TestFoundationDemoPublishesEveryKindIndependently (1.10s)
 === RUN   TestBRC001FrontOverHTTPWithOIDCTokens
-2026/11/10 06:21:31 INFO request not authenticated correlation_id=corr-01a1c59e-f53d-7e24-b5de-aa51e6acb034 reason="identity: unauthenticated: oidc: authorization header is not a bearer token"
-2026/11/10 06:21:31 INFO request not authenticated correlation_id=corr-01a1c59e-f56f-7c42-a57d-2c60111bed41 reason="identity: unauthenticated: oidc: invalid signature"
---- PASS: TestBRC001FrontOverHTTPWithOIDCTokens (0.44s)
+2026/11/10 07:27:48 INFO request not authenticated correlation_id=corr-01a1c5db-a626-723f-8ae5-216db7141598 reason="identity: unauthenticated: oidc: authorization header is not a bearer token"
+2026/11/10 07:27:48 INFO request not authenticated correlation_id=corr-01a1c5db-a65e-729a-94fb-95dd1ee8ca5f reason="identity: unauthenticated: oidc: invalid signature"
+--- PASS: TestBRC001FrontOverHTTPWithOIDCTokens (0.46s)
 === RUN   TestIncompleteRfqIsSavedWithoutInventedFacts
---- PASS: TestIncompleteRfqIsSavedWithoutInventedFacts (0.06s)
+--- PASS: TestIncompleteRfqIsSavedWithoutInventedFacts (0.09s)
 === RUN   TestCompleteRfqBecomesReadyAndClosesWithReason
---- PASS: TestCompleteRfqBecomesReadyAndClosesWithReason (0.18s)
+--- PASS: TestCompleteRfqBecomesReadyAndClosesWithReason (0.23s)
 === RUN   TestDraftRejectionsHaveExactCodesAndPaths
 --- PASS: TestDraftRejectionsHaveExactCodesAndPaths (0.07s)
 === RUN   TestOmissionReplacesDraftAndStaleVersionDoesNotOverwrite
 --- PASS: TestOmissionReplacesDraftAndStaleVersionDoesNotOverwrite (0.07s)
 === RUN   TestSameContentDifferentOriginsSupportDifferentRfqs
---- PASS: TestSameContentDifferentOriginsSupportDifferentRfqs (0.10s)
+--- PASS: TestSameContentDifferentOriginsSupportDifferentRfqs (0.08s)
 === RUN   TestCrossCompanyReferenceIsRejectedWithoutExistenceLeak
---- PASS: TestCrossCompanyReferenceIsRejectedWithoutExistenceLeak (0.08s)
+--- PASS: TestCrossCompanyReferenceIsRejectedWithoutExistenceLeak (0.06s)
 === RUN   TestRevokedActorCannotReplayAnRfqSave
---- PASS: TestRevokedActorCannotReplayAnRfqSave (0.06s)
+--- PASS: TestRevokedActorCannotReplayAnRfqSave (0.05s)
 === RUN   TestInactiveSkuBlocksReady
---- PASS: TestInactiveSkuBlocksReady (0.19s)
+--- PASS: TestInactiveSkuBlocksReady (0.14s)
 === RUN   TestRevisedCustomerBlocksReadyUntilReconfirmed
---- PASS: TestRevisedCustomerBlocksReadyUntilReconfirmed (0.23s)
+--- PASS: TestRevisedCustomerBlocksReadyUntilReconfirmed (0.17s)
 === RUN   TestAgentPreparesAndOnlyAHumanConfirms
---- PASS: TestAgentPreparesAndOnlyAHumanConfirms (0.19s)
+--- PASS: TestAgentPreparesAndOnlyAHumanConfirms (0.18s)
 === RUN   TestConcurrentRfqEditsHaveOneWinner
---- PASS: TestConcurrentRfqEditsHaveOneWinner (0.07s)
+--- PASS: TestConcurrentRfqEditsHaveOneWinner (0.08s)
 === RUN   TestAnotherProcessSeesCommittedData
 --- PASS: TestAnotherProcessSeesCommittedData (0.09s)
 === RUN   TestContactMustMatchCustomerAndReferenceKindsAreChecked
---- PASS: TestContactMustMatchCustomerAndReferenceKindsAreChecked (0.16s)
+--- PASS: TestContactMustMatchCustomerAndReferenceKindsAreChecked (0.14s)
 === RUN   TestConfirmationRequiresAllSourcesAndNoUnresolvedFields
---- PASS: TestConfirmationRequiresAllSourcesAndNoUnresolvedFields (0.17s)
+--- PASS: TestConfirmationRequiresAllSourcesAndNoUnresolvedFields (0.20s)
 === RUN   TestTerminalRfqCannotBeReopenedBySave
 --- PASS: TestTerminalRfqCannotBeReopenedBySave (0.06s)
 === RUN   TestReplayIgnoresCASButNotBusinessFields
 --- PASS: TestReplayIgnoresCASButNotBusinessFields (0.05s)
 === RUN   TestSupplementalConfirmationEvidenceIsRetained
---- PASS: TestSupplementalConfirmationEvidenceIsRetained (0.19s)
+--- PASS: TestSupplementalConfirmationEvidenceIsRetained (0.16s)
 === RUN   TestTeamScopeAndReplayDoNotLeak
---- PASS: TestTeamScopeAndReplayDoNotLeak (0.10s)
+--- PASS: TestTeamScopeAndReplayDoNotLeak (0.08s)
 === RUN   TestBRC001FrontReachesReady
---- PASS: TestBRC001FrontReachesReady (0.24s)
+--- PASS: TestBRC001FrontReachesReady (0.19s)
 === RUN   TestBCAT02DraftMissingSkuAndDeliverySavesButIsNotReady
---- PASS: TestBCAT02DraftMissingSkuAndDeliverySavesButIsNotReady (0.20s)
+--- PASS: TestBCAT02DraftMissingSkuAndDeliverySavesButIsNotReady (0.22s)
 === RUN   TestBCAT05QuantityConflictIsNotPaperedOver
---- PASS: TestBCAT05QuantityConflictIsNotPaperedOver (0.22s)
+--- PASS: TestBCAT05QuantityConflictIsNotPaperedOver (0.27s)
 === RUN   TestRfqCommandsReconcileWithoutExecuting
 --- PASS: TestRfqCommandsReconcileWithoutExecuting (0.23s)
 === RUN   TestRfqReconciliationNeedsReadPermissionAndDataScope
---- PASS: TestRfqReconciliationNeedsReadPermissionAndDataScope (0.06s)
+--- PASS: TestRfqReconciliationNeedsReadPermissionAndDataScope (0.08s)
 === RUN   TestConfigGuardVerdicts
 --- PASS: TestConfigGuardVerdicts (0.14s)
 === RUN   TestConfigGuardDecidesEveryCommitOrder
 === RUN   TestConfigGuardDecidesEveryCommitOrder/POL_commits_first
 === RUN   TestConfigGuardDecidesEveryCommitOrder/downstream_holds_the_guard_first
 === RUN   TestConfigGuardDecidesEveryCommitOrder/POL_holds_the_row_first
---- PASS: TestConfigGuardDecidesEveryCommitOrder (0.24s)
+--- PASS: TestConfigGuardDecidesEveryCommitOrder (0.23s)
     --- PASS: TestConfigGuardDecidesEveryCommitOrder/POL_commits_first (0.06s)
-    --- PASS: TestConfigGuardDecidesEveryCommitOrder/downstream_holds_the_guard_first (0.04s)
+    --- PASS: TestConfigGuardDecidesEveryCommitOrder/downstream_holds_the_guard_first (0.05s)
     --- PASS: TestConfigGuardDecidesEveryCommitOrder/POL_holds_the_row_first (0.05s)
 === RUN   TestIndependentPublicationAndAIGuard
---- PASS: TestIndependentPublicationAndAIGuard (0.11s)
+--- PASS: TestIndependentPublicationAndAIGuard (0.13s)
 === RUN   TestFXDirectionPurposeRoundingAndExpiry
---- PASS: TestFXDirectionPurposeRoundingAndExpiry (0.19s)
+--- PASS: TestFXDirectionPurposeRoundingAndExpiry (0.17s)
 === RUN   TestPaymentStageTotalAndDeclaredCalendar
---- PASS: TestPaymentStageTotalAndDeclaredCalendar (0.12s)
+--- PASS: TestPaymentStageTotalAndDeclaredCalendar (0.15s)
 === RUN   TestCompanyIdentityAndImmutableCurrencySemantics
---- PASS: TestCompanyIdentityAndImmutableCurrencySemantics (0.14s)
+--- PASS: TestCompanyIdentityAndImmutableCurrencySemantics (0.17s)
 === RUN   TestConfigurationCASAndCrossCompanyReference
---- PASS: TestConfigurationCASAndCrossCompanyReference (0.09s)
+--- PASS: TestConfigurationCASAndCrossCompanyReference (0.11s)
 === RUN   TestStaleFXIsNotSilentlyReusedAndNoReciprocal
---- PASS: TestStaleFXIsNotSilentlyReusedAndNoReciprocal (0.22s)
+--- PASS: TestStaleFXIsNotSilentlyReusedAndNoReciprocal (0.21s)
 === RUN   TestRetiredCurrencyCannotBeRedefined
---- PASS: TestRetiredCurrencyCannotBeRedefined (0.11s)
+--- PASS: TestRetiredCurrencyCannotBeRedefined (0.10s)
 === RUN   TestConcurrentNumberIssueHasUniqueNumbers
---- PASS: TestConcurrentNumberIssueHasUniqueNumbers (0.19s)
+--- PASS: TestConcurrentNumberIssueHasUniqueNumbers (0.16s)
 === RUN   TestSameCurrencyExplicitOneAndMissingCrossRateBlocks
---- PASS: TestSameCurrencyExplicitOneAndMissingCrossRateBlocks (0.21s)
+--- PASS: TestSameCurrencyExplicitOneAndMissingCrossRateBlocks (0.18s)
 === RUN   TestExpiredAndFuturePublicationCannotReplaceActiveRate
---- PASS: TestExpiredAndFuturePublicationCannotReplaceActiveRate (0.19s)
+--- PASS: TestExpiredAndFuturePublicationCannotReplaceActiveRate (0.25s)
 === RUN   TestConfigurationSaveRaceHasOneWinner
---- PASS: TestConfigurationSaveRaceHasOneWinner (0.10s)
+--- PASS: TestConfigurationSaveRaceHasOneWinner (0.11s)
 === RUN   TestPublicationSupersedesAndResolvesAtAnInstant
---- PASS: TestPublicationSupersedesAndResolvesAtAnInstant (0.12s)
+--- PASS: TestPublicationSupersedesAndResolvesAtAnInstant (0.15s)
 === RUN   TestDiscardedDraftKeepsItsNumber
---- PASS: TestDiscardedDraftKeepsItsNumber (0.12s)
+--- PASS: TestDiscardedDraftKeepsItsNumber (0.10s)
 === RUN   TestDatabaseKeepsPublishedRevisionsImmutable
---- PASS: TestDatabaseKeepsPublishedRevisionsImmutable (0.16s)
+--- PASS: TestDatabaseKeepsPublishedRevisionsImmutable (0.15s)
 === RUN   TestSameBusinessReferenceKeepsItsNumber
---- PASS: TestSameBusinessReferenceKeepsItsNumber (0.21s)
+--- PASS: TestSameBusinessReferenceKeepsItsNumber (0.18s)
 === RUN   TestPublicationEvidenceMustBeReadable
---- PASS: TestPublicationEvidenceMustBeReadable (0.11s)
+--- PASS: TestPublicationEvidenceMustBeReadable (0.10s)
 === RUN   TestReferenceDeactivationBlocksNewWorkButPreservesSnapshot
---- PASS: TestReferenceDeactivationBlocksNewWorkButPreservesSnapshot (0.26s)
+--- PASS: TestReferenceDeactivationBlocksNewWorkButPreservesSnapshot (0.22s)
 === RUN   TestHistoricalSnapshotSurvivesRateRevision
---- PASS: TestHistoricalSnapshotSurvivesRateRevision (0.28s)
+--- PASS: TestHistoricalSnapshotSurvivesRateRevision (0.21s)
 === RUN   TestSnapshotRequiresCompanyPolicyAndUnknownTaxBlocks
---- PASS: TestSnapshotRequiresCompanyPolicyAndUnknownTaxBlocks (0.29s)
+--- PASS: TestSnapshotRequiresCompanyPolicyAndUnknownTaxBlocks (0.22s)
 === RUN   TestSnapshotReadDoesNotRevalidateExpiry
 --- PASS: TestSnapshotReadDoesNotRevalidateExpiry (3.18s)
 === RUN   TestUnitConversionIsSkuScopedAndExact
---- PASS: TestUnitConversionIsSkuScopedAndExact (0.16s)
+--- PASS: TestUnitConversionIsSkuScopedAndExact (0.17s)
 === RUN   TestTaxSplitIsExactAndUnknownRecoveryBlocks
---- PASS: TestTaxSplitIsExactAndUnknownRecoveryBlocks (0.13s)
+--- PASS: TestTaxSplitIsExactAndUnknownRecoveryBlocks (0.16s)
 === RUN   TestPlainTextTemplateNamesFixedFieldsOnly
---- PASS: TestPlainTextTemplateNamesFixedFieldsOnly (0.10s)
+--- PASS: TestPlainTextTemplateNamesFixedFieldsOnly (0.13s)
 === RUN   TestSensitiveAccountFieldRequiresSeparateGrant
---- PASS: TestSensitiveAccountFieldRequiresSeparateGrant (0.13s)
+--- PASS: TestSensitiveAccountFieldRequiresSeparateGrant (0.16s)
 === RUN   TestAccountSensitivePermissionDoesNotReplaceOwnerScope
---- PASS: TestAccountSensitivePermissionDoesNotReplaceOwnerScope (0.12s)
+--- PASS: TestAccountSensitivePermissionDoesNotReplaceOwnerScope (0.15s)
 === RUN   TestFeeClassificationPreservesInclusionAndSide
---- PASS: TestFeeClassificationPreservesInclusionAndSide (0.09s)
+--- PASS: TestFeeClassificationPreservesInclusionAndSide (0.10s)
 === RUN   TestTradeTaxApplicationAndCreditKinds
---- PASS: TestTradeTaxApplicationAndCreditKinds (0.37s)
+--- PASS: TestTradeTaxApplicationAndCreditKinds (0.36s)
 === RUN   TestConfirmedPartyCannotBeEdited
 --- PASS: TestConfirmedPartyCannotBeEdited (0.08s)
 === RUN   TestDatabaseRefusesEditingAConfirmedParty
@@ -170,51 +192,83 @@ ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.069s
 === RUN   TestAICannotConfirmEvenWithTheGrant
 --- PASS: TestAICannotConfirmEvenWithTheGrant (0.06s)
 === RUN   TestConfirmationRequiresSourceReadPermission
---- PASS: TestConfirmationRequiresSourceReadPermission (0.10s)
+--- PASS: TestConfirmationRequiresSourceReadPermission (0.09s)
 === RUN   TestRevisionPreservesTheConfirmedRecord
---- PASS: TestRevisionPreservesTheConfirmedRecord (0.08s)
+--- PASS: TestRevisionPreservesTheConfirmedRecord (0.11s)
 === RUN   TestContactBelongsToACustomerAndConfirmsOnlyUnderAConfirmedOne
---- PASS: TestContactBelongsToACustomerAndConfirmsOnlyUnderAConfirmedOne (0.13s)
+--- PASS: TestContactBelongsToACustomerAndConfirmsOnlyUnderAConfirmedOne (0.15s)
 === RUN   TestConcurrentRevisionsHaveOneWinner
---- PASS: TestConcurrentRevisionsHaveOneWinner (0.09s)
+--- PASS: TestConcurrentRevisionsHaveOneWinner (0.11s)
 === RUN   TestConfirmationPublishesAnEventWithIdentifiersOnly
---- PASS: TestConfirmationPublishesAnEventWithIdentifiersOnly (0.09s)
+--- PASS: TestConfirmationPublishesAnEventWithIdentifiersOnly (0.08s)
+=== RUN   TestAddressRolesAreKeptPerConfirmedRevision
+--- PASS: TestAddressRolesAreKeptPerConfirmedRevision (0.19s)
+=== RUN   TestSupplierAddressesAndTradingProfile
+--- PASS: TestSupplierAddressesAndTradingProfile (0.20s)
+=== RUN   TestServiceRoleVerifyIsHumanOnlyAndEvidenceReadable
+--- PASS: TestServiceRoleVerifyIsHumanOnlyAndEvidenceReadable (0.26s)
+=== RUN   TestTradingProfilePublicationIsIndependentAndHasOneWinner
+--- PASS: TestTradingProfilePublicationIsIndependentAndHasOneWinner (0.36s)
+=== RUN   TestStaleContactReferenceIsRefused
+--- PASS: TestStaleContactReferenceIsRefused (0.49s)
+=== RUN   TestTradingProfileReferencesAreChecked
+--- PASS: TestTradingProfileReferencesAreChecked (0.44s)
 === RUN   TestBRC001FrontWithRoleTemplates
---- PASS: TestBRC001FrontWithRoleTemplates (0.26s)
+--- PASS: TestBRC001FrontWithRoleTemplates (0.30s)
 === RUN   TestSalesCannotHoldCreditDecisions
 --- PASS: TestSalesCannotHoldCreditDecisions (0.03s)
+=== RUN   TestS1MasterDataOverHTTP
+--- PASS: TestS1MasterDataOverHTTP (0.36s)
 === RUN   TestPartyScreeningGuardDecidesEveryCommitOrder
 === RUN   TestPartyScreeningGuardDecidesEveryCommitOrder/block_and_new_match_committed_first
 === RUN   TestPartyScreeningGuardDecidesEveryCommitOrder/release_holds_the_guard;_the_block_waits
 === RUN   TestPartyScreeningGuardDecidesEveryCommitOrder/release_holds_the_guard;_a_new_list_version_waits
 === RUN   TestPartyScreeningGuardDecidesEveryCommitOrder/block_holds_the_screening_root;_the_guard_waits_and_sees_it
---- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder (0.55s)
-    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/block_and_new_match_committed_first (0.16s)
-    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/release_holds_the_guard;_the_block_waits (0.07s)
-    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/release_holds_the_guard;_a_new_list_version_waits (0.08s)
-    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/block_holds_the_screening_root;_the_guard_waits_and_sees_it (0.08s)
+--- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder (0.45s)
+    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/block_and_new_match_committed_first (0.13s)
+    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/release_holds_the_guard;_the_block_waits (0.06s)
+    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/release_holds_the_guard;_a_new_list_version_waits (0.07s)
+    --- PASS: TestPartyScreeningGuardDecidesEveryCommitOrder/block_holds_the_screening_root;_the_guard_waits_and_sees_it (0.07s)
 === RUN   TestPartyScreeningOverHTTP
---- PASS: TestPartyScreeningOverHTTP (0.27s)
+--- PASS: TestPartyScreeningOverHTTP (0.28s)
 === RUN   TestTDAT15PartyScreeningLifecycle
---- PASS: TestTDAT15PartyScreeningLifecycle (0.61s)
+--- PASS: TestTDAT15PartyScreeningLifecycle (0.47s)
 === RUN   TestScreeningUsesOnlyEnabledLists
---- PASS: TestScreeningUsesOnlyEnabledLists (0.48s)
+--- PASS: TestScreeningUsesOnlyEnabledLists (0.42s)
 === RUN   TestForeignListNeedsLegalConfirmation
 --- PASS: TestForeignListNeedsLegalConfirmation (0.23s)
 === RUN   TestExpiredConclusionIsNotClear
---- PASS: TestExpiredConclusionIsNotClear (0.25s)
+--- PASS: TestExpiredConclusionIsNotClear (0.26s)
 === RUN   TestScreeningListImportIsControlledAndImmutable
---- PASS: TestScreeningListImportIsControlledAndImmutable (0.22s)
+--- PASS: TestScreeningListImportIsControlledAndImmutable (0.26s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/bootstrap	16.692s
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	21.605s
 ?   	go.idp.xyz/idp-brant/internal/contexts/cat	[no test files]
-?   	go.idp.xyz/idp-brant/internal/contexts/cat/api	[no test files]
+=== RUN   TestItemCodeMappingContract
+--- PASS: TestItemCodeMappingContract (0.00s)
+=== RUN   TestLookupsAndVerdicts
+--- PASS: TestLookupsAndVerdicts (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/api	0.002s
 ?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/adapters/postgres	[no test files]
-?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/application	[no test files]
+=== RUN   TestDomainCodesAreTheContractsCodes
+--- PASS: TestDomainCodesAreTheContractsCodes (0.00s)
+=== RUN   TestRulesKeepConfirmationAndPublicationHumanOnly
+--- PASS: TestRulesKeepConfirmationAndPublicationHumanOnly (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/application	0.002s
+=== RUN   TestSaveFixesTheKeyAndReplacesTheDraftWhole
+--- PASS: TestSaveFixesTheKeyAndReplacesTheDraftWhole (0.00s)
+=== RUN   TestPublicationSupersedesAndTheKeyIsPublishedOnce
+--- PASS: TestPublicationSupersedesAndTheKeyIsPublishedOnce (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/mapping	0.001s
 === RUN   TestConfirmationNeedsNameAndPCSAndCountsRevisions
 --- PASS: TestConfirmationNeedsNameAndPCSAndCountsRevisions (0.00s)
+=== RUN   TestOnlyTheCurrentConfirmedSpecificationRevisionIsReferenced
+--- PASS: TestOnlyTheCurrentConfirmedSpecificationRevisionIsReferenced (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	0.003s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	0.001s
 ?   	go.idp.xyz/idp-brant/internal/contexts/evd	[no test files]
 ?   	go.idp.xyz/idp-brant/internal/contexts/evd/api	[no test files]
 ?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/postgres	[no test files]
@@ -222,7 +276,7 @@ ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	0.003s
 === RUN   TestDecodeChecksNameTypeSignatureAndSize
 --- PASS: TestDecodeChecksNameTypeSignatureAndSize (0.03s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/file	0.037s
+ok  	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/file	0.034s
 ?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/source	[no test files]
 ?   	go.idp.xyz/idp-brant/internal/contexts/inq	[no test files]
 ?   	go.idp.xyz/idp-brant/internal/contexts/inq/api	[no test files]
@@ -235,7 +289,7 @@ ok  	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/file	0.037s
 === RUN   TestChecksRunInContractOrder
 --- PASS: TestChecksRunInContractOrder (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/inq/internal/domain/rfq	0.002s
+ok  	go.idp.xyz/idp-brant/internal/contexts/inq/internal/domain/rfq	0.003s
 ?   	go.idp.xyz/idp-brant/internal/contexts/pol	[no test files]
 === RUN   TestSaveDraftContract
 --- PASS: TestSaveDraftContract (0.00s)
@@ -271,7 +325,7 @@ ok  	go.idp.xyz/idp-brant/internal/contexts/pol/api	0.003s
 === RUN   TestMaskKeepsTheLastFourCharacters
 --- PASS: TestMaskKeepsTheLastFourCharacters (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/application	0.003s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/application	0.007s
 === RUN   TestPaymentStagesArePositiveAndSumToExactly100
 --- PASS: TestPaymentStagesArePositiveAndSumToExactly100 (0.00s)
 === RUN   TestContentRules
@@ -321,30 +375,62 @@ ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/config	0.003s
 === RUN   TestBusinessReferenceKeepsItsNumber
 --- PASS: TestBusinessReferenceKeepsItsNumber (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/numbering	0.003s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/numbering	0.002s
 === RUN   TestCaptureIsCanonicalAndAdoptsEachRevisionOnce
 --- PASS: TestCaptureIsCanonicalAndAdoptsEachRevisionOnce (0.00s)
 === RUN   TestFoundationNeedsCompanyAndPolicyAndRefusesUnknownTaxAndStaleFX
 --- PASS: TestFoundationNeedsCompanyAndPolicyAndRefusesUnknownTaxAndStaleFX (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/snapshot	0.003s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/snapshot	0.002s
 ?   	go.idp.xyz/idp-brant/internal/contexts/pty	[no test files]
+=== RUN   TestLocationsAreExactUNLOCODEs
+--- PASS: TestLocationsAreExactUNLOCODEs (0.00s)
+=== RUN   TestPartyAddressContract
+--- PASS: TestPartyAddressContract (0.00s)
+=== RUN   TestServiceRoleContract
+--- PASS: TestServiceRoleContract (0.00s)
+=== RUN   TestTradingProfileContracts
+--- PASS: TestTradingProfileContracts (0.00s)
+=== RUN   TestStaleReferencesAreConflicts
+--- PASS: TestStaleReferencesAreConflicts (0.00s)
 === RUN   TestScreeningContracts
 --- PASS: TestScreeningContracts (0.00s)
 === RUN   TestGuardResultCheck
 --- PASS: TestGuardResultCheck (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/pty/api	0.004s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/api	0.003s
 ?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres	[no test files]
-?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/application	[no test files]
+=== RUN   TestDomainCodesAreTheContractsCodes
+--- PASS: TestDomainCodesAreTheContractsCodes (0.00s)
+=== RUN   TestRulesKeepVerificationAndPublicationHumanOnly
+--- PASS: TestRulesKeepVerificationAndPublicationHumanOnly (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/application	0.006s
 ?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/contact	[no test files]
 === RUN   TestChecksRunInContractOrder
 --- PASS: TestChecksRunInContractOrder (0.00s)
 === RUN   TestMoveCountsVersionsAndConfirmations
 --- PASS: TestMoveCountsVersionsAndConfirmations (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	0.003s
-?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/party	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	0.002s
+=== RUN   TestAddressesArePartOfTheDraft
+--- PASS: TestAddressesArePartOfTheDraft (0.00s)
+=== RUN   TestServiceRoleBelongsToAConfirmedSupplier
+--- PASS: TestServiceRoleBelongsToAConfirmedSupplier (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/party	0.003s
+=== RUN   TestChecksRunInContractOrder
+--- PASS: TestChecksRunInContractOrder (0.00s)
+=== RUN   TestRevisionsArePublishedIndependentlyAndSuperseded
+--- PASS: TestRevisionsArePublishedIndependentlyAndSuperseded (0.00s)
+=== RUN   TestContentHashIsCanonical
+--- PASS: TestContentHashIsCanonical (0.00s)
+=== RUN   TestReferencesAreCheckedWithExactCodes
+--- PASS: TestReferencesAreCheckedWithExactCodes (0.00s)
+=== RUN   TestPublishedRevisionKeepsItsContactVersion
+--- PASS: TestPublishedRevisionKeepsItsContactVersion (0.00s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/profile	0.002s
 === RUN   TestTDAT15PositiveListBindsRevisionAndEntryContent
 --- PASS: TestTDAT15PositiveListBindsRevisionAndEntryContent (0.00s)
 === RUN   TestTrueMatchStaysBlocked
@@ -356,41 +442,41 @@ ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	0.003s
 PASS
 ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/screening	0.002s
 === RUN   TestCommandCommitsResultAuditAndEventTogether
---- PASS: TestCommandCommitsResultAuditAndEventTogether (0.14s)
+--- PASS: TestCommandCommitsResultAuditAndEventTogether (0.17s)
 === RUN   TestSameKeyReplaysAndDifferentPayloadConflicts
---- PASS: TestSameKeyReplaysAndDifferentPayloadConflicts (0.17s)
+--- PASS: TestSameKeyReplaysAndDifferentPayloadConflicts (0.20s)
 === RUN   TestRevocationBlocksReplayAndIsAudited
 --- PASS: TestRevocationBlocksReplayAndIsAudited (0.16s)
 === RUN   TestHumanOnlyRuleRefusesAIBeforeTheDatabase
 --- PASS: TestHumanOnlyRuleRefusesAIBeforeTheDatabase (0.13s)
 === RUN   TestReplayRechecksVisibility
---- PASS: TestReplayRechecksVisibility (0.15s)
+--- PASS: TestReplayRechecksVisibility (0.18s)
 === RUN   TestOutboxFailureRollsBackEverything
 --- PASS: TestOutboxFailureRollsBackEverything (0.16s)
 === RUN   TestSameKeyCommittedDuringTheCommand
---- PASS: TestSameKeyCommittedDuringTheCommand (0.15s)
+--- PASS: TestSameKeyCommittedDuringTheCommand (0.19s)
 === RUN   TestConcurrentCommands
---- PASS: TestConcurrentCommands (0.15s)
+--- PASS: TestConcurrentCommands (0.18s)
 === RUN   TestReadIsAuditedAndDeniedReadToo
---- PASS: TestReadIsAuditedAndDeniedReadToo (0.14s)
+--- PASS: TestReadIsAuditedAndDeniedReadToo (0.16s)
 === RUN   TestReconcileClassifiesCommittedConflictAndMissing
---- PASS: TestReconcileClassifiesCommittedConflictAndMissing (0.21s)
+--- PASS: TestReconcileClassifiesCommittedConflictAndMissing (0.15s)
 === RUN   TestReconcileIsObservationalAndAudited
---- PASS: TestReconcileIsObservationalAndAudited (0.14s)
+--- PASS: TestReconcileIsObservationalAndAudited (0.17s)
 === RUN   TestReconcileNeedsReadPermissionNotWritePermission
---- PASS: TestReconcileNeedsReadPermissionNotWritePermission (0.16s)
+--- PASS: TestReconcileNeedsReadPermissionNotWritePermission (0.26s)
 === RUN   TestReconcileRechecksRevocationAndDataScope
---- PASS: TestReconcileRechecksRevocationAndDataScope (0.17s)
+--- PASS: TestReconcileRechecksRevocationAndDataScope (0.23s)
 === RUN   TestReconcileNeverReadsAnotherScope
---- PASS: TestReconcileNeverReadsAnotherScope (0.15s)
+--- PASS: TestReconcileNeverReadsAnotherScope (0.21s)
 === RUN   TestReconcileRejectsMalformedQueries
---- PASS: TestReconcileRejectsMalformedQueries (0.13s)
+--- PASS: TestReconcileRejectsMalformedQueries (0.16s)
 === RUN   TestCommitUncertainAfterCommitIsReconciledAndReplayed
---- PASS: TestCommitUncertainAfterCommitIsReconciledAndReplayed (0.16s)
+--- PASS: TestCommitUncertainAfterCommitIsReconciledAndReplayed (0.17s)
 === RUN   TestCommitUncertainBeforeCommitIsReconciledAndRetriedOnce
---- PASS: TestCommitUncertainBeforeCommitIsReconciledAndRetriedOnce (0.17s)
+--- PASS: TestCommitUncertainBeforeCommitIsReconciledAndRetriedOnce (0.18s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/foundation/action	2.637s
+ok  	go.idp.xyz/idp-brant/internal/foundation/action	3.079s
 === RUN   TestHumanOnlyCommandsRefuseAIAndSystemActors
 --- PASS: TestHumanOnlyCommandsRefuseAIAndSystemActors (0.00s)
 === RUN   TestPolicyRejectsInvalidRules
@@ -406,47 +492,47 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/action	2.637s
 === RUN   TestPermissionsOfMergesTemplates
 --- PASS: TestPermissionsOfMergesTemplates (0.00s)
 === RUN   TestAIIsRefusedHumanOnlyCommandsEvenWithTheGrant
---- PASS: TestAIIsRefusedHumanOnlyCommandsEvenWithTheGrant (0.03s)
+--- PASS: TestAIIsRefusedHumanOnlyCommandsEvenWithTheGrant (0.04s)
 === RUN   TestMissingGrantsAndUnknownCommandsAreDenied
---- PASS: TestMissingGrantsAndUnknownCommandsAreDenied (0.03s)
+--- PASS: TestMissingGrantsAndUnknownCommandsAreDenied (0.05s)
 === RUN   TestEpochChangesOnlyWhenAccessChanges
---- PASS: TestEpochChangesOnlyWhenAccessChanges (0.03s)
+--- PASS: TestEpochChangesOnlyWhenAccessChanges (0.04s)
 === RUN   TestScopesAreIsolatedByRowLevelSecurity
---- PASS: TestScopesAreIsolatedByRowLevelSecurity (0.02s)
+--- PASS: TestScopesAreIsolatedByRowLevelSecurity (0.03s)
 === RUN   TestCommandHoldingTheGuardCommitsBeforeARevocation
---- PASS: TestCommandHoldingTheGuardCommitsBeforeARevocation (0.03s)
+--- PASS: TestCommandHoldingTheGuardCommitsBeforeARevocation (0.06s)
 === RUN   TestRevocationHoldingTheGuardDeniesTheWaitingCommand
---- PASS: TestRevocationHoldingTheGuardDeniesTheWaitingCommand (0.03s)
+--- PASS: TestRevocationHoldingTheGuardDeniesTheWaitingCommand (0.05s)
 === RUN   TestDataScopeChangesBumpTheEpochAndReachTheDecision
 --- PASS: TestDataScopeChangesBumpTheEpochAndReachTheDecision (0.05s)
 === RUN   TestAccessNeedsAnActiveGrantButNoPermission
---- PASS: TestAccessNeedsAnActiveGrantButNoPermission (0.03s)
+--- PASS: TestAccessNeedsAnActiveGrantButNoPermission (0.04s)
 === RUN   TestRolesDerivePermissionsAndKeepSeparationOfDuties
---- PASS: TestRolesDerivePermissionsAndKeepSeparationOfDuties (0.06s)
+--- PASS: TestRolesDerivePermissionsAndKeepSeparationOfDuties (0.05s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.303s
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.415s
 === RUN   TestContextsNeverJoinEachOthersTransactions
---- PASS: TestContextsNeverJoinEachOthersTransactions (0.04s)
+--- PASS: TestContextsNeverJoinEachOthersTransactions (0.05s)
 === RUN   TestScopeBindsTheTransaction
---- PASS: TestScopeBindsTheTransaction (0.03s)
+--- PASS: TestScopeBindsTheTransaction (0.04s)
 === RUN   TestLostCommitIsUncertain
---- PASS: TestLostCommitIsUncertain (0.04s)
+--- PASS: TestLostCommitIsUncertain (0.05s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/foundation/bento	0.106s
+ok  	go.idp.xyz/idp-brant/internal/foundation/bento	0.149s
 === RUN   TestApplicationRoleIsUnprivileged
---- PASS: TestApplicationRoleIsUnprivileged (0.02s)
+--- PASS: TestApplicationRoleIsUnprivileged (0.03s)
 === RUN   TestApplicationRoleCannotRunDDL
---- PASS: TestApplicationRoleCannotRunDDL (0.01s)
+--- PASS: TestApplicationRoleCannotRunDDL (0.02s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
+ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.048s
 ?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
 ?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
 === RUN   TestBearerToken
 --- PASS: TestBearerToken (0.00s)
 === RUN   TestVerifyHumanToken
---- PASS: TestVerifyHumanToken (0.18s)
+--- PASS: TestVerifyHumanToken (0.17s)
 === RUN   TestHeaderVerifier
---- PASS: TestHeaderVerifier (0.02s)
+--- PASS: TestHeaderVerifier (0.04s)
 === RUN   TestVerifySigningAlgorithms
 === RUN   TestVerifySigningAlgorithms/RS256
 === RUN   TestVerifySigningAlgorithms/PS256
@@ -461,7 +547,7 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
 === RUN   TestActorKindsAndHumanOnlyRules/human
 === RUN   TestActorKindsAndHumanOnlyRules/ai
 === RUN   TestActorKindsAndHumanOnlyRules/system
---- PASS: TestActorKindsAndHumanOnlyRules (0.02s)
+--- PASS: TestActorKindsAndHumanOnlyRules (0.03s)
     --- PASS: TestActorKindsAndHumanOnlyRules/human (0.00s)
     --- PASS: TestActorKindsAndHumanOnlyRules/ai (0.00s)
     --- PASS: TestActorKindsAndHumanOnlyRules/system (0.00s)
@@ -502,7 +588,7 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
 === RUN   TestRefusedClaims/missing_company
 === RUN   TestRefusedClaims/company_too_long
 === RUN   TestRefusedClaims/company_not_ascii
---- PASS: TestRefusedClaims (0.04s)
+--- PASS: TestRefusedClaims (0.03s)
     --- PASS: TestRefusedClaims/missing_actor_kind (0.00s)
     --- PASS: TestRefusedClaims/empty_actor_kind (0.00s)
     --- PASS: TestRefusedClaims/capitalised_actor_kind (0.00s)
@@ -540,7 +626,7 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
     --- PASS: TestRefusedClaims/company_too_long (0.00s)
     --- PASS: TestRefusedClaims/company_not_ascii (0.00s)
 === RUN   TestAudienceList
---- PASS: TestAudienceList (0.02s)
+--- PASS: TestAudienceList (0.01s)
 === RUN   TestLeewayBoundaries
 === RUN   TestLeewayBoundaries/exp_one_second_inside_the_leeway
 === RUN   TestLeewayBoundaries/exp_half_a_second_inside_the_leeway
@@ -564,21 +650,21 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
     --- PASS: TestLeewayBoundaries/configured_leeway,_exp_outside (0.00s)
     --- PASS: TestLeewayBoundaries/configured_leeway,_nbf_outside (0.00s)
 === RUN   TestRefusedAlgorithms
+=== RUN   TestRefusedAlgorithms/none
 === RUN   TestRefusedAlgorithms/none_with_a_copied_signature
 === RUN   TestRefusedAlgorithms/NONE
 === RUN   TestRefusedAlgorithms/HS256_keyed_with_the_public_key_DER
 === RUN   TestRefusedAlgorithms/HS256_keyed_with_the_public_key_PEM
 === RUN   TestRefusedAlgorithms/HS512_keyed_with_the_public_key_DER
 === RUN   TestRefusedAlgorithms/RS384,_not_configured
-=== RUN   TestRefusedAlgorithms/none
 --- PASS: TestRefusedAlgorithms (0.02s)
+    --- PASS: TestRefusedAlgorithms/none (0.00s)
     --- PASS: TestRefusedAlgorithms/none_with_a_copied_signature (0.00s)
     --- PASS: TestRefusedAlgorithms/NONE (0.00s)
     --- PASS: TestRefusedAlgorithms/HS256_keyed_with_the_public_key_DER (0.00s)
     --- PASS: TestRefusedAlgorithms/HS256_keyed_with_the_public_key_PEM (0.00s)
     --- PASS: TestRefusedAlgorithms/HS512_keyed_with_the_public_key_DER (0.00s)
     --- PASS: TestRefusedAlgorithms/RS384,_not_configured (0.00s)
-    --- PASS: TestRefusedAlgorithms/none (0.00s)
 === RUN   TestNewRefusesNoneAndHMAC
 === RUN   TestNewRefusesNoneAndHMAC/none
 === RUN   TestNewRefusesNoneAndHMAC/None
@@ -602,13 +688,13 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
 === RUN   TestSignatureByAnotherKeyWithTheSameKid
 --- PASS: TestSignatureByAnotherKeyWithTheSameKid (0.01s)
 === RUN   TestTamperedToken
---- PASS: TestTamperedToken (0.01s)
+--- PASS: TestTamperedToken (0.02s)
 === RUN   TestKeyRotationRefreshesOnce
 --- PASS: TestKeyRotationRefreshesOnce (0.02s)
 === RUN   TestUnknownKidsRefreshAtMostOncePerInterval
 --- PASS: TestUnknownKidsRefreshAtMostOncePerInterval (0.07s)
 === RUN   TestConcurrentFirstUseFetchesOnce
---- PASS: TestConcurrentFirstUseFetchesOnce (0.02s)
+--- PASS: TestConcurrentFirstUseFetchesOnce (0.04s)
 === RUN   TestUnavailableKeySetRetriesSparingly
 --- PASS: TestUnavailableKeySetRetriesSparingly (0.02s)
 === RUN   TestKeySetMaxAgeWithdrawsKeys
@@ -616,23 +702,23 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
 === RUN   TestStaleKeySetStaysInUseWhenTheIssuerFails
 --- PASS: TestStaleKeySetStaysInUseWhenTheIssuerFails (0.02s)
 === RUN   TestOversizedToken
---- PASS: TestOversizedToken (0.01s)
+--- PASS: TestOversizedToken (0.02s)
 === RUN   TestMalformedTokens
+=== RUN   TestMalformedTokens/four_parts
+=== RUN   TestMalformedTokens/inner_space
+=== RUN   TestMalformedTokens/empty
 === RUN   TestMalformedTokens/one_part
 === RUN   TestMalformedTokens/two_parts
 === RUN   TestMalformedTokens/three_garbage
 === RUN   TestMalformedTokens/JSON_serialized
-=== RUN   TestMalformedTokens/four_parts
-=== RUN   TestMalformedTokens/inner_space
-=== RUN   TestMalformedTokens/empty
 --- PASS: TestMalformedTokens (0.01s)
+    --- PASS: TestMalformedTokens/four_parts (0.00s)
+    --- PASS: TestMalformedTokens/inner_space (0.00s)
+    --- PASS: TestMalformedTokens/empty (0.00s)
     --- PASS: TestMalformedTokens/one_part (0.00s)
     --- PASS: TestMalformedTokens/two_parts (0.00s)
     --- PASS: TestMalformedTokens/three_garbage (0.00s)
     --- PASS: TestMalformedTokens/JSON_serialized (0.00s)
-    --- PASS: TestMalformedTokens/four_parts (0.00s)
-    --- PASS: TestMalformedTokens/inner_space (0.00s)
-    --- PASS: TestMalformedTokens/empty (0.00s)
 === RUN   TestHeaderChecks
 === RUN   TestHeaderChecks/no_typ
 === RUN   TestHeaderChecks/typ_JWT
@@ -646,17 +732,17 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
     --- PASS: TestHeaderChecks/crit (0.00s)
     --- PASS: TestHeaderChecks/b64 (0.00s)
 === RUN   TestKeyMustFitTheAlgorithm
+=== RUN   TestKeyMustFitTheAlgorithm/PS256_with_a_key_limited_to_RS256
 === RUN   TestKeyMustFitTheAlgorithm/ES256_under_an_RSA_kid
 === RUN   TestKeyMustFitTheAlgorithm/EdDSA_under_an_EC_kid
 === RUN   TestKeyMustFitTheAlgorithm/RS256_under_an_Ed25519_kid
-=== RUN   TestKeyMustFitTheAlgorithm/PS256_with_a_key_limited_to_RS256
 --- PASS: TestKeyMustFitTheAlgorithm (0.02s)
+    --- PASS: TestKeyMustFitTheAlgorithm/PS256_with_a_key_limited_to_RS256 (0.00s)
     --- PASS: TestKeyMustFitTheAlgorithm/ES256_under_an_RSA_kid (0.00s)
     --- PASS: TestKeyMustFitTheAlgorithm/EdDSA_under_an_EC_kid (0.00s)
     --- PASS: TestKeyMustFitTheAlgorithm/RS256_under_an_Ed25519_kid (0.00s)
-    --- PASS: TestKeyMustFitTheAlgorithm/PS256_with_a_key_limited_to_RS256 (0.00s)
 === RUN   TestECDSACurveMustFitTheAlgorithm
---- PASS: TestECDSACurveMustFitTheAlgorithm (0.02s)
+--- PASS: TestECDSACurveMustFitTheAlgorithm (0.03s)
 === RUN   TestKeySetSkipsUnusableKeys
 === RUN   TestKeySetSkipsUnusableKeys/use_enc
 === RUN   TestKeySetSkipsUnusableKeys/private_key_in_JWKS
@@ -668,7 +754,7 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
     --- PASS: TestKeySetSkipsUnusableKeys/RSA_below_2048_bits (0.00s)
     --- PASS: TestKeySetSkipsUnusableKeys/two_RSA_keys_one_kid (0.00s)
 === RUN   TestKeySetWithoutUsableKeys
---- PASS: TestKeySetWithoutUsableKeys (0.01s)
+--- PASS: TestKeySetWithoutUsableKeys (0.02s)
 === RUN   TestDuplicateClaimsAndNonObjects
 --- PASS: TestDuplicateClaimsAndNonObjects (0.02s)
 === RUN   TestDiscovery
@@ -679,44 +765,44 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/database	0.031s
 === RUN   TestDiscovery/configured_JWKS_URL_skips_discovery
 === RUN   TestDiscovery/refresh_at_start-up
 --- PASS: TestDiscovery (0.11s)
-    --- PASS: TestDiscovery/issuer_mismatch (0.01s)
+    --- PASS: TestDiscovery/issuer_mismatch (0.02s)
     --- PASS: TestDiscovery/http_jwks_uri (0.03s)
-    --- PASS: TestDiscovery/redirect (0.02s)
+    --- PASS: TestDiscovery/redirect (0.03s)
     --- PASS: TestDiscovery/oversized_response (0.01s)
-    --- PASS: TestDiscovery/configured_JWKS_URL_skips_discovery (0.02s)
+    --- PASS: TestDiscovery/configured_JWKS_URL_skips_discovery (0.01s)
     --- PASS: TestDiscovery/refresh_at_start-up (0.01s)
 === RUN   TestInsecureHTTPIsOptInAndLoopbackOnly
 --- PASS: TestInsecureHTTPIsOptInAndLoopbackOnly (0.03s)
 === RUN   TestNewRefusesInvalidConfig
+=== RUN   TestNewRefusesInvalidConfig/negative_token_size
+=== RUN   TestNewRefusesInvalidConfig/empty_token_type
 === RUN   TestNewRefusesInvalidConfig/no_issuer
 === RUN   TestNewRefusesInvalidConfig/relative_issuer
+=== RUN   TestNewRefusesInvalidConfig/issuer_with_query
 === RUN   TestNewRefusesInvalidConfig/issuer_with_fragment
+=== RUN   TestNewRefusesInvalidConfig/issuer_with_userinfo
 === RUN   TestNewRefusesInvalidConfig/no_audience
 === RUN   TestNewRefusesInvalidConfig/same_claim_twice
 === RUN   TestNewRefusesInvalidConfig/kind_claim_is_sub
-=== RUN   TestNewRefusesInvalidConfig/leeway_too_large
-=== RUN   TestNewRefusesInvalidConfig/issuer_with_query
-=== RUN   TestNewRefusesInvalidConfig/issuer_with_userinfo
 === RUN   TestNewRefusesInvalidConfig/negative_leeway
-=== RUN   TestNewRefusesInvalidConfig/negative_token_size
-=== RUN   TestNewRefusesInvalidConfig/empty_token_type
+=== RUN   TestNewRefusesInvalidConfig/leeway_too_large
 --- PASS: TestNewRefusesInvalidConfig (0.01s)
+    --- PASS: TestNewRefusesInvalidConfig/negative_token_size (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/empty_token_type (0.00s)
     --- PASS: TestNewRefusesInvalidConfig/no_issuer (0.00s)
     --- PASS: TestNewRefusesInvalidConfig/relative_issuer (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/issuer_with_query (0.00s)
     --- PASS: TestNewRefusesInvalidConfig/issuer_with_fragment (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/issuer_with_userinfo (0.00s)
     --- PASS: TestNewRefusesInvalidConfig/no_audience (0.00s)
     --- PASS: TestNewRefusesInvalidConfig/same_claim_twice (0.00s)
     --- PASS: TestNewRefusesInvalidConfig/kind_claim_is_sub (0.00s)
-    --- PASS: TestNewRefusesInvalidConfig/leeway_too_large (0.00s)
-    --- PASS: TestNewRefusesInvalidConfig/issuer_with_query (0.00s)
-    --- PASS: TestNewRefusesInvalidConfig/issuer_with_userinfo (0.00s)
     --- PASS: TestNewRefusesInvalidConfig/negative_leeway (0.00s)
-    --- PASS: TestNewRefusesInvalidConfig/negative_token_size (0.00s)
-    --- PASS: TestNewRefusesInvalidConfig/empty_token_type (0.00s)
+    --- PASS: TestNewRefusesInvalidConfig/leeway_too_large (0.00s)
 === RUN   TestCustomClaimNames
 --- PASS: TestCustomClaimNames (0.01s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	0.821s
+ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	0.894s
 === RUN   TestCriticalEventTypes
 --- PASS: TestCriticalEventTypes (0.00s)
 === RUN   TestSlogAlerterLogsAtError
@@ -782,59 +868,59 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	0.821s
 === RUN   TestRelayRejectsMisconfiguration
 --- PASS: TestRelayRejectsMisconfiguration (0.00s)
 === RUN   TestWebhookPostsEnvelopeWithIdempotencyKey
---- PASS: TestWebhookPostsEnvelopeWithIdempotencyKey (0.03s)
+--- PASS: TestWebhookPostsEnvelopeWithIdempotencyKey (0.04s)
 === RUN   TestWebhookClassifiesSinkAnswers
---- PASS: TestWebhookClassifiesSinkAnswers (0.12s)
+--- PASS: TestWebhookClassifiesSinkAnswers (0.10s)
 === RUN   TestBudgetExhaustionStoresDeadLetter
---- PASS: TestBudgetExhaustionStoresDeadLetter (0.16s)
+--- PASS: TestBudgetExhaustionStoresDeadLetter (0.17s)
 === RUN   TestAbandonmentCommitsWithItsDeadLetter
---- PASS: TestAbandonmentCommitsWithItsDeadLetter (0.15s)
+--- PASS: TestAbandonmentCommitsWithItsDeadLetter (0.16s)
 === RUN   TestDeliveryBeyondAttemptBudgetIsDeadLettered
---- PASS: TestDeliveryBeyondAttemptBudgetIsDeadLettered (0.14s)
+--- PASS: TestDeliveryBeyondAttemptBudgetIsDeadLettered (0.15s)
 === RUN   TestDeadLettersAreIsolatedByScope
---- PASS: TestDeadLettersAreIsolatedByScope (0.18s)
+--- PASS: TestDeadLettersAreIsolatedByScope (0.20s)
 === RUN   TestHumanReplayRepublishesWithSameEventID
---- PASS: TestHumanReplayRepublishesWithSameEventID (0.16s)
+--- PASS: TestHumanReplayRepublishesWithSameEventID (0.20s)
 === RUN   TestConcurrentReplaysAreHarmless
---- PASS: TestConcurrentReplaysAreHarmless (0.14s)
+--- PASS: TestConcurrentReplaysAreHarmless (0.18s)
 === RUN   TestInboxRunsHandlerOnceForRedeliveredEvent
---- PASS: TestInboxRunsHandlerOnceForRedeliveredEvent (0.11s)
+--- PASS: TestInboxRunsHandlerOnceForRedeliveredEvent (0.14s)
 === RUN   TestInboxCommitsHandlerEffectAndRecordTogether
---- PASS: TestInboxCommitsHandlerEffectAndRecordTogether (0.19s)
+--- PASS: TestInboxCommitsHandlerEffectAndRecordTogether (0.14s)
 === RUN   TestInboxRecordsPermanentRejectionAndNeverRetries
---- PASS: TestInboxRecordsPermanentRejectionAndNeverRetries (0.12s)
+--- PASS: TestInboxRecordsPermanentRejectionAndNeverRetries (0.14s)
 === RUN   TestInboxConcurrentWorkersRunHandlerOnce
---- PASS: TestInboxConcurrentWorkersRunHandlerOnce (0.17s)
+--- PASS: TestInboxConcurrentWorkersRunHandlerOnce (0.20s)
 === RUN   TestInboxRacingDeliveriesRunHandlerOnce
---- PASS: TestInboxRacingDeliveriesRunHandlerOnce (0.14s)
+--- PASS: TestInboxRacingDeliveriesRunHandlerOnce (0.16s)
 === RUN   TestInboxRejectsEnvelopeWhoseScopeDoesNotParse
---- PASS: TestInboxRejectsEnvelopeWhoseScopeDoesNotParse (0.11s)
+--- PASS: TestInboxRejectsEnvelopeWhoseScopeDoesNotParse (0.16s)
 === RUN   TestInboxStoreKeepsBentoContractUnderScopeTransactor
 === RUN   TestInboxStoreKeepsBentoContractUnderScopeTransactor/processed_duplicate
 === RUN   TestInboxStoreKeepsBentoContractUnderScopeTransactor/rollback_reacquires
 === RUN   TestInboxStoreKeepsBentoContractUnderScopeTransactor/consumer_isolation
 === RUN   TestInboxStoreKeepsBentoContractUnderScopeTransactor/invalid_requests_and_transitions
 === RUN   TestInboxStoreKeepsBentoContractUnderScopeTransactor/busy_rolls_back
---- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor (0.50s)
-    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/processed_duplicate (0.08s)
-    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/rollback_reacquires (0.09s)
-    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/consumer_isolation (0.09s)
-    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/invalid_requests_and_transitions (0.09s)
-    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/busy_rolls_back (0.15s)
+--- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor (0.61s)
+    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/processed_duplicate (0.11s)
+    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/rollback_reacquires (0.11s)
+    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/consumer_isolation (0.12s)
+    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/invalid_requests_and_transitions (0.11s)
+    --- PASS: TestInboxStoreKeepsBentoContractUnderScopeTransactor/busy_rolls_back (0.16s)
 === RUN   TestRelayDeliversToInboxThroughWebhook
---- PASS: TestRelayDeliversToInboxThroughWebhook (0.25s)
+--- PASS: TestRelayDeliversToInboxThroughWebhook (0.27s)
 === RUN   TestRelayRetriesFailedPublishThenSucceeds
 --- PASS: TestRelayRetriesFailedPublishThenSucceeds (0.11s)
 === RUN   TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition
---- PASS: TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition (0.12s)
+--- PASS: TestRelayAbandonsAfterFailureBudgetAndUnblocksPartition (0.10s)
 === RUN   TestWorkerCrashRecoveryDrill
-    relay_integration_test.go:279: re-delivered 3.067s after the first delivery (lease 3s)
+    relay_integration_test.go:279: re-delivered 3.073s after the first delivery (lease 3s)
     relay_integration_test.go:280: second worker:
-        time=2026-11-10T06:21:32.903-07:00 level=INFO msg="relaying outbox" schema=brant_t_outbox_a98f45301537 sink=http://127.0.0.1:45113 lease=3s
-        time=2026-11-10T06:21:36.000-07:00 level=INFO msg=stopped
---- PASS: TestWorkerCrashRecoveryDrill (3.62s)
+        time=2026-11-10T07:27:47.814-07:00 level=INFO msg="relaying outbox" schema=brant_t_outbox_963403aeaf06 sink=http://127.0.0.1:45169 lease=3s
+        time=2026-11-10T07:27:50.909-07:00 level=INFO msg=stopped
+--- PASS: TestWorkerCrashRecoveryDrill (3.64s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	6.559s
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	6.888s
 === RUN   TestDecodeRejects
 === RUN   TestDecodeRejects/duplicate_key_(V0.50_test_cli)
 === RUN   TestDecodeRejects/duplicate_key_in_an_array_element
@@ -974,13 +1060,13 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	6.559s
 === RUN   TestDecodeValueLimit
 --- PASS: TestDecodeValueLimit (0.05s)
 === RUN   TestDecodeSizeLimit
-=== RUN   TestDecodeSizeLimit/far_beyond
 === RUN   TestDecodeSizeLimit/1_MiB_+_1_spaces_(V0.50_test_cli)
 === RUN   TestDecodeSizeLimit/1_MiB_+_1_valid_request
+=== RUN   TestDecodeSizeLimit/far_beyond
 --- PASS: TestDecodeSizeLimit (0.02s)
-    --- PASS: TestDecodeSizeLimit/far_beyond (0.00s)
     --- PASS: TestDecodeSizeLimit/1_MiB_+_1_spaces_(V0.50_test_cli) (0.00s)
     --- PASS: TestDecodeSizeLimit/1_MiB_+_1_valid_request (0.00s)
+    --- PASS: TestDecodeSizeLimit/far_beyond (0.00s)
 === RUN   TestDecodeReadsAtMostOneByteBeyondTheLimit
 --- PASS: TestDecodeReadsAtMostOneByteBeyondTheLimit (0.00s)
 === RUN   TestDecodeReadFailures
@@ -1138,7 +1224,7 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	6.559s
     --- PASS: FuzzDecode/seed#67 (0.00s)
     --- PASS: FuzzDecode/seed#68 (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	0.071s
+ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	0.077s
 === RUN   TestPaymentTailFollowsRemainderOrder
 --- PASS: TestPaymentTailFollowsRemainderOrder (0.00s)
 === RUN   TestTiesGoToTheSmallerID
@@ -1228,12 +1314,12 @@ ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	0.071s
     --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#1 (0.00s)
     --- PASS: FuzzRoundHalfUpAgainstDigitOracle/seed#2 (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/kernel	0.031s
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.038s
 ?   	go.idp.xyz/idp-brant/internal/reference	[no test files]
 === RUN   TestImportContract
 --- PASS: TestImportContract (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/reference/api	0.002s
+ok  	go.idp.xyz/idp-brant/internal/reference/api	0.004s
 ?   	go.idp.xyz/idp-brant/internal/reference/internal/application	[no test files]
 === RUN   TestNameKeyNormalization
 --- PASS: TestNameKeyNormalization (0.00s)
@@ -1287,22 +1373,22 @@ ok  	go.idp.xyz/idp-brant/internal/reference/internal/lists	0.005s
     --- PASS: TestEnvelopeRejections/missing_args (0.00s)
     --- PASS: TestEnvelopeRejections/too_large (0.00s)
 === RUN   TestUnauthenticatedRequestsAreRefusedBeforeAnything
-2026/11/10 06:21:29 INFO request not authenticated correlation_id=corr-01a1c478-9800-795b-9cef-d15a2c02b688 reason="identity: unauthenticated"
-2026/11/10 06:21:29 INFO request not authenticated correlation_id=corr-01a1c478-9800-76b5-8c61-1187bfbbfde2 reason="identity: unauthenticated"
+2026/11/10 07:27:44 INFO request not authenticated correlation_id=corr-01a1c478-9800-7714-a699-a1d890b1ecf7 reason="identity: unauthenticated"
+2026/11/10 07:27:44 INFO request not authenticated correlation_id=corr-01a1c478-9800-7b19-9f8b-a658a04471ca reason="identity: unauthenticated"
 --- PASS: TestUnauthenticatedRequestsAreRefusedBeforeAnything (0.00s)
 === RUN   TestContextOutcomesMapByCategory
-2026/11/10 06:21:29 ERROR request failed correlation_id=corr-01a1c478-9800-7811-8200-3f2f20e874bd error="connection refused to 10.0.0.1"
-2026/11/10 06:21:29 ERROR commit outcome uncertain correlation_id=corr-01a1c478-9800-7bcd-b356-411e55429b40 error="application: transaction commit outcome uncertain\neof"
+2026/11/10 07:27:44 ERROR request failed correlation_id=corr-01a1c478-9800-7ef8-8dbe-570fe9603816 error="connection refused to 10.0.0.1"
+2026/11/10 07:27:44 ERROR commit outcome uncertain correlation_id=corr-01a1c478-9800-711e-965e-434ab2d46f3a error="application: transaction commit outcome uncertain\neof"
 --- PASS: TestContextOutcomesMapByCategory (0.00s)
 === RUN   TestReadsAnswerViewsAndRejections
 --- PASS: TestReadsAnswerViewsAndRejections (0.00s)
 === RUN   TestDeadLetterReplayRoute
-2026/11/10 06:21:29 WARN dead letter replay failed correlation_id=corr-01a1c478-9800-7f9d-8106-3a306fabf670 error="messaging: dead letter replay failed"
+2026/11/10 07:27:44 WARN dead letter replay failed correlation_id=corr-01a1c478-9800-73ec-ae5a-d6ecde13be68 error="messaging: dead letter replay failed"
 --- PASS: TestDeadLetterReplayRoute (0.00s)
 === RUN   TestListImportHasItsOwnIngressLimits
---- PASS: TestListImportHasItsOwnIngressLimits (0.40s)
+--- PASS: TestListImportHasItsOwnIngressLimits (0.44s)
 PASS
-ok  	go.idp.xyz/idp-brant/internal/transport/httpapi	0.427s
+ok  	go.idp.xyz/idp-brant/internal/transport/httpapi	0.456s
 === RUN   TestClassify
 --- PASS: TestClassify (0.00s)
 === RUN   TestImportRules
@@ -1325,29 +1411,29 @@ ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.005s
 === RUN   TestGeneratedRolesMatchTheArchive
 --- PASS: TestGeneratedRolesMatchTheArchive (0.00s)
 PASS
-ok  	go.idp.xyz/idp-brant/tools/rolegen	0.004s
+ok  	go.idp.xyz/idp-brant/tools/rolegen	0.005s
 === RUN   TestSC04OptionAPrefetchLeavesACommitWindow
---- PASS: TestSC04OptionAPrefetchLeavesACommitWindow (0.07s)
+--- PASS: TestSC04OptionAPrefetchLeavesACommitWindow (0.10s)
 === RUN   TestSC04OptionBGuardDecidesEveryCommitOrder
 === RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first
 === RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first
 === RUN   TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first
---- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder (0.08s)
+--- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder (0.12s)
     --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_committed_first (0.01s)
-    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first (0.02s)
-    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first (0.01s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/activation_holds_the_guard_first (0.03s)
+    --- PASS: TestSC04OptionBGuardDecidesEveryCommitOrder/denial_holds_the_row_first (0.02s)
 === RUN   TestSC03CheckThenActWithoutRootLockLetsBothWin
---- PASS: TestSC03CheckThenActWithoutRootLockLetsBothWin (0.08s)
+--- PASS: TestSC03CheckThenActWithoutRootLockLetsBothWin (0.09s)
 === RUN   TestSC03RootLockLetsExactlyOneWin
 === RUN   TestSC03RootLockLetsExactlyOneWin/replace_first
 === RUN   TestSC03RootLockLetsExactlyOneWin/convert_first
 --- PASS: TestSC03RootLockLetsExactlyOneWin (0.10s)
-    --- PASS: TestSC03RootLockLetsExactlyOneWin/replace_first (0.03s)
+    --- PASS: TestSC03RootLockLetsExactlyOneWin/replace_first (0.02s)
     --- PASS: TestSC03RootLockLetsExactlyOneWin/convert_first (0.01s)
 === RUN   TestSC03StressComparesTheTwoImplementations
-    consistency_integration_test.go:617: no root lock: 199 of 200 rounds had two winners
+    consistency_integration_test.go:617: no root lock: 200 of 200 rounds had two winners
     consistency_integration_test.go:617: root row FOR UPDATE first: 0 of 200 rounds had two winners
---- PASS: TestSC03StressComparesTheTwoImplementations (3.56s)
+--- PASS: TestSC03StressComparesTheTwoImplementations (3.89s)
 PASS
-ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	3.884s
+ok  	go.idp.xyz/idp-brant/tools/spikes/consistency	4.313s
 exit=0

@@ -1,5 +1,5 @@
 {
-  "archive_version": "1.4",
+  "archive_version": "1.5",
   "as_of": "2026-11-10",
   "builder": "00_START_HERE/tools/build_archive.py",
   "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；M0 与 S1 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
@@ -89,7 +89,7 @@
     {
       "check": "岗位模板覆盖全部命令",
       "result": "PASS",
-      "detail": "15 个岗位模板，156 条命令"
+      "detail": "15 个岗位模板，158 条命令"
     },
     {
       "check": "岗位模板的权限均为已登记命令或能力权限",
@@ -139,7 +139,7 @@
     {
       "check": "集成事件均有生产聚合",
       "result": "PASS",
-      "detail": "103 个集成事件"
+      "detail": "106 个集成事件"
     },
     {
       "check": "不变量、验收与场景引用的错误码均已登记",
@@ -224,7 +224,7 @@
     {
       "check": "最新证据快照对应当前 Go 源码",
       "result": "PASS",
-      "detail": "163 个 Go 文件与 05_S1_EVIDENCE 快照一致"
+      "detail": "186 个 Go 文件与 05_S1_EVIDENCE 快照一致"
     },
     {
       "check": "品牌标志与品牌包 QA 清单逐字节一致且各页均已使用",
@@ -246,24 +246,24 @@
     "stateMachines": 20,
     "invariantRegister": 68,
     "referenceTests": 50,
-    "commands": 156,
-    "events": 103,
+    "commands": 158,
+    "events": 106,
     "errorCodes": 143,
     "pythonSourceModules": 54,
     "pythonSourceLines": 21136,
     "pythonUniqueTests": 577,
     "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
-    "goTestsPorted": 63,
+    "goTestsPorted": 67,
     "wbsTasks": 78,
     "adrs": 38,
     "g1Controls": 13,
     "sapReferenceRows": 41,
     "sapReferenceGaps": 0,
     "sapReferencePartial": 11,
-    "goPackages": 56,
-    "goSourceLines": 33447,
-    "goTestFunctions": 337,
-    "goIntegrationTests": 139,
+    "goPackages": 59,
+    "goSourceLines": 39268,
+    "goTestFunctions": 373,
+    "goIntegrationTests": 153,
     "goFuzzTargets": 3,
     "m0DoneLocal": 9,
     "m0Tasks": 11

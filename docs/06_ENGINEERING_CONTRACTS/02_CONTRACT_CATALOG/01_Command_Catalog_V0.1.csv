@@ -5,6 +5,7 @@ PTY,party.revise,人工或 AI（同一守卫）,master.revise,POST /api/brant/v1
 PTY,party.deactivate,仅人工,master.deactivate,POST /api/brant/v1/pty/commands/party.deactivate,S1
 PTY,contact.save_draft,人工或 AI（按动作权限）,master.upsert_draft（kind=contact）,POST /api/brant/v1/pty/commands/contact.save_draft,S1
 PTY,contact.confirm,仅人工,master.confirm,POST /api/brant/v1/pty/commands/contact.confirm,S1
+PTY,contact.revise,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/pty/commands/contact.revise,S1
 PTY,service_role.verify,仅人工,—（Python 未实现）,POST /api/brant/v1/pty/commands/service_role.verify,S1
 PTY,party_screening.record,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/pty/commands/party_screening.record,S1
 PTY,party_screening.decide,仅人工,—（Python 未实现）,POST /api/brant/v1/pty/commands/party_screening.decide,S1
@@ -15,6 +16,7 @@ CAT,sku.save_draft,人工或 AI（按动作权限）,master.upsert_draft（kind=
 CAT,sku.confirm,仅人工,master.confirm,POST /api/brant/v1/cat/commands/sku.confirm,S1
 CAT,sku.revise_spec,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/cat/commands/sku.revise_spec,S1
 CAT,sku.deactivate,仅人工,master.deactivate,POST /api/brant/v1/cat/commands/sku.deactivate,S1
+CAT,item_code_mapping.save_draft,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/cat/commands/item_code_mapping.save_draft,S1
 CAT,item_code_mapping.publish,仅人工,—（Python 未实现）,POST /api/brant/v1/cat/commands/item_code_mapping.publish,S1
 CAT,sample.approve,仅人工,—（Python 未实现）,POST /api/brant/v1/cat/commands/sample.approve,S1
 CAT,declaration_profile.save_draft,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/cat/commands/declaration_profile.save_draft,S1
