@@ -1,12 +1,12 @@
 {
-  "recorded_at": "2026-11-10T11:26:00+00:00",
+  "recorded_at": "2026-11-10T11:36:35+00:00",
   "host": {
     "os": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
     "kernel": "6.18.54.1-microsoft-standard-WSL2"
   },
   "git": {
     "branch": "s1/master-data-and-inquiry",
-    "head": "e52a37a53ab95e9312996f7c438858ab4b591d20",
+    "head": "87f50ab2a1c5cac19b363b6fc7189463cbfe7a9b",
     "remote": "https://github.com/idpxyz/idp-brantgo.git"
   },
   "go": {

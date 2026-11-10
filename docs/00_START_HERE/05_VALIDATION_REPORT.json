@@ -34,7 +34,7 @@
     {
       "check": "关系两端均为已登记上下文",
       "result": "PASS",
-      "detail": "62 条关系"
+      "detail": "63 条关系"
     },
     {
       "check": "关系无重复（上游、下游）",
@@ -218,7 +218,7 @@
     "ulInvariants": 32,
     "contexts": 18,
     "coreContexts": 4,
-    "relationships": 62,
+    "relationships": 63,
     "factAuthority": 47,
     "strategicAdrs": 16,
     "eventStormingScenarios": 12,
@@ -241,9 +241,9 @@
     "sapReferenceGaps": 0,
     "sapReferencePartial": 11,
     "goPackages": 48,
-    "goSourceLines": 22635,
-    "goTestFunctions": 240,
-    "goIntegrationTests": 97,
+    "goSourceLines": 22692,
+    "goTestFunctions": 241,
+    "goIntegrationTests": 98,
     "goFuzzTargets": 3,
     "m0DoneLocal": 9,
     "m0Tasks": 11
