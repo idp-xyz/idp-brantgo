@@ -65,6 +65,7 @@ type Config struct {
 	PTY      PTY
 	CAT      CAT
 	INQ      INQ
+	POL      POL
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -83,7 +84,7 @@ const (
 
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
-	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.Verifier == nil || cfg.Clock == nil {
+	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.Verifier == nil || cfg.Clock == nil {
 		return nil, errors.New("httpapi: contexts, verifier and clock are required")
 	}
 	if cfg.Logger == nil {
@@ -93,7 +94,7 @@ func New(cfg Config) (http.Handler, error) {
 		cfg.MaxBodyBytes = MaxBody
 	}
 	s := &server{cfg: cfg, contexts: map[string]*commandSet{}}
-	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ)} {
+	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL)} {
 		s.contexts[set.bc] = set
 	}
 	mux := http.NewServeMux()
@@ -114,6 +115,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/pty/contacts/{id}", s.authenticated(read(s, cfg.PTY.GetContact, contactView)))
 	mux.Handle("GET /api/brant/v1/cat/skus/{id}", s.authenticated(read(s, cfg.CAT.GetSku, skuView)))
 	mux.Handle("GET /api/brant/v1/inq/rfqs/{id}", s.authenticated(read(s, cfg.INQ.GetRfq, rfqView)))
+	mux.Handle("GET /api/brant/v1/pol/configs/{kind}/{id}", s.authenticated(s.configRead))
+	mux.Handle("GET /api/brant/v1/pol/snapshots/{id}", s.authenticated(read(s, cfg.POL.GetSnapshot, snapshotView)))
 	return s.correlated(mux), nil
 }
 

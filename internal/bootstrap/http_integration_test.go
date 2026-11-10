@@ -21,6 +21,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"go.idp.xyz/idp-brant/internal/bootstrap"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // issuer is a local OpenID Connect issuer: discovery, a JWKS with one RSA key, and a signer.
@@ -195,6 +196,26 @@ func TestBRC001FrontOverHTTPWithOIDCTokens(t *testing.T) {
 	if status, _ := forged.do("GET", "/api/brant/v1/inq/rfqs/rfq.1", nil); status != http.StatusUnauthorized {
 		t.Fatalf("a token of another issuer key: %d", status)
 	}
+	// POL over HTTP: the editor cannot publish its own draft (POL-INV-001); another human can.
+	w.actor("reviewer.demo", allPermissions...)
+	reviewer := &client{t: t, base: api.URL, token: is.token(w.tenant, "company.A", "reviewer.demo", "human")}
+	from := kernel.FormatTimestamp(time.Now().Add(-time.Hour))
+	human.command("pol", "brant.pol/0.1.0", "config.save_draft", map[string]any{"kind": "currency", "id": "USD", "expected_version": 0,
+		"valid_from": from, "data": map[string]any{"code": "USD", "name": "US Dollar", "minor_units": 2, "rounding": "HALF_UP"}})
+	publish := map[string]any{"kind": "currency", "id": "USD", "expected_version": 1, "revision": 1, "evidence_ids": []string{"source.1"}, "reason": "核对 ISO 4217"}
+	if status, out := human.try("pol", "brant.pol/0.1.0", "config.publish", publish); status != http.StatusUnprocessableEntity ||
+		out["code"] != "INDEPENDENT_REVIEW_REQUIRED" {
+		t.Fatalf("self-publication: %d %v", status, out)
+	}
+	reviewer.command("pol", "brant.pol/0.1.0", "config.publish", publish)
+	if status, cfg := human.do("GET", "/api/brant/v1/pol/configs/currency/USD", nil); status != http.StatusOK || cfg["active_revision"] != float64(1) {
+		t.Fatalf("config %d %v", status, cfg)
+	}
+	if status, out := human.try("pol", "brant.pol/0.1.0", "config.save_draft", map[string]any{"kind": "currency", "id": "EUR",
+		"expected_version": 0, "valid_from": from, "data": map[string]any{"code": "EUR", "name": "Euro", "minor_units": 2.5, "rounding": "HALF_UP"}}); status != http.StatusUnprocessableEntity || out["code"] != "SCHEMA_INVALID" {
+		t.Fatalf("a float in config data: %d %v", status, out)
+	}
+
 	audit, err := w.c.INQ.Audit(w.actor("human.demo", allPermissions...))
 	w.must(err)
 	if last := audit[len(audit)-1]; last.Command != "rfq.get" || last.Outcome != "read" {

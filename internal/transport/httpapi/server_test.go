@@ -70,7 +70,7 @@ func (f *fakeINQ) GetRfq(_ context.Context, id string) (inqapi.RfqView, error) {
 
 func newServer(t *testing.T, inq *fakeINQ) http.Handler {
 	t.Helper()
-	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: inq,
+	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: inq, POL: struct{ POL }{},
 		Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestDeadLetterReplayRoute(t *testing.T) {
 		{messaging.ErrAlreadyReplayed, 422, "INVALID_STATE"},
 		{messaging.ErrReplayFailed, 502, ""},
 	} {
-		h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{},
+		h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{},
 			Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{}), Replayer: fakeReplayer{c.err}})
 		if err != nil {
 			t.Fatal(err)
