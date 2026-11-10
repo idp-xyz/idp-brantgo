@@ -1,4 +1,5 @@
-// Package pty assembles the PTY bounded context (trading parties, contacts and party screening).
+// Package pty assembles the PTY bounded context (trading parties with their addresses and service
+// roles, contacts, company trading profiles and party screening).
 // Code outside PTY uses it through package api; everything under internal/ is private to PTY.
 package pty
 
@@ -28,12 +29,14 @@ var (
 	_ api.Queries           = (*Module)(nil)
 	_ api.ScreeningCommands = (*Module)(nil)
 	_ api.ScreeningQueries  = (*Module)(nil)
+	_ api.ProfileCommands   = (*Module)(nil)
+	_ api.ProfileQueries    = (*Module)(nil)
 	_ api.Auditor           = (*Module)(nil)
 )
 
 // New wires PTY to db, a transaction owner that belongs to PTY alone, to EVD's queries for the
-// evidence of confirmations, to POL's queries for the screening_regulation (R60) and to the
-// screening lists of reference data.
+// evidence of confirmations and verifications, to POL's queries for the screening_regulation and the
+// settlement terms of trading profiles (R60) and to the screening lists of reference data.
 func New(db *bentopg.DB, sources evdapi.Queries, configs polapi.Queries, lists refapi.Queries) (*Module, error) {
 	if sources == nil || configs == nil || lists == nil {
 		return nil, errors.New("pty: module needs EVD's and POL's queries and the screening lists")

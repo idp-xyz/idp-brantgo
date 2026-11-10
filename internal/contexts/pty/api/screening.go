@@ -71,13 +71,15 @@ const (
 
 // Codes PTY declares, with the category the error catalog V0.1 gives them.
 const (
-	CodePartyScreeningNotClear = "PARTY_SCREENING_NOT_CLEAR" // 409
-	CodeReferenceStale         = "REFERENCE_STALE"           // 409, refresh and resubmit
+	CodePartyScreeningNotClear    = "PARTY_SCREENING_NOT_CLEAR"   // 409
+	CodeReferenceStale            = "REFERENCE_STALE"             // 409, refresh and resubmit
+	CodeIndependentReviewRequired = "INDEPENDENT_REVIEW_REQUIRED" // 422, trading_profile.publish
 )
 
 var codes = map[string]kernel.Category{
-	CodePartyScreeningNotClear: kernel.CategoryConflict,
-	CodeReferenceStale:         kernel.CategoryConflict,
+	CodePartyScreeningNotClear:    kernel.CategoryConflict,
+	CodeReferenceStale:            kernel.CategoryConflict,
+	CodeIndependentReviewRequired: kernel.CategoryInvalid,
 }
 
 // Reject returns a rejection with a code PTY declares, for downstream contexts that pass a PTY
