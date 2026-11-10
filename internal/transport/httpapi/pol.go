@@ -27,116 +27,41 @@ func (r configRefJSON) api() polapi.ConfigRef {
 	return polapi.ConfigRef{Kind: r.Kind, ConfigID: r.ID, Revision: r.Revision}
 }
 
-type currencyJSON struct {
-	Code       string `json:"code"`
-	Name       string `json:"name"`
-	MinorUnits int    `json:"minor_units"`
-	Rounding   string `json:"rounding"`
+// configDataTypes are the data structures of the configuration kinds POL defines, for the OpenAPI
+// document.
+func configDataTypes() map[string]reflect.Type {
+	out := map[string]reflect.Type{}
+	for f := range reflect.TypeFor[polapi.ConfigData]().Fields() {
+		out[kindOf(f.Name)] = taggedType(f.Type.Elem())
+	}
+	return out
 }
 
-type unitJSON struct {
-	Code      string `json:"code"`
-	Name      string `json:"name"`
-	Dimension string `json:"dimension"`
-	Precision int    `json:"precision"`
-}
-
-type fxRateJSON struct {
-	FromCurrency string `json:"from_currency"`
-	ToCurrency   string `json:"to_currency"`
-	Rate         string `json:"rate"`
-	Purpose      string `json:"purpose"`
-	SourceName   string `json:"source_name"`
-	ObservedAt   string `json:"observed_at"`
-}
-
-type paymentStageJSON struct {
-	StageID string `json:"stage_id"`
-	Percent string `json:"percent"`
-	Trigger string `json:"trigger"`
-	Days    int    `json:"days"`
-}
-
-type paymentTermsJSON struct {
-	Name   string             `json:"name"`
-	Stages []paymentStageJSON `json:"stages"`
-}
-
-type numberSequenceJSON struct {
-	DocumentType string `json:"document_type"`
-	Prefix       string `json:"prefix"`
-	Width        int    `json:"width"`
-	Reset        string `json:"reset"`
-	TimeZone     string `json:"time_zone"`
-}
-
-// configDataTypes are the data structures of the configuration kinds the transport maps, for the
-// OpenAPI document.
-var configDataTypes = map[string]reflect.Type{
-	polapi.KindCurrency:       reflect.TypeFor[currencyJSON](),
-	polapi.KindUnit:           reflect.TypeFor[unitJSON](),
-	polapi.KindFXRate:         reflect.TypeFor[fxRateJSON](),
-	polapi.KindPaymentTerms:   reflect.TypeFor[paymentTermsJSON](),
-	polapi.KindNumberSequence: reflect.TypeFor[numberSequenceJSON](),
-}
-
-// configData decodes data as the closed structure of kind. A kind POL does not implement yet is
-// passed on with empty data, so POL answers it with its own verdict.
+// configData decodes data as the closed structure of kind. A kind POL does not define is passed
+// on with empty data, so POL answers it with its own verdict.
 func configData(kind string, data json.RawMessage) (polapi.ConfigData, error) {
 	var d polapi.ConfigData
 	if len(data) == 0 || data[0] != '{' {
 		return d, schemaError{kernel.Reject(kernel.CodeSchemaInvalid, "/args/data", "required object")}
 	}
-	decode := func(v any) error {
-		if err := strictjson.Unmarshal(data, v, strictjson.Limits{MaxBytes: int64(len(data))}); err != nil {
-			if rej, ok := kernel.AsRejection(err); ok {
-				path := "/args/data"
-				if f := rej.Fields[0]; f.Path != "/" {
-					path += f.Path
-				}
-				return schemaError{kernel.Reject(rej.Code, path, rej.Fields[0].Reason)}
+	field, ok := configDataField(kind)
+	if !ok {
+		return d, nil
+	}
+	tagged := reflect.New(taggedType(field.Type.Elem()))
+	if err := strictjson.Unmarshal(data, tagged.Interface(), strictjson.Limits{MaxBytes: int64(len(data))}); err != nil {
+		if rej, ok := kernel.AsRejection(err); ok {
+			path := "/args/data"
+			if f := rej.Fields[0]; f.Path != "/" {
+				path += f.Path
 			}
-			return err
+			return d, schemaError{kernel.Reject(rej.Code, path, rej.Fields[0].Reason)}
 		}
-		return nil
+		return d, err
 	}
-	switch kind {
-	case polapi.KindCurrency:
-		var c currencyJSON
-		if err := decode(&c); err != nil {
-			return d, err
-		}
-		d.Currency = &polapi.Currency{Code: c.Code, Name: c.Name, MinorUnits: c.MinorUnits, Rounding: c.Rounding}
-	case polapi.KindUnit:
-		var u unitJSON
-		if err := decode(&u); err != nil {
-			return d, err
-		}
-		d.Unit = &polapi.Unit{Code: u.Code, Name: u.Name, Dimension: u.Dimension, Precision: u.Precision}
-	case polapi.KindFXRate:
-		var x fxRateJSON
-		if err := decode(&x); err != nil {
-			return d, err
-		}
-		d.FXRate = &polapi.FXRate{FromCurrency: x.FromCurrency, ToCurrency: x.ToCurrency, Rate: x.Rate, Purpose: x.Purpose,
-			SourceName: x.SourceName, ObservedAt: x.ObservedAt}
-	case polapi.KindPaymentTerms:
-		var p paymentTermsJSON
-		if err := decode(&p); err != nil {
-			return d, err
-		}
-		t := &polapi.PaymentTerms{Name: p.Name}
-		for _, s := range p.Stages {
-			t.Stages = append(t.Stages, polapi.PaymentStage(s))
-		}
-		d.PaymentTerms = t
-	case polapi.KindNumberSequence:
-		var n numberSequenceJSON
-		if err := decode(&n); err != nil {
-			return d, err
-		}
-		d.NumberSequence = &polapi.NumberSequence{DocumentType: n.DocumentType, Prefix: n.Prefix, Width: n.Width, Reset: n.Reset, TimeZone: n.TimeZone}
-	}
+	value := reflect.New(field.Type.Elem())
+	copyValue(value.Elem(), tagged.Elem())
+	reflect.ValueOf(&d).Elem().FieldByIndex(field.Index).Set(value)
 	return d, nil
 }
 
@@ -224,31 +149,20 @@ type polRevisionJSON struct {
 }
 
 func dataJSON(d polapi.ConfigData) json.RawMessage {
-	var v any
-	switch {
-	case d.Currency != nil:
-		c := d.Currency
-		v = currencyJSON{c.Code, c.Name, c.MinorUnits, c.Rounding}
-	case d.Unit != nil:
-		u := d.Unit
-		v = unitJSON{u.Code, u.Name, u.Dimension, u.Precision}
-	case d.FXRate != nil:
-		x := d.FXRate
-		v = fxRateJSON{x.FromCurrency, x.ToCurrency, x.Rate, x.Purpose, x.SourceName, x.ObservedAt}
-	case d.PaymentTerms != nil:
-		p := paymentTermsJSON{Name: d.PaymentTerms.Name, Stages: []paymentStageJSON{}}
-		for _, s := range d.PaymentTerms.Stages {
-			p.Stages = append(p.Stages, paymentStageJSON(s))
+	v := reflect.ValueOf(d)
+	for i := range v.NumField() {
+		f := v.Field(i)
+		if f.IsNil() {
+			continue
 		}
-		v = p
-	case d.NumberSequence != nil:
-		n := d.NumberSequence
-		v = numberSequenceJSON{n.DocumentType, n.Prefix, n.Width, n.Reset, n.TimeZone}
-	default:
-		v = struct{}{}
+		tagged := reflect.New(taggedType(f.Type().Elem()))
+		copyValue(tagged.Elem(), f.Elem())
+		b, err := json.Marshal(tagged.Interface())
+		if err == nil {
+			return b
+		}
 	}
-	b, _ := json.Marshal(v) // plain structs of strings and integers always encode
-	return b
+	return json.RawMessage(`{}`)
 }
 
 func configView(v polapi.ConfigView) any {

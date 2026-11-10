@@ -30,8 +30,9 @@ func OpenAPI() ([]byte, error) {
 		for _, n := range names {
 			args := schemaOf(set.commands[n].args)
 			if set.bc == "pol" && n == "config.save_draft" {
-				kinds := make([]string, 0, len(configDataTypes))
-				for k := range configDataTypes {
+				types := configDataTypes()
+				kinds := make([]string, 0, len(types))
+				for k := range types {
 					kinds = append(kinds, k)
 				}
 				sort.Strings(kinds)
@@ -84,7 +85,7 @@ func OpenAPI() ([]byte, error) {
 		"Rejection":      schemaOf(reflect.TypeFor[rejection]()),
 		"TransportError": schemaOf(reflect.TypeFor[transportError]()),
 	}
-	for k, t := range configDataTypes {
+	for k, t := range configDataTypes() {
 		schemas["pol."+k] = schemaOf(t)
 	}
 	doc := map[string]any{

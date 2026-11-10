@@ -79,6 +79,138 @@
         },
         "type": "object"
       },
+      "pol.bank_account": {
+        "additionalProperties": false,
+        "properties": {
+          "account_number": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bank_name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "currency": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner_kind": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "purpose": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.calendar": {
+        "additionalProperties": false,
+        "properties": {
+          "holidays": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "time_zone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "working_weekdays": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "pol.company_profile": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "base_currency": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "country": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "legal_name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "policy_scope": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "registration_no": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "time_zone": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.credit_policy": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_tiers": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "max_amount": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "currency": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "default_limit": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "limit_sources": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "overdue_tolerance_days": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "pol.currency": {
         "additionalProperties": false,
         "properties": {
@@ -94,6 +226,61 @@
             "type": "string"
           },
           "rounding": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.document_template": {
+        "additionalProperties": false,
+        "properties": {
+          "document_type": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "field_names": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "template_text": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.fee_category": {
+        "additionalProperties": false,
+        "properties": {
+          "allocation_basis": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "category": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "inclusion": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "policy_basis": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "side": {
             "minLength": 1,
             "type": "string"
           }
@@ -158,6 +345,30 @@
       "pol.payment_terms": {
         "additionalProperties": false,
         "properties": {
+          "calendar": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "day_basis": {
+            "minLength": 1,
+            "type": "string"
+          },
           "name": {
             "minLength": 1,
             "type": "string"
@@ -189,6 +400,230 @@
         },
         "type": "object"
       },
+      "pol.pricing_policy": {
+        "additionalProperties": false,
+        "properties": {
+          "calculation_currency": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "max_fx_age_seconds": {
+            "type": "integer"
+          },
+          "minimum_margin": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "quote_valid_days": {
+            "type": "integer"
+          },
+          "tax_profile": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "pol.quote_document_template": {
+        "additionalProperties": false,
+        "properties": {
+          "footer_note": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "language": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "renderer_version": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.tax_application": {
+        "additionalProperties": false,
+        "properties": {
+          "basis_note": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "jurisdiction": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "party_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "side": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "subject_kind": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "tax_profile": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "pol.tax_profile": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "policy_basis": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "price_basis": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "rate": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "recovery_treatment": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.trade_terms": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery": {
+            "additionalProperties": false,
+            "properties": {
+              "anchor_event": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "calendar": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "type": "object"
+              },
+              "date": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "day_basis": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "days": {
+                "type": "integer"
+              },
+              "kind": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "edition": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "incoterm": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "named_place": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "responsibility_note": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "pol.unit": {
         "additionalProperties": false,
         "properties": {
@@ -206,6 +641,35 @@
           },
           "precision": {
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "pol.unit_conversion": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "factor": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "from_unit": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sku_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "spec_revision": {
+            "type": "integer"
+          },
+          "to_unit": {
+            "minLength": 1,
+            "type": "string"
           }
         },
         "type": "object"
@@ -2708,8 +3172,32 @@
                         "description": "The closed structure of the configuration kind named by kind.",
                         "oneOf": [
                           {
+                            "$ref": "#/components/schemas/pol.bank_account",
+                            "title": "bank_account"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.calendar",
+                            "title": "calendar"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.company_profile",
+                            "title": "company_profile"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.credit_policy",
+                            "title": "credit_policy"
+                          },
+                          {
                             "$ref": "#/components/schemas/pol.currency",
                             "title": "currency"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.document_template",
+                            "title": "document_template"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.fee_category",
+                            "title": "fee_category"
                           },
                           {
                             "$ref": "#/components/schemas/pol.fx_rate",
@@ -2724,8 +3212,32 @@
                             "title": "payment_terms"
                           },
                           {
+                            "$ref": "#/components/schemas/pol.pricing_policy",
+                            "title": "pricing_policy"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.quote_document_template",
+                            "title": "quote_document_template"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.tax_application",
+                            "title": "tax_application"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.tax_profile",
+                            "title": "tax_profile"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.trade_terms",
+                            "title": "trade_terms"
+                          },
+                          {
                             "$ref": "#/components/schemas/pol.unit",
                             "title": "unit"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.unit_conversion",
+                            "title": "unit_conversion"
                           }
                         ]
                       },
