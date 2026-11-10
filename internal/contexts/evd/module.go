@@ -21,6 +21,7 @@ type Module struct {
 var (
 	_ api.Commands = (*Module)(nil)
 	_ api.Queries  = (*Module)(nil)
+	_ api.Auditor  = (*Module)(nil)
 )
 
 // New wires EVD to db, a transaction owner that belongs to EVD alone.

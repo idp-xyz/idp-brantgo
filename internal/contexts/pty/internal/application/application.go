@@ -461,3 +461,8 @@ func roleNames(p *party.Party) []string {
 	}
 	return out
 }
+
+// AuditRejected records a request an inbound adapter refused before it became a command.
+func (s Service) AuditRejected(ctx context.Context, command, objectID, code string) error {
+	return s.Ledger.AuditRejected(ctx, command, objectID, code)
+}

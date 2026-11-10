@@ -155,6 +155,12 @@ func (c CloseRfq) Validate() error {
 	return reasoned(c.IdempotencyKey, c.RfqID, c.ExpectedVersion, c.Reason)
 }
 
+// Auditor records a request an inbound adapter refused before it became a command, such as a body
+// that is not valid JSON, in the context's audit trail. The principal in ctx is the requester.
+type Auditor interface {
+	AuditRejected(ctx context.Context, command, objectID, code string) error
+}
+
 // Receipt is the closed success answer of a command.
 type Receipt struct {
 	ActionID   string

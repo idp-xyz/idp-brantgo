@@ -7,10 +7,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
+	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -225,4 +229,39 @@ func TestPrivateSourceCannotBeProbed(t *testing.T) {
 	if _, err := w.c.EVD.GetSource(outsider, "secret"); err != nil {
 		t.Fatalf("company data scope reads every source: %v", err)
 	}
+}
+
+// Python test_core.py test_audit_waits_for_prior_revocation_transaction: a read that starts while a
+// revocation is uncommitted waits for it and is then denied.
+func TestAuditWaitsForAPriorRevocation(t *testing.T) {
+	w := newWorld(t)
+	reader := w.actor("audit.reader", "evd.audit")
+	db, err := bentopg.NewDB(pgtest.AppPool(t))
+	w.must(err)
+	locked, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		done <- bento.ScopeTransactor{DB: db, Scope: w.scope("company.A")}.WithinTransaction(context.Background(), func(ctx context.Context) error {
+			exec, err := db.RequireExecutor(ctx)
+			if err != nil {
+				return err
+			}
+			if _, err = (authorization.Grants{}).Revoke(ctx, exec, w.scope("company.A"), "audit.reader", time.Now()); err != nil {
+				return err
+			}
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+	<-locked
+	read := make(chan error, 1)
+	go func() { _, err := w.c.EVD.Audit(reader); read <- err }()
+	select {
+	case err := <-read:
+		t.Fatalf("the read must wait for the open revocation, got %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(release)
+	w.must(<-done)
+	w.want(<-read, kernel.CodePermissionDenied)
 }
