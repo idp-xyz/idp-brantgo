@@ -21,14 +21,14 @@ S1-08,S1,演示,BRC-001 前段：四行 120 PCS 询价 ready 在 PG16 重放,P1,
 S1-09,S1,PTY,主体筛查结论与 PartyScreeningGuard（名单来源由合规负责人确认）,P1,S1-02;S1-11,PartyScreening 聚合、守卫函数与复筛触发,PTY-INV-002；TD-AT15：新主体 pending、误报放行与正向名单失效、负向名单永久阻断；AI 与 system 身份裁决 match 被拒,PTY Owner＋合规负责人,—（Python 未实现）,DONE_CI
 S1-10,S1,消息,Outbox 死信、告警与重放（ADR-BR-015）,P0,M0-11,死信状态、告警与按事件 ID 的授权重放,预算耗尽的消息进入死信并告警；重放后消费方按事件 ID 去重；撤销与风险类事件不静默丢失,技术负责人＋运维,—（Python 未实现）,DONE_CI
 S1-11,S1,reference,筛查名单参考数据的受控导入（来源、版本、导入时间、哈希）与 POL screening_regulation,P1,S1-04,internal/reference 名单版本与导入命令；适用配置,新版本导入触发复筛；条目不可手工编辑；启用外国名单前须 ADR-BR-017 裁决,合规负责人＋研发,—（Python 未实现）,DONE_CI
-S2-01,S2,SUP,供应商询价与供应报价修订、核实、撤回,P0,S1-05,internal/contexts/sup,SUP-INV-001–002,SUP Owner,T02 §5、§13.2,NOT_STARTED
-S2-02,S2,SUP,采购条件独立发布、物流报价、服务方适用,P0,S2-01,PurchaseTerms、LogisticsOffer,SUP-INV-003；依附型与独立型条件,SUP Owner,T02 §6、§13.1；A46,NOT_STARTED
-S2-03,S2,CST,核价上下文、测算假设与测量快照,P0,S1-05;S1-04,CostingContext、MeasurementSnapshot,完整询价行覆盖；provisional 不可冻结,CST Owner,T02 §4、§13.1,NOT_STARTED
-S2-04,S2,CST,计算规则纯函数：阶梯、MOQ、费用义务、税价、汇率、分摊、资源预算,P0,M0-03,cst/internal/domain 规则包,T02 §11 全部样例与独立算术对照；CST-INV-003–007,CST Owner＋财务,costing_engine/rules.py、validator.py、resource_budget.py,NOT_STARTED
-S2-05,S2,CST,场景评估与冻结、来源核验与否认、快照可采纳资格,P0,S2-01;S2-03;S2-04,CostScenario、CostSnapshot,CST-INV-001–002；同场景唯一快照,CST Owner,integrated_model.py；costing.py,NOT_STARTED
-S2-06,S2,跨上下文,资格守卫：SupplyConditionGuard、ConfigGuard、AdoptabilityGuard（按 ADR-BR-004 裁决实现）,P0,M0-10;S2-05,上游 api 中的守卫契约与实现,依赖撤销先提交则冻结拒绝的 PG16 测试,首席架构师,T03 规格 §7；A26,NOT_STARTED
-S2-07,S2,测试,移植 T02 测试（test_costing*）,P0,S2-05,Go 等价用例,映射行 PORTED 且通过,QA,87 个 Python 测试方法（08 阶段映射）,NOT_STARTED
-S2-08,S2,CST,部分回收税额与成本口径（CST-INV-007）,P0,S2-04,partial 回收处理与可回收率校验,113 CNY、税率 0.13、可回收率 0.09 得 104；缺率或率高于税率被拒；真实可回收率在 CN-D02 冻结后启用,CST Owner＋财务,test_costing_domains.py（扩展）,NOT_STARTED
+S2-01,S2,SUP,供应商询价与供应报价修订、核实、撤回,P0,S1-05,internal/contexts/sup,SUP-INV-001–002,SUP Owner,T02 §5、§13.2,DONE_CI
+S2-02,S2,SUP,采购条件独立发布、物流报价、服务方适用,P0,S2-01,PurchaseTerms、LogisticsOffer,SUP-INV-003；依附型与独立型条件,SUP Owner,T02 §6、§13.1；A46,DONE_CI
+S2-03,S2,CST,核价上下文、测算假设与测量快照,P0,S1-05;S1-04,CostingContext、MeasurementSnapshot,完整询价行覆盖；provisional 不可冻结,CST Owner,T02 §4、§13.1,DONE_CI
+S2-04,S2,CST,计算规则纯函数：阶梯、MOQ、费用义务、税价、汇率、分摊、资源预算,P0,M0-03,cst/internal/domain 规则包,T02 §11 全部样例与独立算术对照；CST-INV-003–007,CST Owner＋财务,costing_engine/rules.py、validator.py、resource_budget.py,DONE_CI
+S2-05,S2,CST,场景评估与冻结、来源核验与否认、快照可采纳资格,P0,S2-01;S2-03;S2-04,CostScenario、CostSnapshot,CST-INV-001–002；同场景唯一快照,CST Owner,integrated_model.py；costing.py,DONE_CI
+S2-06,S2,跨上下文,资格守卫：SupplyConditionGuard、ConfigGuard、AdoptabilityGuard（按 ADR-BR-004 裁决实现）,P0,M0-10;S2-05,上游 api 中的守卫契约与实现,依赖撤销先提交则冻结拒绝的 PG16 测试,首席架构师,T03 规格 §7；A26,DONE_CI
+S2-07,S2,测试,移植 T02 测试（test_costing*）,P0,S2-05,Go 等价用例,映射行 PORTED 且通过,QA,87 个 Python 测试方法（08 阶段映射）,DONE_CI
+S2-08,S2,CST,部分回收税额与成本口径（CST-INV-007）,P0,S2-04,partial 回收处理与可回收率校验,113 CNY、税率 0.13、可回收率 0.09 得 104；缺率或率高于税率被拒；真实可回收率在 CN-D02 冻结后启用,CST Owner＋财务,test_costing_domains.py（扩展）,DONE_CI
 S3-01,S3,TRD,QuoteRoot：工作稿、冻结、商业哈希黄金向量,P0,S2-05;S1-04,trd/internal/domain/quote,TRD-INV-002；哈希跨实现互操作向量（含中文与换行）,TRD Owner,T03 A1–A4；t03_candidate/protocol.py；hash-vectors.json,NOT_STARTED
 S3-02,S3,TRD,服务端计算：销售收费、税、销售汇率、毛利、付款分配,P0,S3-01;S2-04,纯函数计算包,TRD-INV-007–008；T03 §5.3 合成案例,TRD Owner＋财务,T03 A5、A28、A32,NOT_STARTED
 S3-03,S3,TRD,审核请求、批准、撤销与审核人当前资格,P0,S3-01;M0-07,ReviewRequest、QuoteApproval、ApprovalEffectivity,TRD-INV-003–005,TRD Owner,T03 A3、A6、A33–A35,NOT_STARTED
