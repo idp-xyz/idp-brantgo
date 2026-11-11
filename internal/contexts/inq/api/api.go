@@ -239,6 +239,36 @@ type Queries interface {
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 }
 
+// RfqLineRef is RfqLineRef v1 (Context Map R04, T02 §13.1): one line of a customer RFQ at the
+// RFQ's row version. Lines have no versions of their own; the RFQ's row version versions them all.
+type RfqLineRef struct {
+	RfqID      string
+	RowVersion int64
+	LineID     string
+}
+
+// ResolvedRfq is what INQ says about an RFQ now: its state, its row version and its lines with the
+// SKU specification revisions a confirmation fixed. A ready RFQ at the row version a downstream fact
+// names is current; any other state or row version is not.
+type ResolvedRfq struct {
+	RfqID      string
+	Status     string
+	RowVersion int64
+	CustomerID string
+	Lines      []RfqLineView
+}
+
+// MaxLookup bounds the RFQs of one lookup.
+const MaxLookup = 200
+
+// RfqLookup answers RfqLineRef v1 lookups of the contexts downstream of INQ (SUP, R04).
+type RfqLookup interface {
+	// ResolveRfqs returns, among ids, the RFQs of the caller's company inside the caller's data
+	// scope; others are absent. It needs no permission beyond an active grant. Ask before opening
+	// your own transaction: INQ answers in a transaction of its own.
+	ResolveRfqs(ctx context.Context, ids []string) (map[string]ResolvedRfq, error)
+}
+
 func head(key, id string, expected, minVersion int64) error {
 	switch {
 	case !kernel.ValidIdentifier(key):

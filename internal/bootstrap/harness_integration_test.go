@@ -35,6 +35,11 @@ var allPermissions = []string{
 	"rfq.save_draft", "rfq.confirm_scope", "rfq.cancel", "rfq.close", "inq.read", "inq.audit",
 	"party_screening.record", "party_screening.decide", "party_screening.block",
 	"screening_list.import", "ref.read", "ref.audit",
+	"supplier_rfq.save_draft", "supplier_rfq.record_issued", "supplier_rfq.close",
+	"supplier_offer.save_draft", "supplier_offer.revise", "supplier_offer.discard_draft", "supplier_offer.verify", "supplier_offer.withdraw",
+	"purchase_terms.save_draft", "purchase_terms.revise", "purchase_terms.discard_draft", "purchase_terms.publish", "purchase_terms.retire",
+	"logistics_offer.save_draft", "logistics_offer.revise", "logistics_offer.discard_draft", "logistics_offer.verify",
+	"logistics_offer.withdraw", "sup.read", "sup.audit",
 }
 
 type world struct {

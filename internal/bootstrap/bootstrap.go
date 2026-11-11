@@ -24,6 +24,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
+	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database"
@@ -150,6 +151,7 @@ type Contexts struct {
 	CAT *cat.Module
 	POL *pol.Module
 	INQ *inq.Module
+	SUP *sup.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -189,6 +191,12 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		c.INQ, err = inq.New(db, c.EVD, c.PTY, c.CAT)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.SUP, err = sup.New(db, sup.Upstream{Sources: c.EVD, Parties: c.PTY, Skus: c.CAT, Rfqs: c.INQ, Configs: c.POL})
 	}
 	if err != nil {
 		return nil, err

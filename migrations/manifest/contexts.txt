@@ -5,7 +5,8 @@
 # auth: foundation/authorization (brant_auth). msg: foundation/messaging, the Outbox dead letters
 # (brant_msg). ref: reference data, the screening lists (brant_ref); PTY's screening guard calls its
 # guard function, so it precedes pty. Bounded contexts follow in the order of their upstream
-# relationships: evd before pty, cat and pol (R63), all four before inq.
+# relationships: evd before pty, cat and pol (R63), all four before inq; sup after its upstreams inq,
+# pty, cat, pol and evd (R04–R07, R53).
 auth
 msg
 ref
@@ -14,3 +15,4 @@ pty
 cat
 pol
 inq
+sup

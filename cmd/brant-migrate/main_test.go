@@ -82,6 +82,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000001_ref_screening_lists", "brant:000001_evd_sources", "brant:000002_evd_business_files", "brant:000001_pty_parties",
 		"brant:000002_pty_party_screening", "brant:000003_pty_profiles", "brant:000001_cat_skus", "brant:000002_cat_item_code_mappings",
 		"brant:000001_pol_configuration", "brant:000002_pol_config_guard", "brant:000001_inq_customer_rfqs",
+		"brant:000001_sup_supply_conditions", "brant:000002_sup_supply_condition_guard",
 	}
 	if got := strings.Join(ids, " "); got != strings.Join(want, " ") {
 		t.Fatalf("migration order = %s", got)

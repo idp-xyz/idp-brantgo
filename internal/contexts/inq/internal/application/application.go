@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -367,6 +368,47 @@ func (s Service) GetRfq(ctx context.Context, id string) (api.RfqView, error) {
 		return nil
 	})
 	return v, err
+}
+
+// ResolveRfqs answers RfqLineRef v1 lookups (api.RfqLookup): the RFQs among ids that exist in the
+// caller's company and data scope, as they are now.
+func (s Service) ResolveRfqs(ctx context.Context, ids []string) (map[string]api.ResolvedRfq, error) {
+	out := map[string]api.ResolvedRfq{}
+	if len(ids) > api.MaxLookup {
+		return out, kernel.Reject(kernel.CodeSchemaInvalid, "/ids", "")
+	}
+	for i, id := range ids {
+		if !kernel.ValidIdentifier(id) {
+			return out, kernel.Reject(kernel.CodeSchemaInvalid, "/ids/"+strconv.Itoa(i), "")
+		}
+	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		scope, _ := bento.ScopeFromContext(ctx)
+		for _, id := range ids {
+			if _, done := out[id]; done {
+				continue
+			}
+			r, err := postgres.Load(ctx, exec, scope, id, false)
+			if err != nil {
+				return err
+			}
+			if r == nil || !d.Sees(r.OwnerActor, r.OwnerTeam) {
+				continue
+			}
+			v := api.ResolvedRfq{RfqID: r.ID, Status: string(r.Status), RowVersion: r.RowVersion, CustomerID: r.CustomerID,
+				Lines: []api.RfqLineView{}}
+			for _, l := range r.Lines {
+				v.Lines = append(v.Lines, api.RfqLineView{SkuSpecRevision: l.SkuSpecRevision, RfqLine: api.RfqLine{LineID: l.ID, SkuID: l.SkuID,
+					Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem, SourceID: l.SourceID, Locator: l.Locator}})
+			}
+			out[id] = v
+		}
+		return nil
+	})
+	return out, err
 }
 
 // Audit returns INQ's audit trail.

@@ -28,6 +28,7 @@ var (
 	_ api.Queries    = (*Module)(nil)
 	_ api.Auditor    = (*Module)(nil)
 	_ api.Reconciler = (*Module)(nil)
+	_ api.RfqLookup  = (*Module)(nil)
 )
 
 // New wires INQ to db, a transaction owner that belongs to INQ alone, and to the queries of its
