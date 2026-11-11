@@ -59,6 +59,7 @@ type (
 	INQ interface {
 		inqapi.Commands
 		inqapi.Queries
+		inqapi.Reconciler
 		inqapi.Auditor
 	}
 	REF interface {
@@ -127,6 +128,7 @@ func New(cfg Config) (http.Handler, error) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 	mux.Handle("POST /api/brant/v1/{bc}/commands/{command}", s.authenticated(s.command))
+	mux.Handle("POST /api/brant/v1/{bc}/commands/{command}/reconcile", s.authenticated(s.reconcile))
 	mux.Handle("GET /api/brant/v1/{bc}/audit", s.authenticated(s.audit))
 	if cfg.Replayer != nil {
 		mux.Handle("POST /api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", s.authenticated(s.replay))

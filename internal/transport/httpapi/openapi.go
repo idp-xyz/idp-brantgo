@@ -50,21 +50,33 @@ func OpenAPI() ([]byte, error) {
 			if l := set.limits[n]; l.MaxBytes > int64(limit) {
 				limit, values = int(l.MaxBytes), max(l.MaxValues, values)
 			}
+			ingress := "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token."
+			body := map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "args"},
+				"properties": map[string]any{
+					"contract":        map[string]any{"const": set.contract},
+					"command":         map[string]any{"const": n},
+					"idempotency_key": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
+					"args":            args,
+				}}}}}
 			paths["/api/brant/v1/"+set.bc+"/commands/"+n] = map[string]any{"post": map[string]any{
 				"operationId": set.bc + "." + n,
 				"tags":        []string{set.bc},
 				"summary":     n,
-				"description": "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
-				"requestBody": map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
-					"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "args"},
-					"properties": map[string]any{
-						"contract":        map[string]any{"const": set.contract},
-						"command":         map[string]any{"const": n},
-						"idempotency_key": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
-						"args":            args,
-					}}}}},
-				"responses": commandResponses(),
+				"description": ingress,
+				"requestBody": body,
+				"responses":   commandResponses(),
 			}}
+			if set.reconcilable(n) {
+				paths["/api/brant/v1/"+set.bc+"/commands/"+n+"/reconcile"] = map[string]any{"post": map[string]any{
+					"operationId": set.bc + "." + n + ".reconcile",
+					"tags":        []string{set.bc},
+					"summary":     "What became of " + n + " sent with this idempotency key (动作对账)",
+					"description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. " + ingress,
+					"requestBody": body,
+					"responses":   reconcileResponses(),
+				}}
+			}
 		}
 	}
 	for _, r := range reads {
@@ -86,6 +98,7 @@ func OpenAPI() ([]byte, error) {
 		"200": map[string]any{"description": "The process serves requests."}}}}
 	schemas := map[string]any{
 		"Receipt":        schemaOf(reflect.TypeFor[receipt]()),
+		"Reconciliation": schemaOf(reflect.TypeFor[reconciliation]()),
 		"Rejection":      schemaOf(reflect.TypeFor[rejection]()),
 		"TransportError": schemaOf(reflect.TypeFor[transportError]()),
 	}
@@ -173,6 +186,15 @@ func commandResponses() map[string]any {
 	return out
 }
 
+func reconcileResponses() map[string]any {
+	out := readResponses()
+	out["200"] = map[string]any{"description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key).",
+		"content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/Reconciliation"}}}}
+	out["400"] = commandResponses()["400"]
+	out["413"] = commandResponses()["413"]
+	return out
+}
+
 func readResponses() map[string]any {
 	ref := func(name, desc string) map[string]any {
 		return map[string]any{"description": desc, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/" + name}}}}
@@ -183,7 +205,7 @@ func readResponses() map[string]any {
 		"403": ref("Rejection", "PERMISSION_DENIED"),
 		"404": ref("Rejection", "NOT_FOUND: missing or outside the caller's data scope"),
 		"422": ref("Rejection", "SCHEMA_INVALID or a business rejection"),
-		"503": ref("TransportError", "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"),
+		"503": ref("TransportError", "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"),
 	}
 }
 

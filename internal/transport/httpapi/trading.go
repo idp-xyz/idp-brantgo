@@ -14,6 +14,7 @@ import (
 type TRD interface {
 	trdapi.Commands
 	trdapi.Queries
+	trdapi.Reconciler
 	trdapi.Auditor
 }
 
@@ -34,7 +35,7 @@ func receiptOf[C, R any](call func(context.Context, C) (R, error)) func(context.
 func trdCommands(c TRD) *commandSet {
 	// TRD's commands name their objects as Python's T03/T04 contracts do (quote_id, response_id,
 	// acceptance_id), so no member is renamed to id.
-	return &commandSet{bc: "trd", contract: trdapi.Contract, auditor: c, audit: c.Audit, commands: map[string]commandFunc{
+	return &commandSet{bc: "trd", contract: trdapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
 		trdapi.CommandSaveDraft:            reflected("", "", receiptOf(c.SaveDraft)),
 		trdapi.CommandRevise:               reflected("", "", receiptOf(c.Revise)),
 		trdapi.CommandDiscardDraft:         reflected("", "", receiptOf(c.DiscardDraft)),

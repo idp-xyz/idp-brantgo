@@ -156,3 +156,65 @@ func TestQuoteToAcceptanceOverHTTP(t *testing.T) {
 		t.Fatalf("unknown acceptance: %d %v", status, out)
 	}
 }
+
+// Contract 06 动作对账 over HTTP: the caller posts the request it sent to the command's reconcile
+// route and learns what became of it without executing anything (Python t03_reconciliation; T03
+// A22).
+func TestReconcileOverHTTP(t *testing.T) {
+	q := newTrdWorld(t)
+	is := newIssuer(t)
+	handler, err := q.platform.API(bootstrap.APIConfig{Issuer: is.srv.URL, Audience: "brant-api", AllowInsecureHTTP: true})
+	q.must(err)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	ed := &client{t: t, base: srv.URL, token: is.token(q.tenant, "company.A", "editor", "human")}
+	envelope := func(key string, args map[string]any) map[string]any {
+		return map[string]any{"contract": trdapi.Contract, "command": trdapi.CommandUpdateMetadata, "idempotency_key": key, "args": args}
+	}
+	q.drafted("quote.r")
+	labels := map[string]any{"quote_id": "quote.r", "expected_version": 1, "labels": []string{"vip"}, "internal_note": "合成备注"}
+	const command, reconcile = "/api/brant/v1/trd/commands/quote.metadata.update", "/api/brant/v1/trd/commands/quote.metadata.update/reconcile"
+
+	status, out := ed.do("POST", reconcile, envelope("rec.1", labels))
+	if status != http.StatusOK || out["ok"] != true || out["state"] != "not_committed" || out["action_id"] != nil || out["receipt"] != nil {
+		t.Fatalf("before the command: %d %v", status, out)
+	}
+	status, sent := ed.do("POST", command, envelope("rec.1", labels))
+	if status != http.StatusOK || sent["ok"] != true {
+		t.Fatalf("metadata.update %d %v", status, sent)
+	}
+	status, out = ed.do("POST", reconcile, envelope("rec.1", labels))
+	stored, _ := out["receipt"].(map[string]any)
+	if status != http.StatusOK || out["state"] != "committed" || out["action_id"] != sent["action_id"] || out["object_id"] != "quote.r" ||
+		stored["action_id"] != sent["action_id"] || stored["row_version"] != sent["row_version"] || stored["status"] != sent["status"] {
+		t.Fatalf("after the command: %d %v (sent %v)", status, out, sent)
+	}
+	if v := q.getQuote("quote.r"); v.RootVersion != 2 {
+		t.Fatalf("reconciling executed the command: root version %d", v.RootVersion)
+	}
+	changed := map[string]any{"quote_id": "quote.r", "expected_version": 1, "labels": []string{"other"}}
+	if status, out = ed.do("POST", reconcile, envelope("rec.1", changed)); status != http.StatusOK || out["state"] != "payload_conflict" ||
+		out["action_id"] != sent["action_id"] || out["receipt"] != nil {
+		t.Fatalf("another request under the key: %d %v", status, out)
+	}
+
+	// The request is checked as the command checks it; contexts without reconciliation have no route.
+	wrong := envelope("rec.2", labels)
+	wrong["contract"] = "brant.other/0.1.0"
+	if status, out = ed.do("POST", reconcile, wrong); status != http.StatusBadRequest || out["code"] != kernel.CodeUnsupportedContract {
+		t.Fatalf("wrong contract: %d %v", status, out)
+	}
+	if status, out = ed.do("POST", reconcile, envelope("rec.2", map[string]any{"quote_id": "quote.r", "expected_version": 1, "colour": "red"})); status != http.StatusUnprocessableEntity ||
+		out["code"] != kernel.CodeSchemaInvalid {
+		t.Fatalf("unknown member: %d %v", status, out)
+	}
+	if status, out = ed.do("POST", "/api/brant/v1/pty/commands/party.save_draft/reconcile", map[string]any{}); status != http.StatusNotFound {
+		t.Fatalf("pty reconcile: %d %v", status, out)
+	}
+
+	// Reconciling needs trd.read now (X-INV-003).
+	q.regrant("editor", "company", without(allPermissions, "trd.read"))
+	if status, out = ed.do("POST", reconcile, envelope("rec.1", labels)); status != http.StatusForbidden || out["code"] != kernel.CodePermissionDenied {
+		t.Fatalf("without trd.read: %d %v", status, out)
+	}
+}
