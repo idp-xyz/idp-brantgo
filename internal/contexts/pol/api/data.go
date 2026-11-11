@@ -61,6 +61,11 @@ const (
 	// the legal terms a quote seals (WBS S3-17). A quote with legal terms needs a template of it.
 	QuoteRendererVersion020 = "quote-text/0.2.0"
 	QuoteSectionLegalTerms  = "legal_terms"
+	OrderRendererVersion    = "order-text/0.1.0"
+
+	// Document kinds of an order document template.
+	OrderDocumentSalesContract   = "sales_contract"
+	OrderDocumentProformaInvoice = "proforma_invoice"
 
 	LimitSourceInternalAssessment = "internal_assessment"
 	LimitSourceSinosureBuyerLimit = "sinosure_buyer_limit"
@@ -86,6 +91,8 @@ const (
 	maxTitleCharacters = 2000
 	maxNoteCharacters  = 5000
 	maxTemplateText    = 50000
+	MaxClauses         = 50
+	maxClauseChars     = 2000
 	minAccountNumber   = 4
 	maxAccountNumber   = 64
 )
@@ -115,7 +122,16 @@ var (
 	// (GB-ENG for England and Wales, US-NY for New York).
 	governingLaw = regexp.MustCompile(`^[A-Z]{2}(-[A-Z0-9]{1,3})?$`)
 	// languageTag is a BCP 47 language tag of a language, an optional script and an optional region.
-	languageTag = regexp.MustCompile(`^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$`)
+	languageTag   = regexp.MustCompile(`^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$`)
+	orderRequired = map[string][]string{
+		OrderDocumentSalesContract: {"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "clauses", "signatures",
+			"notes"},
+		OrderDocumentProformaInvoice: {"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes"},
+	}
+	orderOptional = map[string][]string{
+		OrderDocumentSalesContract:   {"law"},
+		OrderDocumentProformaInvoice: {"clauses", "law"},
+	}
 )
 
 // AmountFormat is the lexical form of a credit amount before its currency's minor units are known:
@@ -138,6 +154,14 @@ func QuoteSectionsFor(version string) []string {
 		return append(QuoteSections(), QuoteSectionLegalTerms)
 	}
 	return nil
+}
+
+// OrderDocumentSections returns the sections an order document template of document kind kind lists
+// once each, and those it may list at most once (nil for an unknown kind). The law section is the
+// slot of governing law and dispute resolution (WBS S3-17); TRD renders it once an order revision
+// binds them.
+func OrderDocumentSections(kind string) (required, optional []string) {
+	return slices.Clone(orderRequired[kind]), slices.Clone(orderOptional[kind])
 }
 
 // ConfigData is the content of one configuration kind; exactly the member of the revision's kind
@@ -165,6 +189,7 @@ type ConfigData struct {
 	CreditPolicy          *CreditPolicy
 	ScreeningRegulation   *ScreeningRegulation
 	LegalTerms            *LegalTerms
+	OrderDocumentTemplate *OrderDocumentTemplate
 }
 
 // CompanyProfile is the company of the scope; its config_id is the company's ID (at most
@@ -359,6 +384,21 @@ type QuoteDocumentTemplate struct {
 	FooterNote      string   // 0–5000 characters
 }
 
+// OrderDocumentTemplate is the layout of an order document — an export sales contract (S/C) or a
+// proforma invoice (PI) — for the fixed order-text renderer: its kind and language, the title, the
+// order of its sections (the kind's required ones once each, its optional ones at most once), the
+// numbered clauses its clauses section prints, and a footer note.
+type OrderDocumentTemplate struct {
+	Name            string
+	DocumentKind    string   // sales_contract or proforma_invoice
+	Language        string   // zh-CN or en
+	RendererVersion string   // order-text/0.1.0
+	Title           string   // 1–2000 characters
+	Sections        []string // OrderDocumentSections of the kind, in rendering order
+	Clauses         []string // 1–50 clauses of 1–2000 characters when the template lists clauses; none otherwise
+	FooterNote      string   // 0–5000 characters
+}
+
 // CreditPolicy is how customer credit is limited (ADR-BR-016): the default limit of a new customer,
 // the accepted sources of a limit, the approval levels by the largest excess each may approve
 // (above the highest, two approvers decide in STL), and how many days a payment may be overdue.
@@ -484,6 +524,7 @@ func (d ConfigData) validate(kind string) error {
 		KindBankAccount: d.BankAccount != nil, KindNumberSequence: d.NumberSequence != nil, KindDocumentTemplate: d.DocumentTemplate != nil,
 		KindQuoteDocumentTemplate: d.QuoteDocumentTemplate != nil, KindCreditPolicy: d.CreditPolicy != nil,
 		KindScreeningRegulation: d.ScreeningRegulation != nil, KindLegalTerms: d.LegalTerms != nil,
+		KindOrderDocumentTemplate: d.OrderDocumentTemplate != nil,
 	}
 	for k, present := range members {
 		if present != (k == kind) {
@@ -529,6 +570,8 @@ func (d ConfigData) validate(kind string) error {
 		return d.ScreeningRegulation.validate()
 	case KindLegalTerms:
 		return d.LegalTerms.validate()
+	case KindOrderDocumentTemplate:
+		return d.OrderDocumentTemplate.validate()
 	}
 	return schema("/args/kind")
 }
@@ -733,6 +776,36 @@ func (t *QuoteDocumentTemplate) validate() error {
 		field{"title", nonBlank(t.Title, maxTitleCharacters)},
 		field{"sections", slices.Equal(sections, slices.Sorted(slices.Values(want)))},
 		field{"footer_note", utf8.ValidString(t.FooterNote) && utf8.RuneCountInString(t.FooterNote) <= maxNoteCharacters})
+}
+
+func (t *OrderDocumentTemplate) validate() error {
+	need, may := orderRequired[t.DocumentKind], orderOptional[t.DocumentKind]
+	if err := first(field{"name", name(t.Name)}, field{"document_kind", need != nil}, field{"language", slices.Contains(languages, t.Language)},
+		field{"renderer_version", t.RendererVersion == OrderRendererVersion}, field{"title", nonBlank(t.Title, maxTitleCharacters)},
+		field{"footer_note", utf8.ValidString(t.FooterNote) && utf8.RuneCountInString(t.FooterNote) <= maxNoteCharacters}); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for i, s := range t.Sections {
+		if seen[s] || (!slices.Contains(need, s) && !slices.Contains(may, s)) {
+			return schema("/args/data/sections/" + strconv.Itoa(i))
+		}
+		seen[s] = true
+	}
+	for _, s := range need {
+		if !seen[s] {
+			return schema("/args/data/sections")
+		}
+	}
+	if seen["clauses"] != (len(t.Clauses) > 0) || len(t.Clauses) > MaxClauses {
+		return schema("/args/data/clauses")
+	}
+	for i, c := range t.Clauses {
+		if !nonBlank(c, maxClauseChars) {
+			return schema("/args/data/clauses/" + strconv.Itoa(i))
+		}
+	}
+	return nil
 }
 
 func (p *CreditPolicy) validate() error {

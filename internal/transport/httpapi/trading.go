@@ -63,6 +63,13 @@ func trdCommands(c TRD) *commandSet {
 		trdapi.CommandRevokeOrderApproval:   reflected("", "", receiptOf[trdapi.Receipt](c.RevokeOrderApproval)),
 		trdapi.CommandCancelOrder:           reflected("", "", receiptOf[trdapi.Receipt](c.CancelOrder)),
 		trdapi.CommandCloseOrderUnfulfilled: reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrderUnfulfilled)),
+		trdapi.CommandPrepareAmendment:      reflected("", "", receiptOf[trdapi.Receipt](c.PrepareAmendment)),
+		trdapi.CommandSubmitAmendment:       reflected("", "", receiptOf[trdapi.Receipt](c.SubmitAmendment)),
+		trdapi.CommandDecideAmendment:       reflected("", "", receiptOf[trdapi.Receipt](c.DecideAmendment)),
+		trdapi.CommandApplyAmendment:        reflected("", "", receiptOf[trdapi.Receipt](c.ApplyAmendment)),
+		trdapi.CommandWithdrawAmendment:     reflected("", "", receiptOf[trdapi.Receipt](c.WithdrawAmendment)),
+		trdapi.CommandCloseOrderRemainder:   reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrderRemainder)),
+		trdapi.CommandCloseOrder:            reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrder)),
 	}}
 }
 

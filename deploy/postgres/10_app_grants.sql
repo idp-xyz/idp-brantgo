@@ -193,6 +193,17 @@ GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, 
               acknowledged_risks, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
     ON brant_trd.sales_order_review TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_order_active_v1(text, bigint, text) TO brant_app;
+-- Active orders' amendments, revisions and ends (S3-15): an order moves to its next revision only
+-- with the revision row and the amendment's commit evidence (trigger), which, like the end of an
+-- active order, are only inserted; an amendment changes along SM-TRD-ORDER-AMENDMENT (trigger).
+GRANT SELECT, INSERT ON brant_trd.sales_order_amendment, brant_trd.sales_order_revision, brant_trd.sales_order_amendment_commit,
+    brant_trd.sales_order_end TO brant_app;
+GRANT UPDATE (order_revision, order_hash) ON brant_trd.sales_order TO brant_app;
+GRANT UPDATE (base_revision, base_hash, content, amendment_hash, status, version, preparations, submitted_by_kind, submitted_by_id,
+              submit_epoch, submitted_at, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason,
+              decision_evidence, applied_by_kind, applied_by_id, apply_epoch, applied_at, applied_revision, withdrawn_by_kind,
+              withdrawn_by_id, withdraw_epoch, withdrawn_at, withdraw_reason, withdraw_evidence, updated_at)
+    ON brant_trd.sales_order_amendment TO brant_app;
 
 -- PUR: a purchase draft is inserted prepared with its lines and only voided, once (trigger); its
 -- lines never change; a DemandAllocation root moves its balance, order revision and version by one

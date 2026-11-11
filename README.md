@@ -31,8 +31,9 @@ internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, cl
 internal/contexts/sup/            SUP: supplier RFQs; supplier offers, purchase terms and logistics offers in sealed
                                   revisions (verify/publish independently, supersede, withdraw/retire);
                                   SupplyConditionRef lookup and SupplyConditionGuard v1
-internal/contexts/pol/            POL: nineteen configuration kinds (legal terms and the tenant's default since S3-17) with
-                                  independent publication, ConfigGuard v1, FX, tax and unit lookups, document numbers,
+internal/contexts/pol/            POL: twenty configuration kinds (S3 adds legal_terms with the tenant's default, S3-17,
+                                  and order_document_template, S3-15) with independent publication, ConfigGuard v1, FX,
+                                  tax and unit lookups, document numbers,
                                   foundation snapshots
 internal/contexts/cst/            CST: costing contexts and measurements in sealed revisions, the calculation rules, cost
                                   scenarios with deterministic evaluations, frozen cost snapshots (once per scenario),
@@ -50,7 +51,11 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   the caller's grant, data scope and EVD sources;
                                   sales orders: preparation taking the conversion slot, review with risk
                                   acknowledgement, activation re-checking the source and upstream (STL/CNX extension
-                                  points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR
+                                  points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR;
+                                  active orders: amendments (prepare, submit, independent decision, apply) that move the
+                                  order to its next hashed order revision, so OrderGuard v1 refuses the old binding;
+                                  cancellation, short closing and closing (FUL and PUR facts not wired); the S/C and PI
+                                  renderer order-text/0.1.0 (golden vectors; generate and record_signed not wired yet)
 internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding active order lines to chosen supply condition
                                   lines (immutable, hashed, not committed; server calculation of MOQ, multiples, tiers, tax
                                   and delivery; costing comparison), the demand allocation ledger per order line (several

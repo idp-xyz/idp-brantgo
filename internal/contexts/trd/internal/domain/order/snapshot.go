@@ -111,7 +111,7 @@ func (o *Order) Verify(scope kernel.Scope, path string) (Snapshot, error) {
 	bad := func(why string) (Snapshot, error) {
 		return Snapshot{}, kernel.Reject(kernel.CodeReferenceInvalid, path, "The order's snapshot "+why)
 	}
-	if quote.Hash(o.Snapshot) != o.OrderHash {
+	if quote.Hash(o.Snapshot) != o.SnapshotHash || (o.OrderRevision == 1 && o.OrderHash != o.SnapshotHash) {
 		return bad("does not hash to its order hash")
 	}
 	var s Snapshot

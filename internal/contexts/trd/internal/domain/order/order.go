@@ -34,6 +34,12 @@
 // (POL), an exchange rate past its age, a specification, RFQ or party moved on (CAT, INQ, PTY) — do
 // not refuse the order: each is a Risk the order approval acknowledges one by one, and activation
 // refuses an unacknowledged one (ORDER_RISK_UNACKNOWLEDGED; ADR-BR-004, TRD-INV-014).
+//
+// Once active (WBS S3-15, active.go) an order changes only through its amendments (package
+// amendment, SM-TRD-ORDER-AMENDMENT): an applied amendment moves the order to its next order revision
+// (package orderrev: revision 1 is the snapshot, every later one a document of its own, each hash the
+// order hash), and the order ends once: cancelled with nothing shipped, closed with its remainder
+// given up, or closed fulfilled (TRD-INV-019). The conversion slot stays taken for good.
 package order
 
 import (
@@ -41,6 +47,8 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/acceptance"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/amendment"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -199,9 +207,10 @@ type Order struct {
 	ID              string
 	Source          Source
 	Slot            string
-	OrderRevision   int64
-	Snapshot        []byte // canonical JSON (snapshot.go)
-	OrderHash       string // SHA-256 of Snapshot
+	OrderRevision   int64  // the current order revision: 1, then one more with each applied amendment (active.go)
+	Snapshot        []byte // canonical JSON (snapshot.go): revision 1
+	SnapshotHash    string // SHA-256 of Snapshot, revision 1's order hash
+	OrderHash       string // the current revision's order hash (SnapshotHash at revision 1)
 	Status          Status
 	RowVersion      int64
 	Prepared        quote.Act
@@ -209,8 +218,15 @@ type Order struct {
 	Reviews         []*Review // in the order they were requested
 	Commits         []*Commit // one per activated order revision
 	Closure         *Closure
-	Fresh           bool
-	Changed         bool
+	// The active order's revisions, amendments, their commit evidence and its end (active.go).
+	Revisions        []RevisionRecord
+	Amendments       []*amendment.Amendment
+	AmendmentCommits []*AmendmentCommit
+	End              *End
+	current          *orderrev.Revision
+	NewRevision      *orderrev.Revision // the revision an apply produced, to write
+	Fresh            bool
+	Changed          bool
 }
 
 // Preparation is what order.prepare names: the order to create, the formal revision and business
@@ -254,7 +270,8 @@ func Prepare(p Preparation, q *quote.Quote, a *acceptance.Acceptance, scope kern
 		return nil, err
 	}
 	at := kernel.Instant(now)
-	return &Order{ID: p.OrderID, Source: src, Slot: quote.SlotFullV1, OrderRevision: 1, Snapshot: snapshot, OrderHash: quote.Hash(snapshot),
+	hash := quote.Hash(snapshot)
+	return &Order{ID: p.OrderID, Source: src, Slot: quote.SlotFullV1, OrderRevision: 1, Snapshot: snapshot, SnapshotHash: hash, OrderHash: hash,
 		Status: Draft, RowVersion: 1, Prepared: quote.Act{By: by, Epoch: epoch, At: at}, Fresh: true}, nil
 }
 

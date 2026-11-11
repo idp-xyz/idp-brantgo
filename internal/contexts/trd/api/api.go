@@ -652,6 +652,7 @@ type Commands interface {
 	Cancel(ctx context.Context, cmd Cancel) (RevisionReceipt, error)
 	AcceptanceCommands
 	OrderCommands
+	ActiveOrderCommands
 }
 
 // Queries is TRD's audited read side.

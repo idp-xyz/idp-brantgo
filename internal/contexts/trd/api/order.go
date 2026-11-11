@@ -416,9 +416,11 @@ type Risk struct {
 	Detail string
 }
 
-// OrderView is a sales order as the reads show it: what it binds, its snapshot (the exact bytes the
-// order hash covers), its state and row version, who prepared it, its reviews, the commit evidence
-// of its activation and its closure.
+// OrderView is a sales order as the reads show it: what it binds, its snapshot (revision 1, the exact
+// bytes SnapshotHash covers), its current revision and order hash (CurrentRevision holds the
+// document of a revision after the first, "" at revision 1), its state and row version, who
+// prepared it, its reviews, the commit evidence of its activation, its closure as a draft, and, once
+// active (WBS S3-15), its later revisions, amendments, their commit evidence and how it ended.
 type OrderView struct {
 	OrderID           string
 	QuoteID           string
@@ -435,6 +437,8 @@ type OrderView struct {
 	OrderRevision     int64
 	OrderHash         string
 	Snapshot          string
+	SnapshotHash      string
+	CurrentRevision   string
 	Status            string
 	RowVersion        int64
 	PreparedBy        kernel.ActorRef
@@ -443,6 +447,10 @@ type OrderView struct {
 	Reviews           []OrderReviewView
 	Commits           []OrderCommitView
 	Closure           *OrderClosureView
+	Revisions         []OrderRevisionView
+	Amendments        []OrderAmendmentView
+	AmendmentCommits  []OrderCommitView
+	End               *OrderEndView
 }
 
 // OrderReviewView is an order review. DecisionState is its state as of the read: pending (open),

@@ -16,7 +16,7 @@ import (
 
 // Python test_cli.py test_foundation_demo_has_explicit_synthetic_truth_values (PYT-0003): the demo
 // writes explicit synthetic truth values into foundation-demo-result.json. Python publishes 22
-// configurations of its 18 kinds; Brant publishes 21 of POL's 19 kinds, because sku_profile,
+// configurations of its 18 kinds; Brant publishes 21 of POL's 20 kinds, because sku_profile,
 // party_profile, contact_profile and code_mapping are not POL kinds and POL has tax_application,
 // quote_document_template, credit_policy, screening_regulation and legal_terms (bootstrap.FoundationDemo). A
 // second run into the same directory is refused and leaves the result as it was (Python requires a

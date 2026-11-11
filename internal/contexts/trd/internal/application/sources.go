@@ -43,7 +43,8 @@ var citing = map[string]bool{api.CommandSaveDraft: true, api.CommandDiscardDraft
 	api.CommandRevokeApproval: true, api.CommandWithdraw: true, api.CommandCancel: true, api.CommandRecordResponse: true,
 	api.CommandVerifyResponse: true, api.CommandInvalidateAcceptance: true, api.CommandDisputeAcceptance: true,
 	api.CommandDecideOrderReview: true, api.CommandRevokeOrderApproval: true, api.CommandCancelOrder: true,
-	api.CommandCloseOrderUnfulfilled: true}
+	api.CommandCloseOrderUnfulfilled: true, api.CommandPrepareAmendment: true, api.CommandDecideAmendment: true,
+	api.CommandWithdrawAmendment: true, api.CommandCloseOrderRemainder: true, api.CommandCloseOrder: true}
 
 // cited returns the sources cmd cites as sent, and whether they are instead those of the customer
 // response its stored result names (quote.response.record and quote.response.verify).
@@ -84,6 +85,20 @@ func cited(cmd api.Command) (ids []string, ofResponse bool) {
 	case api.CancelOrder:
 		return ev(c.Evidence), false
 	case api.CloseOrderUnfulfilled:
+		return ev(c.Evidence), false
+	case api.PrepareAmendment:
+		out := ev(c.Source.Evidence)
+		for _, a := range c.Impact {
+			out = append(out, ev(a.Evidence)...)
+		}
+		return out, false
+	case api.DecideAmendment:
+		return ev(c.Evidence), false
+	case api.WithdrawAmendment:
+		return ev(c.Evidence), false
+	case api.CloseOrderRemainder:
+		return ev(c.Evidence), false
+	case api.CloseOrder:
 		return ev(c.Evidence), false
 	case api.RecordResponse, api.VerifyResponse:
 		return nil, true

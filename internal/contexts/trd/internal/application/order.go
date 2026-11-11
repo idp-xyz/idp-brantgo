@@ -40,7 +40,9 @@ const (
 // orderWrites are the commands of this file; a replay of one passes the quote root's object control
 // as the write would (Visible).
 var orderWrites = []string{api.CommandPrepareOrder, api.CommandRequestOrderReview, api.CommandDecideOrderReview, api.CommandActivateOrder,
-	api.CommandRevokeOrderApproval, api.CommandCancelOrder, api.CommandCloseOrderUnfulfilled}
+	api.CommandRevokeOrderApproval, api.CommandCancelOrder, api.CommandCloseOrderUnfulfilled, api.CommandPrepareAmendment,
+	api.CommandSubmitAmendment, api.CommandDecideAmendment, api.CommandApplyAmendment, api.CommandWithdrawAmendment,
+	api.CommandCloseOrderRemainder, api.CommandCloseOrder}
 
 // orderCommand locks the quote root an order converts and the order, and applies one command.
 // order.prepare names the quote; the others resolve it from the order, whose quote never changes.
@@ -308,12 +310,6 @@ func (s Service) RevokeOrderApproval(ctx context.Context, cmd api.RevokeOrderApp
 	return s.orderReceipt(ctx, res, cmd.ReviewID)
 }
 
-// CancelOrder cancels a draft order (order.cancel).
-func (s Service) CancelOrder(ctx context.Context, cmd api.CancelOrder) (api.OrderReceipt, error) {
-	return s.closeOrder(ctx, api.CommandCancelOrder, api.EventOrderCancelled, cmd.IdempotencyKey, cmd.OrderID, cmd.ExpectedVersion,
-		cmd.Reason, cmd.Evidence, cmd, cmd.Validate(), (*order.Order).Cancel)
-}
-
 // CloseOrderUnfulfilled closes a draft order unfulfilled (order.close_unfulfilled).
 func (s Service) CloseOrderUnfulfilled(ctx context.Context, cmd api.CloseOrderUnfulfilled) (api.OrderReceipt, error) {
 	return s.closeOrder(ctx, api.CommandCloseOrderUnfulfilled, api.EventOrderClosedUnfulfilled, cmd.IdempotencyKey, cmd.OrderID,
@@ -440,6 +436,7 @@ func orderView(o *order.Order, now time.Time) api.OrderView {
 		v.Closure = &api.OrderClosureView{Status: string(c.Status), ClosedBy: c.Closed.By, ClosedAt: c.Closed.At, Reason: c.Closed.Reason,
 			Evidence: apiEvidence(c.Closed.Evidence), RowVersion: c.RowVersion}
 	}
+	amendmentViews(o, &v)
 	return v
 }
 
@@ -536,11 +533,18 @@ func activeOrderFact(o *order.Order, sc kernel.Scope) api.ActiveOrderFact {
 	f.CurrencyRef = apiRef(d.Currency)
 	f.RfqRef = api.RfqRef{RfqID: d.Rfq.RfqID, RowVersion: d.Rfq.RowVersion}
 	f.CostSnapshotRef = api.CostSnapshotRef{SnapshotID: d.Snapshot.SnapshotID, ResultHash: d.Snapshot.ResultHash}
-	f.Delivery = apiDelivery(d.Delivery)
-	for _, l := range snap.Lines() {
+	// The lines and delivery are the current revision's: an applied amendment changes them (S3-15).
+	r, err := o.Revision()
+	if err != nil {
+		f.Code = kernel.CodeReferenceInvalid
+		return f
+	}
+	f.Delivery = apiDelivery(r.Terms.Delivery)
+	for _, l := range r.Lines {
+		a, _ := r.LineAmounts(l.LineID)
 		f.Lines = append(f.Lines, api.OrderLine{LineID: l.LineID, RfqLineID: l.RfqLineID, Sku: api.SkuRef{SkuID: l.Sku.SkuID,
 			SpecRevision: l.Sku.SpecRevision}, Quantity: l.Quantity, UnitRef: apiRef(l.Unit), NormalizedQuantity: l.NormalizedQuantity,
-			CostUnit: l.CostUnit, UnitPrice: l.UnitPrice, NetMinor: l.NetMinor, TaxMinor: l.TaxMinor, PayableMinor: l.PayableMinor})
+			CostUnit: l.CostUnit, UnitPrice: l.UnitPrice, NetMinor: a.NetMinor, TaxMinor: a.TaxMinor, PayableMinor: a.PayableMinor})
 	}
 	return f
 }

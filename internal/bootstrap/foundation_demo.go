@@ -160,7 +160,7 @@ type DemoIssuedNumber struct {
 // configurations of the other 14 kinds are published here under POL's names, and one configuration
 // of each kind Python did not have (tax_application, quote_document_template, credit_policy,
 // screening_regulation, and legal_terms: the tenant's default, the CISG with PRC law, which the
-// company profile names), so the demo publishes 21 configurations of POL's 19 kinds. Python's clock
+// company profile names), so the demo publishes 21 configurations of POL's 20 kinds. Python's clock
 // is fixed at 2026-10-22T09:00:00Z; POL publishes at the system clock, so the business clock is the
 // start of the run and the bounded configurations are valid from the hour before it for a day.
 func (p *Platform) FoundationDemo(ctx context.Context, cfg DemoConfig) (DemoResult, error) {

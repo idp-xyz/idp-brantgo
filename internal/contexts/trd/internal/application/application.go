@@ -101,6 +101,15 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandRevokeOrderApproval, api.CommandRevokeOrderApproval),
 		authorization.HumanOnly(api.CommandCancelOrder, api.CommandCancelOrder),
 		authorization.HumanOnly(api.CommandCloseOrderUnfulfilled, api.CommandCloseOrderUnfulfilled),
+		// Active orders (S3-15): the command catalog's 人工或 AI（同一守卫） for the amendment's
+		// preparation, the tactical model's humanOnlyCommands for the rest.
+		{Command: api.CommandPrepareAmendment, Permission: api.CommandPrepareAmendment, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandSubmitAmendment, api.CommandSubmitAmendment),
+		authorization.HumanOnly(api.CommandDecideAmendment, api.CommandDecideAmendment),
+		authorization.HumanOnly(api.CommandApplyAmendment, api.CommandApplyAmendment),
+		authorization.HumanOnly(api.CommandWithdrawAmendment, api.CommandWithdrawAmendment),
+		authorization.HumanOnly(api.CommandCloseOrderRemainder, api.CommandCloseOrderRemainder),
+		authorization.HumanOnly(api.CommandCloseOrder, api.CommandCloseOrder),
 		{Command: CommandGetOrder, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandCheckOrder, Permission: PermissionRead, ActorKinds: anyActor},
 	}, readRules()...)
@@ -252,6 +261,27 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.CloseOrderUnfulfilled:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandCloseOrderUnfulfilled, key, c
+	case api.PrepareAmendment:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandPrepareAmendment, key, c
+	case api.SubmitAmendment:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandSubmitAmendment, key, c
+	case api.DecideAmendment:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandDecideAmendment, key, c
+	case api.ApplyAmendment:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandApplyAmendment, key, c
+	case api.WithdrawAmendment:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandWithdrawAmendment, key, c
+	case api.CloseOrderRemainder:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandCloseOrderRemainder, key, c
+	case api.CloseOrder:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandCloseOrder, key, c
 	}
 	return "", "", nil
 }

@@ -1,0 +1,51 @@
+SYNTHETIC SALES CONTRACT — EXAMPLE ONLY
+
+Number: SC-2026-00008
+Order: order.1 r1
+Order SHA-256: e6925282fe4cf9c17a70d6cabf63ed1afa443cdd773a321343a7db89c08e8ee3
+Quote: QT-2026-00001 (quote.1 r1) | Acceptance: acceptance.1
+Date: 2026-11-02T03:04:05.000006Z
+
+Seller: SYNTHETIC Exporter — no actual trade
+Synthetic Shanghai address
+Registration: SYNTHETIC-NOT-REAL | Country: CN
+
+Buyer: Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+Contact: Synthetic Contact 联系人
+
+Lines (amounts in USD):
+L1 | ST01 衬衫 red S | ST01.red.S r1 | 24 PCS | price 8 per 1 PCS | discount 0 | net 192.00 | tax 0.00 | total 192.00
+L2 | ST01 衬衫 red M | ST01.red.M r1 | 36 PCS | price 8 per 1 PCS | discount 0 | net 288.00 | tax 0.00 | total 288.00
+L3 | ST01 衬衫 blue S | ST01.blue.S r1 | 12 PCS | price 8 per 1 PCS | discount 0 | net 96.00 | tax 0.00 | total 96.00
+L4 | ST01 衬衫 blue M | ST01.blue.M r1 | 48 PCS | price 8 per 1 PCS | discount 0 | net 384.00 | tax 0.00 | total 384.00
+charge C1 | freight.main | separate | net 60.00 | tax 0.00 | total 60.00
+charge C2 | packing.L2 | included_in_line | net 0.00 | tax 0.00 | total 0.00
+
+Currency: USD
+Net: 1020.00 | Tax: 0.00 | Total: 1020.00
+
+Payment plan (planned amounts, not receipts):
+P1 | 30% | 306.00 | order_confirmed | 0 calendar days
+P2 | 70% | 714.00 | after_shipment | 30 working days | calendar cn.workdays r1
+
+Delivery: 45 working days after deposit.received r1 | calendar cn.workdays r1 | loaded_on_vessel | Asia/Shanghai
+
+Terms: FCA Incoterms 2020 | Synthetic negotiated terms; not legal guidance
+Named place: Hamburg (DEHAM) | Trade terms: terms.fca r1
+
+Governing law: Laws of the People's Republic of China; CISG applies
+Dispute resolution: CIETAC, Shanghai, in English
+
+Clauses:
+1. Packing: export cartons, 12 pieces each.
+2. Inspection: the seller's QC before shipment; the buyer may inspect at its cost.
+3. Force majeure: as agreed in writing.
+
+Signatures (this generated copy is unsigned; signed copies are recorded as evidence):
+Seller: SYNTHETIC Exporter — no actual trade
+Buyer: Synthetic Buyer GmbH
+
+Synthetic 🚢 data.
+Second line.

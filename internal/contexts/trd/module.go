@@ -35,13 +35,14 @@ type Module struct {
 }
 
 var (
-	_ api.Commands           = (*Module)(nil)
-	_ api.Queries            = (*Module)(nil)
-	_ api.Lookups            = (*Module)(nil)
-	_ api.AcceptanceLookups  = (*Module)(nil)
-	_ api.ActiveOrderLookups = (*Module)(nil)
-	_ api.Auditor            = (*Module)(nil)
-	_ api.Reconciler         = (*Module)(nil)
+	_ api.Commands            = (*Module)(nil)
+	_ api.Queries             = (*Module)(nil)
+	_ api.Lookups             = (*Module)(nil)
+	_ api.AcceptanceLookups   = (*Module)(nil)
+	_ api.ActiveOrderLookups  = (*Module)(nil)
+	_ api.ActiveOrderCommands = (*Module)(nil)
+	_ api.Auditor             = (*Module)(nil)
+	_ api.Reconciler          = (*Module)(nil)
 )
 
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,

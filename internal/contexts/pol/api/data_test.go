@@ -54,6 +54,10 @@ func valid() map[string]ConfigData {
 			LimitSources:         []string{LimitSourceInternalAssessment, LimitSourceSinosureBuyerLimit},
 			ApprovalTiers:        []CreditApprovalTier{{Level: "credit_officer", MaxAmount: "1000"}, {Level: "credit_manager", MaxAmount: "10000.00"}},
 			OverdueToleranceDays: 30}},
+		KindOrderDocumentTemplate: {OrderDocumentTemplate: &OrderDocumentTemplate{Name: "sales contract", DocumentKind: OrderDocumentSalesContract,
+			Language: LanguageEn, RendererVersion: OrderRendererVersion, Title: "SALES CONTRACT",
+			Sections: []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "clauses", "signatures", "notes"},
+			Clauses:  []string{"Packing: export cartons."}}},
 		KindScreeningRegulation: {ScreeningRegulation: &ScreeningRegulation{RescreenIntervalDays: 90,
 			Lists: []ScreeningList{{ListCode: "cn.export_control", Jurisdiction: JurisdictionCN},
 				{ListCode: "eu.consolidated", Jurisdiction: JurisdictionForeign, LegalConfirmationEvidenceID: "src.legal.1"}}}},
@@ -130,8 +134,8 @@ func TestLegalTermsContract(t *testing.T) {
 		QuoteSectionsFor("quote-text/9") != nil || !slices.Equal(QuoteSectionsFor(QuoteRendererVersion), QuoteSections()) {
 		t.Fatal(s)
 	}
-	if !KindKnown(KindLegalTerms) || !KindImplemented(KindLegalTerms) || len(kinds) != 19 {
-		t.Fatal("legal_terms is the nineteenth kind")
+	if !KindKnown(KindLegalTerms) || !KindImplemented(KindLegalTerms) || !KindKnown(KindOrderDocumentTemplate) || len(kinds) != 20 {
+		t.Fatal("legal_terms and order_document_template are the nineteenth and twentieth kinds")
 	}
 }
 
@@ -199,6 +203,43 @@ func TestSecondBatchContracts(t *testing.T) {
 		{KindQuoteDocumentTemplate, func(d *ConfigData) { slices.Reverse(d.QuoteDocumentTemplate.Sections) }, "OK"},
 		{KindQuoteDocumentTemplate, func(d *ConfigData) { d.QuoteDocumentTemplate.FooterNote = strings.Repeat("注", 5001) },
 			"SCHEMA_INVALID /args/data/footer_note"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { slices.Reverse(d.OrderDocumentTemplate.Sections) }, "OK"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			d.OrderDocumentTemplate.Sections = append(d.OrderDocumentTemplate.Sections, "law")
+		}, "OK"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.DocumentKind = "commercial_invoice" },
+			"SCHEMA_INVALID /args/data/document_kind"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.RendererVersion = QuoteRendererVersion },
+			"SCHEMA_INVALID /args/data/renderer_version"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Sections = d.OrderDocumentTemplate.Sections[1:] },
+			"SCHEMA_INVALID /args/data/sections"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Sections[1] = "seller" }, "SCHEMA_INVALID /args/data/sections/1"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Sections[0] = "issuer" }, "SCHEMA_INVALID /args/data/sections/0"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = nil }, "SCHEMA_INVALID /args/data/clauses"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = make([]string, MaxClauses+1) },
+			"SCHEMA_INVALID /args/data/clauses"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = []string{" "} }, "SCHEMA_INVALID /args/data/clauses/0"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = []string{strings.Repeat("条", 2001)} },
+			"SCHEMA_INVALID /args/data/clauses/0"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Title = "" }, "SCHEMA_INVALID /args/data/title"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			t := d.OrderDocumentTemplate
+			t.DocumentKind = OrderDocumentProformaInvoice
+			t.Sections = []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes"}
+			t.Clauses = nil
+		}, "OK"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			t := d.OrderDocumentTemplate
+			t.DocumentKind = OrderDocumentProformaInvoice
+			t.Sections = []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes", "signatures"}
+			t.Clauses = nil
+		}, "SCHEMA_INVALID /args/data/sections/9"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			t := d.OrderDocumentTemplate
+			t.DocumentKind = OrderDocumentProformaInvoice
+			t.Sections = []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes"}
+		}, "SCHEMA_INVALID /args/data/clauses"},
+		{KindNumberSequence, func(d *ConfigData) { d.NumberSequence.DocumentType = DocumentTypeProformaInvoice }, "OK"},
 		{KindCreditPolicy, func(d *ConfigData) { d.CreditPolicy.LimitSources = []string{"guess"} }, "SCHEMA_INVALID /args/data/limit_sources/0"},
 		{KindCreditPolicy, func(d *ConfigData) { d.CreditPolicy.ApprovalTiers = nil }, "SCHEMA_INVALID /args/data/approval_tiers"},
 		{KindCreditPolicy, func(d *ConfigData) { d.CreditPolicy.DefaultLimit = "-1" }, "SCHEMA_INVALID /args/data/default_limit"},
@@ -209,7 +250,9 @@ func TestSecondBatchContracts(t *testing.T) {
 			t.Errorf("%s: %s, want %s", c.kind, got, c.want)
 		}
 	}
-	if !slices.Equal(TemplateFields(), templateFields) || len(QuoteSections()) != 10 {
+	required, optional := OrderDocumentSections(OrderDocumentProformaInvoice)
+	if !slices.Equal(TemplateFields(), templateFields) || len(QuoteSections()) != 10 || len(required) != 9 ||
+		!slices.Equal(optional, []string{"clauses", "law"}) {
 		t.Fatal("fixed lists")
 	}
 }
