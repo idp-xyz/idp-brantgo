@@ -35,6 +35,7 @@
     "item_code_mapping.save_draft",
     "lead.capture",
     "mfg.read",
+    "number.issue",
     "object_control.bind",
     "opportunity.advance",
     "order.activate",
