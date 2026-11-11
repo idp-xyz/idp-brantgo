@@ -3,9 +3,11 @@
 package postgres
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -80,6 +82,9 @@ func LoadQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, i
 		return nil, err
 	}
 	if q.Approvals, err = loadApprovals(ctx, exec, scope, id); err != nil {
+		return nil, err
+	}
+	if err = loadFormal(ctx, exec, scope, q); err != nil {
 		return nil, err
 	}
 	return q, nil
@@ -159,16 +164,41 @@ func SaveQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, q
 			return ErrConflict
 		}
 	}
+	// New revisions first; then what a status change needs to exist before it (the triggers check):
+	// a formal document and its commit evidence before the revision becomes active, a closure before
+	// it is withdrawn or cancelled; then the changed revisions, the revision becoming active last
+	// (one active revision per root at every statement).
 	for _, r := range q.Revisions {
-		if !r.Fresh && !r.Changed {
-			continue
+		if r.Fresh {
+			if err := writeRevision(ctx, exec, t, c, q.ID, r); err != nil {
+				return err
+			}
 		}
+	}
+	for _, r := range q.Revisions {
+		if r.Formal != nil && r.Formal.Fresh {
+			if err := writeFormal(ctx, exec, t, c, q.ID, r); err != nil {
+				return err
+			}
+		}
+		if r.Closed != nil && r.Closed.Fresh {
+			if err := writeClosure(ctx, exec, t, c, q.ID, r); err != nil {
+				return err
+			}
+		}
+	}
+	moved := slices.DeleteFunc(slices.Clone(q.Revisions), func(r *quote.Revision) bool { return r.Fresh || !r.Changed })
+	slices.SortStableFunc(moved, func(a, b *quote.Revision) int {
+		return cmp.Compare(boolInt(a.Status == quote.Active), boolInt(b.Status == quote.Active))
+	})
+	for _, r := range moved {
 		if err := writeRevision(ctx, exec, t, c, q.ID, r); err != nil {
 			return err
 		}
 	}
 	// Reviews after the revisions they move, approvals after the reviews that approved them,
-	// exceptions after their approvals: the triggers check each against what it binds.
+	// exceptions after their approvals, risk holds after the revocation that registers them: the
+	// triggers check each against what it binds.
 	for _, r := range q.Reviews {
 		if err := writeReview(ctx, exec, t, c, q.ID, r); err != nil {
 			return err
@@ -179,7 +209,24 @@ func SaveQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, q
 			return err
 		}
 	}
+	for _, h := range q.Holds {
+		if h.Fresh {
+			if err := writeHold(ctx, exec, t, c, q.ID, h); err != nil {
+				return err
+			}
+		}
+	}
+	if s := q.Slot; s != nil && s.Fresh {
+		return writeSlot(ctx, exec, t, c, q.ID, s)
+	}
 	return nil
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func writeRevision(ctx context.Context, exec bentopg.Executor, t, c, id string, r *quote.Revision) error {

@@ -7,9 +7,8 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// Status of a revision (SM-TRD-REVISION). TRD writes working, frozen, discarded and
-// pending_approval; the other states come with activation, replacement, withdrawal and
-// cancellation, and the storage already admits one active revision per root (TRD-INV-001).
+// Status of a revision (SM-TRD-REVISION; discarded ends a working revision). At most one revision
+// of a root is active (TRD-INV-001; formal.go).
 type Status string
 
 const (
@@ -39,11 +38,13 @@ type Revision struct {
 	SavedBy      kernel.ActorRef
 	SavedEpoch   int64
 	SavedAt      time.Time
-	Seal         *Seal // frozen
-	End          *End  // discarded
-	Fresh        bool  // not stored yet
-	Changed      bool  // stored, changed by this command
-	StatusOnly   bool  // stored and sealed: only its status changed
+	Seal         *Seal          // frozen
+	End          *End           // discarded
+	Formal       *Formalization // activated or replaced in: its formal document and commit evidence
+	Closed       *Closure       // withdrawn or cancelled
+	Fresh        bool           // not stored yet
+	Changed      bool           // stored, changed by this command
+	StatusOnly   bool           // stored and sealed: only its status changed
 }
 
 // End is how a working revision was discarded.
@@ -68,6 +69,8 @@ type Quote struct {
 	Revisions       []*Revision
 	Reviews         []*Review   // in the order they were requested
 	Approvals       []*Approval // in the order they were given
+	Holds           []*Hold     // risk holds, in the order they were registered
+	Slot            *Slot       // the conversion slot, once taken
 	MetadataChanged bool
 }
 

@@ -34,6 +34,10 @@ const (
 	CodeApprovalReferenceMismatch    = "APPROVAL_REFERENCE_MISMATCH"     // the approval or exception names another revision, target or margin fact
 	CodeIndependentReviewRequired    = "INDEPENDENT_REVIEW_REQUIRED"     // the reviewer contributed to, froze or submitted the revision
 	CodeMarginExceptionNotAuthorized = "MARGIN_EXCEPTION_NOT_AUTHORIZED" // 403: no capability, or not independent of the revision's authors
+
+	// Formalization and conversion (WBS S3-04, S3-05; formal.go).
+	CodeRootConversionLocked   = "ROOT_CONVERSION_LOCKED"   // 409: the conversion slot is taken; the active revision is neither replaced nor cancelled
+	CodeConversionSlotConflict = "CONVERSION_SLOT_CONFLICT" // 409: the root's full_v1 conversion slot is taken
 )
 
 var codes = map[string]kernel.Category{
@@ -58,6 +62,9 @@ var codes = map[string]kernel.Category{
 	CodeApprovalReferenceMismatch:    kernel.CategoryInvalid,
 	CodeIndependentReviewRequired:    kernel.CategoryInvalid,
 	CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
+
+	CodeRootConversionLocked:   kernel.CategoryConflict,
+	CodeConversionSlotConflict: kernel.CategoryConflict,
 }
 
 // Category returns the category of a code TRD declares: QuoteRoot's, the calculation's or the

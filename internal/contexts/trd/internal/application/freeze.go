@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -108,7 +109,7 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 		if err != nil {
 			return action.Outcome{}, err
 		}
-		if err = s.guardUpstream(ctx, exec, w.Data, seal, f.Facts, now); err != nil {
+		if _, err = s.guardUpstream(ctx, exec, freezeGuards(w.Data, seal, f.Profile.ContentHash), now); err != nil {
 			return action.Outcome{}, err
 		}
 		if _, err = h.q.Freeze(cmd.WorkingRevision, seal, d.Actor, d.Epoch, now); err != nil {
@@ -147,12 +148,59 @@ func (s Service) calculation(d quote.Data, f facts, at time.Time) quote.Calculat
 	}
 }
 
-// guardUpstream re-checks, inside TRD's transaction after the root is locked FOR UPDATE, what the
-// freeze binds upstream, in context code order; each guard locks its upstream rows FOR SHARE until
-// TRD's transaction ends, so a change that would end a bound fact either committed first and the
-// freeze is refused with the owner's verdict, or waits until the freeze commits.
-func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, d quote.Data, seal *quote.Seal, f quote.Facts, at time.Time) error {
-	const p = "/args/data"
+// guarded is what a transaction re-checks upstream for a sealed revision (ADR-BR-004 option B): the
+// draft's SKU specifications, cost snapshot, trading profile and addresses, the RFQ binding and the
+// POL revisions adopted with their content hashes (as the freeze sealed them in the dependency
+// manifest), and the trading profile's content hash. prefix is where refusals point: the freeze's
+// request (/args/data) or the stored commercial document a formalization re-checks (/data).
+type guarded struct {
+	data        quote.Data
+	configs     []quote.Dependency
+	rfq         quote.Dependency
+	profileHash string
+	prefix      string
+}
+
+// freezeGuards is what the freeze guards for draft d with seal s, the profile read as profileHash.
+func freezeGuards(d quote.Data, s *quote.Seal, profileHash string) guarded {
+	return guarded{data: d, configs: s.Configs, rfq: s.Rfq, profileHash: profileHash, prefix: "/args/data"}
+}
+
+// sealedGuards is what a formalization guards for revision r: what its freeze guarded, read back from
+// its commercial document c (the manifest's POL revisions, RFQ and trading profile).
+func sealedGuards(r *quote.Revision, c quote.Commercial) guarded {
+	g := guarded{data: r.Data, prefix: "/data"}
+	for _, d := range c.DependencyManifest {
+		switch d.Kind {
+		case quote.DependencyRfq:
+			g.rfq = d
+		case quote.DependencyTradingProfile:
+			g.profileHash = d.ContentHash
+		case quote.DependencyCostSnapshot, quote.DependencySource:
+		default:
+			g.configs = append(g.configs, d)
+		}
+	}
+	return g
+}
+
+// at is path, a request path under /args/data, under the guard set's prefix.
+func (g guarded) at(path string) string {
+	const data = "/args/data"
+	if rest, ok := strings.CutPrefix(path, data); ok {
+		return g.prefix + rest
+	}
+	return path
+}
+
+// guardUpstream re-checks, inside TRD's transaction after the root is locked FOR UPDATE, what a
+// sealed revision binds upstream, in context code order; each guard locks its upstream rows FOR
+// SHARE until TRD's transaction ends, so a change that would end a bound fact either committed first
+// and the command is refused with the owner's verdict, or waits until the command commits. It
+// returns CST's adoptability verdict, which a formalization records in its commit evidence.
+func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g guarded, at time.Time) (cstapi.AdoptabilityVerdict, error) {
+	d, p := g.data, g.prefix
+	var none cstapi.AdoptabilityVerdict
 	// CAT (R14): SkuGuard v1 on every SKU specification revision, in (SKU, revision) order.
 	specs := map[catapi.SpecRef]string{}
 	for i, l := range d.Lines {
@@ -164,39 +212,42 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, d quo
 	for _, ref := range slices.SortedFunc(maps.Keys(specs), compareSpec) {
 		v, err := catapi.ScanSkuGuard(ref, exec.QueryRow(ctx, catapi.SkuGuardSQL, catapi.SkuGuardArgs(ref)...).Scan)
 		if err != nil {
-			return err
+			return none, err
 		}
 		if err = v.Check(specs[ref]); err != nil {
-			return err
+			return none, err
 		}
 	}
 	// CST (R11): AdoptabilityGuard v1 on the cost snapshot and its result hash.
-	ref := cstapi.CostSnapshotRef{SnapshotID: seal.Snapshot.SnapshotID, ResultHash: seal.Snapshot.ResultHash}
+	if d.Snapshot == nil {
+		return none, kernel.Reject(kernel.CodeReferenceInvalid, p+"/cost_snapshot_ref", "")
+	}
+	ref := cstapi.CostSnapshotRef{SnapshotID: d.Snapshot.SnapshotID, ResultHash: d.Snapshot.ResultHash}
 	adoptable, err := cstapi.ScanAdoptabilityGuard(ref, exec.QueryRow(ctx, cstapi.AdoptabilityGuardSQL, cstapi.AdoptabilityGuardArgs(ref, at)...).Scan)
 	if err != nil {
-		return err
+		return none, err
 	}
 	if err = adoptable.Check(p + "/cost_snapshot_ref"); err != nil {
-		return err
+		return none, err
 	}
 	// INQ (R12): RfqGuard v1 on the RFQ at its row version with its line set.
-	rfq := inqapi.RfqBinding{RfqID: seal.Rfq.ID, RowVersion: seal.Rfq.Version, LinesHash: seal.Rfq.ContentHash}
+	rfq := inqapi.RfqBinding{RfqID: g.rfq.ID, RowVersion: g.rfq.Version, LinesHash: g.rfq.ContentHash}
 	ready, err := inqapi.ScanRfqGuard(rfq, exec.QueryRow(ctx, inqapi.RfqGuardSQL, inqapi.RfqGuardArgs(rfq)...).Scan)
 	if err != nil {
-		return err
+		return none, err
 	}
 	if err = ready.Check(p + "/rfq_ref"); err != nil {
-		return err
+		return none, err
 	}
 	// POL (R15): ConfigGuard v1 on every revision adopted, directly or through another; a revision's
 	// content never changes, so the hash it answers is the one the manifest binds.
 	paths := map[quote.Ref]string{}
 	for _, field := range d.Fields() {
 		if _, ok := paths[field.Ref]; !ok {
-			paths[field.Ref] = field.Path
+			paths[field.Ref] = g.at(field.Path)
 		}
 	}
-	for _, c := range seal.Configs {
+	for _, c := range g.configs {
 		r := polapi.ConfigRef{Kind: c.Kind, ConfigID: c.ID, Revision: c.Version}
 		path, ok := paths[quote.Ref{Kind: c.Kind, ID: c.ID, Revision: c.Version}]
 		if !ok {
@@ -204,29 +255,32 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, d quo
 		}
 		v, err := polapi.ScanConfigGuard(r, exec.QueryRow(ctx, polapi.ConfigGuardSQL, polapi.ConfigGuardArgs(r, at)...).Scan)
 		if err != nil {
-			return err
+			return none, err
 		}
 		if err = v.Check(path); err != nil {
-			return err
+			return none, err
 		}
 		if v.ContentHash != c.ContentHash {
-			return api.Reject(api.CodeReferenceStale, path)
+			return none, api.Reject(api.CodeReferenceStale, path)
 		}
 	}
 	// PTY (R13): TradingProfileGuard v1 on the exact profile revision (it also locks the party row
 	// and the pinned contacts' rows, so the customer revision and the contact the domain matched
 	// against the profile stay as read), then AddressRoleGuard v1 on every address in (party,
 	// revision, address) order.
+	if d.Profile == nil || d.Customer == nil {
+		return none, kernel.Reject(kernel.CodeReferenceInvalid, p+"/trading_profile_ref", "")
+	}
 	profile := ptyapi.TradingProfileRef{PartyID: d.Profile.PartyID, Revision: d.Profile.Revision}
 	pv, err := ptyapi.ScanTradingProfileGuard(profile, exec.QueryRow(ctx, ptyapi.TradingProfileGuardSQL, ptyapi.TradingProfileGuardArgs(profile)...).Scan)
 	if err != nil {
-		return err
+		return none, err
 	}
 	if err = pv.Check(p + "/trading_profile_ref"); err != nil {
-		return err
+		return none, err
 	}
-	if pv.ContentHash != f.Profile.ContentHash || pv.PartyRevision != d.Customer.Revision {
-		return api.Reject(api.CodeReferenceStale, p+"/trading_profile_ref")
+	if pv.ContentHash != g.profileHash || pv.PartyRevision != d.Customer.Revision {
+		return none, api.Reject(api.CodeReferenceStale, p+"/trading_profile_ref")
 	}
 	addresses := map[ptyapi.AddressRoleRef]string{}
 	for i, a := range d.Addresses {
@@ -236,13 +290,13 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, d quo
 	for _, a := range slices.SortedFunc(maps.Keys(addresses), compareAddress) {
 		v, err := ptyapi.ScanAddressRoleGuard(a, exec.QueryRow(ctx, ptyapi.AddressRoleGuardSQL, ptyapi.AddressRoleGuardArgs(a)...).Scan)
 		if err != nil {
-			return err
+			return none, err
 		}
 		if err = v.Check(addresses[a]); err != nil {
-			return err
+			return none, err
 		}
 	}
-	return nil
+	return adoptable, nil
 }
 
 func compareAddress(a, b ptyapi.AddressRoleRef) int {

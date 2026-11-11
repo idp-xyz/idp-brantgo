@@ -202,7 +202,20 @@ func quoteView(q *quote.Quote) (api.QuoteView, error) {
 		if e := r.End; e != nil {
 			rv.DiscardedBy, rv.DiscardedAt, rv.DiscardReason, rv.DiscardProofs = e.By, e.At, e.Reason, apiEvidence(e.Evidence)
 		}
+		rv.Formal = formalView(r.Formal)
+		if c := r.Closed; c != nil {
+			rv.Closed = &api.ClosureView{Status: string(c.Status), ClosedBy: c.Closed.By, ClosedAt: c.Closed.At, Reason: c.Closed.Reason,
+				Evidence: apiEvidence(c.Closed.Evidence), RootVersion: c.RootVersion}
+		}
 		v.Revisions = append(v.Revisions, rv)
+	}
+	for _, h := range q.Holds {
+		v.Holds = append(v.Holds, api.HoldView{HoldID: h.ID, BusinessRevision: h.Revision, Cause: h.Cause, ApprovalID: h.ApprovalID,
+			Code: h.Code, RegisteredBy: h.Registered.By, RegisteredAt: h.Registered.At, RootVersion: h.RootVersion})
+	}
+	if c := q.Slot; c != nil {
+		v.Conversion = &api.ConversionView{Slot: c.Slot, BusinessRevision: c.Revision, BusinessHash: c.BusinessHash, OrderID: c.OrderID,
+			TakenBy: c.Taken.By, TakenAt: c.Taken.At, RootVersion: c.RootVersion}
 	}
 	for _, r := range q.Reviews {
 		rv := api.ReviewView{ReviewRequestID: r.ID, BusinessRevision: r.Revision, BusinessHash: r.BusinessHash, TargetCommand: r.Target,

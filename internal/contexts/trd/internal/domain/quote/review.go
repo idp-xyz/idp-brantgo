@@ -466,23 +466,24 @@ type Revocation struct {
 }
 
 // Revoke revokes an approval at its effectivity version (valid → revoked): it never releases again,
-// and its margin exception with it. The root version moves. Revoking the approval of an active
-// revision registers a risk hold (SM-TRD-APPROVAL), which comes with formalization (S3-04); no
-// revision is active before it.
-func (q *Quote) Revoke(r Revocation, by kernel.ActorRef, epoch int64, now time.Time) (*Approval, error) {
+// and its margin exception with it. The root version moves. Revoking the approval the active
+// revision was formalized with registers a risk hold on that revision (SM-TRD-APPROVAL 生效后撤销登记风险暂停;
+// formal.go), returned with the approval; the revision stays active.
+func (q *Quote) Revoke(r Revocation, by kernel.ActorRef, epoch int64, now time.Time) (*Approval, *Hold, error) {
 	a := q.Approval(r.ApprovalID)
 	switch {
 	case a == nil:
-		return nil, kernel.Reject(kernel.CodeNotFound, "/args/approval_id", "")
+		return nil, nil, kernel.Reject(kernel.CodeNotFound, "/args/approval_id", "")
 	case a.EffectivityVersion != r.ExpectedEffectivity:
-		return nil, kernel.Reject(kernel.CodeVersionConflict, "/args/expected_effectivity_version", "")
+		return nil, nil, kernel.Reject(kernel.CodeVersionConflict, "/args/expected_effectivity_version", "")
 	case a.Effectivity != Valid:
-		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/approval_id", "The approval is revoked")
+		return nil, nil, kernel.Reject(kernel.CodeInvalidState, "/args/approval_id", "The approval is revoked")
 	}
+	at := kernel.Instant(now)
 	a.Effectivity, a.EffectivityVersion, a.Changed = Revoked, a.EffectivityVersion+1, true
-	a.Revocation = &Act{By: by, Epoch: epoch, At: kernel.Instant(now), Reason: r.Reason, Evidence: slices.Clone(r.Evidence)}
+	a.Revocation = &Act{By: by, Epoch: epoch, At: at, Reason: r.Reason, Evidence: slices.Clone(r.Evidence)}
 	q.RootVersion++
-	return a, nil
+	return a, q.hold(a, by, epoch, at), nil
 }
 
 // Standing is an actor's grant as TRD reads it at a use of an approval: whether it is an active

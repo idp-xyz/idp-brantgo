@@ -212,8 +212,8 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.TRD, err = trd.New(db, trd.Upstream{Sources: c.EVD, Parties: c.PTY, Profiles: c.PTY, Skus: c.CAT, Configs: c.POL, Rfqs: c.INQ,
-			Snapshots: c.CST, Contexts: c.CST})
+		c.TRD, err = trd.New(db, trd.Upstream{Sources: c.EVD, Parties: c.PTY, Profiles: c.PTY, Skus: c.CAT, Configs: c.POL, Numbers: c.POL,
+			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST})
 	}
 	if err != nil {
 		return nil, err

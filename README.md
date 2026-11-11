@@ -38,7 +38,9 @@ internal/contexts/cst/            CST: costing contexts and measurements in seal
 internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working drafts, the human freeze with the server calculation
                                   (calc), its commercial document and business hash (Python protocol.py, golden vectors),
                                   internal metadata, the root's object control and control epoch fence; review requests,
-                                  approvals with revocation and margin exceptions, the release check activation will use
+                                  approvals with revocation and margin exceptions; activation and replacement with the
+                                  quote-text/0.1.0 formal document, POL number and commit evidence in one transaction,
+                                  withdrawal, cancellation, risk holds, the conversion slot; QuoteRevisionGuard v1
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only

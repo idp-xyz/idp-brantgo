@@ -116,20 +116,20 @@ func TestReviewApprovalAndRevocation(t *testing.T) {
 	if err != nil || got != a || c.MarginRule != MarginPass || c.PayableMinor != "96000" {
 		t.Fatalf("releasable %+v, %+v, %v", got, c, err)
 	}
-	if _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 1, Reason: "客户信用变化", Evidence: proof}, human("reviewer"), 3,
+	if _, _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 1, Reason: "客户信用变化", Evidence: proof}, human("reviewer"), 3,
 		issuedAt.Add(3*time.Hour)); err != nil || a.Effectivity != Revoked || a.EffectivityVersion != 2 || a.Revocation.Reason != "客户信用变化" ||
 		q.RootVersion != 5 {
 		t.Fatalf("revoke %+v, %v", a, err)
 	}
-	if _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 1}, human("reviewer"), 3, issuedAt); code(err) !=
+	if _, _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 1}, human("reviewer"), 3, issuedAt); code(err) !=
 		"VERSION_CONFLICT at /args/expected_effectivity_version" {
 		t.Fatalf("revoke again at version 1: %s", code(err))
 	}
-	if _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 2}, human("reviewer"), 3, issuedAt); code(err) !=
+	if _, _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 2}, human("reviewer"), 3, issuedAt); code(err) !=
 		"INVALID_STATE at /args/approval_id" {
 		t.Fatalf("revoke a revoked approval: %s", code(err))
 	}
-	if _, err = q.Revoke(Revocation{ApprovalID: "approval.9", ExpectedEffectivity: 1}, human("reviewer"), 3, issuedAt); code(err) !=
+	if _, _, err = q.Revoke(Revocation{ApprovalID: "approval.9", ExpectedEffectivity: 1}, human("reviewer"), 3, issuedAt); code(err) !=
 		"NOT_FOUND at /args/approval_id" {
 		t.Fatalf("an unknown approval: %s", code(err))
 	}
@@ -472,7 +472,7 @@ func TestMarginExceptionApproval(t *testing.T) {
 		t.Fatalf("an exception of another shortfall: %s", got)
 	}
 	e.Shortfall = saved
-	if _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 1, Reason: "撤回例外", Evidence: proof}, human("approver"), 3, at); err != nil {
+	if _, _, err = q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 1, Reason: "撤回例外", Evidence: proof}, human("approver"), 3, at); err != nil {
 		t.Fatal(err)
 	}
 	if got := code(release(q, "approval.1", at, qualified(nil))); got != "APPROVAL_REVOKED at /args/approval_id" {

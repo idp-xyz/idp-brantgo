@@ -150,11 +150,12 @@ GRANT UPDATE (status, data, content_hash, valid_from, valid_until, validity_mode
 GRANT EXECUTE ON FUNCTION brant_sup.guard_supply_condition_v1(text, text, bigint, timestamptz) TO brant_app;
 
 -- TRD: a quote root moves its version and its object control (trigger: identity and owner fixed,
--- versions and control epochs only grow); a working revision is edited, frozen or discarded, a frozen
--- one only moves to pending approval and back, a discarded one never changes (trigger); a review is
--- decided once, an approval revoked once, a margin exception never changes (triggers); nothing is
--- deleted; the ledger only grows. The freeze calls CST's, INQ's, CAT's, PTY's and POL's guard
--- functions, granted above.
+-- versions and control epochs only grow); a working revision is edited, frozen or discarded, a sealed
+-- one only changes its status along SM-TRD-REVISION, a discarded one never changes (trigger); a review
+-- is decided once, an approval revoked once, a margin exception never changes (triggers); formal
+-- documents, commit evidence, closures, risk holds and conversion slots are only inserted (triggers);
+-- nothing is deleted; the ledger only grows. The freeze, activation and replacement call CST's, INQ's,
+-- CAT's, PTY's and POL's guard functions, granted above; TRD publishes its quote revision guard.
 GRANT USAGE ON SCHEMA brant_trd TO brant_app;
 GRANT SELECT, INSERT ON brant_trd.quote_root, brant_trd.quote_revision, brant_trd.action_result, brant_trd.audit_event TO brant_app;
 GRANT UPDATE (root_version, last_revision, labels, internal_note, control_state, control_epoch, control_task_id,
@@ -169,3 +170,6 @@ GRANT UPDATE (status, decided_by_kind, decided_by_id, decided_epoch, decided_at,
     ON brant_trd.quote_review TO brant_app;
 GRANT UPDATE (effectivity, effectivity_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
     ON brant_trd.quote_approval TO brant_app;
+GRANT SELECT, INSERT ON brant_trd.quote_document, brant_trd.quote_commit_evidence, brant_trd.quote_revision_closure,
+    brant_trd.quote_risk_hold, brant_trd.quote_conversion_slot TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint, text) TO brant_app;

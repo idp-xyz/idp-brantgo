@@ -63,8 +63,8 @@ func newTrdWorld(t *testing.T) *trdWorld {
 		TaxApplication: &polapi.TaxApplication{Name: "sale", Side: polapi.TaxSideSales, SubjectKind: polapi.SubjectSKU, SubjectID: "sku.1",
 			TaxProfile: w.tax, Jurisdiction: "CN", BasisNote: "synthetic"}}, true)
 	q.template = w.configure(ed, rv, polapi.KindQuoteDocumentTemplate, "quote.template", 0, win.from, time.Time{}, polapi.ConfigData{
-		QuoteDocumentTemplate: &polapi.QuoteDocumentTemplate{Name: "formal", Language: polapi.LanguageZhCN,
-			RendererVersion: polapi.QuoteRendererVersion, Title: "报价单", Sections: polapi.QuoteSections(), FooterNote: "合成测试，不构成要约"}}, true)
+		QuoteDocumentTemplate: &polapi.QuoteDocumentTemplate{Name: "formal", Language: polapi.LanguageEn,
+			RendererVersion: polapi.QuoteRendererVersion, Title: "Quotation", Sections: polapi.QuoteSections(), FooterNote: "合成测试，不构成要约"}}, true)
 	q.seq = w.sequence(ed, rv, "quote.seq", "QT-")
 	return q
 }
