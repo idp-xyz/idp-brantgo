@@ -451,6 +451,7 @@ type OrderView struct {
 	Amendments        []OrderAmendmentView
 	AmendmentCommits  []OrderCommitView
 	End               *OrderEndView
+	Documents         []OrderDocumentView // the S/C and PI of its revisions (orderdoc.go)
 }
 
 // OrderReviewView is an order review. DecisionState is its state as of the read: pending (open),
@@ -542,4 +543,5 @@ type OrderQueries interface {
 	// reviewID ("": the order's source and upstream risks only), audited as order.check
 	// (trd.read). A refusal of the check is its answer, not an error.
 	CheckOrder(ctx context.Context, orderID, reviewID string) (OrderCheck, error)
+	OrderDocumentQueries
 }

@@ -29,7 +29,7 @@ type preparation struct {
 }
 
 // loadActive reads o's revisions after the first (with the current one's document), amendments,
-// amendment commit evidence and end.
+// amendment commit evidence, end, and its S/C and PI with their signed copies (orderdoc.go).
 func loadActive(ctx context.Context, exec bentopg.Executor, t, c string, o *order.Order) error {
 	rows, err := exec.Query(ctx, `SELECT order_revision, order_hash, previous_hash, amendment_id, amendment_hash, row_version, created_at,
 		CASE WHEN order_revision = $4 THEN document ELSE '' END FROM brant_trd.sales_order_revision
@@ -66,8 +66,10 @@ func loadActive(ctx context.Context, exec bentopg.Executor, t, c string, o *orde
 	if o.AmendmentCommits, err = loadAmendmentCommits(ctx, exec, t, c, o.ID); err != nil {
 		return err
 	}
-	o.End, err = loadEnd(ctx, exec, t, c, o.ID)
-	return err
+	if o.End, err = loadEnd(ctx, exec, t, c, o.ID); err != nil {
+		return err
+	}
+	return loadDocuments(ctx, exec, t, c, o)
 }
 
 func loadAmendments(ctx context.Context, exec bentopg.Executor, t, c string, o *order.Order) ([]*amendment.Amendment, error) {
@@ -201,7 +203,8 @@ type endLine struct {
 
 // saveActive writes what an active-order command did, in the order the triggers check: the revision
 // an apply produced, the amendments (fresh, then changed: the applied one names that revision), the
-// apply's commit evidence and the order's end.
+// apply's commit evidence and the order's end; and the documents and signed copies of the document
+// commands, which bind the order's revision as it stands.
 func saveActive(ctx context.Context, exec bentopg.Executor, t, c string, o *order.Order, at time.Time) error {
 	if r := o.NewRevision; r != nil {
 		rec := o.Revisions[len(o.Revisions)-1]
@@ -257,7 +260,7 @@ func saveActive(ctx context.Context, exec bentopg.Executor, t, c string, o *orde
 			return err
 		}
 	}
-	return nil
+	return saveDocuments(ctx, exec, t, c, o)
 }
 
 // writeAmendment inserts a fresh amendment or writes a changed one at its previous version.

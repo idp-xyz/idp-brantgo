@@ -6,7 +6,8 @@
 // replacement), its withdrawal and cancellation, risk holds and the conversion slot; then the
 // customer's responses to an active formal revision, their verification into acceptances that form
 // the contract when they arrived in time, and the acceptances' effectivity ledger; then the sales
-// order an accepted revision converts into, its review and activation (ActiveOrderRef v1 for PUR).
+// order an accepted revision converts into, its review and activation (ActiveOrderRef v1 for PUR),
+// its amendments and end, and the S/C and PI of its revisions with their signed copies.
 // Code outside TRD uses it through package api; everything under internal/ is private to TRD.
 package trd
 
@@ -35,14 +36,15 @@ type Module struct {
 }
 
 var (
-	_ api.Commands            = (*Module)(nil)
-	_ api.Queries             = (*Module)(nil)
-	_ api.Lookups             = (*Module)(nil)
-	_ api.AcceptanceLookups   = (*Module)(nil)
-	_ api.ActiveOrderLookups  = (*Module)(nil)
-	_ api.ActiveOrderCommands = (*Module)(nil)
-	_ api.Auditor             = (*Module)(nil)
-	_ api.Reconciler          = (*Module)(nil)
+	_ api.Commands              = (*Module)(nil)
+	_ api.Queries               = (*Module)(nil)
+	_ api.Lookups               = (*Module)(nil)
+	_ api.AcceptanceLookups     = (*Module)(nil)
+	_ api.ActiveOrderLookups    = (*Module)(nil)
+	_ api.ActiveOrderCommands   = (*Module)(nil)
+	_ api.OrderDocumentCommands = (*Module)(nil)
+	_ api.Auditor               = (*Module)(nil)
+	_ api.Reconciler            = (*Module)(nil)
 )
 
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,

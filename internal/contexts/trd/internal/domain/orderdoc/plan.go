@@ -45,9 +45,8 @@ type Plan struct {
 }
 
 // Prepare checks order revision r, template t and the facts for a document generated at instant
-// at, in this order: the template is one the renderer supports (Template.Supported); the law
-// section and the law facts agree (DEPENDENCY_NOT_SUPPORTED for a law section without law terms,
-// WBS S3-17; REFERENCE_INVALID for law terms a template leaves out); the sequence issues numbers of
+// at, in this order: the template is one the renderer supports (Template.Supported); it prints the
+// law section exactly when the revision carries legal terms (REFERENCE_INVALID); the sequence issues numbers of
 // the kind's document type (REFERENCE_INVALID at /facts/sequence); the facts are those of the
 // references the revision binds and the revision is whole (REFERENCE_INVALID); the text is UTF-8
 // (REFERENCE_INVALID) and fits MaxDocumentBytes with the longest number
@@ -59,13 +58,12 @@ func Prepare(r *orderrev.Revision, t Template, f Facts, at time.Time) (*Plan, er
 	if err := t.Supported(); err != nil {
 		return nil, err
 	}
-	law := slices.Contains(t.Sections, SectionLaw)
+	law, bound := slices.Contains(t.Sections, SectionLaw), r.LegalTerms != nil && r.LegalTermsRef != nil
 	switch {
-	case law && f.Law == nil:
-		return nil, fail(CodeDependencyNotSupported, "/template/sections", "The order revision binds no governing law and dispute resolution yet (WBS S3-17)")
-	case !law && f.Law != nil:
-		return nil, fail(kernel.CodeReferenceInvalid, "/template/sections", "The order revision binds governing law and dispute resolution; "+
-			"its contract prints them")
+	case law && !bound:
+		return nil, fail(kernel.CodeReferenceInvalid, "/template/sections", "The order binds no legal terms; use a template without the law section")
+	case !law && bound:
+		return nil, fail(kernel.CodeReferenceInvalid, "/template/sections", "The order binds legal terms; its documents print them")
 	}
 	if f.Sequence.Ref.Kind != quote.KindNumberSequence || f.Sequence.DocumentType != DocumentType(t.DocumentKind) {
 		return nil, fail(kernel.CodeReferenceInvalid, "/facts/sequence", "A "+t.DocumentKind+" is numbered from a sequence of document type "+
@@ -226,7 +224,7 @@ func Sign(b *Binding, r *orderrev.Revision, s Signature, recorded []Signature) (
 	}
 	switch {
 	case s.Kind != Signed && s.Kind != Countersigned:
-		return false, kernel.Reject(kernel.CodeSchemaInvalid, "/args/kind", "")
+		return false, kernel.Reject(kernel.CodeSchemaInvalid, "/args/signature_kind", "")
 	case !kernel.ValidIdentifier(s.FileID) || len(s.FileSHA256) != 64:
 		return false, kernel.Reject(kernel.CodeSchemaInvalid, "/args/file_id", "")
 	case s.FileSHA256 == b.ContentSHA256:
@@ -241,7 +239,7 @@ func Sign(b *Binding, r *orderrev.Revision, s Signature, recorded []Signature) (
 		if x.FileID == s.FileID && x.FileSHA256 == s.FileSHA256 {
 			return true, nil
 		}
-		return false, kernel.Reject(kernel.CodeInvalidState, "/args/kind", "The "+s.Kind+" copy of "+b.Number+" is recorded; it never changes")
+		return false, kernel.Reject(kernel.CodeInvalidState, "/args/signature_kind", "The "+s.Kind+" copy of "+b.Number+" is recorded; it never changes")
 	}
 	return false, nil
 }

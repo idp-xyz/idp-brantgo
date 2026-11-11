@@ -61,6 +61,16 @@ func revisionOne() *orderrev.Revision {
 	return r
 }
 
+// legalTerms are the tenant's default legal terms as a quote seals them: the CISG with PRC law,
+// CIETAC arbitration in Shanghai in English (WBS S3-17's fixture).
+func legalTerms() (*quote.Ref, *quote.LegalTerms) {
+	ref := ref(quote.KindLegalTerms, "legal.default")
+	return &ref, &quote.LegalTerms{Source: quote.LegalSourceIssuerDefault, GoverningLaw: quote.GoverningLawCN, CISG: quote.CISGApplies,
+		DisputeResolution: quote.DisputeResolution{Method: quote.DisputeArbitration,
+			Institution: "China International Economic and Trade Arbitration Commission (CIETAC)", Seat: "Shanghai", Language: "en"},
+		Formation: quote.Formation{Rule: quote.FormationArrival, Basis: quote.FormationBasisCISG}}
+}
+
 // revisionTwo is TD-AT01's revision 2: blue M at 44, by amendment.1.
 func revisionTwo(t *testing.T) *orderrev.Revision {
 	t.Helper()
@@ -272,7 +282,7 @@ func TestProformaInvoiceOfRevisionTwo(t *testing.T) {
 
 // The variant exercises what the BRC-001 documents do not: a separate and an included charge, a
 // lead-time delivery, payment stages in working days on a calendar, sections in another order, the
-// law slot (S3-17's terms as the command will resolve them), a PI with clauses, and a footer note
+// law section (the legal terms the source quote sealed, WBS S3-17), a PI with clauses, and a footer note
 // with an emoji and a line break.
 func TestVariantDocument(t *testing.T) {
 	r := revisionOne()
@@ -290,7 +300,7 @@ func TestVariantDocument(t *testing.T) {
 	r.Amounts.Net, r.Amounts.Payable = "102000", "102000"
 	r.Amounts.Payments[0].AmountMinor, r.Amounts.Payments[1].AmountMinor = "30600", "71400"
 	f := facts(KindSalesContract)
-	f.Law = &Law{GoverningLaw: "Laws of the People's Republic of China; CISG applies", DisputeResolution: "CIETAC, Shanghai, in English"}
+	r.LegalTermsRef, r.LegalTerms = legalTerms()
 	tpl := contractTemplate()
 	tpl.Sections = []string{SectionIdentity, SectionSeller, SectionBuyer, SectionLines, SectionTotals, SectionPayments, SectionDelivery, SectionTerms,
 		SectionLaw, SectionClauses, SectionSignatures, SectionNotes}
@@ -302,7 +312,8 @@ func TestVariantDocument(t *testing.T) {
 		"charge C2 | packing.L2 | included_in_line | net 0.00 | tax 0.00 | total 0.00\n",
 		"Delivery: 45 working days after deposit.received r1 | calendar cn.workdays r1 | loaded_on_vessel | Asia/Shanghai\n",
 		"P2 | 70% | 714.00 | after_shipment | 30 working days | calendar cn.workdays r1\n",
-		"Governing law: Laws of the People's Republic of China; CISG applies\nDispute resolution: CIETAC, Shanghai, in English\n\nClauses:",
+		"Legal terms: legal.default r1\nGoverning law: CN | CISG: applies\nContract formation: acceptance effective on arrival | CISG Art. 18(2), 23\n" +
+			"Disputes: arbitration | China International Economic and Trade Arbitration Commission (CIETAC) | seat Shanghai | language en\n\nClauses:",
 		"Synthetic 🚢 data.\nSecond line.\n"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("variant lacks %q", want)
@@ -351,11 +362,14 @@ func TestPrepareRefusals(t *testing.T) {
 		"clauses without a section":  {tpl: func(t *Template) { *t = invoiceTemplate(); t.Clauses = []string{"x"} }, f: func(f *Facts) { *f = facts(KindProformaInvoice) }, want: "REFERENCE_INVALID at /template/clauses"},
 		"a blank clause":             {tpl: func(t *Template) { t.Clauses[1] = "  " }, want: "REFERENCE_INVALID at /template/clauses/1"},
 		"zh-CN":                      {tpl: func(t *Template) { t.Language = "zh-CN" }, want: "DEPENDENCY_NOT_SUPPORTED at /template/language"},
-		"a law section before S3-17": {tpl: func(t *Template) { t.Sections = append(t.Sections, SectionLaw) }, want: "DEPENDENCY_NOT_SUPPORTED at /template/sections"},
-		"law terms left out": {f: func(f *Facts) { f.Law = &Law{GoverningLaw: "PRC law", DisputeResolution: "CIETAC"} },
+		"a law section without legal terms": {tpl: func(t *Template) { t.Sections = append(t.Sections, SectionLaw) },
 			want: "REFERENCE_INVALID at /template/sections"},
-		"half the law terms": {tpl: func(t *Template) { t.Sections = append(t.Sections, SectionLaw) }, f: func(f *Facts) { f.Law = &Law{GoverningLaw: "PRC law"} },
-			want: "REFERENCE_INVALID at /facts/law"},
+		"legal terms left out": {r: func(r *orderrev.Revision) { r.LegalTermsRef, r.LegalTerms = legalTerms() },
+			want: "REFERENCE_INVALID at /template/sections"},
+		"arbitration without a seat": {tpl: func(t *Template) { t.Sections = append(t.Sections, SectionLaw) }, r: func(r *orderrev.Revision) {
+			r.LegalTermsRef, r.LegalTerms = legalTerms()
+			r.LegalTerms.DisputeResolution.Seat = ""
+		}, want: "REFERENCE_INVALID at /revision/legal_terms/dispute_resolution"},
 		"a PI sequence for an S/C":  {f: func(f *Facts) { f.Sequence = Sequence{Ref: piSequence, DocumentType: DocumentTypeProformaInvoice} }, want: "REFERENCE_INVALID at /facts/sequence"},
 		"another customer":          {f: func(f *Facts) { f.Customer.Ref.Revision = 3 }, want: "REFERENCE_INVALID at /facts/customer"},
 		"a nameless contact":        {f: func(f *Facts) { f.Contact.Name = "" }, want: "REFERENCE_INVALID at /facts/contact"},
@@ -439,11 +453,11 @@ func TestSignedCopies(t *testing.T) {
 		have []Signature
 		want string
 	}{
-		"another countersigned copy": {&sc.Binding, r1, other, []Signature{signed, back}, "INVALID_STATE at /args/kind"},
+		"another countersigned copy": {&sc.Binding, r1, other, []Signature{signed, back}, "INVALID_STATE at /args/signature_kind"},
 		"the unsigned draft":         {&sc.Binding, r1, draft, nil, "INVALID_KNOWN_VALUE at /args/file_id"},
 		"a stale document":           {&sc.Binding, r2, signed, nil, "ORDER_DOCUMENT_STALE at /document_binding"},
 		"no document":                {nil, r1, signed, nil, "DOCUMENT_BINDING_MISSING at /document_binding"},
-		"an unknown kind":            {&sc.Binding, r1, odd, nil, "SCHEMA_INVALID at /args/kind"},
+		"an unknown kind":            {&sc.Binding, r1, odd, nil, "SCHEMA_INVALID at /args/signature_kind"},
 		"an AI recorder":             {&sc.Binding, r1, ai, nil, "PERMISSION_DENIED at /"},
 	} {
 		if _, err := Sign(c.b, c.r, c.s, c.have); code(err) != c.want {
@@ -492,5 +506,5 @@ func golden(t *testing.T, name string, got []byte) {
 var goldenSHA256 = map[string]string{
 	"sc-brc001-r1.txt": "b98045cc9123b753e9eb628923366165279cb4688753585f780a13547a0918f6",
 	"pi-brc001-r2.txt": "1b32e307df5b323e5a571c95a8d1d003478b81447c7f209731716e7d6010e79c",
-	"sc-variant.txt":   "5de2c27300e82994828339cca697434a2ebe181c430765a40d4f5c212462406e",
+	"sc-variant.txt":   "5cc7fc2844f78a26be7c5cce1a7e7a583e2cf213fd20ae5b575dca9e1f65dd83",
 }

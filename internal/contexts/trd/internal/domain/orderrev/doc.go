@@ -21,6 +21,8 @@
 //	                     acceptance_id}                   the contract's origin, never changed
 //	parties             {issuer, customer}                the source quote's party snapshots
 //	customer_ref, contact_ref, currency_ref               never changed by an amendment
+//	legal_terms_ref?, legal_terms?                        the source quote's sealed legal terms (WBS
+//	                                                      S3-17), when it sealed any; never changed
 //	terms               {trade_terms_ref, named_place_ref, payment_terms_ref, delivery}
 //	lines               [{line_id, rfq_line_id?, sku_ref, quantity, unit_ref, conversion_ref?,
 //	                      normalized_quantity, cost_unit, unit_price, price_basis_quantity,
@@ -62,7 +64,7 @@
 //   - Terms: the trade terms, the named place, the payment terms (the plan follows the new terms'
 //     stages) and the delivery change.
 //   - Never: the order, its scope, its source quote revision and acceptance, the issuer, the
-//     customer, the contact and the currency. A proposal has no member for them; another customer
+//     customer, the contact, the currency and the legal terms. A proposal has no member for them; another customer
 //     or currency is another contract.
 //
 // # Ending an active order (TRD-INV-019)

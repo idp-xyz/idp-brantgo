@@ -55,7 +55,9 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   active orders: amendments (prepare, submit, independent decision, apply) that move the
                                   order to its next hashed order revision, so OrderGuard v1 refuses the old binding;
                                   cancellation, short closing and closing (FUL and PUR facts not wired); the S/C and PI
-                                  renderer order-text/0.1.0 (golden vectors; generate and record_signed not wired yet)
+                                  of an order revision (order-text/0.1.0 with the source quote's legal terms, POL
+                                  template and number, bytes and commit evidence in one transaction, stale once the
+                                  order is amended) and their signed and countersigned copies (EVD files)
 internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding active order lines to chosen supply condition
                                   lines (immutable, hashed, not committed; server calculation of MOQ, multiples, tiers, tax
                                   and delivery; costing comparison), the demand allocation ledger per order line (several

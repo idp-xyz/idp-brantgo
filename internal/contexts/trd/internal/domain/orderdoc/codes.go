@@ -10,16 +10,18 @@ const (
 	CodeDocumentIntegrityFailure = "DOCUMENT_INTEGRITY_FAILURE" // the stored bytes are not the bound document
 	CodeDependencyNotSupported   = "DEPENDENCY_NOT_SUPPORTED"   // a template the renderer has no layout for, or a section whose facts are not delivered
 	CodeCalculationLimitExceeded = "CALCULATION_LIMIT_EXCEEDED" // a document beyond its size budget
+	CodeBusinessKeyConflict      = "BUSINESS_KEY_CONFLICT"      // 409: the order revision has a document of that kind
 )
 
-// Categories maps the codes above to their error catalog category: ORDER_DOCUMENT_STALE is 409,
-// the rest 422.
+// Categories maps the codes above to their error catalog category: ORDER_DOCUMENT_STALE and
+// BUSINESS_KEY_CONFLICT are 409, the rest 422.
 var Categories = map[string]kernel.Category{
 	CodeOrderDocumentStale:       kernel.CategoryConflict,
 	CodeDocumentBindingMissing:   kernel.CategoryInvalid,
 	CodeDocumentIntegrityFailure: kernel.CategoryInvalid,
 	CodeDependencyNotSupported:   kernel.CategoryInvalid,
 	CodeCalculationLimitExceeded: kernel.CategoryInvalid,
+	CodeBusinessKeyConflict:      kernel.CategoryConflict,
 }
 
 func fail(code, path, reason string) error {

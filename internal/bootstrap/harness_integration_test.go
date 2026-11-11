@@ -51,7 +51,7 @@ var allPermissions = []string{
 	"quote.response.record", "quote.response.verify", "acceptance.invalidate", "acceptance.mark_disputed",
 	"order.prepare", "order.review.request", "order.review.decide", "order.activate", "order.approval.revoke", "order.cancel",
 	"order.close_unfulfilled", "order.amendment.prepare", "order.amendment.submit", "order.amendment.decide", "order.amendment.apply",
-	"order.amendment.withdraw", "order.close_remainder", "order.close",
+	"order.amendment.withdraw", "order.close_remainder", "order.close", "order.document.generate", "order.document.record_signed",
 	"purchase.draft.prepare", "purchase.draft.void", "purchase.overbuy.approve", "pur.read", "pur.audit",
 }
 
