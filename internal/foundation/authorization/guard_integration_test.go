@@ -412,6 +412,64 @@ func TestAccessNeedsAnActiveGrantButNoPermission(t *testing.T) {
 	}
 }
 
+// Qualify reads another actor's grant as it is now, in the caller's transaction (T03 A33: the
+// reviewer an approval relies on): kind, activity, permissions and data scope; a missing grant is an
+// inactive holding; another scope's grant is never read.
+func TestQualifyReadsAnotherActorsCurrentGrant(t *testing.T) {
+	f := newFixture(t)
+	qualify := func(scope kernel.Scope, actor string) authorization.Holding {
+		var h authorization.Holding
+		err := f.inScope(scope, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			h, err = f.auth.Qualify(ctx, exec, actor)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	h := qualify(f.scope, alice.ID)
+	if h.Actor != alice || !h.Active || !h.Holds("quote.activate") || h.Holds("quote.cancel") || h.DataScope != authorization.DataScopeOwn ||
+		!h.Sees("alice", "") || h.Sees("bob", "") {
+		t.Fatalf("alice %+v", h)
+	}
+	if h := qualify(f.scope, agent.ID); h.Actor != agent || !h.Holds("quote.write") {
+		t.Fatalf("agent %+v", h)
+	}
+	if h := qualify(f.scope, bob.ID); h.Active || h.Holds("quote.write") || h.Sees("bob", "") {
+		t.Fatalf("no grant %+v", h)
+	}
+	other := kernel.Scope{Tenant: f.scope.Tenant, Company: kernel.CompanyID(pgtest.UniqueID(t, "company."))}
+	if h := qualify(other, alice.ID); h.Active {
+		t.Fatalf("another company %+v", h)
+	}
+	err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+		g := authorization.Grants{}
+		if _, err := g.SetDataScope(ctx, exec, f.scope, alice.ID, authorization.DataScopeTeam, "team.east", time.Now()); err != nil {
+			return err
+		}
+		_, err := g.Put(ctx, exec, f.scope, alice, []string{"quote.write"}, time.Now())
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := qualify(f.scope, alice.ID); h.Holds("quote.activate") || !h.Sees("carol", "team.east") || h.Sees("carol", "team.west") {
+		t.Fatalf("after the change %+v", h)
+	}
+	err = f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+		_, err := authorization.Grants{}.Revoke(ctx, exec, f.scope, alice.ID, time.Now())
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := qualify(f.scope, alice.ID); h.Active || h.Holds("quote.write") || h.Sees("alice", "") {
+		t.Fatalf("revoked %+v", h)
+	}
+}
+
 // BC-D02: roles derive permissions; tenant roles merge templates; forbidden combinations are
 // refused at definition and at assignment; assignments keep their history.
 func TestRolesDerivePermissionsAndKeepSeparationOfDuties(t *testing.T) {

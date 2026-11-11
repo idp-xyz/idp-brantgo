@@ -17,10 +17,23 @@ const (
 	CodeQuoteExpired          = "QUOTE_EXPIRED"              // as_of ≥ expires_at
 	CodeQuoteValidityInvalid  = "QUOTE_VALIDITY_INVALID"     // the validity exceeds the pricing policy's
 	CodeCostSnapshotMissing   = "COST_SNAPSHOT_MISSING"      // no cost snapshot bound
-	CodeBusinessHashMismatch  = "BUSINESS_HASH_MISMATCH"     // a stored commercial document does not hash to its business hash
+	CodeBusinessHashMismatch  = "BUSINESS_HASH_MISMATCH"     // a stored commercial document does not hash to its business hash, or a stated hash is not the revision's
 	CodeCustomerReferenceMiss = "CUSTOMER_REFERENCE_MISSING" // no customer bound
 	CodeContactReferenceMiss  = "CONTACT_REFERENCE_MISSING"  // no contact bound
 	CodeReferenceStale        = "REFERENCE_STALE"            // 409: a referenced version or state no longer applies
+
+	// Review and approval (WBS S3-03, S3-14; review.go).
+	CodeBusinessKeyConflict          = "BUSINESS_KEY_CONFLICT"           // 409: the review request or approval ID is taken in the quote
+	CodeQuoteActive                  = "QUOTE_ACTIVE"                    // 409: the root has an active revision (target quote.activate)
+	CodeQuoteNotCurrent              = "QUOTE_NOT_CURRENT"               // 409: the active revision is not the one a replacement names
+	CodeNoActiveRevision             = "NO_ACTIVE_REVISION"              // the root has no active revision to replace
+	CodeApprovalRequired             = "APPROVAL_REQUIRED"               // no approval of the revision
+	CodeApprovalRevoked              = "APPROVAL_REVOKED"                // the approval was revoked
+	CodeApprovalExpired              = "APPROVAL_EXPIRED"                // the approval lapsed, or would outlive the quote
+	CodeApprovalStale                = "APPROVAL_STALE"                  // 409: the approval's rules or its reviewer's qualification changed
+	CodeApprovalReferenceMismatch    = "APPROVAL_REFERENCE_MISMATCH"     // the approval or exception names another revision, target or margin fact
+	CodeIndependentReviewRequired    = "INDEPENDENT_REVIEW_REQUIRED"     // the reviewer contributed to, froze or submitted the revision
+	CodeMarginExceptionNotAuthorized = "MARGIN_EXCEPTION_NOT_AUTHORIZED" // 403: no capability, or not independent of the revision's authors
 )
 
 var codes = map[string]kernel.Category{
@@ -33,6 +46,18 @@ var codes = map[string]kernel.Category{
 	CodeCustomerReferenceMiss: kernel.CategoryInvalid,
 	CodeContactReferenceMiss:  kernel.CategoryInvalid,
 	CodeReferenceStale:        kernel.CategoryConflict,
+
+	CodeBusinessKeyConflict:          kernel.CategoryConflict,
+	CodeQuoteActive:                  kernel.CategoryConflict,
+	CodeQuoteNotCurrent:              kernel.CategoryConflict,
+	CodeNoActiveRevision:             kernel.CategoryInvalid,
+	CodeApprovalRequired:             kernel.CategoryInvalid,
+	CodeApprovalRevoked:              kernel.CategoryInvalid,
+	CodeApprovalExpired:              kernel.CategoryInvalid,
+	CodeApprovalStale:                kernel.CategoryConflict,
+	CodeApprovalReferenceMismatch:    kernel.CategoryInvalid,
+	CodeIndependentReviewRequired:    kernel.CategoryInvalid,
+	CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 }
 
 // Category returns the category of a code TRD declares: QuoteRoot's, the calculation's or the

@@ -28,6 +28,14 @@ func optAPIRef(r *quote.Ref) *api.ConfigRef {
 	return &a
 }
 
+func business(r api.BusinessRef) quote.BusinessRef {
+	return quote.BusinessRef{Kind: r.Kind, ID: r.ID, Revision: r.Revision}
+}
+
+func apiBusiness(r quote.BusinessRef) api.BusinessRef {
+	return api.BusinessRef{Kind: r.Kind, ID: r.ID, Revision: r.Revision}
+}
+
 func evidence(es []api.Evidence) []quote.Evidence {
 	if es == nil {
 		return nil
@@ -74,10 +82,23 @@ func quoteData(a api.QuoteData) quote.Data {
 	if r := a.CostSnapshotRef; r != nil {
 		d.Snapshot = &quote.SnapshotRef{SnapshotID: r.SnapshotID, ResultHash: r.ResultHash}
 	}
+	if r := a.NamedPlaceRef; r != nil {
+		p := business(*r)
+		d.NamedPlace = &p
+	}
+	if v := a.Delivery; v != nil {
+		dv := quote.Delivery{Kind: v.Kind, Date: v.Date, Days: v.Days, DayBasis: v.DayBasis, Calendar: optRef(v.CalendarRef),
+			Milestone: v.Milestone, Place: business(v.PlaceRef), TimeZone: v.TimeZone}
+		if v.AnchorRef != nil {
+			anchor := business(*v.AnchorRef)
+			dv.Anchor = &anchor
+		}
+		d.Delivery = &dv
+	}
 	for _, l := range a.Lines {
 		d.Lines = append(d.Lines, quote.Line{LineID: l.LineID, RfqLineID: l.RfqLineID, Sku: quote.SkuRef{SkuID: l.Sku.SkuID,
 			SpecRevision: l.Sku.SpecRevision}, Quantity: l.Quantity, Unit: ref(l.UnitRef), Conversion: optRef(l.ConversionRef),
-			UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
+			BaseQuantity: l.BaseQuantity, UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
 			TaxApplication: ref(l.TaxApplicationRef), Evidence: evidence(l.Evidence)})
 	}
 	for _, c := range a.Charges {
@@ -123,10 +144,23 @@ func apiData(d quote.Data) api.QuoteData {
 	if r := d.Snapshot; r != nil {
 		a.CostSnapshotRef = &api.CostSnapshotRef{SnapshotID: r.SnapshotID, ResultHash: r.ResultHash}
 	}
+	if r := d.NamedPlace; r != nil {
+		p := apiBusiness(*r)
+		a.NamedPlaceRef = &p
+	}
+	if v := d.Delivery; v != nil {
+		dv := api.Delivery{Kind: v.Kind, Date: v.Date, Days: v.Days, DayBasis: v.DayBasis, CalendarRef: optAPIRef(v.Calendar),
+			Milestone: v.Milestone, PlaceRef: apiBusiness(v.Place), TimeZone: v.TimeZone}
+		if v.Anchor != nil {
+			anchor := apiBusiness(*v.Anchor)
+			dv.AnchorRef = &anchor
+		}
+		a.Delivery = &dv
+	}
 	for _, l := range d.Lines {
 		a.Lines = append(a.Lines, api.Line{LineID: l.LineID, RfqLineID: l.RfqLineID, Sku: api.SkuRef{SkuID: l.Sku.SkuID,
 			SpecRevision: l.Sku.SpecRevision}, Quantity: l.Quantity, UnitRef: apiRef(l.Unit), ConversionRef: optAPIRef(l.Conversion),
-			UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
+			BaseQuantity: l.BaseQuantity, UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
 			TaxApplicationRef: apiRef(l.TaxApplication), Evidence: apiEvidence(l.Evidence)})
 	}
 	for _, c := range d.Charges {
@@ -157,16 +191,58 @@ func quoteView(q *quote.Quote) (api.QuoteView, error) {
 		rv := api.RevisionView{Revision: r.Number, Status: string(r.Status), BaseRevision: r.Base, ContentHash: r.Hash, Data: apiData(r.Data),
 			Contributors: r.Contributors, SavedBy: r.SavedBy, SavedAt: r.SavedAt, AuthorityEpoch: r.SavedEpoch}
 		if s := r.Seal; s != nil {
-			if _, err := quote.ParseCommercial(s.Commercial, s.BusinessHash); err != nil {
+			doc, err := quote.ParseCommercial(s.Commercial, s.BusinessHash)
+			if err != nil {
 				return api.QuoteView{}, err
 			}
 			rv.BusinessHash, rv.IssuedAt, rv.ExpiresAt, rv.Commercial = s.BusinessHash, s.IssuedAt, s.ExpiresAt, string(s.Commercial)
 			rv.FrozenBy, rv.FreezeEpoch, rv.FrozenAt = s.By, s.Epoch, s.At
+			rv.Calculation = calculationView(doc.Calculation)
 		}
 		if e := r.End; e != nil {
 			rv.DiscardedBy, rv.DiscardedAt, rv.DiscardReason, rv.DiscardProofs = e.By, e.At, e.Reason, apiEvidence(e.Evidence)
 		}
 		v.Revisions = append(v.Revisions, rv)
 	}
+	for _, r := range q.Reviews {
+		rv := api.ReviewView{ReviewRequestID: r.ID, BusinessRevision: r.Revision, BusinessHash: r.BusinessHash, TargetCommand: r.Target,
+			ExpectedActiveRevision: r.ExpectedActive, MarginExceptionRequired: r.MarginExceptionRequired, Status: string(r.Status),
+			RequestedBy: r.Requested.By, RequestedAt: r.Requested.At}
+		if d := r.Decided; d != nil {
+			rv.DecidedBy, rv.DecidedAt, rv.Reason, rv.Evidence = d.By, d.At, d.Reason, apiEvidence(d.Evidence)
+		}
+		v.Reviews = append(v.Reviews, rv)
+	}
+	for _, a := range q.Approvals {
+		av := api.ApprovalView{ApprovalID: a.ID, ReviewRequestID: a.ReviewID, BusinessRevision: a.Revision, BusinessHash: a.BusinessHash,
+			TargetCommand: a.Target, ExpectedActiveRevision: a.ExpectedActive, NormalizationVersion: a.Rules.NormalizationVersion,
+			CalculationVersion: a.Rules.CalculationVersion, PricingPolicyRef: apiRef(a.Rules.PricingPolicy), Reviewer: a.Approved.By,
+			DecidedAt: a.Approved.At, ExpiresAt: a.ExpiresAt, Reason: a.Approved.Reason, Evidence: apiEvidence(a.Approved.Evidence),
+			Effectivity: string(a.Effectivity), EffectivityVersion: a.EffectivityVersion}
+		if r := a.Revocation; r != nil {
+			av.RevokedBy, av.RevokedAt, av.RevokeReason, av.RevokeEvidence = r.By, r.At, r.Reason, apiEvidence(r.Evidence)
+		}
+		if e := a.Exception; e != nil {
+			av.MarginException = &api.MarginExceptionView{ApprovedBy: e.Approved.By, ApprovedAt: e.Approved.At, BusinessHash: e.BusinessHash,
+				PricingPolicyRef: apiRef(e.Rules.PricingPolicy), CalculationVersion: e.Rules.CalculationVersion, MinimumMargin: e.MinimumMargin,
+				Shortfall: e.Shortfall, Currency: e.Currency, Reason: e.Approved.Reason, Evidence: apiEvidence(e.Approved.Evidence)}
+		}
+		v.Approvals = append(v.Approvals, av)
+	}
 	return v, nil
+}
+
+// calculationView is the summary of a sealed calculation, nil for none.
+func calculationView(c *quote.Calculation) *api.CalculationView {
+	if c == nil {
+		return nil
+	}
+	v := &api.CalculationView{NetMinor: c.NetMinor, TaxMinor: c.TaxMinor, PayableMinor: c.PayableMinor,
+		ComparisonCurrencyRef: apiRef(c.ComparisonCurrency), SalesFXRef: optAPIRef(c.SalesFX), ComparisonRevenueMinor: c.ComparisonRevenueMinor,
+		CostMinor: c.CostMinor, ProfitMinor: c.ProfitMinor, MinimumMargin: c.MinimumMargin, MarginRule: c.MarginRule,
+		MarginShortfall: c.MarginShortfall, PricingPolicyRef: apiRef(c.CostScope.PricingPolicy), CalculationVersion: c.CalculationVersion}
+	for _, p := range c.Payments {
+		v.Payments = append(v.Payments, api.PaymentView{StageID: p.StageID, Percent: p.Percent, AmountMinor: p.AmountMinor})
+	}
+	return v
 }

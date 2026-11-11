@@ -39,10 +39,11 @@ import (
 
 // Read commands and permissions.
 const (
-	CommandGetQuote = "quote.get"
-	CommandAudit    = "trd.audit"
-	PermissionRead  = "trd.read"
-	PermissionAudit = "trd.audit"
+	CommandGetQuote      = "quote.get"
+	CommandCheckApproval = "quote.approval.check"
+	CommandAudit         = "trd.audit"
+	PermissionRead       = "trd.read"
+	PermissionAudit      = "trd.audit"
 )
 
 var (
@@ -52,7 +53,8 @@ var (
 )
 
 // Rules is TRD's authorization policy for QuoteRoot. The tactical model's humanOnlyCommands name
-// quote.freeze, object_control.stop and object_control.release; the command catalog gives
+// quote.freeze, quote.submit_review, quote.review.decide, quote.approval.revoke,
+// object_control.stop and object_control.release; the command catalog gives
 // object_control.bind to the system (TSK claims a root for a task) and the role templates give it to
 // the sales clerk, so a human or the system binds, never an AI agent (it would fence humans out). An
 // AI agent prepares, revises and discards drafts and edits the internal metadata through the same
@@ -67,7 +69,11 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandBindControl, Permission: api.CommandBindControl, ActorKinds: humanOrSystem},
 		authorization.HumanOnly(api.CommandStopControl, api.CommandStopControl),
 		authorization.HumanOnly(api.CommandReleaseControl, api.CommandReleaseControl),
+		authorization.HumanOnly(api.CommandSubmitReview, api.CommandSubmitReview),
+		authorization.HumanOnly(api.CommandDecideReview, api.CommandDecideReview),
+		authorization.HumanOnly(api.CommandRevokeApproval, api.CommandRevokeApproval),
 		{Command: CommandGetQuote, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandCheckApproval, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 }
@@ -81,6 +87,7 @@ type Upstream struct {
 	Configs   polapi.Queries         // ConfigRef v1 (R15)
 	Rfqs      inqapi.RfqLookups      // RfqRef v1 (R12)
 	Snapshots cstapi.SnapshotLookups // CostSnapshotRef v1 (R11)
+	Contexts  cstapi.Lookups         // the costing context a snapshot froze (R11)
 }
 
 // Service runs TRD's use cases.
@@ -88,8 +95,8 @@ type Service struct {
 	Ledger   *action.Ledger
 	Clock    application.Clock
 	Upstream Upstream
-	// Calculator is the server calculation of WBS S3-02. While it is nil a freeze seals the
-	// commercial document with calculation null (freeze.go).
+	// Calculator is the server calculation of WBS S3-02 (ServerCalculator); without one TRD
+	// freezes nothing.
 	Calculator Calculator
 }
 
@@ -122,8 +129,8 @@ func (s Service) run(ctx context.Context, cmd action.Command, req api.Command, v
 }
 
 // request returns the name, the idempotency key and the business arguments of cmd, which its
-// request hash covers: everything but the key and the expected root version or control epoch, so
-// a replay with another CAS value still matches. Execution and reconciliation hash through it.
+// request hash covers: everything but the key and the expected root version, control epoch or
+// effectivity version, so a replay with another CAS value still matches. Execution and reconciliation hash through it.
 func request(cmd api.Command) (name, key string, args any) {
 	switch c := cmd.(type) {
 	case api.SaveDraft:
@@ -150,11 +157,21 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.ReleaseControl:
 		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
 		return api.CommandReleaseControl, key, c
+	case api.SubmitReview:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandSubmitReview, key, c
+	case api.DecideReview:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandDecideReview, key, c
+	case api.RevokeApproval:
+		key, c.IdempotencyKey, c.ExpectedEffectivityVersion = c.IdempotencyKey, "", 0
+		return api.CommandRevokeApproval, key, c
 	}
 	return "", "", nil
 }
 
-var quoteWrites = []string{api.CommandSaveDraft, api.CommandRevise, api.CommandDiscardDraft, api.CommandFreeze, api.CommandUpdateMetadata}
+var quoteWrites = []string{api.CommandSaveDraft, api.CommandRevise, api.CommandDiscardDraft, api.CommandFreeze, api.CommandUpdateMetadata,
+	api.CommandSubmitReview, api.CommandDecideReview, api.CommandRevokeApproval}
 
 // Visible reports whether d's actor sees the quote root a stored result names. On the write path
 // (a replay) of a quote write it also passes the root's object control as it is now (Python

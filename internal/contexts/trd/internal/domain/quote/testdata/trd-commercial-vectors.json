@@ -1,226 +1,5 @@
 [
   {
-    "name": "fixture without server calculation",
-    "document": {
-      "quote_id": "quote.1",
-      "business_revision": 1,
-      "issued_at": "2026-10-22T09:00:00.000000Z",
-      "data": {
-        "issuer_ref": {
-          "kind": "company_profile",
-          "id": "company.live",
-          "revision": 1
-        },
-        "customer_ref": {
-          "party_id": "customer.1",
-          "revision": 2
-        },
-        "contact_ref": {
-          "contact_id": "contact.1",
-          "row_version": 2
-        },
-        "trading_profile_ref": {
-          "party_id": "customer.1",
-          "revision": 1
-        },
-        "customer_address_refs": [
-          {
-            "party_id": "customer.1",
-            "party_revision": 2,
-            "address_id": "hq"
-          }
-        ],
-        "rfq_ref": {
-          "rfq_id": "rfq.1",
-          "row_version": 2
-        },
-        "cost_snapshot_ref": {
-          "snapshot_id": "snapshot.1",
-          "result_hash": "2a809a7b878bb2bedba3eed7534ecd55d43952b41bad144babe3c2d289cc677f"
-        },
-        "lines": [
-          {
-            "line_id": "L1",
-            "rfq_line_id": "L1",
-            "sku_ref": {
-              "sku_id": "sku.1",
-              "spec_revision": 1
-            },
-            "quantity": "120",
-            "unit_ref": {
-              "kind": "unit",
-              "id": "PCS",
-              "revision": 1
-            },
-            "unit_price": "8",
-            "price_basis_quantity": "1",
-            "discount_ratio": "0",
-            "tax_application_ref": {
-              "kind": "tax_application",
-              "id": "tax.sale",
-              "revision": 1
-            },
-            "evidence": [
-              {
-                "source_id": "source.1",
-                "locator": "合成核实依据"
-              }
-            ]
-          }
-        ],
-        "charges": [],
-        "currency_ref": {
-          "kind": "currency",
-          "id": "USD",
-          "revision": 1
-        },
-        "pricing_policy_ref": {
-          "kind": "pricing_policy",
-          "id": "policy.1",
-          "revision": 1
-        },
-        "trade_terms_ref": {
-          "kind": "trade_terms",
-          "id": "terms.test",
-          "revision": 1
-        },
-        "payment_terms_ref": {
-          "kind": "payment_terms",
-          "id": "payment.test",
-          "revision": 1
-        },
-        "document_template_ref": {
-          "kind": "quote_document_template",
-          "id": "quote.template",
-          "revision": 1
-        },
-        "sequence_ref": {
-          "kind": "number_sequence",
-          "id": "quote.sequence",
-          "revision": 1
-        },
-        "expires_at": "2026-10-28T08:00:00.000000Z",
-        "customer_notes": "客户可见说明：合成样例\nKeep this line break.",
-        "evidence": [
-          {
-            "source_id": "source.1",
-            "locator": "合成核实依据"
-          }
-        ]
-      },
-      "calculation": null,
-      "party_snapshots": {
-        "issuer": {
-          "company_id": "company.live",
-          "legal_name": "SYNTHETIC Exporter — no actual trade",
-          "registration_no": "SYNTHETIC-NOT-REAL",
-          "country": "CN",
-          "address": "Synthetic Shanghai address"
-        },
-        "customer": {
-          "party_id": "customer.1",
-          "party_revision": 2,
-          "addresses": [
-            {
-              "address_id": "hq",
-              "role": "buyer",
-              "address": "Synthetic buyer address\n上海"
-            }
-          ]
-        }
-      },
-      "dependency_manifest": [
-        {
-          "kind": "company_profile",
-          "id": "company.live",
-          "version": 1,
-          "content_hash": "f168ccdd91548c5a8c871bd4b9b757c5e889a1672e774bddef4a2714759a7a8f"
-        },
-        {
-          "kind": "cost_snapshot",
-          "id": "snapshot.1",
-          "version": 1,
-          "content_hash": "3668d7dc21b908c3ef5b25ffab99b94193b51c785d0f66a41950fed5107d221b"
-        },
-        {
-          "kind": "currency",
-          "id": "USD",
-          "version": 1,
-          "content_hash": "d60fbd8718eceb7f7751c68b695e33ef974d0ecca2b1bf20c928e6d1b995f00e"
-        },
-        {
-          "kind": "number_sequence",
-          "id": "quote.sequence",
-          "version": 1,
-          "content_hash": "bf37c7c208717d6de100ce851b48273f8d5d945c8dc64fc64372087ffcf88ba9"
-        },
-        {
-          "kind": "payment_terms",
-          "id": "payment.test",
-          "version": 1,
-          "content_hash": "040ffd5925d40e11c67b7238a7fc9957850b8b9a46e9729fab88c24d6a98aff2"
-        },
-        {
-          "kind": "pricing_policy",
-          "id": "policy.1",
-          "version": 1,
-          "content_hash": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812"
-        },
-        {
-          "kind": "quote_document_template",
-          "id": "quote.template",
-          "version": 1,
-          "content_hash": "5cde0f1298f41f7d1c8b907a36992a7a513225a2615bd6e307bf1a9149b06b40"
-        },
-        {
-          "kind": "rfq",
-          "id": "rfq.1",
-          "version": 2,
-          "content_hash": "3ee92f1118c480ab32896c9bbb35186fa05687b9e44c43f0e1544527267c868f"
-        },
-        {
-          "kind": "source",
-          "id": "source.1",
-          "version": 1,
-          "content_hash": "0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61"
-        },
-        {
-          "kind": "tax_application",
-          "id": "tax.sale",
-          "version": 1,
-          "content_hash": "1f7101fe71011ba0872a2e069e8f26c98d6af9ebf8e67bb0c1a559fa9569aa6b"
-        },
-        {
-          "kind": "tax_profile",
-          "id": "tax.zero",
-          "version": 1,
-          "content_hash": "f9194e73f9e9459e3450ea10a179cdf77aafa695beecd3b9344a98d111622243"
-        },
-        {
-          "kind": "trade_terms",
-          "id": "terms.test",
-          "version": 1,
-          "content_hash": "276446ba01e3aa387c83b06f54fccc5ac65bdc6099157a2a828716eac9c6fd4d"
-        },
-        {
-          "kind": "trading_profile",
-          "id": "customer.1",
-          "version": 1,
-          "content_hash": "9572be119f04ad3072f7a8f98a14a6946efeec50764cb45d43bce99deafe8090"
-        },
-        {
-          "kind": "unit",
-          "id": "PCS",
-          "version": 1,
-          "content_hash": "d7d4f59db48fb4b8d9fe1fe1b7ec5bff489fc305e0ce38500bbb4acc2166e4ca"
-        }
-      ],
-      "normalization_version": "brant.quote-normalization/0.1.0"
-    },
-    "normalized_canonical": "{\"business_revision\":1,\"calculation\":null,\"data\":{\"charges\":[],\"contact_ref\":{\"contact_id\":\"contact.1\",\"row_version\":2},\"cost_snapshot_ref\":{\"result_hash\":\"2a809a7b878bb2bedba3eed7534ecd55d43952b41bad144babe3c2d289cc677f\",\"snapshot_id\":\"snapshot.1\"},\"currency_ref\":{\"id\":\"USD\",\"kind\":\"currency\",\"revision\":1},\"customer_address_refs\":[{\"address_id\":\"hq\",\"party_id\":\"customer.1\",\"party_revision\":2}],\"customer_notes\":\"客户可见说明：合成样例\\nKeep this line break.\",\"customer_ref\":{\"party_id\":\"customer.1\",\"revision\":2},\"document_template_ref\":{\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"revision\":1},\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"expires_at\":\"2026-10-28T08:00:00.000000Z\",\"issuer_ref\":{\"id\":\"company.live\",\"kind\":\"company_profile\",\"revision\":1},\"lines\":[{\"discount_ratio\":\"0\",\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"line_id\":\"L1\",\"price_basis_quantity\":\"1\",\"quantity\":\"120\",\"rfq_line_id\":\"L1\",\"sku_ref\":{\"sku_id\":\"sku.1\",\"spec_revision\":1},\"tax_application_ref\":{\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"revision\":1},\"unit_price\":\"8\",\"unit_ref\":{\"id\":\"PCS\",\"kind\":\"unit\",\"revision\":1}}],\"payment_terms_ref\":{\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"revision\":1},\"pricing_policy_ref\":{\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"revision\":1},\"rfq_ref\":{\"rfq_id\":\"rfq.1\",\"row_version\":2},\"sequence_ref\":{\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"revision\":1},\"trade_terms_ref\":{\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"revision\":1},\"trading_profile_ref\":{\"party_id\":\"customer.1\",\"revision\":1}},\"dependency_manifest\":[{\"content_hash\":\"f168ccdd91548c5a8c871bd4b9b757c5e889a1672e774bddef4a2714759a7a8f\",\"id\":\"company.live\",\"kind\":\"company_profile\",\"version\":1},{\"content_hash\":\"3668d7dc21b908c3ef5b25ffab99b94193b51c785d0f66a41950fed5107d221b\",\"id\":\"snapshot.1\",\"kind\":\"cost_snapshot\",\"version\":1},{\"content_hash\":\"d60fbd8718eceb7f7751c68b695e33ef974d0ecca2b1bf20c928e6d1b995f00e\",\"id\":\"USD\",\"kind\":\"currency\",\"version\":1},{\"content_hash\":\"bf37c7c208717d6de100ce851b48273f8d5d945c8dc64fc64372087ffcf88ba9\",\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"version\":1},{\"content_hash\":\"040ffd5925d40e11c67b7238a7fc9957850b8b9a46e9729fab88c24d6a98aff2\",\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"version\":1},{\"content_hash\":\"823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812\",\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"version\":1},{\"content_hash\":\"5cde0f1298f41f7d1c8b907a36992a7a513225a2615bd6e307bf1a9149b06b40\",\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"version\":1},{\"content_hash\":\"3ee92f1118c480ab32896c9bbb35186fa05687b9e44c43f0e1544527267c868f\",\"id\":\"rfq.1\",\"kind\":\"rfq\",\"version\":2},{\"content_hash\":\"0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61\",\"id\":\"source.1\",\"kind\":\"source\",\"version\":1},{\"content_hash\":\"1f7101fe71011ba0872a2e069e8f26c98d6af9ebf8e67bb0c1a559fa9569aa6b\",\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"version\":1},{\"content_hash\":\"f9194e73f9e9459e3450ea10a179cdf77aafa695beecd3b9344a98d111622243\",\"id\":\"tax.zero\",\"kind\":\"tax_profile\",\"version\":1},{\"content_hash\":\"276446ba01e3aa387c83b06f54fccc5ac65bdc6099157a2a828716eac9c6fd4d\",\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"version\":1},{\"content_hash\":\"9572be119f04ad3072f7a8f98a14a6946efeec50764cb45d43bce99deafe8090\",\"id\":\"customer.1\",\"kind\":\"trading_profile\",\"version\":1},{\"content_hash\":\"d7d4f59db48fb4b8d9fe1fe1b7ec5bff489fc305e0ce38500bbb4acc2166e4ca\",\"id\":\"PCS\",\"kind\":\"unit\",\"version\":1}],\"issued_at\":\"2026-10-22T09:00:00.000000Z\",\"normalization_version\":\"brant.quote-normalization/0.1.0\",\"party_snapshots\":{\"customer\":{\"addresses\":[{\"address\":\"Synthetic buyer address\\n上海\",\"address_id\":\"hq\",\"role\":\"buyer\"}],\"party_id\":\"customer.1\",\"party_revision\":2},\"issuer\":{\"address\":\"Synthetic Shanghai address\",\"company_id\":\"company.live\",\"country\":\"CN\",\"legal_name\":\"SYNTHETIC Exporter — no actual trade\",\"registration_no\":\"SYNTHETIC-NOT-REAL\"}},\"quote_id\":\"quote.1\"}",
-    "sha256": "a9b202eb7c1f4e0e68922ef48f8f870dbfabea523724f7790c79541f62a6e1d5"
-  },
-  {
     "name": "fixture with server calculation",
     "document": {
       "quote_id": "quote.1",
@@ -305,10 +84,26 @@
           "id": "terms.test",
           "revision": 1
         },
+        "named_place_ref": {
+          "kind": "location",
+          "id": "DEHAM",
+          "revision": 1
+        },
         "payment_terms_ref": {
           "kind": "payment_terms",
           "id": "payment.test",
           "revision": 1
+        },
+        "delivery": {
+          "kind": "fixed",
+          "date": "2027-01-31",
+          "milestone": "handover",
+          "place_ref": {
+            "kind": "location",
+            "id": "DEHAM",
+            "revision": 1
+          },
+          "time_zone": "Asia/Shanghai"
         },
         "document_template_ref": {
           "kind": "quote_document_template",
@@ -352,7 +147,9 @@
         "profit_minor": "30000",
         "margin_numerator": "30000",
         "margin_denominator": "96000",
+        "minimum_margin": "0.1",
         "margin_rule": "pass",
+        "margin_shortfall": "0",
         "cost_basis": "nominal_direct_cost",
         "excluded_cost_categories": [
           "expected_credit_loss",
@@ -365,10 +162,83 @@
             "percent": "100",
             "trigger": "before_shipment",
             "days": 0,
-            "day_basis": "calendar",
             "amount_minor": "96000"
           }
-        ]
+        ],
+        "cost_scope_binding": {
+          "contract": "brant.quote-cost-scope/0.1.0",
+          "rfq_ref": {
+            "rfq_id": "rfq.1",
+            "row_version": 2
+          },
+          "pricing_policy_ref": {
+            "kind": "pricing_policy",
+            "id": "policy.1",
+            "revision": 1
+          },
+          "calculation_currency": "USD",
+          "cost_basis": "nominal_direct_cost",
+          "trade_terms_ref": {
+            "kind": "trade_terms",
+            "id": "terms.test",
+            "revision": 1
+          },
+          "payment_terms_ref": {
+            "kind": "payment_terms",
+            "id": "payment.test",
+            "revision": 1
+          },
+          "named_place_ref": {
+            "kind": "location",
+            "id": "DEHAM",
+            "revision": 1
+          },
+          "delivery": {
+            "kind": "fixed",
+            "date": "2027-01-31",
+            "milestone": "handover",
+            "place_ref": {
+              "kind": "location",
+              "id": "DEHAM",
+              "revision": 1
+            },
+            "time_zone": "Asia/Shanghai"
+          },
+          "line_bindings": [
+            {
+              "line_id": "L1",
+              "rfq_line_id": "L1",
+              "sku_id": "sku.1",
+              "spec_revision": 1,
+              "quantity": "120",
+              "unit": "PCS",
+              "normalized_quantity": "120",
+              "cost_unit": "PCS"
+            }
+          ]
+        },
+        "sales_terms_binding": {
+          "contract": "brant.quote-sales-terms/0.1.0",
+          "tax_bindings": [
+            {
+              "role": "line:L1",
+              "tax_application_ref": {
+                "kind": "tax_application",
+                "id": "tax.sale",
+                "revision": 1
+              },
+              "tax_profile_ref": {
+                "kind": "tax_profile",
+                "id": "tax.zero",
+                "revision": 1
+              },
+              "price_basis": "exclusive",
+              "rate": "0"
+            }
+          ],
+          "charge_bindings": []
+        },
+        "calculation_version": "brant.quote-calculation/0.1.0"
       },
       "party_snapshots": {
         "issuer": {
@@ -478,7 +348,359 @@
       ],
       "normalization_version": "brant.quote-normalization/0.1.0"
     },
-    "normalized_canonical": "{\"business_revision\":1,\"calculation\":{\"charges\":[],\"comparison_currency_ref\":{\"id\":\"USD\",\"kind\":\"currency\",\"revision\":1},\"comparison_revenue_minor\":\"96000\",\"cost_basis\":\"nominal_direct_cost\",\"cost_minor\":\"66000\",\"excluded_cost_categories\":[\"expected_credit_loss\",\"imputed_financing_cost\",\"unrealized_fx_hedge\"],\"lines\":[{\"id\":\"L1\",\"net_minor\":\"96000\",\"payable_minor\":\"96000\",\"tax_minor\":\"0\"}],\"margin_denominator\":\"96000\",\"margin_numerator\":\"30000\",\"margin_rule\":\"pass\",\"net_minor\":\"96000\",\"payable_minor\":\"96000\",\"payments\":[{\"amount_minor\":\"96000\",\"day_basis\":\"calendar\",\"days\":0,\"percent\":\"100\",\"stage_id\":\"P1\",\"trigger\":\"before_shipment\"}],\"profit_minor\":\"30000\",\"tax_minor\":\"0\"},\"data\":{\"charges\":[],\"contact_ref\":{\"contact_id\":\"contact.1\",\"row_version\":2},\"cost_snapshot_ref\":{\"result_hash\":\"2a809a7b878bb2bedba3eed7534ecd55d43952b41bad144babe3c2d289cc677f\",\"snapshot_id\":\"snapshot.1\"},\"currency_ref\":{\"id\":\"USD\",\"kind\":\"currency\",\"revision\":1},\"customer_address_refs\":[{\"address_id\":\"hq\",\"party_id\":\"customer.1\",\"party_revision\":2}],\"customer_notes\":\"客户可见说明：合成样例\\nKeep this line break.\",\"customer_ref\":{\"party_id\":\"customer.1\",\"revision\":2},\"document_template_ref\":{\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"revision\":1},\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"expires_at\":\"2026-10-28T08:00:00.000000Z\",\"issuer_ref\":{\"id\":\"company.live\",\"kind\":\"company_profile\",\"revision\":1},\"lines\":[{\"discount_ratio\":\"0\",\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"line_id\":\"L1\",\"price_basis_quantity\":\"1\",\"quantity\":\"120\",\"rfq_line_id\":\"L1\",\"sku_ref\":{\"sku_id\":\"sku.1\",\"spec_revision\":1},\"tax_application_ref\":{\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"revision\":1},\"unit_price\":\"8\",\"unit_ref\":{\"id\":\"PCS\",\"kind\":\"unit\",\"revision\":1}}],\"payment_terms_ref\":{\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"revision\":1},\"pricing_policy_ref\":{\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"revision\":1},\"rfq_ref\":{\"rfq_id\":\"rfq.1\",\"row_version\":2},\"sequence_ref\":{\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"revision\":1},\"trade_terms_ref\":{\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"revision\":1},\"trading_profile_ref\":{\"party_id\":\"customer.1\",\"revision\":1}},\"dependency_manifest\":[{\"content_hash\":\"f168ccdd91548c5a8c871bd4b9b757c5e889a1672e774bddef4a2714759a7a8f\",\"id\":\"company.live\",\"kind\":\"company_profile\",\"version\":1},{\"content_hash\":\"3668d7dc21b908c3ef5b25ffab99b94193b51c785d0f66a41950fed5107d221b\",\"id\":\"snapshot.1\",\"kind\":\"cost_snapshot\",\"version\":1},{\"content_hash\":\"d60fbd8718eceb7f7751c68b695e33ef974d0ecca2b1bf20c928e6d1b995f00e\",\"id\":\"USD\",\"kind\":\"currency\",\"version\":1},{\"content_hash\":\"bf37c7c208717d6de100ce851b48273f8d5d945c8dc64fc64372087ffcf88ba9\",\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"version\":1},{\"content_hash\":\"040ffd5925d40e11c67b7238a7fc9957850b8b9a46e9729fab88c24d6a98aff2\",\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"version\":1},{\"content_hash\":\"823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812\",\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"version\":1},{\"content_hash\":\"5cde0f1298f41f7d1c8b907a36992a7a513225a2615bd6e307bf1a9149b06b40\",\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"version\":1},{\"content_hash\":\"3ee92f1118c480ab32896c9bbb35186fa05687b9e44c43f0e1544527267c868f\",\"id\":\"rfq.1\",\"kind\":\"rfq\",\"version\":2},{\"content_hash\":\"0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61\",\"id\":\"source.1\",\"kind\":\"source\",\"version\":1},{\"content_hash\":\"1f7101fe71011ba0872a2e069e8f26c98d6af9ebf8e67bb0c1a559fa9569aa6b\",\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"version\":1},{\"content_hash\":\"f9194e73f9e9459e3450ea10a179cdf77aafa695beecd3b9344a98d111622243\",\"id\":\"tax.zero\",\"kind\":\"tax_profile\",\"version\":1},{\"content_hash\":\"276446ba01e3aa387c83b06f54fccc5ac65bdc6099157a2a828716eac9c6fd4d\",\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"version\":1},{\"content_hash\":\"9572be119f04ad3072f7a8f98a14a6946efeec50764cb45d43bce99deafe8090\",\"id\":\"customer.1\",\"kind\":\"trading_profile\",\"version\":1},{\"content_hash\":\"d7d4f59db48fb4b8d9fe1fe1b7ec5bff489fc305e0ce38500bbb4acc2166e4ca\",\"id\":\"PCS\",\"kind\":\"unit\",\"version\":1}],\"issued_at\":\"2026-10-22T09:00:00.000000Z\",\"normalization_version\":\"brant.quote-normalization/0.1.0\",\"party_snapshots\":{\"customer\":{\"addresses\":[{\"address\":\"Synthetic buyer address\\n上海\",\"address_id\":\"hq\",\"role\":\"buyer\"}],\"party_id\":\"customer.1\",\"party_revision\":2},\"issuer\":{\"address\":\"Synthetic Shanghai address\",\"company_id\":\"company.live\",\"country\":\"CN\",\"legal_name\":\"SYNTHETIC Exporter — no actual trade\",\"registration_no\":\"SYNTHETIC-NOT-REAL\"}},\"quote_id\":\"quote.1\"}",
-    "sha256": "e44b3bc7f5fcebeb2d262f3cafe414daeb1af5d4f299e44eeba8831d3e0ae634"
+    "normalized_canonical": "{\"business_revision\":1,\"calculation\":{\"calculation_version\":\"brant.quote-calculation/0.1.0\",\"charges\":[],\"comparison_currency_ref\":{\"id\":\"USD\",\"kind\":\"currency\",\"revision\":1},\"comparison_revenue_minor\":\"96000\",\"cost_basis\":\"nominal_direct_cost\",\"cost_minor\":\"66000\",\"cost_scope_binding\":{\"calculation_currency\":\"USD\",\"contract\":\"brant.quote-cost-scope/0.1.0\",\"cost_basis\":\"nominal_direct_cost\",\"delivery\":{\"date\":\"2027-01-31\",\"kind\":\"fixed\",\"milestone\":\"handover\",\"place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"time_zone\":\"Asia/Shanghai\"},\"line_bindings\":[{\"cost_unit\":\"PCS\",\"line_id\":\"L1\",\"normalized_quantity\":\"120\",\"quantity\":\"120\",\"rfq_line_id\":\"L1\",\"sku_id\":\"sku.1\",\"spec_revision\":1,\"unit\":\"PCS\"}],\"named_place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"payment_terms_ref\":{\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"revision\":1},\"pricing_policy_ref\":{\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"revision\":1},\"rfq_ref\":{\"rfq_id\":\"rfq.1\",\"row_version\":2},\"trade_terms_ref\":{\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"revision\":1}},\"excluded_cost_categories\":[\"expected_credit_loss\",\"imputed_financing_cost\",\"unrealized_fx_hedge\"],\"lines\":[{\"id\":\"L1\",\"net_minor\":\"96000\",\"payable_minor\":\"96000\",\"tax_minor\":\"0\"}],\"margin_denominator\":\"96000\",\"margin_numerator\":\"30000\",\"margin_rule\":\"pass\",\"margin_shortfall\":\"0\",\"minimum_margin\":\"0.1\",\"net_minor\":\"96000\",\"payable_minor\":\"96000\",\"payments\":[{\"amount_minor\":\"96000\",\"days\":0,\"percent\":\"100\",\"stage_id\":\"P1\",\"trigger\":\"before_shipment\"}],\"profit_minor\":\"30000\",\"sales_terms_binding\":{\"charge_bindings\":[],\"contract\":\"brant.quote-sales-terms/0.1.0\",\"tax_bindings\":[{\"price_basis\":\"exclusive\",\"rate\":\"0\",\"role\":\"line:L1\",\"tax_application_ref\":{\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"revision\":1},\"tax_profile_ref\":{\"id\":\"tax.zero\",\"kind\":\"tax_profile\",\"revision\":1}}]},\"tax_minor\":\"0\"},\"data\":{\"charges\":[],\"contact_ref\":{\"contact_id\":\"contact.1\",\"row_version\":2},\"cost_snapshot_ref\":{\"result_hash\":\"2a809a7b878bb2bedba3eed7534ecd55d43952b41bad144babe3c2d289cc677f\",\"snapshot_id\":\"snapshot.1\"},\"currency_ref\":{\"id\":\"USD\",\"kind\":\"currency\",\"revision\":1},\"customer_address_refs\":[{\"address_id\":\"hq\",\"party_id\":\"customer.1\",\"party_revision\":2}],\"customer_notes\":\"客户可见说明：合成样例\\nKeep this line break.\",\"customer_ref\":{\"party_id\":\"customer.1\",\"revision\":2},\"delivery\":{\"date\":\"2027-01-31\",\"kind\":\"fixed\",\"milestone\":\"handover\",\"place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"time_zone\":\"Asia/Shanghai\"},\"document_template_ref\":{\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"revision\":1},\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"expires_at\":\"2026-10-28T08:00:00.000000Z\",\"issuer_ref\":{\"id\":\"company.live\",\"kind\":\"company_profile\",\"revision\":1},\"lines\":[{\"discount_ratio\":\"0\",\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"line_id\":\"L1\",\"price_basis_quantity\":\"1\",\"quantity\":\"120\",\"rfq_line_id\":\"L1\",\"sku_ref\":{\"sku_id\":\"sku.1\",\"spec_revision\":1},\"tax_application_ref\":{\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"revision\":1},\"unit_price\":\"8\",\"unit_ref\":{\"id\":\"PCS\",\"kind\":\"unit\",\"revision\":1}}],\"named_place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"payment_terms_ref\":{\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"revision\":1},\"pricing_policy_ref\":{\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"revision\":1},\"rfq_ref\":{\"rfq_id\":\"rfq.1\",\"row_version\":2},\"sequence_ref\":{\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"revision\":1},\"trade_terms_ref\":{\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"revision\":1},\"trading_profile_ref\":{\"party_id\":\"customer.1\",\"revision\":1}},\"dependency_manifest\":[{\"content_hash\":\"f168ccdd91548c5a8c871bd4b9b757c5e889a1672e774bddef4a2714759a7a8f\",\"id\":\"company.live\",\"kind\":\"company_profile\",\"version\":1},{\"content_hash\":\"3668d7dc21b908c3ef5b25ffab99b94193b51c785d0f66a41950fed5107d221b\",\"id\":\"snapshot.1\",\"kind\":\"cost_snapshot\",\"version\":1},{\"content_hash\":\"d60fbd8718eceb7f7751c68b695e33ef974d0ecca2b1bf20c928e6d1b995f00e\",\"id\":\"USD\",\"kind\":\"currency\",\"version\":1},{\"content_hash\":\"bf37c7c208717d6de100ce851b48273f8d5d945c8dc64fc64372087ffcf88ba9\",\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"version\":1},{\"content_hash\":\"040ffd5925d40e11c67b7238a7fc9957850b8b9a46e9729fab88c24d6a98aff2\",\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"version\":1},{\"content_hash\":\"823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812\",\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"version\":1},{\"content_hash\":\"5cde0f1298f41f7d1c8b907a36992a7a513225a2615bd6e307bf1a9149b06b40\",\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"version\":1},{\"content_hash\":\"3ee92f1118c480ab32896c9bbb35186fa05687b9e44c43f0e1544527267c868f\",\"id\":\"rfq.1\",\"kind\":\"rfq\",\"version\":2},{\"content_hash\":\"0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61\",\"id\":\"source.1\",\"kind\":\"source\",\"version\":1},{\"content_hash\":\"1f7101fe71011ba0872a2e069e8f26c98d6af9ebf8e67bb0c1a559fa9569aa6b\",\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"version\":1},{\"content_hash\":\"f9194e73f9e9459e3450ea10a179cdf77aafa695beecd3b9344a98d111622243\",\"id\":\"tax.zero\",\"kind\":\"tax_profile\",\"version\":1},{\"content_hash\":\"276446ba01e3aa387c83b06f54fccc5ac65bdc6099157a2a828716eac9c6fd4d\",\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"version\":1},{\"content_hash\":\"9572be119f04ad3072f7a8f98a14a6946efeec50764cb45d43bce99deafe8090\",\"id\":\"customer.1\",\"kind\":\"trading_profile\",\"version\":1},{\"content_hash\":\"d7d4f59db48fb4b8d9fe1fe1b7ec5bff489fc305e0ce38500bbb4acc2166e4ca\",\"id\":\"PCS\",\"kind\":\"unit\",\"version\":1}],\"issued_at\":\"2026-10-22T09:00:00.000000Z\",\"normalization_version\":\"brant.quote-normalization/0.1.0\",\"party_snapshots\":{\"customer\":{\"addresses\":[{\"address\":\"Synthetic buyer address\\n上海\",\"address_id\":\"hq\",\"role\":\"buyer\"}],\"party_id\":\"customer.1\",\"party_revision\":2},\"issuer\":{\"address\":\"Synthetic Shanghai address\",\"company_id\":\"company.live\",\"country\":\"CN\",\"legal_name\":\"SYNTHETIC Exporter — no actual trade\",\"registration_no\":\"SYNTHETIC-NOT-REAL\"}},\"quote_id\":\"quote.1\"}",
+    "sha256": "fdd9bebd46343277b863d306e619dcd68c68a5f6be10793761cd14979202b774"
+  },
+  {
+    "name": "BC-AT06 below the minimum margin",
+    "document": {
+      "quote_id": "quote.1",
+      "business_revision": 1,
+      "issued_at": "2026-10-22T09:00:00.000000Z",
+      "data": {
+        "issuer_ref": {
+          "kind": "company_profile",
+          "id": "company.live",
+          "revision": 1
+        },
+        "customer_ref": {
+          "party_id": "customer.1",
+          "revision": 2
+        },
+        "contact_ref": {
+          "contact_id": "contact.1",
+          "row_version": 2
+        },
+        "trading_profile_ref": {
+          "party_id": "customer.1",
+          "revision": 1
+        },
+        "customer_address_refs": [
+          {
+            "party_id": "customer.1",
+            "party_revision": 2,
+            "address_id": "hq"
+          }
+        ],
+        "rfq_ref": {
+          "rfq_id": "rfq.1",
+          "row_version": 2
+        },
+        "cost_snapshot_ref": {
+          "snapshot_id": "snapshot.1",
+          "result_hash": "2a809a7b878bb2bedba3eed7534ecd55d43952b41bad144babe3c2d289cc677f"
+        },
+        "lines": [
+          {
+            "line_id": "L1",
+            "rfq_line_id": "L1",
+            "sku_ref": {
+              "sku_id": "sku.1",
+              "spec_revision": 1
+            },
+            "quantity": "120",
+            "unit_ref": {
+              "kind": "unit",
+              "id": "PCS",
+              "revision": 1
+            },
+            "unit_price": "7",
+            "price_basis_quantity": "1",
+            "discount_ratio": "0",
+            "tax_application_ref": {
+              "kind": "tax_application",
+              "id": "tax.sale",
+              "revision": 1
+            },
+            "evidence": [
+              {
+                "source_id": "source.1",
+                "locator": "合成核实依据"
+              }
+            ]
+          }
+        ],
+        "charges": [],
+        "currency_ref": {
+          "kind": "currency",
+          "id": "USD",
+          "revision": 1
+        },
+        "pricing_policy_ref": {
+          "kind": "pricing_policy",
+          "id": "policy.1",
+          "revision": 1
+        },
+        "trade_terms_ref": {
+          "kind": "trade_terms",
+          "id": "terms.test",
+          "revision": 1
+        },
+        "named_place_ref": {
+          "kind": "location",
+          "id": "DEHAM",
+          "revision": 1
+        },
+        "payment_terms_ref": {
+          "kind": "payment_terms",
+          "id": "payment.test",
+          "revision": 1
+        },
+        "delivery": {
+          "kind": "fixed",
+          "date": "2027-01-31",
+          "milestone": "handover",
+          "place_ref": {
+            "kind": "location",
+            "id": "DEHAM",
+            "revision": 1
+          },
+          "time_zone": "Asia/Shanghai"
+        },
+        "document_template_ref": {
+          "kind": "quote_document_template",
+          "id": "quote.template",
+          "revision": 1
+        },
+        "sequence_ref": {
+          "kind": "number_sequence",
+          "id": "quote.sequence",
+          "revision": 1
+        },
+        "expires_at": "2026-10-28T08:00:00.000000Z",
+        "customer_notes": "客户可见说明：合成样例\nKeep this line break.",
+        "evidence": [
+          {
+            "source_id": "source.1",
+            "locator": "合成核实依据"
+          }
+        ]
+      },
+      "calculation": {
+        "lines": [
+          {
+            "id": "L1",
+            "net_minor": "84000",
+            "tax_minor": "0",
+            "payable_minor": "84000"
+          }
+        ],
+        "charges": [],
+        "net_minor": "84000",
+        "tax_minor": "0",
+        "payable_minor": "84000",
+        "comparison_currency_ref": {
+          "kind": "currency",
+          "id": "USD",
+          "revision": 1
+        },
+        "comparison_revenue_minor": "84000",
+        "cost_minor": "66000",
+        "profit_minor": "18000",
+        "margin_numerator": "18000",
+        "margin_denominator": "84000",
+        "minimum_margin": "0.25",
+        "margin_rule": "requires_approval",
+        "margin_shortfall": "30",
+        "cost_basis": "nominal_direct_cost",
+        "excluded_cost_categories": [
+          "expected_credit_loss",
+          "imputed_financing_cost",
+          "unrealized_fx_hedge"
+        ],
+        "payments": [
+          {
+            "stage_id": "P1",
+            "percent": "100",
+            "trigger": "before_shipment",
+            "days": 0,
+            "amount_minor": "84000"
+          }
+        ],
+        "cost_scope_binding": {
+          "contract": "brant.quote-cost-scope/0.1.0",
+          "rfq_ref": {
+            "rfq_id": "rfq.1",
+            "row_version": 2
+          },
+          "pricing_policy_ref": {
+            "kind": "pricing_policy",
+            "id": "policy.1",
+            "revision": 1
+          },
+          "calculation_currency": "USD",
+          "cost_basis": "nominal_direct_cost",
+          "trade_terms_ref": {
+            "kind": "trade_terms",
+            "id": "terms.test",
+            "revision": 1
+          },
+          "payment_terms_ref": {
+            "kind": "payment_terms",
+            "id": "payment.test",
+            "revision": 1
+          },
+          "named_place_ref": {
+            "kind": "location",
+            "id": "DEHAM",
+            "revision": 1
+          },
+          "delivery": {
+            "kind": "fixed",
+            "date": "2027-01-31",
+            "milestone": "handover",
+            "place_ref": {
+              "kind": "location",
+              "id": "DEHAM",
+              "revision": 1
+            },
+            "time_zone": "Asia/Shanghai"
+          },
+          "line_bindings": [
+            {
+              "line_id": "L1",
+              "rfq_line_id": "L1",
+              "sku_id": "sku.1",
+              "spec_revision": 1,
+              "quantity": "120",
+              "unit": "PCS",
+              "normalized_quantity": "120",
+              "cost_unit": "PCS"
+            }
+          ]
+        },
+        "sales_terms_binding": {
+          "contract": "brant.quote-sales-terms/0.1.0",
+          "tax_bindings": [
+            {
+              "role": "line:L1",
+              "tax_application_ref": {
+                "kind": "tax_application",
+                "id": "tax.sale",
+                "revision": 1
+              },
+              "tax_profile_ref": {
+                "kind": "tax_profile",
+                "id": "tax.zero",
+                "revision": 1
+              },
+              "price_basis": "exclusive",
+              "rate": "0"
+            }
+          ],
+          "charge_bindings": []
+        },
+        "calculation_version": "brant.quote-calculation/0.1.0"
+      },
+      "party_snapshots": {
+        "issuer": {
+          "company_id": "company.live",
+          "legal_name": "SYNTHETIC Exporter — no actual trade",
+          "registration_no": "SYNTHETIC-NOT-REAL",
+          "country": "CN",
+          "address": "Synthetic Shanghai address"
+        },
+        "customer": {
+          "party_id": "customer.1",
+          "party_revision": 2,
+          "addresses": [
+            {
+              "address_id": "hq",
+              "role": "buyer",
+              "address": "Synthetic buyer address\n上海"
+            }
+          ]
+        }
+      },
+      "dependency_manifest": [
+        {
+          "kind": "company_profile",
+          "id": "company.live",
+          "version": 1,
+          "content_hash": "f168ccdd91548c5a8c871bd4b9b757c5e889a1672e774bddef4a2714759a7a8f"
+        },
+        {
+          "kind": "cost_snapshot",
+          "id": "snapshot.1",
+          "version": 1,
+          "content_hash": "3668d7dc21b908c3ef5b25ffab99b94193b51c785d0f66a41950fed5107d221b"
+        },
+        {
+          "kind": "currency",
+          "id": "USD",
+          "version": 1,
+          "content_hash": "d60fbd8718eceb7f7751c68b695e33ef974d0ecca2b1bf20c928e6d1b995f00e"
+        },
+        {
+          "kind": "number_sequence",
+          "id": "quote.sequence",
+          "version": 1,
+          "content_hash": "bf37c7c208717d6de100ce851b48273f8d5d945c8dc64fc64372087ffcf88ba9"
+        },
+        {
+          "kind": "payment_terms",
+          "id": "payment.test",
+          "version": 1,
+          "content_hash": "040ffd5925d40e11c67b7238a7fc9957850b8b9a46e9729fab88c24d6a98aff2"
+        },
+        {
+          "kind": "pricing_policy",
+          "id": "policy.1",
+          "version": 1,
+          "content_hash": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812"
+        },
+        {
+          "kind": "quote_document_template",
+          "id": "quote.template",
+          "version": 1,
+          "content_hash": "5cde0f1298f41f7d1c8b907a36992a7a513225a2615bd6e307bf1a9149b06b40"
+        },
+        {
+          "kind": "rfq",
+          "id": "rfq.1",
+          "version": 2,
+          "content_hash": "3ee92f1118c480ab32896c9bbb35186fa05687b9e44c43f0e1544527267c868f"
+        },
+        {
+          "kind": "source",
+          "id": "source.1",
+          "version": 1,
+          "content_hash": "0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61"
+        },
+        {
+          "kind": "tax_application",
+          "id": "tax.sale",
+          "version": 1,
+          "content_hash": "1f7101fe71011ba0872a2e069e8f26c98d6af9ebf8e67bb0c1a559fa9569aa6b"
+        },
+        {
+          "kind": "tax_profile",
+          "id": "tax.zero",
+          "version": 1,
+          "content_hash": "f9194e73f9e9459e3450ea10a179cdf77aafa695beecd3b9344a98d111622243"
+        },
+        {
+          "kind": "trade_terms",
+          "id": "terms.test",
+          "version": 1,
+          "content_hash": "276446ba01e3aa387c83b06f54fccc5ac65bdc6099157a2a828716eac9c6fd4d"
+        },
+        {
+          "kind": "trading_profile",
+          "id": "customer.1",
+          "version": 1,
+          "content_hash": "9572be119f04ad3072f7a8f98a14a6946efeec50764cb45d43bce99deafe8090"
+        },
+        {
+          "kind": "unit",
+          "id": "PCS",
+          "version": 1,
+          "content_hash": "d7d4f59db48fb4b8d9fe1fe1b7ec5bff489fc305e0ce38500bbb4acc2166e4ca"
+        }
+      ],
+      "normalization_version": "brant.quote-normalization/0.1.0"
+    },
+    "normalized_canonical": "{\"business_revision\":1,\"calculation\":{\"calculation_version\":\"brant.quote-calculation/0.1.0\",\"charges\":[],\"comparison_currency_ref\":{\"id\":\"USD\",\"kind\":\"currency\",\"revision\":1},\"comparison_revenue_minor\":\"84000\",\"cost_basis\":\"nominal_direct_cost\",\"cost_minor\":\"66000\",\"cost_scope_binding\":{\"calculation_currency\":\"USD\",\"contract\":\"brant.quote-cost-scope/0.1.0\",\"cost_basis\":\"nominal_direct_cost\",\"delivery\":{\"date\":\"2027-01-31\",\"kind\":\"fixed\",\"milestone\":\"handover\",\"place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"time_zone\":\"Asia/Shanghai\"},\"line_bindings\":[{\"cost_unit\":\"PCS\",\"line_id\":\"L1\",\"normalized_quantity\":\"120\",\"quantity\":\"120\",\"rfq_line_id\":\"L1\",\"sku_id\":\"sku.1\",\"spec_revision\":1,\"unit\":\"PCS\"}],\"named_place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"payment_terms_ref\":{\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"revision\":1},\"pricing_policy_ref\":{\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"revision\":1},\"rfq_ref\":{\"rfq_id\":\"rfq.1\",\"row_version\":2},\"trade_terms_ref\":{\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"revision\":1}},\"excluded_cost_categories\":[\"expected_credit_loss\",\"imputed_financing_cost\",\"unrealized_fx_hedge\"],\"lines\":[{\"id\":\"L1\",\"net_minor\":\"84000\",\"payable_minor\":\"84000\",\"tax_minor\":\"0\"}],\"margin_denominator\":\"84000\",\"margin_numerator\":\"18000\",\"margin_rule\":\"requires_approval\",\"margin_shortfall\":\"30\",\"minimum_margin\":\"0.25\",\"net_minor\":\"84000\",\"payable_minor\":\"84000\",\"payments\":[{\"amount_minor\":\"84000\",\"days\":0,\"percent\":\"100\",\"stage_id\":\"P1\",\"trigger\":\"before_shipment\"}],\"profit_minor\":\"18000\",\"sales_terms_binding\":{\"charge_bindings\":[],\"contract\":\"brant.quote-sales-terms/0.1.0\",\"tax_bindings\":[{\"price_basis\":\"exclusive\",\"rate\":\"0\",\"role\":\"line:L1\",\"tax_application_ref\":{\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"revision\":1},\"tax_profile_ref\":{\"id\":\"tax.zero\",\"kind\":\"tax_profile\",\"revision\":1}}]},\"tax_minor\":\"0\"},\"data\":{\"charges\":[],\"contact_ref\":{\"contact_id\":\"contact.1\",\"row_version\":2},\"cost_snapshot_ref\":{\"result_hash\":\"2a809a7b878bb2bedba3eed7534ecd55d43952b41bad144babe3c2d289cc677f\",\"snapshot_id\":\"snapshot.1\"},\"currency_ref\":{\"id\":\"USD\",\"kind\":\"currency\",\"revision\":1},\"customer_address_refs\":[{\"address_id\":\"hq\",\"party_id\":\"customer.1\",\"party_revision\":2}],\"customer_notes\":\"客户可见说明：合成样例\\nKeep this line break.\",\"customer_ref\":{\"party_id\":\"customer.1\",\"revision\":2},\"delivery\":{\"date\":\"2027-01-31\",\"kind\":\"fixed\",\"milestone\":\"handover\",\"place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"time_zone\":\"Asia/Shanghai\"},\"document_template_ref\":{\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"revision\":1},\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"expires_at\":\"2026-10-28T08:00:00.000000Z\",\"issuer_ref\":{\"id\":\"company.live\",\"kind\":\"company_profile\",\"revision\":1},\"lines\":[{\"discount_ratio\":\"0\",\"evidence\":[{\"locator\":\"合成核实依据\",\"source_id\":\"source.1\"}],\"line_id\":\"L1\",\"price_basis_quantity\":\"1\",\"quantity\":\"120\",\"rfq_line_id\":\"L1\",\"sku_ref\":{\"sku_id\":\"sku.1\",\"spec_revision\":1},\"tax_application_ref\":{\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"revision\":1},\"unit_price\":\"7\",\"unit_ref\":{\"id\":\"PCS\",\"kind\":\"unit\",\"revision\":1}}],\"named_place_ref\":{\"id\":\"DEHAM\",\"kind\":\"location\",\"revision\":1},\"payment_terms_ref\":{\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"revision\":1},\"pricing_policy_ref\":{\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"revision\":1},\"rfq_ref\":{\"rfq_id\":\"rfq.1\",\"row_version\":2},\"sequence_ref\":{\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"revision\":1},\"trade_terms_ref\":{\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"revision\":1},\"trading_profile_ref\":{\"party_id\":\"customer.1\",\"revision\":1}},\"dependency_manifest\":[{\"content_hash\":\"f168ccdd91548c5a8c871bd4b9b757c5e889a1672e774bddef4a2714759a7a8f\",\"id\":\"company.live\",\"kind\":\"company_profile\",\"version\":1},{\"content_hash\":\"3668d7dc21b908c3ef5b25ffab99b94193b51c785d0f66a41950fed5107d221b\",\"id\":\"snapshot.1\",\"kind\":\"cost_snapshot\",\"version\":1},{\"content_hash\":\"d60fbd8718eceb7f7751c68b695e33ef974d0ecca2b1bf20c928e6d1b995f00e\",\"id\":\"USD\",\"kind\":\"currency\",\"version\":1},{\"content_hash\":\"bf37c7c208717d6de100ce851b48273f8d5d945c8dc64fc64372087ffcf88ba9\",\"id\":\"quote.sequence\",\"kind\":\"number_sequence\",\"version\":1},{\"content_hash\":\"040ffd5925d40e11c67b7238a7fc9957850b8b9a46e9729fab88c24d6a98aff2\",\"id\":\"payment.test\",\"kind\":\"payment_terms\",\"version\":1},{\"content_hash\":\"823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812\",\"id\":\"policy.1\",\"kind\":\"pricing_policy\",\"version\":1},{\"content_hash\":\"5cde0f1298f41f7d1c8b907a36992a7a513225a2615bd6e307bf1a9149b06b40\",\"id\":\"quote.template\",\"kind\":\"quote_document_template\",\"version\":1},{\"content_hash\":\"3ee92f1118c480ab32896c9bbb35186fa05687b9e44c43f0e1544527267c868f\",\"id\":\"rfq.1\",\"kind\":\"rfq\",\"version\":2},{\"content_hash\":\"0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61\",\"id\":\"source.1\",\"kind\":\"source\",\"version\":1},{\"content_hash\":\"1f7101fe71011ba0872a2e069e8f26c98d6af9ebf8e67bb0c1a559fa9569aa6b\",\"id\":\"tax.sale\",\"kind\":\"tax_application\",\"version\":1},{\"content_hash\":\"f9194e73f9e9459e3450ea10a179cdf77aafa695beecd3b9344a98d111622243\",\"id\":\"tax.zero\",\"kind\":\"tax_profile\",\"version\":1},{\"content_hash\":\"276446ba01e3aa387c83b06f54fccc5ac65bdc6099157a2a828716eac9c6fd4d\",\"id\":\"terms.test\",\"kind\":\"trade_terms\",\"version\":1},{\"content_hash\":\"9572be119f04ad3072f7a8f98a14a6946efeec50764cb45d43bce99deafe8090\",\"id\":\"customer.1\",\"kind\":\"trading_profile\",\"version\":1},{\"content_hash\":\"d7d4f59db48fb4b8d9fe1fe1b7ec5bff489fc305e0ce38500bbb4acc2166e4ca\",\"id\":\"PCS\",\"kind\":\"unit\",\"version\":1}],\"issued_at\":\"2026-10-22T09:00:00.000000Z\",\"normalization_version\":\"brant.quote-normalization/0.1.0\",\"party_snapshots\":{\"customer\":{\"addresses\":[{\"address\":\"Synthetic buyer address\\n上海\",\"address_id\":\"hq\",\"role\":\"buyer\"}],\"party_id\":\"customer.1\",\"party_revision\":2},\"issuer\":{\"address\":\"Synthetic Shanghai address\",\"company_id\":\"company.live\",\"country\":\"CN\",\"legal_name\":\"SYNTHETIC Exporter — no actual trade\",\"registration_no\":\"SYNTHETIC-NOT-REAL\"}},\"quote_id\":\"quote.1\"}",
+    "sha256": "a5ed70cb7ca05bee10c18e48b6b1b9049cc427708b59c609db37ab1cb1853dc5"
   }
 ]

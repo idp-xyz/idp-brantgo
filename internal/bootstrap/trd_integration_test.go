@@ -78,10 +78,20 @@ func trefp(r polapi.ConfigRef) *trdapi.ConfigRef {
 	return &c
 }
 
-// data is the synthetic quote of Python examples/quote.json on this world's references.
+// The named place and the delivery of the CST suite's costing context (contextData): DEHAM, handed
+// over on 2027-01-31 in Asia/Shanghai.
+var (
+	dehamPlace = trdapi.BusinessRef{Kind: trdapi.PlaceKind, ID: "DEHAM", Revision: 1}
+	handover   = trdapi.Delivery{Kind: trdapi.DeliveryFixed, Date: "2027-01-31", Milestone: trdapi.MilestoneHandover, PlaceRef: dehamPlace,
+		TimeZone: "Asia/Shanghai"}
+)
+
+// data is the synthetic quote of Python examples/quote.json on this world's references, with the
+// costing's comparison basis.
 func (q *trdWorld) data() trdapi.QuoteData {
 	notes := "客户可见说明：合成样例\nKeep this line break."
-	return trdapi.QuoteData{IssuerRef: trefp(q.company), CustomerRef: &trdapi.PartyRef{PartyID: "customer.1", Revision: 2},
+	place, delivery := dehamPlace, handover
+	return trdapi.QuoteData{NamedPlaceRef: &place, Delivery: &delivery, IssuerRef: trefp(q.company), CustomerRef: &trdapi.PartyRef{PartyID: "customer.1", Revision: 2},
 		ContactRef:          &trdapi.ContactRef{ContactID: "contact.1", RowVersion: 2},
 		TradingProfileRef:   &trdapi.TradingProfileRef{PartyID: "customer.1", Revision: 1},
 		CustomerAddressRefs: []trdapi.AddressRoleRef{{PartyID: "customer.1", PartyRevision: 2, AddressID: "hq"}},
@@ -195,7 +205,7 @@ func TestQuoteDraftFreezeReviseAndDiscard(t *testing.T) {
 	var doc map[string]any
 	q.must(json.Unmarshal([]byte(rev.Commercial), &doc))
 	data := doc["data"].(map[string]any)
-	if doc["quote_id"] != "quote.1" || doc["calculation"] != nil || doc["normalization_version"] != trdapi.NormalizationVersion ||
+	if doc["quote_id"] != "quote.1" || doc["calculation"] == nil || doc["normalization_version"] != trdapi.NormalizationVersion ||
 		data["customer_notes"] != "客户可见说明：合成样例\nKeep this line break." ||
 		data["lines"].([]any)[0].(map[string]any)["quantity"] != "120" || !strings.Contains(rev.Commercial, "合成买方地址\\n上海") {
 		t.Fatalf("commercial document %s", rev.Commercial)
@@ -213,7 +223,7 @@ func TestQuoteDraftFreezeReviseAndDiscard(t *testing.T) {
 	}
 	events := q.frozenEvents()
 	if len(events) != 1 || events[0].Payload["business_hash"] != f.BusinessHash || events[0].Payload["quote_id"] != "quote.1" ||
-		events[0].Payload["calculation_server_owned"] != false {
+		events[0].Payload["calculation_server_owned"] != true || events[0].Payload["margin_rule"] != "pass" {
 		t.Fatalf("events %+v", events)
 	}
 	again, err := q.c.TRD.Freeze(q.author, cmd)
@@ -554,7 +564,12 @@ func TestFreezeRefusesWhatIsNotInEffect(t *testing.T) {
 		{"an older RFQ version", func(d *trdapi.QuoteData) { d.RfqRef.RowVersion = 1 }, trdapi.CodeReferenceStale, "/args/data/rfq_ref"},
 		{"an older customer revision", func(d *trdapi.QuoteData) { d.CustomerRef.Revision = 1 }, trdapi.CodeReferenceStale, "/args/data/customer_ref"},
 		{"a retired template", func(d *trdapi.QuoteData) { d.DocumentTemplateRef = trefp(old) }, polapi.CodeConfigNotActive, "/args/data/document_template_ref"},
-		{"another quantity", func(d *trdapi.QuoteData) { d.Lines[0].Quantity = "100" }, trdapi.CodeBaseQuantityMismatch, "/args/data/lines/0/quantity"},
+		{"another quantity", func(d *trdapi.QuoteData) { d.Lines[0].Quantity = "100" }, trdapi.CodeComparisonBasisMismatch, "/args/data/lines/0/quantity"},
+		{"BC-AT04: a stated base quantity that is not the converted one", func(d *trdapi.QuoteData) { d.Lines[0].BaseQuantity = "2" },
+			trdapi.CodeBaseQuantityMismatch, "/args/data/lines/0/base_quantity"},
+		{"another delivery than the costing's", func(d *trdapi.QuoteData) { v := handover; v.Date = "2027-02-01"; d.Delivery = &v },
+			trdapi.CodeComparisonBasisMismatch, "/args/data/delivery"},
+		{"no named place", func(d *trdapi.QuoteData) { d.NamedPlaceRef = nil }, kernel.CodeDraftNotReady, "/args/data/named_place_ref"},
 		{"a validity of eight days", func(d *trdapi.QuoteData) { d.ExpiresAt = kernel.FormatTimestamp(time.Now().Add(8 * 24 * time.Hour)) },
 			trdapi.CodeQuoteValidityInvalid, "/args/data/expires_at"},
 		{"no snapshot", func(d *trdapi.QuoteData) { d.CostSnapshotRef = nil }, trdapi.CodeCostSnapshotMissing, "/args/data/cost_snapshot_ref"},

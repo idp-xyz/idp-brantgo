@@ -3,6 +3,7 @@ package quote
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
@@ -34,20 +35,15 @@ const (
 	CostBasisNominalDirect = "nominal_direct_cost"
 )
 
-// Policy values the freeze judges.
+// Policy values the freeze judges itself; the server calculation (package calc) judges the rest.
 const (
-	SideSales          = "sales"
-	SideSalesCharge    = "sales_charge"
-	SubjectSKU         = "sku"
-	SubjectFeeCategory = "fee_category"
-	PurposeQuotation   = "quotation"
-	DocumentTypeQuote  = "quote"
-	QuoteRendererV010  = "quote-text/0.1.0"
+	DocumentTypeQuote = "quote"
+	QuoteRendererV010 = "quote-text/0.1.0"
 )
 
 // Terms is the commercial data of a frozen revision: the draft complete, with every member the
-// commercial document requires present (charges and customer notes possibly empty) and the
-// customer addresses in address ID order.
+// commercial document requires present (charges and customer notes possibly empty), the customer
+// addresses in address ID order and stated base quantities without trailing zeros.
 type Terms struct {
 	Issuer           Ref          `json:"issuer_ref"`
 	Customer         PartyRef     `json:"customer_ref"`
@@ -62,7 +58,9 @@ type Terms struct {
 	PricingPolicy    Ref          `json:"pricing_policy_ref"`
 	SalesFX          *Ref         `json:"sales_fx_ref,omitempty"`
 	TradeTerms       Ref          `json:"trade_terms_ref"`
+	NamedPlace       BusinessRef  `json:"named_place_ref"`
 	PaymentTerms     Ref          `json:"payment_terms_ref"`
+	Delivery         Delivery     `json:"delivery"`
 	DocumentTemplate Ref          `json:"document_template_ref"`
 	Sequence         Ref          `json:"sequence_ref"`
 	ExpiresAt        string       `json:"expires_at"`
@@ -71,10 +69,10 @@ type Terms struct {
 }
 
 // Commercial is the commercial document a freeze seals (Python commercial.schema.json, on TRD's
-// references): what the customer is offered, the server calculation, the parties as they read
-// then, and every upstream fact it rests on with its content hash. Its business hash is
-// Digest(document) (canonical.go). Calculation is null until the S3-02 server calculation is wired
-// into the freeze (Calculator in the application layer).
+// references): what the customer is offered, the server calculation (calculation.go), the parties
+// as they read then, and every upstream fact it rests on with its content hash. Its business hash is
+// Digest(document) (canonical.go). Documents sealed before the calculation was wired carry
+// calculation null; nothing reviews or activates them.
 type Commercial struct {
 	QuoteID              string         `json:"quote_id"`
 	BusinessRevision     int64          `json:"business_revision"`
@@ -84,46 +82,6 @@ type Commercial struct {
 	PartySnapshots       PartySnapshots `json:"party_snapshots"`
 	DependencyManifest   []Dependency   `json:"dependency_manifest"`
 	NormalizationVersion string         `json:"normalization_version"`
-}
-
-// Calculation is the server-owned result of the S3-02 calculation a freeze seals (Python
-// commercial.schema.json calculation): amounts in minor units of the quote currency (comparison
-// amounts in the pricing policy's), as integer strings.
-type Calculation struct {
-	Lines                  []AmountLine `json:"lines"`
-	Charges                []AmountLine `json:"charges"`
-	NetMinor               string       `json:"net_minor"`
-	TaxMinor               string       `json:"tax_minor"`
-	PayableMinor           string       `json:"payable_minor"`
-	ComparisonCurrency     Ref          `json:"comparison_currency_ref"`
-	ComparisonRevenueMinor string       `json:"comparison_revenue_minor"`
-	CostMinor              string       `json:"cost_minor"`
-	ProfitMinor            string       `json:"profit_minor"`
-	MarginNumerator        string       `json:"margin_numerator"`
-	MarginDenominator      string       `json:"margin_denominator"`
-	MarginRule             string       `json:"margin_rule"`
-	CostBasis              string       `json:"cost_basis"`
-	ExcludedCostCategories []string     `json:"excluded_cost_categories"`
-	Payments               []Payment    `json:"payments"`
-}
-
-// AmountLine is the amounts of one line or charge.
-type AmountLine struct {
-	ID           string `json:"id"`
-	NetMinor     string `json:"net_minor"`
-	TaxMinor     string `json:"tax_minor"`
-	PayableMinor string `json:"payable_minor"`
-}
-
-// Payment is one stage of the payment schedule with its amount.
-type Payment struct {
-	StageID     string `json:"stage_id"`
-	Percent     string `json:"percent"`
-	Trigger     string `json:"trigger"`
-	Days        int    `json:"days"`
-	DayBasis    string `json:"day_basis,omitempty"`
-	Calendar    *Ref   `json:"calendar,omitempty"`
-	AmountMinor string `json:"amount_minor"`
 }
 
 // PartySnapshots are the parties as the freeze read them: the issuer's company profile and the
@@ -167,7 +125,9 @@ type Dependency struct {
 // Facts are what the upstream contexts said about the references of a draft, each in a
 // transaction of its own before TRD's, at the freeze's instant. A reference that is absent does
 // not exist or lies outside the caller's data scope. A Check is the upstream's verdict, nil when the
-// reference serves new business.
+// reference serves new business. Adopted are the POL revisions the calculation reads beyond the
+// draft's own references (the costing's comparison currency and cost units), which the freeze binds
+// and guards like them.
 type Facts struct {
 	Company   string // the company of the caller's scope
 	Party     *Party
@@ -177,6 +137,7 @@ type Facts struct {
 	Rfq       *Rfq
 	Specs     map[SkuRef]Verdict
 	Configs   map[Ref]Config
+	Adopted   []Ref
 	Snapshot  *Snapshot
 	Sources   map[string]string // the EVD sources the caller reads, with their content SHA-256
 }
@@ -223,90 +184,52 @@ type Address struct {
 	Address string
 }
 
-// Rfq is INQ's RfqRef v1 now.
+// Rfq is INQ's RfqRef v1 now: its row version, readiness and the hash of its complete line set.
+// The calculation reads its customer, contact and lines.
 type Rfq struct {
 	RowVersion int64
 	Ready      bool
 	LinesHash  string
-	Lines      []RfqLine
 }
 
-// RfqLine is one line of an RFQ.
-type RfqLine struct {
-	LineID       string
-	SkuID        string
-	SpecRevision int64
-	Quantity     string
-	UOM          string
-}
-
-// Snapshot is CST's ResolvedSnapshot of the bound CostSnapshotRef v1.
+// Snapshot is CST's ResolvedSnapshot of the bound CostSnapshotRef v1: its adoptability now, the
+// hash of the RFQ line set it costed and the evidence hash of its document. The calculation reads
+// its costing and amounts.
 type Snapshot struct {
 	Check        Verdict // CST's adoptability now
-	RfqID        string
-	RfqVersion   int64
 	RfqLinesHash string
-	Currency     string
 	EvidenceHash string
-	LineIDs      []string
 }
 
 // Config is what POL said about one configuration revision at the freeze's instant: its verdict,
-// content hash and the data the freeze judges. Nested are the revisions it names itself (a pricing
-// policy's or tax application's tax profile, a payment or trade terms calendar), which the freeze
-// adopts and guards too.
+// content hash and the data the freeze judges itself. Nested are the revisions it names itself (a
+// pricing policy's or tax application's tax profile, a payment or trade terms calendar), which the
+// freeze adopts and guards too.
 type Config struct {
-	Check          Verdict
-	ContentHash    string
-	Nested         []Ref
-	CurrencyCode   string          // currency
-	Policy         *Policy         // pricing_policy
-	UnitCode       string          // unit
-	Conversion     *Conversion     // unit_conversion
-	TaxApplication *TaxApplication // tax_application
-	FeeSide        string          // fee_category
-	FX             *FX             // fx_rate
-	SequenceType   string          // number_sequence: its document type
-	Renderer       string          // quote_document_template: its renderer version
-	Company        *IssuerSnapshot // company_profile
+	Check        Verdict
+	ContentHash  string
+	Nested       []Ref
+	Policy       *Policy         // pricing_policy
+	SequenceType string          // number_sequence: its document type
+	Renderer     string          // quote_document_template: its renderer version
+	Company      *IssuerSnapshot // company_profile
 }
 
-// Policy is a POL pricing policy.
+// Policy is what the freeze reads of a POL pricing policy: how long its quotes are valid.
 type Policy struct {
-	CalculationCurrency string
-	QuoteValidDays      int
-}
-
-// Conversion is a POL unit conversion: one From is Factor To, for one SKU specification revision.
-type Conversion struct {
-	SkuID        string
-	SpecRevision int64
-	From, To     string
-	Factor       string
-}
-
-// TaxApplication is a POL tax application.
-type TaxApplication struct {
-	Side        string
-	SubjectKind string
-	SubjectID   string
-	PartyID     string
-}
-
-// FX is a POL exchange rate's direction and purpose.
-type FX struct {
-	From, To, Purpose string
+	QuoteValidDays int
 }
 
 // Seal is what a freeze fixes: the normalized canonical commercial document and its business
-// hash, issued_at and expires_at, and what the transaction guards (the POL revisions adopted, the
-// RFQ binding and the cost snapshot).
+// hash, issued_at and expires_at, the server calculation, and what the transaction guards (the POL
+// revisions adopted, the RFQ binding and the cost snapshot).
 type Seal struct {
 	Commercial   []byte
 	BusinessHash string
 	IssuedAt     time.Time
 	ExpiresAt    time.Time
-	Configs      []Dependency // POL revisions, direct and nested, in kind, ID and revision order
+	Calculation  *Calculation
+	Configs      []Dependency // POL revisions, direct, adopted and nested, in kind, ID and revision order
 	Rfq          Dependency
 	Snapshot     SnapshotRef
 	By           kernel.ActorRef
@@ -314,6 +237,14 @@ type Seal struct {
 	At           time.Time
 	RootVersion  int64 // the root version the freeze committed at
 }
+
+// Calculate runs the server calculation of a freeze (WBS S3-02) on a draft whose references the
+// freeze found known and in effect. It is the one place a freeze takes amounts from, never the
+// client.
+type Calculate func() (*Calculation, error)
+
+// ErrNoCalculation means a freeze was asked to seal without the server calculation.
+var ErrNoCalculation = errors.New("quote: a freeze needs the server calculation")
 
 // Complete refuses a draft that lacks what a freeze needs, at the first missing member in document
 // order: the customer and contact references have their own codes (CUSTOMER_REFERENCE_MISSING,
@@ -344,8 +275,12 @@ func (d Data) Complete() error {
 		return missing("/pricing_policy_ref")
 	case d.TradeTerms == nil:
 		return missing("/trade_terms_ref")
+	case d.NamedPlace == nil:
+		return missing("/named_place_ref")
 	case d.PaymentTerms == nil:
 		return missing("/payment_terms_ref")
+	case d.Delivery == nil:
+		return missing("/delivery")
 	case d.DocumentTemplate == nil:
 		return missing("/document_template_ref")
 	case d.Sequence == nil:
@@ -358,14 +293,18 @@ func (d Data) Complete() error {
 	return nil
 }
 
-// Seal judges a complete draft against facts for a freeze of revision rev of quote id at instant
-// now (the freeze's issued_at), with calc the server calculation (nil until S3-02 is wired), and
-// returns its commercial document and business hash. Checks run in this order: completeness, the
-// draft's own rules and evidence, then each reference known and in effect (customer, contact,
-// trading profile, addresses, RFQ, specifications, configurations, cost snapshot), then the
-// content (RFQ coverage and base quantities, tax applications, charges, exchange rate, terms,
-// template and sequence, the snapshot's binding), then the validity window (TRD-INV-005).
-func SealDraft(id string, rev int64, d Data, f Facts, calc *Calculation, now time.Time) (*Seal, error) {
+// SealDraft judges a complete draft against facts for a freeze of revision rev of quote id at instant
+// now (the freeze's issued_at), runs the server calculation and returns the commercial document
+// and its business hash. Checks run in this order, each rule once: completeness, the draft's own
+// rules and evidence, each reference known and in effect (customer, contact, trading profile,
+// addresses, RFQ, specifications, configurations, cost snapshot), what the freeze judges itself
+// (issuer, template, number sequence, the snapshot's RFQ line set), the validity window
+// (TRD-INV-005), then the calculation: the cost scope (TRD-INV-006), the sales terms, the
+// amounts, the comparison currency, the margin verdict and the payment plan (calc.Calculate).
+func SealDraft(id string, rev int64, d Data, f Facts, calculate Calculate, now time.Time) (*Seal, error) {
+	if calculate == nil {
+		return nil, ErrNoCalculation
+	}
 	if err := d.Complete(); err != nil {
 		return nil, err
 	}
@@ -387,11 +326,16 @@ func SealDraft(id string, rev int64, d Data, f Facts, calc *Calculation, now tim
 	if err != nil {
 		return nil, err
 	}
+	calc, err := calculate()
+	if err != nil {
+		return nil, err
+	}
+	if calc == nil {
+		return nil, ErrNoCalculation
+	}
 	terms := sealedTerms(d)
-	if calc != nil {
-		if err = calc.Check(terms); err != nil {
-			return nil, err
-		}
+	if err = calc.Check(terms); err != nil {
+		return nil, err
 	}
 	configs := closure(d, f)
 	doc := Commercial{QuoteID: id, BusinessRevision: rev, IssuedAt: kernel.FormatTimestamp(issued), Data: terms, Calculation: calc,
@@ -418,8 +362,8 @@ func SealDraft(id string, rev int64, d Data, f Facts, calc *Calculation, now tim
 	if err != nil {
 		return nil, err
 	}
-	return &Seal{Commercial: canonical, BusinessHash: hash, IssuedAt: issued, ExpiresAt: expires, Configs: configs, Rfq: rfq,
-		Snapshot: terms.Snapshot}, nil
+	return &Seal{Commercial: canonical, BusinessHash: hash, IssuedAt: issued, ExpiresAt: expires, Calculation: calc, Configs: configs,
+		Rfq: rfq, Snapshot: terms.Snapshot}, nil
 }
 
 var hexHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -489,79 +433,52 @@ func references(d Data, f Facts) error {
 			return err
 		}
 	}
-	for _, field := range d.Fields() {
-		c, ok := f.Configs[field.Ref]
+	configured := func(r Ref, path, what string) error {
+		c, ok := f.Configs[r]
 		if !ok {
-			return kernel.Reject(kernel.CodeReferenceInvalid, field.Path, "")
+			return kernel.Reject(kernel.CodeReferenceInvalid, path, what)
 		}
-		if err := c.Check.at(field.Path); err != nil {
+		if err := c.Check.at(path); err != nil {
 			return err
 		}
 		for _, n := range c.Nested {
 			nc, ok := f.Configs[n]
 			if !ok {
-				return kernel.Reject(kernel.CodeReferenceInvalid, field.Path, "A configuration it names is unknown")
+				return kernel.Reject(kernel.CodeReferenceInvalid, path, "A configuration it names is unknown")
 			}
-			if err := nc.Check.at(field.Path); err != nil {
+			if err := nc.Check.at(path); err != nil {
 				return err
 			}
+		}
+		return nil
+	}
+	for _, field := range d.Fields() {
+		if err := configured(field.Ref, field.Path, ""); err != nil {
+			return err
 		}
 	}
 	if f.Snapshot == nil {
 		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/cost_snapshot_ref", "")
 	}
-	return f.Snapshot.Check.at(p + "/cost_snapshot_ref")
-}
-
-// content judges what the references say together.
-func content(d Data, f Facts) error {
-	const p = "/args/data"
-	if err := cover(d, f); err != nil {
+	if err := f.Snapshot.Check.at(p + "/cost_snapshot_ref"); err != nil {
 		return err
 	}
-	for i, l := range d.Lines {
-		path := fmt.Sprintf("%s/lines/%d/tax_application_ref", p, i)
-		if err := taxApplication(f.Configs[l.TaxApplication].TaxApplication, SubjectSKU, l.Sku.SkuID, d.Customer.PartyID, path); err != nil {
+	for _, r := range f.Adopted {
+		if err := configured(r, p+"/cost_snapshot_ref", "A configuration the costing adopted is unknown"); err != nil {
 			return err
 		}
 	}
-	obligations := map[string]bool{}
-	for i, c := range d.Charges {
-		cp := fmt.Sprintf("%s/charges/%d", p, i)
-		if f.Configs[c.FeeCategory].FeeSide != SideSalesCharge {
-			return kernel.Reject(kernel.CodeReferenceInvalid, cp+"/fee_category_ref", "The fee category is not a sales charge")
-		}
-		if obligations[c.ObligationKey] {
-			return fail(CodeChargeScopeUnresolved, cp+"/obligation_key", "The obligation is charged once")
-		}
-		obligations[c.ObligationKey] = true
-		if err := taxApplication(f.Configs[c.TaxApplication].TaxApplication, SubjectFeeCategory, c.FeeCategory.ID, d.Customer.PartyID,
-			cp+"/tax_application_ref"); err != nil {
-			return err
-		}
-	}
-	policy := f.Configs[*d.PricingPolicy].Policy
-	currency := f.Configs[*d.Currency].CurrencyCode
-	if policy == nil || currency == "" {
-		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/pricing_policy_ref", "")
-	}
-	switch {
-	case currency == policy.CalculationCurrency && d.SalesFX != nil:
-		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/sales_fx_ref", "A quote in the calculation currency takes no exchange rate")
-	case currency != policy.CalculationCurrency && d.SalesFX == nil:
-		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/sales_fx_ref", "A quote in another currency names its quotation rate")
-	case d.SalesFX != nil:
-		fx := f.Configs[*d.SalesFX].FX
-		if fx == nil || fx.From != currency || fx.To != policy.CalculationCurrency || fx.Purpose != PurposeQuotation {
-			return fail(CodeFXScopeMismatch, p+"/sales_fx_ref", "The rate converts the quote currency into the calculation currency for quotation")
-		}
-	}
-	pr := f.Profile
-	if *d.TradeTerms != pr.TradeTerms {
-		return fail(CodeComparisonBasisMismatch, p+"/trade_terms_ref", "The trade terms are the trading profile's")
-	}
-	if *d.PaymentTerms != pr.PaymentTerms {
-		return fail(CodeComparisonBasisMismatch, p+"/payment_terms_ref", "The payment terms are the trading profile's")
+	return nil
+}
+
+// content judges what the freeze decides itself, beyond the server calculation: the issuer's
+// company profile, the template's renderer, the number sequence's document type, and that the cost
+// snapshot costed the RFQ's line set as INQ answers it now (the calculation compares the RFQ, its
+// row version and the lines one by one).
+func content(d Data, f Facts) error {
+	const p = "/args/data"
+	if f.Configs[*d.Issuer].Company == nil {
+		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/issuer_ref", "")
 	}
 	if f.Configs[*d.DocumentTemplate].Renderer != QuoteRendererV010 {
 		return fail(CodeDependencyNotSupported, p+"/document_template_ref", "The template's renderer is not supported")
@@ -569,101 +486,8 @@ func content(d Data, f Facts) error {
 	if f.Configs[*d.Sequence].SequenceType != DocumentTypeQuote {
 		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/sequence_ref", "The number sequence does not number quotes")
 	}
-	if f.Configs[*d.Issuer].Company == nil {
-		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/issuer_ref", "")
-	}
-	s := f.Snapshot
-	switch {
-	case s.RfqID != d.Rfq.RfqID || s.RfqVersion != f.Rfq.RowVersion || s.RfqLinesHash != f.Rfq.LinesHash:
-		return fail(CodeComparisonBasisMismatch, p+"/cost_snapshot_ref", "The cost snapshot costs another RFQ binding")
-	case s.Currency != policy.CalculationCurrency:
-		return fail(CodeComparisonBasisMismatch, p+"/cost_snapshot_ref", "The cost snapshot is in another currency than the pricing policy's")
-	}
-	var rfqLines []string
-	for _, l := range f.Rfq.Lines {
-		rfqLines = append(rfqLines, l.LineID)
-	}
-	if !slices.Equal(slices.Sorted(slices.Values(s.LineIDs)), slices.Sorted(slices.Values(rfqLines))) {
-		return fail(CodeComparisonBasisMismatch, p+"/cost_snapshot_ref", "The cost snapshot covers another line set")
-	}
-	return nil
-}
-
-// cover checks the lines against the RFQ's complete line set (TRD-INV-006): each RFQ line exactly
-// once, at its SKU and specification, and its quantity in the RFQ's unit equal to the RFQ's, through
-// a conversion of the line's SKU specification when the quoted unit differs.
-func cover(d Data, f Facts) error {
-	const p = "/args/data/lines"
-	rfq := map[string]RfqLine{}
-	for _, l := range f.Rfq.Lines {
-		rfq[l.LineID] = l
-	}
-	if len(d.Lines) != len(f.Rfq.Lines) {
-		return fail(CodeComparisonBasisMismatch, p, "The quote covers the RFQ's complete line set")
-	}
-	for i, l := range d.Lines {
-		path := fmt.Sprintf("%s/%d", p, i)
-		r, ok := rfq[l.RfqLineID]
-		if !ok {
-			return fail(CodeComparisonBasisMismatch, path+"/rfq_line_id", "The quote covers the RFQ's complete line set")
-		}
-		if l.Sku.SkuID != r.SkuID || l.Sku.SpecRevision != r.SpecRevision {
-			return fail(CodeComparisonBasisMismatch, path+"/sku_ref", "SKU and specification are the RFQ line's")
-		}
-		unit := f.Configs[l.Unit].UnitCode
-		if unit == "" {
-			return kernel.Reject(kernel.CodeReferenceInvalid, path+"/unit_ref", "")
-		}
-		q, err := kernel.ParseDecimal(l.Quantity, kernel.QuantityFormat)
-		if err != nil {
-			return kernel.Reject(kernel.CodeSchemaInvalid, path+"/quantity", "")
-		}
-		want, err := kernel.ParseDecimal(r.Quantity, kernel.QuantityFormat)
-		if err != nil {
-			return kernel.Reject(kernel.CodeReferenceInvalid, path+"/rfq_line_id", "The RFQ line has no quantity")
-		}
-		base := q
-		switch {
-		case unit == r.UOM && l.Conversion != nil:
-			return kernel.Reject(kernel.CodeReferenceInvalid, path+"/conversion_ref", "A line in the RFQ's unit takes no conversion")
-		case unit != r.UOM:
-			if l.Conversion == nil {
-				return kernel.Reject(kernel.CodeReferenceInvalid, path+"/conversion_ref", "A line in another unit than the RFQ's names its conversion")
-			}
-			c := f.Configs[*l.Conversion].Conversion
-			if c == nil || c.SkuID != l.Sku.SkuID || c.SpecRevision != l.Sku.SpecRevision {
-				return kernel.Reject(kernel.CodeReferenceInvalid, path+"/conversion_ref", "The conversion is not of this SKU specification")
-			}
-			factor, err := kernel.ParseDecimal(c.Factor, kernel.FactorFormat)
-			if err != nil || factor.Sign() <= 0 {
-				return kernel.Reject(kernel.CodeReferenceInvalid, path+"/conversion_ref", "")
-			}
-			switch {
-			case c.From == unit && c.To == r.UOM:
-				base = q.Mul(factor)
-			case c.From == r.UOM && c.To == unit:
-				if base, err = q.Quo(factor); err != nil {
-					return kernel.Reject(kernel.CodeReferenceInvalid, path+"/conversion_ref", "")
-				}
-			default:
-				return kernel.Reject(kernel.CodeReferenceInvalid, path+"/conversion_ref", "The conversion is not between the quoted and the RFQ's unit")
-			}
-		}
-		if !base.Equal(want) {
-			return fail(CodeBaseQuantityMismatch, path+"/quantity", "The quantity in the RFQ's unit is the RFQ line's")
-		}
-	}
-	return nil
-}
-
-func taxApplication(t *TaxApplication, subjectKind, subjectID, partyID, path string) error {
-	switch {
-	case t == nil || t.Side != SideSales:
-		return kernel.Reject(kernel.CodeReferenceInvalid, path, "Only a sales tax application answers for a sale")
-	case t.SubjectKind != subjectKind || t.SubjectID != subjectID:
-		return kernel.Reject(kernel.CodeReferenceInvalid, path, "The tax application is for another subject")
-	case t.PartyID != "" && t.PartyID != partyID:
-		return kernel.Reject(kernel.CodeReferenceInvalid, path, "The tax application is for another party")
+	if f.Snapshot.RfqLinesHash != f.Rfq.LinesHash {
+		return fail(CodeComparisonBasisMismatch, p+"/cost_snapshot_ref", "The cost snapshot costed another line set of the RFQ")
 	}
 	return nil
 }
@@ -678,7 +502,11 @@ func validity(d Data, f Facts, issued time.Time) (time.Time, error) {
 		return time.Time{}, kernel.Reject(kernel.CodeSchemaInvalid, p, "")
 	}
 	expires = kernel.Instant(expires)
-	days := f.Configs[*d.PricingPolicy].Policy.QuoteValidDays
+	policy := f.Configs[*d.PricingPolicy].Policy
+	if policy == nil {
+		return time.Time{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/data/pricing_policy_ref", "")
+	}
+	days := policy.QuoteValidDays
 	if days <= 0 {
 		return time.Time{}, fail(CodeQuoteValidityInvalid, "/args/data/pricing_policy_ref", "The pricing policy bounds no validity")
 	}
@@ -692,28 +520,35 @@ func validity(d Data, f Facts, issued time.Time) (time.Time, error) {
 }
 
 // sealedTerms returns the commercial data of a complete draft: required members present, addresses
-// in address ID order (lines, charges and evidence are sorted by the normalization).
+// in address ID order, stated base quantities without trailing zeros (lines, charges and evidence
+// are sorted, and the other line decimals trimmed, by the normalization).
 func sealedTerms(d Data) Terms {
 	t := Terms{Issuer: *d.Issuer, Customer: *d.Customer, Contact: *d.Contact, Profile: *d.Profile,
 		Addresses: slices.Clone(d.Addresses), Rfq: *d.Rfq, Snapshot: *d.Snapshot, Lines: slices.Clone(d.Lines),
 		Charges: slices.Clone(d.Charges), Currency: *d.Currency, PricingPolicy: *d.PricingPolicy, SalesFX: d.SalesFX,
-		TradeTerms: *d.TradeTerms, PaymentTerms: *d.PaymentTerms, DocumentTemplate: *d.DocumentTemplate, Sequence: *d.Sequence,
-		ExpiresAt: d.ExpiresAt, Evidence: slices.Clone(d.Evidence)}
+		TradeTerms: *d.TradeTerms, NamedPlace: *d.NamedPlace, PaymentTerms: *d.PaymentTerms, Delivery: *d.Delivery,
+		DocumentTemplate: *d.DocumentTemplate, Sequence: *d.Sequence, ExpiresAt: d.ExpiresAt, Evidence: slices.Clone(d.Evidence)}
 	if t.Charges == nil {
 		t.Charges = []Charge{}
 	}
 	if d.CustomerNotes != nil {
 		t.CustomerNotes = *d.CustomerNotes
 	}
+	for i := range t.Lines {
+		if t.Lines[i].BaseQuantity != "" {
+			t.Lines[i].BaseQuantity = trimDecimal(t.Lines[i].BaseQuantity)
+		}
+	}
 	slices.SortFunc(t.Addresses, func(a, b AddressRef) int { return cmp.Compare(a.AddressID, b.AddressID) })
 	return t
 }
 
-// closure returns the POL revisions the draft adopts, directly or through the revisions it names,
-// with their content hashes, in kind, ID and revision order.
+// closure returns the POL revisions the draft adopts, directly, through the calculation (Adopted)
+// or through the revisions those name, with their content hashes, in kind, ID and revision order.
 func closure(d Data, f Facts) []Dependency {
-	refs := d.ConfigRefs()
-	for _, r := range d.ConfigRefs() {
+	direct := append(d.ConfigRefs(), f.Adopted...)
+	refs := slices.Clone(direct)
+	for _, r := range direct {
 		refs = append(refs, f.Configs[r].Nested...)
 	}
 	var out []Dependency
@@ -739,9 +574,10 @@ var signedMinor = regexp.MustCompile(`^(?:0|-?[1-9][0-9]{0,23})$`)
 
 // Check verifies the form of a server calculation against the terms it computed before a freeze
 // seals it: one amount line per quote line and per charge, amounts in minor units, net + tax =
-// payable, the payments adding up to the payable amount, and a known margin rule and cost basis.
-// The arithmetic is S3-02's (TRD-INV-007, TRD-INV-008); this only refuses a calculation that does
-// not fit the revision.
+// payable, the payments adding up to the payable amount, a known margin verdict whose shortfall is
+// positive exactly when the margin requires approval, a known cost basis and the current
+// calculation version. The arithmetic is the calculation's (TRD-INV-007, TRD-INV-008); this only
+// refuses a calculation that does not fit the revision.
 func (c Calculation) Check(t Terms) error {
 	const p = "/calculation"
 	bad := func(path string) error {
@@ -775,6 +611,7 @@ func (c Calculation) Check(t Terms) error {
 			return bad("/lines")
 		}
 	}
+	shortfall, err := kernel.ParseDecimal(c.MarginShortfall, ShortfallFormat)
 	switch {
 	case !sums(c.NetMinor, c.TaxMinor, c.PayableMinor):
 		return bad("/payable_minor")
@@ -784,8 +621,12 @@ func (c Calculation) Check(t Terms) error {
 		return bad("/profit_minor")
 	case c.MarginRule != MarginPass && c.MarginRule != MarginRequiresApproval:
 		return bad("/margin_rule")
+	case err != nil || (shortfall.Sign() > 0) != (c.MarginRule == MarginRequiresApproval):
+		return bad("/margin_shortfall")
 	case c.CostBasis != CostBasisNominalDirect:
 		return bad("/cost_basis")
+	case c.CalculationVersion != CalculationVersion:
+		return bad("/calculation_version")
 	case c.ExcludedCostCategories == nil || len(c.Payments) == 0:
 		return bad("/payments")
 	}
