@@ -1280,7 +1280,7 @@ def write_registry(pages: list[str]) -> None:
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "product": "IDP Brant · AI-Native Trade Operations Platform（中国 B2B 出口业务版）",
         "standard": "IDP-Cargo 主档案 V2.9（01–12 阶段、证据分级、门禁与 Go-first 工程基线）",
         "implementation_language": "Go (Golang)",
-        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；私有远程仓库 idpxyz/idp-brantgo，GitHub Actions 通过；M0 完成，S1 部分完成；按负责人决定不配置受保护主干）",
+        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；公开远程仓库 idp-xyz/idp-brantgo（2026-11-11 由个人账号 idpxyz 转入），GitHub Actions 通过；M0 完成，S1 部分完成；按负责人决定不配置受保护主干）",
         "status": "DESIGN_CANDIDATE_ARCHIVE_WITH_M0_BASELINE_AND_S1_PARTIAL", "production_ready": False,
         "gates": G1["productGates"], "gate_mapping": G1["gateMapping"],
         "versioning_policy": "Latest means the most recent design candidate, not approved or implemented",

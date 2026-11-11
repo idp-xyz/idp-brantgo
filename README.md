@@ -5,7 +5,8 @@
 - Product module: `go.idp.xyz/idp-brant` (candidate; the `go.idp.xyz` vanity host serves only `idp-bento-go` so far).
 - Framework module: `go.idp.xyz/idp-bento-go@v0.1.0-rc.2` (release candidate), resolved from its public repository.
 - Go `1.26.5` (`toolchain` directive); PostgreSQL 16.
-- The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is not published with the code. `docs/00_START_HERE/00_INDEX.html` is its entry page.
+- Repository: `github.com/idp-xyz/idp-brantgo`, public (moved from the personal account `idpxyz` to the `idp-xyz` organization on 2026-11-11; links under the old name redirect).
+- The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is published with the repository. `docs/00_START_HERE/00_INDEX.html` is its entry page.
 
 M0 built the engineering baseline. S1 (master data and inquiry) is done: EVD, PTY with party screening, trading profiles, address roles and service roles, CAT with item-code mappings, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. `brant-cli foundation-demo` publishes a synthetic foundation. S2 (sourcing and costing) is done too: SUP supply conditions with SupplyConditionGuard v1, and CST costing contexts, measurements, deterministic scenario evaluation, frozen cost snapshots, source denial and AdoptabilityGuard v1; T02's 660.00 USD baseline freezes on PostgreSQL 16. The connection to a real identity provider is deferred to the B0 pilot gate. S3 (quotes, acceptance, orders, purchase drafts) is next.
 
@@ -97,7 +98,7 @@ Against another PostgreSQL 16:
 
 ## Status of evidence
 
-S1, 2026-11-10: GitHub Actions runs the workflow on the private repository `idpxyz/idp-brantgo`; the S1 branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). Branch protection and required reviews are not configured: GitHub does not offer them for private repositories on the Free plan, and the owner decided on 2026-11-10 to go without them (G1 control C09 is not blocking). Contributors open pull requests and merge only after the CI check passes. The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
+S1, 2026-11-10: GitHub Actions runs the workflow on this repository (then the private `idpxyz/idp-brantgo`, public as `idp-xyz/idp-brantgo` since 2026-11-11); every branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). Branch protection and required reviews are not configured: GitHub did not offer them for the private repository on the Free plan, and the owner decided on 2026-11-10 to go without them (G1 control C09 is not blocking); now that the repository is public they are available and await the owner's decision. Contributors open pull requests and merge only after the CI check passes. The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
 
 - The command ledger orders a command as the Python service does (contract, permission, stored result, CAS and state, references) and commits the change, the action result, the audit entry and the Outbox events together; replays re-check the current permission and visibility.
 - 53 Python V0.50 tests of T01 and the shared foundation are ported (08 stage mapping); the front of BRC-001 (four lines, 120 PCS, ready) replays on PostgreSQL 16 directly and over HTTP with OIDC access tokens.
