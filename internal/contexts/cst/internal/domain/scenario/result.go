@@ -54,7 +54,11 @@ const (
 	FromCAT = "cat"
 	FromPOL = "pol"
 	FromSUP = "sup"
+	FromEVD = "evd"
 )
+
+// KindSource is the kind of an EVD source an evaluation binds.
+const KindSource = "source"
 
 // Uses of a bound input. An input is in force for the evaluation and is re-guarded by a freeze;
 // an anchor is the verified event a delivery counts from, whose standing is its verification;
@@ -63,6 +67,7 @@ const (
 	UseInput      = "input"
 	UseAnchor     = "anchor"
 	UseProvenance = "provenance"
+	UseEvidence   = "evidence" // an EVD source an input's content or verification cites
 )
 
 // BoundInput is one revision an evaluation read: its upstream context, kind, identity, revision

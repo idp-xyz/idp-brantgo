@@ -1,6 +1,7 @@
 // Package application runs CST's commands, queries and lookups on the command ledger. Costing
 // context rules live in domain/costing, measurement rules in domain/measurement (on the
-// calculation rules of domain/rules); SQL lives in adapters/postgres.
+// calculation rules of domain/rules), scenarios and their evaluation in domain/scenario, snapshots
+// and source attestations in domain/snapshot; SQL lives in adapters/postgres.
 //
 // CST's upstream contexts are INQ (Context Map R08, RfqRef v1 with a guard lock), CAT (R51, SkuRef
 // v1), POL (R10, ConfigRef v1 with ConfigGuard) and EVD (R64, SourceRef v1: the actor reads every

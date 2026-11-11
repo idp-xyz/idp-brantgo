@@ -80,7 +80,9 @@ type Computed struct {
 //     tax application; a payable fee measured, billed, taxed, converted and allocated;
 //  10. every fee type the comparison basis requires is accounted for (COST_INPUT_NOT_READY);
 //  11. the context's assumptions bound to the selected documents (provisional);
-//  12. the total within the business bound; the resource budget.
+//  12. the total within the business bound; the resource budget;
+//  13. the EVD sources every bound input rests on (Python _source): the caller reads each
+//     (PERMISSION_DENIED) and none was denied (REFERENCE_STALE at /sources/<id>).
 //
 // What does not refuse the calculation is recorded: differences make the result not comparable,
 // unverified assumptions and unresolved deliveries make it provisional.
@@ -99,6 +101,9 @@ func Evaluate(in Inputs) (Computed, error) {
 	}
 	result, err := e.run()
 	if err != nil {
+		return Computed{}, err
+	}
+	if err = e.evidence(); err != nil {
 		return Computed{}, err
 	}
 	inputs := make([]BoundInput, 0, len(e.bound))
@@ -761,6 +766,14 @@ func (e *engine) anchor(a costing.Ref, path string) (*delivery.Anchor, error) {
 		e.bind(FromSUP, kind, id, a.Revision, s.ContentHash, UseAnchor)
 		if s.Status != "active" {
 			return nil, fail(CodeReferenceStale, path, "The anchor's revision is no longer the active one")
+		}
+		// The anchor's own dependencies are history whose sources must still be trustworthy (Python
+		// _business(..., "delivery_anchor"): reference_dependencies, then _source on every source
+		// they used): purchase terms carry the offer revision they were formed from.
+		if t := s.Terms; t != nil && t.SourceOffer != nil {
+			if o, ok := e.in.Supply[*t.SourceOffer]; ok {
+				e.bind(FromSUP, t.SourceOffer.Kind, t.SourceOffer.ID, t.SourceOffer.Revision, o.ContentHash, UseProvenance)
+			}
 		}
 		return &delivery.Anchor{Path: path, Verified: true, OccurredAt: s.VerifiedAt}, nil
 	}
@@ -1690,4 +1703,78 @@ func checkOutput(r Result) error {
 		return fail(rules.CodeAllocationInvalid, "/result/total_minor", "The components do not sum to the total")
 	}
 	return nil
+}
+
+// evidence binds the EVD sources the bound inputs rest on (Python _source, called for the
+// verification and document evidence of every business revision an evaluation reads, the anchors'
+// origins and the provenance offer of independent purchase terms included): the costing context
+// revision's verification and assumption evidence, a measurement revision's evidence, an anchor
+// context revision's, and a supply condition revision's content and verification evidence. The
+// caller must read each source in EVD (Python _read_row: PERMISSION_DENIED, without detail) and CST
+// must not have recorded its denial (REFERENCE_STALE at /sources/<id>; Python /source_denial). POL,
+// INQ and CAT do not publish the evidence of their revisions in their references, so their sources
+// are not part of the chain. Sources are judged in ID order and bound with their content hash.
+func (e *engine) evidence() error {
+	seen := map[string]bool{}
+	var ids []string
+	for b := range e.bound {
+		for _, id := range e.sourcesOf(b) {
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		s, ok := e.in.Sources[id]
+		if !ok {
+			return kernel.Reject(kernel.CodePermissionDenied, "/", "")
+		}
+		if s.Denied {
+			return fail(CodeReferenceStale, "/sources/"+id, "The source was denied; cost on inputs verified on other evidence")
+		}
+		e.bind(FromEVD, KindSource, id, 1, s.ContentHash, UseEvidence)
+	}
+	return nil
+}
+
+// sourcesOf returns the sources bound input b rests on.
+func (e *engine) sourcesOf(b BoundInput) []string {
+	switch {
+	case b.Context == FromCST && b.Kind == KindCostingContext && b.Use == UseInput:
+		if c := e.in.Context; c != nil && c.Revision != nil {
+			return ContextSources(c.Revision)
+		}
+	case b.Context == FromCST && b.Kind == KindCostingContext && b.Use == UseAnchor:
+		return e.in.Contexts[ContextRef{ContextID: b.ID, Revision: b.Revision}].Sources
+	case b.Context == FromCST && b.Kind == KindMeasurement:
+		if m, ok := e.in.Measurements[MeasurementKey{MeasurementID: b.ID, Revision: b.Revision}]; ok && m.Revision != nil {
+			var out []string
+			for _, ev := range m.Revision.Data.Evidence {
+				out = append(out, ev.SourceID)
+			}
+			return out
+		}
+	case b.Context == FromSUP:
+		return e.in.Supply[Ref{Kind: b.Kind, ID: b.ID, Revision: b.Revision}].Sources
+	}
+	return nil
+}
+
+// ContextSources returns the sources a sealed costing context revision rests on: its verification
+// evidence and its assumptions' evidence.
+func ContextSources(r *costing.Revision) []string {
+	var out []string
+	if r.Seal != nil {
+		for _, ev := range r.Seal.Evidence {
+			out = append(out, ev.SourceID)
+		}
+	}
+	for _, a := range r.Data.Assumptions {
+		for _, ev := range a.Evidence {
+			out = append(out, ev.SourceID)
+		}
+	}
+	return out
 }

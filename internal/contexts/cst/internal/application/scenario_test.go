@@ -5,6 +5,8 @@ import (
 
 	"go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/scenario"
+	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/snapshot"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -69,5 +71,60 @@ func TestScenarioRequestHash(t *testing.T) {
 	_, _, b := request(api.SaveScenario{ScenarioID: "s", Data: api.ScenarioData{SelectionReason: "b"}})
 	if hash(t, a) == hash(t, b) {
 		t.Fatal("business arguments change the hash")
+	}
+}
+
+// The snapshot domain decides with the codes package api declares; its kinds, uses and verdicts
+// are the contract's.
+func TestSnapshotCodesAreTheContractsCodes(t *testing.T) {
+	for code, category := range snapshot.Categories {
+		if got, ok := api.Category(code); !ok || got != category {
+			t.Errorf("%s: api says %q (declared %v), domain says %q", code, got, ok, category)
+		}
+	}
+	for _, pair := range [][2]string{{scenario.FromEVD, api.InputFromEVD}, {scenario.KindSource, api.KindSource},
+		{scenario.UseEvidence, api.UseEvidence}, {snapshot.Attested, api.VerdictAttested}, {snapshot.Denied, api.VerdictDenied}} {
+		if pair[0] != pair[1] {
+			t.Errorf("domain %q, api %q", pair[0], pair[1])
+		}
+	}
+}
+
+// Freezing and attesting are human only (05 stage humanOnlyCommands 27, 28); the snapshot reads
+// need cst.read; both hash their business arguments without the key and the expected version.
+func TestSnapshotRulesAndRequestHash(t *testing.T) {
+	rules := map[string]authorization.Rule{}
+	for _, r := range Rules() {
+		rules[r.Command] = r
+	}
+	for _, c := range []string{api.CommandFreezeSnapshot, api.CommandAttestSource} {
+		r, ok := rules[c]
+		if !ok || len(r.ActorKinds) != 1 || r.ActorKinds[0] != kernel.ActorHuman || r.Permission != c {
+			t.Errorf("%s: %+v", c, r)
+		}
+	}
+	for _, c := range []string{CommandGetSnapshot, CommandQuerySnapshot, CommandGetAttestation} {
+		if rules[c].Permission != PermissionRead {
+			t.Errorf("%s: %+v", c, rules[c])
+		}
+	}
+	for _, pair := range [][2]api.Command{
+		{api.FreezeSnapshot{IdempotencyKey: "k1", ScenarioID: "s", ExpectedVersion: 1, EvaluationID: "e"},
+			api.FreezeSnapshot{IdempotencyKey: "k2", ScenarioID: "s", ExpectedVersion: 2, EvaluationID: "e"}},
+		{api.AttestSource{IdempotencyKey: "k1", AttestationID: "a", SourceID: "s"}, api.AttestSource{IdempotencyKey: "k2", AttestationID: "a", SourceID: "s"}},
+	} {
+		n1, k1, a1 := request(pair[0])
+		n2, k2, a2 := request(pair[1])
+		if n1 != n2 || n1 == "" || k1 != "k1" || k2 != "k2" || hash(t, a1) != hash(t, a2) {
+			t.Errorf("%s: %s %s %s", n1, n2, k1, k2)
+		}
+	}
+	_, _, a := request(api.FreezeSnapshot{ScenarioID: "s", EvaluationID: "e1"})
+	_, _, b := request(api.FreezeSnapshot{ScenarioID: "s", EvaluationID: "e2"})
+	if hash(t, a) == hash(t, b) {
+		t.Fatal("business arguments change the hash")
+	}
+	if !scenarioCommand(api.CommandFreezeSnapshot) || !scenarioCommand(api.CommandAttestSource) {
+		t.Fatal("replays of freezes and attestations check their visibility")
 	}
 }
