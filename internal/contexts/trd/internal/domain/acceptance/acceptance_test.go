@@ -317,4 +317,20 @@ func TestEffectivityLedger(t *testing.T) {
 	if err := again.Check("quote.1", 2, hash, "/a"); code(err) != "ACCEPTANCE_SCOPE_MISMATCH /a" {
 		t.Fatalf("another revision: %s", code(err))
 	}
+	// The owner's decision of 2026-11-11: a dispute ends in invalidation (disputed → invalidated at
+	// version 3), which frees the revision; a disputed acceptance is not disputed again, and an
+	// invalidated one never moves.
+	if err := again.MarkDisputed(1, act); err != nil || again.Effectivity != Disputed || again.Version != 2 || !again.Live() {
+		t.Fatalf("disputed %+v %v", again, err)
+	}
+	if err := again.MarkDisputed(2, act); code(err) != "INVALID_STATE /args/acceptance_id" {
+		t.Fatalf("disputed twice: %s", code(err))
+	}
+	if err := again.Invalidate(2, act); err != nil || again.Effectivity != Invalidated || again.Version != 3 || again.Live() ||
+		len(again.History) != 3 || again.History[2].Effectivity != Invalidated {
+		t.Fatalf("a dispute ended in invalidation %+v %v", again, err)
+	}
+	if err := again.Invalidate(3, act); code(err) != "INVALID_STATE /args/acceptance_id" {
+		t.Fatalf("invalidated twice: %s", code(err))
+	}
 }

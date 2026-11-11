@@ -149,12 +149,7 @@ func apiData(d quote.Data) api.QuoteData {
 		a.NamedPlaceRef = &p
 	}
 	if v := d.Delivery; v != nil {
-		dv := api.Delivery{Kind: v.Kind, Date: v.Date, Days: v.Days, DayBasis: v.DayBasis, CalendarRef: optAPIRef(v.Calendar),
-			Milestone: v.Milestone, PlaceRef: apiBusiness(v.Place), TimeZone: v.TimeZone}
-		if v.Anchor != nil {
-			anchor := apiBusiness(*v.Anchor)
-			dv.AnchorRef = &anchor
-		}
+		dv := apiDelivery(*v)
 		a.Delivery = &dv
 	}
 	for _, l := range d.Lines {
@@ -258,4 +253,15 @@ func calculationView(c *quote.Calculation) *api.CalculationView {
 		v.Payments = append(v.Payments, api.PaymentView{StageID: p.StageID, Percent: p.Percent, AmountMinor: p.AmountMinor})
 	}
 	return v
+}
+
+// apiDelivery is a delivery requirement as trd/api states it.
+func apiDelivery(v quote.Delivery) api.Delivery {
+	dv := api.Delivery{Kind: v.Kind, Date: v.Date, Days: v.Days, DayBasis: v.DayBasis, CalendarRef: optAPIRef(v.Calendar),
+		Milestone: v.Milestone, PlaceRef: apiBusiness(v.Place), TimeZone: v.TimeZone}
+	if v.Anchor != nil {
+		anchor := apiBusiness(*v.Anchor)
+		dv.AnchorRef = &anchor
+	}
+	return dv
 }

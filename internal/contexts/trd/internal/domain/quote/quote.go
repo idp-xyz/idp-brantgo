@@ -58,19 +58,24 @@ type End struct {
 
 // Quote is the QuoteRoot aggregate.
 type Quote struct {
-	ID              string
-	RootVersion     int64
-	LastRevision    int64
-	OwnerActor      string
-	OwnerTeam       string
-	Labels          []string // internal; never part of the business hash
-	InternalNote    string   // internal; never part of the business hash
-	Control         Control
-	Revisions       []*Revision
-	Reviews         []*Review   // in the order they were requested
-	Approvals       []*Approval // in the order they were given
-	Holds           []*Hold     // risk holds, in the order they were registered
-	Slot            *Slot       // the conversion slot, once taken
+	ID           string
+	RootVersion  int64
+	LastRevision int64
+	OwnerActor   string
+	OwnerTeam    string
+	Labels       []string // internal; never part of the business hash
+	InternalNote string   // internal; never part of the business hash
+	Control      Control
+	Revisions    []*Revision
+	Reviews      []*Review   // in the order they were requested
+	Approvals    []*Approval // in the order they were given
+	Holds        []*Hold     // risk holds, in the order they were registered
+	Slot         *Slot       // the conversion slot, once taken
+	// Contracts are the live (valid or disputed) acceptances of the root's revisions, by revision:
+	// the formed contracts that keep a revision from being superseded, withdrawn or cancelled (the
+	// owner's decision of 2026-11-11). They are loaded with the root and change only in commands that
+	// lock it first (quote.response.verify, acceptance.invalidate, acceptance.mark_disputed).
+	Contracts       map[int64][]string
 	MetadataChanged bool
 }
 

@@ -87,6 +87,9 @@ func LoadQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, i
 	if err = loadFormal(ctx, exec, scope, q); err != nil {
 		return nil, err
 	}
+	if err = loadContracts(ctx, exec, scope, q); err != nil {
+		return nil, err
+	}
 	return q, nil
 }
 
