@@ -10,8 +10,9 @@ import (
 )
 
 // RfqLineRef v1 (Context Map R04, T02 §13.1: rfq_id + rfq_row_version + line_id): INQ answers its
-// downstream contexts with an RFQ's state, row version and lines, including the SKU specification
-// revisions its confirmation fixed; RFQs outside the caller's company or data scope are absent.
+// downstream contexts with an RFQ's state, row version, customer and contact (what TRD's quote
+// calculation binds, R12) and lines, including the SKU specification revisions its confirmation
+// fixed; RFQs outside the caller's company or data scope are absent.
 func TestResolveRfqsForDownstreamContexts(t *testing.T) {
 	w := newWorld(t)
 	ctx := w.actor("human.1", allPermissions...)
@@ -25,7 +26,7 @@ func TestResolveRfqsForDownstreamContexts(t *testing.T) {
 	r, ok := got["rfq.1"]
 	if len(got) != 1 || !ok || r.Status != inqapi.StatusReady || r.RowVersion != ready.RowVersion || r.LinesHash == "" ||
 		len(r.Lines) != 1 || r.Lines[0].LineID != "L1" || r.Lines[0].SkuID != "sku.1" || r.Lines[0].SkuSpecRevision != 1 ||
-		r.Lines[0].Quantity != "120" {
+		r.Lines[0].Quantity != "120" || r.CustomerID != "customer.1" || r.ContactID != "contact.1" {
 		t.Fatalf("resolved %+v", got)
 	}
 	other := w.actor("human.2", "inq.read") // own data scope: another actor's RFQ is not seen

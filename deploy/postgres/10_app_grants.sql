@@ -151,8 +151,10 @@ GRANT EXECUTE ON FUNCTION brant_sup.guard_supply_condition_v1(text, text, bigint
 
 -- TRD: a quote root moves its version and its object control (trigger: identity and owner fixed,
 -- versions and control epochs only grow); a working revision is edited, frozen or discarded, a frozen
--- or discarded one never changes (trigger); nothing is deleted; the ledger only grows. The freeze
--- calls CST's, INQ's and POL's guard functions, granted above.
+-- one only moves to pending approval and back, a discarded one never changes (trigger); a review is
+-- decided once, an approval revoked once, a margin exception never changes (triggers); nothing is
+-- deleted; the ledger only grows. The freeze calls CST's, INQ's, CAT's, PTY's and POL's guard
+-- functions, granted above.
 GRANT USAGE ON SCHEMA brant_trd TO brant_app;
 GRANT SELECT, INSERT ON brant_trd.quote_root, brant_trd.quote_revision, brant_trd.action_result, brant_trd.audit_event TO brant_app;
 GRANT UPDATE (root_version, last_revision, labels, internal_note, control_state, control_epoch, control_task_id,
@@ -162,3 +164,8 @@ GRANT UPDATE (status, data, content_hash, contributors, saved_by_kind, saved_by_
               issued_at, expires_at, frozen_by_kind, frozen_by_id, freeze_epoch, frozen_at, frozen_root_version, ended_by_kind,
               ended_by_id, end_epoch, ended_at, end_reason, end_evidence)
     ON brant_trd.quote_revision TO brant_app;
+GRANT SELECT, INSERT ON brant_trd.quote_review, brant_trd.quote_approval, brant_trd.quote_margin_exception TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decided_epoch, decided_at, decision_reason, decision_evidence)
+    ON brant_trd.quote_review TO brant_app;
+GRANT UPDATE (effectivity, effectivity_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
+    ON brant_trd.quote_approval TO brant_app;

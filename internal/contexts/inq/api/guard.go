@@ -30,12 +30,16 @@ type RfqRefLine struct {
 	UOM             string
 }
 
-// RfqRef is what INQ says about one RFQ now: its status and row version, and its lines in
-// line-ID order with their LinesHash.
+// RfqRef is what INQ says about one RFQ now: its status and row version, the customer party and
+// the contact it asks for (empty while a draft lacks them; a ready RFQ has both), and its lines in
+// line-ID order with their LinesHash. The customer and contact are as the RFQ row stores them at
+// RowVersion; LinesHash and RfqGuard v1 cover the line set only.
 type RfqRef struct {
 	RfqID      string
 	RowVersion int64
 	Status     string
+	CustomerID string
+	ContactID  string
 	Lines      []RfqRefLine
 	LinesHash  string
 }

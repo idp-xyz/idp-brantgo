@@ -25,7 +25,8 @@ internal/contexts/pty/            PTY: parties with role sets and contacts; conf
                                   lists and PartyScreeningGuard v1; TradingProfileGuard v1 and AddressRoleGuard v1 for TRD
 internal/contexts/cat/            CAT: SKUs and specification revisions, item-code mappings; SkuRef and ItemCodeMappingRef lookups;
                                   SkuGuard v1 for TRD
-internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed; RfqLineRef lookup
+internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed; RfqLineRef and RfqRef (with customer and
+                                  contact) lookups, RfqGuard v1
 internal/contexts/sup/            SUP: supplier RFQs; supplier offers, purchase terms and logistics offers in sealed
                                   revisions (verify/publish independently, supersede, withdraw/retire);
                                   SupplyConditionRef lookup and SupplyConditionGuard v1
@@ -34,9 +35,10 @@ internal/contexts/pol/            POL: eighteen configuration kinds with indepen
 internal/contexts/cst/            CST: costing contexts and measurements in sealed revisions, the calculation rules, cost
                                   scenarios with deterministic evaluations, frozen cost snapshots (once per scenario),
                                   source attestations and denials; CostSnapshotRef lookup and AdoptabilityGuard v1
-internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working drafts, the human freeze with its commercial
-                                  document and business hash (Python protocol.py, golden vectors), internal metadata, the
-                                  root's object control and control epoch fence; the server calculation rules (calc)
+internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working drafts, the human freeze with the server calculation
+                                  (calc), its commercial document and business hash (Python protocol.py, golden vectors),
+                                  internal metadata, the root's object control and control epoch fence; review requests,
+                                  approvals with revocation and margin exceptions, the release check activation will use
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only

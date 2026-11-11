@@ -1,6 +1,7 @@
 // Package trd assembles the TRD bounded context (quotes, customer acceptance and sales orders). S3
-// starts with QuoteRoot: working drafts, the freeze with its commercial document and business hash,
-// internal metadata and the root's object control. Code outside TRD uses it through package api;
+// starts with QuoteRoot: working drafts, the freeze with its server calculation, commercial document
+// and business hash, internal metadata, the root's object control, and the review of a frozen
+// revision with its approval and margin exception. Code outside TRD uses it through package api;
 // everything under internal/ is private to TRD.
 package trd
 
@@ -37,7 +38,7 @@ var (
 
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,
 // TradingProfileRef and AddressRoleRef v1, R13), CAT (SkuRef v1, R14), POL (ConfigRef v1, R15), INQ
-// (RfqRef v1, R12) and CST (CostSnapshotRef v1, R11).
+// (RfqRef v1, R12) and CST (CostSnapshotRef v1 and the costing context it froze, R11).
 type Upstream struct {
 	Sources   evdapi.Queries
 	Parties   ptyapi.Queries
@@ -46,14 +47,15 @@ type Upstream struct {
 	Configs   polapi.Queries
 	Rfqs      inqapi.RfqLookups
 	Snapshots cstapi.SnapshotLookups
+	Contexts  cstapi.Lookups
 }
 
 // New wires TRD to db, a transaction owner that belongs to TRD alone, and to the lookups of its
-// upstream contexts. The freeze calls the guard functions of CAT, CST, INQ, POL and PTY itself. The
-// S3-02 server calculation (application.Calculator) is wired here once its inputs are available to
-// TRD; until then the freeze seals calculation null.
+// upstream contexts. The freeze calls the guard functions of CAT, CST, INQ, POL and PTY itself and
+// computes the quote on the server (application.ServerCalculator, WBS S3-02).
 func New(db *bentopg.DB, up Upstream) (*Module, error) {
-	if up.Sources == nil || up.Parties == nil || up.Profiles == nil || up.Skus == nil || up.Configs == nil || up.Rfqs == nil || up.Snapshots == nil {
+	if up.Sources == nil || up.Parties == nil || up.Profiles == nil || up.Skus == nil || up.Configs == nil || up.Rfqs == nil ||
+		up.Snapshots == nil || up.Contexts == nil {
 		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL, INQ and CST")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
@@ -65,9 +67,9 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 		return nil, err
 	}
 	clock := bento.SystemClock{}
-	return &Module{application.Service{Clock: clock,
+	return &Module{application.Service{Clock: clock, Calculator: application.ServerCalculator{},
 		Upstream: application.Upstream{Sources: up.Sources, Parties: up.Parties, Profiles: up.Profiles, Skus: up.Skus, Configs: up.Configs,
-			Rfqs: up.Rfqs, Snapshots: up.Snapshots},
+			Rfqs: up.Rfqs, Snapshots: up.Snapshots, Contexts: up.Contexts},
 		Ledger: &action.Ledger{
 			DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 			Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetQuote, Visible: application.Visible,

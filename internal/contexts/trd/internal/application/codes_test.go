@@ -38,7 +38,11 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 		api.CommandBindControl:    {kernel.ActorHuman, kernel.ActorSystem},
 		api.CommandStopControl:    {kernel.ActorHuman},
 		api.CommandReleaseControl: {kernel.ActorHuman},
+		api.CommandSubmitReview:   {kernel.ActorHuman},
+		api.CommandDecideReview:   {kernel.ActorHuman},
+		api.CommandRevokeApproval: {kernel.ActorHuman},
 		CommandGetQuote:           {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandCheckApproval:      {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 	}
 	for command, kinds := range want {
 		r, err := policy.Rule(command)
@@ -54,8 +58,16 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 				t.Errorf("%s admits %s: %v", command, k, r.Admits(k))
 			}
 		}
-		if command != CommandGetQuote && r.Permission != command {
+		if command != CommandGetQuote && command != CommandCheckApproval && r.Permission != command {
 			t.Errorf("%s needs permission %s", command, r.Permission)
 		}
+	}
+	if r, _ := policy.Rule(CommandCheckApproval); r.Permission != PermissionRead {
+		t.Errorf("%s needs %s", CommandCheckApproval, r.Permission)
+	}
+	// The domain's permission names are the api's command and read names.
+	if quote.PermissionReview != api.CommandDecideReview || quote.PermissionMarginException != api.PermissionMarginException ||
+		quote.PermissionRead != PermissionRead {
+		t.Error("permission names differ")
 	}
 }

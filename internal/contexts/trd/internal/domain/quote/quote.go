@@ -7,9 +7,9 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// Status of a revision (SM-TRD-REVISION). S3-01 writes working, frozen and discarded; the other
-// states come with review, activation, replacement, withdrawal and cancellation, and the storage
-// already admits one active revision per root (TRD-INV-001).
+// Status of a revision (SM-TRD-REVISION). TRD writes working, frozen, discarded and
+// pending_approval; the other states come with activation, replacement, withdrawal and
+// cancellation, and the storage already admits one active revision per root (TRD-INV-001).
 type Status string
 
 const (
@@ -43,6 +43,7 @@ type Revision struct {
 	End          *End  // discarded
 	Fresh        bool  // not stored yet
 	Changed      bool  // stored, changed by this command
+	StatusOnly   bool  // stored and sealed: only its status changed
 }
 
 // End is how a working revision was discarded.
@@ -65,6 +66,8 @@ type Quote struct {
 	InternalNote    string   // internal; never part of the business hash
 	Control         Control
 	Revisions       []*Revision
+	Reviews         []*Review   // in the order they were requested
+	Approvals       []*Approval // in the order they were given
 	MetadataChanged bool
 }
 

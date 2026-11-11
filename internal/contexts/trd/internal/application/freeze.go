@@ -23,59 +23,48 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// quote.freeze (human; WBS S3-01, TRD-INV-002).
+// quote.freeze (human; WBS S3-01, S3-02, TRD-INV-002).
 //
 // Before TRD's transaction, after the command is authorized and found not to be a replay, Prepare
 // reads the stored working revision and asks every upstream about its references at the freeze's
 // instant, each in a transaction of its own: EVD the evidence sources, PTY the customer party and
-// contact, the trading profile and the addresses, INQ the RFQ, CAT the SKU specifications, POL every
-// configuration (and, in a second round, the revisions those name), CST the cost snapshot with its
-// adoptability.
+// contact, the trading profile and the addresses, INQ the RFQ (with its customer, contact and line
+// set), CAT the SKU specifications, CST the cost snapshot with its adoptability and the costing
+// context it froze (its comparison basis), POL every configuration the draft names and the
+// costing's comparison currency and cost units (and, in a second round, the revisions those name).
 //
 // Inside the transaction the lock and guard order is (ADR-BR-011, tactical lockOrder):
 //
 //  1. the quote root FOR UPDATE (the handler's Lock), which also holds its object control;
 //  2. the company's authority guard row FOR SHARE (the ledger's Authorize);
-//  3. after the domain sealed the draft, the upstream guard rows FOR SHARE through their guard
-//     functions, in context code order (guardUpstream): CAT (SkuGuard v1 per specification
-//     revision), CST (AdoptabilityGuard v1, which in turn locks the snapshot, its sources and
-//     inputs), INQ (RfqGuard v1), POL (ConfigGuard v1 per adopted revision in kind, ID and
-//     revision order), PTY (TradingProfileGuard v1, which also locks the party and the pinned
-//     contacts, then AddressRoleGuard v1 per address);
+//  3. after the domain judged the draft and the server calculation computed it (quote.SealDraft,
+//     Calculator), the upstream guard rows FOR SHARE through their guard functions, in context
+//     code order (guardUpstream): CAT (SkuGuard v1 per specification revision), CST
+//     (AdoptabilityGuard v1, which in turn locks the snapshot, its sources and inputs), INQ
+//     (RfqGuard v1), POL (ConfigGuard v1 per adopted revision in kind, ID and revision order), PTY
+//     (TradingProfileGuard v1, which also locks the party and the pinned contacts, then
+//     AddressRoleGuard v1 per address);
 //  4. the revision, the action result, the audit entry and QuoteFrozen in the Outbox.
 //
 // An upstream change that ends what the freeze binds (a source denial, an RFQ cancellation, a
 // configuration retirement, a party or specification revision) either committed before its guard
 // read the row, and the freeze is refused with the owner's verdict, or waits until the freeze
-// commits.
+// commits. The costing context's comparison basis needs no guard of its own: a sealed revision
+// never changes, and CST's AdoptabilityGuard decides whether the snapshot built on it is adoptable.
 //
 // STL's CreditGuard v1 (Context Map R57) and CNX's TradeComplianceGuard v1 (R58) are not freeze
 // guards: the design checks credit and trade compliance at order.activate (TRD-INV-022, 023), which
 // comes with the order wave; by the owner's decision of 2026-11-10 both are S4–S5 integration and
 // stay recorded gaps there. In context code order CNX falls between CAT and CST, STL after PTY.
 
-// Calculator is the server calculation of WBS S3-02 (sales charges, tax, sales FX, margin, payment
-// allocation): the one place a freeze takes amounts from, never from the client. It computes on
-// the draft and what POL and CST said before the transaction; the domain checks that its result
-// fits the revision before the freeze seals it.
-type Calculator interface {
-	Calculate(in CalculationInput) (*quote.Calculation, error)
-}
-
-// CalculationInput is what the calculation of one freeze rests on.
-type CalculationInput struct {
-	Data     quote.Data
-	Configs  map[polapi.ConfigRef]polapi.ResolvedConfig // every POL revision the draft adopts, direct and nested
-	Snapshot cstapi.ResolvedSnapshot
-	At       time.Time
-}
-
 // facts are what the upstreams said before the transaction: the domain's view and the raw answers
 // the calculation needs.
 type facts struct {
 	quote.Facts
 	configs  map[polapi.ConfigRef]polapi.ResolvedConfig
+	rfq      *inqapi.RfqRef
 	snapshot *cstapi.ResolvedSnapshot
+	context  *cstapi.VerifiedContext
 }
 
 // Freeze seals the working revision (Python quote.freeze).
@@ -115,11 +104,7 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 			return action.Outcome{}, kernel.Reject(kernel.CodeVersionConflict, "/args/expected_version", "")
 		}
 		w, now := h.q.Working(), s.Clock.Now()
-		calc, err := s.calculate(w.Data, f, now)
-		if err != nil {
-			return action.Outcome{}, err
-		}
-		seal, err := quote.SealDraft(h.q.ID, w.Number, w.Data, f.Facts, calc, now)
+		seal, err := quote.SealDraft(h.q.ID, w.Number, w.Data, f.Facts, s.calculation(w.Data, f, now), now)
 		if err != nil {
 			return action.Outcome{}, err
 		}
@@ -129,11 +114,13 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 		if _, err = h.q.Freeze(cmd.WorkingRevision, seal, d.Actor, d.Epoch, now); err != nil {
 			return action.Outcome{}, err
 		}
+		c := seal.Calculation
 		event := action.Event{Type: api.EventQuoteFrozen, AggregateType: "QuoteRoot", AggregateID: h.q.ID, AggregateVersion: h.q.RootVersion,
 			Fields: map[string]any{"quote_id": h.q.ID, "business_revision": w.Number, "business_hash": seal.BusinessHash,
 				"issued_at": kernel.FormatTimestamp(seal.IssuedAt), "expires_at": kernel.FormatTimestamp(seal.ExpiresAt),
 				"rfq_id": seal.Rfq.ID, "rfq_row_version": seal.Rfq.Version, "cost_snapshot_id": seal.Snapshot.SnapshotID,
-				"customer_party_id": w.Data.Customer.PartyID, "calculation_server_owned": calc != nil}}
+				"customer_party_id": w.Data.Customer.PartyID, "calculation_server_owned": true, "margin_rule": c.MarginRule,
+				"calculation_version": c.CalculationVersion}}
 		return h.save(ctx, exec, false, api.StatusFrozen, event)
 	}
 	r, err := s.run(ctx, action.Command{Name: api.CommandFreeze, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.QuoteID},
@@ -144,14 +131,20 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 	return s.freezeReceipt(ctx, r)
 }
 
-// calculate runs the S3-02 server calculation when it is wired. Until then the commercial document
-// carries calculation null: nothing is computed, and nothing claims it was (the review and
-// activation waves must refuse a revision without a calculation).
-func (s Service) calculate(d quote.Data, f facts, at time.Time) (*quote.Calculation, error) {
-	if s.Calculator == nil || f.snapshot == nil {
-		return nil, nil
+// calculation is the server calculation of draft d on facts f at instant at, which SealDraft runs
+// once it found every reference known and in effect. Without a Calculator TRD is misconfigured
+// and SealDraft freezes nothing (quote.ErrNoCalculation).
+func (s Service) calculation(d quote.Data, f facts, at time.Time) quote.Calculate {
+	if s.Calculator == nil {
+		return nil
 	}
-	return s.Calculator.Calculate(CalculationInput{Data: d, Configs: maps.Clone(f.configs), Snapshot: *f.snapshot, At: at})
+	return func() (*quote.Calculation, error) {
+		if f.rfq == nil || f.snapshot == nil || f.Profile == nil {
+			return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/data", "")
+		}
+		return s.Calculator.Calculate(CalculationInput{Data: d, Configs: maps.Clone(f.configs), Rfq: *f.rfq, Profile: *f.Profile,
+			Snapshot: *f.snapshot, Context: f.context, At: at})
+	}
 }
 
 // guardUpstream re-checks, inside TRD's transaction after the root is locked FOR UPDATE, what the
@@ -295,11 +288,8 @@ func (s Service) facts(ctx context.Context, d quote.Data, at time.Time) (facts, 
 			return f, err
 		}
 		if r, ok := rfqs[d.Rfq.RfqID]; ok {
+			f.rfq = &r
 			f.Rfq = &quote.Rfq{RowVersion: r.RowVersion, Ready: r.Ready(), LinesHash: r.LinesHash}
-			for _, l := range r.Lines {
-				f.Rfq.Lines = append(f.Rfq.Lines, quote.RfqLine{LineID: l.LineID, SkuID: l.SkuID, SpecRevision: l.SkuSpecRevision,
-					Quantity: l.Quantity, UOM: l.UOM})
-			}
 		}
 	}
 	if len(d.Lines) > 0 {
@@ -315,9 +305,6 @@ func (s Service) facts(ctx context.Context, d quote.Data, at time.Time) (facts, 
 			f.Specs[quote.SkuRef{SkuID: ref.SkuID, SpecRevision: ref.SpecRevision}] = standing.Check
 		}
 	}
-	if err = s.configs(ctx, d.ConfigRefs(), at, &f); err != nil {
-		return f, err
-	}
 	if d.Snapshot != nil {
 		ref := cstapi.CostSnapshotRef{SnapshotID: d.Snapshot.SnapshotID, ResultHash: d.Snapshot.ResultHash}
 		found, err := s.Upstream.Snapshots.ResolveSnapshots(ctx, []cstapi.CostSnapshotRef{ref}, at)
@@ -327,17 +314,24 @@ func (s Service) facts(ctx context.Context, d quote.Data, at time.Time) (facts, 
 		if rs, ok := found[ref]; ok {
 			f.snapshot = &rs
 			a := rs.Adoptability
-			f.Snapshot = &quote.Snapshot{RfqID: rs.Rfq.RfqID, RfqVersion: rs.Rfq.RowVersion, RfqLinesHash: rs.Rfq.LinesHash,
-				Currency: rs.Currency, EvidenceHash: rs.EvidenceHash, Check: func(path string) error {
-					if a.Adoptable() {
-						return nil
-					}
-					return kernel.RejectAs(cstapi.CodeCostSnapshotIneligible, kernel.CategoryInvalid, path, "The cost snapshot is "+a.Status)
-				}}
-			for _, l := range rs.Lines {
-				f.Snapshot.LineIDs = append(f.Snapshot.LineIDs, l.LineID)
+			f.Snapshot = &quote.Snapshot{RfqLinesHash: rs.Rfq.LinesHash, EvidenceHash: rs.EvidenceHash, Check: func(path string) error {
+				if a.Adoptable() {
+					return nil
+				}
+				return kernel.RejectAs(cstapi.CodeCostSnapshotIneligible, kernel.CategoryInvalid, path, "The cost snapshot is "+a.Status)
+			}}
+			contexts, err := s.Upstream.Contexts.ResolveContexts(ctx, []cstapi.ContextRef{rs.Context})
+			if err != nil {
+				return f, err
+			}
+			if vc, ok := contexts[rs.Context]; ok {
+				f.context = &vc
+				f.Adopted = adoptedRefs(&vc)
 			}
 		}
+	}
+	if err = s.configs(ctx, append(d.ConfigRefs(), f.Adopted...), at, &f); err != nil {
+		return f, err
 	}
 	return f, nil
 }
@@ -438,7 +432,8 @@ func (s Service) configs(ctx context.Context, refs []quote.Ref, at time.Time, f 
 	return nil
 }
 
-// config is what the freeze judges of a POL revision.
+// config is what the freeze judges itself of a POL revision; the calculation reads the raw
+// revision (calculate.go).
 func config(rc polapi.ResolvedConfig) quote.Config {
 	c := quote.Config{Check: rc.Check, ContentHash: rc.ContentHash}
 	nested := func(r *polapi.ConfigRef) {
@@ -450,27 +445,14 @@ func config(rc polapi.ResolvedConfig) quote.Config {
 	case d.CompanyProfile != nil:
 		p := d.CompanyProfile
 		c.Company = &quote.IssuerSnapshot{LegalName: p.LegalName, RegistrationNo: p.RegistrationNo, Country: p.Country, Address: p.Address}
-	case d.Currency != nil:
-		c.CurrencyCode = d.Currency.Code
-	case d.Unit != nil:
-		c.UnitCode = d.Unit.Code
-	case d.UnitConversion != nil:
-		u := d.UnitConversion
-		c.Conversion = &quote.Conversion{SkuID: u.SkuID, SpecRevision: u.SpecRevision, From: u.FromUnit, To: u.ToUnit, Factor: u.Factor}
-	case d.FXRate != nil:
-		c.FX = &quote.FX{From: d.FXRate.FromCurrency, To: d.FXRate.ToCurrency, Purpose: d.FXRate.Purpose}
 	case d.TradeTerms != nil:
 		nested(d.TradeTerms.Delivery.Calendar)
 	case d.PaymentTerms != nil:
 		nested(d.PaymentTerms.Calendar)
 	case d.TaxApplication != nil:
-		t := d.TaxApplication
-		c.TaxApplication = &quote.TaxApplication{Side: t.Side, SubjectKind: t.SubjectKind, SubjectID: t.SubjectID, PartyID: t.PartyID}
-		nested(&t.TaxProfile)
-	case d.FeeCategory != nil:
-		c.FeeSide = d.FeeCategory.Side
+		nested(&d.TaxApplication.TaxProfile)
 	case d.PricingPolicy != nil:
-		c.Policy = &quote.Policy{CalculationCurrency: d.PricingPolicy.CalculationCurrency, QuoteValidDays: d.PricingPolicy.QuoteValidDays}
+		c.Policy = &quote.Policy{QuoteValidDays: d.PricingPolicy.QuoteValidDays}
 		nested(&d.PricingPolicy.TaxProfile)
 	case d.NumberSequence != nil:
 		c.SequenceType = d.NumberSequence.DocumentType

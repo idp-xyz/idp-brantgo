@@ -398,7 +398,8 @@ func (s Service) ResolveRfqs(ctx context.Context, ids []string) (map[string]api.
 			if r == nil || !d.Sees(r.OwnerActor, r.OwnerTeam) {
 				continue
 			}
-			ref := api.RfqRef{RfqID: r.ID, RowVersion: r.RowVersion, Status: string(r.Status), Lines: []api.RfqRefLine{}}
+			ref := api.RfqRef{RfqID: r.ID, RowVersion: r.RowVersion, Status: string(r.Status), CustomerID: r.CustomerID, ContactID: r.ContactID,
+				Lines: []api.RfqRefLine{}}
 			for _, l := range r.Lines {
 				ref.Lines = append(ref.Lines, api.RfqRefLine{LineID: l.ID, SkuID: l.SkuID, SkuSpecRevision: l.SkuSpecRevision,
 					Quantity: l.Quantity, UOM: l.UOM})

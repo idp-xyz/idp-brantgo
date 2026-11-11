@@ -100,6 +100,30 @@ type SkuRef struct {
 	SpecRevision int64  `json:"spec_revision"`
 }
 
+// BusinessRef names a revision of a business object no Brant context owns yet: a place (kind
+// location) or a delivery anchor (kind delivery_anchor), compared as an identity (CST BusinessRef).
+type BusinessRef struct {
+	Kind     string `json:"kind"`
+	ID       string `json:"id"`
+	Revision int64  `json:"revision"`
+}
+
+// Delivery is the customer's delivery requirement as a quote states it and as the adopted costing
+// compared candidates on it (CST Delivery): a milestone at a place in an IANA time zone, on a
+// fixed date or Days (calendar or working) days after the event Anchor names, counted on a POL
+// calendar. Days of 0 are omitted from the JSON.
+type Delivery struct {
+	Kind      string       `json:"kind"`
+	Date      string       `json:"date,omitempty"`
+	Anchor    *BusinessRef `json:"anchor_ref,omitempty"`
+	Days      int          `json:"days,omitempty"`
+	DayBasis  string       `json:"day_basis,omitempty"`
+	Calendar  *Ref         `json:"calendar_ref,omitempty"`
+	Milestone string       `json:"milestone"`
+	Place     BusinessRef  `json:"place_ref"`
+	TimeZone  string       `json:"time_zone"`
+}
+
 // Evidence is an EVD source and the place in it a human relied on (Context Map R16).
 type Evidence struct {
 	SourceID string `json:"source_id"`
@@ -107,7 +131,8 @@ type Evidence struct {
 }
 
 // Line is one quoted line: an RFQ line at its SKU specification, the quantity in the quoted unit
-// (converted to the RFQ's unit by ConversionRef when the units differ), the price per
+// (converted to the costing's unit by Conversion when the units differ), the quantity in the
+// costing's unit when the author states it (BaseQuantity, "" otherwise), the price per
 // PriceBasisQuantity units, the discount and the sales tax application. Decimals are strings in
 // their contract formats, never floats.
 type Line struct {
@@ -117,6 +142,7 @@ type Line struct {
 	Quantity           string     `json:"quantity"`
 	Unit               Ref        `json:"unit_ref"`
 	Conversion         *Ref       `json:"conversion_ref,omitempty"`
+	BaseQuantity       string     `json:"base_quantity,omitempty"`
 	UnitPrice          string     `json:"unit_price"`
 	PriceBasisQuantity string     `json:"price_basis_quantity"`
 	DiscountRatio      string     `json:"discount_ratio"`
@@ -157,7 +183,9 @@ type Data struct {
 	PricingPolicy    *Ref         `json:"pricing_policy_ref,omitempty"`
 	SalesFX          *Ref         `json:"sales_fx_ref,omitempty"`
 	TradeTerms       *Ref         `json:"trade_terms_ref,omitempty"`
+	NamedPlace       *BusinessRef `json:"named_place_ref,omitempty"`
 	PaymentTerms     *Ref         `json:"payment_terms_ref,omitempty"`
+	Delivery         *Delivery    `json:"delivery,omitempty"`
 	DocumentTemplate *Ref         `json:"document_template_ref,omitempty"`
 	Sequence         *Ref         `json:"sequence_ref,omitempty"`
 	ExpiresAt        string       `json:"expires_at,omitempty"`
@@ -213,6 +241,9 @@ func (d Data) Fields() []Field {
 	add(d.SalesFX, KindFXRate, p+"/sales_fx_ref")
 	add(d.TradeTerms, KindTradeTerms, p+"/trade_terms_ref")
 	add(d.PaymentTerms, KindPaymentTerms, p+"/payment_terms_ref")
+	if d.Delivery != nil {
+		add(d.Delivery.Calendar, KindCalendar, p+"/delivery/calendar_ref")
+	}
 	add(d.DocumentTemplate, KindQuoteDocumentTemplate, p+"/document_template_ref")
 	add(d.Sequence, KindNumberSequence, p+"/sequence_ref")
 	return out

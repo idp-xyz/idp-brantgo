@@ -86,9 +86,78 @@ func TestOtherCommandContracts(t *testing.T) {
 		{BindControl{IdempotencyKey: "k", QuoteID: "q", TaskID: "task.1"}.Validate(), "OK"},
 		{StopControl{IdempotencyKey: "k", QuoteID: "q", Reason: "r"}.Validate(), "SCHEMA_INVALID /args/expected_control_epoch"},
 		{ReleaseControl{IdempotencyKey: "k", QuoteID: "q", ExpectedControlEpoch: 1}.Validate(), "SCHEMA_INVALID /args/reason"},
+		{submit(TargetActivate, 0).Validate(), "OK"},
+		{submit(TargetReplace, 1).Validate(), "OK"},
+		{submit(TargetActivate, 1).Validate(), "SCHEMA_INVALID /args/expected_active_revision"},
+		{submit(TargetReplace, 0).Validate(), "SCHEMA_INVALID /args/expected_active_revision"},
+		{submit("quote.cancel", 0).Validate(), "SCHEMA_INVALID /args/target_command"},
+		{SubmitReview{IdempotencyKey: "k", QuoteID: "q", ExpectedVersion: 1, ReviewRequestID: "r", TargetCommand: TargetActivate}.Validate(),
+			"SCHEMA_INVALID /args/business_revision"},
+		{decide(DecisionApprove, nil).Validate(), "OK"},
+		{decide(DecisionApprove, func(c *DecideReview) { c.ExpiresAt = "" }).Validate(), "SCHEMA_INVALID /args/expires_at"},
+		{decide(DecisionApprove, func(c *DecideReview) { c.ApprovalID = "" }).Validate(), "SCHEMA_INVALID /args/approval_id"},
+		{decide(DecisionApprove, func(c *DecideReview) { c.BusinessHash = "x" }).Validate(), "SCHEMA_INVALID /args/business_hash"},
+		{decide("approved", nil).Validate(), "SCHEMA_INVALID /args/decision"},
+		{decide(DecisionReturn, func(c *DecideReview) { c.ApprovalID, c.ExpiresAt, c.Reason = "", "", "改价" }).Validate(), "OK"},
+		{decide(DecisionReject, func(c *DecideReview) { c.ApprovalID, c.ExpiresAt = "", "" }).Validate(), "SCHEMA_INVALID /args/reason"},
+		{decide(DecisionReturn, func(c *DecideReview) { c.ExpiresAt, c.Reason = "", "r" }).Validate(), "SCHEMA_INVALID /args/approval_id"},
+		{decide(DecisionApprove, func(c *DecideReview) { c.MarginException = exception() }).Validate(), "OK"},
+		{decide(DecisionApprove, func(c *DecideReview) { c.MarginException = exception(); c.MarginException.Shortfall = "-1" }).Validate(),
+			"SCHEMA_INVALID /args/margin_exception/shortfall"},
+		{decide(DecisionApprove, func(c *DecideReview) { c.MarginException = exception(); c.MarginException.Reason = "" }).Validate(),
+			"SCHEMA_INVALID /args/margin_exception/reason"},
+		{decide(DecisionApprove, func(c *DecideReview) { c.Evidence = []Evidence{} }).Validate(), "SCHEMA_INVALID /args/evidence"},
+		{RevokeApproval{IdempotencyKey: "k", QuoteID: "q", ApprovalID: "a", ExpectedEffectivityVersion: 1, Reason: "r", Evidence: proof}.Validate(), "OK"},
+		{RevokeApproval{IdempotencyKey: "k", QuoteID: "q", ApprovalID: "a", Reason: "r", Evidence: proof}.Validate(),
+			"SCHEMA_INVALID /args/expected_effectivity_version"},
+		{RevokeApproval{IdempotencyKey: "k", QuoteID: "q", ApprovalID: "a", ExpectedEffectivityVersion: 1, Reason: "r"}.Validate(),
+			"SCHEMA_INVALID /args/evidence"},
 	} {
 		if got := pathOf(c.err); got != c.want {
 			t.Errorf("got %s, want %s", got, c.want)
+		}
+	}
+}
+
+func submit(target string, active int64) SubmitReview {
+	return SubmitReview{IdempotencyKey: "k", QuoteID: "q", ExpectedVersion: 1, BusinessRevision: 1, ReviewRequestID: "review.1",
+		TargetCommand: target, ExpectedActiveRevision: active}
+}
+
+func decide(decision string, edit func(c *DecideReview)) DecideReview {
+	c := DecideReview{IdempotencyKey: "k", QuoteID: "q", ExpectedVersion: 1, ReviewRequestID: "review.1",
+		BusinessHash: strings.Repeat("a", 64), Decision: decision, ApprovalID: "approval.1", ExpiresAt: "2026-10-28T08:00:00Z"}
+	if edit != nil {
+		edit(&c)
+	}
+	return c
+}
+
+func exception() *MarginException {
+	return &MarginException{PricingPolicyRef: ConfigRef{Kind: "pricing_policy", ID: "policy.1", Revision: 1}, MinimumMargin: "0.25",
+		Shortfall: "30", Reason: "战略客户首单"}
+}
+
+// The named place and the delivery of a draft have CST's closed form (Python T03 quote_data
+// location_ref and delivery; CST api.Delivery for lead times).
+func TestPlaceAndDeliveryContract(t *testing.T) {
+	place := BusinessRef{Kind: PlaceKind, ID: "DEHAM", Revision: 1}
+	fixed := Delivery{Kind: DeliveryFixed, Date: "2027-01-31", Milestone: MilestoneHandover, PlaceRef: place, TimeZone: "Asia/Shanghai"}
+	lead := Delivery{Kind: DeliveryLeadTime, AnchorRef: &BusinessRef{Kind: AnchorKind, ID: "order:o.1", Revision: 1}, Days: 30,
+		DayBasis: DayBasisWorking, CalendarRef: &ConfigRef{Kind: "calendar", ID: "cal", Revision: 1}, Milestone: MilestoneGoodsReady,
+		PlaceRef: place, TimeZone: "Asia/Shanghai"}
+	for want, d := range map[string]QuoteData{
+		"OK":  {NamedPlaceRef: &place, Delivery: &fixed},
+		"OK ": {Delivery: &lead},
+		"SCHEMA_INVALID /args/data/named_place_ref/kind":  {NamedPlaceRef: &BusinessRef{Kind: "port", ID: "DEHAM", Revision: 1}},
+		"SCHEMA_INVALID /args/data/delivery/date":         {Delivery: &Delivery{Kind: DeliveryFixed, Date: "2027-02-30", Milestone: MilestoneArrival, PlaceRef: place, TimeZone: "UTC"}},
+		"SCHEMA_INVALID /args/data/delivery/milestone":    {Delivery: &Delivery{Kind: DeliveryFixed, Date: "2027-01-31", Milestone: "loaded", PlaceRef: place, TimeZone: "UTC"}},
+		"SCHEMA_INVALID /args/data/delivery":              {Delivery: &Delivery{Kind: DeliveryFixed, Date: "2027-01-31", Days: 3, Milestone: MilestoneArrival, PlaceRef: place, TimeZone: "UTC"}},
+		"SCHEMA_INVALID /args/data/delivery/anchor_ref":   {Delivery: &Delivery{Kind: DeliveryLeadTime, Days: 3, DayBasis: DayBasisCalendar, Milestone: MilestoneArrival, PlaceRef: place, TimeZone: "UTC"}},
+		"SCHEMA_INVALID /args/data/lines/0/base_quantity": {Lines: []Line{func() Line { l := line(); l.BaseQuantity = "0"; return l }()}},
+	} {
+		if got := pathOf(d.Validate("/args/data")); got != strings.TrimSpace(want) {
+			t.Errorf("got %s, want %s", got, want)
 		}
 	}
 }
@@ -97,7 +166,8 @@ func TestOtherCommandContracts(t *testing.T) {
 // (PYT-0195): no command a transport decodes has a member that names a task or a control epoch,
 // except object_control.bind's own task; the claim comes from the trusted adapter's context only.
 func TestTaskIdentityIsNotACommandMember(t *testing.T) {
-	for _, c := range []any{SaveDraft{}, Revise{}, DiscardDraft{}, Freeze{}, UpdateMetadata{}, StopControl{}, ReleaseControl{}, QuoteData{}, Line{}, Charge{}} {
+	for _, c := range []any{SaveDraft{}, Revise{}, DiscardDraft{}, Freeze{}, UpdateMetadata{}, StopControl{}, ReleaseControl{}, QuoteData{}, Line{}, Charge{},
+		SubmitReview{}, DecideReview{}, RevokeApproval{}, MarginException{}} {
 		ty := reflect.TypeOf(c)
 		for i := range ty.NumField() {
 			name := ty.Field(i).Name
@@ -129,6 +199,14 @@ func TestCodesHaveCatalogCategories(t *testing.T) {
 		CodeCostSnapshotMissing: kernel.CategoryInvalid, CodeBusinessHashMismatch: kernel.CategoryInvalid,
 		CodeCustomerReferenceMiss: kernel.CategoryInvalid, CodeContactReferenceMiss: kernel.CategoryInvalid,
 		CodeReferenceStale: kernel.CategoryConflict,
+		// Review and approval: BUSINESS_KEY_CONFLICT, QUOTE_ACTIVE, QUOTE_NOT_CURRENT and
+		// APPROVAL_STALE 409, MARGIN_EXCEPTION_NOT_AUTHORIZED 403, the rest 422.
+		CodeBusinessKeyConflict: kernel.CategoryConflict, CodeQuoteActive: kernel.CategoryConflict,
+		CodeQuoteNotCurrent: kernel.CategoryConflict, CodeNoActiveRevision: kernel.CategoryInvalid,
+		CodeApprovalRequired: kernel.CategoryInvalid, CodeApprovalRevoked: kernel.CategoryInvalid,
+		CodeApprovalExpired: kernel.CategoryInvalid, CodeApprovalStale: kernel.CategoryConflict,
+		CodeApprovalReferenceMismatch: kernel.CategoryInvalid, CodeIndependentReviewRequired: kernel.CategoryInvalid,
+		CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 	}
 	if len(codes) != len(want) {
 		t.Fatalf("%d QuoteRoot codes, want %d", len(codes), len(want))

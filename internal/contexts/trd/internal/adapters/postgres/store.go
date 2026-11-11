@@ -73,8 +73,16 @@ func LoadQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, i
 	if err != nil {
 		return nil, err
 	}
-	q.Revisions, err = pgx.CollectRows(rows, scanRevision)
-	return q, err
+	if q.Revisions, err = pgx.CollectRows(rows, scanRevision); err != nil {
+		return nil, err
+	}
+	if q.Reviews, err = loadReviews(ctx, exec, scope, id); err != nil {
+		return nil, err
+	}
+	if q.Approvals, err = loadApprovals(ctx, exec, scope, id); err != nil {
+		return nil, err
+	}
+	return q, nil
 }
 
 func scanRevision(row pgx.CollectableRow) (*quote.Revision, error) {
@@ -159,10 +167,30 @@ func SaveQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, q
 			return err
 		}
 	}
+	// Reviews after the revisions they move, approvals after the reviews that approved them,
+	// exceptions after their approvals: the triggers check each against what it binds.
+	for _, r := range q.Reviews {
+		if err := writeReview(ctx, exec, t, c, q.ID, r); err != nil {
+			return err
+		}
+	}
+	for _, a := range q.Approvals {
+		if err := writeApproval(ctx, exec, t, c, q.ID, a); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func writeRevision(ctx context.Context, exec bentopg.Executor, t, c, id string, r *quote.Revision) error {
+	if r.StatusOnly && !r.Fresh {
+		tag, err := exec.Exec(ctx, `UPDATE brant_trd.quote_revision SET status = $5
+			WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3 AND revision = $4`, t, c, id, r.Number, string(r.Status))
+		if err == nil && tag.RowsAffected() != 1 {
+			err = ErrConflict
+		}
+		return err
+	}
 	tree, err := quote.TreeOf(r.Data)
 	if err != nil {
 		return err

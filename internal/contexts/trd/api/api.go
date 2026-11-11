@@ -19,12 +19,19 @@
 // object_control.bind {quote_id, task_id, expected_control_epoch}; object_control.stop and
 // object_control.release {quote_id, expected_control_epoch, reason}. The members of data are the
 // JSON names of QuoteData's fields as documented there.
+//
+// The freeze computes the quote's amounts on the server (WBS S3-02: internal/domain/calc) and seals
+// them in the commercial document's calculation. A frozen revision is reviewed (WBS S3-03, S3-14;
+// review.go): quote.submit_review, quote.review.decide with its margin exception, and
+// quote.approval.revoke.
 package api
 
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -70,6 +77,26 @@ const (
 const (
 	InclusionSeparate       = "separate"
 	InclusionIncludedInLine = "included_in_line"
+)
+
+// Places and deliveries, as CST's costing context compares candidates on them (CST api.Delivery):
+// a place is a BusinessRef of kind location, a delivery anchor one of kind delivery_anchor.
+const (
+	PlaceKind  = "location"
+	AnchorKind = "delivery_anchor"
+
+	DeliveryFixed    = "fixed"
+	DeliveryLeadTime = "lead_time"
+
+	MilestoneGoodsReady = "goods_ready"
+	MilestoneHandover   = "handover"
+	MilestoneArrival    = "arrival"
+
+	DayBasisCalendar = "calendar"
+	DayBasisWorking  = "working"
+
+	maxLeadDays = 3650
+	maxTimeZone = 100
 )
 
 // Limits of the contract (Python T03_write-commands.schema.json).
@@ -142,6 +169,33 @@ type SkuRef struct {
 	SpecRevision int64
 }
 
+// BusinessRef names a revision of a business object no Brant context owns yet {kind, id,
+// revision}: a place (kind location) or a delivery anchor (kind delivery_anchor), compared as
+// identities, as CST compares them.
+type BusinessRef struct {
+	Kind     string
+	ID       string
+	Revision int64
+}
+
+// Delivery is the customer's delivery requirement a quote states {kind, date, anchor_ref, days,
+// day_basis, calendar_ref, milestone, place_ref, time_zone}, of CST's form: a milestone
+// (goods_ready, handover or arrival) at place_ref (kind location) in an IANA time zone, either on a
+// fixed date (kind fixed, YYYY-MM-DD) or days (0–3650) calendar or working days (day_basis) after
+// the event anchor_ref (kind delivery_anchor) names, counted on the POL calendar calendar_ref (kind
+// lead_time). The freeze requires it to be the adopted costing's delivery exactly.
+type Delivery struct {
+	Kind        string
+	Date        string
+	AnchorRef   *BusinessRef
+	Days        int
+	DayBasis    string
+	CalendarRef *ConfigRef
+	Milestone   string
+	PlaceRef    BusinessRef
+	TimeZone    string
+}
+
 // Evidence is an EVD source and a locator in it {source_id, locator}; the actor of the command
 // reads the source (REFERENCE_INVALID at its source_id otherwise).
 type Evidence struct {
@@ -150,10 +204,12 @@ type Evidence struct {
 }
 
 // Line is one quoted line {line_id, rfq_line_id, sku_ref, quantity, unit_ref (unit),
-// conversion_ref (unit_conversion, when the unit is not the RFQ line's), unit_price,
-// price_basis_quantity, discount_ratio, tax_application_ref (tax_application, sales side),
-// evidence}. Quantities are QuantityFormat strings (positive), prices and the discount PriceFormat
-// strings (the discount below 1).
+// conversion_ref (unit_conversion, when the unit is not the costing's), base_quantity (optional),
+// unit_price, price_basis_quantity, discount_ratio, tax_application_ref (tax_application, sales
+// side), evidence}. Quantities are QuantityFormat strings (positive), prices and the discount
+// PriceFormat strings (the discount below 1). BaseQuantity is the quantity in the costing's unit as
+// the author states it ("" when not stated): the freeze converts the quantity anyway and refuses a
+// stated one that differs (BASE_QUANTITY_MISMATCH, BC-AT04).
 type Line struct {
 	LineID             string
 	RfqLineID          string
@@ -161,6 +217,7 @@ type Line struct {
 	Quantity           string
 	UnitRef            ConfigRef
 	ConversionRef      *ConfigRef
+	BaseQuantity       string
 	UnitPrice          string
 	PriceBasisQuantity string
 	DiscountRatio      string
@@ -186,12 +243,14 @@ type Charge struct {
 // customer_ref, contact_ref, trading_profile_ref, customer_address_refs, rfq_ref,
 // cost_snapshot_ref, lines, charges, currency_ref (currency), pricing_policy_ref (pricing_policy),
 // sales_fx_ref (fx_rate, when the quote currency is not the pricing policy's), trade_terms_ref
-// (trade_terms), payment_terms_ref (payment_terms), document_template_ref
-// (quote_document_template), sequence_ref (number_sequence), expires_at, customer_notes, evidence}.
-// Every member is optional in a draft; quote.freeze needs all but sales_fx_ref, charges and
-// customer_notes (DRAFT_NOT_READY, CUSTOMER_REFERENCE_MISSING, CONTACT_REFERENCE_MISSING or
-// COST_SNAPSHOT_MISSING at the first missing one). CustomerNotes are customer-visible and part of
-// the business hash.
+// (trade_terms), named_place_ref (a BusinessRef of kind location), payment_terms_ref
+// (payment_terms), delivery (Delivery), document_template_ref (quote_document_template),
+// sequence_ref (number_sequence), expires_at, customer_notes, evidence}. Every member is optional
+// in a draft; quote.freeze needs all but sales_fx_ref, charges and customer_notes
+// (DRAFT_NOT_READY, CUSTOMER_REFERENCE_MISSING, CONTACT_REFERENCE_MISSING or COST_SNAPSHOT_MISSING
+// at the first missing one). Trade terms, named place, payment terms and delivery are the adopted
+// costing's comparison basis (Python T03 A27). CustomerNotes are customer-visible and part of the
+// business hash.
 type QuoteData struct {
 	IssuerRef           *ConfigRef
 	CustomerRef         *PartyRef
@@ -206,7 +265,9 @@ type QuoteData struct {
 	PricingPolicyRef    *ConfigRef
 	SalesFXRef          *ConfigRef
 	TradeTermsRef       *ConfigRef
+	NamedPlaceRef       *BusinessRef
 	PaymentTermsRef     *ConfigRef
+	Delivery            *Delivery
 	DocumentTemplateRef *ConfigRef
 	SequenceRef         *ConfigRef
 	ExpiresAt           string
@@ -368,7 +429,19 @@ func (d QuoteData) Validate(path string) error {
 		func() error { return optionalRef(d.PricingPolicyRef, path+"/pricing_policy_ref") },
 		func() error { return optionalRef(d.SalesFXRef, path+"/sales_fx_ref") },
 		func() error { return optionalRef(d.TradeTermsRef, path+"/trade_terms_ref") },
+		func() error {
+			if r := d.NamedPlaceRef; r != nil {
+				return business(*r, PlaceKind, path+"/named_place_ref")
+			}
+			return nil
+		},
 		func() error { return optionalRef(d.PaymentTermsRef, path+"/payment_terms_ref") },
+		func() error {
+			if d.Delivery != nil {
+				return d.Delivery.validate(path + "/delivery")
+			}
+			return nil
+		},
 		func() error { return optionalRef(d.DocumentTemplateRef, path+"/document_template_ref") },
 		func() error { return optionalRef(d.SequenceRef, path+"/sequence_ref") },
 		func() error {
@@ -426,6 +499,9 @@ func lines(ls []Line, path string) error {
 		}
 		if err := optionalRef(l.ConversionRef, p+"/conversion_ref"); err != nil {
 			return err
+		}
+		if l.BaseQuantity != "" && !decimal(l.BaseQuantity, kernel.QuantityFormat, true) {
+			return schema(p + "/base_quantity")
 		}
 		switch {
 		case !decimal(l.UnitPrice, kernel.PriceFormat, false):
@@ -540,14 +616,21 @@ type Commands interface {
 	BindControl(ctx context.Context, cmd BindControl) (Receipt, error)
 	StopControl(ctx context.Context, cmd StopControl) (Receipt, error)
 	ReleaseControl(ctx context.Context, cmd ReleaseControl) (Receipt, error)
+	SubmitReview(ctx context.Context, cmd SubmitReview) (ReviewReceipt, error)
+	DecideReview(ctx context.Context, cmd DecideReview) (ReviewReceipt, error)
+	RevokeApproval(ctx context.Context, cmd RevokeApproval) (ReviewReceipt, error)
 }
 
 // Queries is TRD's audited read side.
 type Queries interface {
-	// GetQuote returns a quote root the caller sees with all its revisions, audited as quote.get
-	// (trd.read). A frozen revision's commercial document is checked against its business hash
-	// (BUSINESS_HASH_MISMATCH for a corrupt one).
+	// GetQuote returns a quote root the caller sees with all its revisions, reviews and approvals,
+	// audited as quote.get (trd.read). A frozen revision's commercial document is checked against
+	// its business hash (BUSINESS_HASH_MISMATCH for a corrupt one).
 	GetQuote(ctx context.Context, quoteID string) (QuoteView, error)
+	// CheckApproval says whether an approval releases its revision now, audited as
+	// quote.approval.check (trd.read): the check quote.activate and quote.replace make in their
+	// transaction (review.go), run in a read transaction. It changes nothing.
+	CheckApproval(ctx context.Context, quoteID, approvalID string) (ApprovalCheck, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 }
 
@@ -562,6 +645,9 @@ func (UpdateMetadata) trdCommand() {}
 func (BindControl) trdCommand()    {}
 func (StopControl) trdCommand()    {}
 func (ReleaseControl) trdCommand() {}
+func (SubmitReview) trdCommand()   {}
+func (DecideReview) trdCommand()   {}
+func (RevokeApproval) trdCommand() {}
 
 // Reconciliation is what became of a command whose answer the caller lost.
 type Reconciliation struct {
@@ -620,6 +706,61 @@ func optionalRef(r *ConfigRef, path string) error {
 		return nil
 	}
 	return ref(*r, path)
+}
+
+// business checks a BusinessRef of kind at path.
+func business(r BusinessRef, kind, path string) error {
+	switch {
+	case r.Kind != kind:
+		return schema(path + "/kind")
+	case !kernel.ValidIdentifier(r.ID):
+		return schema(path + "/id")
+	}
+	return positive(r.Revision, path+"/revision")
+}
+
+var milestones = []string{MilestoneGoodsReady, MilestoneHandover, MilestoneArrival}
+
+// validate checks the closed form of a delivery at p (CST api.Delivery's rules).
+func (d Delivery) validate(p string) error {
+	if !slices.Contains(milestones, d.Milestone) {
+		return schema(p + "/milestone")
+	}
+	if !text(d.TimeZone, maxTimeZone) {
+		return schema(p + "/time_zone")
+	}
+	if err := business(d.PlaceRef, PlaceKind, p+"/place_ref"); err != nil {
+		return err
+	}
+	switch d.Kind {
+	case DeliveryFixed:
+		if _, err := time.Parse(time.DateOnly, d.Date); err != nil {
+			return schema(p + "/date")
+		}
+		if d.AnchorRef != nil || d.Days != 0 || d.DayBasis != "" || d.CalendarRef != nil {
+			return schema(p)
+		}
+		return nil
+	case DeliveryLeadTime:
+	default:
+		return schema(p + "/kind")
+	}
+	switch {
+	case d.Date != "":
+		return schema(p + "/date")
+	case d.AnchorRef == nil:
+		return schema(p + "/anchor_ref")
+	case d.Days < 0 || d.Days > maxLeadDays:
+		return schema(p + "/days")
+	case d.DayBasis != DayBasisCalendar && d.DayBasis != DayBasisWorking:
+		return schema(p + "/day_basis")
+	case d.CalendarRef == nil:
+		return schema(p + "/calendar_ref")
+	}
+	if err := business(*d.AnchorRef, AnchorKind, p+"/anchor_ref"); err != nil {
+		return err
+	}
+	return ref(*d.CalendarRef, p+"/calendar_ref")
 }
 
 func evidence(es []Evidence, path string) error {

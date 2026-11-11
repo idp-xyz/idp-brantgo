@@ -17,6 +17,8 @@ type QuoteView struct {
 	InternalNote    string
 	Control         ControlView
 	Revisions       []RevisionView
+	Reviews         []ReviewView   // in the order they were requested
+	Approvals       []ApprovalView // in the order they were given
 }
 
 // ControlView is the root's object control.
@@ -49,9 +51,39 @@ type RevisionView struct {
 	FreezeEpoch    int64
 	FrozenAt       time.Time
 	Commercial     string
+	Calculation    *CalculationView // frozen: the server calculation Commercial seals
 	DiscardedBy    kernel.ActorRef
 	DiscardedAt    time.Time
 	DiscardReason  string
 	DiscardProofs  []Evidence
 	AuthorityEpoch int64 // of the last save
+}
+
+// CalculationView is the server calculation a frozen revision seals (its commercial document's
+// calculation): amounts in minor units of the quote currency as integer strings (the comparison
+// amounts in the comparison currency's), the margin verdict with the exact minimum margin and
+// shortfall (major units of the comparison currency; "0" when the margin passes), the pricing
+// policy revision and calculation version it was computed under, and the payment plan.
+type CalculationView struct {
+	NetMinor               string
+	TaxMinor               string
+	PayableMinor           string
+	ComparisonCurrencyRef  ConfigRef
+	SalesFXRef             *ConfigRef
+	ComparisonRevenueMinor string
+	CostMinor              string
+	ProfitMinor            string
+	MinimumMargin          string
+	MarginRule             string // pass or requires_approval
+	MarginShortfall        string
+	PricingPolicyRef       ConfigRef
+	CalculationVersion     string
+	Payments               []PaymentView
+}
+
+// PaymentView is one stage of a payment plan.
+type PaymentView struct {
+	StageID     string
+	Percent     string
+	AmountMinor string
 }

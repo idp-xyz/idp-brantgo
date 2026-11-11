@@ -45,6 +45,7 @@ var allPermissions = []string{
 	"logistics_offer.withdraw", "sup.read", "sup.audit",
 	"quote.save_draft", "quote.revise", "quote.discard_draft", "quote.freeze", "quote.metadata.update",
 	"object_control.bind", "object_control.stop", "object_control.release", "trd.read", "trd.audit",
+	"quote.submit_review", "quote.review.decide", "quote.approval.revoke", "quote.margin_exception.approve",
 }
 
 type world struct {
