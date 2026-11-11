@@ -216,7 +216,7 @@ func components(v cstapi.EvaluationView) map[string]cstapi.CostComponent {
 }
 
 // Python test_costing.py test_actual_database_inputs_evaluate_freeze_and_read_after_restart (the
-// evaluation; the freeze is S2-05's second half) and T02 §11 既有基准回归: 120 PCS × 5 USD and a
+// evaluation; the freeze is TestSnapshotBaselineFreezes660USD) and T02 §11 既有基准回归: 120 PCS × 5 USD and a
 // separate 60 USD freight are 660.00 USD, verified and comparable. The evaluation leaves the
 // scenario's root version as it is, replays its receipt, emits CostScenarioEvaluated and binds every
 // input with its content hash; the stored documents are the bytes their hashes cover.

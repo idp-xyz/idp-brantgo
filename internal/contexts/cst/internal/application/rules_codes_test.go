@@ -29,11 +29,12 @@ func TestRuleCodesAreTheContractsCodes(t *testing.T) {
 	}
 }
 
-// Verification, withdrawal and every measurement command are human only; drafts are open to AI
-// agents with the grant (05 stage humanOnlyCommands plus Python HUMAN_ACTIONS).
+// Verification, withdrawal, every measurement command, the freeze and the source attestation are
+// human only; drafts are open to AI agents with the grant (05 stage humanOnlyCommands plus Python
+// HUMAN_ACTIONS).
 func TestRulesKeepVerificationHumanOnly(t *testing.T) {
 	humanOnly := []string{api.CommandVerifyContext, api.CommandWithdrawContext, api.CommandRecordMeasurement,
-		api.CommandSupersedeMeasurement, api.CommandWithdrawMeasurement}
+		api.CommandSupersedeMeasurement, api.CommandWithdrawMeasurement, api.CommandFreezeSnapshot, api.CommandAttestSource}
 	seen := map[string]bool{}
 	for _, r := range Rules() {
 		seen[r.Command] = true

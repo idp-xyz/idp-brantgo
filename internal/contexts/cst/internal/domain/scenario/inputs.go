@@ -24,6 +24,16 @@ type Inputs struct {
 	Supply       map[Ref]Supply               // SUP, at Now
 	Measurements map[MeasurementKey]Measured  // CST
 	Contexts     map[ContextRef]AnchorContext // CST: costing context revisions delivery anchors name
+	// Sources are the EVD sources the inputs rest on that the caller reads (Context Map R64), with
+	// CST's standing of each; a source absent from the map is one the caller does not read.
+	Sources map[string]Source
+}
+
+// Source is an EVD source as the evaluation reads it: its content hash (SourceRef v1) and whether
+// CST recorded a denial of it (costing.attest_source).
+type Source struct {
+	ContentHash string
+	Denied      bool
 }
 
 // Context is the costing context revision a scenario names, as CST stores it.
@@ -39,6 +49,7 @@ type AnchorContext struct {
 	Status     string
 	VerifiedAt time.Time
 	Hash       string
+	Sources    []string // the sources its verification and assumptions cite
 }
 
 // Rfq is RfqRef v1 as INQ answers it now.
@@ -170,6 +181,7 @@ type Supply struct {
 	Check       func(path string) error
 	ContentHash string
 	VerifiedAt  time.Time
+	Sources     []string // the sources its content and its verification cite
 	Offer       *Offer
 	Terms       *Terms
 	Logistics   *Logistics

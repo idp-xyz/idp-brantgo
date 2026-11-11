@@ -1,6 +1,7 @@
-// Package cst assembles the CST bounded context (costing: costing contexts, measurement snapshots
-// and the calculation rules; cost scenarios and snapshots follow). Code outside CST uses it through
-// package api; everything under internal/ is private to CST.
+// Package cst assembles the CST bounded context (costing: costing contexts, measurement snapshots,
+// the calculation rules, cost scenarios and their evaluations, frozen cost snapshots, source
+// attestations and AdoptabilityGuard v1). Code outside CST uses it through package api; everything
+// under internal/ is private to CST.
 package cst
 
 import (
@@ -36,6 +37,10 @@ var (
 	_ api.ScenarioCommands  = (*Module)(nil)
 	_ api.ScenarioQueries   = (*Module)(nil)
 	_ api.EvaluationLookups = (*Module)(nil)
+
+	_ api.SnapshotCommands = (*Module)(nil)
+	_ api.SnapshotQueries  = (*Module)(nil)
+	_ api.SnapshotLookups  = (*Module)(nil)
 )
 
 // New wires CST to db, a transaction owner that belongs to CST alone, and to the lookups of its

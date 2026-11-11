@@ -31,23 +31,27 @@ const (
 )
 
 // scenarioRules are the authorization rules of scenarios: an AI agent saves and evaluates through
-// the same command path as a human (command catalog: 人工或 AI); freezing is human only (next step).
+// the same command path as a human (command catalog: 人工或 AI); freezing is human only
+// (snapshotRules).
 func scenarioRules() []authorization.Rule {
-	return []authorization.Rule{
+	return append([]authorization.Rule{
 		{Command: api.CommandSaveScenario, Permission: api.CommandSaveScenario, ActorKinds: humanOrAgent},
 		{Command: api.CommandEvaluateScenario, Permission: api.CommandEvaluateScenario, ActorKinds: humanOrAgent},
 		{Command: CommandGetScenario, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetEvaluation, Permission: PermissionRead, ActorKinds: anyActor},
-	}
+	}, snapshotRules()...)
 }
 
 func scenarioCommand(command string) bool {
-	return command == api.CommandSaveScenario || command == api.CommandEvaluateScenario
+	return command == api.CommandSaveScenario || command == api.CommandEvaluateScenario || snapshotCommand(command)
 }
 
 // visibleScenario reports whether d's actor sees the scenario a stored result names: the scenario
 // itself, or the scenario of an evaluation.
 func visibleScenario(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
+	if snapshotCommand(command) {
+		return visibleSnapshotResult(ctx, exec, d, command, id)
+	}
 	sc := scope(ctx)
 	if command == api.CommandEvaluateScenario {
 		e, err := postgres.LoadEvaluation(ctx, exec, sc, id)
@@ -70,7 +74,7 @@ func scenarioRequest(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandEvaluateScenario, key, c
 	}
-	return "", "", nil
+	return snapshotRequest(cmd)
 }
 
 // scenarioHandler locks the scenario root and applies one command.
@@ -262,6 +266,7 @@ func (s Service) GetEvaluation(ctx context.Context, id string) (api.EvaluationVi
 	if err != nil {
 		return api.EvaluationView{}, err
 	}
+	h := history{bound: bound, readable: readable}
 	var v api.EvaluationView
 	err = s.Ledger.Read(ctx, CommandGetEvaluation, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		e, err := postgres.LoadEvaluation(ctx, exec, scope(ctx), id)
@@ -277,14 +282,9 @@ func (s Service) GetEvaluation(ctx context.Context, id string) (api.EvaluationVi
 		if sc == nil || !d.Sees(sc.OwnerActor, sc.OwnerTeam) {
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
-		ok, err := readableOwn(ctx, exec, d, e.Inputs)
+		ok, err := h.allowed(ctx, exec, d)
 		if err != nil {
 			return err
-		}
-		for _, b := range e.Inputs {
-			if b.Context != scenario.FromCST && !readable[b] {
-				ok = false
-			}
 		}
 		if !ok {
 			return kernel.Reject(kernel.CodePermissionDenied, "/", "")

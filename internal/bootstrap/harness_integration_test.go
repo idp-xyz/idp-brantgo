@@ -37,7 +37,7 @@ var allPermissions = []string{
 	"screening_list.import", "ref.read", "ref.audit",
 	"costing_context.save_draft", "costing_context.revise", "costing_context.discard_draft", "costing_context.verify",
 	"costing_context.withdraw", "measurement.record_verified", "measurement.supersede", "measurement.withdraw", "cst.read", "cst.audit",
-	"cost_scenario.save_draft", "cost_scenario.evaluate",
+	"cost_scenario.save_draft", "cost_scenario.evaluate", "cost_snapshot.freeze", "costing.attest_source",
 	"supplier_rfq.save_draft", "supplier_rfq.record_issued", "supplier_rfq.close",
 	"supplier_offer.save_draft", "supplier_offer.revise", "supplier_offer.discard_draft", "supplier_offer.verify", "supplier_offer.withdraw",
 	"purchase_terms.save_draft", "purchase_terms.revise", "purchase_terms.discard_draft", "purchase_terms.publish", "purchase_terms.retire",

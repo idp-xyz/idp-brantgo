@@ -113,6 +113,16 @@ GRANT SELECT, INSERT ON brant_cst.cost_scenario, brant_cst.cost_evaluation TO br
 GRANT UPDATE (root_version, status, data, content_hash, contributors, saved_by_kind, saved_by_id, saved_epoch, saved_at,
               last_evaluation, updated_at)
     ON brant_cst.cost_scenario TO brant_app;
+-- Cost snapshots and their components and allocations are only appended (triggers). The single
+-- column grant on cost_snapshot exists so a freeze can lock the snapshot it supersedes FOR UPDATE;
+-- the trigger refuses every update. A source's standing is created undisputed and denied once; an
+-- attestation is only appended (triggers).
+GRANT SELECT, INSERT ON brant_cst.cost_snapshot, brant_cst.cost_snapshot_component, brant_cst.cost_snapshot_allocation,
+    brant_cst.source_standing, brant_cst.source_attestation TO brant_app;
+GRANT UPDATE (snapshot_id) ON brant_cst.cost_snapshot TO brant_app;
+GRANT UPDATE (root_version, status, denial_id, denied_at, updated_at) ON brant_cst.source_standing TO brant_app;
+-- AdoptabilityGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_cst.guard_cost_snapshot_adoptable_v1(text, text, timestamptz) TO brant_app;
 
 -- SUP: a supplier RFQ's draft is replaced whole, an issued one is only closed (trigger). A supply
 -- condition's root moves its version; a draft revision is edited, sealed or discarded, a sealed one

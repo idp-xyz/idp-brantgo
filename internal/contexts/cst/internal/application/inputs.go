@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/costing"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/delivery"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/scenario"
+	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/snapshot"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
@@ -33,7 +34,7 @@ func (s Service) inputs(ctx context.Context, id string, d scenario.Data, now tim
 	now = kernel.Instant(now)
 	in := scenario.Inputs{ScenarioID: id, Data: d, Now: now, Specs: map[costing.Spec]scenario.Standing{}, Configs: map[scenario.Ref]scenario.Config{},
 		Supply: map[scenario.Ref]scenario.Supply{}, Measurements: map[scenario.MeasurementKey]scenario.Measured{},
-		Contexts: map[scenario.ContextRef]scenario.AnchorContext{}}
+		Contexts: map[scenario.ContextRef]scenario.AnchorContext{}, Sources: map[string]scenario.Source{}}
 	var anchor *costing.Ref
 	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, dec authorization.Decision) error {
 		cc, err := postgres.LoadContext(ctx, exec, scope(ctx), d.Context.ContextID, postgres.NoLock)
@@ -56,7 +57,7 @@ func (s Service) inputs(ctx context.Context, id string, d scenario.Data, now tim
 			return err
 		}
 		if r := ac.Revision(anchor.Revision); r != nil {
-			a := scenario.AnchorContext{Sealed: r.Status.Sealed(), Status: string(r.Status), Hash: r.Hash}
+			a := scenario.AnchorContext{Sealed: r.Status.Sealed(), Status: string(r.Status), Hash: r.Hash, Sources: scenario.ContextSources(r)}
 			if r.Seal != nil {
 				a.VerifiedAt = r.Seal.At
 			}
@@ -153,10 +154,59 @@ func (s Service) inputs(ctx context.Context, id string, d scenario.Data, now tim
 			}
 		}
 	}
-	if len(measurements) == 0 {
-		return in, nil
+	if len(measurements) > 0 {
+		if err = s.measurements(ctx, measurements, &in); err != nil {
+			return in, err
+		}
 	}
-	err = s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, dec authorization.Decision) error {
+	return in, s.evidenceOf(ctx, &in)
+}
+
+// evidenceOf asks EVD which of the sources in's inputs rest on the caller reads (Context Map R64,
+// SourceRef v1), and reads CST's standing of them: the costing context revision's and the anchor
+// contexts' verification and assumption evidence, the measurements' evidence, and every supply
+// condition's content and verification evidence.
+func (s Service) evidenceOf(ctx context.Context, in *scenario.Inputs) error {
+	var ids []string
+	if in.Context != nil && in.Context.Revision != nil {
+		ids = append(ids, scenario.ContextSources(in.Context.Revision)...)
+	}
+	for _, a := range in.Contexts {
+		ids = append(ids, a.Sources...)
+	}
+	for _, m := range in.Measurements {
+		for _, e := range m.Revision.Data.Evidence {
+			ids = append(ids, e.SourceID)
+		}
+	}
+	for _, sc := range in.Supply {
+		ids = append(ids, sc.Sources...)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
+	refs, err := s.Upstream.Sources.ResolveSources(ctx, ids)
+	if err != nil {
+		return err
+	}
+	var standings map[string]snapshot.Standing
+	if err = s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		var err error
+		standings, err = postgres.SourceStandings(ctx, exec, scope(ctx), ids, postgres.NoLock)
+		return err
+	}); err != nil {
+		return err
+	}
+	for id, r := range refs {
+		in.Sources[id] = scenario.Source{ContentHash: r.ContentSHA256, Denied: standings[id].Denied()}
+	}
+	return nil
+}
+
+// measurements reads the measurement revisions the charges name into in.
+func (s Service) measurements(ctx context.Context, measurements []api.MeasurementRef, in *scenario.Inputs) error {
+	return s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, dec authorization.Decision) error {
 		keys := make([]postgres.MeasurementRevisionKey, len(measurements))
 		for i, m := range measurements {
 			keys[i] = postgres.MeasurementRevisionKey{MeasurementID: m.MeasurementID, Revision: m.Revision}
@@ -169,7 +219,6 @@ func (s Service) inputs(ctx context.Context, id string, d scenario.Data, now tim
 		}
 		return err
 	})
-	return in, err
 }
 
 // contextAnchor returns the costing context an anchor names, if it names one.
@@ -292,9 +341,11 @@ func (s Service) resolveConfigs(ctx context.Context, refs []scenario.Ref, at tim
 func (s Service) readableUpstream(ctx context.Context, bound []scenario.BoundInput) (map[scenario.BoundInput]bool, error) {
 	out := map[scenario.BoundInput]bool{}
 	var supply, configs []scenario.Ref
-	var rfqs, skus []string
+	var rfqs, skus, sources []string
 	for _, b := range bound {
 		switch b.Context {
+		case scenario.FromEVD:
+			sources = append(sources, b.ID)
 		case scenario.FromSUP:
 			supply = append(supply, scenario.Ref{Kind: b.Kind, ID: b.ID, Revision: b.Revision})
 		case scenario.FromPOL:
@@ -326,9 +377,19 @@ func (s Service) readableUpstream(ctx context.Context, bound []scenario.BoundInp
 			return nil, err
 		}
 	}
+	// A caller without EVD's read permission reads none of the sources: the audited read refuses it.
+	foundSources, err := s.sources(ctx, sources)
+	if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodePermissionDenied {
+		foundSources, err = map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	for _, b := range bound {
 		r := scenario.Ref{Kind: b.Kind, ID: b.ID, Revision: b.Revision}
 		switch b.Context {
+		case scenario.FromEVD:
+			out[b] = foundSources[b.ID]
 		case scenario.FromSUP:
 			_, out[b] = foundSupply[r]
 		case scenario.FromPOL:
@@ -344,13 +405,16 @@ func (s Service) readableUpstream(ctx context.Context, bound []scenario.BoundInp
 
 // GuardInputs re-checks, inside CST's transaction and after the scenario root is locked FOR
 // UPDATE, that the inputs an evaluation bound are still what it read (ADR-BR-004 option B,
-// ADR-BR-011, lock order): CST's costing context and measurement revisions re-read FOR SHARE, then
-// the upstream guards in context code order, each locking its row FOR SHARE until the transaction
-// ends: RfqGuard v1 for the RFQ, ConfigGuard v1 for every POL input and SupplyConditionGuard v1 for
-// every SUP input in force (anchors and provenance are history: their standing is their
-// verification). A revision that is no longer in force is refused with its owner's code at
-// /inputs/<context>/<kind>/<id>/<revision>; one whose content hash changed is REFERENCE_STALE there.
-// The freeze calls it again at its own instant.
+// ADR-BR-011, lock order): CST's costing context (input and anchor) and measurement revisions
+// re-read FOR SHARE, the standing rows of the EVD sources the inputs rest on FOR SHARE (created
+// when CST holds none; a denied source is REFERENCE_STALE at /sources/<id>), then the upstream
+// guards in context code order, each locking its row FOR SHARE until the transaction ends: RfqGuard
+// v1 for the RFQ, ConfigGuard v1 for every POL input and SupplyConditionGuard v1 for every SUP input
+// in force and every SUP anchor, which counts while its revision is active (Python
+// _business(..., "delivery_anchor")); provenance is history only. A revision that is no longer in
+// force is refused with its owner's code at /inputs/<context>/<kind>/<id>/<revision>; one whose
+// content hash changed, or an anchor no longer active, is REFERENCE_STALE there. The freeze calls it
+// again at its own instant.
 func GuardInputs(ctx context.Context, exec bentopg.Executor, d authorization.Decision, bound []scenario.BoundInput, at time.Time) error {
 	path := func(b scenario.BoundInput) string {
 		return fmt.Sprintf("/inputs/%s/%s/%s/%d", b.Context, b.Kind, b.ID, b.Revision)
@@ -360,9 +424,12 @@ func GuardInputs(ctx context.Context, exec bentopg.Executor, d authorization.Dec
 	}
 	var contexts []postgres.ContextRevisionKey
 	var measurements []postgres.MeasurementRevisionKey
+	var sources []string
 	for _, b := range bound {
 		switch {
-		case b.Context == scenario.FromCST && b.Kind == scenario.KindCostingContext && b.Use == scenario.UseInput:
+		case b.Context == scenario.FromEVD:
+			sources = append(sources, b.ID)
+		case b.Context == scenario.FromCST && b.Kind == scenario.KindCostingContext:
 			contexts = append(contexts, postgres.ContextRevisionKey{ContextID: b.ID, Revision: b.Revision})
 		case b.Context == scenario.FromCST && b.Kind == scenario.KindMeasurement:
 			measurements = append(measurements, postgres.MeasurementRevisionKey{MeasurementID: b.ID, Revision: b.Revision})
@@ -377,7 +444,7 @@ func GuardInputs(ctx context.Context, exec bentopg.Executor, d authorization.Dec
 		return err
 	}
 	for _, b := range bound {
-		if b.Context != scenario.FromCST || b.Use != scenario.UseInput {
+		if b.Context != scenario.FromCST || (b.Use != scenario.UseInput && b.Use != scenario.UseAnchor) {
 			continue
 		}
 		switch b.Kind {
@@ -391,6 +458,22 @@ func GuardInputs(ctx context.Context, exec bentopg.Executor, d authorization.Dec
 			if !ok || !d.Sees(o.OwnerActor, o.OwnerTeam) || string(o.Revision.Status) != api.StatusActive || o.Revision.Hash != b.ContentHash {
 				return stale(b)
 			}
+		}
+	}
+	// The sources' standing rows, created when CST holds none, FOR SHARE in ID order: a denial that
+	// committed first is seen here, one in flight waits until this transaction ends.
+	sc := scope(ctx)
+	if err = postgres.EnsureSources(ctx, exec, sc, sources, at); err != nil {
+		return err
+	}
+	standings, err := postgres.SourceStandings(ctx, exec, sc, sources, postgres.ForShare)
+	if err != nil {
+		return err
+	}
+	for _, id := range slices.Sorted(slices.Values(sources)) {
+		if standings[id].Denied() {
+			return kernel.RejectAs(api.CodeReferenceStale, kernel.CategoryConflict, "/sources/"+id,
+				"The source was denied; cost on inputs verified on other evidence")
 		}
 	}
 	for _, b := range bound {
@@ -423,13 +506,21 @@ func GuardInputs(ctx context.Context, exec bentopg.Executor, d authorization.Dec
 		}
 	}
 	for _, b := range bound {
-		if b.Context != scenario.FromSUP || b.Use != scenario.UseInput {
+		if b.Context != scenario.FromSUP || (b.Use != scenario.UseInput && b.Use != scenario.UseAnchor) {
 			continue
 		}
 		ref := supapi.SupplyConditionRef{Kind: b.Kind, ID: b.ID, Revision: b.Revision}
 		v, err := supapi.ScanSupplyConditionGuard(ref, exec.QueryRow(ctx, supapi.SupplyConditionGuardSQL, supapi.SupplyConditionGuardArgs(ref, at)...).Scan)
 		if err != nil {
 			return err
+		}
+		if b.Use == scenario.UseAnchor {
+			// An anchor is the verification event of its revision: it counts while the revision is
+			// active, whatever its validity (Python _business(..., "delivery_anchor")).
+			if !v.Known || v.Status != supapi.StatusActive {
+				return stale(b)
+			}
+			continue
 		}
 		if err = v.Check(path(b)); err != nil {
 			return err
@@ -497,6 +588,18 @@ func measurementKey(r *supapi.MeasurementRef) *scenario.MeasurementKey {
 // supplyInput is what SUP said about one supply condition revision, as the evaluation reads it.
 func supplyInput(r supapi.ResolvedSupplyCondition) scenario.Supply {
 	out := scenario.Supply{Status: r.Status, Check: r.Check, ContentHash: r.ContentHash, VerifiedAt: kernel.Instant(r.Verification.At)}
+	var cited []supapi.Evidence
+	switch {
+	case r.Offer != nil:
+		cited = r.Offer.Evidence
+	case r.Terms != nil:
+		cited = r.Terms.Evidence
+	case r.Logistics != nil:
+		cited = r.Logistics.Evidence
+	}
+	for _, e := range append(slices.Clone(cited), r.Verification.Evidence...) {
+		out.Sources = append(out.Sources, e.SourceID)
+	}
 	switch {
 	case r.Offer != nil:
 		o := r.Offer

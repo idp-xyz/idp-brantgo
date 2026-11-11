@@ -24,6 +24,9 @@ const (
 	CodeMeasurementConflict      = "MEASUREMENT_CONFLICT"       // measurement data contradict each other
 	CodeEvidenceHashMismatch     = "EVIDENCE_HASH_MISMATCH"     // output evidence hash differs
 	CodeReferenceStale           = "REFERENCE_STALE"            // 409: a referenced version or state no longer applies
+	// COST_SNAPSHOT_INELIGIBLE is the catalog's TRD row "快照当前不可采纳"; CST declares it for the
+	// AdoptabilityGuard's verdict a downstream context passes on.
+	CodeCostSnapshotIneligible = "COST_SNAPSHOT_INELIGIBLE"
 )
 
 var codes = map[string]kernel.Category{
@@ -44,6 +47,7 @@ var codes = map[string]kernel.Category{
 	CodeMeasurementConflict:      kernel.CategoryInvalid,
 	CodeEvidenceHashMismatch:     kernel.CategoryInvalid,
 	CodeReferenceStale:           kernel.CategoryConflict,
+	CodeCostSnapshotIneligible:   kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code CST declares.

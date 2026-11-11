@@ -16,12 +16,11 @@ import (
 )
 
 // The rows of Python test_costing_domains.py and test_costing.py that need the evaluation (the
-// "application only" and "partly" rows of the rules' port), without their freeze or source-denial
-// parts, which belong to S2-05's second half.
+// "application only" and "partly" rows of the rules' port), with the freeze refusals and re-reads
+// that complete them; the source-denial and eligibility parts are in cst_adoption_integration_test.go.
 
-// Python test_costing_domains.py test_late_delivery_can_be_analyzed_but_cannot_be_frozen (the
-// evaluation; the freeze refusal is the next step): a supplier date after the required one is
-// analyzed at full cost but not comparable.
+// Python test_costing_domains.py test_late_delivery_can_be_analyzed_but_cannot_be_frozen: a supplier
+// date after the required one is analyzed at full cost but not comparable, and is not frozen.
 func TestScenarioLateDeliveryIsAnalyzedButNotComparable(t *testing.T) {
 	w := newScenWorld(t)
 	late := w.variant(func(l *supapi.ConditionLine) { l.Delivery.Date = "2027-02-01" })
@@ -42,6 +41,11 @@ func TestScenarioLateDeliveryIsAnalyzedButNotComparable(t *testing.T) {
 	w.must(err)
 	if code(b.Freezable("/args")) != cstapi.CodeComparisonBasisMismatch {
 		t.Fatalf("freezable %v", b.Freezable("/args"))
+	}
+	// The freeze refuses it (Python: COMPARISON_BASIS_MISMATCH, business store unchanged).
+	_, err = w.freeze(w.reviewer, r, 1)
+	if code(err) != cstapi.CodeComparisonBasisMismatch || path(err) != "/args/comparison_status" || w.snapshotsOf(r.ScenarioID) != 0 {
+		t.Fatalf("freeze: %s at %s", code(err), path(err))
 	}
 }
 
@@ -113,7 +117,8 @@ func requirement(v cstapi.EvaluationView) cstapi.DeliveryCheck {
 }
 
 // Python test_costing_domains.py test_working_days_use_real_verification_event_and_reviewed_overrides
-// (the evaluation; the freeze and the eligibility after withdrawal are the next step),
+// (the evaluation; the freeze and the eligibility after withdrawal are
+// TestWorkingDaysFreezeAndEligibilityAfterAnchorWithdrawal),
 // test_zero_lead_days_resolves_to_anchor_local_date and
 // test_anchor_history_does_not_reactivate_old_commercial_role. A lead time counts from the real
 // verification event of the revision its anchor names, on the POL calendar's working weekdays; 0
@@ -149,9 +154,9 @@ func TestScenarioLeadTimeCountsFromTheVerificationEvent(t *testing.T) {
 	}
 }
 
-// Python test_costing_domains.py test_pending_verification_anchor_does_not_invent_a_date (the
-// evaluation; the freeze refusal is the next step): an anchor on a revision that was saved but not
-// verified has no occurrence, so no date is assumed and the result is provisional.
+// Python test_costing_domains.py test_pending_verification_anchor_does_not_invent_a_date: an anchor
+// on a revision that was saved but not verified has no occurrence, so no date is assumed, the result
+// is provisional and it is not frozen.
 func TestScenarioPendingAnchorDoesNotInventADate(t *testing.T) {
 	w := newScenWorld(t)
 	draft := w.next("offer")
@@ -170,6 +175,11 @@ func TestScenarioPendingAnchorDoesNotInventADate(t *testing.T) {
 	w.must(err)
 	if code(b.Freezable("/args")) != cstapi.CodeCostInputNotReady {
 		t.Fatalf("freezable %v", b.Freezable("/args"))
+	}
+	// The freeze refuses it (Python: COST_INPUT_NOT_READY, business store unchanged).
+	_, err = w.freeze(w.reviewer, r, 1)
+	if code(err) != cstapi.CodeCostInputNotReady || path(err) != "/args/verification_status" || w.snapshotsOf(r.ScenarioID) != 0 {
+		t.Fatalf("freeze: %s at %s", code(err), path(err))
 	}
 }
 
@@ -203,7 +213,7 @@ func TestScenarioHistoryRechecksInputPermissions(t *testing.T) {
 }
 
 // Python test_costing_domains.py test_three_line_one_cent_allocation_has_deterministic_remainder
-// (the evaluation; the freeze and its re-read are the next step): three lines L3, L2, L1 of 1 PCS at
+// (with the freeze and its re-read by a second platform): three lines L3, L2, L1 of 1 PCS at
 // 5 USD and a 0.01 USD freight by quantity: 1501 cents, the cent to L1 (CST-INV-004).
 func TestScenarioThreeLineOneCentAllocation(t *testing.T) {
 	w := newScenWorld(t)
@@ -250,6 +260,14 @@ func TestScenarioThreeLineOneCentAllocation(t *testing.T) {
 	}
 	if !slices.Equal(got, []string{"L1=1", "L2=0", "L3=0"}) {
 		t.Fatalf("freight %v", got)
+	}
+	// Frozen and re-read by a second platform: 1501 cents, the cent still with L1.
+	f, err := w.freeze(w.reviewer, r, 1)
+	w.must(err)
+	v, err := reopened(t).GetSnapshot(w.reviewer, f.SnapshotID)
+	w.must(err)
+	if v.TotalMinor != "1501" || components(cstapi.EvaluationView{Result: v.Result})["fee.1"].Allocations[0].AmountMinor != "1" {
+		t.Fatalf("snapshot %s", v.Document)
 	}
 }
 

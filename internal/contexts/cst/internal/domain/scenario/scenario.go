@@ -5,7 +5,7 @@
 //
 //	draft → draft    cost_scenario.save_draft replaces the selection whole (root version + 1)
 //	draft → draft    cost_scenario.evaluate appends an evaluation; the root version stays
-//	draft → frozen   cost_snapshot.freeze (the next step of S2-05)
+//	draft → frozen   cost_snapshot.freeze (package snapshot)
 //
 // A scenario names the costing context revision (context_ref), the supply condition line each
 // demand line is bought under and in what quantity (allocations: SupplyConditionRef v1 of a

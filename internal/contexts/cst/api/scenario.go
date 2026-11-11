@@ -12,7 +12,7 @@ import (
 // (SupplyConditionRef v1 of a supplier offer or purchase terms revision), the logistics offer
 // revisions whose charges it adds and the cost_estimate exchange rates it adopts. A draft is saved
 // whole; cost_scenario.evaluate computes an immutable evaluation of the current draft without
-// changing its root version; cost_snapshot.freeze (next step) freezes a verified and comparable
+// changing its root version; cost_snapshot.freeze (snapshot.go) freezes a verified and comparable
 // evaluation once.
 
 const (
@@ -252,8 +252,9 @@ type ScenarioView struct {
 	Evaluations    []EvaluationSummary
 }
 
-// BoundInput is one revision an evaluation read: its upstream context (cst, inq, cat, pol, sup),
-// kind, ID, revision or row version, the content hash its owner gave (an RFQ's line set hash;
+// BoundInput is one revision an evaluation read: its upstream context (cst, inq, cat, pol, sup, or
+// evd for a source an input rests on, kind source, revision 1, use evidence), kind, ID, revision or
+// row version, the content hash its owner gave (an RFQ's line set hash; a source's content SHA-256;
 // empty for a CAT specification revision, which never changes) and its use.
 type BoundInput struct {
 	Context     string `json:"context"`
