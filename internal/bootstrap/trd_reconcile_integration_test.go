@@ -315,6 +315,11 @@ func TestSourceRevocationBlocksReplaysAndReconciliation(t *testing.T) {
 		Evidence: foreign}
 	_, err = q.c.TRD.DiscardDraft(q.author, discard)
 	q.must(err)
+	_, prepared := q.prepared("quote.4")
+	cancelOrder := trdapi.CancelOrder{IdempotencyKey: q.key(), OrderID: prepared.ObjectID, ExpectedVersion: prepared.RowVersion,
+		Reason: "客户取消订单", Evidence: foreign}
+	_, err = q.c.TRD.CancelOrder(q.author, cancelOrder)
+	q.must(err)
 
 	conflicting := func(cmd trdapi.Command) trdapi.Command {
 		switch c := cmd.(type) {
@@ -328,6 +333,9 @@ func TestSourceRevocationBlocksReplaysAndReconciliation(t *testing.T) {
 			c.Reason = "另一理由"
 			return c
 		case trdapi.DiscardDraft:
+			c.Reason = "另一理由"
+			return c
+		case trdapi.CancelOrder:
 			c.Reason = "另一理由"
 			return c
 		}
@@ -347,6 +355,9 @@ func TestSourceRevocationBlocksReplaysAndReconciliation(t *testing.T) {
 		case trdapi.DiscardDraft:
 			_, err := q.c.TRD.DiscardDraft(ctx, c)
 			return err
+		case trdapi.CancelOrder:
+			_, err := q.c.TRD.CancelOrder(ctx, c)
+			return err
 		}
 		return nil
 	}
@@ -364,7 +375,7 @@ func TestSourceRevocationBlocksReplaysAndReconciliation(t *testing.T) {
 		if g := got(err); g != want {
 			t.Errorf("%s: the read: %s, want %s", phase, g, want)
 		}
-		for ctx, cmds := range map[context.Context][]trdapi.Command{author: {record, withdraw, discard}, reviewer: {verify}} {
+		for ctx, cmds := range map[context.Context][]trdapi.Command{author: {record, withdraw, discard, cancelOrder}, reviewer: {verify}} {
 			for _, cmd := range cmds {
 				if g := got(replay(ctx, cmd)); g != want {
 					t.Errorf("%s: the replay of %T: %s, want %s", phase, cmd, g, want)

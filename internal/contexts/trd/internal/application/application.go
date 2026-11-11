@@ -62,8 +62,10 @@ var (
 // object_control.bind to the system (TSK claims a root for a task) and the role templates give it to
 // the sales clerk, so a human or the system binds, never an AI agent (it would fence humans out). An
 // AI agent prepares, revises and discards drafts, edits the internal metadata and records customer
-// responses (quote.response.record: 人工或 AI; its classification is a candidate a human verifies)
-// through the same command path.
+// responses (quote.response.record: 人工或 AI; its classification is a candidate a human verifies),
+// prepares orders and requests their review (order.prepare, order.review.request: 人工或 AI（按动作权限）)
+// through the same command path. order.review.decide, order.activate, order.approval.revoke,
+// order.cancel and order.close_unfulfilled are human only (humanOnlyCommands).
 func Rules() []authorization.Rule {
 	return append([]authorization.Rule{
 		{Command: api.CommandSaveDraft, Permission: api.CommandSaveDraft, ActorKinds: humanOrAgent},
@@ -92,6 +94,15 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandDisputeAcceptance, api.CommandDisputeAcceptance),
 		{Command: CommandGetResponse, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetAcceptance, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandPrepareOrder, Permission: api.CommandPrepareOrder, ActorKinds: humanOrAgent},
+		{Command: api.CommandRequestOrderReview, Permission: api.CommandRequestOrderReview, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandDecideOrderReview, api.CommandDecideOrderReview),
+		authorization.HumanOnly(api.CommandActivateOrder, api.CommandActivateOrder),
+		authorization.HumanOnly(api.CommandRevokeOrderApproval, api.CommandRevokeOrderApproval),
+		authorization.HumanOnly(api.CommandCancelOrder, api.CommandCancelOrder),
+		authorization.HumanOnly(api.CommandCloseOrderUnfulfilled, api.CommandCloseOrderUnfulfilled),
+		{Command: CommandGetOrder, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandCheckOrder, Permission: PermissionRead, ActorKinds: anyActor},
 	}, readRules()...)
 }
 
@@ -122,6 +133,9 @@ type Service struct {
 	// Calculator is the server calculation of WBS S3-02 (ServerCalculator); without one TRD
 	// freezes nothing.
 	Calculator Calculator
+	// Orders are the extension points of order.activate for STL's and CNX's guards, nil (recorded
+	// gaps) until those contexts exist (order_activate.go).
+	Orders OrderGuards
 }
 
 func scope(ctx context.Context) kernel.Scope {
@@ -217,6 +231,27 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.DisputeAcceptance:
 		key, c.IdempotencyKey, c.ExpectedEffectivityVersion = c.IdempotencyKey, "", 0
 		return api.CommandDisputeAcceptance, key, c
+	case api.PrepareOrder:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandPrepareOrder, key, c
+	case api.RequestOrderReview:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRequestOrderReview, key, c
+	case api.DecideOrderReview:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandDecideOrderReview, key, c
+	case api.ActivateOrder:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandActivateOrder, key, c
+	case api.RevokeOrderApproval:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRevokeOrderApproval, key, c
+	case api.CancelOrder:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandCancelOrder, key, c
+	case api.CloseOrderUnfulfilled:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandCloseOrderUnfulfilled, key, c
 	}
 	return "", "", nil
 }
@@ -226,8 +261,8 @@ var quoteWrites = []string{api.CommandSaveDraft, api.CommandRevise, api.CommandD
 	api.CommandWithdraw, api.CommandCancel}
 
 // Visible reports whether d's actor sees the quote root a stored result names: the quote itself,
-// or the quote a stored response (quote.response.record) or acceptance (quote.response.verify,
-// acceptance.invalidate, acceptance.mark_disputed) belongs to. On the write path (a replay) of a
+// or the quote a stored response (quote.response.record), acceptance (quote.response.verify,
+// acceptance.invalidate, acceptance.mark_disputed) or order (the order commands) belongs to. On the write path (a replay) of a
 // quote write or one of those it also passes the root's object control as it is now (Python
 // test_committed_public_replay_and_local_replay_cannot_bypass_new_binding): a stored success is
 // never handed to a caller the binding now fences out. Reconciliation is not fenced. A replay or
@@ -248,12 +283,21 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 			return false, err
 		}
 		quoteID = a.QuoteID
+	default:
+		if slices.Contains(orderWrites, command) {
+			id, err := postgres.OrderQuote(ctx, exec, scope(ctx), id)
+			if err != nil || id == "" {
+				return false, err
+			}
+			quoteID = id
+		}
 	}
 	q, err := postgres.LoadRoot(ctx, exec, scope(ctx), quoteID)
 	if err != nil || q == nil || !d.Sees(q.OwnerActor, q.OwnerTeam) {
 		return false, err
 	}
-	if ctx.Value(writing{}) != nil && (slices.Contains(quoteWrites, command) || slices.Contains(acceptanceWrites, command)) {
+	if ctx.Value(writing{}) != nil && (slices.Contains(quoteWrites, command) || slices.Contains(acceptanceWrites, command) ||
+		slices.Contains(orderWrites, command)) {
 		if err = q.Control.Admit(claim(ctx), d.Epoch); err != nil {
 			return false, err
 		}

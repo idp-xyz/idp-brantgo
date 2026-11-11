@@ -51,7 +51,7 @@ func TestFormalApprovalStandsOnCurrentQualification(t *testing.T) {
 	q := active(t, "8", "0.1")
 	rev := q.Active()
 	stands := func(at time.Time, s Standings) string {
-		a, err := q.FormalApproval(rev, at, s)
+		a, err := q.ReadyApproval(rev, at, s)
 		if a == nil || a.ID != "approval.1" {
 			t.Fatalf("the approval judged: %+v", a)
 		}
@@ -83,11 +83,11 @@ func TestFormalApprovalStandsOnCurrentQualification(t *testing.T) {
 	}
 
 	m := active(t, "7.00", "0.25")
-	if _, err := m.FormalApproval(m.Active(), at, qualified(nil)); err != nil {
+	if _, err := m.ReadyApproval(m.Active(), at, qualified(nil)); err != nil {
 		t.Fatalf("an exception approver still qualified: %v", err)
 	}
 	lost := qualified(map[string]Standing{"approver": {Human: true, SeesRoot: true, Permissions: []string{PermissionReview, PermissionRead}}})
-	if _, err := m.FormalApproval(m.Active(), at, lost); code(err) != "APPROVAL_STALE at /commit/approval_id" {
+	if _, err := m.ReadyApproval(m.Active(), at, lost); code(err) != "APPROVAL_STALE at /commit/approval_id" {
 		t.Fatalf("an exception approver without the capability now: %s", code(err))
 	}
 }
@@ -112,7 +112,7 @@ func TestReadinessJudgesTheCommittedApprovalOnly(t *testing.T) {
 	}
 	// approval.1 stays valid and its reviewer qualified; approval.2's reviewer lost the review grant.
 	lost := qualified(map[string]Standing{"reviewer": {Human: true, SeesRoot: true, Permissions: []string{PermissionRead}}})
-	if _, err := q.FormalApproval(rev, at, lost); code(err) != "APPROVAL_STALE at /commit/approval_id" {
+	if _, err := q.ReadyApproval(rev, at, lost); code(err) != "APPROVAL_STALE at /commit/approval_id" {
 		t.Fatalf("another approval stands in: %s", code(err))
 	}
 	if q.Approval("approval.1").Effectivity != Valid {
@@ -137,7 +137,7 @@ func TestReadinessJudgesTheCommittedApprovalOnly(t *testing.T) {
 		t.Fatalf("another revision's approval: %s", code(err))
 	}
 	tampered.Formal = nil
-	if a, err := q.FormalApproval(&tampered, at, qualified(nil)); a != nil || code(err) != "COMMIT_EVIDENCE_MISSING at /commit" {
+	if a, err := q.ReadyApproval(&tampered, at, qualified(nil)); a != nil || code(err) != "COMMIT_EVIDENCE_MISSING at /commit" {
 		t.Fatalf("no commit evidence: %+v %s", a, code(err))
 	}
 	if c, ok := ReadCategories[CodeCommitEvidenceMissing]; !ok || c != kernel.CategoryInvalid {

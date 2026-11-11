@@ -65,13 +65,13 @@ func (q *Quote) CommittedApproval(r *Revision) (*Approval, error) {
 	return a, nil
 }
 
-// FormalApproval decides whether the approval that formalized revision r still stands at instant
+// ReadyApproval decides whether the approval that formalized revision r still stands at instant
 // at, on its approvers' standings now (Python quote_ready and current_reviewer; T03 A34, A35): it
 // is the committed one and in effect (CommittedApproval); its business hash and rule versions are
 // the revision's and the current ones (APPROVAL_STALE); it has not lapsed (APPROVAL_EXPIRED, at <
 // its expires_at, equality lapsed); and its reviewer and margin exception approver are still
 // qualified (stands). It returns the approval when it was found, even when it no longer stands.
-func (q *Quote) FormalApproval(r *Revision, at time.Time, standings Standings) (*Approval, error) {
+func (q *Quote) ReadyApproval(r *Revision, at time.Time, standings Standings) (*Approval, error) {
 	a, err := q.CommittedApproval(r)
 	if err != nil {
 		if r != nil && r.Formal != nil {

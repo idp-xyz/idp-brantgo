@@ -171,6 +171,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/outbox", s.authenticated(quoteHistory(s, cfg.TRD.OutboxHistory)))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_preflight", s.authenticated(dispatchRead(s, cfg.TRD.DispatchPreflight)))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_target", s.authenticated(dispatchRead(s, cfg.TRD.DispatchTarget)))
+	mux.Handle("GET /api/brant/v1/trd/orders/{id}", s.authenticated(read(s, cfg.TRD.GetOrder, okView[trdapi.OrderView])))
+	mux.Handle("GET /api/brant/v1/trd/orders/{id}/check", s.authenticated(s.orderCheck))
 	mux.Handle("GET /api/brant/v1/trd/customer_responses/{id}", s.authenticated(read(s, cfg.TRD.GetCustomerResponse, okView[trdapi.CustomerResponseView])))
 	mux.Handle("GET /api/brant/v1/trd/acceptances/{id}", s.authenticated(read(s, cfg.TRD.GetAcceptance, okView[trdapi.AcceptanceView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))

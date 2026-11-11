@@ -184,7 +184,7 @@ func (s Service) QuoteReady(ctx context.Context, rq api.ReadyQuery) (api.QuoteRe
 // as a write by the caller would meet it; the revision (NOT_FOUND for a revision the root does not
 // have, NO_ACTIVE_REVISION, QUOTE_NOT_CURRENT for one that is not active); its commit evidence;
 // its formal document's bytes; a risk hold; the validity; the approval its commit evidence names
-// (quote.FormalApproval); the upstream guards (guardUpstream); then the cost scope and sales terms
+// (quote.ReadyApproval); the upstream guards (guardUpstream); then the cost scope and sales terms
 // bound again on the current inputs, and the sales exchange rate's age.
 func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authorization.Decision, q *quote.Quote, named int64, f facts,
 	inputs error, at time.Time) (api.QuoteReadiness, error) {
@@ -225,7 +225,7 @@ func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authori
 	if !kernel.Instant(at).Before(rev.Seal.ExpiresAt) {
 		_ = r.add(api.CheckValidity, refusal(api.CodeQuoteExpired, "/expires_at"))
 	}
-	if _, err := q.FormalApproval(rev, at, s.standings(ctx, exec, q)); r.add(api.CheckApproval, err) != nil {
+	if _, err := q.ReadyApproval(rev, at, s.standings(ctx, exec, q)); r.add(api.CheckApproval, err) != nil {
 		return out, err
 	}
 	c, err := quote.ParseCommercial(rev.Seal.Commercial, rev.Seal.BusinessHash)
@@ -254,20 +254,6 @@ func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authori
 		return out, err
 	}
 	return finish()
-}
-
-// standings reads, inside the caller's transaction, an actor's standing now for the approvals of q
-// (Authorizer.Qualify: the authority guard rows FOR SHARE, after the root as the lock order
-// requires).
-func (s Service) standings(ctx context.Context, exec bentopg.Executor, q *quote.Quote) quote.Standings {
-	return func(actorID string) (quote.Standing, error) {
-		h, err := s.Ledger.Authorizer.Qualify(ctx, exec, actorID)
-		if err != nil {
-			return quote.Standing{}, err
-		}
-		return quote.Standing{Human: h.Active && h.Actor.Kind == kernel.ActorHuman, Permissions: h.Permissions,
-			SeesRoot: h.Sees(q.OwnerActor, q.OwnerTeam)}, nil
-	}
 }
 
 // bindAgain binds the cost scope and the sales terms of draft d again on the current inputs f at

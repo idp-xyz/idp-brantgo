@@ -35,27 +35,34 @@ func receiptOf[C, R any](call func(context.Context, C) (R, error)) func(context.
 
 func trdCommands(c TRD) *commandSet {
 	// TRD's commands name their objects as Python's T03/T04 contracts do (quote_id, response_id,
-	// acceptance_id), so no member is renamed to id.
+	// acceptance_id, order_id), so no member is renamed to id.
 	return &commandSet{bc: "trd", contract: trdapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
-		trdapi.CommandSaveDraft:            reflected("", "", receiptOf(c.SaveDraft)),
-		trdapi.CommandRevise:               reflected("", "", receiptOf(c.Revise)),
-		trdapi.CommandDiscardDraft:         reflected("", "", receiptOf(c.DiscardDraft)),
-		trdapi.CommandFreeze:               reflected("", "", receiptOf(c.Freeze)),
-		trdapi.CommandUpdateMetadata:       reflected("", "", receiptOf(c.UpdateMetadata)),
-		trdapi.CommandBindControl:          reflected("", "", receiptOf(c.BindControl)),
-		trdapi.CommandStopControl:          reflected("", "", receiptOf(c.StopControl)),
-		trdapi.CommandReleaseControl:       reflected("", "", receiptOf(c.ReleaseControl)),
-		trdapi.CommandSubmitReview:         reflected("", "", receiptOf(c.SubmitReview)),
-		trdapi.CommandDecideReview:         reflected("", "", receiptOf(c.DecideReview)),
-		trdapi.CommandRevokeApproval:       reflected("", "", receiptOf(c.RevokeApproval)),
-		trdapi.CommandActivate:             reflected("", "", receiptOf(c.Activate)),
-		trdapi.CommandReplace:              reflected("", "", receiptOf(c.Replace)),
-		trdapi.CommandWithdraw:             reflected("", "", receiptOf(c.Withdraw)),
-		trdapi.CommandCancel:               reflected("", "", receiptOf(c.Cancel)),
-		trdapi.CommandRecordResponse:       reflected("", "", receiptOf(c.RecordResponse)),
-		trdapi.CommandVerifyResponse:       reflected("", "", receiptOf(c.VerifyResponse)),
-		trdapi.CommandInvalidateAcceptance: reflected("", "", receiptOf(c.InvalidateAcceptance)),
-		trdapi.CommandDisputeAcceptance:    reflected("", "", receiptOf(c.DisputeAcceptance)),
+		trdapi.CommandSaveDraft:             reflected("", "", receiptOf(c.SaveDraft)),
+		trdapi.CommandRevise:                reflected("", "", receiptOf(c.Revise)),
+		trdapi.CommandDiscardDraft:          reflected("", "", receiptOf(c.DiscardDraft)),
+		trdapi.CommandFreeze:                reflected("", "", receiptOf(c.Freeze)),
+		trdapi.CommandUpdateMetadata:        reflected("", "", receiptOf(c.UpdateMetadata)),
+		trdapi.CommandBindControl:           reflected("", "", receiptOf(c.BindControl)),
+		trdapi.CommandStopControl:           reflected("", "", receiptOf(c.StopControl)),
+		trdapi.CommandReleaseControl:        reflected("", "", receiptOf(c.ReleaseControl)),
+		trdapi.CommandSubmitReview:          reflected("", "", receiptOf(c.SubmitReview)),
+		trdapi.CommandDecideReview:          reflected("", "", receiptOf(c.DecideReview)),
+		trdapi.CommandRevokeApproval:        reflected("", "", receiptOf(c.RevokeApproval)),
+		trdapi.CommandActivate:              reflected("", "", receiptOf(c.Activate)),
+		trdapi.CommandReplace:               reflected("", "", receiptOf(c.Replace)),
+		trdapi.CommandWithdraw:              reflected("", "", receiptOf(c.Withdraw)),
+		trdapi.CommandCancel:                reflected("", "", receiptOf(c.Cancel)),
+		trdapi.CommandRecordResponse:        reflected("", "", receiptOf(c.RecordResponse)),
+		trdapi.CommandVerifyResponse:        reflected("", "", receiptOf(c.VerifyResponse)),
+		trdapi.CommandInvalidateAcceptance:  reflected("", "", receiptOf(c.InvalidateAcceptance)),
+		trdapi.CommandDisputeAcceptance:     reflected("", "", receiptOf(c.DisputeAcceptance)),
+		trdapi.CommandPrepareOrder:          reflected("", "", receiptOf(c.PrepareOrder)),
+		trdapi.CommandRequestOrderReview:    reflected("", "", receiptOf(c.RequestOrderReview)),
+		trdapi.CommandDecideOrderReview:     reflected("", "", receiptOf(c.DecideOrderReview)),
+		trdapi.CommandActivateOrder:         reflected("", "", receiptOf(c.ActivateOrder)),
+		trdapi.CommandRevokeOrderApproval:   reflected("", "", receiptOf(c.RevokeOrderApproval)),
+		trdapi.CommandCancelOrder:           reflected("", "", receiptOf(c.CancelOrder)),
+		trdapi.CommandCloseOrderUnfulfilled: reflected("", "", receiptOf(c.CloseOrderUnfulfilled)),
 	}}
 }
 
@@ -162,4 +169,23 @@ func dispatchRead[V any](s *server, get func(context.Context, trdapi.DispatchQue
 		}
 		s.fail(w, r, err)
 	}
+}
+
+// orderCheck answers GET /api/brant/v1/trd/orders/<id>/check[?review_id=]: the checks
+// order.activate would make now on that review (none: the source and upstream risks only); a
+// refusal is the answer, not an error.
+func (s *server) orderCheck(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	for k := range q {
+		if k != "review_id" || len(q[k]) != 1 {
+			s.reject(w, r, kernel.Reject(kernel.CodeSchemaInvalid, "/"+k, "unknown or repeated query parameter"))
+			return
+		}
+	}
+	v, err := s.cfg.TRD.CheckOrder(r.Context(), r.PathValue("id"), q.Get("review_id"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, okView(v))
 }

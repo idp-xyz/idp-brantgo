@@ -46,7 +46,7 @@ const (
 	CodeAcceptanceTimeConflict        = "ACCEPTANCE_TIME_CONFLICT"        // the arrival is after the recording or verification, or before the formalization
 	CodeAcceptanceLate                = "ACCEPTANCE_LATE"                 // the acceptance arrived at or after the revision's expires_at
 	CodeAcceptanceNotValid            = "ACCEPTANCE_NOT_VALID"            // 409: the acceptance is invalidated or disputed
-	CodeAcceptanceAlreadyExists       = "ACCEPTANCE_ALREADY_EXISTS"       // 409: the acceptance ID is taken, or the revision has a valid acceptance
+	CodeAcceptanceAlreadyExists       = "ACCEPTANCE_ALREADY_EXISTS"       // 409: the acceptance ID is taken, the revision has a valid acceptance, or a live acceptance keeps the revision from ending
 	CodeSourceMessageDuplicate        = "SOURCE_MESSAGE_DUPLICATE"        // 409: the customer's message backs a live acceptance
 	CodeResponseImmutable             = "RESPONSE_IMMUTABLE"              // the response ID is recorded with other content
 	CodeResponseVerificationImmutable = "RESPONSE_VERIFICATION_IMMUTABLE" // the response was verified into another live acceptance
@@ -91,9 +91,12 @@ var codes = map[string]kernel.Category{
 }
 
 // Category returns the category of a code TRD declares: QuoteRoot's, the calculation's, the read
-// side's or the formal document's.
+// side's, the formal document's or the sales order's (order.go).
 func Category(code string) (kernel.Category, bool) {
 	if c, ok := codes[code]; ok {
+		return c, true
+	}
+	if c, ok := orderCodes[code]; ok {
 		return c, true
 	}
 	if c, ok := CalcCategory(code); ok {
@@ -105,8 +108,9 @@ func Category(code string) (kernel.Category, bool) {
 	return DocumentCategory(code)
 }
 
-// Reject returns a rejection with a code TRD declares (QuoteRoot's, the calculation's or the
-// formal document's), at path of the caller's request. It panics on a code TRD does not declare.
+// Reject returns a rejection with a code TRD declares (QuoteRoot's, the calculation's, the formal
+// document's or the sales order's), at path of the caller's request. It panics on a code TRD does
+// not declare.
 func Reject(code, path string) *kernel.Rejection {
 	c, ok := Category(code)
 	if !ok {

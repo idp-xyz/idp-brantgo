@@ -41,7 +41,9 @@ type sourcesVerdict struct {
 // citing are the commands that cite EVD sources: their replays and reconciliations need the answer.
 var citing = map[string]bool{api.CommandSaveDraft: true, api.CommandDiscardDraft: true, api.CommandDecideReview: true,
 	api.CommandRevokeApproval: true, api.CommandWithdraw: true, api.CommandCancel: true, api.CommandRecordResponse: true,
-	api.CommandVerifyResponse: true, api.CommandInvalidateAcceptance: true, api.CommandDisputeAcceptance: true}
+	api.CommandVerifyResponse: true, api.CommandInvalidateAcceptance: true, api.CommandDisputeAcceptance: true,
+	api.CommandDecideOrderReview: true, api.CommandRevokeOrderApproval: true, api.CommandCancelOrder: true,
+	api.CommandCloseOrderUnfulfilled: true}
 
 // cited returns the sources cmd cites as sent, and whether they are instead those of the customer
 // response its stored result names (quote.response.record and quote.response.verify).
@@ -74,6 +76,14 @@ func cited(cmd api.Command) (ids []string, ofResponse bool) {
 	case api.InvalidateAcceptance:
 		return ev(c.Evidence), false
 	case api.DisputeAcceptance:
+		return ev(c.Evidence), false
+	case api.DecideOrderReview:
+		return ev(c.Evidence), false
+	case api.RevokeOrderApproval:
+		return ev(c.Evidence), false
+	case api.CancelOrder:
+		return ev(c.Evidence), false
+	case api.CloseOrderUnfulfilled:
 		return ev(c.Evidence), false
 	case api.RecordResponse, api.VerifyResponse:
 		return nil, true

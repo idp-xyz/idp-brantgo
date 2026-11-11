@@ -175,10 +175,28 @@ func (q *Quote) ClosedAt(v int64) *Revision {
 
 // CheckConversion refuses a replacement of the active revision while the conversion slot is taken
 // (ROOT_CONVERSION_LOCKED, TRD-INV-010): the root converted into an order, which keeps the revision
-// it converted.
+// it converted; and while a live acceptance accepts the active revision (ACCEPTANCE_ALREADY_EXISTS,
+// CheckContract).
 func (q *Quote) CheckConversion(target string) error {
-	if target == TargetReplace && q.Slot != nil {
+	if target != TargetReplace {
+		return nil
+	}
+	if q.Slot != nil {
 		return fail(CodeRootConversionLocked, "/args/quote_id", "The quote was converted into an order; its active revision stays")
+	}
+	if active := q.Active(); active != nil {
+		return q.CheckContract(active.Number, "/args/expected_active_revision")
+	}
+	return nil
+}
+
+// CheckContract refuses ending revision n — superseding, withdrawing or cancelling it — while a live
+// (valid or disputed) acceptance accepts it (ACCEPTANCE_ALREADY_EXISTS at path): the customer's
+// acceptance formed a contract on it, and the owner's decision of 2026-11-11 keeps the revision until
+// a human invalidates the acceptance (acceptance.invalidate, with a reason and evidence).
+func (q *Quote) CheckContract(n int64, path string) error {
+	if ids := q.Contracts[n]; len(ids) > 0 {
+		return fail(CodeAcceptanceAlreadyExists, path, "Acceptance "+ids[0]+" formed a contract on the revision; invalidate it first")
 	}
 	return nil
 }
@@ -256,7 +274,9 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 // Withdraw ends frozen or pending revision n before it takes effect (quote.withdraw; Python
 // withdraw), by by at now for reason on evidence: an open review of it is cancelled with the same
 // act, and its approvals can never release it again (Releasable needs a pending revision). The root
-// version moves. It returns the revision and the review it cancelled, if any.
+// version moves. A revision a live acceptance accepts is not withdrawn (CheckContract: such a
+// revision is active, so this states the owner's rule for every end of a revision). It returns the
+// revision and the review it cancelled, if any.
 func (q *Quote) Withdraw(n int64, by kernel.ActorRef, epoch int64, now time.Time, reason string, evidence []Evidence) (*Revision, *Review, error) {
 	rev := q.Revision(n)
 	switch {
@@ -264,6 +284,9 @@ func (q *Quote) Withdraw(n int64, by kernel.ActorRef, epoch int64, now time.Time
 		return nil, nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/business_revision", "")
 	case rev.Status != Frozen && rev.Status != PendingApproval:
 		return nil, nil, kernel.Reject(kernel.CodeInvalidState, "/args/business_revision", "Only a frozen or pending revision is withdrawn")
+	}
+	if err := q.CheckContract(n, "/args/business_revision"); err != nil {
+		return nil, nil, err
 	}
 	act := Act{By: by, Epoch: epoch, At: kernel.Instant(now), Reason: reason, Evidence: slices.Clone(evidence)}
 	var cancelled *Review
@@ -281,8 +304,9 @@ func (q *Quote) Withdraw(n int64, by kernel.ActorRef, epoch int64, now time.Time
 }
 
 // Cancel ends the active revision n (quote.cancel; Python cancel): QUOTE_NOT_CURRENT unless n is
-// the active revision, ROOT_CONVERSION_LOCKED while the conversion slot is taken. Its formal
-// document and commit evidence stay. The root version moves.
+// the active revision, ROOT_CONVERSION_LOCKED while the conversion slot is taken,
+// ACCEPTANCE_ALREADY_EXISTS while a live acceptance accepts it (CheckContract). Its formal document
+// and commit evidence stay. The root version moves.
 func (q *Quote) Cancel(n int64, by kernel.ActorRef, epoch int64, now time.Time, reason string, evidence []Evidence) (*Revision, error) {
 	active := q.Active()
 	if active == nil || active.Number != n {
@@ -290,6 +314,9 @@ func (q *Quote) Cancel(n int64, by kernel.ActorRef, epoch int64, now time.Time, 
 	}
 	if q.Slot != nil {
 		return nil, fail(CodeRootConversionLocked, "/args/quote_id", "The quote was converted into an order")
+	}
+	if err := q.CheckContract(n, "/args/business_revision"); err != nil {
+		return nil, err
 	}
 	q.RootVersion++
 	active.Status, active.Changed, active.StatusOnly = Cancelled, true, true
@@ -336,6 +363,52 @@ func (q *Quote) Usable(n int64, businessHash, path string) error {
 		return fail(h.Code, path, "A risk hold pauses the revision: "+h.Cause)
 	}
 	return nil
+}
+
+// FormalApproval decides, when an order of revision n activates (TRD-INV-014: 正式化批准未撤销、审核人仍合格),
+// whether the approval its commit evidence names still stands on the reviewers' standings now: the
+// revision has commit evidence (REFERENCE_INVALID otherwise, Python PYT-0239), its approval is
+// still valid (APPROVAL_REVOKED), the reviewer is still independent of the revision's authors
+// (INDEPENDENT_REVIEW_REQUIRED) and an active human grant holding quote.review.decide and trd.read
+// that sees the quote (APPROVAL_STALE, T03 A26), and so is a margin exception's approver with the
+// capability. The approval's and the quote's expiry are not judged: the formalization judged them,
+// and the contract the order rests on formed afterwards (ADR-BR-013, TRD-INV-017). It returns the
+// approval.
+func (q *Quote) FormalApproval(n int64, standings Standings, path string) (*Approval, error) {
+	rev := q.Revision(n)
+	if rev == nil || rev.Formal == nil || rev.Seal == nil {
+		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "The revision has no commit evidence")
+	}
+	a := q.Approval(rev.Formal.Commit.ApprovalID)
+	switch {
+	case a == nil || a.Revision != n || a.BusinessHash != rev.Seal.BusinessHash:
+		return nil, fail(CodeApprovalRequired, path, "The commit evidence names no approval of the revision")
+	case a.Effectivity != Valid:
+		return nil, fail(CodeApprovalRevoked, path, "The revision's formalization approval was revoked")
+	}
+	review := q.Review(a.ReviewID)
+	if review == nil {
+		return nil, fail(CodeApprovalStale, path, "The approval's review is missing")
+	}
+	if slices.Contains(authors(rev, review), a.Approved.By.ID) {
+		return nil, fail(CodeIndependentReviewRequired, path, "")
+	}
+	s, err := standings(a.Approved.By.ID)
+	if err != nil {
+		return nil, err
+	}
+	if a.Approved.By.Kind != kernel.ActorHuman || !s.qualified(PermissionReview, PermissionRead) {
+		return nil, fail(CodeApprovalStale, path, "The quote's reviewer is no longer qualified")
+	}
+	if e := a.Exception; e != nil {
+		if s, err = standings(e.Approved.By.ID); err != nil {
+			return nil, err
+		}
+		if e.Approved.By.Kind != kernel.ActorHuman || !s.qualified(PermissionReview, PermissionRead, PermissionMarginException) {
+			return nil, fail(CodeApprovalStale, path, "The margin exception's approver is no longer qualified")
+		}
+	}
+	return a, nil
 }
 
 // TakeSlot takes the root's conversion slot for its active revision n at businessHash, for order

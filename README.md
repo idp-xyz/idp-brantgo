@@ -45,7 +45,10 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1;
                                   the read side: quote_ready, paged quote, approval, document, commit and Outbox
                                   histories, dispatch preflight and target, reconciliation and replays that re-check
-                                  the caller's grant, data scope and EVD sources
+                                  the caller's grant, data scope and EVD sources;
+                                  sales orders: preparation taking the conversion slot, review with risk
+                                  acknowledgement, activation re-checking the source and upstream (STL/CNX extension
+                                  points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only
