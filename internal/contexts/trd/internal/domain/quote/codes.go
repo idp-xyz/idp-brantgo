@@ -67,6 +67,10 @@ const (
 	CodeRootConversionLocked   = "ROOT_CONVERSION_LOCKED"
 	CodeConversionSlotConflict = "CONVERSION_SLOT_CONFLICT"
 	CodeFXStale                = "FX_STALE"
+
+	// CodeAcceptanceAlreadyExists refuses ending a revision a live acceptance accepts (the owner's
+	// decision of 2026-11-11; formal.go).
+	CodeAcceptanceAlreadyExists = "ACCEPTANCE_ALREADY_EXISTS"
 )
 
 // Categories maps the codes above to their error catalog category.
@@ -99,6 +103,8 @@ var Categories = map[string]kernel.Category{
 	CodeRootConversionLocked:   kernel.CategoryConflict,
 	CodeConversionSlotConflict: kernel.CategoryConflict,
 	CodeFXStale:                kernel.CategoryInvalid,
+
+	CodeAcceptanceAlreadyExists: kernel.CategoryConflict,
 }
 
 func fail(code, path, reason string) error {

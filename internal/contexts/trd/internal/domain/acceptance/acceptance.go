@@ -6,12 +6,15 @@
 // one formal quote revision, its business hash and document number, the customer, the contact and
 // the revision's complete line set, and its effectivity ledger:
 //
-//	valid → invalidated   acceptance.invalidate: a human, at the effectivity version, with a reason
-//	valid → disputed      acceptance.mark_disputed  and new evidence
+//	valid → invalidated      acceptance.invalidate: a human, at the effectivity version, with a
+//	valid → disputed         acceptance.mark_disputed  reason and new evidence
+//	disputed → invalidated   acceptance.invalidate
 //
-// Neither returns to valid: a new verification creates a new acceptance (UL
+// Nothing returns to valid: a new verification creates a new acceptance (UL
 // TRD-AcceptanceEffectivity). Every change appends an entry to the ledger; version 1 is the
-// verification.
+// verification. A disputed acceptance is invalidated (version 3) by the owner's decision of
+// 2026-11-11: a live (valid or disputed) acceptance keeps its revision from being superseded,
+// withdrawn or cancelled until a human invalidates it (quote.CheckContract).
 //
 // Verify creates an acceptance from a full_unconditional customer response in the response's
 // transaction (the tactical model's registered creating exception). It judges contract formation
@@ -260,25 +263,28 @@ func Verify(r *response.Response, q *quote.Quote, v Verification, k Known, reada
 }
 
 // Invalidate invalidates a at its effectivity version expected (acceptance.invalidate), by act
-// (who, epoch, when, reason, evidence).
+// (who, epoch, when, reason, evidence): a valid acceptance, or a disputed one (the owner's decision
+// of 2026-11-11: a live acceptance keeps its revision from being superseded, withdrawn or cancelled
+// until a human invalidates it, so a dispute ends in invalidation too).
 func (a *Acceptance) Invalidate(expected int64, act quote.Act) error {
-	return a.change(Invalidated, expected, act)
+	return a.change(Invalidated, expected, act, Valid, Disputed)
 }
 
-// MarkDisputed marks a disputed at its effectivity version expected (acceptance.mark_disputed).
+// MarkDisputed marks a valid acceptance disputed at its effectivity version expected
+// (acceptance.mark_disputed).
 func (a *Acceptance) MarkDisputed(expected int64, act quote.Act) error {
-	return a.change(Disputed, expected, act)
+	return a.change(Disputed, expected, act, Valid)
 }
 
-// change moves a valid acceptance to effectivity to: VERSION_CONFLICT at another effectivity
-// version, INVALID_STATE when it is not valid (nothing returns to valid and an invalidated or
-// disputed acceptance does not change again).
-func (a *Acceptance) change(to Effectivity, expected int64, act quote.Act) error {
+// change moves an acceptance in one of the effectivities from to effectivity to: VERSION_CONFLICT at
+// another effectivity version, INVALID_STATE otherwise (nothing returns to valid, an invalidated
+// acceptance never changes again, a disputed one is only invalidated).
+func (a *Acceptance) change(to Effectivity, expected int64, act quote.Act, from ...Effectivity) error {
 	if a.Version != expected {
 		return kernel.Reject(kernel.CodeVersionConflict, "/args/expected_effectivity_version", "")
 	}
-	if a.Effectivity != Valid {
-		return kernel.Reject(kernel.CodeInvalidState, "/args/acceptance_id", "Only a valid acceptance is invalidated or disputed")
+	if !slices.Contains(from, a.Effectivity) {
+		return kernel.Reject(kernel.CodeInvalidState, "/args/acceptance_id", "The acceptance is "+string(a.Effectivity))
 	}
 	act.At = kernel.Instant(act.At)
 	act.Evidence = slices.Clone(act.Evidence)

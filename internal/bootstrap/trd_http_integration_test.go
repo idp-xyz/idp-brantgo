@@ -124,6 +124,42 @@ func TestQuoteToAcceptanceOverHTTP(t *testing.T) {
 		formal["number"] != number(1) || string(content) != q.rendered("quote.http", 1, number(1)) {
 		t.Fatalf("document %d %v\n%s", status, formal, content)
 	}
+
+	// The S3-09 reads of the active quote.
+	base := "/api/brant/v1/trd/quotes/quote.http"
+	status, ready := ed.do("GET", base+"/ready", nil)
+	if status != http.StatusOK || ready["ready"] != true || ready["business_revision"] != float64(1) || ready["business_hash"] != hash {
+		t.Fatalf("ready %d %v", status, ready)
+	}
+	pages := map[string]string{"/history": "revisions", "/approvals": "reviews", "/documents": "documents", "/commits": "commits"}
+	for path, list := range pages {
+		status, page := ed.do("GET", base+path+"?limit=10", nil)
+		if items, _ := page[list].([]any); status != http.StatusOK || page["ok"] != true || len(items) != 1 || page["next"] != float64(0) {
+			t.Fatalf("%s %d %v", path, status, page)
+		}
+	}
+	if _, page := ed.do("GET", base+"/documents", nil); page["documents"].([]any)[0].(map[string]any)["integrity"] != "intact" {
+		t.Fatalf("documents %v", page)
+	}
+	status, outbox := ed.do("GET", base+"/outbox", nil)
+	if events, _ := outbox["events"].([]any); status != http.StatusOK || len(events) == 0 || events[0].(map[string]any)["external_delivery"] != "not_started" {
+		t.Fatalf("outbox %d %v", status, outbox)
+	}
+	status, preflight := ed.do("GET", base+"/revisions/1/dispatch_preflight", nil)
+	if status != http.StatusOK || preflight["ready"] != true || preflight["number"] != number(1) {
+		t.Fatalf("dispatch preflight %d %v", status, preflight)
+	}
+	status, target := ed.do("GET", base+"/revisions/1/dispatch_target", nil)
+	if status != http.StatusOK || target["target_ready"] != false || target["channel_status"] != "not_configured" || target["preflight_ready"] != true {
+		t.Fatalf("dispatch target %d %v", status, target)
+	}
+	for _, path := range []string{base + "/history?limit=x", base + "/history?limit=201", base + "/history?after=-1", base + "/history?page=2",
+		base + "/history?limit=1&limit=2", base + "/ready?business_revision=y", base + "/revisions/0/dispatch_target"} {
+		if status, out := ed.do("GET", path, nil); status != http.StatusUnprocessableEntity || out["code"] != kernel.CodeSchemaInvalid {
+			t.Fatalf("%s: %d %v", path, status, out)
+		}
+	}
+
 	for _, path := range []string{"/api/brant/v1/trd/quotes/quote.http/revisions/0/document", "/api/brant/v1/trd/quotes/quote.http/revisions/x/document"} {
 		if status, out := ed.do("GET", path, nil); status != http.StatusUnprocessableEntity || out["code"] != kernel.CodeSchemaInvalid {
 			t.Fatalf("%s: %d %v", path, status, out)

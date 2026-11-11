@@ -181,13 +181,25 @@ GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint,
 GRANT SELECT, INSERT ON brant_trd.customer_response, brant_trd.acceptance, brant_trd.acceptance_effectivity TO brant_app;
 GRANT UPDATE (effectivity, effectivity_version) ON brant_trd.acceptance TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_acceptance_valid_v1(text, text, bigint, text) TO brant_app;
+-- Sales orders: an order is inserted with its snapshot and then changes only its status, row version
+-- and activating review (trigger); a review is decided once and revoked once (trigger); commit
+-- evidence and closures are only inserted. Every order command locks the order FOR UPDATE, which
+-- needs the column grants. order.activate calls PTY's PartyScreeningGuard, granted above; TRD
+-- publishes its order guard (ActiveOrderRef v1, R19).
+GRANT SELECT, INSERT ON brant_trd.sales_order, brant_trd.sales_order_review, brant_trd.sales_order_commit_evidence,
+    brant_trd.sales_order_closure TO brant_app;
+GRANT UPDATE (status, row_version, activated_review_id, updated_at) ON brant_trd.sales_order TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason, decision_evidence, expires_at,
+              acknowledged_risks, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
+    ON brant_trd.sales_order_review TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_trd.guard_order_active_v1(text, bigint, text) TO brant_app;
 
 -- PUR: a purchase draft is inserted prepared with its lines and only voided, once (trigger); its
 -- lines never change; a DemandAllocation root moves its balance, order revision and version by one
 -- per command (trigger), and its entries are taken once and released once (trigger); nothing is
 -- deleted; the ledger only grows. FOR UPDATE on drafts and roots needs the column grants. The
--- purchase draft commands call SUP's, CST's, POL's, PTY's and CAT's guard functions, granted above,
--- and TRD's OrderGuard v1 once sales orders exist.
+-- purchase draft commands call SUP's, CST's, POL's, PTY's, CAT's and TRD's guard functions, granted
+-- above.
 GRANT USAGE ON SCHEMA brant_pur TO brant_app;
 GRANT SELECT, INSERT ON brant_pur.purchase_draft, brant_pur.purchase_draft_line, brant_pur.demand_allocation,
     brant_pur.allocation_entry, brant_pur.action_result, brant_pur.audit_event TO brant_app;

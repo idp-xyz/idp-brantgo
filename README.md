@@ -43,7 +43,13 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   quote-text/0.1.0 formal document, POL number and commit evidence in one transaction,
                                   withdrawal, cancellation, risk holds, the conversion slot; QuoteRevisionGuard v1;
                                   customer responses, their verification into acceptances that form the contract when
-                                  they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1
+                                  they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1;
+                                  the read side: quote_ready, paged quote, approval, document, commit and Outbox
+                                  histories, dispatch preflight and target, reconciliation and replays that re-check
+                                  the caller's grant, data scope and EVD sources;
+                                  sales orders: preparation taking the conversion slot, review with risk
+                                  acknowledgement, activation re-checking the source and upstream (STL/CNX extension
+                                  points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR
 internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding active order lines to chosen supply condition
                                   lines (immutable, hashed, not committed; server calculation of MOQ, multiples, tiers, tax
                                   and delivery; costing comparison), the demand allocation ledger per order line (several

@@ -22,6 +22,11 @@ import (
 //	                conversion slot is free (ROOT_CONVERSION_LOCKED); QUOTE_NOT_CURRENT for another
 //	                revision.
 //
+// A revision a live (valid or disputed) acceptance accepts — a formed contract — is neither
+// superseded by quote.replace, withdrawn nor cancelled (ACCEPTANCE_ALREADY_EXISTS, after the slot's
+// ROOT_CONVERSION_LOCKED) until a human invalidates the acceptance (acceptance.invalidate, with a
+// reason and evidence): the owner's decision of 2026-11-11. The database refuses it as well.
+//
 // quote.activate and quote.replace formalize the revision. Before TRD's transaction they check
 // everything the transaction will check (so a refusal costs no number), read what the formal
 // document prints (PTY: the customer's name at the bound revision and the contact's at the bound

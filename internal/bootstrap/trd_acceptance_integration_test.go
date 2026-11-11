@@ -685,11 +685,13 @@ func TestAcceptanceArrivingBeforeExpiryFormsTheContractAfterExpiry(t *testing.T)
 
 // SM-TRD-ACCEPTANCE, TRD-INV-017's negative and UL TRD-AcceptanceEffectivity: a human invalidates a
 // valid acceptance at its effectivity version (VERSION_CONFLICT otherwise) with a reason and new
-// evidence, or marks it disputed; the ledger keeps every entry; neither moves again
-// (INVALID_STATE); the lookups and the guard say ACCEPTANCE_NOT_VALID; AcceptanceInvalidated and
-// AcceptanceDisputed are published in the acceptance's order. An invalidated acceptance frees its
-// response and message: a new verification creates a new acceptance. A disputed one keeps them,
-// and another message of the customer may still accept the revision.
+// evidence, or marks it disputed; the ledger keeps every entry; an invalidated acceptance never
+// moves again and a disputed one is only invalidated (INVALID_STATE; the owner's decision of
+// 2026-11-11 makes a dispute end in invalidation, version 3); the lookups and the guard say
+// ACCEPTANCE_NOT_VALID; AcceptanceInvalidated and AcceptanceDisputed are published in the
+// acceptance's order. An invalidated acceptance frees its response and message: a new verification
+// creates a new acceptance. A disputed one keeps them, and another message of the customer may still
+// accept the revision.
 func TestInvalidateAndDisputeAcceptance(t *testing.T) {
 	q := newTrdWorld(t)
 	q.mail()
@@ -734,7 +736,7 @@ func TestInvalidateAndDisputeAcceptance(t *testing.T) {
 	if err != nil || d.Status != trdapi.AcceptanceDisputed || d.RowVersion != 2 {
 		t.Fatalf("disputed %+v %v", d, err)
 	}
-	_, err = q.c.TRD.InvalidateAcceptance(q.reviewer, q.invalidation(w.ObjectID, 2))
+	_, err = q.c.TRD.DisputeAcceptance(q.author, q.dispute(w.ObjectID, 2))
 	q.want(err, kernel.CodeInvalidState)
 	_, err = q.c.TRD.VerifyResponse(q.reviewer, q.verification("response.quote.2", "acceptance.quote.2.b", 1, b.BusinessHash))
 	q.want(err, trdapi.CodeResponseVerificationImmutable)
@@ -743,6 +745,19 @@ func TestInvalidateAndDisputeAcceptance(t *testing.T) {
 	if _, err = q.c.TRD.VerifyResponse(q.reviewer, q.verification("response.quote.2.po", "acceptance.quote.2.po", 1, b.BusinessHash)); err != nil {
 		t.Fatalf("another message while the first is disputed: %v", err)
 	}
+	// The dispute ends in invalidation, at the next version; nothing moves after.
+	_, err = q.c.TRD.InvalidateAcceptance(q.reviewer, q.invalidation(w.ObjectID, 1))
+	q.want(err, kernel.CodeVersionConflict)
+	ended, err := q.c.TRD.InvalidateAcceptance(q.reviewer, q.invalidation(w.ObjectID, 2))
+	if err != nil || ended.Status != trdapi.AcceptanceInvalidated || ended.RowVersion != 3 {
+		t.Fatalf("the disputed acceptance invalidated %+v %v", ended, err)
+	}
+	_, err = q.c.TRD.InvalidateAcceptance(q.reviewer, q.invalidation(w.ObjectID, 3))
+	q.want(err, kernel.CodeInvalidState)
+	if got, err := q.c.TRD.GetAcceptance(q.author, w.ObjectID); err != nil || len(got.History) != 3 ||
+		got.History[1].Effectivity != trdapi.AcceptanceDisputed || got.History[2].Effectivity != trdapi.AcceptanceInvalidated {
+		t.Fatalf("the disputed acceptance's ledger %+v %v", got, err)
+	}
 	var kinds []string
 	for _, e := range q.events("company.A", trdapi.Source) {
 		if e.Payload["acceptance_id"] == "acceptance.quote.1" || e.Payload["acceptance_id"] == w.ObjectID {
@@ -750,7 +765,8 @@ func TestInvalidateAndDisputeAcceptance(t *testing.T) {
 		}
 	}
 	if !slices.Equal(kinds, []string{"acceptance_verified.v1@acceptance.quote.1", "acceptance_invalidated.v1@acceptance.quote.1",
-		"acceptance_verified.v1@acceptance.quote.2", "acceptance_disputed.v1@acceptance.quote.2"}) {
+		"acceptance_verified.v1@acceptance.quote.2", "acceptance_disputed.v1@acceptance.quote.2",
+		"acceptance_invalidated.v1@acceptance.quote.2"}) {
 		t.Fatalf("events %v", kinds)
 	}
 }
