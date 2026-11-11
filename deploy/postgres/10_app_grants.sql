@@ -107,6 +107,12 @@ GRANT UPDATE (status, base_revision, data, content_hash, contributors, provenanc
     ON brant_cst.costing_context_revision TO brant_app;
 GRANT UPDATE (status, superseded_at, withdrawn_by_id, withdraw_epoch, withdrawn_at, withdraw_reason, withdraw_evidence)
     ON brant_cst.measurement_revision TO brant_app;
+-- Cost scenarios: a draft is replaced whole, an evaluation counts itself on the root, a freeze moves
+-- the root to frozen (trigger); evaluations are only appended (trigger).
+GRANT SELECT, INSERT ON brant_cst.cost_scenario, brant_cst.cost_evaluation TO brant_app;
+GRANT UPDATE (root_version, status, data, content_hash, contributors, saved_by_kind, saved_by_id, saved_epoch, saved_at,
+              last_evaluation, updated_at)
+    ON brant_cst.cost_scenario TO brant_app;
 
 -- SUP: a supplier RFQ's draft is replaced whole, an issued one is only closed (trigger). A supply
 -- condition's root moves its version; a draft revision is edited, sealed or discarded, a sealed one

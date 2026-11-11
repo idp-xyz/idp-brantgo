@@ -28,6 +28,7 @@ import (
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
+	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
@@ -54,7 +55,7 @@ var (
 // the sibling supplier_offer.withdraw and logistics_offer.withdraw are human only). An AI agent
 // prepares, revises and discards drafts through the same command path.
 func Rules() []authorization.Rule {
-	return []authorization.Rule{
+	return append([]authorization.Rule{
 		{Command: api.CommandSaveContext, Permission: api.CommandSaveContext, ActorKinds: humanOrAgent},
 		{Command: api.CommandReviseContext, Permission: api.CommandReviseContext, ActorKinds: humanOrAgent},
 		{Command: api.CommandDiscardContextDraft, Permission: api.CommandDiscardContextDraft, ActorKinds: humanOrAgent},
@@ -66,12 +67,15 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetContext, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetMeasurement, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
-	}
+	}, scenarioRules()...)
 }
 
 // Visible reports whether d's actor sees the costing context or measurement a stored result names.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	sc := scope(ctx)
+	if scenarioCommand(command) {
+		return visibleScenario(ctx, exec, d, command, id)
+	}
 	if measurementCommand(command) {
 		s, err := postgres.LoadMeasurement(ctx, exec, sc, id, postgres.NoLock)
 		return err == nil && s != nil && d.Sees(s.OwnerActor, s.OwnerTeam), err
@@ -90,6 +94,7 @@ type Upstream struct {
 	Rfqs    inqapi.RfqLookups // RfqRef v1 (R08)
 	Skus    catapi.Queries    // SkuRef v1 (R51)
 	Configs polapi.Queries    // ConfigRef v1 (R10)
+	Supply  supapi.Queries    // SupplyConditionRef v1 (R09)
 }
 
 // Service runs CST's use cases.
@@ -154,7 +159,7 @@ func request(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandWithdrawMeasurement, key, c
 	}
-	return "", "", nil
+	return scenarioRequest(cmd)
 }
 
 // Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
