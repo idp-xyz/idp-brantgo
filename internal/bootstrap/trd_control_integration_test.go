@@ -92,9 +92,11 @@ func (c *controlWorld) unchanged(state string, epoch int64) {
 }
 
 // Python test_t03_a24_write_control.py test_bound_root_rejects_missing_task_in_both_entrypoints_without_residue
-// (PYT-0189) and test_t03_persistence.py test_bound_object_requires_server_task_and_current_authority
-// (PYT-0420): on a bound root every quote write without the task's claim is OBJECT_CONTROL_CONFLICT,
-// is audited as refused and leaves nothing behind.
+// (PYT-0189), test_t03_persistence.py test_bound_object_requires_server_task_and_current_authority
+// (PYT-0420) and test_t03_a6_authority.py test_bound_quote_requires_the_server_task_identity
+// (PYT-0403, the refusal; Go binds an existing root only, TRD-INV-015): on a bound root every quote
+// write without the task's claim, the draft save among them, is OBJECT_CONTROL_CONFLICT, is audited
+// as refused and leaves nothing behind.
 func TestBoundRootRefusesWritesWithoutTheTaskAndLeavesNoResidue(t *testing.T) {
 	c := newControlWorld(t)
 	if b := c.bind("quote.1", "task.1", 0); b.RowVersion != 1 || b.Status != trdapi.ControlBound {
@@ -126,8 +128,10 @@ func TestBoundRootRefusesWritesWithoutTheTaskAndLeavesNoResidue(t *testing.T) {
 }
 
 // Python test_t03_a24_write_control.py test_matching_server_task_allows_local_write_and_rechecks_replays
-// (PYT-0190): the task's claim admits its writes, a human's too (a human-only freeze for the task);
-// a replay with the claim is the stored result, without it OBJECT_CONTROL_CONFLICT.
+// (PYT-0190) and test_t03_a6_authority.py test_bound_quote_requires_the_server_task_identity
+// (PYT-0403, the admitted save): the task's claim admits its writes — the draft save at the next root
+// version, the control epoch the binding set — a human's too (a human-only freeze for the task); a
+// replay with the claim is the stored result, without it OBJECT_CONTROL_CONFLICT.
 func TestMatchingTaskWritesAndReplaysAreRechecked(t *testing.T) {
 	c := newControlWorld(t)
 	c.bind("quote.1", "task.1", 0)

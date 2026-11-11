@@ -90,7 +90,7 @@ func prepared(t *testing.T) (*Order, *quote.Quote) {
 	return o, q
 }
 
-// TRD-INV-010, 017 and Python T03 A25 (PYT-0203, 0204, 0207, 0221, 0227): the preparation, after the
+// TRD-INV-010, 017 and Python T03 A25 (PYT-0203, 0204, 0207, 0227): the preparation, after the
 // quote expired, converts the formed contract into a draft at row version 1 and takes the root's
 // slot for it (the root version moves); the snapshot copies the sealed commercial document whole —
 // nothing recalculated — with the acceptance it binds, and hashes to the order hash; a second
@@ -160,6 +160,62 @@ func TestPrepareConvertsTheFormedContract(t *testing.T) {
 		a = c.change(q, a, &p)
 		if _, err := Prepare(p, q, a, scope, agent, 3, prepareOn); code(err) != c.want || q.Slot != nil || q.RootVersion != 5 {
 			t.Errorf("%s: %s, want %s", name, code(err), c.want)
+		}
+	}
+}
+
+// Python test_t03_a25_order_snapshot.py test_source_builder_rejects_unstructured_and_inconsistent_calculations
+// (PYT-0221): the snapshot is built only from a sealed commercial document. A revision without a
+// calculation, without lines or without the terms is DRAFT_NOT_READY; a document whose totals or
+// line IDs differ from what was sealed no longer hashes to the business hash and is
+// BUSINESS_HASH_MISMATCH. Go takes no calculation from the caller: the freeze computes it on the
+// server and seals it under the hash, so Python's "inconsistent calculation" is a changed document.
+func TestBuildSnapshotTakesOnlyTheSealedDocument(t *testing.T) {
+	q, a := accepted(t)
+	rev := q.Revision(1)
+	src := Source{QuoteID: "quote.1", Revision: 1, BusinessHash: rev.Seal.BusinessHash, Number: "QT-2026-00001",
+		DocumentSHA256: strings.Repeat("d", 64), AcceptanceID: "acceptance.1", AcceptanceVersion: 1, ArrivalAt: arrived,
+		ArrivalBasis: "channel_server", ExpiresAt: expires}
+	if _, err := BuildSnapshot(scope, "order.1", src, rev.Seal.Commercial, a); err != nil {
+		t.Fatalf("the sealed document: %v", err)
+	}
+	sealed := func(edit func(*quote.Commercial)) ([]byte, string) {
+		c, err := quote.ParseCommercial(rev.Seal.Commercial, rev.Seal.BusinessHash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		edit(&c)
+		tree, err := quote.TreeOf(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, hash, err := quote.Digest(tree)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return doc, hash
+	}
+	for name, edit := range map[string]func(*quote.Commercial){
+		"no calculation": func(c *quote.Commercial) { c.Calculation = nil },
+		"no lines":       func(c *quote.Commercial) { c.Data.Lines = nil },
+		"no data":        func(c *quote.Commercial) { c.Data = quote.Terms{} },
+	} {
+		doc, hash := sealed(edit)
+		s := src
+		s.BusinessHash = hash
+		if _, err := BuildSnapshot(scope, "order.1", s, doc, a); code(err) != "DRAFT_NOT_READY /args/business_revision" {
+			t.Errorf("%s: %s", name, code(err))
+		}
+	}
+	for name, edit := range map[string]func(*quote.Commercial){
+		"the net total":     func(c *quote.Commercial) { c.Calculation.NetMinor = "97002" },
+		"the tax total":     func(c *quote.Commercial) { c.Calculation.TaxMinor = "1" },
+		"the payable total": func(c *quote.Commercial) { c.Calculation.PayableMinor = "97002" },
+		"a line's ID":       func(c *quote.Commercial) { c.Calculation.Lines[0].ID = "other" },
+	} {
+		doc, _ := sealed(edit)
+		if _, err := BuildSnapshot(scope, "order.1", src, doc, a); code(err) != "BUSINESS_HASH_MISMATCH /business_hash" {
+			t.Errorf("%s with the sealed hash: %s", name, code(err))
 		}
 	}
 }

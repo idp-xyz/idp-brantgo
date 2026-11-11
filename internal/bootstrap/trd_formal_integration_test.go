@@ -244,6 +244,21 @@ func (q *trdWorld) rendered(id string, rev int64, number string) string {
 // revision and its content hash; one commit evidence (read back as a summary and the SHA-256 of
 // its entries) and one QuoteActivated carrying the file reference are written in the same
 // transaction; the key replays; reads verify the bytes; the lookups and the guard answer for it.
+//
+// Also, on the same activation:
+//   - test_t03_a19_configuration_consumption.py test_published_sales_tax_application_is_consumed_and_bound
+//     (PYT-0162): the line's published sales tax application is bound at the freeze — the line
+//     names it and the frozen document's dependency manifest pins its revision and content hash,
+//     covered by the business hash the formal binding names (Go keeps no per-document configuration
+//     binding table; the template is bound by the formal binding itself);
+//   - test_t03_a29_trade_parties.py test_public_freeze_persists_server_binding_and_renders_it
+//     (PYT-0350): the freeze seals the server's party binding (the issuer's and the customer's
+//     snapshots, the trading profile pinned in the dependency manifest) and the formal document
+//     prints the issuer, the customer, its address and the contact (quote-text/0.1.0 does not print
+//     the issuer's registration number, which stays in the commercial document);
+//   - test_t03_cost_binding.py test_activate_rechecks_and_records_current_snapshot_qualification
+//     (PYT-0410, the activation half): the commit evidence records the bound snapshot and CST's
+//     current verdict on it (adoptable).
 func TestActivateWritesNumberFileBindingEvidenceAndOutboxAtomically(t *testing.T) {
 	q := newTrdWorld(t)
 	f, d := q.approved("quote.1")
@@ -287,6 +302,7 @@ func TestActivateWritesNumberFileBindingEvidenceAndOutboxAtomically(t *testing.T
 	if sha256Hex(entries) != c.EntriesSHA256 {
 		t.Fatal("the entries' SHA-256")
 	}
+	feqvBindings(t, q, "quote.1", rv, string(doc.Content))
 	if documents, commits, numbers := q.formalRows(); documents != 1 || commits != 1 || numbers != 1 {
 		t.Fatalf("%d documents, %d commit evidence, %d numbers", documents, commits, numbers)
 	}
@@ -688,9 +704,13 @@ func TestWithdrawClosesOpenReviewAndInvalidatesRevision(t *testing.T) {
 // revision binds must still be in force when it is activated. A CST source denial, a party
 // revision and a SKU specification revision held off by an activation holding the guards wait
 // until it commits; once they committed, the next activation is refused with the owner's verdict at
-// the stored commercial document's path, nothing is written and POL issues no number. A retired
-// template (Python test_revoked_publication_evidence_blocks_formalization_atomically, PYT-0165,
-// on POL's retirement) is refused the same way.
+// the stored commercial document's path, nothing is written and POL issues no number. Each lapse
+// alone is refused the same way: a retired sales tax application (Python test_t03_a28_sales_terms.py
+// test_retired_sales_application_blocks_formalization_without_any_business_residue, PYT-0331;
+// CONFIG_NOT_ACTIVE where Python says REFERENCE_STALE) and a retired template. Python's
+// test_revoked_publication_evidence_blocks_formalization_atomically revokes the verification of a
+// template's publication evidence; POL has no such revocation (it checks evidence only when it
+// publishes, S1-D16), so the retired template is the nearest Go lapse, not a port of that test.
 func TestGuardedInputsLapsingBeforeActivationAreRefused(t *testing.T) {
 	q := newTrdWorld(t)
 	d := newDownstream(q.world)
@@ -760,12 +780,12 @@ func TestGuardedInputsLapsingBeforeActivationAreRefused(t *testing.T) {
 		}, cstapi.CodeCostSnapshotIneligible, "/data/cost_snapshot_ref"},
 		"PTY party revision": {func(q *trdWorld) { q.must(q.reviseParty(q.author, "customer.1", 5, q.key())) }, trdapi.CodeReferenceStale,
 			"/data/trading_profile_ref"},
-		"POL sales tax application retired (PYT-0162)": {func(q *trdWorld) {
+		"POL sales tax application retired (PYT-0331)": {func(q *trdWorld) {
 			_, err := q.c.POL.Retire(q.reviewer, polapi.Retire{IdempotencyKey: q.key(), Kind: q.sale.Kind, ConfigID: q.sale.ConfigID,
 				ExpectedVersion: 2, Reason: "停用税适用"})
 			q.must(err)
 		}, polapi.CodeConfigNotActive, "/data/lines/0/tax_application_ref"},
-		"POL template retired (PYT-0165)": {func(q *trdWorld) {
+		"POL template retired": {func(q *trdWorld) {
 			_, err := q.c.POL.Retire(q.reviewer, polapi.Retire{IdempotencyKey: q.key(), Kind: q.template.Kind, ConfigID: q.template.ConfigID,
 				ExpectedVersion: 2, Reason: "停用模板"})
 			q.must(err)
@@ -828,8 +848,9 @@ func TestNumberRenderAndFileFailuresLeaveNothing(t *testing.T) {
 		t.Fatalf("a zh-CN template: %s at %s", code(err), path(err))
 	}
 	// Numbering: an activator POL does not let issue numbers. Reading the facts: an activator who does
-	// not read PTY (the customer's and contact's names; the analogue of Python
-	// test_configuration_reference_requires_conditional_read_permission, PYT-0164).
+	// not read PTY (the document prints the customer's and the contact's names, read from PTY before
+	// the transaction). This is not Python's read permission on the configurations the quote
+	// consumes: POL's lookups need only an active grant (S1-D15), so Go has none to check.
 	_, d := q.approved("quote.1")
 	clerk := q.regrant("clerk", "company", without(allPermissions, "number.issue"))
 	_, err = q.c.TRD.Activate(clerk, q.activateCmd("quote.1", d.RowVersion, 1, "approval.quote.1"))

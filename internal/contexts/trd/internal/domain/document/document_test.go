@@ -85,7 +85,9 @@ func TestEquivalentDecimalsRenderOneDocument(t *testing.T) {
 
 // Charges print after the lines, with the amounts the server calculation gives them, in the
 // document's order (Python document.render); the recipient is addressed at the buyer address, else
-// the billing address.
+// the billing address, and never at another role's (Python test_t03_a31_address_roles.py
+// test_buyer_and_billing_are_bound_as_selected_roles, PYT-0379, the printed half; the sealed half is
+// quote's TestCustomerAddressesBindTheirRoles).
 func TestChargesAndRecipientAddress(t *testing.T) {
 	vat := quote.Ref{Kind: quote.KindTaxProfile, ID: "tax.vat13", Revision: 1}
 	charged := seal(t, func(d *quote.Data, f *quote.Facts) {

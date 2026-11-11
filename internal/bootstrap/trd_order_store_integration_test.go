@@ -15,7 +15,10 @@ import (
 // (PYT-0216), test_t03_a26 test_post_activation_failure_rolls_back_qualification_event_and_ledger
 // (PYT-0247), test_t04_a38 test_original_quote_approval_still_required_and_atomic_failure (PYT-0483,
 // the failure half) and test_t04_a39 test_public_activation_audit_failure_rolls_back_link_event_order_and_receipt
-// (PYT-0501), test_revocation_audit_failure_rolls_back_every_business_record (PYT-0500): a storage
+// (PYT-0501), test_revocation_audit_failure_rolls_back_every_business_record (PYT-0500) and
+// test_t04_a40_public_revoke.py test_rejected_public_revoke_has_no_success_ledger_and_audit_failure_rolls_back
+// (PYT-0511: Go has one command path; the failed revocation leaves no action result, so the retry
+// under the same key executes rather than replays): a storage
 // failure inside a preparation leaves no order, no slot and no event, the root unmoved; inside an
 // activation (the commit evidence, or the Outbox) the order stays a draft with no evidence and no
 // event; inside a revocation the review stays approved. Each retry with the same key succeeds.

@@ -97,7 +97,11 @@ func (q *trdWorld) audited(command, object, outcome, code string) bool {
 // trd.read alone, with CST's current qualification of its snapshot; a revision named that is not the
 // active one is QUOTE_NOT_CURRENT; a bound root is not ready for a caller without the task's claim;
 // a source denial in CST makes it not ready (COST_SNAPSHOT_INELIGIBLE) without rewriting its
-// history; and no read changes TRD's business state.
+// history; and no read changes TRD's business state. Also test_t03_server_calculation.py
+// test_quote_get_returns_history_and_current_cost_qualification (PYT-0444): Go splits Python's
+// quote_get into GetQuote (the revisions' history, for the reviewer as for the author) and
+// quote_ready (CST's current qualification of the active revision's snapshot); a reader without
+// trd.read gets neither (PERMISSION_DENIED).
 func TestQuoteReadyReflectsTheActiveRevisionNow(t *testing.T) {
 	q := newTrdWorld(t)
 	q.drafted("quote.draft")
@@ -128,6 +132,13 @@ func TestQuoteReadyReflectsTheActiveRevisionNow(t *testing.T) {
 	}
 
 	a := q.activated("quote.1")
+	if v, err := q.c.TRD.GetQuote(q.reviewer, "quote.1"); err != nil || len(v.Revisions) != 1 || v.Revisions[0].Status != trdapi.StatusActive ||
+		v.Revisions[0].BusinessHash != a.BusinessHash {
+		t.Fatalf("PYT-0444: the history for the reviewer %+v, %v", v, err)
+	}
+	if _, err := q.c.TRD.GetQuote(blind, "quote.1"); code(err) != kernel.CodePermissionDenied {
+		t.Fatalf("PYT-0444: the history for a reader without trd.read: %v", err)
+	}
 	before := q.business()
 	reader := q.regrant("reader", "company", []string{"trd.read"})
 	for name, ctx := range map[string]context.Context{"the author": q.author, "a reader of TRD alone": reader} {

@@ -196,7 +196,28 @@ func slicesClone(es []Evidence) []Evidence { return append([]Evidence(nil), es..
 // The freeze's checks in their order, each rule once, each refused with its catalog code at its
 // path (Python t03_storage freeze, _seal_quote_timing, _server_calculation, t03_trade_parties.bind):
 // the domain's own checks, then the validity window, then the server calculation's (package calc,
-// whose own tests cover every rule; here each family appears once, through the freeze).
+// whose own tests cover every rule; here each family appears once, through the freeze). The cases
+// port, as the freeze judges them:
+//   - test_t03_a27_cost_scope.py test_public_missing_rfq_fails_closed (PYT-0293): no RFQ;
+//   - test_t03_a28_sales_terms.py test_missing_issuer_cannot_skip_sales_tax_party_binding (PYT-0316)
+//     and test_foreign_issuer_cannot_use_local_sales_applicability (PYT-0317): no issuer, and an
+//     issuer other than the company of the scope (the sales tax applications are the company's,
+//     S1-D15, so the issuer's own applicability is not asked);
+//   - test_t03_a29_trade_parties.py test_reference_and_address_validation (PYT-0348): no trading
+//     profile, no address and an address the customer does not have (an empty ID or a boolean
+//     revision fails the contract's decoding, SCHEMA_INVALID);
+//   - test_t03_a29_trade_parties.py test_profile_must_match_customer_contact_terms_and_supported_address_role
+//     (PYT-0349): a profile of another party (REFERENCE_INVALID; Python REFERENCE_STALE) or of another
+//     revision of the customer, a superseded profile, a contact the profile does not pin, an address
+//     of no supported role and terms other than the profile's (COMPARISON_BASIS_MISMATCH; the payment
+//     terms in calc's TestBindScopeRefusals); PTY refuses a party without a name;
+//   - test_t03_a30_contact_profiles.py test_profile_without_exact_legacy_contact_cannot_authorize_freeze
+//     (PYT-0365): the contact must be the one the trading profile pins at its row version (Brant has
+//     no contact profile; PTY's trading profile pins the contact, S1-D35);
+//   - test_t03_a31_address_roles.py test_all_other_foundation_roles_are_rejected (PYT-0380): an
+//     address of another role alone (more in TestCustomerAddressesBindTheirRoles);
+//   - test_t03_server_calculation.py test_structured_quote_validity_is_bounded_by_server_policy
+//     (PYT-0443): expired at issue, and beyond the pricing policy's validity.
 func TestSealDraftRefusesWhatCannotBeFrozen(t *testing.T) {
 	stale := func(path string) error { return fail(CodeReferenceStale, path, "") }
 	charge := Charge{ChargeID: "C1", FeeCategory: freight, ObligationKey: "freight", Amount: "60", Inclusion: InclusionSeparate,
@@ -208,8 +229,12 @@ func TestSealDraftRefusesWhatCannotBeFrozen(t *testing.T) {
 		c    calcEdit
 		want string
 	}{
+		{"no issuer", func(d *Data) { d.Issuer = nil }, nil, nil, "DRAFT_NOT_READY at /args/data/issuer_ref"},
 		{"no customer", func(d *Data) { d.Customer = nil }, nil, nil, "CUSTOMER_REFERENCE_MISSING at /args/data/customer_ref"},
 		{"no contact", func(d *Data) { d.Contact = nil }, nil, nil, "CONTACT_REFERENCE_MISSING at /args/data/contact_ref"},
+		{"no trading profile", func(d *Data) { d.Profile = nil }, nil, nil, "DRAFT_NOT_READY at /args/data/trading_profile_ref"},
+		{"no address", func(d *Data) { d.Addresses = nil }, nil, nil, "DRAFT_NOT_READY at /args/data/customer_address_refs"},
+		{"no RFQ", func(d *Data) { d.Rfq = nil }, nil, nil, "DRAFT_NOT_READY at /args/data/rfq_ref"},
 		{"no snapshot", func(d *Data) { d.Snapshot = nil }, nil, nil, "COST_SNAPSHOT_MISSING at /args/data/cost_snapshot_ref"},
 		{"no named place", func(d *Data) { d.NamedPlace = nil }, nil, nil, "DRAFT_NOT_READY at /args/data/named_place_ref"},
 		{"no delivery", func(d *Data) { d.Delivery = nil }, nil, nil, "DRAFT_NOT_READY at /args/data/delivery"},
@@ -223,6 +248,9 @@ func TestSealDraftRefusesWhatCannotBeFrozen(t *testing.T) {
 		{"contact of another party", nil, func(f *Facts) { f.Contact.PartyID = "customer.2" }, nil, "REFERENCE_INVALID at /args/data/contact_ref"},
 		{"contact changed", nil, func(f *Facts) { f.Contact.RowVersion = 3 }, nil, "REFERENCE_STALE at /args/data/contact_ref"},
 		{"profile superseded", nil, func(f *Facts) { f.Profile.Check = stale }, nil, "REFERENCE_STALE at /args/data/trading_profile_ref"},
+		{"profile of another party", func(d *Data) { d.Profile.PartyID = "customer.2" }, nil, nil, "REFERENCE_INVALID at /args/data/trading_profile_ref"},
+		{"profile of another revision of the customer", nil, func(f *Facts) { f.Profile.PartyRevision = 1 }, nil,
+			"REFERENCE_STALE at /args/data/trading_profile_ref"},
 		{"contact not pinned", nil, func(f *Facts) { f.Profile.Contacts = nil }, nil, "REFERENCE_INVALID at /args/data/contact_ref"},
 		{"unknown address", func(d *Data) {
 			d.Addresses = []AddressRef{{PartyID: "customer.1", PartyRevision: 2, AddressID: "nowhere"}}
@@ -321,6 +349,43 @@ func TestSealDraftRefusesWhatCannotBeFrozen(t *testing.T) {
 	if c := s.Calculation; c.NetMinor != "102000" || len(c.Charges) != 1 || c.Charges[0].ObligationKey != "freight" ||
 		c.Charges[0].NetMinor != "6000" || len(c.SalesTerms.Charges) != 1 || c.SalesTerms.Charges[0].Amount != "60" {
 		t.Fatalf("with a sales charge %+v", c)
+	}
+}
+
+// Python test_t03_a31_address_roles.py test_buyer_and_billing_are_bound_as_selected_roles
+// (PYT-0379) and test_all_other_foundation_roles_are_rejected (PYT-0380), T03 A31: a quote addresses
+// its customer at a buyer or a billing address of the confirmed revision it binds, and the freeze
+// seals the address with its role into the party snapshots the business hash covers; an address of
+// any of PTY's five other roles (seller, payer, payee, consignee, shipper; S1-D33) alone is
+// REFERENCE_INVALID. (Go binds a list of addresses, one per role, of which one must be buyer or
+// billing; the formal document prints the buyer's, else the billing one: TestChargesAndRecipientAddress.)
+func TestCustomerAddressesBindTheirRoles(t *testing.T) {
+	billing := AddressRef{PartyID: "customer.1", PartyRevision: 2, AddressID: "ap"}
+	for role, ref := range map[string]AddressRef{"buyer": hq, "billing": billing} {
+		d := draft()
+		d.Addresses = []AddressRef{ref}
+		s, err := sealed(d, "0.1")
+		if err != nil {
+			t.Fatalf("%s: %v", role, err)
+		}
+		c, err := ParseCommercial(s.Commercial, s.BusinessHash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := c.PartySnapshots.Customer.Addresses; len(got) != 1 || got[0].AddressID != ref.AddressID || got[0].Role != role ||
+			got[0].Address != facts().Addresses[ref].Address {
+			t.Errorf("%s: sealed %+v", role, got)
+		}
+	}
+	for _, role := range []string{"seller", "payer", "payee", "consignee", "shipper"} {
+		other := AddressRef{PartyID: "customer.1", PartyRevision: 2, AddressID: role}
+		d, f := draft(), facts()
+		d.Addresses = []AddressRef{other}
+		f.Addresses[other] = Address{Role: role, Address: "synthetic " + role + " address"}
+		_, err := SealDraft("quote.1", 1, d, f, calculator(d, "0.1"), issuedAt)
+		if got := code(err); got != "REFERENCE_INVALID at /args/data/customer_address_refs" {
+			t.Errorf("%s alone: %s", role, got)
+		}
 	}
 }
 

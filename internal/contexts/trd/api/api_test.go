@@ -171,9 +171,14 @@ func TestPlaceAndDeliveryContract(t *testing.T) {
 // Python test_t03_a24_write_control.py test_task_identity_cannot_be_supplied_through_public_json
 // (PYT-0195): no command a transport decodes has a member that names a task or a control epoch,
 // except object_control.bind's own task; the claim comes from the trusted adapter's context only.
+// The list holds every TRD command but BindControl, among them the three Python sends a forged
+// task through: quote.response.verify, order.prepare and order.activate.
 func TestTaskIdentityIsNotACommandMember(t *testing.T) {
 	for _, c := range []any{SaveDraft{}, Revise{}, DiscardDraft{}, Freeze{}, UpdateMetadata{}, StopControl{}, ReleaseControl{}, QuoteData{}, Line{}, Charge{},
-		SubmitReview{}, DecideReview{}, RevokeApproval{}, MarginException{}, Activate{}, Replace{}, Withdraw{}, Cancel{}} {
+		SubmitReview{}, DecideReview{}, RevokeApproval{}, MarginException{}, Activate{}, Replace{}, Withdraw{}, Cancel{},
+		RecordResponse{}, VerifyResponse{}, InvalidateAcceptance{}, DisputeAcceptance{},
+		PrepareOrder{}, RequestOrderReview{}, DecideOrderReview{}, ActivateOrder{}, RevokeOrderApproval{}, CancelOrder{}, CloseOrderUnfulfilled{},
+		PrepareAmendment{}, SubmitAmendment{}, DecideAmendment{}, ApplyAmendment{}, WithdrawAmendment{}, CloseOrderRemainder{}, CloseOrder{}} {
 		ty := reflect.TypeOf(c)
 		for i := range ty.NumField() {
 			name := ty.Field(i).Name

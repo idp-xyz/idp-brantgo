@@ -22,7 +22,10 @@ import (
 // test_rejected_decision_blocks_activation_and_atomic_audit_failure_rolls_back (PYT-0517, the
 // decision half) and test_public_decision_expiry_and_quote_bound_are_checked (PYT-0518, as a
 // deliberate divergence), test_t04_a39_order_gate.py test_revocation_is_idempotent_and_immutable
-// (PYT-0496) and test_revocation_needs_approved_decision (PYT-0498); TRD-INV-013,
+// (PYT-0496) and test_revocation_needs_approved_decision (PYT-0498), and test_t04_a40_public_revoke.py
+// test_public_revoke_commits_audited_idempotent_receipt (PYT-0508: the revocation commits, the same
+// key replays its action ID, the review reads revoked and the activation is ORDER_APPROVAL_REVOKED;
+// its audit entry is in TestOrderReadsAndReconciliation); TRD-INV-013,
 // SM-TRD-ORDER-REVIEW: one open review per order; the reviewer is a human independent of the
 // preparer and the requester who reads TRD now; the decision restates the order hash; an approval
 // is valid after its decision and may outlive the quote; a rejection blocks activation and a new
@@ -127,8 +130,13 @@ func TestOrderReviewRulesAndIndependence(t *testing.T) {
 // test_reviewer_changed_to_ai_blocks_new_activation (PYT-0233) and
 // test_reviewer_losing_source_quote_scope_blocks_new_activation (PYT-0234), and test_t03_a24
 // test_order_activation_does_not_bypass_source_quote_scope (PYT-0196) and
-// test_order_activation_rechecks_binding_after_core_restart (PYT-0197); TRD-INV-013, 014, 015: the
-// order gate admits an approved, unrevoked, unexpired review by a reviewer still qualified, and the
+// test_order_activation_rechecks_binding_after_core_restart (PYT-0197), test_t03_a20
+// test_wrong_version_and_unapproved_activation_are_blocked (PYT-0168, the activation half: an order
+// whose review is not approved is ORDER_APPROVAL_REQUIRED where Python says APPROVAL_REQUIRED, the
+// order step naming no quote approval) and test_t03_a26
+// test_matching_trusted_task_keeps_quote_control_and_qualification_checks (PYT-0255: the task's
+// claim passes the quote's control and the qualification checks still run; the commit evidence
+// records the control epoch); TRD-INV-013, 014, 015: the order gate admits an approved, unrevoked, unexpired review by a reviewer still qualified, and the
 // formalization approval's reviewer must still be qualified too; an outsider is NOT_FOUND, a bound
 // root needs the task; a review after a revocation activates the draft, and nothing is requested of
 // an active order; revoking the approval that activated an order keeps it active and its receipt.
@@ -166,6 +174,7 @@ func TestOrderActivationGate(t *testing.T) {
 	activate := q.activateOrderCmd(id, d2.RowVersion, "review.2")
 	for name, grant := range map[string]func(){
 		"without order.review.decide (PYT-0492)": func() { q.regrant("order.reviewer", "company", without(allPermissions, "order.review.decide")) },
+		"an AI agent now (PYT-0492)":             func() { q.provision(grantOf(q, "order.reviewer", kernel.ActorAI, "company", allPermissions...)) },
 		"own data scope (PYT-0493)":              func() { q.regrant("order.reviewer", "own", allPermissions) },
 	} {
 		grant()
@@ -179,6 +188,7 @@ func TestOrderActivationGate(t *testing.T) {
 	// The formalization approval's reviewer (the quote's) must still be qualified (T03 A26).
 	for name, grant := range map[string]func(){
 		"without quote.review.decide (PYT-0232)": func() { q.regrant("reviewer", "company", without(allPermissions, "quote.review.decide")) },
+		"an AI agent now (PYT-0233)":             func() { q.provision(grantOf(q, "reviewer", kernel.ActorAI, "company", allPermissions...)) },
 		"own data scope (PYT-0234)":              func() { q.regrant("reviewer", "own", allPermissions) },
 	} {
 		grant()
