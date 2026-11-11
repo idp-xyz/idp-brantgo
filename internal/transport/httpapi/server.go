@@ -20,6 +20,7 @@ import (
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
@@ -84,6 +85,7 @@ type Config struct {
 	REF      REF
 	SUP      SUP
 	CST      CST
+	TRD      TRD
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -102,7 +104,7 @@ const (
 
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
-	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.Verifier == nil ||
+	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.TRD == nil || cfg.Verifier == nil ||
 		cfg.Clock == nil {
 		return nil, errors.New("httpapi: contexts, verifier and clock are required")
 	}
@@ -114,7 +116,7 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	s := &server{cfg: cfg, contexts: map[string]*commandSet{}}
 	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL),
-		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST)} {
+		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD)} {
 		s.contexts[set.bc] = set
 	}
 	mux := http.NewServeMux()
@@ -155,6 +157,12 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/cst/cost_snapshots/{id}", s.authenticated(read(s, cfg.CST.GetSnapshot, okView[cstapi.SnapshotView])))
 	mux.Handle("GET /api/brant/v1/cst/cost_snapshots/{id}/adoptability", s.authenticated(read(s, cfg.CST.QuerySnapshot, okView[cstapi.SnapshotQuery])))
 	mux.Handle("GET /api/brant/v1/cst/source_attestations/{id}", s.authenticated(read(s, cfg.CST.GetAttestation, okView[cstapi.AttestationView])))
+	mux.Handle("GET /api/brant/v1/trd/quotes/{id}", s.authenticated(read(s, cfg.TRD.GetQuote, okView[trdapi.QuoteView])))
+	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/active", s.authenticated(read(s, cfg.TRD.GetActiveRevision, okView[trdapi.FormalRevision])))
+	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check", s.authenticated(s.approvalCheck))
+	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/document", s.authenticated(s.formalDocument))
+	mux.Handle("GET /api/brant/v1/trd/customer_responses/{id}", s.authenticated(read(s, cfg.TRD.GetCustomerResponse, okView[trdapi.CustomerResponseView])))
+	mux.Handle("GET /api/brant/v1/trd/acceptances/{id}", s.authenticated(read(s, cfg.TRD.GetAcceptance, okView[trdapi.AcceptanceView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	return s.correlated(mux), nil

@@ -14819,6 +14819,4235 @@
         ]
       }
     },
+    "/api/brant/v1/trd/acceptances/{id}": {
+      "get": {
+        "operationId": "trd.acceptance.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "An acceptance and its effectivity history",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/acceptance.invalidate": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.acceptance.invalidate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acceptance_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "expected_effectivity_version": {
+                        "type": "integer"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "acceptance.invalidate"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "acceptance.invalidate",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/acceptance.mark_disputed": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.acceptance.mark_disputed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acceptance_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "expected_effectivity_version": {
+                        "type": "integer"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "acceptance.mark_disputed"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "acceptance.mark_disputed",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/object_control.bind": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.object_control.bind",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected_control_epoch": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "task_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "object_control.bind"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "object_control.bind",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/object_control.release": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.object_control.release",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected_control_epoch": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "object_control.release"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "object_control.release",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/object_control.stop": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.object_control.stop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected_control_epoch": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "object_control.stop"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "object_control.stop",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.activate": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.activate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "approval_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "expected_approval_effectivity_version": {
+                        "type": "integer"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.activate"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.activate",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.approval.revoke": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.approval.revoke",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "approval_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "expected_effectivity_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.approval.revoke"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.approval.revoke",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.cancel": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.cancel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.cancel"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.cancel",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.discard_draft": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.discard_draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "working_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.discard_draft"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.discard_draft",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.freeze": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.freeze",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "working_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.freeze"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.freeze",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.metadata.update": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.metadata.update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "internal_note": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "labels": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.metadata.update"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.metadata.update",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.replace": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.replace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "approval_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "expected_active_revision": {
+                        "type": "integer"
+                      },
+                      "expected_approval_effectivity_version": {
+                        "type": "integer"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.replace"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.replace",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.response.record": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.response.record",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "business_hash": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "classification": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "customer_po_number": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "received_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "received_at_basis": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "response_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_ref": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "locator": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "source_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "summary": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.response.record"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.response.record",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.response.verify": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.response.verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acceptance_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_hash": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "contact_ref": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contact_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "row_version": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "customer_ref": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "party_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "line_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "response_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.response.verify"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.response.verify",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.review.decide": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.review.decide",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "approval_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_hash": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "decision": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "expires_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "margin_exception": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "evidence": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "locator": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "source_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "minimum_margin": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "pricing_policy_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "reason": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "shortfall": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "review_request_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.review.decide"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.review.decide",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.revise": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.revise",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "base_revision": {
+                        "type": "integer"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.revise"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.revise",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.save_draft": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.save_draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "data": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "charges": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "amount": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "charge_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "evidence": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "locator": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "source_id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "fee_category_ref": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "included_line_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "inclusion": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "obligation_key": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "tax_application_ref": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "contact_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contact_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "row_version": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "cost_snapshot_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "result_hash": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "snapshot_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "currency_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "customer_address_refs": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "address_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "party_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "party_revision": {
+                                  "type": "integer"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "customer_notes": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "customer_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "party_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "delivery": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "anchor_ref": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "calendar_ref": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "date": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "day_basis": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "days": {
+                                "type": "integer"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "milestone": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "place_ref": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "time_zone": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "document_template_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "evidence": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "locator": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "source_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "expires_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "issuer_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "lines": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "base_quantity": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "conversion_ref": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "discount_ratio": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "evidence": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "locator": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "source_id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "line_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "price_basis_quantity": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "rfq_line_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "sku_ref": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "sku_id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "spec_revision": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "tax_application_ref": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "unit_price": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "unit_ref": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "named_place_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "payment_terms_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "pricing_policy_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "rfq_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "rfq_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "row_version": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "sales_fx_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "sequence_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "trade_terms_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "trading_profile_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "party_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.save_draft"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.save_draft",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.submit_review": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.submit_review",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "expected_active_revision": {
+                        "type": "integer"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "review_request_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "target_command": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.submit_review"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.submit_review",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/quote.withdraw": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
+        "operationId": "trd.quote.withdraw",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "evidence": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "locator": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "quote.withdraw"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "quote.withdraw",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/customer_responses/{id}": {
+      "get": {
+        "operationId": "trd.customer_response.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "A customer response and its acceptances",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/quotes/{id}": {
+      "get": {
+        "operationId": "trd.quote.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "A quote: root versions, object control, every revision with its calculation, reviews, approvals, holds and the conversion slot",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/quotes/{id}/active": {
+      "get": {
+        "operationId": "trd.quote.active.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "The quote's active formal revision",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check": {
+      "get": {
+        "operationId": "trd.quote.approval.check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "Whether an approval releases its revision now (a refusal is a code in the answer, not an error)",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/quotes/{id}/revisions/{revision}/document": {
+      "get": {
+        "operationId": "trd.quote.document.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"
+          }
+        },
+        "summary": "A formal quote document: its binding and bytes (Base64), verified on read",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
     "/api/brant/v1/{bc}/audit": {
       "get": {
         "operationId": "audit",

@@ -22,7 +22,8 @@ const OpenAPIPath = "contracts/openapi/brant-api.openapi.json"
 func OpenAPI() ([]byte, error) {
 	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
 		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{}),
-		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{})}
+		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{}),
+		trdCommands(struct{ TRD }{})}
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -144,6 +145,15 @@ var reads = []readRoute{
 	{"/api/brant/v1/cst/cost_snapshots/{id}/adoptability", "cst.cost_snapshot.query", "cst",
 		"Whether the snapshot may be adopted now, as AdoptabilityGuard v1 decides it (Python snapshot_query)", []string{"id"}, false},
 	{"/api/brant/v1/cst/source_attestations/{id}", "cst.source_attestation.get", "cst", "A source attestation or denial", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}", "trd.quote.get", "trd",
+		"A quote: root versions, object control, every revision with its calculation, reviews, approvals, holds and the conversion slot", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/active", "trd.quote.active.get", "trd", "The quote's active formal revision", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check", "trd.quote.approval.check", "trd",
+		"Whether an approval releases its revision now (a refusal is a code in the answer, not an error)", []string{"id", "approval_id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/revisions/{revision}/document", "trd.quote.document.get", "trd",
+		"A formal quote document: its binding and bytes (Base64), verified on read", []string{"id", "revision"}, false},
+	{"/api/brant/v1/trd/customer_responses/{id}", "trd.customer_response.get", "trd", "A customer response and its acceptances", []string{"id"}, false},
+	{"/api/brant/v1/trd/acceptances/{id}", "trd.acceptance.get", "trd", "An acceptance and its effectivity history", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},

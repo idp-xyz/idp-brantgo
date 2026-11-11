@@ -221,7 +221,7 @@ type Evidence struct {
 type Line struct {
 	LineID             string
 	RfqLineID          string
-	Sku                SkuRef
+	Sku                SkuRef `json:"sku_ref"`
 	Quantity           string
 	UnitRef            ConfigRef
 	ConversionRef      *ConfigRef
