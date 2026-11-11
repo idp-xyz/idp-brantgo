@@ -5,6 +5,7 @@ package bootstrap_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -41,8 +42,10 @@ type legalWorld struct {
 
 // newLegalWorld is the TRD world with the tenant's default legal terms legal.default named by
 // company.A's profile revision 2, and the quote-text/0.2.0 template quote.legal.
-func newLegalWorld(t *testing.T) *legalWorld {
-	q := newTrdWorld(t)
+func newLegalWorld(t *testing.T) *legalWorld { return legalOn(newTrdWorld(t)) }
+
+// legalOn adds the legal terms setup of newLegalWorld to the TRD world q.
+func legalOn(q *trdWorld) *legalWorld {
 	l := &legalWorld{trdWorld: q}
 	ed, rv, win := q.author, q.reviewer, q.win
 	l.def = q.configure(ed, rv, polapi.KindLegalTerms, "legal.default", 0, win.from, time.Time{},
@@ -383,5 +386,108 @@ func TestLegalTermsAreGuardedLikeEveryConfiguration(t *testing.T) {
 	}
 	if v := guard(); v.InForce() || v.Code != polapi.CodeConfigNotActive {
 		t.Fatalf("the guard after the retirement %+v", v)
+	}
+}
+
+// acceptedWith saves d as quote id, freezes it, has it approved for quote.activate and activates
+// it; then the customer's full acceptance, arrived now, is recorded and verified as
+// "acceptance.<id>".
+func (l *legalWorld) acceptedWith(id string, d trdapi.QuoteData) trdapi.AcceptanceReceipt {
+	l.t.Helper()
+	_, err := l.saveQuote(l.author, id, 0, d)
+	l.must(err)
+	f, err := l.freezeQuote(l.author, id, 1, 1)
+	l.must(err)
+	_, err = l.submit(l.author, id, f.RowVersion, 1, "review."+id)
+	l.must(err)
+	decided, err := l.c.TRD.DecideReview(l.reviewer, l.approval(id, f.RowVersion+1, "review."+id, f.BusinessHash, "approval."+id))
+	l.must(err)
+	a, err := l.c.TRD.Activate(l.author, l.activateCmd(id, decided.RowVersion, 1, "approval."+id))
+	l.must(err)
+	_, err = l.c.TRD.RecordResponse(l.author, l.full("response."+id, id, 1, a.BusinessHash))
+	l.must(err)
+	v, err := l.c.TRD.VerifyResponse(l.reviewer, l.verification("response."+id, "acceptance."+id, 1, a.BusinessHash))
+	l.must(err)
+	return v
+}
+
+// sourceOf is the source quote snapshot order id's snapshot embeds.
+func (l *legalWorld) sourceOf(id string) map[string]any {
+	l.t.Helper()
+	var snapshot map[string]any
+	l.must(json.Unmarshal([]byte(l.getOrder(id).Snapshot), &snapshot))
+	return snapshot["source_quote_snapshot"].(map[string]any)
+}
+
+// WBS S3-17 with S3-07: the legal terms reach the order. An order prepared from a revision with
+// legal terms — its own (German law with the CISG, Hamburg arbitration) or its issuer's default (the
+// CISG with PRC law) — embeds the sealed commercial document whole as source_quote_snapshot
+// (brant.order-commercial-snapshot/0.1.0): legal_terms, data.legal_terms_ref and the manifest entry
+// with its content hash; the acceptance's formation is arrival on the CISG. quote_ready and the
+// order's check, review and activation re-check the legal terms through ConfigGuard v1 like every
+// POL revision the manifest binds: once legal retires them, quote_ready answers CONFIG_NOT_ACTIVE at
+// /data/legal_terms_ref (for the issuer's default too, where the document binds it), and the order
+// carries that as a risk its review must acknowledge (ADR-BR-013: an upstream change does not undo
+// a formed contract); acknowledged, the order activates with the legal terms it was prepared with.
+func TestOrderCarriesTheLegalTermsAndRechecksThem(t *testing.T) {
+	l := legalOn(newOrderWorld(t))
+	hamburg := l.configure(l.author, l.reviewer, polapi.KindLegalTerms, "legal.de-hamburg", 0, l.win.from, time.Time{},
+		termsData("German law with the CISG, Hamburg arbitration", "DE", polapi.CISGApplies, polapi.FormationArrival, hamburgArbitration), true)
+	own := l.draft()
+	own.LegalTermsRef = trefp(hamburg)
+	a1 := l.acceptedWith("quote.1", own)
+	a2 := l.acceptedWith("quote.2", l.draft())
+	if a1.FormationBasis != trdapi.FormationBasisCISG || a2.FormationBasis != trdapi.FormationBasisCISG || !a1.Formed || !a2.Formed {
+		t.Fatalf("formations %+v %+v", a1, a2)
+	}
+	o1, err := l.c.TRD.PrepareOrder(l.author, l.prepareCmd("order.1", a1))
+	l.must(err)
+	_, err = l.c.TRD.PrepareOrder(l.author, l.prepareCmd("order.2", a2))
+	l.must(err)
+	for _, c := range []struct {
+		order, quote string
+		terms        polapi.ConfigRef
+		source       string
+	}{{"order.1", "quote.1", hamburg, "quote"}, {"order.2", "quote.2", l.def, "issuer_default"}} {
+		src, sealed := l.sourceOf(c.order), l.commercial(c.quote, 1)
+		legal, _ := src["legal_terms"].(map[string]any)
+		if legal == nil || !reflect.DeepEqual(legal, sealed["legal_terms"]) || legal["source"] != c.source ||
+			src["data"].(map[string]any)["legal_terms_ref"].(map[string]any)["id"] != c.terms.ConfigID ||
+			!manifested(src, c.terms, l.contentHash(c.terms)) {
+			t.Fatalf("%s carries %v", c.order, legal)
+		}
+	}
+
+	// Legal retires both terms after the contracts formed.
+	for _, ref := range []polapi.ConfigRef{hamburg, l.def} {
+		_, err = l.c.POL.Retire(l.reviewer, polapi.Retire{IdempotencyKey: l.key(), Kind: ref.Kind, ConfigID: ref.ConfigID,
+			ExpectedVersion: l.rootVersion(ref.Kind, ref.ConfigID), Reason: "法务停用条款"})
+		l.must(err)
+	}
+	lapsed := trdapi.Risk{Path: "/data/legal_terms_ref", Code: polapi.CodeConfigNotActive}
+	for _, c := range []struct{ order, quote string }{{"order.1", "quote.1"}, {"order.2", "quote.2"}} {
+		ready, err := l.c.TRD.QuoteReady(l.author, trdapi.ReadyQuery{QuoteID: c.quote})
+		l.must(err)
+		if ready.Ready || !slices.Contains(ready.Reasons, trdapi.Reason{Check: trdapi.CheckUpstream, Code: polapi.CodeConfigNotActive,
+			Path: "/data/legal_terms_ref"}) {
+			t.Fatalf("%s ready %+v", c.quote, ready.Reasons)
+		}
+		if risks := l.risks(c.order); len(risks) != 1 || risks[0] != lapsed {
+			t.Fatalf("%s risks %+v", c.order, risks)
+		}
+	}
+	r, err := l.c.TRD.RequestOrderReview(l.author, l.requestCmd(o1.ObjectID, l.orderVersion(o1.ObjectID), "review.order.1"))
+	l.must(err)
+	_, err = l.c.TRD.DecideOrderReview(l.reviewer, l.decideCmd(o1.ObjectID, r.RowVersion, "review.order.1", o1.OrderHash))
+	if code(err) != trdapi.CodeOrderRiskUnacknowledged {
+		t.Fatalf("an approval ignoring the lapsed legal terms: %s", code(err))
+	}
+	d, err := l.c.TRD.DecideOrderReview(l.reviewer, l.decideCmd(o1.ObjectID, r.RowVersion, "review.order.1", o1.OrderHash, ack(lapsed)))
+	l.must(err)
+	_, err = l.c.TRD.ActivateOrder(l.author, l.activateOrderCmd(o1.ObjectID, d.RowVersion, "review.order.1"))
+	l.must(err)
+	if v := l.getOrder(o1.ObjectID); v.Status != trdapi.OrderActive || v.OrderHash != o1.OrderHash ||
+		l.sourceOf(o1.ObjectID)["legal_terms"].(map[string]any)["governing_law"] != "DE" {
+		t.Fatalf("the activated order %+v", v)
 	}
 }

@@ -126,8 +126,17 @@ type Acceptance struct {
 	Changed      bool // stored, its effectivity changed by this command
 
 	// Formation is the formation rule and its basis the revision seals, which judged the acceptance
-	// (WBS S3-17; quote.Formation).
+	// (WBS S3-17; quote.Formation); the zero value is quote.DefaultFormation (FormedBy).
 	Formation quote.Formation
+}
+
+// FormedBy is the formation rule and basis a was judged by: its Formation, or the default for an
+// acceptance that records none (a revision without legal terms).
+func (a *Acceptance) FormedBy() quote.Formation {
+	if a.Formation == (quote.Formation{}) {
+		return quote.DefaultFormation
+	}
+	return a.Formation
 }
 
 // Live reports whether a stands for its response and message: valid or disputed.
@@ -136,7 +145,7 @@ func (a *Acceptance) Live() bool { return a.Effectivity != Invalidated }
 // Formed reports whether the contract formed under the acceptance's formation rule: under arrival,
 // the only rule Brant implements, the acceptance arrived before the revision expired.
 func (a *Acceptance) Formed() bool {
-	return a.Formation.Rule == quote.FormationArrival && a.ArrivalAt.Before(a.ExpiresAt)
+	return a.FormedBy().Rule == quote.FormationArrival && a.ArrivalAt.Before(a.ExpiresAt)
 }
 
 // Check decides whether a stands for a formed contract on revision revision of quote quoteID at

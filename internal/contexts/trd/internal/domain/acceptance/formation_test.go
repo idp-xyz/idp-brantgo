@@ -82,4 +82,9 @@ func TestFormationFollowsTheRevisionsLegalTerms(t *testing.T) {
 	if a.Formed() || a.Code() != CodeAcceptanceLate {
 		t.Fatalf("formed under dispatch: %v %s", a.Formed(), a.Code())
 	}
+	// An acceptance that records no formation was judged by the default.
+	a.Formation = quote.Formation{}
+	if a.FormedBy() != quote.DefaultFormation || !a.Formed() || a.Code() != "" {
+		t.Fatalf("no formation recorded: %+v %v", a.FormedBy(), a.Formed())
+	}
 }

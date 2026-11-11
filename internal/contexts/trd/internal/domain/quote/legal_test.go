@@ -60,7 +60,7 @@ func TestQuotesWithoutLegalTermsAreSealedAsBefore(t *testing.T) {
 	if f, err := s.Formation(); err != nil || f != DefaultFormation || f.Check("/x") != nil {
 		t.Fatalf("formation %+v %v", f, err)
 	}
-	// An issuer naming no default and a template of either renderer's predecessor change nothing.
+	// Legal terms POL publishes but neither the draft nor the issuer names change nothing.
 	d, f := withLegal(false, false)
 	d.DocumentTemplate = &template
 	if s2, err := SealDraft("quote.1", 1, d, f, calculator(d, "0.1"), issuedAt); err != nil || s2.BusinessHash != s.BusinessHash {

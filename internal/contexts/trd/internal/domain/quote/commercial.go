@@ -245,6 +245,10 @@ type Seal struct {
 	Epoch        int64
 	At           time.Time
 	RootVersion  int64 // the root version the freeze committed at
+
+	// LegalTerms is the legal terms revision the freeze adopted, the draft's or its issuer's default
+	// (legal.go); nil for none. Set by SealDraft only: a stored seal holds it in its document.
+	LegalTerms *Ref
 }
 
 // Calculate runs the server calculation of a freeze (WBS S3-02) on a draft whose references the
@@ -383,7 +387,7 @@ func SealDraft(id string, rev int64, d Data, f Facts, calculate Calculate, now t
 		return nil, err
 	}
 	return &Seal{Commercial: canonical, BusinessHash: hash, IssuedAt: issued, ExpiresAt: expires, Calculation: calc, Configs: configs,
-		Rfq: rfq, Snapshot: terms.Snapshot}, nil
+		Rfq: rfq, Snapshot: terms.Snapshot, LegalTerms: legalRef}, nil
 }
 
 var hexHash = regexp.MustCompile(`^[0-9a-f]{64}$`)

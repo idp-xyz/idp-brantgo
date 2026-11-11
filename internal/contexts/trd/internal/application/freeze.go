@@ -163,17 +163,27 @@ type guarded struct {
 	// hooks run at their place in context code order (order activation: the extension points of CNX
 	// after CAT and of STL after PTY, and PTY's screening after its address guards); nil for none.
 	afterCAT, afterPTY func() error
+	// legal is where refusals of the legal terms the freeze adopted from the issuer's default point
+	// (quote/legal.go): the draft names none, so they are refused at its issuer_ref; "" otherwise.
+	legal string
 }
 
 // freezeGuards is what the freeze guards for draft d with seal s, the profile read as profileHash.
 func freezeGuards(d quote.Data, s *quote.Seal, profileHash string) guarded {
-	return guarded{data: d, configs: s.Configs, rfq: s.Rfq, profileHash: profileHash, prefix: "/args/data"}
+	g := guarded{data: d, configs: s.Configs, rfq: s.Rfq, profileHash: profileHash, prefix: "/args/data"}
+	if d.LegalTerms == nil && s.LegalTerms != nil {
+		g.data.LegalTerms, g.legal = s.LegalTerms, "/args/data/issuer_ref"
+	}
+	return g
 }
 
 // sealedGuards is what a formalization guards for revision r: what its freeze guarded, read back from
-// its commercial document c (the manifest's POL revisions, RFQ and trading profile).
+// its commercial document c (the manifest's POL revisions, RFQ and trading profile). The legal terms
+// the revision sealed, its own or its issuer's default, are bound at data.legal_terms_ref of c, where
+// a lapse of them points.
 func sealedGuards(r *quote.Revision, c quote.Commercial) guarded {
 	g := guarded{data: r.Data, prefix: "/data"}
+	g.data.LegalTerms = c.Data.LegalTerms
 	for _, d := range c.DependencyManifest {
 		switch d.Kind {
 		case quote.DependencyRfq:
@@ -275,6 +285,9 @@ func (s Service) checkUpstream(ctx context.Context, exec bentopg.Executor, g gua
 		if _, ok := paths[field.Ref]; !ok {
 			paths[field.Ref] = g.at(field.Path)
 		}
+	}
+	if d.LegalTerms != nil && g.legal != "" {
+		paths[*d.LegalTerms] = g.legal
 	}
 	for _, c := range g.configs {
 		r := polapi.ConfigRef{Kind: c.Kind, ConfigID: c.ID, Revision: c.Version}
