@@ -107,3 +107,22 @@ GRANT UPDATE (status, base_revision, data, content_hash, contributors, provenanc
     ON brant_cst.costing_context_revision TO brant_app;
 GRANT UPDATE (status, superseded_at, withdrawn_by_id, withdraw_epoch, withdrawn_at, withdraw_reason, withdraw_evidence)
     ON brant_cst.measurement_revision TO brant_app;
+
+-- SUP: a supplier RFQ's draft is replaced whole, an issued one is only closed (trigger). A supply
+-- condition's root moves its version; a draft revision is edited, sealed or discarded, a sealed one
+-- only superseded, withdrawn or retired (trigger); the ledger only grows.
+GRANT USAGE ON SCHEMA brant_sup TO brant_app;
+GRANT SELECT, INSERT ON brant_sup.supplier_rfq, brant_sup.condition_root, brant_sup.condition_revision,
+    brant_sup.action_result, brant_sup.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, data, content_hash, saved_by_kind, saved_by_id, saved_epoch, saved_at, issued_version,
+              issued_by_kind, issued_by_id, issue_epoch, issued_at, issue_reason, issue_evidence, closed_by_kind, closed_by_id,
+              close_epoch, closed_at, close_reason, close_evidence, updated_at)
+    ON brant_sup.supplier_rfq TO brant_app;
+GRANT UPDATE (root_version, last_revision, updated_at) ON brant_sup.condition_root TO brant_app;
+GRANT UPDATE (status, data, content_hash, valid_from, valid_until, validity_mode, source_offer_id, source_offer_revision,
+              saved_by_kind, saved_by_id, saved_epoch, saved_at, contributors, verified_by_kind, verified_by_id, verify_epoch,
+              verified_at, verification_evidence, superseded_at, ended_by_kind, ended_by_id, end_epoch, ended_at, end_reason,
+              end_evidence)
+    ON brant_sup.condition_revision TO brant_app;
+-- SupplyConditionGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_sup.guard_supply_condition_v1(text, text, bigint, timestamptz) TO brant_app;

@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-func bootstrapGrant(c *costingWorld, kind, id string) bootstrap.Grant {
+func costingGrant(c *costingWorld, kind, id string) bootstrap.Grant {
 	return bootstrap.Grant{Scope: c.scope("company.A"), Actor: actorRef(kind, id), Permissions: allPermissions, DataScope: "company", Team: "trade"}
 }
 
@@ -164,7 +164,7 @@ func TestAssumptionsKeepTheContextProvisional(t *testing.T) {
 	d.Assumptions = []cstapi.Assumption{quantity}
 	_, err := c.saveContext(c.author, "ctx", 0, d)
 	c.must(err)
-	ai := c.provision(bootstrapGrant(c, "ai", "ai.1"))
+	ai := c.provision(costingGrant(c, "ai", "ai.1"))
 	d.Assumptions = []cstapi.Assumption{quantity, price}
 	_, err = c.saveContext(ai, "ctx", 1, d)
 	c.must(err)

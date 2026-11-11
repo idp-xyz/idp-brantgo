@@ -377,15 +377,20 @@ func (s Service) GetRfq(ctx context.Context, id string) (api.RfqView, error) {
 func (s Service) ResolveRfqs(ctx context.Context, ids []string) (map[string]api.RfqRef, error) {
 	out := map[string]api.RfqRef{}
 	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
+	if len(ids) > api.MaxLookup {
+		return out, kernel.Reject(kernel.CodeSchemaInvalid, "/ids", "")
+	}
+	for _, id := range ids {
+		if !kernel.ValidIdentifier(id) {
+			return out, kernel.Reject(kernel.CodeSchemaInvalid, "/ids", "malformed RFQ ID")
+		}
+	}
 	if len(ids) == 0 {
 		return out, nil
 	}
 	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		scope, _ := bento.ScopeFromContext(ctx)
 		for _, id := range ids {
-			if !kernel.ValidIdentifier(id) {
-				continue
-			}
 			r, err := postgres.Load(ctx, exec, scope, id, false)
 			if err != nil {
 				return err
