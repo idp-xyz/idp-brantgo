@@ -29,23 +29,23 @@ S2-05,S2,CST,场景评估与冻结、来源核验与否认、快照可采纳资�
 S2-06,S2,跨上下文,资格守卫：SupplyConditionGuard、ConfigGuard、AdoptabilityGuard（按 ADR-BR-004 裁决实现）,P0,M0-10;S2-05,上游 api 中的守卫契约与实现,依赖撤销先提交则冻结拒绝的 PG16 测试,首席架构师,T03 规格 §7；A26,DONE_CI
 S2-07,S2,测试,移植 T02 测试（test_costing*）,P0,S2-05,Go 等价用例,映射行 PORTED 且通过,QA,87 个 Python 测试方法（08 阶段映射）,DONE_CI
 S2-08,S2,CST,部分回收税额与成本口径（CST-INV-007）,P0,S2-04,partial 回收处理与可回收率校验,113 CNY、税率 0.13、可回收率 0.09 得 104；缺率或率高于税率被拒；真实可回收率在 CN-D02 冻结后启用,CST Owner＋财务,test_costing_domains.py（扩展）,DONE_CI
-S3-01,S3,TRD,QuoteRoot：工作稿、冻结、商业哈希黄金向量,P0,S2-05;S1-04,trd/internal/domain/quote,TRD-INV-002；哈希跨实现互操作向量（含中文与换行）,TRD Owner,T03 A1–A4；t03_candidate/protocol.py；hash-vectors.json,NOT_STARTED
-S3-02,S3,TRD,服务端计算：销售收费、税、销售汇率、毛利、付款分配,P0,S3-01;S2-04,纯函数计算包,TRD-INV-007–008；T03 §5.3 合成案例,TRD Owner＋财务,T03 A5、A28、A32,NOT_STARTED
-S3-03,S3,TRD,审核请求、批准、撤销与审核人当前资格,P0,S3-01;M0-07,ReviewRequest、QuoteApproval、ApprovalEffectivity,TRD-INV-003–005,TRD Owner,T03 A3、A6、A33–A35,NOT_STARTED
-S3-04,S3,TRD,正式化：报价模板、确定性渲染、编号、文件字节、提交证据、风险暂停,P0,S3-03;S1-01,quote.activate,TRD-INV-009、016；文件或编号失败整体回滚,TRD Owner,T03 A4、A13、A18、A19,NOT_STARTED
-S3-05,S3,TRD,替代、撤回、取消与转换名额锁定,P0,S3-04,quote.replace／withdraw／cancel,TRD-INV-001、010；SC-03,TRD Owner,T03 A17、A24,NOT_STARTED
-S3-06,S3,TRD,客户回复登记与核实、Acceptance 效力账本（含 invalidate／mark_disputed）,P0,S3-04,CustomerResponse、Acceptance,TRD-INV-011–012；BC-AT10–12,TRD Owner,T03 A20；T04 A36、A37、A44、A45,NOT_STARTED
-S3-07,S3,TRD,订单准备、订单审批与撤销、激活资格重查、order.cancel／close_unfulfilled（草稿态）,P0,S3-05;S3-06;S2-06,SalesOrder,TRD-INV-010、013、014；BC-AT13、15–17；SC-04,TRD Owner,T03 A20、A24–A26；T04 A38–A43,NOT_STARTED
-S3-08,S3,TRD,根级对象控制绑定与 control_epoch 围栏,P0,S3-01,ObjectControl,TRD-INV-015,TRD Owner＋AI Owner,t03_object_control；A24,NOT_STARTED
-S3-09,S3,TRD,查询：quote_ready、报价／审批／文档／Outbox／提交证据历史、发送前准入、动作对账,P1,S3-04;S3-07,查询 api 与 OpenAPI,读取与重放重查当前权限（X-INV-003）,TRD Owner,T03 A8–A16、A22–A23；T04 A42–A43,NOT_STARTED
-S3-10,S3,PUR,采购草稿（A46 对等）,P0,S3-07;S2-02;S2-06,internal/contexts/pur,PUR-INV-001–007,PUR Owner,T04 A46,NOT_STARTED
-S3-11,S3,测试,移植 T03／T04 测试并出具 V0.50 等价性报告,P0,S3-01;S3-02;S3-03;S3-04;S3-05;S3-06;S3-07;S3-08;S3-09;S3-10,等价性报告（映射、移植、通过、不移植及原因）,08 阶段映射表全部行有结论；未移植项有业务理由；有意背离项逐条引用 05 阶段不变量，不按 Python 行为移植。,QA＋首席架构师,417 个 Python 测试方法（08 阶段映射）,NOT_STARTED
-S3-12,S3,演示,BRC-001 全链人工路径在 PG16 重放（BC-AT01）,P0,S3-11,可重放证据,报价 960.00、订单 960.00、草稿 600.00；有效订单唯一,QA,BC-AT01,NOT_STARTED
-S3-13,S3,TRD,合同成立与有效期：承诺到达时间、迟到承诺、到期后订单生效与风险确认（ADR-BR-013）,P0,S3-06;S3-07,ReceivedAt、TRD-INV-012／014／017 与风险确认,SC-07、TD-AT03、BC-AT13 在 PG16 通过,TRD Owner,T04 A37、T03 A26（有意背离）,NOT_STARTED
-S3-14,S3,TRD,毛利例外批准（TRD-INV-007）,P0,S3-03,例外权限、独立性与绑定,SC-02、BC-AT06：普通批准不放行，例外批准后可激活,TRD Owner＋财务,test_t03_server_calculation.py（有意背离）,NOT_STARTED
-S3-15,S3,TRD,生效订单变更、取消、短交关闭与关闭；外销合同／形式发票,P0,S3-07,SM-TRD-ORDER、SM-TRD-ORDER-AMENDMENT、TRD-INV-018／019／020,TD-AT01、TD-AT02；订单修订与提交证据；PI 绑定订单修订,TRD Owner,—（Python 未实现）,NOT_STARTED
-S3-16,S3,PUR,需求分配、多来源草稿与草稿作废（PUR-INV-002／005／007）,P0,S3-10,DemandAllocation 聚合与 purchase.draft.void,TD-AT05、TD-AT06；并发分配只有一个成功,PUR Owner,test_t04_a46_purchase_draft.py（有意背离）,NOT_STARTED
-S3-17,S3,TRD,合同适用法律与争议解决条款（F-02）,P1,S3-02,POL 条款模板与 TRD 报价、合同条款字段,合同成立规则按适用法律选择；默认 CISG 与中国法；SIM-02 第 3 步可表达,TRD Owner＋法务,—（Python 未实现）,NOT_STARTED
+S3-01,S3,TRD,QuoteRoot：工作稿、冻结、商业哈希黄金向量,P0,S2-05;S1-04,trd/internal/domain/quote,TRD-INV-002；哈希跨实现互操作向量（含中文与换行）,TRD Owner,T03 A1–A4；t03_candidate/protocol.py；hash-vectors.json,DONE_CI
+S3-02,S3,TRD,服务端计算：销售收费、税、销售汇率、毛利、付款分配,P0,S3-01;S2-04,纯函数计算包,TRD-INV-007–008；T03 §5.3 合成案例,TRD Owner＋财务,T03 A5、A28、A32,DONE_CI
+S3-03,S3,TRD,审核请求、批准、撤销与审核人当前资格,P0,S3-01;M0-07,ReviewRequest、QuoteApproval、ApprovalEffectivity,TRD-INV-003–005,TRD Owner,T03 A3、A6、A33–A35,DONE_CI
+S3-04,S3,TRD,正式化：报价模板、确定性渲染、编号、文件字节、提交证据、风险暂停,P0,S3-03;S1-01,quote.activate,TRD-INV-009、016；文件或编号失败整体回滚,TRD Owner,T03 A4、A13、A18、A19,DONE_CI
+S3-05,S3,TRD,替代、撤回、取消与转换名额锁定,P0,S3-04,quote.replace／withdraw／cancel,TRD-INV-001、010；SC-03,TRD Owner,T03 A17、A24,DONE_CI
+S3-06,S3,TRD,客户回复登记与核实、Acceptance 效力账本（含 invalidate／mark_disputed）,P0,S3-04,CustomerResponse、Acceptance,TRD-INV-011–012；BC-AT10–12,TRD Owner,T03 A20；T04 A36、A37、A44、A45,DONE_CI
+S3-07,S3,TRD,订单准备、订单审批与撤销、激活资格重查、order.cancel／close_unfulfilled（草稿态）,P0,S3-05;S3-06;S2-06,SalesOrder,TRD-INV-010、013、014；BC-AT13、15–17；SC-04,TRD Owner,T03 A20、A24–A26；T04 A38–A43,DONE_CI
+S3-08,S3,TRD,根级对象控制绑定与 control_epoch 围栏,P0,S3-01,ObjectControl,TRD-INV-015,TRD Owner＋AI Owner,t03_object_control；A24,DONE_CI
+S3-09,S3,TRD,查询：quote_ready、报价／审批／文档／Outbox／提交证据历史、发送前准入、动作对账,P1,S3-04;S3-07,查询 api 与 OpenAPI,读取与重放重查当前权限（X-INV-003）,TRD Owner,T03 A8–A16、A22–A23；T04 A42–A43,DONE_CI
+S3-10,S3,PUR,采购草稿（A46 对等）,P0,S3-07;S2-02;S2-06,internal/contexts/pur,PUR-INV-001–007,PUR Owner,T04 A46,DONE_CI
+S3-11,S3,测试,移植 T03／T04 测试并出具 V0.50 等价性报告,P0,S3-01;S3-02;S3-03;S3-04;S3-05;S3-06;S3-07;S3-08;S3-09;S3-10,等价性报告（映射、移植、通过、不移植及原因）,08 阶段映射表全部行有结论；未移植项有业务理由；有意背离项逐条引用 05 阶段不变量，不按 Python 行为移植。,QA＋首席架构师,417 个 Python 测试方法（08 阶段映射）,DONE_CI
+S3-12,S3,演示,BRC-001 全链人工路径在 PG16 重放（BC-AT01）,P0,S3-11,可重放证据,报价 960.00、订单 960.00、草稿 600.00；有效订单唯一,QA,BC-AT01,DONE_CI
+S3-13,S3,TRD,合同成立与有效期：承诺到达时间、迟到承诺、到期后订单生效与风险确认（ADR-BR-013）,P0,S3-06;S3-07,ReceivedAt、TRD-INV-012／014／017 与风险确认,SC-07、TD-AT03、BC-AT13 在 PG16 通过,TRD Owner,T04 A37、T03 A26（有意背离）,DONE_CI
+S3-14,S3,TRD,毛利例外批准（TRD-INV-007）,P0,S3-03,例外权限、独立性与绑定,SC-02、BC-AT06：普通批准不放行，例外批准后可激活,TRD Owner＋财务,test_t03_server_calculation.py（有意背离）,DONE_CI
+S3-15,S3,TRD,生效订单变更、取消、短交关闭与关闭；外销合同／形式发票,P0,S3-07,SM-TRD-ORDER、SM-TRD-ORDER-AMENDMENT、TRD-INV-018／019／020,TD-AT01、TD-AT02；订单修订与提交证据；PI 绑定订单修订,TRD Owner,—（Python 未实现）,DONE_CI
+S3-16,S3,PUR,需求分配、多来源草稿与草稿作废（PUR-INV-002／005／007）,P0,S3-10,DemandAllocation 聚合与 purchase.draft.void,TD-AT05、TD-AT06；并发分配只有一个成功,PUR Owner,test_t04_a46_purchase_draft.py（有意背离）,DONE_CI
+S3-17,S3,TRD,合同适用法律与争议解决条款（F-02）,P1,S3-02,POL 条款模板与 TRD 报价、合同条款字段,合同成立规则按适用法律选择；默认 CISG 与中国法；SIM-02 第 3 步可表达,TRD Owner＋法务,—（Python 未实现）,DONE_CI
 S4-01,S4,TSK,业务任务生命周期与控制模式（基线第 16 章）,P0,S3-08,internal/contexts/tsk,TSK-INV-001–002；未列出转换拒绝,AI Owner,Q01 旧包 take_control,NOT_STARTED
 S4-02,S4,TSK,动作执行与对账；提交后断连恢复,P0,S4-01,ActionExecution,BC-AT18、19,AI Owner,t03_reconciliation.py,NOT_STARTED
 S4-03,S4,ai,internal/ai：capability、gateway、policy、approvalgrant、execution、executionevidence,P0,S4-01;S1-06,AI 能力层,无授权默认拒绝；AI 只调用 api 命令,AI Owner＋安全负责人,,NOT_STARTED

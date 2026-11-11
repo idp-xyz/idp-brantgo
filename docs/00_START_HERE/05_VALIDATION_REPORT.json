@@ -1,15 +1,15 @@
 {
-  "archive_version": "1.6",
-  "as_of": "2026-11-10",
+  "archive_version": "1.7",
+  "as_of": "2026-11-11",
   "builder": "00_START_HERE/tools/build_archive.py",
   "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；M0 与 S1 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
-  "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE、07_S2_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
+  "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE、07_S2_EVIDENCE、09_S3_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
   "result": "PASS",
   "checks": [
     {
       "check": "全部 JSON 可解析",
       "result": "PASS",
-      "detail": "83 个 JSON"
+      "detail": "85 个 JSON"
     },
     {
       "check": "UL 词条 ID 唯一",
@@ -89,7 +89,7 @@
     {
       "check": "岗位模板覆盖全部命令",
       "result": "PASS",
-      "detail": "15 个岗位模板，168 条命令"
+      "detail": "15 个岗位模板，169 条命令"
     },
     {
       "check": "岗位模板的权限均为已登记命令或能力权限",
@@ -139,7 +139,7 @@
     {
       "check": "集成事件均有生产聚合",
       "result": "PASS",
-      "detail": "109 个集成事件"
+      "detail": "115 个集成事件"
     },
     {
       "check": "不变量、验收与场景引用的错误码均已登记",
@@ -149,7 +149,7 @@
     {
       "check": "守卫锁边无环（下游以 FOR SHARE 锁上游守卫）",
       "result": "PASS",
-      "detail": "22 条守卫锁边"
+      "detail": "23 条守卫锁边"
     },
     {
       "check": "SAP 流程参照引用的上下文、命令与事件均存在且状态完整",
@@ -189,7 +189,7 @@
     {
       "check": "生成页面的本地链接均可解析",
       "result": "PASS",
-      "detail": "16 个页面"
+      "detail": "17 个页面"
     },
     {
       "check": "生成页面的锚点均存在",
@@ -217,6 +217,11 @@
       "detail": "7 个文件"
     },
     {
+      "check": "S3 证据文件齐全",
+      "result": "PASS",
+      "detail": "8 个文件"
+    },
+    {
       "check": "M0 一致性实测结论与报告一致",
       "result": "PASS",
       "detail": "9 个场景"
@@ -229,12 +234,12 @@
     {
       "check": "最新证据快照对应当前 Go 源码",
       "result": "PASS",
-      "detail": "290 个 Go 文件与 07_S2_EVIDENCE 快照一致"
+      "detail": "483 个 Go 文件与 09_S3_EVIDENCE 快照一致"
     },
     {
       "check": "品牌标志与品牌包 QA 清单逐字节一致且各页均已使用",
       "result": "PASS",
-      "detail": "4 个品牌文件，16 个页面"
+      "detail": "4 个品牌文件，17 个页面"
     }
   ],
   "counts": {
@@ -251,24 +256,24 @@
     "stateMachines": 20,
     "invariantRegister": 68,
     "referenceTests": 50,
-    "commands": 168,
-    "events": 109,
+    "commands": 169,
+    "events": 115,
     "errorCodes": 143,
     "pythonSourceModules": 54,
     "pythonSourceLines": 21136,
     "pythonUniqueTests": 577,
     "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
-    "goTestsPorted": 141,
+    "goTestsPorted": 455,
     "wbsTasks": 78,
     "adrs": 38,
     "g1Controls": 13,
     "sapReferenceRows": 41,
     "sapReferenceGaps": 0,
     "sapReferencePartial": 11,
-    "goPackages": 77,
-    "goSourceLines": 67792,
-    "goTestFunctions": 563,
-    "goIntegrationTests": 223,
+    "goPackages": 97,
+    "goSourceLines": 121164,
+    "goTestFunctions": 922,
+    "goIntegrationTests": 378,
     "goFuzzTargets": 3,
     "m0DoneLocal": 9,
     "m0Tasks": 11

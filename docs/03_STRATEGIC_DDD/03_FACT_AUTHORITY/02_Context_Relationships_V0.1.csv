@@ -20,7 +20,7 @@ R18,TRD,TSK,OHS / Published Language,quote_ready 与 order_active 目标核验�
 R19,TRD,PUR,Customer / Supplier,已生效且订单审批未撤销的订单行与商业快照,ActiveOrderRef v1,TRD,订单审批撤销后仍编制草稿,DESIGN,yes
 R20,SUP,PUR,Customer / Supplier + Qualification Guard,供应条件当前有效版本与条件行,SupplyConditionRef v1＋SupplyConditionGuard,SUP,被替代或过期条件形成草稿,DESIGN — ADR-BR-004,yes
 R21,CST,PUR,OHS,订单来源报价的成本快照（核价对照，只读，不阻断）,CostSnapshotRef v1,CST,对照结果被误用为阻断规则,DESIGN,yes
-R22,PTY,PUR,OHS / Published Language,供应商当前主数据版本,PartyRef v1,PTY,供应商停用后仍编制,DESIGN,yes
+R22,PTY,PUR,OHS / Published Language,供应商当前主数据版本,PartyRef v1＋PartyGuard v1,PTY,供应商停用后仍编制,DESIGN,yes
 R23,PUR,MFG,Customer / Supplier（条件）,委外或工序需求与材料责任,SubcontractDemand v1,PUR,工序加工量被累加为销售需求,NOT_STARTED,no
 R24,PUR,QLT,Customer / Supplier,受检对象（采购批次、供应商交付）,InspectionSubject v1,PUR,供应商自报合格被当作放行,NOT_STARTED,no
 R25,MFG,QLT,Customer / Supplier（条件）,工序与半成品受检对象,InspectionSubject v1,MFG,外厂完成声明直接形成合格库存,NOT_STARTED,no
@@ -50,7 +50,7 @@ R48,POL,PUR,OHS / Published Language,单位、税价、贸易与付款条件配�
 R49,POL,FUL,OHS / Published Language,单证模板、编号规则与贸易条件配置,ConfigRef v1,POL,单证套用错误模板版本,NOT_STARTED,no
 R50,POL,CNX,OHS / Published Language,主体政策、税价口径与申报参数配置,ConfigRef v1,POL,按未冻结政策判定合规,NOT_STARTED,no
 R51,CAT,CST,OHS / Published Language,SKU 与规格修订、单位换算依据,SkuRef v1,CAT,核价引用旧规格,NOT_STARTED,no
-R52,CAT,PUR,OHS / Published Language,SKU 与规格修订,SkuRef v1,CAT,采购规格与订单规格不一致,NOT_STARTED,no
+R52,CAT,PUR,OHS / Published Language,SKU 与规格修订,SkuRef v1＋SkuGuard v1,CAT,采购规格与订单规格不一致,NOT_STARTED,yes
 R53,EVD,SUP,OHS / Published Language,供应报价来源与附件,SourceRef v1、FileRef v1,EVD,未核实来源当作已核实报价,NOT_STARTED,no
 R54,EVD,CNX,OHS / Published Language,票据、报关与证书原件及来源,SourceRef v1、FileRef v1,EVD,附件存在被当作真实性已核实,NOT_STARTED,no
 R55,CNX,STL,OHS / Published Language,退税核准与到账对账引用,TaxRefundResultRef v1,CNX,退税到账重复记为客户收款,NOT_STARTED,no
