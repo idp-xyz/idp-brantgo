@@ -239,6 +239,17 @@ type Queries interface {
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 }
 
+// RfqLineRef is RfqLineRef v1 (Context Map R04, T02 §13.1): one line of a customer RFQ at the
+// RFQ's row version. Lines have no versions of their own; the RFQ's row version versions them all.
+type RfqLineRef struct {
+	RfqID      string
+	RowVersion int64
+	LineID     string
+}
+
+// MaxLookup bounds the RFQs of one lookup.
+const MaxLookup = 200
+
 func head(key, id string, expected, minVersion int64) error {
 	switch {
 	case !kernel.ValidIdentifier(key):

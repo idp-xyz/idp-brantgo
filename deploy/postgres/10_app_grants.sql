@@ -91,3 +91,54 @@ GRANT USAGE ON SCHEMA brant_inq TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_inq.customer_rfq TO brant_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON brant_inq.rfq_line, brant_inq.rfq_source TO brant_app;
 GRANT SELECT, INSERT ON brant_inq.action_result, brant_inq.audit_event TO brant_app;
+-- RfqGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_inq.guard_rfq_ready_v1(text, bigint, text) TO brant_app;
+
+-- CST: roots move their version; revisions are written as the triggers allow (a working revision
+-- is edited, sealed and ended revisions only change state), never deleted; the ledger only grows.
+GRANT USAGE ON SCHEMA brant_cst TO brant_app;
+GRANT SELECT, INSERT ON brant_cst.costing_context, brant_cst.costing_context_revision, brant_cst.measurement,
+    brant_cst.measurement_revision, brant_cst.action_result, brant_cst.audit_event TO brant_app;
+GRANT UPDATE (root_version, last_revision, updated_at) ON brant_cst.costing_context, brant_cst.measurement TO brant_app;
+GRANT UPDATE (status, base_revision, data, content_hash, contributors, provenance, saved_by_kind, saved_by_id, saved_epoch,
+              saved_at, verified_by_kind, verified_by_id, verify_epoch, verified_at, verification_evidence, rfq_id,
+              rfq_row_version, rfq_lines_hash, rfq_lines, superseded_at, ended_by_kind, ended_by_id, end_epoch, ended_at, end_reason,
+              end_evidence)
+    ON brant_cst.costing_context_revision TO brant_app;
+GRANT UPDATE (status, superseded_at, withdrawn_by_id, withdraw_epoch, withdrawn_at, withdraw_reason, withdraw_evidence)
+    ON brant_cst.measurement_revision TO brant_app;
+-- Cost scenarios: a draft is replaced whole, an evaluation counts itself on the root, a freeze moves
+-- the root to frozen (trigger); evaluations are only appended (trigger).
+GRANT SELECT, INSERT ON brant_cst.cost_scenario, brant_cst.cost_evaluation TO brant_app;
+GRANT UPDATE (root_version, status, data, content_hash, contributors, saved_by_kind, saved_by_id, saved_epoch, saved_at,
+              last_evaluation, updated_at)
+    ON brant_cst.cost_scenario TO brant_app;
+-- Cost snapshots and their components and allocations are only appended (triggers). The single
+-- column grant on cost_snapshot exists so a freeze can lock the snapshot it supersedes FOR UPDATE;
+-- the trigger refuses every update. A source's standing is created undisputed and denied once; an
+-- attestation is only appended (triggers).
+GRANT SELECT, INSERT ON brant_cst.cost_snapshot, brant_cst.cost_snapshot_component, brant_cst.cost_snapshot_allocation,
+    brant_cst.source_standing, brant_cst.source_attestation TO brant_app;
+GRANT UPDATE (snapshot_id) ON brant_cst.cost_snapshot TO brant_app;
+GRANT UPDATE (root_version, status, denial_id, denied_at, updated_at) ON brant_cst.source_standing TO brant_app;
+-- AdoptabilityGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_cst.guard_cost_snapshot_adoptable_v1(text, text, timestamptz) TO brant_app;
+
+-- SUP: a supplier RFQ's draft is replaced whole, an issued one is only closed (trigger). A supply
+-- condition's root moves its version; a draft revision is edited, sealed or discarded, a sealed one
+-- only superseded, withdrawn or retired (trigger); the ledger only grows.
+GRANT USAGE ON SCHEMA brant_sup TO brant_app;
+GRANT SELECT, INSERT ON brant_sup.supplier_rfq, brant_sup.condition_root, brant_sup.condition_revision,
+    brant_sup.action_result, brant_sup.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, data, content_hash, saved_by_kind, saved_by_id, saved_epoch, saved_at, issued_version,
+              issued_by_kind, issued_by_id, issue_epoch, issued_at, issue_reason, issue_evidence, closed_by_kind, closed_by_id,
+              close_epoch, closed_at, close_reason, close_evidence, updated_at)
+    ON brant_sup.supplier_rfq TO brant_app;
+GRANT UPDATE (root_version, last_revision, updated_at) ON brant_sup.condition_root TO brant_app;
+GRANT UPDATE (status, data, content_hash, valid_from, valid_until, validity_mode, source_offer_id, source_offer_revision,
+              saved_by_kind, saved_by_id, saved_epoch, saved_at, contributors, verified_by_kind, verified_by_id, verify_epoch,
+              verified_at, verification_evidence, superseded_at, ended_by_kind, ended_by_id, end_epoch, ended_at, end_reason,
+              end_evidence)
+    ON brant_sup.condition_revision TO brant_app;
+-- SupplyConditionGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_sup.guard_supply_condition_v1(text, text, bigint, timestamptz) TO brant_app;

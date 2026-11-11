@@ -32,6 +32,9 @@ SUP,SupplierOfferWithdrawn,idp-brant.sup.supplier_offer_withdrawn.v1,idp-brant.s
 SUP,PurchaseTermsPublished,idp-brant.sup.purchase_terms_published.v1,idp-brant.sup,PurchaseTerms,S2
 SUP,PurchaseTermsRetired,idp-brant.sup.purchase_terms_retired.v1,idp-brant.sup,PurchaseTerms,S2
 SUP,LogisticsOfferVerified,idp-brant.sup.logistics_offer_verified.v1,idp-brant.sup,LogisticsOffer,S2
+SUP,LogisticsOfferWithdrawn,idp-brant.sup.logistics_offer_withdrawn.v1,idp-brant.sup,LogisticsOffer,S2
+CST,CostingContextVerified,idp-brant.cst.costing_context_verified.v1,idp-brant.cst,CostingContext,S2
+CST,MeasurementRecorded,idp-brant.cst.measurement_recorded.v1,idp-brant.cst,MeasurementSnapshot,S2
 CST,CostScenarioEvaluated,idp-brant.cst.cost_scenario_evaluated.v1,idp-brant.cst,CostScenario,S2
 CST,CostSnapshotFrozen,idp-brant.cst.cost_snapshot_frozen.v1,idp-brant.cst,CostScenario,S2
 CST,CostSourceDenied,idp-brant.cst.cost_source_denied.v1,idp-brant.cst,CostSnapshot,S2

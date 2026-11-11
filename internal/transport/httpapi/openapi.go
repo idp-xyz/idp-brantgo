@@ -21,7 +21,8 @@ const OpenAPIPath = "contracts/openapi/brant-api.openapi.json"
 // answers.
 func OpenAPI() ([]byte, error) {
 	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
-		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{})}
+		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{}),
+		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{})}
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -129,6 +130,20 @@ var reads = []readRoute{
 	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
 	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
 	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
+	{"/api/brant/v1/sup/supplier_rfqs/{id}", "sup.supplier_rfq.get", "sup", "A supplier RFQ", []string{"id"}, false},
+	{"/api/brant/v1/sup/supplier_offers/{id}", "sup.supplier_offer.get", "sup", "A supplier offer and every revision", []string{"id"}, false},
+	{"/api/brant/v1/sup/purchase_terms/{id}", "sup.purchase_terms.get", "sup", "Purchase terms and every revision", []string{"id"}, false},
+	{"/api/brant/v1/sup/logistics_offers/{id}", "sup.logistics_offer.get", "sup", "A logistics offer and every revision", []string{"id"}, false},
+	{"/api/brant/v1/cst/costing_contexts/{id}", "cst.costing_context.get", "cst", "A costing context and every revision", []string{"id"}, false},
+	{"/api/brant/v1/cst/measurements/{id}", "cst.measurement.get", "cst", "A measurement and every revision", []string{"id"}, false},
+	{"/api/brant/v1/cst/cost_scenarios/{id}", "cst.cost_scenario.get", "cst", "A cost scenario: its draft and the summaries of its evaluations", []string{"id"}, false},
+	{"/api/brant/v1/cst/cost_evaluations/{id}", "cst.cost_evaluation.get", "cst",
+		"One evaluation with its normalized input and result; access to every bound input is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/cst/cost_snapshots/{id}", "cst.cost_snapshot.get", "cst",
+		"A frozen cost snapshot with its document, inputs and the current standing of its sources", []string{"id"}, false},
+	{"/api/brant/v1/cst/cost_snapshots/{id}/adoptability", "cst.cost_snapshot.query", "cst",
+		"Whether the snapshot may be adopted now, as AdoptabilityGuard v1 decides it (Python snapshot_query)", []string{"id"}, false},
+	{"/api/brant/v1/cst/source_attestations/{id}", "cst.source_attestation.get", "cst", "A source attestation or denial", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},

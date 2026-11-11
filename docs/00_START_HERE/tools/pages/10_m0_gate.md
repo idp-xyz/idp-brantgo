@@ -37,7 +37,7 @@ Brant 的产品基线自己定义了 G0—G5。Cargo 主档案的 G0 是“M0 �
 
 {{g1_controls}}
 
-当前满足情况（2026-11-10 回写 S1 证据）：13 项控制中 11 项 MET——C04、C05、C06、C07、C10、C13 有本机与 GitHub Actions 证据（C10 的真实身份提供方接入按负责人决定延后），C03 为实测加模拟评审，C01、C02、C08、C12 只有模拟评审；C09 为负责人接受的 PARTIAL；C11（AI 风险与自治治理，非阻断）NOT_MET。8 项阻断控制都已满足，但其中 C01、C02、C03 依据的是模拟评审（E0），未经真人签核，G1 仍为 NO-GO。逐项证据见 [M0 执行报告](05_IDP_Brant_M0_Execution_Report_V1.0.html#s10) 与 [S1 执行报告](../09_IMPLEMENTATION_PLAN/04_IDP_Brant_S1_Execution_Report_V0.1.html)。
+当前满足情况（2026-11-10 回写 S1 证据）：13 项控制中 11 项 MET——C04、C05、C06、C07、C10、C13 有本机与 GitHub Actions 证据（C10 的真实身份提供方接入按负责人决定延后），C03 为实测加模拟评审，C01、C02、C08、C12 只有模拟评审；C09 为 PARTIAL（仓库公开后可配置受保护主干，待负责人决定）；C11（AI 风险与自治治理，非阻断）NOT_MET。8 项阻断控制都已满足，但其中 C01、C02、C03 依据的是模拟评审（E0），未经真人签核，G1 仍为 NO-GO。逐项证据见 [M0 执行报告](05_IDP_Brant_M0_Execution_Report_V1.0.html#s10) 与 [S1 执行报告](../09_IMPLEMENTATION_PLAN/04_IDP_Brant_S1_Execution_Report_V0.1.html)。
 
 ## 03 M0 技术基线 {#s3}
 

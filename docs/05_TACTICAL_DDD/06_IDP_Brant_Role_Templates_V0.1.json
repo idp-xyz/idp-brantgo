@@ -165,6 +165,8 @@
     "goal.verify",
     "inq.read",
     "item_code_mapping.save_draft",
+    "logistics_offer.discard_draft",
+    "logistics_offer.revise",
     "logistics_offer.save_draft",
     "logistics_offer.verify",
     "logistics_offer.withdraw",
@@ -180,8 +182,10 @@
     "purchase.draft.void",
     "purchase.supplier_confirmation.record",
     "purchase_invoice.import",
+    "purchase_terms.discard_draft",
     "purchase_terms.publish",
     "purchase_terms.retire",
+    "purchase_terms.revise",
     "purchase_terms.save_draft",
     "qlt.read",
     "ref.read",
@@ -197,6 +201,7 @@
     "sup.read",
     "supplier_delivery.record",
     "supplier_delivery.verify",
+    "supplier_offer.discard_draft",
     "supplier_offer.revise",
     "supplier_offer.save_draft",
     "supplier_offer.verify",
@@ -229,8 +234,11 @@
     "cost_scenario.save_draft",
     "cost_snapshot.freeze",
     "costing.attest_source",
+    "costing_context.discard_draft",
+    "costing_context.revise",
     "costing_context.save_draft",
     "costing_context.verify",
+    "costing_context.withdraw",
     "crm.read",
     "cst.read",
     "evd.read",
@@ -240,6 +248,8 @@
     "goal.verify",
     "inq.read",
     "measurement.record_verified",
+    "measurement.supersede",
+    "measurement.withdraw",
     "mfg.read",
     "pol.read",
     "pty.read",
@@ -527,6 +537,7 @@
     "clm.read",
     "cnx.audit",
     "cnx.read",
+    "costing.attest_source",
     "crm.audit",
     "crm.read",
     "cst.audit",
@@ -966,6 +977,30 @@
    "independentOf": "例外申请人",
    "context": "STL",
    "state": "SPEC"
+  },
+  {
+   "command": "supplier_offer.verify",
+   "independentOf": "该修订草稿的全部编辑人",
+   "context": "SUP",
+   "state": "IMPLEMENTED"
+  },
+  {
+   "command": "purchase_terms.publish",
+   "independentOf": "该修订草稿的全部编辑人",
+   "context": "SUP",
+   "state": "IMPLEMENTED"
+  },
+  {
+   "command": "logistics_offer.verify",
+   "independentOf": "该修订草稿的全部编辑人",
+   "context": "SUP",
+   "state": "IMPLEMENTED"
+  },
+  {
+   "command": "costing_context.verify",
+   "independentOf": "该修订草稿的全部编辑人",
+   "context": "CST",
+   "state": "IMPLEMENTED"
   }
  ]
 }

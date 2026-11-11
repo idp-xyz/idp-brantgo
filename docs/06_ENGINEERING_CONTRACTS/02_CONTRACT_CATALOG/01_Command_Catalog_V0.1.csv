@@ -40,16 +40,26 @@ SUP,supplier_rfq.close,仅人工,—（Python 未实现）,POST /api/brant/v1/su
 SUP,supplier_offer.save_draft,人工或 AI（按动作权限）,supplier_offer.save_draft,POST /api/brant/v1/sup/commands/supplier_offer.save_draft,S2
 SUP,supplier_offer.verify,仅人工,T02 规格 §13.2 候选（引擎内实现）,POST /api/brant/v1/sup/commands/supplier_offer.verify,S2
 SUP,supplier_offer.revise,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/sup/commands/supplier_offer.revise,S2
+SUP,supplier_offer.discard_draft,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/sup/commands/supplier_offer.discard_draft,S2
 SUP,supplier_offer.withdraw,仅人工,—（Python 未实现）,POST /api/brant/v1/sup/commands/supplier_offer.withdraw,S2
 SUP,purchase_terms.save_draft,人工或 AI（按动作权限）,purchase_terms.save_draft,POST /api/brant/v1/sup/commands/purchase_terms.save_draft,S2
+SUP,purchase_terms.revise,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/sup/commands/purchase_terms.revise,S2
+SUP,purchase_terms.discard_draft,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/sup/commands/purchase_terms.discard_draft,S2
 SUP,purchase_terms.publish,仅人工,T02 规格 §13.2 候选（引擎内实现）,POST /api/brant/v1/sup/commands/purchase_terms.publish,S2
 SUP,purchase_terms.retire,仅人工,T02 规格 §13.2 候选（引擎内实现）,POST /api/brant/v1/sup/commands/purchase_terms.retire,S2
 SUP,logistics_offer.save_draft,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/sup/commands/logistics_offer.save_draft,S2
+SUP,logistics_offer.revise,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/sup/commands/logistics_offer.revise,S2
+SUP,logistics_offer.discard_draft,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/sup/commands/logistics_offer.discard_draft,S2
 SUP,logistics_offer.verify,仅人工,—（Python 未实现）,POST /api/brant/v1/sup/commands/logistics_offer.verify,S2
 SUP,logistics_offer.withdraw,仅人工,—（Python 未实现）,POST /api/brant/v1/sup/commands/logistics_offer.withdraw,S2
 CST,costing_context.save_draft,人工或 AI（按动作权限）,costing_context.save_draft,POST /api/brant/v1/cst/commands/costing_context.save_draft,S2
+CST,costing_context.revise,人工或 AI（按动作权限）,costing_context.revise,POST /api/brant/v1/cst/commands/costing_context.revise,S2
+CST,costing_context.discard_draft,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/cst/commands/costing_context.discard_draft,S2
 CST,costing_context.verify,仅人工,T02 规格 §13.2 候选（引擎内实现）,POST /api/brant/v1/cst/commands/costing_context.verify,S2
+CST,costing_context.withdraw,仅人工,—（Python 未实现）,POST /api/brant/v1/cst/commands/costing_context.withdraw,S2
 CST,measurement.record_verified,仅人工,—（Python 未实现）,POST /api/brant/v1/cst/commands/measurement.record_verified,S2
+CST,measurement.supersede,仅人工,—（Python 未实现）,POST /api/brant/v1/cst/commands/measurement.supersede,S2
+CST,measurement.withdraw,仅人工,—（Python 未实现）,POST /api/brant/v1/cst/commands/measurement.withdraw,S2
 CST,cost_scenario.save_draft,人工或 AI（按动作权限）,cost_scenario.save_draft,POST /api/brant/v1/cst/commands/cost_scenario.save_draft,S2
 CST,cost_scenario.evaluate,人工或 AI（同一守卫）,cost_scenario.evaluate,POST /api/brant/v1/cst/commands/cost_scenario.evaluate,S2
 CST,cost_snapshot.freeze,仅人工,cost_snapshot.freeze,POST /api/brant/v1/cst/commands/cost_snapshot.freeze,S2

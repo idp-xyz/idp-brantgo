@@ -20,10 +20,12 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
+	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
+	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database"
@@ -150,6 +152,8 @@ type Contexts struct {
 	CAT *cat.Module
 	POL *pol.Module
 	INQ *inq.Module
+	SUP *sup.Module
+	CST *cst.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -189,6 +193,18 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		c.INQ, err = inq.New(db, c.EVD, c.PTY, c.CAT)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.SUP, err = sup.New(db, sup.Upstream{Sources: c.EVD, Parties: c.PTY, Skus: c.CAT, Rfqs: c.INQ, Configs: c.POL})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.CST, err = cst.New(db, c.EVD, c.INQ, c.CAT, c.POL, c.SUP)
 	}
 	if err != nil {
 		return nil, err
@@ -281,7 +297,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
 	if cfg.ReplaySinkURL != "" {
 		replayer, err := p.Replayer(ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout})

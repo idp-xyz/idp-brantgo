@@ -327,7 +327,7 @@ S1 创建的目录：internal/contexts/{evd, pty, cat, pol, inq}、internal/kern
 
 | 事项 | 状态（2026-11-07） |
 |---|---|
-| idp-brantgo 仓库目录 | 根目录为 Go Module；docs/ 为本主档案；brand/ 为品牌资料（不属于 Go 模块）；私有远程仓库 idpxyz/idp-brantgo |
+| idp-brantgo 仓库目录 | 根目录为 Go Module；docs/ 为本主档案；brand/ 为品牌资料（不属于 Go 模块）；公开远程仓库 idp-xyz/idp-brantgo（2026-11-11 由个人账号 idpxyz 转入组织 idp-xyz） |
 | go.mod、go.sum | 已建立：go 1.26.0、toolchain go1.26.5；idp-bento-go v0.1.0-rc.2；go.sum 与 Cargo 逐字节一致 |
 | cmd/ | brant-migrate、brant-worker 已实现；brant-api、brant-cli 随 S1 |
 | internal/ | kernel、bootstrap、foundation/{bento, database, identity, authorization, messaging} 已实现；尚无 contexts/ |

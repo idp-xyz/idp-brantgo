@@ -1,5 +1,30 @@
 # IDP Brant 主档案变更记录
 
+## V1.6 · 2026-11-10 · S2 完成：寻源与核价
+
+S2 合并：SUP 供应条件与 SupplyConditionGuard v1，CST 计算规则、核价上下文与测量、场景评估、冻结快照、来源否认与 AdoptabilityGuard v1，INQ 的 RfqGuard v1。T02 的 660.00 USD 基线在 PostgreSQL 16 上冻结；执行证据回写到 09 阶段。
+
+### 新增
+- 09：S2 执行报告 V0.1（决定 S2-D01—S2-D22）与 07_S2_EVIDENCE。
+- 03：Context Map 新增 R64 EVD→CST（SourceRef v1），负责人决定。
+
+### 更新
+- 03、05：SUP 与 CST 实现的修订、丢弃与撤回命令和 LogisticsOfferWithdrawn、CostingContextVerified、MeasurementRecorded 事件登记进 Context Map 与战术模型；costing_context.withdraw、measurement.supersede、measurement.withdraw 加入人工专属清单。
+- 05：岗位模板把新命令分给采购与核价岗位，costing.attest_source 另归合规；独立性清单加入 supplier_offer.verify、purchase_terms.publish、logistics_offer.verify 与 costing_context.verify。
+- 06：错误码的适用上下文补上 SUP、CST（COST_INPUT_NOT_READY、CALCULATION_LIMIT_EXCEEDED、CHARGE_DOUBLE_COUNT、ALLOCATION_INVALID、SUPPLY_CONDITION_*、COST_SNAPSHOT_INELIGIBLE）。
+- 08：Python 测试映射 T02 的 87 行：74 行 PORTED、9 行 NOT_APPLICABLE、4 行 NOT_PORTED 并写明原因。全表 577 行中已移植 141 行。
+- 09：WBS 中 S2-01 至 S2-08 改为 DONE_CI；S2 完成。
+- 构建器：版本 1.6；新增 S2 已移植测试表与 S2 证据检查，“最新证据快照”依次取 S2、S1、M0。
+
+### 仓库
+- 2026-11-11 按负责人决定，仓库由个人账号 idpxyz 转入组织 idp-xyz，并改为公开（github.com/idp-xyz/idp-brantgo）；提交、分支、PR #1—#5 与 Actions 运行记录随仓库转移，旧链接自动跳转。公开前扫描了全部历史：没有令牌、密钥或个人邮箱，唯一的口令是 Makefile 中仅供本机开发库使用的口令。
+- G1 C09 改为“可配置，待负责人决定”：公开仓库在 GitHub 免费版上可以配置分支保护。
+
+### 限制
+- 主体与 SKU 主数据修订不进入成本快照的可采纳判定（PTY 不是 CST 的上游，CAT 不发布守卫）。
+- 读取核价上下文历史时不经 EVD 重查证据（与 S1-D16 相同）。
+- TRD、PUR 尚未调用 AdoptabilityGuard（S3）。G0、G1 结论不变。
+
 ## V1.5 · 2026-11-10 · S1 完成
 
 S1 第三批合并：PTY 交易档案、地址角色与服务方角色，CAT 货号映射，brant-cli 基础演示；S1 的 11 项工作全部有本机与远程 CI 记录。

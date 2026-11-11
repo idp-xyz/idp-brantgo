@@ -238,11 +238,16 @@
         "supplier_offer.save_draft",
         "supplier_offer.verify",
         "supplier_offer.revise",
+        "supplier_offer.discard_draft",
         "supplier_offer.withdraw",
         "purchase_terms.save_draft",
+        "purchase_terms.revise",
+        "purchase_terms.discard_draft",
         "purchase_terms.publish",
         "purchase_terms.retire",
         "logistics_offer.save_draft",
+        "logistics_offer.revise",
+        "logistics_offer.discard_draft",
         "logistics_offer.verify",
         "logistics_offer.withdraw"
       ],
@@ -252,7 +257,8 @@
         "SupplierOfferWithdrawn",
         "PurchaseTermsPublished",
         "PurchaseTermsRetired",
-        "LogisticsOfferVerified"
+        "LogisticsOfferVerified",
+        "LogisticsOfferWithdrawn"
       ],
       "invariants": [
         "UL-INV-25"
@@ -280,14 +286,21 @@
       ],
       "commands": [
         "costing_context.save_draft",
+        "costing_context.revise",
+        "costing_context.discard_draft",
         "costing_context.verify",
+        "costing_context.withdraw",
         "measurement.record_verified",
+        "measurement.supersede",
+        "measurement.withdraw",
         "cost_scenario.save_draft",
         "cost_scenario.evaluate",
         "cost_snapshot.freeze",
         "costing.attest_source"
       ],
       "facts": [
+        "CostingContextVerified",
+        "MeasurementRecorded",
         "CostScenarioEvaluated",
         "CostSnapshotFrozen",
         "CostSourceDenied",
@@ -1614,6 +1627,18 @@
       "contract": "SourceRef v1",
       "authority": "EVD",
       "risk": "发布人无权读取核实证据仍发布配置",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R64",
+      "frm": "EVD",
+      "to": "CST",
+      "pattern": "OHS / Published Language",
+      "fact": "核价上下文、测量、假设与来源核验所依据的来源及其读取权限",
+      "contract": "SourceRef v1",
+      "authority": "EVD",
+      "risk": "核价人无权读取或来源已被否认仍作为核价证据",
       "contractStatus": "DESIGN",
       "guardLock": false
     }
