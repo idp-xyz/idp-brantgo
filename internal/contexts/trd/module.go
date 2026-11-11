@@ -3,7 +3,9 @@
 // and business hash, internal metadata, the root's object control, the review of a frozen revision
 // with its approval and margin exception, and the formalization that makes an approved revision the
 // root's one active revision with its formal document, number and commit evidence (activation,
-// replacement), its withdrawal and cancellation, risk holds and the conversion slot. Code outside
+// replacement), its withdrawal and cancellation, risk holds and the conversion slot; then the
+// customer's responses to an active formal revision, their verification into acceptances that form
+// the contract when they arrived in time, and the acceptances' effectivity ledger. Code outside
 // TRD uses it through package api; everything under internal/ is private to TRD.
 package trd
 
@@ -32,11 +34,12 @@ type Module struct {
 }
 
 var (
-	_ api.Commands   = (*Module)(nil)
-	_ api.Queries    = (*Module)(nil)
-	_ api.Lookups    = (*Module)(nil)
-	_ api.Auditor    = (*Module)(nil)
-	_ api.Reconciler = (*Module)(nil)
+	_ api.Commands          = (*Module)(nil)
+	_ api.Queries           = (*Module)(nil)
+	_ api.Lookups           = (*Module)(nil)
+	_ api.AcceptanceLookups = (*Module)(nil)
+	_ api.Auditor           = (*Module)(nil)
+	_ api.Reconciler        = (*Module)(nil)
 )
 
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,

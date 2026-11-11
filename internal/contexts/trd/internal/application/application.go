@@ -54,14 +54,16 @@ var (
 	humanOrSystem = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}
 )
 
-// Rules is TRD's authorization policy for QuoteRoot. The tactical model's humanOnlyCommands name
-// quote.freeze, quote.submit_review, quote.review.decide, quote.approval.revoke, quote.activate,
-// quote.replace, quote.withdraw, quote.cancel, object_control.stop and object_control.release; each
-// needs the permission of its own name. The command catalog gives
+// Rules is TRD's authorization policy for QuoteRoot, customer responses and acceptance. The
+// tactical model's humanOnlyCommands name quote.freeze, quote.submit_review, quote.review.decide,
+// quote.approval.revoke, quote.activate, quote.replace, quote.withdraw, quote.cancel,
+// quote.response.verify, acceptance.invalidate, acceptance.mark_disputed, object_control.stop and
+// object_control.release; each needs the permission of its own name. The command catalog gives
 // object_control.bind to the system (TSK claims a root for a task) and the role templates give it to
 // the sales clerk, so a human or the system binds, never an AI agent (it would fence humans out). An
-// AI agent prepares, revises and discards drafts and edits the internal metadata through the same
-// command path.
+// AI agent prepares, revises and discards drafts, edits the internal metadata and records customer
+// responses (quote.response.record: 人工或 AI; its classification is a candidate a human verifies)
+// through the same command path.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandSaveDraft, Permission: api.CommandSaveDraft, ActorKinds: humanOrAgent},
@@ -84,6 +86,12 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetFormalDocument, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetActiveRevision, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
+		{Command: api.CommandRecordResponse, Permission: api.CommandRecordResponse, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandVerifyResponse, api.CommandVerifyResponse),
+		authorization.HumanOnly(api.CommandInvalidateAcceptance, api.CommandInvalidateAcceptance),
+		authorization.HumanOnly(api.CommandDisputeAcceptance, api.CommandDisputeAcceptance),
+		{Command: CommandGetResponse, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetAcceptance, Permission: PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -194,6 +202,18 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.Cancel:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandCancel, key, c
+	case api.RecordResponse:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRecordResponse, key, c
+	case api.VerifyResponse:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandVerifyResponse, key, c
+	case api.InvalidateAcceptance:
+		key, c.IdempotencyKey, c.ExpectedEffectivityVersion = c.IdempotencyKey, "", 0
+		return api.CommandInvalidateAcceptance, key, c
+	case api.DisputeAcceptance:
+		key, c.IdempotencyKey, c.ExpectedEffectivityVersion = c.IdempotencyKey, "", 0
+		return api.CommandDisputeAcceptance, key, c
 	}
 	return "", "", nil
 }
@@ -202,16 +222,33 @@ var quoteWrites = []string{api.CommandSaveDraft, api.CommandRevise, api.CommandD
 	api.CommandSubmitReview, api.CommandDecideReview, api.CommandRevokeApproval, api.CommandActivate, api.CommandReplace,
 	api.CommandWithdraw, api.CommandCancel}
 
-// Visible reports whether d's actor sees the quote root a stored result names. On the write path
-// (a replay) of a quote write it also passes the root's object control as it is now (Python
+// Visible reports whether d's actor sees the quote root a stored result names: the quote itself,
+// or the quote a stored response (quote.response.record) or acceptance (quote.response.verify,
+// acceptance.invalidate, acceptance.mark_disputed) belongs to. On the write path (a replay) of a
+// quote write or one of those it also passes the root's object control as it is now (Python
 // test_committed_public_replay_and_local_replay_cannot_bypass_new_binding): a stored success is
 // never handed to a caller the binding now fences out. Reconciliation is not fenced.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
-	q, err := postgres.LoadRoot(ctx, exec, scope(ctx), id)
+	quoteID := id
+	switch command {
+	case api.CommandRecordResponse:
+		r, err := postgres.LoadResponse(ctx, exec, scope(ctx), id)
+		if err != nil || r == nil {
+			return false, err
+		}
+		quoteID = r.QuoteID
+	case api.CommandVerifyResponse, api.CommandInvalidateAcceptance, api.CommandDisputeAcceptance:
+		a, err := postgres.LoadAcceptance(ctx, exec, scope(ctx), id, postgres.NoLock)
+		if err != nil || a == nil {
+			return false, err
+		}
+		quoteID = a.QuoteID
+	}
+	q, err := postgres.LoadRoot(ctx, exec, scope(ctx), quoteID)
 	if err != nil || q == nil || !d.Sees(q.OwnerActor, q.OwnerTeam) {
 		return false, err
 	}
-	if ctx.Value(writing{}) != nil && slices.Contains(quoteWrites, command) {
+	if ctx.Value(writing{}) != nil && (slices.Contains(quoteWrites, command) || slices.Contains(acceptanceWrites, command)) {
 		if err = q.Control.Admit(claim(ctx), d.Epoch); err != nil {
 			return false, err
 		}

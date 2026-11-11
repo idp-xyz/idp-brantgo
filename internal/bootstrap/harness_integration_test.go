@@ -47,6 +47,7 @@ var allPermissions = []string{
 	"object_control.bind", "object_control.stop", "object_control.release", "trd.read", "trd.audit",
 	"quote.submit_review", "quote.review.decide", "quote.approval.revoke", "quote.margin_exception.approve",
 	"quote.activate", "quote.replace", "quote.withdraw", "quote.cancel",
+	"quote.response.record", "quote.response.verify", "acceptance.invalidate", "acceptance.mark_disputed",
 }
 
 type world struct {
