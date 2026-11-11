@@ -1616,6 +1616,18 @@
       "risk": "发布人无权读取核实证据仍发布配置",
       "contractStatus": "DESIGN",
       "guardLock": false
+    },
+    {
+      "id": "R64",
+      "frm": "EVD",
+      "to": "CST",
+      "pattern": "OHS / Published Language",
+      "fact": "核价上下文、测量、假设与来源核验所依据的来源及其读取权限",
+      "contract": "SourceRef v1",
+      "authority": "EVD",
+      "risk": "核价人无权读取或来源已被否认仍作为核价证据",
+      "contractStatus": "DESIGN",
+      "guardLock": false
     }
   ],
   "externalBoundaries": [

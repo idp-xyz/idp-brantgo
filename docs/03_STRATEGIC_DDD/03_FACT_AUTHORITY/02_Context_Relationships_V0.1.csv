@@ -62,3 +62,4 @@ R60,POL,PTY,OHS / Published Language,启用的筛查名单与法规配置,Config
 R61,EVD,PTY,OHS / Published Language,主体与联系人核实所依据的来源及其读取权限,SourceRef v1,EVD,无权读取来源仍核实主数据,DESIGN,no
 R62,EVD,CAT,OHS / Published Language,SKU 核实所依据的来源及其读取权限,SourceRef v1,EVD,无权读取来源仍核实 SKU,DESIGN,no
 R63,EVD,POL,OHS / Published Language,配置发布核实所依据的来源及其读取权限,SourceRef v1,EVD,发布人无权读取核实证据仍发布配置,DESIGN,no
+R64,EVD,CST,OHS / Published Language,核价上下文、测量、假设与来源核验所依据的来源及其读取权限,SourceRef v1,EVD,核价人无权读取或来源已被否认仍作为核价证据,DESIGN,no
