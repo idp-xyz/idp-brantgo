@@ -11,7 +11,7 @@ S3 合并：TRD 报价根（工作稿、冻结与服务端计算、商业哈希�
 ### 更新
 - 03：Context Map 的 TRD 事实补上 AcceptanceDisputed、OrderReviewRequested、OrderAmendmentRequested、OrderAmendmentDecided、OrderAmendmentWithdrawn；R22 为 PartyRef v1＋PartyGuard v1；R52 改为守卫锁定（SkuRef v1＋SkuGuard v1），负责人决定。
 - 05：战术模型的 POL 封闭枚举加入 legal_terms 与 order_document_template；SM-TRD-ACCEPTANCE 增加 disputed → invalidated（acceptance.invalidate），争议承诺须先作废，其报价修订方可替代、撤回或取消（负责人决定）；SalesOrder 事件加入 OrderAmendmentWithdrawn。
-- 08：Python 测试映射 T03、T04 的 417 行全部有结论：@@S3MAPPINGROWS@@ 集成门 IG-03（BC-AT15、BC-AT17）与 IG-04（跨上下文资格重查）为 DONE_CI，IG-08（正式文档字节）与 IG-09（编号）为 PARTIAL。
+- 08：Python 测试映射 T03、T04 的 417 行全部有结论：313 行 PORTED（16 行缺次要部分，注明于行内）、28 行 DIVERGES_BY_DESIGN、67 行 NOT_APPLICABLE、9 行 NOT_PORTED 并写明业务理由；共享基础 PYT-0135 的渲染一半随 S3-04 移植。全表 577 行中已移植 455 行。 集成门 IG-03（BC-AT15、BC-AT17）与 IG-04（跨上下文资格重查）为 DONE_CI，IG-08（正式文档字节）与 IG-09（编号）为 PARTIAL。
 - 09：WBS 中 S3-01 至 S3-17 改为 DONE_CI；S3 完成。
 - 构建器：版本 1.7；新增 S3 已移植测试表与 S3 证据检查，“最新证据快照”依次取 S3、S2、S1、M0。
 

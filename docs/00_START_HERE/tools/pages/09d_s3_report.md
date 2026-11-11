@@ -203,32 +203,168 @@ foot: S3 Execution Report V0.1 · 2026-11-11
 | S3-D150 | 命令路由返回通用回执（action_id、object_id、row_version、status、replayed）；扩展回执的成员经报价、正式文档、回复、Acceptance、订单与采购草稿的读取路由取得 | S1-06 | — |
 | S3-D151 | 读取路由在 /api/brant/v1/trd/ 下有 quotes 及其 active、approvals 检查、revisions 文档、ready、history、approvals、documents、commits、outbox、dispatch_preflight、dispatch_target，orders 及其 check，customer_responses、acceptances，在 /api/brant/v1/pur/ 下有 purchase_drafts 与订单 allocations；查询参数封闭，未知、重复或格式错误为 SCHEMA_INVALID | 06 阶段契约 §07；S1-06 | — |
 | S3-D152 | 动作对账 POST /api/brant/v1/{bc}/commands/{command}/reconcile 收取原样请求并按命令路由校验，答复 committed（附已存回执）、payload_conflict 或 not_committed，不执行命令；INQ、CST、TRD、PUR 的全部命令可对账 | 06 阶段契约 §07（A22、A23、A43）；X-INV-003 | — |
+| S3-D153 | PTY、CST、CAT、INQ 发布给下游的引用查询（ResolveParties、ResolveTradingProfiles、ResolveAddressRoles；ResolveSnapshots、ResolveContexts、ResolveMeasurements；ResolveSkus、ResolveSpecs；ResolveRfqs）与 POL 的 ResolveConfigs 一样只需有效授权，调用方数据范围外的记录视为不存在；Brant 没有传递的依赖读取权限，冻结、正式化、quote_ready 与订单激活只要求命令自身的权限与报价可见性。审计读取仍须读取权限：所引证据须 evd.read，正式文档打印的客户、联系人与品名须 pty.read 与 cat.read | S1-D15 的扩展；各上下文 api 的查询约定 | Python 冻结、绑定交易档案与联系人、订单激活缺 costing.read、foundation.read、quotation_foundation.read 任一即 PERMISSION_DENIED（PYT-0253、0354、0371、0402） |
 
 
-## 03 Python 测试移植 {#s3}
+## 03 Python 测试移植与 V0.50 等价性 {#s3}
 
-<!-- TODO S3-11 counts -->
+08 阶段映射表中 T03 的 300 个与 T04 的 117 个测试方法，连同共享基础 PYT-0135 的渲染一半，共 418 行，全部有结论：314 个已移植（PORTED，其中 17 个缺次要部分，注明于行内），28 个有意背离（DIVERGES_BY_DESIGN），67 个为 Python 实现专属（NOT_APPLICABLE），9 个未移植（NOT_PORTED）。计为已移植的行，均有树内 Go 测试在注释中以映射编号或 Python 测试名引用它，且测试确实判定该行为。有意背离逐条引用 05 阶段不变量、ADR 或负责人决定，按 Brant 的规则判定，不按 Python 行为移植；未移植的行均写明业务理由。
 
-每个 Go 测试在注释中引用其 Python 来源。有意背离按 05 阶段不变量与负责人决定移植，不按 Python 行为移植；下表列出各波次登记的背离与不移植，逐行结论以 S3-11 等价性报告为准。
+### 总计
 
-| Python 测试 | 结论 | 原因 |
+| 范围 | 行数 | PORTED | 其中缺次要部分 | DIVERGES_BY_DESIGN | NOT_APPLICABLE | NOT_PORTED |
+|---|---|---|---|---|---|---|
+| T03 | 300 | 219 | 10 | 22 | 51 | 8 |
+| T04 | 117 | 94 | 6 | 6 | 16 | 1 |
+| PYT-0135（共享基础，渲染一半） | 1 | 1 | 1 | 0 | 0 | 0 |
+| S3 合计 | 418 | 314 | 17 | 28 | 67 | 9 |
+| 08 阶段映射表全表（577 行） | 577 | 455 | 17 | 30 | 79 | 13 |
+
+### 按 Python 测试文件
+
+| Python 测试文件 | 切片 | 行数 | PORTED | DIVERGES | N/A | NOT_PORTED |
+|---|---|---|---|---|---|---|
+| `test_foundation.py` | 共享基础 V0.2 | 1 | 1 | 0 | 0 | 0 |
+| `test_t03_a19_configuration_consumption.py` | T03 A19 | 5 | 2 | 1 | 1 | 1 |
+| `test_t03_a20_acceptance_order.py` | T03 A20 | 8 | 7 | 1 | 0 | 0 |
+| `test_t03_a23_reconciliation_access.py` | T03 A23 | 15 | 12 | 0 | 3 | 0 |
+| `test_t03_a24_write_control.py` | T03 A24 | 14 | 13 | 0 | 1 | 0 |
+| `test_t03_a25_order_snapshot.py` | T03 A25 | 25 | 14 | 0 | 7 | 4 |
+| `test_t03_a26_order_qualification.py` | T03 A26 | 34 | 17 | 10 | 6 | 1 |
+| `test_t03_a27_cost_scope.py` | T03 A27 | 36 | 30 | 0 | 6 | 0 |
+| `test_t03_a28_sales_terms.py` | T03 A28 | 50 | 40 | 3 | 6 | 1 |
+| `test_t03_a29_trade_parties.py` | T03 A29 | 16 | 10 | 2 | 4 | 0 |
+| `test_t03_a30_contact_profiles.py` | T03 A30 | 15 | 6 | 2 | 6 | 1 |
+| `test_t03_a31_address_roles.py` | T03 A31 | 4 | 2 | 0 | 2 | 0 |
+| `test_t03_a32_sales_fx.py` | T03 A32 | 2 | 1 | 0 | 1 | 0 |
+| `test_t03_a33_reviewer_qualification.py` | T03 A33 | 7 | 7 | 0 | 0 | 0 |
+| `test_t03_a34_ready_reviewer.py` | T03 A34 | 3 | 3 | 0 | 0 | 0 |
+| `test_t03_a35_time_qualification.py` | T03 A35 | 6 | 4 | 1 | 1 | 0 |
+| `test_t03_a6_authority.py` | T03 A6 | 3 | 2 | 1 | 0 | 0 |
+| `test_t03_configuration_runtime.py` | T03 A18 | 6 | 5 | 1 | 0 | 0 |
+| `test_t03_cost_binding.py` | T03 | 3 | 2 | 0 | 1 | 0 |
+| `test_t03_formalization.py` | T03 A4 | 5 | 5 | 0 | 0 | 0 |
+| `test_t03_persistence.py` | T03 A1–A5 | 7 | 3 | 0 | 4 | 0 |
+| `test_t03_query_contract.py` | T03 A8 | 12 | 12 | 0 | 0 | 0 |
+| `test_t03_quote_review.py` | T03 A3 | 5 | 5 | 0 | 0 | 0 |
+| `test_t03_server_calculation.py` | T03 A5 | 11 | 11 | 0 | 0 | 0 |
+| `test_t03_snapshot.py` | T03 | 2 | 1 | 0 | 1 | 0 |
+| `test_t03_write_contract.py` | T03 A17 | 6 | 5 | 0 | 1 | 0 |
+| `test_t04_a36_customer_response.py` | T04 A36 | 7 | 4 | 1 | 2 | 0 |
+| `test_t04_a37_response_verification.py` | T04 A37 | 11 | 8 | 1 | 2 | 0 |
+| `test_t04_a38_order_review.py` | T04 A38 | 8 | 5 | 2 | 1 | 0 |
+| `test_t04_a39_order_gate.py` | T04 A39 | 21 | 20 | 0 | 1 | 0 |
+| `test_t04_a40_public_revoke.py` | T04 A40 | 6 | 5 | 0 | 1 | 0 |
+| `test_t04_a41_public_review.py` | T04 A41 | 5 | 4 | 1 | 0 | 0 |
+| `test_t04_a42_public_review_query.py` | T04 A42 | 4 | 4 | 0 | 0 | 0 |
+| `test_t04_a43_order_reconciliation.py` | T04 A43 | 3 | 3 | 0 | 0 | 0 |
+| `test_t04_a44_public_customer_response.py` | T04 A44 | 4 | 4 | 0 | 0 | 0 |
+| `test_t04_a45_response_query_recovery.py` | T04 A45 | 26 | 18 | 0 | 8 | 0 |
+| `test_t04_a46_purchase_draft.py` | T04 A46 | 22 | 19 | 1 | 1 | 1 |
+
+### 有意背离（DIVERGES_BY_DESIGN）
+
+| 编号 | Python 测试 | 固定 Go 行为的测试 | 依据与差异 |
+|---|---|---|---|
+| PYT-0164 | `test_t03_a19_configuration_consumption.py::test_configuration_reference_requires_conditional_read_permission` | TestQuoteReadyReflectsTheActiveRevisionNow | S1-D15；POL 配置属于公司，TRD 经 POL 查询只需有效授权，冻结与激活不要求配置读取权限，Python 返回 PERMISSION_DENIED（只持 trd.read 的读者经上游查询得出 ready：TestQuoteReadyReflectsTheActiveRevisionNow） |
+| PYT-0167 | `test_t03_a20_acceptance_order.py::test_late_and_duplicate_confirmation_are_rejected_without_residue` | TestAcceptanceArrivingBeforeExpiryFormsTheContractAfterExpiry、TestVerificationScopeImmutabilityAndUniqueness、TestOneLiveAcceptancePerResponseMessageAndRevision | TRD-INV-012、ADR-BR-013；承诺按到达时间判定，到达早于报价到期即成立合同，核实晚于到期亦然，到达不早于到期为 ACCEPTANCE_LATE 且无残留；Python 按核实时刻返回 QUOTE_EXPIRED（TestAcceptanceArrivingBeforeExpiryFormsTheContractAfterExpiry）；重复消息一半已移植（SOURCE_MESSAGE_DUPLICATE） |
+| PYT-0228 | `test_t03_a26_order_qualification.py::test_current_cost_denial_blocks_new_activation_without_residue` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；合同成立后成本来源被否认是须由订单审批确认的风险，未确认为 ORDER_RISK_UNACKNOWLEDGED 且无残留，确认后激活；Python 以 COST_SNAPSHOT_NOT_ELIGIBLE 拒绝（TestUpstreamChangesAfterApprovalAreRisksToAcknowledge） |
+| PYT-0229 | `test_t03_a26_order_qualification.py::test_retired_template_blocks_new_activation_without_residue` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；合同成立后配置停用是须确认的风险（CONFIG_NOT_ACTIVE），确认后激活；Python 以 REFERENCE_STALE 拒绝；Go 以停用销售税适用演示（TestUpstreamChangesAfterApprovalAreRisksToAcknowledge） |
+| PYT-0235 | `test_t03_a26_order_qualification.py::test_quote_expiration_blocks_uncommitted_order_even_if_acceptance_was_timely` | TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract | ADR-BR-013、TRD-INV-014、TRD-INV-017；合同成立后报价到期不阻断订单激活；Python 返回 QUOTE_EXPIRED（TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract） |
+| PYT-0236 | `test_t03_a26_order_qualification.py::test_approval_expiry_is_exclusive_and_does_not_change_order` | TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract | ADR-BR-013、TRD-INV-014；正式化批准的期限在正式化时已判定，订单激活只查其未撤销、审核人仍合格；Python 在批准期限届满时为 APPROVAL_STALE（TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract） |
+| PYT-0246 | `test_t03_a26_order_qualification.py::test_end_of_check_approval_expiry_rolls_back_before_state_change` | TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract | ADR-BR-013、TRD-INV-014；订单激活不判定正式化批准的期限，检查中途跨过期限不阻断，全部检查以同一时刻判定；Python 为 APPROVAL_STALE（TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract） |
+| PYT-0253 | `test_t03_a26_order_qualification.py::test_dependency_read_grants_are_required_for_new_activation` | TestAccessNeedsAnActiveGrantButNoPermission | S3-D153（S1-D15 的扩展）；上游查询只需有效授权，订单激活不要求 costing.read、foundation.read、quotation_foundation.read 这类依赖读取权限，Python 缺任一即 PERMISSION_DENIED（TestAccessNeedsAnActiveGrantButNoPermission）；激活仍需 order.activate 与报价可见性 |
+| PYT-0254 | `test_t03_a26_order_qualification.py::test_cost_denial_committing_first_blocks_waiting_activation` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；先提交的成本否认使等待的激活拒绝为 ORDER_RISK_UNACKNOWLEDGED 且无残留，经新审批确认后可激活；Python 为 COST_SNAPSHOT_NOT_ELIGIBLE；两种提交次序已移植（TestUpstreamChangesAfterApprovalAreRisksToAcknowledge） |
+| PYT-0256 | `test_t03_a26_order_qualification.py::test_retired_cost_pricing_policy_blocks_new_activation` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；合同成立后成本所用定价政策停用是须订单审批确认的风险：未确认为 ORDER_RISK_UNACKNOWLEDGED，确认后激活；Python 拒绝（COST_SNAPSHOT_NOT_ELIGIBLE） |
+| PYT-0258 | `test_t03_a26_order_qualification.py::test_end_of_check_quote_expiry_rolls_back_before_state_change` | TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract | ADR-BR-013、TRD-INV-017；检查中途报价到期不阻断已成立合同的订单激活，全部检查以同一时刻判定；Python 为 QUOTE_EXPIRED（TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract） |
+| PYT-0260 | `test_t03_a26_order_qualification.py::test_sales_fx_is_current_for_new_activation_and_staleness_is_not_ignored` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；销售汇率超龄是须订单审批确认的风险，不拒绝；Python 为 FX_STALE；PostgreSQL 测试世界没有销售汇率，规则由成本与配置用例固定（TestUpstreamChangesAfterApprovalAreRisksToAcknowledge） |
+| PYT-0336 | `test_t03_a28_sales_terms.py::test_freeze_to_formalization_rechecks_read_authority` | TestNumberRenderAndFileFailuresLeaveNothing | S1-D15；POL 配置属于公司，激活读取配置只需有效授权，不要求配置读取权限（Python 缺 quotation_foundation.read 为 PERMISSION_DENIED）；激活前对 PTY 读取权限的重查见 TestNumberRenderAndFileFailuresLeaveNothing |
+| PYT-0343 | `test_t03_a28_sales_terms.py::test_new_order_activation_rechecks_sales_fee_after_prepare` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；订单准备后停用的配置是订单审批须确认的风险（ORDER_RISK_UNACKNOWLEDGED），确认后可激活，Python 拒绝（CONFIG_NOT_ACTIVE）；测试以销售税适用演示，费用类别经同一 ConfigGuard 路径 |
+| PYT-0344 | `test_t03_a28_sales_terms.py::test_new_order_activation_rechecks_sales_application_after_prepare` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；订单准备后停用的配置是订单审批须确认的风险（ORDER_RISK_UNACKNOWLEDGED），确认后可激活，Python 拒绝（REFERENCE_STALE）；测试以销售税适用演示 |
+| PYT-0354 | `test_t03_a29_trade_parties.py::test_profile_read_authority_is_required_at_use` | TestQuoteReadyReflectsTheActiveRevisionNow、TestNumberRenderAndFileFailuresLeaveNothing | S3-D153（S1-D15 的扩展）；冻结经 PTY 查询只需有效授权，不要求 pty.read，Python 绑定时返回 PERMISSION_DENIED（仅持 trd.read 的读者经上游查询：TestQuoteReadyReflectsTheActiveRevisionNow）；激活读取客户与联系人名称须 pty.read（TestNumberRenderAndFileFailuresLeaveNothing） |
+| PYT-0359 | `test_t03_a29_trade_parties.py::test_order_activation_rechecks_profile` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge、TestTradingProfileGuardDecidesEveryCommitOrder | ADR-BR-004、TRD-INV-014；订单激活时交易档案失效是须订单审批确认的风险（ORDER_RISK_UNACKNOWLEDGED），确认后可激活，Python 直接拒绝（CONFIG_NOT_ACTIVE）（TestUpstreamChangesAfterApprovalAreRisksToAcknowledge）；PTY 守卫一半见 TestTradingProfileGuardDecidesEveryCommitOrder |
+| PYT-0371 | `test_t03_a30_contact_profiles.py::test_contact_profile_foundation_read_authority_is_required` | TestQuoteReadyReflectsTheActiveRevisionNow、TestNumberRenderAndFileFailuresLeaveNothing | S3-D153（S1-D15 的扩展）；Brant 无 contact_profile，冻结经 PTY 查询只需有效授权，不要求读权限，Python 返回 PERMISSION_DENIED（TestQuoteReadyReflectsTheActiveRevisionNow）；激活打印联系人姓名须 pty.read（TestNumberRenderAndFileFailuresLeaveNothing） |
+| PYT-0373 | `test_t03_a30_contact_profiles.py::test_new_order_rechecks_contact_profile` | TestUpstreamChangesAfterApprovalAreRisksToAcknowledge | ADR-BR-004、TRD-INV-014；Brant 无 contact_profile，订单激活时联系人修订经 TradingProfileGuard 成为须确认的风险（ORDER_RISK_UNACKNOWLEDGED），Python 直接拒绝（TestUpstreamChangesAfterApprovalAreRisksToAcknowledge 以主体修订测试同一路径） |
+| PYT-0397 | `test_t03_a35_time_qualification.py::test_ready_compares_quote_and_approval_offsets_as_instants` | TestQuoteReadyComparesInstants、TestFormalApprovalStandsOnCurrentQualification | 负责人决定 2026-11-11、ADR-BR-013、TRD-INV-017；active 修订的批准已用尽，报价到期后 quote_ready 只报 QUOTE_EXPIRED，Python 同时报 APPROVAL_EXPIRED；按 UTC 时刻比较已移植 |
+| PYT-0402 | `test_t03_a6_authority.py::test_structured_freeze_requires_transitive_cost_and_foundation_reads` | TestQuoteReadyReflectsTheActiveRevisionNow、TestAccessNeedsAnActiveGrantButNoPermission | S3-D153（S1-D15 的扩展）；冻结经 CST、PTY、POL 等上游查询只需有效授权，不要求 costing.read 等读权限，Python 返回 PERMISSION_DENIED（TestQuoteReadyReflectsTheActiveRevisionNow、TestAccessNeedsAnActiveGrantButNoPermission）；所引证据仍须 evd.read |
+| PYT-0406 | `test_t03_configuration_runtime.py::test_scope_permissions_ai_and_object_control_are_enforced` | TestIndependentPublicationAndAIGuard | S1-D15；POL 配置属于公司、不设数据范围归属，own 范围读者也能读取草稿，Python 返回 NOT_FOUND；AI 发布被拒见 TestIndependentPublicationAndAIGuard（未引用本测试）；配置没有对象控制（只在报价根） |
+| PYT-0467 | `test_t04_a36_customer_response.py::test_task_binding_and_human_required` | TestResponseAndAcceptanceWritesPassTheObjectControl、TestCustomerResponseRecordAndVerifyLifecycle | X-INV-002；quote.response.record 不在人工专属清单，命令目录为人工或 AI，AI 可登记客户回复（TestCustomerResponseRecordAndVerifyLifecycle），Python 拒绝 AI；绑定根须任务声明的一半已移植 |
+| PYT-0473 | `test_t04_a37_response_verification.py::test_expiry_boundary_and_historical_replay` | TestAcceptanceArrivingBeforeExpiryFormsTheContractAfterExpiry、TestTimelyAcceptanceFormsTheContractWhenVerifiedAfterExpiry | ADR-BR-013、TRD-INV-012、TRD-INV-017；合同按到达时间成立，到达早于 expires_at 的承诺在报价到期后核实仍形成 Acceptance，到达不早于 expires_at 为 ACCEPTANCE_LATE；Python 在核实时刻不早于到期即为 QUOTE_EXPIRED。到期后重放与对象控制一半已移植 |
+| PYT-0481 | `test_t04_a38_order_review.py::test_expiry_and_reviewer_current_authority` | TestOrderReviewRulesAndIndependence、TestOrderReviewDecisions | TRD-INV-013、ADR-BR-013；订单审批有效期由订单审批自身设定，晚于报价 expires_at 的批准被接受，Python 拒绝；无时区时间（SCHEMA_INVALID）、审核人失去授权与审批到期（ORDER_APPROVAL_EXPIRED，TestOrderActivationGate 以 PYT-0491、0492 引用）一半已移植 |
+| PYT-0482 | `test_t04_a38_order_review.py::test_access_task_and_human_controls` | TestOrderReviewRulesAndIndependence | X-INV-002；order.review.request 不在人工专属清单，命令目录为人工或 AI，AI 可请求订单审核，Python 拒绝；裁决限人工已移植；他范围主体与绑定根须任务声明在激活上见 TestOrderActivationGate（未引用本测试） |
+| PYT-0518 | `test_t04_a41_public_review.py::test_public_decision_expiry_and_quote_bound_are_checked` | TestOrderReviewRulesAndIndependence、TestOrderCommandContracts | TRD-INV-013、ADR-BR-013；订单审批有效期不受报价 expires_at 限制，Python 为 ORDER_REVIEW_EXPIRY_INVALID；无时区时间为 SCHEMA_INVALID 已移植（TestOrderCommandContracts） |
+| PYT-0570 | `test_t04_a46_purchase_draft.py::test_identity_permissions_and_data_scope` | TestIdentityPermissionsAndDataScope | S3-D119、S3-D153；编制只需 purchase.draft.prepare，上游查询只需有效授权并按数据范围，持 purchase.draft.prepare 而缺 costing.read 的编制人可以编制，Python 返回 PERMISSION_DENIED（TestIdentityPermissionsAndDataScope）；AI 被拒、他公司与数据范围外为 NOT_FOUND 已移植 |
+
+依据归类：ADR-BR-004 与 TRD-INV-014（订单激活时的上游变化是须由订单审批确认的风险）PYT-0228、0229、0254、0256、0260、0343、0344、0359、0373；ADR-BR-013、TRD-INV-012、014、017（合同按到达成立，成立后报价与正式化批准到期不阻断订单）PYT-0167、0235、0236、0246、0258、0473；TRD-INV-013（订单审批有效期与报价有效期无关）PYT-0481、0518；负责人决定 2026-11-11（active 修订的批准已用尽）PYT-0397；X-INV-002（人工专属以清单为准，回复登记与订单审核请求为人工或 AI）PYT-0467、0482；S1-D15（POL 配置属于公司，查询只需有效授权）PYT-0164、0336、0406；S3-D153（PTY、CST、CAT、INQ 的引用查询只需有效授权，没有传递的依赖读取权限）PYT-0253、0354、0371、0402，与 S3-D119 一起 PYT-0570。
+
+### 未移植（NOT_PORTED）
+
+**能力或关系不存在（5）**
+
+| 编号 | Python 测试 | 说明 |
 |---|---|---|
-| PYT-0304 | 有意背离 | 重复费用义务为 CHARGE_DOUBLE_COUNT（S3-D15） |
-| PYT-0290 | 有意背离 | what_if 快照为 COST_SNAPSHOT_NOT_ELIGIBLE（S3-D16） |
-| PYT-0161 | 部分移植 | 模板哈希写入绑定，不在文件内容中（S3-D52） |
-| PYT-0397 | 有意背离 | active 修订的批准已用尽（S3-D101） |
-| PYT-0467 | 部分移植 | AI 可登记客户回复（S3-D70） |
-| PYT-0473 | 有意背离 | 合同成立按到达时间（S3-D75） |
-| PYT-0481、PYT-0518 | 有意背离 | 订单批准期限不受报价到期限制（S3-D90） |
-| PYT-0557、PYT-0558 | 有意背离 | 一个订单行可分配给多个草稿（S3-D109） |
-| PYT-0562 | 有意背离 | 未核实的工作修订为 REFERENCE_INVALID（S3-D118） |
-| PYT-0570 | 有意背离 | 准备只需 purchase.draft.prepare 与有效授权（S3-D119） |
-| PYT-0181、PYT-0541、PYT-0543、PYT-0553 | 以 Go 等价测试移植 | Go 不存回执 JSON，回执由聚合重建；brant_app 对 action_result 只有 SELECT 与 INSERT |
-| PYT-0163、PYT-0199、PYT-0398、PYT-0412 | 不适用 | POL 配置无对象控制；围栏在事务内、无单独入口；期限列为 timestamptz；冻结已拒绝错误的结果哈希 |
-| PYT-0465、PYT-0466、PYT-0477、PYT-0478、PYT-0575 | 不适用 | Python 结构升级与 SQLite 迁移；Go 的迁移执行器与 brant-migrate 测试覆盖 |
-| PYT-0180、PYT-0185、PYT-0549 | 不适用 | Python 运行时的 JSON 结构身份；Go api 为类型化契约，传输层封闭请求结构 |
-| PYT-0542、PYT-0544—0547、PYT-0552、PYT-0555 | 不适用 | 损坏的回复与 Acceptance 存储、非 ASCII 旧 ID；Go 以类型化列、CHECK 与触发器拒绝，ID 校验不通过 |
-| PYT-0571 | 未移植（S4） | PUR 根无对象控制，TSK 在 S4（S3-D121） |
+| PYT-0225 | `test_t03_a25_order_snapshot.py::test_acceptance_line_scope_corruption_rejects_new_order_atomically` | 准备时不再比对 Acceptance 的行集合（核实时已比对，BC-AT11）；Acceptance 不可修改（TestDatabaseRefusesIllegalAcceptanceChanges），绕过触发器的篡改在激活与读取时由 Verify 按完整行集合重建核对发现，不在准备时拒绝 |
+| PYT-0230 | `test_t03_a26_order_qualification.py::test_unverified_publication_source_blocks_new_activation` | POL 配置的发布证据只在发布时核对（S1-D16），ConfigGuard 只判配置在效，EVD 核实撤回不使已发布配置失效；按 ADR-BR-004 这类变化在订单激活时也只是须确认的风险 |
+| PYT-0335 | `test_t03_a28_sales_terms.py::test_charge_evidence_verification_is_rechecked_independently` | EVD 来源没有核实状态，Context Map R16 只发布 SourceRef v1 查询而无来源守卫；销售费用证据只在冻结前经 EVD 判定可读，激活在 TRD 事务内不再查询 EVD |
+| PYT-0370 | `test_t03_a30_contact_profiles.py::test_contact_profile_source_access_is_rechecked` | 联系人与交易档案的来源证据归 PTY，在发布时核验（S1-D35）；TRD 只经 EVD 重查报价自身所引证据，不重查上游主数据的来源可读性 |
+| PYT-0571 | `test_t04_a46_purchase_draft.py::test_task_control_applies_to_new_drafts_and_write_replays` | PUR 的根没有对象控制（战术模型未给 PUR 聚合 ObjectControl），OrderGuard v1 不发布报价根的对象控制；任务控制随 TSK 在 S4-01 接入（负责人决定 2026-11-10） |
+
+**同键重放不重验所存内容（TRD 的重放口径）（3）**
+
+| 编号 | Python 测试 | 说明 |
+|---|---|---|
+| PYT-0213 | `test_t03_a25_order_snapshot.py::test_public_prepare_receipt_replay_rechecks_persisted_snapshot` | TRD 的同键重放按命令账本与订单行重建回执，只重查可见性、对象控制与所引来源，不重验所存内容，与报价、回复与 Acceptance 的重放相同（PUR 的草稿重放另行重验）；快照由不可变触发器与 CHECK（order_hash = sha256(snapshot)）保护（TestDatabaseRefusesIllegalOrderChanges），绕过触发器并重算哈希的篡改在下一次激活、读取或 ActiveOrderRef 时由 Verify 发现 |
+| PYT-0214 | `test_t03_a25_order_snapshot.py::test_public_active_receipt_replay_rechecks_persisted_snapshot` | TRD 的同键重放按命令账本与订单行重建回执，只重查可见性、对象控制与所引来源，不重验所存内容，与报价、回复与 Acceptance 的重放相同（PUR 的草稿重放另行重验）；快照由不可变触发器与 CHECK（order_hash = sha256(snapshot)）保护（TestDatabaseRefusesIllegalOrderChanges），绕过触发器并重算哈希的篡改在下一次激活、读取或 ActiveOrderRef 时由 Verify 发现 |
+| PYT-0215 | `test_t03_a25_order_snapshot.py::test_local_active_replay_rechecks_persisted_snapshot` | TRD 的同键重放按命令账本与订单行重建回执，只重查可见性、对象控制与所引来源，不重验所存内容，与报价、回复与 Acceptance 的重放相同（PUR 的草稿重放另行重验）；快照由不可变触发器与 CHECK（order_hash = sha256(snapshot)）保护（TestDatabaseRefusesIllegalOrderChanges），绕过触发器并重算哈希的篡改在下一次激活、读取或 ActiveOrderRef 时由 Verify 发现 |
+
+**实质一半在 Brant 不存在（部分移植）（1）**
+
+| 编号 | Python 测试 | 说明 |
+|---|---|---|
+| PYT-0165 | `test_t03_a19_configuration_consumption.py::test_revoked_publication_evidence_blocks_formalization_atomically` | 配置失效时激活整体拒绝、不留文档、提交证据与编号已移植（TestGuardedInputsLapsingBeforeActivationAreRefused，以模板停用，CONFIG_NOT_ACTIVE）；发布证据的核实撤销在 Brant 不存在：POL 只在发布时核对证据可读（S1-D16），已发布配置不因证据变化失效 |
+
+### Python 实现专属（NOT_APPLICABLE），按理由分组
+
+| 理由 | 编号 |
+|---|---|
+| SQLite 迁移与结构升级；Go 由 brant-migrate 按迁移账本在 PostgreSQL 16 上迁移 | PYT-0219、PYT-0220、PYT-0418、PYT-0422、PYT-0423、PYT-0424、PYT-0453、PYT-0465、PYT-0466、PYT-0477、PYT-0478、PYT-0485、PYT-0506、PYT-0575（14） |
+| Python 运行时与候选 JSON Schema、映射文件的一致性；Go 契约为类型化 api，请求结构由传输层严格解码封闭 | PYT-0180、PYT-0185、PYT-0382、PYT-0459、PYT-0549（5） |
+| 篡改已存回执 JSON 或 JSON 正文；Go 不存回执 JSON，回执由聚合重建，回复与 Acceptance 为类型化列，受 CHECK、外键与不可变触发器约束 | PYT-0188、PYT-0226、PYT-0542、PYT-0544、PYT-0545、PYT-0546、PYT-0547（7） |
+| 绕过触发器改写封存数据、文件字节或时间文本；Go 以 CHECK（哈希、大小）与 timestamptz 使该状态无法存储，命令只收 Z | PYT-0206、PYT-0237、PYT-0238、PYT-0261、PYT-0398、PYT-0552（6） |
+| Python 调用方自有的 SQLite 事务与连接；Go 的事务由各上下文的应用层拥有（ADR-BR-REPO-04），命令整体提交或回滚 | PYT-0199、PYT-0248、PYT-0288、PYT-0340、PYT-0341、PYT-0362、PYT-0376（7） |
+| 对象控制只在 TRD 报价根（TRD-INV-015）；POL 配置、汇率与 PTY 交易档案没有对象控制 | PYT-0163、PYT-0231、PYT-0333、PYT-0334、PYT-0353、PYT-0368、PYT-0384（7） |
+| 旧格式数据、伪造的旧版本修订或客户端证明；Go 冻结必经服务端计算并封存当前契约的绑定 | PYT-0217、PYT-0218、PYT-0286、PYT-0289、PYT-0291、PYT-0294、PYT-0297、PYT-0339、PYT-0356、PYT-0360、PYT-0377、PYT-0412（12） |
+| Brant 没有 contact_profile 配置类型，联系人由 PTY 交易档案按行版本固定（S1-D35） | PYT-0364、PYT-0366、PYT-0375（3） |
+| Python 的本地与公共两入口及旧标识；Go 只有一条命令路径 | PYT-0512、PYT-0555（2） |
+| Python 实现专属的语义：布尔与整数相等、引用种类区分税适用、地址角色可改、依赖读取权限 | PYT-0222、PYT-0329、PYT-0381、PYT-0257（4） |
+
+### 已移植但缺次要部分
+
+| 编号 | Python 测试 | 缺少的部分 |
+|---|---|---|
+| PYT-0135 | `test_foundation.py::test_number_and_plaintext_template_bind_snapshot` | 编号与模板字段由 POL 移植（TestBusinessReferenceKeepsItsNumber、TestPlainTextTemplateNamesFixedFieldsOnly，同一业务引用返回原编号，S1-D14）；按模板渲染的字节由 TRD 的 RenderPlain 逐字节复现（TestPlainTextTemplateRendersFixedFields）；Go 没有 foundation.document.render 命令，渲染结果不登记为文件、不记模板修订 |
+| PYT-0209 | `test_t03_a25_order_snapshot.py::test_local_public_replay_and_restart_keep_one_snapshot` | 同键重放返回同一动作与订单哈希（TestOrderPrepareReviewAndActivate）；Go 只有一个入口，订单的进程重开未单独测试（同类见 TestReconciliationObservesRecoversAndStaysAvailable） |
+| PYT-0241 | `test_t03_a26_order_qualification.py::test_revocation_event_is_a_durable_revision_hold_even_if_effectivity_is_corrupted` | 撤销正式化批准即登记风险暂停，订单激活为 APPROVAL_REVOKED（TestActivationRechecksTheContractAndTheSourceRevision）；改回批准效力的篡改未测，批准撤销以效力版本 CAS 且只撤销一次，风险暂停只可插入 |
+| PYT-0273 | `test_t03_a27_cost_scope.py::test_wrong_contact_revision_is_rejected` | 联系人须为询价的联系人（TestBindScopeRefusals）；行版本不与询价比对，联系人行版本不是 PTY 当前的在冻结时为 REFERENCE_STALE（TestSealDraftRefusesWhatCannotBeFrozen，未引用本测试） |
+| PYT-0348 | `test_t03_a29_trade_parties.py::test_reference_and_address_validation` | 缺交易档案、缺地址（DRAFT_NOT_READY）与未知地址（REFERENCE_INVALID）已移植；空 ID 与布尔修订号在 Go 属契约解码（SCHEMA_INVALID），未在此测试 |
+| PYT-0383 | `test_t03_a32_sales_fx.py::test_age_boundary_and_stale_formalization_leave_no_business_writes` | 时效边界在计算、正式化与 quote_ready 三处的单元测试；PostgreSQL 上未执行（测试世界没有销售汇率），拒绝不留业务写入未实测；quote_ready 原因保持 FX_STALE（Python 公共查询映射为 REFERENCE_STALE） |
+| PYT-0396 | `test_t03_a35_time_qualification.py::test_future_negative_offset_and_fraction_are_not_prematurely_expired` | 负偏移与未到的小数时刻按 UTC 移植，放行不提前判过期；激活后的 quote_ready 未在此测试重复 |
+| PYT-0436 | `test_t03_query_contract.py::test_query_contract_rejects_bad_shape_and_keeps_unimplemented_kinds_explicit` | 畸形查询为 SCHEMA_INVALID（TestQueryContracts），多余成员由传输层严格解码拒绝；Go 的读取按路由分开，没有 Python 的查询种类分派与 UNSUPPORTED_CONTRACT |
+| PYT-0455 | `test_t03_write_contract.py::test_public_contract_executes_all_thirteen_actions` | 保存、冻结、修订与丢弃已移植（TestQuoteDraftFreezeReviseAndDiscard）；审核、批准、退回、驳回、撤销、激活、替代、取消与撤回各按其 Python 测试移植（PYT-0437、0441、0413、0416、0417），未串成一个测试 |
+| PYT-0456 | `test_t03_write_contract.py::test_idempotency_replay_and_changed_payload_are_atomic_and_authorized` | 同键同参重放与同键异参 IDEMPOTENCY_PAYLOAD_CONFLICT 已移植，另加对账；撤权后重放为 PERMISSION_DENIED 由命令账本统一执行，此测试未重复 |
+| PYT-0458 | `test_t03_write_contract.py::test_quote_root_own_team_and_company_scope_is_enforced` | 他公司、own 范围外与同团队 team 范围已移植；团队变更后不可见未在此测试重复 |
+| PYT-0494 | `test_t04_a39_order_gate.py::test_stale_hash_version_and_mismatched_order_fail_closed` | 审核所绑订单哈希不符为 ORDER_REVIEW_STALE 已移植；Python 绕过触发器改写订单行版本与订单 ID 的情形未移植，Go 由数据库触发器拒绝此类改写 |
+| PYT-0509 | `test_t04_a40_public_revoke.py::test_payload_conflict_and_closed_schema` | 封闭结构、空理由与超长理由已移植；同键异参的 IDEMPOTENCY_PAYLOAD_CONFLICT 由通用命令账本执行（X-INV-001），未对撤销单独测试 |
+| PYT-0517 | `test_t04_a41_public_review.py::test_rejected_decision_blocks_activation_and_atomic_audit_failure_rolls_back` | 驳回阻断激活已移植；审核请求的存储故障回滚未单独测试（准备、激活与撤销的故障见 TestOrderWritesFailWithoutResidue） |
+| PYT-0521 | `test_t04_a42_public_review_query.py::test_query_rejects_extra_fields_and_cross_scope_review` | 他范围读取为 NOT_FOUND 已移植；请求的额外成员由传输层严格解码拒绝，此处未测 |
+| PYT-0536 | `test_t04_a45_response_query_recovery.py::test_own_team_and_company_scope_are_current` | own 与公司范围已移植；team 范围未在此测试（通用可见性见 TestTeamScopeAndReplayDoNotLeak） |
+| PYT-0548 | `test_t04_a45_response_query_recovery.py::test_read_audit_is_atomic_and_failure_has_no_business_effect` | 读取与被拒读取（NOT_FOUND）均写入审计已移植；审计写入失败时读取一并失败、不留审计的情形未测 |
+
+### 本次补齐的移植
+
+第一轮核对后有 52 行未移植而缺业务理由：31 行已被 Go 测试判定但测试未引用，21 行为测试缺口。本次逐行补齐：已判定的测试补引用（核对后不足的补用例），缺口按所属层级补写测试，新增的 PostgreSQL 16 集成测试在 trd_order_eqv、trd_quote_eqv、trd_formal_eqv 与 pol_quote_config 四个文件；另修正引用了编号却未判定该行为的测试注释（PYT-0162、0164、0165、0221、0295、0534 及 PYT-0195 的命令清单）。
+
+产品修正一处：order.approval.revoke、order.cancel、order.close_unfulfilled、order.close_remainder 与 order.close（给出理由时）的理由须为 1—2000 个字符的有效 UTF-8、不全为空白、不含控制字符，否则 SCHEMA_INVALID（api reasonText，与 PUR 的 api.Reason 相同；PYT-0497）。
 
 {{s3_ported}}
 
@@ -267,6 +403,7 @@ foot: S3 Execution Report V0.1 · 2026-11-11
 | 客户 PO 行的自动比对；以行为承诺（定金，需 STL）；FileRef v1 形式的回复证据 | 待定；S5 |
 | quote.response.verify 是否要求四眼 | 待负责人决定 |
 | 动作对账路由：EVD、PTY、CAT、POL、REF、SUP 尚无 | 待定 |
+| 报价侧全部理由与订单审核、订单变更裁决的驳回理由、order.amendment.withdraw 只查长度与 UTF-8，不拒绝全空白与控制字符（订单撤销、取消与关闭已收紧，PYT-0497） | 待定 |
 | 订单占用转换名额后 quote_ready 仍答 ready（只重查激活所查），/active 显示 conversion_taken；读取 ActiveOrderRef v1 没有 HTTP 路由 | S4（TSK GoalReadiness） |
 | OpenAPI 候选的读取响应没有模式（空列表省略）；同一引用在各上下文拼写不同（PTY contact_refs[].id 与 TRD contact_ref.contact_id，CST rfq_ref.id 与 SUP、TRD 的 rfq_id），契约冻结前统一 | 契约冻结前 |
 | 正式报价文档以最小币值打印金额（与 Python 相同），API 中不出现 960.00 这类主币值 | 待定 |
