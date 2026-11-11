@@ -1,0 +1,76 @@
+// Package trd assembles the TRD bounded context (quotes, customer acceptance and sales orders). S3
+// starts with QuoteRoot: working drafts, the freeze with its commercial document and business hash,
+// internal metadata and the root's object control. Code outside TRD uses it through package api;
+// everything under internal/ is private to TRD.
+package trd
+
+import (
+	"errors"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
+	cstapi "go.idp.xyz/idp-brant/internal/contexts/cst/api"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
+	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
+	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/application"
+	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
+	"go.idp.xyz/idp-brant/internal/foundation/bento"
+)
+
+// Module is TRD wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
+type Module struct {
+	application.Service
+}
+
+var (
+	_ api.Commands   = (*Module)(nil)
+	_ api.Queries    = (*Module)(nil)
+	_ api.Auditor    = (*Module)(nil)
+	_ api.Reconciler = (*Module)(nil)
+)
+
+// Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,
+// TradingProfileRef and AddressRoleRef v1, R13), CAT (SkuRef v1, R14), POL (ConfigRef v1, R15), INQ
+// (RfqRef v1, R12) and CST (CostSnapshotRef v1, R11).
+type Upstream struct {
+	Sources   evdapi.Queries
+	Parties   ptyapi.Queries
+	Profiles  ptyapi.ProfileQueries
+	Skus      catapi.Queries
+	Configs   polapi.Queries
+	Rfqs      inqapi.RfqLookups
+	Snapshots cstapi.SnapshotLookups
+}
+
+// New wires TRD to db, a transaction owner that belongs to TRD alone, and to the lookups of its
+// upstream contexts. The freeze calls CST's, INQ's and POL's guard functions itself; the guards of
+// PTY and CAT (application.Guards) and the S3-02 server calculation (application.Calculator) are
+// wired here once they exist: until then the freeze relies on PTY's and CAT's lookups before its
+// transaction and seals calculation null.
+func New(db *bentopg.DB, up Upstream) (*Module, error) {
+	if up.Sources == nil || up.Parties == nil || up.Profiles == nil || up.Skus == nil || up.Configs == nil || up.Rfqs == nil || up.Snapshots == nil {
+		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL, INQ and CST")
+	}
+	policy, err := authorization.NewPolicy(application.Rules()...)
+	if err != nil {
+		return nil, err
+	}
+	outbox, err := bentooutbox.NewStore(db)
+	if err != nil {
+		return nil, err
+	}
+	clock := bento.SystemClock{}
+	return &Module{application.Service{Clock: clock,
+		Upstream: application.Upstream{Sources: up.Sources, Parties: up.Parties, Profiles: up.Profiles, Skus: up.Skus, Configs: up.Configs,
+			Rfqs: up.Rfqs, Snapshots: up.Snapshots},
+		Ledger: &action.Ledger{
+			DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
+			Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetQuote, Visible: application.Visible,
+		}}}, nil
+}
