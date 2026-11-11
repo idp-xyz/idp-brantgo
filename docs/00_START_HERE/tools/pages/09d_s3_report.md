@@ -37,10 +37,10 @@ foot: S3 Execution Report V0.1 · 2026-11-11
 - S3-09 | quote_ready、历史、发送前准入与动作对账 | quote_ready 判定修订现在能否服务下一步：对象控制、提交证据、文档字节、风险暂停、期限、批准与批准人当前资格、上游守卫、在当前输入上重新绑定的成本范围与销售条款、销售汇率时效。修订、审批、正式文档、提交证据与 Outbox 历史按报价根分页且不含载荷，Outbox 显示真实投递状态。发送前准入与发送目标只报告本地链条，没有发送渠道。同键重放与对账在事务前经 EVD 重查所引来源，读取、重放与对账都重查当前权限与数据范围（X-INV-003）。
 - S3-10 · S3-16 | PUR 采购草稿、需求分配与作废 | 采购草稿从生效订单行与当前有效的供应条件准备，准备一次即不可变；一个订单行可按数量拆分给多个草稿与供应商，并发分配只有一个成功（TD-AT05、TD-AT06）；作废释放分配并保留记录。准备在事务内依次调用 CAT、CST、POL、PTY（新的 PartyGuard v1）、SUP 与 TRD OrderGuard 守卫；核价对照只记录不阻断（R21）。BRC-001 的 600.00 USD 草稿来自 960.00 USD 的生效订单。
 - S3-15 | 生效订单变更与结束；S/C 与 PI 渲染 | 变更经准备、提交（七个领域的影响评估）、独立裁决与应用，形成带哈希链的新订单修订；已出运的数量、SKU 与价格不被覆盖（TD-AT01）；OrderGuard v1 对旧修订的绑定答 REFERENCE_STALE。生效订单可取消、短交关闭或关闭，FUL、PUR、STK、STL 事实记为 not_wired，不视为通过。order-text/0.1.0 渲染外销合同与形式发票，以黄金文件固定。
-<!-- TODO order documents -->
+- S3-15 | 外销合同与形式发票 | order.document.generate 以 POL 版式与 order-text/0.1.0 生成订单当前修订的 S/C 或 PI，POL 取号，绑定、字节与提交证据同一事务写入；订单修订推进后旧单据为 ORDER_DOCUMENT_STALE（TRD-INV-020）。law 区块打印来源报价封存的法律条款，变更后不变。order.document.record_signed 以 EVD 文件登记签署件与会签件，未签署的生成件不能冒充签署件。SIM-02 第 6 步（生效前生成 PI 并登记会签件）在 PostgreSQL 16 上运行。
 - S3-17 | 适用法律与合同成立规则（F-02） | POL 新增 legal_terms，公司档案可指定租户默认；冻结封存修订的法律条款与成立规则，quote-text/0.2.0 打印法律条款。CISG 与中国法按到达主义成立，其他法律在冻结时拒绝。SIM-02 第 3 步（德国法、汉堡仲裁、修订替代后按到达成立）在 PostgreSQL 16 上端到端运行；订单快照携带条款，条款退役在订单上成为待确认的风险。无法律条款的报价哈希与渲染逐字节不变。
-- HTTP | 命令、读取与动作对账 | 33 个 TRD 命令与 2 个 PUR 命令经通用命令路由；读取有报价、active 修订、批准检查、正式文档（Base64，读取时校验）、quote_ready、五种历史、发送前准入与目标、订单与订单检查、客户回复、Acceptance、采购草稿与订单行分配，查询参数封闭。TestQuoteToAcceptanceOverHTTP 在 PostgreSQL 16 上从线上草稿经冻结、独立审核、激活、正式文档走到已核实的完整承诺，并核对 HTTP 草稿与 trd/api 草稿冻结出相同的商业内容。动作对账路由按 06 阶段契约答复 committed、payload_conflict 或 not_committed，不执行命令。
-<!-- TODO BRC-001 -->
+- HTTP | 命令、读取与动作对账 | 35 个 TRD 命令与 2 个 PUR 命令经通用命令路由；读取有报价、active 修订、批准检查、正式文档（Base64，读取时校验）、quote_ready、五种历史、发送前准入与目标、订单与订单检查、客户回复、Acceptance、采购草稿与订单行分配，查询参数封闭。TestQuoteToAcceptanceOverHTTP 在 PostgreSQL 16 上从线上草稿经冻结、独立审核、激活、正式文档走到已核实的完整承诺，并核对 HTTP 草稿与 trd/api 草稿冻结出相同的商业内容。动作对账路由按 06 阶段契约答复 committed、payload_conflict 或 not_committed，不执行命令。
+- S3-12 | BRC-001 全链经 HTTP 重放（BC-AT01） | TestBRC001FullChainOverHTTP 按事件风暴 ES-01 第 1—19 步在 PostgreSQL 16 上经 130 个 HTTP 请求、十位人工各持访问令牌走完 BRC-001：ST01 四行（24、36、12、48 PCS），两家供应商（5.00 与 5.30，按款式组合计 MOQ 100），核价场景 A 660.00 USD 冻结、B 696.00 USD；报价应付 96000（960.00 USD，毛利 300.00，付款 288.00＋672.00）经独立审核正式化为 QT-2026-00001；客户承诺按到达成立；订单 96000 经独立审核生效；采购草稿 60000（600.00 USD）。编制人自审被拒（INDEPENDENT_REVIEW_REQUIRED、REVIEWER_NOT_INDEPENDENT），第二次准备订单为 CONVERSION_SLOT_CONFLICT，超量分配为 PURCHASE_ALLOCATION_EXCEEDED。只有租户、十位人工的授权与令牌签发为夹具，其余全部经 HTTP；每一步记录在证据 07。
 :::
 
 状态说明：DONE_CI 表示验收项在本机与 GitHub Actions 上都通过。
@@ -185,20 +185,25 @@ foot: S3 Execution Report V0.1 · 2026-11-11
 | S3-D132 | 迁移 trd/000006 的变更、订单修订、变更提交证据与结束各表 FORCE RLS 并由触发器守护：生效订单带修订行与提交证据才能前进修订，带结束行才能结束；snapshot_hash 回填语句暂时解除 FORCE RLS | TRD-INV-016、018、019 | — |
 | S3-D133 | S/C 与 PI 渲染器 order-text/0.1.0：PI 声明非商业发票、非税务发票，S/C 签署区注明生成件未签署；POL 新增 order_document_template 与编号单据类型 proforma_invoice（S/C 用 order），每订单每种单据一个编号，修订共用 | TRD-INV-020；S1-D14 | Python 未实现 |
 | S3-D134 | PI 不打印银行账户：完整账号需 pol.read_sensitive，单据岗位都不持有 | S1-D20 | — |
-| S3-D135 | POL 新增 legal_terms（适用法律、CISG 适用或排除、成立规则、争议解决），与 order_document_template 一起使 POL 共 20 种配置；适用 CISG 或中国法时成立规则须为 arrival（INVALID_KNOWN_VALUE） | F-02；CISG 第 18(2)、23 条；民法典第 137、483、484 条 | Python 未实现 |
-| S3-D136 | 租户默认为公司档案的 default_legal_terms（确切修订），不设保留的默认配置；冻结采用草稿所指条款，否则采用开票方默认，封存 legal_terms（来源、适用法律、CISG、争议解决、成立规则与依据）并列入依赖清单 | F-02；R15 | — |
-| S3-D137 | TRD 自行推导成立规则：CISG 适用为 arrival、依据 cisg，中国法为 arrival、依据 prc_civil_code，其他法律或规则在冻结时为 DEPENDENCY_NOT_SUPPORTED，不含 CISG 的德国法待法务确认；CN 只指中国大陆法律 | ADR-BR-013；F-02 | — |
-| S3-D138 | 无法律条款的修订按默认（CISG 与中国法，到达主义）成立，此前冻结的修订均如此，哈希与渲染逐字节不变 | ADR-BR-013 | — |
-| S3-D139 | 法律条款随 ConfigGuard 在冻结、激活与替代、quote_ready、订单检查、审核与激活时重查；订单快照携带封存的条款，条款退役在订单上成为待确认的风险 | ADR-BR-004；R15 | — |
-| S3-D140 | quote-text/0.2.0 增加 legal_terms 区块，0.1.0 保持 Python 版式；0.1.0 模板配法律条款为 DEPENDENCY_NOT_SUPPORTED，0.2.0 模板无条款为 DRAFT_NOT_READY | TRD-INV-009 | 0.1.0 同 Python |
-| S3-D141 | 核实按修订封存的成立规则判定，acceptance_verified.v1 增加 formation_rule 与 formation_basis；成立由封存文档推导，不新增 TRD 迁移，AcceptanceGuard v1 不变 | ADR-BR-013；TRD-INV-012 | — |
-| S3-D142 | legal_terms 与 default_legal_terms 由管理员起草，第二人发布，与其他 POL 配置相同；岗位模板不变 | 负责人决定（2026-11-11）；POL-INV-001 | — |
-| S3-D143 | TRD 的 33 个命令经通用反射命令处理器路由，对象成员保留 T03、T04 的名称（quote_id、response_id、acceptance_id），Line.Sku 在线上名为 sku_ref | T03、T04 契约；S2-D21 的例外 | 成员名同 Python |
-| S3-D144 | 命令路由返回通用回执（action_id、object_id、row_version、status、replayed）；扩展回执的成员经报价、正式文档、回复、Acceptance、订单与采购草稿的读取路由取得 | S1-06 | — |
-| S3-D145 | 读取路由在 /api/brant/v1/trd/ 下有 quotes 及其 active、approvals 检查、revisions 文档、ready、history、approvals、documents、commits、outbox、dispatch_preflight、dispatch_target，orders 及其 check，customer_responses、acceptances，在 /api/brant/v1/pur/ 下有 purchase_drafts 与订单 allocations；查询参数封闭，未知、重复或格式错误为 SCHEMA_INVALID | 06 阶段契约 §07；S1-06 | — |
-| S3-D146 | 动作对账 POST /api/brant/v1/{bc}/commands/{command}/reconcile 收取原样请求并按命令路由校验，答复 committed（附已存回执）、payload_conflict 或 not_committed，不执行命令；INQ、CST、TRD、PUR 的全部命令可对账 | 06 阶段契约 §07（A22、A23、A43）；X-INV-003 | — |
+| S3-D135 | order.document.generate（人工或 AI）以 POL order_document_template 与 order-text/0.1.0 渲染订单当前修订的 S/C 或 PI；事务前试运行与取号（S/C 用 order，PI 用 proforma_invoice，每单每种一个号，文件名 <编号>-r<修订>.txt），事务内锁报价根、订单与权限守卫，ConfigGuard 重查模板与号段，绑定、字节与提交证据一行写入 | TRD-INV-020；正式化的顺序与取号（S3-D49、S3-D59） | —（Python 未实现） |
+| S3-D136 | 订单修订推进后，按旧修订生成为 ORDER_DOCUMENT_STALE（/args/expected_order_revision），旧修订文档的签署件亦然；与应用变更竞争时生成等待并写入为零，两次并发生成只有一个成功 | TRD-INV-020；TD-AT01 | — |
+| S3-D137 | law 区块打印来源报价封存的法律条款，随订单修订与变更保留，从不读取 POL 的当前条款；模板有无 law 区块须与订单有无法律条款一致，否则 REFERENCE_INVALID | S3-D141、S3-D145；F-02 | — |
+| S3-D138 | 草稿订单可生成单据（SIM-02 第 6 步在生效前生成 PI 并登记会签件）；已取消或关闭的订单不再生成（INVALID_STATE），其当前单据仍可登记签署件 | SIM-02；TRD-INV-020 | — |
+| S3-D139 | order.document.record_signed（仅人工）以 EVD 业务文件登记签署件或会签件：事务前读取文件的 SHA-256 与 MIME，生成的未签署文件不能作为签署件（INVALID_KNOWN_VALUE），同一种签署只登记一个文件（INVALID_STATE），重复登记同一文件不写入；重放与对账重查所引来源。成员名为 signature_kind（传输层保留 kind） | UL TRD-SalesContractDocument；S3-D106 | — |
+| S3-D140 | 报价后修改的联系人阻止该订单生成单据（REFERENCE_STALE，/order/contact_ref），与正式化相同；PTY 没有联系人历史读取。迁移 trd/000007 的单据与签署件表 FORCE RLS、只插入，触发器绑定订单当前修订；事件 OrderDocumentGenerated、OrderDocumentSigned | S3-D57；R13 | — |
+| S3-D141 | POL 新增 legal_terms（适用法律、CISG 适用或排除、成立规则、争议解决），与 order_document_template 一起使 POL 共 20 种配置；适用 CISG 或中国法时成立规则须为 arrival（INVALID_KNOWN_VALUE） | F-02；CISG 第 18(2)、23 条；民法典第 137、483、484 条 | Python 未实现 |
+| S3-D142 | 租户默认为公司档案的 default_legal_terms（确切修订），不设保留的默认配置；冻结采用草稿所指条款，否则采用开票方默认，封存 legal_terms（来源、适用法律、CISG、争议解决、成立规则与依据）并列入依赖清单 | F-02；R15 | — |
+| S3-D143 | TRD 自行推导成立规则：CISG 适用为 arrival、依据 cisg，中国法为 arrival、依据 prc_civil_code，其他法律或规则在冻结时为 DEPENDENCY_NOT_SUPPORTED，不含 CISG 的德国法待法务确认；CN 只指中国大陆法律 | ADR-BR-013；F-02 | — |
+| S3-D144 | 无法律条款的修订按默认（CISG 与中国法，到达主义）成立，此前冻结的修订均如此，哈希与渲染逐字节不变 | ADR-BR-013 | — |
+| S3-D145 | 法律条款随 ConfigGuard 在冻结、激活与替代、quote_ready、订单检查、审核与激活时重查；订单快照携带封存的条款，条款退役在订单上成为待确认的风险 | ADR-BR-004；R15 | — |
+| S3-D146 | quote-text/0.2.0 增加 legal_terms 区块，0.1.0 保持 Python 版式；0.1.0 模板配法律条款为 DEPENDENCY_NOT_SUPPORTED，0.2.0 模板无条款为 DRAFT_NOT_READY | TRD-INV-009 | 0.1.0 同 Python |
+| S3-D147 | 核实按修订封存的成立规则判定，acceptance_verified.v1 增加 formation_rule 与 formation_basis；成立由封存文档推导，不新增 TRD 迁移，AcceptanceGuard v1 不变 | ADR-BR-013；TRD-INV-012 | — |
+| S3-D148 | legal_terms 与 default_legal_terms 由管理员起草，第二人发布，与其他 POL 配置相同；岗位模板不变 | 负责人决定（2026-11-11）；POL-INV-001 | — |
+| S3-D149 | TRD 的 35 个命令经通用反射命令处理器路由，对象成员保留 T03、T04 的名称（quote_id、response_id、acceptance_id），Line.Sku 在线上名为 sku_ref | T03、T04 契约；S2-D21 的例外 | 成员名同 Python |
+| S3-D150 | 命令路由返回通用回执（action_id、object_id、row_version、status、replayed）；扩展回执的成员经报价、正式文档、回复、Acceptance、订单与采购草稿的读取路由取得 | S1-06 | — |
+| S3-D151 | 读取路由在 /api/brant/v1/trd/ 下有 quotes 及其 active、approvals 检查、revisions 文档、ready、history、approvals、documents、commits、outbox、dispatch_preflight、dispatch_target，orders 及其 check，customer_responses、acceptances，在 /api/brant/v1/pur/ 下有 purchase_drafts 与订单 allocations；查询参数封闭，未知、重复或格式错误为 SCHEMA_INVALID | 06 阶段契约 §07；S1-06 | — |
+| S3-D152 | 动作对账 POST /api/brant/v1/{bc}/commands/{command}/reconcile 收取原样请求并按命令路由校验，答复 committed（附已存回执）、payload_conflict 或 not_committed，不执行命令；INQ、CST、TRD、PUR 的全部命令可对账 | 06 阶段契约 §07（A22、A23、A43）；X-INV-003 | — |
 
-<!-- TODO order documents: order.document.generate 与 order.document.record_signed 的决定行插在 S3-D134 之后，其后编号顺延 -->
 
 ## 03 Python 测试移植 {#s3}
 
@@ -250,7 +255,7 @@ foot: S3 Execution Report V0.1 · 2026-11-11
 | TSK 对象控制：manual 状态与屏障、释放前提、受信适配器设置任务声明、system 操作者的绑定授权，及绑定随授权变化失效是否放宽；GoalReadiness（R18）的非审计查询 | S4-01、S4-02 |
 | 上游事件触发的风险暂停（来源否认、成本变化等，SC-04）；EVD 按 QuoteActivated、QuoteReplaced 登记正式文件（R16 FileRef v1） | S4-06（WF-03） |
 | FUL、STK 出运事实与 PUR、STL 承诺：订单取消、短交关闭、关闭与变更记为 not_wired；PUR 对 OrderAmended 的复核 | S5-01、S5-03、S5-04、S5-09 |
-| 订单修订 2 及以后不携带 legal_terms，变更不能改法律条款；新增费用的变更 | S3-15、S3-17 余项 |
+| 订单变更不能修改法律条款；新增费用的变更（DEPENDENCY_NOT_SUPPORTED）；变更不重查毛利 | S3-15、S3-17 余项 |
 | 已批准但过时的变更永久保持 approved（状态机无 approved → withdrawn）；订单取消时未决变更不关闭；POL 无订单审批政策 | 设计修订 |
 | PUR 来源可信（PUR-INV-004）只覆盖核价快照的来源且不阻断（R21），须 CST 契约与负责人决定；超采的独立批准与阈值；PUR 根的对象控制（PYT-0571） | 待定；S5；S4 |
 | 采购承诺、供应商确认与直发交付 | S5-01、S5-15 |
@@ -262,9 +267,12 @@ foot: S3 Execution Report V0.1 · 2026-11-11
 | 客户 PO 行的自动比对；以行为承诺（定金，需 STL）；FileRef v1 形式的回复证据 | 待定；S5 |
 | quote.response.verify 是否要求四眼 | 待负责人决定 |
 | 动作对账路由：EVD、PTY、CAT、POL、REF、SUP 尚无 | 待定 |
+| 订单占用转换名额后 quote_ready 仍答 ready（只重查激活所查），/active 显示 conversion_taken；读取 ActiveOrderRef v1 没有 HTTP 路由 | S4（TSK GoalReadiness） |
+| OpenAPI 候选的读取响应没有模式（空列表省略）；同一引用在各上下文拼写不同（PTY contact_refs[].id 与 TRD contact_ref.contact_id，CST rfq_ref.id 与 SUP、TRD 的 rfq_id），契约冻结前统一 | 契约冻结前 |
+| 正式报价文档以最小币值打印金额（与 Python 相同），API 中不出现 960.00 这类主币值 | 待定 |
 
 > [!warn] 尚未执行
 > 真实客户样例与真人签核；STL 信用与 CNX 贸易合规守卫（S5-12、S5-13，订单激活记为未检查）；TSK 对象控制与 GoalReadiness（S4-01）；Inbox 消费方（上游风险暂停、EVD 文件登记，S4-06）；FUL、STK、STL 事实（订单结束与变更记为 not_wired）；外部发送渠道；CISG 与中国法以外的成立规则。G0、G1 仍为 NO-GO。
 
 > [!decision] 已决定（负责人，2026-11-10、2026-11-11）
-> S3 不接入 STL、CNX 与 TSK，缺失记为未检查（S3-D01）。毛利审批人可作出审核裁决（S3-D46）；销售经办持有 number.issue（S3-D65）。已成立合同的修订不能被替代或取消，争议中的 Acceptance 可直接作废（S3-D78、S3-D79）。active 修订的批准已用尽，quote_ready 不再报告其过期（S3-D101）。超采批准在 S3 不授岗位（S3-D111）；R52 CAT→PUR 为守卫锁（S3-D116）；法律条款由管理员起草与发布（S3-D142）。
+> S3 不接入 STL、CNX 与 TSK，缺失记为未检查（S3-D01）。毛利审批人可作出审核裁决（S3-D46）；销售经办持有 number.issue（S3-D65）。已成立合同的修订不能被替代或取消，争议中的 Acceptance 可直接作废（S3-D78、S3-D79）。active 修订的批准已用尽，quote_ready 不再报告其过期（S3-D101）。超采批准在 S3 不授岗位（S3-D111）；R52 CAT→PUR 为守卫锁（S3-D116）；法律条款由管理员起草与发布（S3-D148）。
