@@ -508,6 +508,10 @@ func (s Standing) qualified(needs ...string) bool {
 	return true
 }
 
+// Qualified reports whether the standing is an active human grant seeing the quote root and
+// holding every permission of needs (an order's reviewer at its activation: package order).
+func (s Standing) Qualified(needs ...string) bool { return s.qualified(needs...) }
+
 // Standings reads an actor's standing now.
 type Standings func(actorID string) (Standing, error)
 
@@ -573,39 +577,54 @@ func (q *Quote) Releasable(r Release, at time.Time, standings Standings) (*Appro
 	case !at.Before(a.ExpiresAt):
 		return nil, nil, fail(CodeApprovalExpired, "/args/approval_id", "")
 	}
+	if err := q.stands(rev, a, calc, standings, "/args/approval_id"); err != nil {
+		return nil, nil, err
+	}
+	return a, calc, nil
+}
+
+// stands decides whether approval a of sealed revision rev, calculated as calc, is still given by
+// qualified people, on their standings now: the reviewer is independent of the revision's authors
+// (INDEPENDENT_REVIEW_REQUIRED) and an active human grant holding quote.review.decide and trd.read
+// that sees the quote (APPROVAL_STALE, T03 A33); a margin that requires approval has its exception
+// (MARGIN_POLICY_REQUIRES_APPROVAL), bound like the approval (APPROVAL_STALE) and given by an
+// independent approver (MARGIN_EXCEPTION_NOT_AUTHORIZED) still qualified the same way with the
+// capability (APPROVAL_STALE). Refusals point at path. Releasable and the readiness of a formal
+// revision (ready.go) decide with it.
+func (q *Quote) stands(rev *Revision, a *Approval, calc *Calculation, standings Standings, path string) error {
 	review := q.Review(a.ReviewID)
 	if review == nil {
-		return nil, nil, fail(CodeApprovalStale, "/args/approval_id", "The approval's review is missing")
+		return fail(CodeApprovalStale, path, "The approval's review is missing")
 	}
 	if slices.Contains(authors(rev, review), a.Approved.By.ID) {
-		return nil, nil, fail(CodeIndependentReviewRequired, "/args/approval_id", "")
+		return fail(CodeIndependentReviewRequired, path, "")
 	}
 	s, err := standings(a.Approved.By.ID)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 	if a.Approved.By.Kind != kernel.ActorHuman || !s.qualified(PermissionReview, PermissionRead) {
-		return nil, nil, fail(CodeApprovalStale, "/args/approval_id", "The reviewer is no longer qualified")
+		return fail(CodeApprovalStale, path, "The reviewer is no longer qualified")
 	}
 	if calc.MarginRule != MarginRequiresApproval {
-		return a, calc, nil
+		return nil
 	}
 	e := a.Exception
 	if e == nil {
-		return nil, nil, fail(CodeMarginPolicyRequiresApproval, "/args/approval_id",
+		return fail(CodeMarginPolicyRequiresApproval, path,
 			"The margin is below the minimum by "+calc.MarginShortfall+" "+calc.ComparisonCurrency.ID+"; it needs a margin exception approval")
 	}
 	if e.BusinessHash != rev.Seal.BusinessHash || e.Rules != a.Rules || e.Shortfall != calc.MarginShortfall || e.MinimumMargin != calc.MinimumMargin {
-		return nil, nil, fail(CodeApprovalStale, "/args/approval_id", "The margin exception is of other content or rules")
+		return fail(CodeApprovalStale, path, "The margin exception is of other content or rules")
 	}
 	if slices.Contains(authors(rev, review), e.Approved.By.ID) {
-		return nil, nil, fail(CodeMarginExceptionNotAuthorized, "/args/approval_id", "")
+		return fail(CodeMarginExceptionNotAuthorized, path, "")
 	}
 	if s, err = standings(e.Approved.By.ID); err != nil {
-		return nil, nil, err
+		return err
 	}
 	if e.Approved.By.Kind != kernel.ActorHuman || !s.qualified(PermissionReview, PermissionRead, PermissionMarginException) {
-		return nil, nil, fail(CodeApprovalStale, "/args/approval_id", "The margin exception's approver is no longer qualified")
+		return fail(CodeApprovalStale, path, "The margin exception's approver is no longer qualified")
 	}
-	return a, calc, nil
+	return nil
 }

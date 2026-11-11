@@ -160,6 +160,9 @@ type guarded struct {
 	rfq         quote.Dependency
 	profileHash string
 	prefix      string
+	// hooks run at their place in context code order (order activation: the extension points of CNX
+	// after CAT and of STL after PTY, and PTY's screening after its address guards); nil for none.
+	afterCAT, afterPTY func() error
 }
 
 // freezeGuards is what the freeze guards for draft d with seal s, the profile read as profileHash.
@@ -200,8 +203,28 @@ func (g guarded) at(path string) string {
 // and the command is refused with the owner's verdict, or waits until the command commits. It
 // returns CST's adoptability verdict, which a formalization records in its commit evidence.
 func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g guarded, at time.Time) (cstapi.AdoptabilityVerdict, error) {
+	return s.checkUpstream(ctx, exec, g, at, refuseLapse)
+}
+
+// lapse decides what a re-check does with an upstream verdict that a bound fact no longer serves new
+// business (refusal, nil when it does), detail being the owner's own pointer: the freeze and the
+// formalization refuse (refuseLapse); an order's review and activation record the lapse as a risk
+// and go on (ADR-BR-004; order_upstream.go).
+type lapse func(refusal error, detail string) error
+
+func refuseLapse(refusal error, _ string) error { return refusal }
+
+// checkUpstream is guardUpstream with onLapse deciding each lapse; every guard is called, in the
+// same order, whatever it answers.
+func (s Service) checkUpstream(ctx context.Context, exec bentopg.Executor, g guarded, at time.Time, onLapse lapse) (cstapi.AdoptabilityVerdict, error) {
 	d, p := g.data, g.prefix
 	var none cstapi.AdoptabilityVerdict
+	lapsed := func(refusal error, detail string) error {
+		if refusal == nil {
+			return nil
+		}
+		return onLapse(refusal, detail)
+	}
 	// CAT (R14): SkuGuard v1 on every SKU specification revision, in (SKU, revision) order.
 	specs := map[catapi.SpecRef]string{}
 	for i, l := range d.Lines {
@@ -215,7 +238,12 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g gua
 		if err != nil {
 			return none, err
 		}
-		if err = v.Check(specs[ref]); err != nil {
+		if err = lapsed(v.Check(specs[ref]), v.Status); err != nil {
+			return none, err
+		}
+	}
+	if g.afterCAT != nil {
+		if err := g.afterCAT(); err != nil {
 			return none, err
 		}
 	}
@@ -228,7 +256,7 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g gua
 	if err != nil {
 		return none, err
 	}
-	if err = adoptable.Check(p + "/cost_snapshot_ref"); err != nil {
+	if err = lapsed(adoptable.Check(p+"/cost_snapshot_ref"), adoptable.Input); err != nil {
 		return none, err
 	}
 	// INQ (R12): RfqGuard v1 on the RFQ at its row version with its line set.
@@ -237,7 +265,7 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g gua
 	if err != nil {
 		return none, err
 	}
-	if err = ready.Check(p + "/rfq_ref"); err != nil {
+	if err = lapsed(ready.Check(p+"/rfq_ref"), ready.Status); err != nil {
 		return none, err
 	}
 	// POL (R15): ConfigGuard v1 on every revision adopted, directly or through another; a revision's
@@ -258,11 +286,13 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g gua
 		if err != nil {
 			return none, err
 		}
-		if err = v.Check(path); err != nil {
+		if err = lapsed(v.Check(path), ""); err != nil {
 			return none, err
 		}
-		if v.ContentHash != c.ContentHash {
-			return none, api.Reject(api.CodeReferenceStale, path)
+		if v.InForce() && v.ContentHash != c.ContentHash {
+			if err = lapsed(api.Reject(api.CodeReferenceStale, path), "content_hash"); err != nil {
+				return none, err
+			}
 		}
 	}
 	// PTY (R13): TradingProfileGuard v1 on the exact profile revision (it also locks the party row
@@ -277,11 +307,13 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g gua
 	if err != nil {
 		return none, err
 	}
-	if err = pv.Check(p + "/trading_profile_ref"); err != nil {
+	if err = lapsed(pv.Check(p+"/trading_profile_ref"), pv.Stale); err != nil {
 		return none, err
 	}
-	if pv.ContentHash != g.profileHash || pv.PartyRevision != d.Customer.Revision {
-		return none, api.Reject(api.CodeReferenceStale, p+"/trading_profile_ref")
+	if pv.Current() && (pv.ContentHash != g.profileHash || pv.PartyRevision != d.Customer.Revision) {
+		if err = lapsed(api.Reject(api.CodeReferenceStale, p+"/trading_profile_ref"), "content_hash"); err != nil {
+			return none, err
+		}
 	}
 	addresses := map[ptyapi.AddressRoleRef]string{}
 	for i, a := range d.Addresses {
@@ -293,7 +325,12 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, g gua
 		if err != nil {
 			return none, err
 		}
-		if err = v.Check(addresses[a]); err != nil {
+		if err = lapsed(v.Check(addresses[a]), v.Stale); err != nil {
+			return none, err
+		}
+	}
+	if g.afterPTY != nil {
+		if err := g.afterPTY(); err != nil {
 			return none, err
 		}
 	}

@@ -358,3 +358,77 @@ func TestSalesFXAgeAtFormalization(t *testing.T) {
 		t.Errorf("no observation: %s", got)
 	}
 }
+
+// The owner's decision of 2026-11-11: a revision a live (valid or disputed) acceptance accepts is
+// neither replaced (CheckConversion, Formalize), cancelled nor withdrawn — ACCEPTANCE_ALREADY_EXISTS —
+// while the conversion slot, when taken, refuses first (ROOT_CONVERSION_LOCKED); once no live
+// acceptance accepts it, the revision ends as before.
+func TestAcceptedRevisionIsNotEnded(t *testing.T) {
+	q := frozen(t, "8", "0.1")
+	approvedFor(t, q, 1, "review.1", "approval.1", TargetActivate, 0)
+	if _, _, err := formalize(q, 1, "approval.1", TargetActivate, 0, documentOf(q, 1, "QT-1", "one")); err != nil {
+		t.Fatal(err)
+	}
+	n := frozenNext(t, q)
+	approvedFor(t, q, n, "review.2", "approval.2", TargetReplace, 1)
+	q.Contracts = map[int64][]string{1: {"acceptance.1"}}
+	if err := q.CheckConversion(TargetReplace); code(err) != "ACCEPTANCE_ALREADY_EXISTS at /args/expected_active_revision" {
+		t.Fatalf("replace an accepted revision: %s", code(err))
+	}
+	if _, _, err := formalize(q, n, "approval.2", TargetReplace, 1, documentOf(q, n, "QT-2", "two")); code(err) !=
+		"ACCEPTANCE_ALREADY_EXISTS at /args/expected_active_revision" {
+		t.Fatalf("Formalize a replacement of an accepted revision: %s", code(err))
+	}
+	if _, err := q.Cancel(1, human("canceller"), 5, at, "r", proof); code(err) != "ACCEPTANCE_ALREADY_EXISTS at /args/business_revision" {
+		t.Fatalf("cancel an accepted revision: %s", code(err))
+	}
+	if err := q.CheckContract(n, "/x"); err != nil {
+		t.Fatalf("the pending revision has no contract: %v", err)
+	}
+	slotted := *q
+	slotted.Slot = &Slot{Slot: SlotFullV1, Revision: 1}
+	if err := slotted.CheckConversion(TargetReplace); code(err) != "ROOT_CONVERSION_LOCKED at /args/quote_id" {
+		t.Fatalf("the slot first: %s", code(err))
+	}
+	if q.Active().Number != 1 || q.Revision(n).Status != PendingApproval {
+		t.Fatal("refusals changed the revisions")
+	}
+	q.Contracts = map[int64][]string{}
+	if _, replaced, err := formalize(q, n, "approval.2", TargetReplace, 1, documentOf(q, n, "QT-2", "two")); err != nil || replaced.Number != 1 {
+		t.Fatalf("replace once the acceptance is invalidated: %v", err)
+	}
+}
+
+// TRD-INV-014 (正式化批准未撤销、审核人仍合格) and Python test_t03_a26 PYT-0232–0234, 0239, 0241, 0242:
+// an order's activation re-checks the approval the revision's commit evidence names — not revoked,
+// its reviewer still independent and qualified — but neither the approval's nor the quote's expiry
+// (the contract formed before; ADR-BR-013).
+func TestFormalApprovalAtAnOrdersActivation(t *testing.T) {
+	q := frozen(t, "8", "0.1")
+	if _, err := q.FormalApproval(1, qualified(nil), "/x"); code(err) != "REFERENCE_INVALID at /x" {
+		t.Fatalf("a revision never formalized: %s", code(err))
+	}
+	approvedFor(t, q, 1, "review.1", "approval.1", TargetActivate, 0)
+	if _, _, err := formalize(q, 1, "approval.1", TargetActivate, 0, documentOf(q, 1, "QT-1", "one")); err != nil {
+		t.Fatal(err)
+	}
+	reviewer := q.Approval("approval.1").Approved.By.ID
+	if a, err := q.FormalApproval(1, qualified(nil), "/x"); err != nil || a.ID != "approval.1" {
+		t.Fatalf("the formalization approval %+v %v", a, err)
+	}
+	for name, s := range map[string]Standing{
+		"without quote.review.decide (PYT-0232)": {Human: true, SeesRoot: true, Permissions: []string{PermissionRead}},
+		"no longer human (PYT-0233)":             {SeesRoot: true, Permissions: []string{PermissionReview, PermissionRead}},
+		"no longer seeing the quote (PYT-0234)":  {Human: true, Permissions: []string{PermissionReview, PermissionRead}},
+	} {
+		if _, err := q.FormalApproval(1, qualified(map[string]Standing{reviewer: s}), "/x"); code(err) != "APPROVAL_STALE at /x" {
+			t.Errorf("a reviewer %s: %s", name, code(err))
+		}
+	}
+	if _, _, err := q.Revoke(Revocation{ApprovalID: "approval.1", ExpectedEffectivity: 1, Reason: "r", Evidence: proof}, human("revoker"), 5, at); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.FormalApproval(1, qualified(nil), "/x"); code(err) != "APPROVAL_REVOKED at /x" {
+		t.Fatalf("a revoked formalization approval: %s", code(err))
+	}
+}

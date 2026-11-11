@@ -27,9 +27,12 @@ import (
 //	quote.response.verify     a human verifies a recorded full_unconditional response into an
 //	                          Acceptance, restating the revision, its business hash, the customer,
 //	                          the contact and the complete line set it accepts.
-//	acceptance.invalidate     valid → invalidated, human, at expected_effectivity_version, with a
-//	acceptance.mark_disputed  valid → disputed     reason and new evidence. Neither ever returns to
-//	                          valid: a new verification creates a new acceptance.
+//	acceptance.invalidate     valid or disputed → invalidated, human, at expected_effectivity_version,
+//	acceptance.mark_disputed  valid → disputed     with a reason and new evidence. Nothing returns to
+//	                          valid: a new verification creates a new acceptance. A live (valid or
+//	                          disputed) acceptance keeps its revision from being replaced, withdrawn
+//	                          or cancelled (ACCEPTANCE_ALREADY_EXISTS; the owner's decision of
+//	                          2026-11-11) until a human invalidates it — a dispute too.
 //
 // The revision a response answers must be the quote's active formal revision at the stated hash,
 // not paused by a risk hold, when the response is recorded and when it is verified (REFERENCE_INVALID

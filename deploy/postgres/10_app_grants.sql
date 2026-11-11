@@ -179,3 +179,15 @@ GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint,
 GRANT SELECT, INSERT ON brant_trd.customer_response, brant_trd.acceptance, brant_trd.acceptance_effectivity TO brant_app;
 GRANT UPDATE (effectivity, effectivity_version) ON brant_trd.acceptance TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_acceptance_valid_v1(text, text, bigint, text) TO brant_app;
+-- Sales orders: an order is inserted with its snapshot and then changes only its status, row version
+-- and activating review (trigger); a review is decided once and revoked once (trigger); commit
+-- evidence and closures are only inserted. Every order command locks the order FOR UPDATE, which
+-- needs the column grants. order.activate calls PTY's PartyScreeningGuard, granted above; TRD
+-- publishes its order guard (ActiveOrderRef v1, R19).
+GRANT SELECT, INSERT ON brant_trd.sales_order, brant_trd.sales_order_review, brant_trd.sales_order_commit_evidence,
+    brant_trd.sales_order_closure TO brant_app;
+GRANT UPDATE (status, row_version, activated_review_id, updated_at) ON brant_trd.sales_order TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason, decision_evidence, expires_at,
+              acknowledged_risks, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
+    ON brant_trd.sales_order_review TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_trd.guard_order_active_v1(text, bigint, text) TO brant_app;
