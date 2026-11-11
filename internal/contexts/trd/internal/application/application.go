@@ -65,7 +65,7 @@ var (
 // responses (quote.response.record: 人工或 AI; its classification is a candidate a human verifies)
 // through the same command path.
 func Rules() []authorization.Rule {
-	return []authorization.Rule{
+	return append([]authorization.Rule{
 		{Command: api.CommandSaveDraft, Permission: api.CommandSaveDraft, ActorKinds: humanOrAgent},
 		{Command: api.CommandRevise, Permission: api.CommandRevise, ActorKinds: humanOrAgent},
 		{Command: api.CommandDiscardDraft, Permission: api.CommandDiscardDraft, ActorKinds: humanOrAgent},
@@ -92,7 +92,7 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandDisputeAcceptance, api.CommandDisputeAcceptance),
 		{Command: CommandGetResponse, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetAcceptance, Permission: PermissionRead, ActorKinds: anyActor},
-	}
+	}, readRules()...)
 }
 
 // Upstream are the contexts TRD reads references from.
@@ -148,6 +148,9 @@ func (s Service) run(ctx context.Context, cmd action.Command, req api.Command, v
 		return api.Receipt{}, err
 	}
 	cmd.RequestHash = hash
+	if ctx, err = s.storedSources(ctx, req); err != nil { // a replay re-checks the sources the command cited (sources.go)
+		return api.Receipt{}, err
+	}
 	res, err := s.Ledger.Execute(context.WithValue(ctx, writing{}, true), cmd, h)
 	return api.Receipt(res), err
 }
@@ -227,7 +230,9 @@ var quoteWrites = []string{api.CommandSaveDraft, api.CommandRevise, api.CommandD
 // acceptance.invalidate, acceptance.mark_disputed) belongs to. On the write path (a replay) of a
 // quote write or one of those it also passes the root's object control as it is now (Python
 // test_committed_public_replay_and_local_replay_cannot_bypass_new_binding): a stored success is
-// never handed to a caller the binding now fences out. Reconciliation is not fenced.
+// never handed to a caller the binding now fences out. Reconciliation is not fenced. A replay or
+// reconciliation of a command that cited EVD sources also needs the caller to read them now
+// (sourcesRead).
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	quoteID := id
 	switch command {
@@ -253,7 +258,7 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 			return false, err
 		}
 	}
-	return true, nil
+	return true, sourcesRead(ctx, command)
 }
 
 // claim returns the control claim the trusted adapter put into ctx, or nil.
@@ -274,6 +279,9 @@ func (s Service) Reconcile(ctx context.Context, cmd api.Command) (api.Reconcilia
 	}
 	hash, err := action.RequestHash(args)
 	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	if ctx, err = s.storedSources(ctx, cmd); err != nil {
 		return api.Reconciliation{}, err
 	}
 	r, err := s.Ledger.Reconcile(ctx, name, key, hash)

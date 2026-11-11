@@ -90,13 +90,16 @@ var codes = map[string]kernel.Category{
 	CodeResponseVerificationImmutable: kernel.CategoryInvalid,
 }
 
-// Category returns the category of a code TRD declares: QuoteRoot's, the calculation's or the
-// formal document's.
+// Category returns the category of a code TRD declares: QuoteRoot's, the calculation's, the read
+// side's or the formal document's.
 func Category(code string) (kernel.Category, bool) {
 	if c, ok := codes[code]; ok {
 		return c, true
 	}
 	if c, ok := CalcCategory(code); ok {
+		return c, true
+	}
+	if c, ok := QueryCategory(code); ok {
 		return c, true
 	}
 	return DocumentCategory(code)

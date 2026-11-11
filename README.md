@@ -42,7 +42,10 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   quote-text/0.1.0 formal document, POL number and commit evidence in one transaction,
                                   withdrawal, cancellation, risk holds, the conversion slot; QuoteRevisionGuard v1;
                                   customer responses, their verification into acceptances that form the contract when
-                                  they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1
+                                  they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1;
+                                  the read side: quote_ready, paged quote, approval, document, commit and Outbox
+                                  histories, dispatch preflight and target, reconciliation and replays that re-check
+                                  the caller's grant, data scope and EVD sources
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only
