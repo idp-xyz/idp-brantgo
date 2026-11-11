@@ -217,7 +217,7 @@ func TestTDAT01QuantityNeverBelowShipped(t *testing.T) {
 	r1 := revisionOne()
 	p := toFortyFour(r1, impact())
 	p.Proposal.Lines[3].Quantity = "36"
-	if _, _, _, err := Prepare(nil, p, activeAt(r1), shipped("L4", "40"), facts(), clerk, 1, at(0)); code(err) != "QUANTITY_BELOW_SHIPPED at /args/proposal/lines/3/quantity" {
+	if _, _, _, err := Prepare(nil, p, activeAt(r1), shipped("L4", "40"), facts(), clerk, 1, at(0)); code(err) != "QUANTITY_BELOW_SHIPPED at /args/lines/3/quantity" {
 		t.Fatalf("36 after 40: %s", code(err))
 	}
 	p.Proposal.Lines[3].Quantity = "38"
@@ -263,7 +263,7 @@ func TestTwoAmendmentsOfOneRevisionHaveOneWinner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !second.Stale(activeAt(r2)) || first.Stale(activeAt(r1)) {
+	if !second.Stale(activeAt(r2)) || first.Stale(activeAt(r1)) || first.Stale(activeAt(r2)) {
 		t.Fatal("staleness")
 	}
 	if _, _, _, err := second.Apply(Applying{ExpectedVersion: 3, Facts: facts()}, activeAt(r2), qualified, applier, 1, at(6)); code(err) != "ORDER_AMENDMENT_STALE at /args/amendment_id" {
@@ -325,9 +325,9 @@ func TestPrepareRefusals(t *testing.T) {
 		"an unknown status":   {func(p *Preparation) { p.Impact[0].Status = "maybe" }, activeAt(r1), "SCHEMA_INVALID at /args/impact/0/status"},
 		"an open item unsaid": {func(p *Preparation) { p.Impact[5].Note = " " }, activeAt(r1), "INVALID_KNOWN_VALUE at /args/impact/5/note"},
 		"no change": {func(p *Preparation) { p.Proposal.Lines[3].Quantity = "48.000000" }, activeAt(r1),
-			"INVALID_KNOWN_VALUE at /args/proposal"},
+			"INVALID_KNOWN_VALUE at /args/lines"},
 		"a bad proposal": {func(p *Preparation) { p.Proposal.Lines[3].Quantity = "-1" }, activeAt(r1),
-			"SCHEMA_INVALID at /args/proposal/lines/3/quantity"},
+			"SCHEMA_INVALID at /args/lines/3/quantity"},
 	} {
 		p := toFortyFour(r1, impact())
 		c.edit(&p)

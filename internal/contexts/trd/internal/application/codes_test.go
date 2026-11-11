@@ -6,9 +6,12 @@ import (
 
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/acceptance"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/amendment"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/calc"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/document"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/order"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderdoc"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/response"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -19,7 +22,8 @@ import (
 // categories, so a refusal reaches transports with the catalog's status.
 func TestDomainCodesAreDeclaredByTheAPI(t *testing.T) {
 	for name, m := range map[string]map[string]kernel.Category{"quote": quote.Categories, "calc": calc.Categories, "document": document.Categories,
-		"response": response.Categories, "acceptance": acceptance.Categories, "order": order.Categories} {
+		"response": response.Categories, "acceptance": acceptance.Categories, "order": order.Categories, "orderrev": orderrev.Categories,
+		"amendment": amendment.Categories, "orderdoc": orderdoc.Categories} {
 		for code, category := range m {
 			if got, ok := api.Category(code); !ok || got != category {
 				t.Errorf("%s code %s: api says %v (declared %v), domain %v", name, code, got, ok, category)
@@ -72,8 +76,16 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 		api.CommandRevokeOrderApproval:   {kernel.ActorHuman},
 		api.CommandCancelOrder:           {kernel.ActorHuman},
 		api.CommandCloseOrderUnfulfilled: {kernel.ActorHuman},
-		CommandGetOrder:                  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
-		CommandCheckOrder:                {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		// Active orders: the command catalog's 人工或 AI（同一守卫） for the amendment's preparation.
+		api.CommandPrepareAmendment:    {kernel.ActorHuman, kernel.ActorAI},
+		api.CommandSubmitAmendment:     {kernel.ActorHuman},
+		api.CommandDecideAmendment:     {kernel.ActorHuman},
+		api.CommandApplyAmendment:      {kernel.ActorHuman},
+		api.CommandWithdrawAmendment:   {kernel.ActorHuman},
+		api.CommandCloseOrderRemainder: {kernel.ActorHuman},
+		api.CommandCloseOrder:          {kernel.ActorHuman},
+		CommandGetOrder:                {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandCheckOrder:              {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 	}
 	for command, kinds := range want {
 		r, err := policy.Rule(command)
@@ -103,8 +115,20 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 	}
 	// The domain's permission names are the api's command and read names.
 	if quote.PermissionReview != api.CommandDecideReview || quote.PermissionMarginException != api.PermissionMarginException ||
-		quote.PermissionRead != PermissionRead || order.PermissionDecide != api.CommandDecideOrderReview || order.PermissionRead != PermissionRead {
+		quote.PermissionRead != PermissionRead || order.PermissionDecide != api.CommandDecideOrderReview || order.PermissionRead != PermissionRead ||
+		amendment.PermissionDecide != api.CommandDecideAmendment || amendment.PermissionRead != PermissionRead {
 		t.Error("permission names differ")
+	}
+	// The domain's command names are the api's.
+	if amendment.CommandPrepare != api.CommandPrepareAmendment || amendment.CommandSubmit != api.CommandSubmitAmendment ||
+		amendment.CommandDecide != api.CommandDecideAmendment || amendment.CommandApply != api.CommandApplyAmendment ||
+		amendment.CommandWithdraw != api.CommandWithdrawAmendment || orderrev.CommandCancel != api.CommandCancelOrder ||
+		orderrev.CommandCloseRemainder != api.CommandCloseOrderRemainder || orderrev.CommandClose != api.CommandCloseOrder ||
+		orderrev.NotWired != api.NotWired || amendment.Contract == "" {
+		t.Error("command names differ")
+	}
+	if !slices.Equal(amendment.Areas(), api.ImpactAreas()) {
+		t.Error("impact areas differ")
 	}
 }
 

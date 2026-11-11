@@ -49,7 +49,11 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   the caller's grant, data scope and EVD sources;
                                   sales orders: preparation taking the conversion slot, review with risk
                                   acknowledgement, activation re-checking the source and upstream (STL/CNX extension
-                                  points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR
+                                  points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR;
+                                  active orders: amendments (prepare, submit, independent decision, apply) that move the
+                                  order to its next hashed order revision, so OrderGuard v1 refuses the old binding;
+                                  cancellation, short closing and closing (FUL and PUR facts not wired); the S/C and PI
+                                  renderer order-text/0.1.0 (golden vectors; generate and record_signed not wired yet)
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only

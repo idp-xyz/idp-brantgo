@@ -201,6 +201,15 @@ func TestWhatAnAmendmentChangesOfTheLines(t *testing.T) {
 			x.Measures[Measure{Sku: navy, Unit: "DOZ"}] = Measurement{CostUnit: "PCS"}
 			return x
 		}, "DEPENDENCY_NOT_SUPPORTED at /args/proposal/lines/4/unit_ref"},
+		"a conversion on a line in its cost unit": {func(p *Proposal) {
+			c := quote.Ref{Kind: quote.KindUnitConversion, ID: "x", Revision: 1}
+			p.Lines[0].Conversion = &c
+		}, facts, "INVALID_KNOWN_VALUE at /args/proposal/lines/0/conversion_ref"},
+		"an added line naming another conversion than its measures": {func(p *Proposal) {
+			c := quote.Ref{Kind: quote.KindUnitConversion, ID: "x", Revision: 1}
+			p.Lines = append(p.Lines, ProposedLine{LineID: "L5", Sku: navy, Quantity: "10", Unit: pcs, Conversion: &c, UnitPrice: "8",
+				PriceBasisQuantity: "1", DiscountRatio: "0", TaxApplication: newTax})
+		}, withNavy, "REFERENCE_INVALID at /args/proposal/lines/4/conversion_ref"},
 		"a payment terms change without its stages": {func(p *Proposal) {
 			p.Terms.PaymentTerms = quote.Ref{Kind: quote.KindPaymentTerms, ID: "payment.100", Revision: 1}
 		}, facts, "REFERENCE_INVALID at /args/proposal/terms/payment_terms_ref"},
@@ -212,7 +221,7 @@ func TestWhatAnAmendmentChangesOfTheLines(t *testing.T) {
 			x.Currency = kernel.MustCurrency("EUR", 2)
 			return x
 		}, "REFERENCE_INVALID at /facts/currency"},
-		"no precision of the unit": {func(*Proposal) {}, func() Facts {
+		"no precision of the unit": {func(p *Proposal) { p.Lines[0].Quantity = "30" }, func() Facts {
 			x := facts()
 			delete(x.Units, "PCS")
 			return x
@@ -251,8 +260,8 @@ func TestAmendmentRecalculatesEveryAmount(t *testing.T) {
 	p := ProposalOf(r1)
 	p.Lines[2] = ProposedLine{LineID: "L3", Sku: navyS, Quantity: "12", Unit: pcs, UnitPrice: "8.40", PriceBasisQuantity: "1", DiscountRatio: "0",
 		TaxApplication: navyTax}
-	p.Lines = append(p.Lines, ProposedLine{LineID: "L5", Sku: navyM, Quantity: "1", Unit: dozen, UnitPrice: "96.00", PriceBasisQuantity: "1",
-		DiscountRatio: "0.05", TaxApplication: sale})
+	p.Lines = append(p.Lines, ProposedLine{LineID: "L5", Sku: navyM, Quantity: "1", Unit: dozen, Conversion: &conv, UnitPrice: "96.00",
+		PriceBasisQuantity: "1", DiscountRatio: "0.05", TaxApplication: sale})
 	x.Taxes[sale] = &calc.TaxApplication{Ref: quote.CalcRef(sale), Side: calc.SideSales, SubjectKind: calc.SubjectSku, SubjectID: navyM.SkuID,
 		Profile: zeroTax}
 	p.Terms.PaymentTerms = upfront

@@ -172,6 +172,7 @@ func TestVerifyDetectsATamperedOrder(t *testing.T) {
 		"a rehashed snapshot": func(o *Order) {
 			o.Snapshot = []byte(strings.Replace(string(o.Snapshot), `"60"`, `"1"`, 1))
 			o.OrderHash = quote.Hash(o.Snapshot)
+			o.SnapshotHash = o.OrderHash
 		},
 		"the acceptance column": func(o *Order) { o.Source.AcceptanceID = "other" },
 		"the revision column":   func(o *Order) { o.Source.Revision = 2 },

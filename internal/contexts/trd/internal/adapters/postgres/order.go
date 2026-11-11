@@ -19,8 +19,8 @@ import (
 // evidence and closures once. Nothing is deleted.
 
 const orderColumns = `order_id, quote_id, slot, revision, business_hash, number, document_sha256, acceptance_id, acceptance_version,
-	arrival_at, arrival_basis, expires_at, order_revision, snapshot, order_hash, status, row_version, prepared_by_kind, prepared_by_id,
-	prepare_epoch, prepared_at, coalesce(activated_review_id, '')`
+	arrival_at, arrival_basis, expires_at, order_revision, snapshot, snapshot_hash, order_hash, status, row_version, prepared_by_kind,
+	prepared_by_id, prepare_epoch, prepared_at, coalesce(activated_review_id, '')`
 
 // LoadOrder returns order id with its reviews, commit evidence and closure, or nil, locking the
 // order row as lock says.
@@ -51,8 +51,8 @@ func loadOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, w
 	err := exec.QueryRow(ctx, `SELECT `+orderColumns+` FROM brant_trd.sales_order WHERE tenant_id = $1 AND company_id = $2 AND `+where+
 		string(lock), t, c, arg).Scan(&o.ID, &o.Source.QuoteID, &o.Slot, &o.Source.Revision, &o.Source.BusinessHash, &o.Source.Number,
 		&o.Source.DocumentSHA256, &o.Source.AcceptanceID, &o.Source.AcceptanceVersion, &o.Source.ArrivalAt, &o.Source.ArrivalBasis,
-		&o.Source.ExpiresAt, &o.OrderRevision, &snapshot, &o.OrderHash, &status, &o.RowVersion, &kind, &o.Prepared.By.ID, &o.Prepared.Epoch,
-		&o.Prepared.At, &o.ActivatedReview)
+		&o.Source.ExpiresAt, &o.OrderRevision, &snapshot, &o.SnapshotHash, &o.OrderHash, &status, &o.RowVersion, &kind, &o.Prepared.By.ID,
+		&o.Prepared.Epoch, &o.Prepared.At, &o.ActivatedReview)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -69,6 +69,9 @@ func loadOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, w
 		return nil, err
 	}
 	if o.Closure, err = loadOrderClosure(ctx, exec, t, c, o.ID); err != nil {
+		return nil, err
+	}
+	if err = loadActive(ctx, exec, t, c, o); err != nil {
 		return nil, err
 	}
 	return o, nil
@@ -167,11 +170,11 @@ func SaveOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, o
 		s := o.Source
 		_, err := exec.Exec(ctx, `INSERT INTO brant_trd.sales_order (tenant_id, company_id, order_id, quote_id, slot, revision, business_hash,
 			number, document_sha256, acceptance_id, acceptance_version, arrival_at, arrival_basis, expires_at, order_revision, snapshot,
-			order_hash, status, row_version, prepared_by_kind, prepared_by_id, prepare_epoch, prepared_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23)`,
+			order_hash, status, row_version, prepared_by_kind, prepared_by_id, prepare_epoch, prepared_at, updated_at, snapshot_hash)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23, $24)`,
 			t, c, o.ID, s.QuoteID, o.Slot, s.Revision, s.BusinessHash, s.Number, s.DocumentSHA256, s.AcceptanceID, s.AcceptanceVersion,
 			s.ArrivalAt, s.ArrivalBasis, s.ExpiresAt, o.OrderRevision, string(o.Snapshot), o.OrderHash, string(o.Status), o.RowVersion,
-			string(o.Prepared.By.Kind), o.Prepared.By.ID, o.Prepared.Epoch, o.Prepared.At)
+			string(o.Prepared.By.Kind), o.Prepared.By.ID, o.Prepared.Epoch, o.Prepared.At, o.SnapshotHash)
 		if err != nil {
 			return err
 		}
@@ -195,14 +198,20 @@ func SaveOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, o
 			return err
 		}
 	}
+	// The active order's writes come before the order's own update, which the trigger checks against
+	// them: the revision an apply produced, then the amendments (the applied one names that revision),
+	// the apply's commit evidence, and how the order ended.
+	if err := saveActive(ctx, exec, t, c, o, at); err != nil {
+		return err
+	}
 	if o.Changed && !o.Fresh {
 		var review any
 		if o.ActivatedReview != "" {
 			review = o.ActivatedReview
 		}
-		tag, err := exec.Exec(ctx, `UPDATE brant_trd.sales_order SET status = $4, row_version = $5, activated_review_id = $6, updated_at = $7
-			WHERE tenant_id = $1 AND company_id = $2 AND order_id = $3 AND row_version = $8`,
-			t, c, o.ID, string(o.Status), o.RowVersion, review, at, from)
+		tag, err := exec.Exec(ctx, `UPDATE brant_trd.sales_order SET status = $4, row_version = $5, activated_review_id = $6, updated_at = $7,
+			order_revision = $9, order_hash = $10 WHERE tenant_id = $1 AND company_id = $2 AND order_id = $3 AND row_version = $8`,
+			t, c, o.ID, string(o.Status), o.RowVersion, review, at, from, o.OrderRevision, o.OrderHash)
 		if err != nil {
 			return err
 		}

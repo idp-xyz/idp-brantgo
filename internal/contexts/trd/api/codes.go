@@ -99,6 +99,9 @@ func Category(code string) (kernel.Category, bool) {
 	if c, ok := orderCodes[code]; ok {
 		return c, true
 	}
+	if c, ok := amendmentCodes[code]; ok {
+		return c, true
+	}
 	if c, ok := CalcCategory(code); ok {
 		return c, true
 	}

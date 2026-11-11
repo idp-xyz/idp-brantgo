@@ -231,12 +231,12 @@ func Prepare(a *Amendment, p Preparation, o Order, f orderrev.Fulfilment, facts 
 	}
 	// Derive once to validate and normalize the proposal, hash the content, then derive the preview
 	// that names the amendment.
-	draft, d, err := orderrev.Next(o.Current, orderrev.AmendmentRef{ID: p.AmendmentID}, p.Proposal, f, facts, "/args/proposal")
+	draft, d, err := orderrev.Next(o.Current, orderrev.AmendmentRef{ID: p.AmendmentID}, p.Proposal, f, facts, "/args")
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if d.Empty() {
-		return nil, nil, nil, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/proposal", "An amendment changes the order")
+		return nil, nil, nil, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/lines", "An amendment changes the order")
 	}
 	c := Content{Contract: Contract, OrderID: p.OrderID, AmendmentID: p.AmendmentID, Base: p.Base, Source: normalSource(p.Source),
 		Proposal: orderrev.ProposalOf(draft), Impact: impact}
@@ -244,7 +244,7 @@ func Prepare(a *Amendment, p Preparation, o Order, f orderrev.Fulfilment, facts 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	preview, d, err := orderrev.Next(o.Current, orderrev.AmendmentRef{ID: p.AmendmentID, Hash: hash}, c.Proposal, f, facts, "/args/proposal")
+	preview, d, err := orderrev.Next(o.Current, orderrev.AmendmentRef{ID: p.AmendmentID, Hash: hash}, c.Proposal, f, facts, "/args")
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -442,10 +442,12 @@ func (a *Amendment) Withdraw(expected int64, act quote.Act) error {
 	return nil
 }
 
-// Stale reports whether the order no longer is at the revision the amendment binds: it can be
-// withdrawn (draft, pending) or prepared again (draft), never applied.
+// Stale reports whether an open amendment (draft, pending or approved) binds a revision the order
+// is no longer at: it can be withdrawn (draft, pending) or prepared again (draft), never applied. An
+// ended amendment is never stale.
 func (a *Amendment) Stale(o Order) bool {
-	return o.Current == nil || a.Content.Base != o.Current.Link()
+	open := a.Status == Draft || a.Status == PendingApproval || a.Status == Approved
+	return open && (o.Current == nil || a.Content.Base != o.Current.Link())
 }
 
 // Preparers returns everyone who prepared the amendment, once each, in order.

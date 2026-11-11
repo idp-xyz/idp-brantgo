@@ -26,12 +26,15 @@ type Proposal struct {
 }
 
 // ProposedLine is one line of a proposal. A line of the current revision is named by its line_id;
-// another line_id adds a line.
+// another line_id adds a line. Conversion is the POL unit_conversion of the unit into the SKU's cost
+// unit (none when the line counts in its cost unit); a line that keeps its SKU and unit keeps its
+// conversion.
 type ProposedLine struct {
 	LineID             string       `json:"line_id"`
 	Sku                quote.SkuRef `json:"sku_ref"`
 	Quantity           string       `json:"quantity"`
 	Unit               quote.Ref    `json:"unit_ref"`
+	Conversion         *quote.Ref   `json:"conversion_ref,omitempty"`
 	UnitPrice          string       `json:"unit_price"`
 	PriceBasisQuantity string       `json:"price_basis_quantity"`
 	DiscountRatio      string       `json:"discount_ratio"`
@@ -48,7 +51,8 @@ type ProposedCharge struct {
 func ProposalOf(r *Revision) Proposal {
 	p := Proposal{Lines: []ProposedLine{}, Charges: []ProposedCharge{}, Terms: r.Terms}
 	for _, l := range r.Lines {
-		p.Lines = append(p.Lines, ProposedLine{LineID: l.LineID, Sku: l.Sku, Quantity: l.Quantity, Unit: l.Unit, UnitPrice: l.UnitPrice,
+		p.Lines = append(p.Lines, ProposedLine{LineID: l.LineID, Sku: l.Sku, Quantity: l.Quantity, Unit: l.Unit, Conversion: l.Conversion,
+			UnitPrice:          l.UnitPrice,
 			PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio, TaxApplication: l.Tax.Application})
 	}
 	for _, c := range r.Charges {
@@ -314,39 +318,57 @@ func nextLine(base *Revision, pl ProposedLine, f Fulfilment, facts Facts, at str
 		}
 	}
 
-	// The quantity in its unit and in the SKU's cost unit.
+	// The quantity in its unit and in the SKU's cost unit. A line that keeps its SKU and quantity
+	// keeps them as they are; any other needs the units' precision and the conversion.
+	if cur != nil && cur.Sku == pl.Sku && !sameRef(pl.Conversion, cur.Conversion) {
+		return none(kernel.Reject(kernel.CodeInvalidKnownValue, at+"/conversion_ref", "A line that keeps its SKU and unit keeps its conversion"))
+	}
+	if cur != nil && cur.Sku == pl.Sku && same(q, cur.Quantity) {
+		line.CostUnit, line.Conversion, line.NormalizedQuantity = cur.CostUnit, cur.Conversion, cur.NormalizedQuantity
+	} else if err := measure(&line, cur, pl, q, facts, at); err != nil {
+		return none(err)
+	}
+	return priced(base, line, cur, pl, q, price, basis, discount, facts, at)
+}
+
+// measure sets the line's cost unit, conversion and quantity in the cost unit: the current line's
+// conversion while the SKU stays, the facts' measures otherwise; both units' precision from the
+// facts.
+func measure(line *Line, cur *Line, pl ProposedLine, q kernel.Decimal, facts Facts, at string) error {
 	unit, ok := facts.Units[pl.Unit.ID]
 	if !ok || unit.Code != pl.Unit.ID {
-		return none(kernel.Reject(kernel.CodeReferenceInvalid, at+"/unit_ref", "The unit's precision is needed"))
+		return kernel.Reject(kernel.CodeReferenceInvalid, at+"/unit_ref", "The unit's precision is needed")
 	}
 	if q.Sign() > 0 && (unit.Precision < 0 || !fits(q, unit.Precision)) {
-		return none(kernel.Reject(kernel.CodeInvalidKnownValue, at+"/quantity", "The quantity has more fractional digits than its unit allows"))
+		return kernel.Reject(kernel.CodeInvalidKnownValue, at+"/quantity", "The quantity has more fractional digits than its unit allows")
 	}
 	var factor kernel.Decimal
 	if cur != nil && cur.Sku == pl.Sku {
 		curQ, err1 := kernel.ParseDecimal(cur.Quantity, wide)
 		curN, err2 := kernel.ParseDecimal(cur.NormalizedQuantity, wide)
 		if err1 != nil || err2 != nil || curQ.Sign() <= 0 {
-			return none(kernel.Reject(kernel.CodeReferenceInvalid, "/revision/lines", "The current line "+cur.LineID+" has no readable quantities"))
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/revision/lines", "The current line "+cur.LineID+" has no readable quantities")
 		}
 		factor, _ = curN.Quo(curQ)
 		line.CostUnit, line.Conversion = cur.CostUnit, cur.Conversion
 	} else {
 		m, ok := facts.Measures[Measure{Sku: pl.Sku, Unit: pl.Unit.ID}]
 		if !ok || m.CostUnit == "" {
-			return none(kernel.Reject(kernel.CodeReferenceInvalid, at+"/sku_ref", "How the SKU specification counts in its cost unit is needed"))
+			return kernel.Reject(kernel.CodeReferenceInvalid, at+"/sku_ref", "How the SKU specification counts in its cost unit is needed")
 		}
 		line.CostUnit = m.CostUnit
 		switch x := m.Conversion; {
+		case !sameRef(pl.Conversion, conversionRef(x)):
+			return kernel.Reject(kernel.CodeReferenceInvalid, at+"/conversion_ref", "The measures are of another conversion")
 		case x == nil && m.CostUnit != pl.Unit.ID:
-			return none(fail(calc.CodeDependencyNotSupported, at+"/unit_ref",
-				"A sales unit other than the cost unit needs a published conversion; a package is never guessed"))
+			return fail(calc.CodeDependencyNotSupported, at+"/unit_ref",
+				"A sales unit other than the cost unit needs a published conversion; a package is never guessed")
 		case x == nil:
 			factor = kernel.DecimalFromInt(1)
 		case x.SkuID != pl.Sku.SkuID || x.SpecRevision != pl.Sku.SpecRevision || x.From != pl.Unit.ID || x.To != m.CostUnit:
-			return none(kernel.Reject(kernel.CodeReferenceInvalid, at+"/unit_ref", "The conversion is for another SKU, specification or pair of units"))
+			return kernel.Reject(kernel.CodeReferenceInvalid, at+"/unit_ref", "The conversion is for another SKU, specification or pair of units")
 		case !fits(x.Factor, calc.FactorScale) || x.Factor.Sign() <= 0 || x.Factor.Cmp(kernel.DecimalFromInt(1_000_000_000_000)) >= 0:
-			return none(kernel.Reject(kernel.CodeReferenceInvalid, at+"/unit_ref", "A conversion factor is positive with at most 12 fractional digits"))
+			return kernel.Reject(kernel.CodeReferenceInvalid, at+"/unit_ref", "A conversion factor is positive with at most 12 fractional digits")
 		default:
 			factor = x.Factor
 			r := quote.Ref{Kind: x.Ref.Kind, ID: x.Ref.ID, Revision: x.Ref.Revision}
@@ -356,17 +378,23 @@ func nextLine(base *Revision, pl ProposedLine, f Fulfilment, facts Facts, at str
 	normalized := q.Mul(factor)
 	cost, ok := facts.Units[line.CostUnit]
 	if !ok || cost.Code != line.CostUnit {
-		return none(kernel.Reject(kernel.CodeReferenceInvalid, at+"/sku_ref", "The cost unit's precision is needed"))
+		return kernel.Reject(kernel.CodeReferenceInvalid, at+"/sku_ref", "The cost unit's precision is needed")
 	}
 	if cost.Precision < 0 || !fits(normalized, cost.Precision) {
-		return none(kernel.Reject(kernel.CodeInvalidKnownValue, at+"/quantity", "The converted quantity has more fractional digits than the cost unit allows"))
+		return kernel.Reject(kernel.CodeInvalidKnownValue, at+"/quantity", "The converted quantity has more fractional digits than the cost unit allows")
 	}
 	n, ok := normalized.Exact()
 	if !ok {
-		return none(kernel.Reject(kernel.CodeInvalidKnownValue, at+"/quantity", "The converted quantity has no exact decimal form"))
+		return kernel.Reject(kernel.CodeInvalidKnownValue, at+"/quantity", "The converted quantity has no exact decimal form")
 	}
 	line.NormalizedQuantity = n
+	return nil
+}
 
+// priced binds the line's tax and prices it.
+func priced(base *Revision, line Line, cur *Line, pl ProposedLine, q, unitPrice, basis, discount kernel.Decimal, facts Facts,
+	at string) (Line, calc.Amounts, error) {
+	none := func(err error) (Line, calc.Amounts, error) { return Line{}, calc.Amounts{}, err }
 	// The tax: the current binding while the SKU and the application stay, else the fact.
 	if cur != nil && cur.Sku == pl.Sku && cur.Tax.Application == pl.TaxApplication {
 		line.Tax = cur.Tax
@@ -382,7 +410,7 @@ func nextLine(base *Revision, pl ProposedLine, f Fulfilment, facts Facts, at str
 			PriceBasis: string(a.Profile.PriceBasis), Rate: exact(a.Profile.Rate)}
 	}
 
-	b, err := calc.Line{Path: at, LineID: pl.LineID, Quantity: q, UnitPrice: price, PriceBasisQuantity: basis, Discount: discount}.Base()
+	b, err := calc.Line{Path: at, LineID: pl.LineID, Quantity: q, UnitPrice: unitPrice, PriceBasisQuantity: basis, Discount: discount}.Base()
 	if err != nil {
 		return none(err)
 	}
@@ -620,6 +648,15 @@ func exact(d kernel.Decimal) string {
 		panic("orderrev: a contract decimal has no exact decimal form: " + d.String())
 	}
 	return s
+}
+
+func sameRef(a, b *quote.Ref) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
+
+func conversionRef(x *calc.Conversion) *quote.Ref {
+	if x == nil {
+		return nil
+	}
+	return &quote.Ref{Kind: x.Ref.Kind, ID: x.Ref.ID, Revision: x.Ref.Revision}
 }
 
 func validRef(r quote.Ref, kind string) bool {
