@@ -68,8 +68,8 @@ func (q *Quote) CommittedApproval(r *Revision) (*Approval, error) {
 // ReadyApproval decides whether the approval that formalized revision r still stands at instant
 // at, on its approvers' standings now (Python quote_ready and current_reviewer; T03 A34, A35): it
 // is the committed one and in effect (CommittedApproval); its business hash and rule versions are
-// the revision's and the current ones (APPROVAL_STALE); it has not lapsed (APPROVAL_EXPIRED, at <
-// its expires_at, equality lapsed); and its reviewer and margin exception approver are still
+// the revision's and the current ones (APPROVAL_STALE); unless the revision is active, it has not
+// lapsed (APPROVAL_EXPIRED, at < its expires_at, equality lapsed); and its reviewer and margin exception approver are still
 // qualified (stands). It returns the approval when it was found, even when it no longer stands.
 func (q *Quote) ReadyApproval(r *Revision, at time.Time, standings Standings) (*Approval, error) {
 	a, err := q.CommittedApproval(r)
@@ -86,7 +86,11 @@ func (q *Quote) ReadyApproval(r *Revision, at time.Time, standings Standings) (*
 	if c == nil || a.Rules != rulesOf(c) || a.Rules != current(c.CostScope.PricingPolicy) {
 		return a, fail(CodeApprovalStale, PathCommitApproval, "The approval is of other content or rules")
 	}
-	if !kernel.Instant(at).Before(a.ExpiresAt) {
+	// The approval's expiry bounds the activation it releases. Once the revision is active it is
+	// spent: an order rests on the contract, not on the approval's window (owner decision
+	// 2026-11-11, as order activation judges it: ADR-BR-013, TRD-INV-017; Python PYT-0397 still
+	// reports APPROVAL_EXPIRED). Revocation and the approvers' standing are still judged.
+	if r.Status != Active && !kernel.Instant(at).Before(a.ExpiresAt) {
 		return a, fail(CodeApprovalExpired, PathCommitApproval, "")
 	}
 	return a, q.stands(r, a, c, standings, PathCommitApproval)

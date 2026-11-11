@@ -258,8 +258,9 @@ func TestQuoteReadyFollowsTheCommittedApprovalNow(t *testing.T) {
 }
 
 // Python test_t03_a35_time_qualification.py test_ready_compares_quote_and_approval_offsets_as_instants
-// (PYT-0397), TRD-INV-005: readiness compares instants — before the approval lapses the quote is
-// ready; once the quote expired, it reports both the quote's expiry and the approval's.
+// (PYT-0397), TRD-INV-005: readiness compares instants — before the expiry the quote is ready; once
+// it expired, readiness reports the quote's expiry. Python also reports the approval's; an active
+// revision's approval is spent (owner decision 2026-11-11).
 func TestQuoteReadyComparesInstants(t *testing.T) {
 	q := newTrdWorld(t)
 	_, expires := q.shortlyActivated("quote.1", 6*time.Second)
@@ -268,7 +269,9 @@ func TestQuoteReadyComparesInstants(t *testing.T) {
 	}
 	time.Sleep(time.Until(expires) + 100*time.Millisecond)
 	r := q.readiness(q.author, "quote.1", 0)
-	if r.Ready || !slices.Equal(reasonsOf(r.Reasons), []string{"validity:QUOTE_EXPIRED", "approval:APPROVAL_EXPIRED"}) {
+	// The approval lapsed with the quote, but it is spent once the revision is active (owner
+	// decision 2026-11-11; Python also reports APPROVAL_EXPIRED).
+	if r.Ready || !slices.Equal(reasonsOf(r.Reasons), []string{"validity:QUOTE_EXPIRED"}) {
 		t.Fatalf("after the expiry: %+v", r)
 	}
 }

@@ -44,8 +44,8 @@ func active(t *testing.T, price, minimum string) *Quote {
 // test_ready_compares_quote_and_approval_offsets_as_instants (PYT-0397, the approval half) and
 // TRD-INV-004: the approval that formalized the active revision stands while its reviewer is an
 // active human grant holding quote.review.decide and trd.read that sees the quote; each loss is
-// APPROVAL_STALE, and restoring the grant restores it; the approval lapses at its expires_at
-// (equality lapsed); a reviewer among the authors is INDEPENDENT_REVIEW_REQUIRED; a margin
+// APPROVAL_STALE, and restoring the grant restores it; the approval of a revision not active lapses
+// at its expires_at (equality lapsed), an active revision's is spent; a reviewer among the authors is INDEPENDENT_REVIEW_REQUIRED; a margin
 // exception's approver must stay qualified with the capability.
 func TestFormalApprovalStandsOnCurrentQualification(t *testing.T) {
 	q := active(t, "8", "0.1")
@@ -74,9 +74,16 @@ func TestFormalApprovalStandsOnCurrentQualification(t *testing.T) {
 	if got := stands(expires.Add(-time.Microsecond), qualified(nil)); got != "OK" {
 		t.Fatalf("a microsecond before the approval lapses: %s", got)
 	}
-	if got := stands(expires, qualified(nil)); got != "APPROVAL_EXPIRED at /commit/approval_id" {
-		t.Fatalf("at the approval's expires_at: %s", got)
+	// Once the revision is active its approval is spent: its expiry no longer counts (owner decision
+	// 2026-11-11; Python reports APPROVAL_EXPIRED). Of a revision that is not active, it does.
+	if got := stands(expires, qualified(nil)); got != "OK" {
+		t.Fatalf("an active revision at the approval's expires_at: %s", got)
 	}
+	rev.Status = Superseded
+	if got := stands(expires, qualified(nil)); got != "APPROVAL_EXPIRED at /commit/approval_id" {
+		t.Fatalf("a superseded revision at the approval's expires_at: %s", got)
+	}
+	rev.Status = Active
 	rev.Contributors = append(rev.Contributors, "reviewer")
 	if got := stands(at, qualified(nil)); got != "INDEPENDENT_REVIEW_REQUIRED at /commit/approval_id" {
 		t.Fatalf("a reviewer among the authors: %s", got)
