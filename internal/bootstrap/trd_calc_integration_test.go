@@ -16,11 +16,14 @@ import (
 // commercial document seals them, and the business hash covers them.
 
 // Python test_t03_server_calculation.py test_freeze_ignores_client_calculation_and_persists_server
-// _result (PYT-0442; no command has a calculation member, so a client cannot send one), and
-// test_t03_a27_cost_scope.py / test_t03_a28_sales_terms.py's bindings: 120 × 8.00 USD against the
-// 660.00 USD snapshot is 960.00 net and payable, a profit of 300.00 above policy.1's minimum of
-// 0.1, one stage of 960.00; the document records the cost scope and sales terms bindings, the
-// comparison currency the costing context names, and the calculation version.
+// _result (PYT-0442; no command has a calculation member, so a client cannot send one),
+// test_t03_a27_cost_scope.py test_complete_freeze_records_server_scope_binding (PYT-0265) and
+// test_t03_a28_sales_terms.py test_server_sales_binding_is_persisted_for_supported_quote
+// (PYT-0301): 120 × 8.00 USD against the 660.00 USD snapshot is 960.00 net and payable, a profit of
+// 300.00 above policy.1's minimum of 0.1, one stage of 960.00; the frozen document records the cost
+// scope binding (brant.quote-cost-scope/0.1.0 on rfq.1 at its row version, line L1 bound to RFQ
+// line L1) and the sales terms binding (brant.quote-sales-terms/0.1.0), the comparison currency the
+// costing context names, and the calculation version, all under the business hash.
 func TestFrozenRevisionCarriesTheServerCalculation(t *testing.T) {
 	q := newTrdWorld(t)
 	f := q.frozenQuote("quote.1")
@@ -35,17 +38,23 @@ func TestFrozenRevisionCarriesTheServerCalculation(t *testing.T) {
 	var doc struct {
 		Calculation struct {
 			CostScope struct {
-				Contract   string `json:"contract"`
+				Contract string `json:"contract"`
+				Rfq      struct {
+					ID         string `json:"rfq_id"`
+					RowVersion int64  `json:"row_version"`
+				} `json:"rfq_ref"`
 				NamedPlace struct {
 					ID string `json:"id"`
 				} `json:"named_place_ref"`
 				Lines []struct {
+					RfqLineID          string `json:"rfq_line_id"`
 					NormalizedQuantity string `json:"normalized_quantity"`
 					CostUnit           string `json:"cost_unit"`
 				} `json:"line_bindings"`
 			} `json:"cost_scope_binding"`
 			SalesTerms struct {
-				Taxes []struct {
+				Contract string `json:"contract"`
+				Taxes    []struct {
 					Role string `json:"role"`
 				} `json:"tax_bindings"`
 			} `json:"sales_terms_binding"`
@@ -54,9 +63,11 @@ func TestFrozenRevisionCarriesTheServerCalculation(t *testing.T) {
 	}
 	q.must(json.Unmarshal([]byte(v.Revisions[0].Commercial), &doc))
 	s := doc.Calculation
-	if s.CostScope.Contract != "brant.quote-cost-scope/0.1.0" || s.CostScope.NamedPlace.ID != "DEHAM" || len(s.CostScope.Lines) != 1 ||
-		s.CostScope.Lines[0].NormalizedQuantity != "120" || s.CostScope.Lines[0].CostUnit != "PCS" || len(s.SalesTerms.Taxes) != 1 ||
-		s.SalesTerms.Taxes[0].Role != "line:L1" || len(s.Excluded) != 3 {
+	if s.CostScope.Contract != "brant.quote-cost-scope/0.1.0" || s.CostScope.Rfq.ID != "rfq.1" || s.CostScope.Rfq.RowVersion != q.rfqVersion ||
+		s.CostScope.NamedPlace.ID != "DEHAM" || len(s.CostScope.Lines) != 1 || s.CostScope.Lines[0].RfqLineID != "L1" ||
+		s.CostScope.Lines[0].NormalizedQuantity != "120" || s.CostScope.Lines[0].CostUnit != "PCS" ||
+		s.SalesTerms.Contract != "brant.quote-sales-terms/0.1.0" || len(s.SalesTerms.Taxes) != 1 || s.SalesTerms.Taxes[0].Role != "line:L1" ||
+		len(s.Excluded) != 3 {
 		t.Fatalf("bindings %+v", s)
 	}
 	if sha256Hex(v.Revisions[0].Commercial) != f.BusinessHash {

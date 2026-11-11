@@ -341,7 +341,8 @@ func (c ActivateOrder) Validate() error {
 	return nil
 }
 
-// Validate checks the closed contract: a reason of 1–2000 characters and 0–200 evidence entries.
+// Validate checks the closed contract: a reason of 1–2000 characters, not only white space and
+// without control characters, and 0–200 evidence entries.
 func (c RevokeOrderApproval) Validate() error {
 	switch {
 	case !kernel.ValidIdentifier(c.IdempotencyKey):
@@ -350,7 +351,7 @@ func (c RevokeOrderApproval) Validate() error {
 		return schema("/args/order_id")
 	case !kernel.ValidIdentifier(c.ReviewID):
 		return schema("/args/review_id")
-	case !text(c.Reason, maxText):
+	case !reasonText(c.Reason, maxText):
 		return schema("/args/reason")
 	}
 	if len(c.Evidence) > 0 {
@@ -373,7 +374,7 @@ func orderEnd(key, id string, expected int64, reason string, proofs []Evidence) 
 	if err := orderHead(key, id, expected); err != nil {
 		return err
 	}
-	if !text(reason, maxText) {
+	if !reasonText(reason, maxText) {
 		return schema("/args/reason")
 	}
 	return evidence(proofs, "/args/evidence")

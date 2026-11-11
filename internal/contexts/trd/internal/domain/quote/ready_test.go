@@ -153,7 +153,9 @@ func TestReadinessJudgesTheCommittedApprovalOnly(t *testing.T) {
 }
 
 // The frozen bindings hold on the current inputs (Python quote_ready's t03_cost_scope.bind and
-// t03_sales_terms.bind, PYT-0410/0411 domain half; TRD-INV-006): binding the fixture's inputs again
+// t03_sales_terms.bind, PYT-0410/0411 domain half, and test_t03_a27_cost_scope.py
+// test_current_scope_failure_does_not_rewrite_committed_quote_history, PYT-0296, the rule; the
+// PostgreSQL half is TestQuoteReadyAfterTheRfqEndsKeepsTheHistory; TRD-INV-006): binding the fixture's inputs again
 // gives the frozen bindings; a changed quantity rebinds the cost scope otherwise and a changed tax
 // rate the sales terms (REFERENCE_STALE at the binding); a revision without a calculation is
 // REFERENCE_INVALID.

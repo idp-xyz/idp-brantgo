@@ -90,7 +90,11 @@ func TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract(t *testing.T) {
 // test_cost_denial_committing_first_blocks_waiting_activation (PYT-0254) as deliberate divergences
 // (Python refuses; the design makes the denial a risk the approval acknowledges),
 // test_retired_template_blocks_new_activation_without_residue (PYT-0229, likewise, with the sales tax
-// application) and test_advisory_quote_ready_is_not_used_as_a_write_token (PYT-0244): the approval
+// application), test_retired_cost_pricing_policy_blocks_new_activation (PYT-0256, likewise),
+// test_advisory_quote_ready_is_not_used_as_a_write_token (PYT-0244) and
+// test_source_checks_use_the_exact_order_write_connection (PYT-0245: the upstream guards run inside
+// the activation's own transaction and hold their rows, so a CST denial waits for it; Python checks
+// the connection object, which Go has no counterpart of): the approval
 // came before the upstream change. An activation holding its guards makes a CST denial wait until it
 // commits, and its order stays active; the denial committed first is found by the next activation
 // (ORDER_RISK_UNACKNOWLEDGED, nothing written). A new review acknowledging the risk activates that
@@ -205,6 +209,32 @@ func TestUpstreamChangesAfterApprovalAreRisksToAcknowledge(t *testing.T) {
 	dx := x.reviewed(ox, "review.1", ack(found[0]))
 	if _, err = x.c.TRD.ActivateOrder(x.author, x.activateOrderCmd(ox.ObjectID, dx.RowVersion, "review.1")); err != nil {
 		t.Fatalf("activation acknowledging the retirement: %v", err)
+	}
+
+	// The cost's pricing policy retired after the contract formed (Python
+	// test_retired_cost_pricing_policy_blocks_new_activation, PYT-0256, refuses): the risks it raises
+	// are acknowledged and the order activates; an approval acknowledging none is refused.
+	y := newOrderWorld(t)
+	_, oy := y.prepared("quote.1")
+	_, err = y.c.POL.Retire(y.reviewer, polapi.Retire{IdempotencyKey: y.key(), Kind: polapi.KindPricingPolicy, ConfigID: y.policy.ConfigID,
+		ExpectedVersion: 2, Reason: "规则停止采用"})
+	y.must(err)
+	found = y.risks(oy.ObjectID)
+	if len(found) == 0 {
+		t.Fatal("a retired pricing policy raised no risk")
+	}
+	acks := make([]trdapi.RiskAcknowledgement, len(found))
+	for i, r := range found {
+		acks[i] = ack(r)
+	}
+	ry, err := y.c.TRD.RequestOrderReview(y.author, y.requestCmd(oy.ObjectID, 1, "review.1"))
+	y.must(err)
+	_, err = y.c.TRD.DecideOrderReview(y.reviewer, y.decideCmd(oy.ObjectID, ry.RowVersion, "review.1", oy.OrderHash))
+	y.want(err, trdapi.CodeOrderRiskUnacknowledged)
+	dy, err := y.c.TRD.DecideOrderReview(y.reviewer, y.decideCmd(oy.ObjectID, ry.RowVersion, "review.1", oy.OrderHash, acks...))
+	y.must(err)
+	if _, err = y.c.TRD.ActivateOrder(y.author, y.activateOrderCmd(oy.ObjectID, dy.RowVersion, "review.1")); err != nil {
+		t.Fatalf("activation acknowledging the retired pricing policy %+v: %v", found, err)
 	}
 }
 

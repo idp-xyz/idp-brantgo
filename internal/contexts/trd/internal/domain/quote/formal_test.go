@@ -399,10 +399,13 @@ func TestAcceptedRevisionIsNotEnded(t *testing.T) {
 	}
 }
 
-// TRD-INV-014 (正式化批准未撤销、审核人仍合格) and Python test_t03_a26 PYT-0232–0234, 0239, 0241, 0242:
-// an order's activation re-checks the approval the revision's commit evidence names — not revoked,
-// its reviewer still independent and qualified — but neither the approval's nor the quote's expiry
-// (the contract formed before; ADR-BR-013).
+// TRD-INV-014 (正式化批准未撤销、审核人仍合格) and Python test_t03_a26 PYT-0232–0234, 0239, 0241, 0242,
+// and test_reviewer_independence_is_rechecked (PYT-0252): an order's activation re-checks the
+// approval the revision's commit evidence names — not revoked, its reviewer still independent
+// (INDEPENDENT_REVIEW_REQUIRED when the reviewer is one of the revision's authors or the review's
+// requester; Python rewrites the stored reviewer, which Go's immutable approval rows refuse, so the
+// domain test sets it) and still qualified — but neither the approval's nor the quote's expiry (the
+// contract formed before; ADR-BR-013).
 func TestFormalApprovalAtAnOrdersActivation(t *testing.T) {
 	q := frozen(t, "8", "0.1")
 	if _, err := q.FormalApproval(1, qualified(nil), "/x"); code(err) != "REFERENCE_INVALID at /x" {
@@ -416,6 +419,18 @@ func TestFormalApprovalAtAnOrdersActivation(t *testing.T) {
 	if a, err := q.FormalApproval(1, qualified(nil), "/x"); err != nil || a.ID != "approval.1" {
 		t.Fatalf("the formalization approval %+v %v", a, err)
 	}
+	approval := q.Approval("approval.1")
+	named := authors(q.Revision(1), q.Review(approval.ReviewID))
+	if len(named) < 2 {
+		t.Fatalf("the revision's authors and requester %v", named)
+	}
+	for _, author := range named {
+		approval.Approved.By = human(author)
+		if _, err := q.FormalApproval(1, qualified(nil), "/x"); code(err) != "INDEPENDENT_REVIEW_REQUIRED at /x" {
+			t.Errorf("the reviewer is an author, %s (PYT-0252): %s", author, code(err))
+		}
+	}
+	approval.Approved.By = human(reviewer)
 	for name, s := range map[string]Standing{
 		"without quote.review.decide (PYT-0232)": {Human: true, SeesRoot: true, Permissions: []string{PermissionRead}},
 		"no longer human (PYT-0233)":             {SeesRoot: true, Permissions: []string{PermissionReview, PermissionRead}},

@@ -80,6 +80,61 @@ func TestOrderCommandContracts(t *testing.T) {
 	}
 }
 
+// Python test_t04_a39_order_gate.py test_revocation_reason_is_nonempty_bounded_and_valid_unicode
+// (PYT-0497): a reason that revokes an order approval or ends an order is something a person wrote —
+// empty, only white space, a control character, invalid UTF-8 or more than 2000 characters is
+// SCHEMA_INVALID at /args/reason, for order.approval.revoke, order.cancel, order.close_unfulfilled,
+// order.close_remainder and (when given) order.close. Python's local limit is 1000 characters, its
+// public one 2000; Go has one path and keeps 2000.
+func TestOrderReasonsAreWrittenByAPerson(t *testing.T) {
+	ev := []Evidence{{SourceID: "s", Locator: "l"}}
+	commands := map[string]func(reason string) interface{ Validate() error }{
+		"order.approval.revoke": func(r string) interface{ Validate() error } {
+			return RevokeOrderApproval{IdempotencyKey: "k1", OrderID: "order.1", ReviewID: "review.1", Reason: r}
+		},
+		"order.cancel": func(r string) interface{ Validate() error } {
+			return CancelOrder{IdempotencyKey: "k1", OrderID: "order.1", ExpectedVersion: 1, Reason: r, Evidence: ev}
+		},
+		"order.close_unfulfilled": func(r string) interface{ Validate() error } {
+			return CloseOrderUnfulfilled{IdempotencyKey: "k1", OrderID: "order.1", ExpectedVersion: 1, Reason: r, Evidence: ev}
+		},
+		"order.close_remainder": func(r string) interface{ Validate() error } {
+			return CloseOrderRemainder{IdempotencyKey: "k1", OrderID: "order.1", ExpectedVersion: 1, Reason: r}
+		},
+		"order.close": func(r string) interface{ Validate() error } {
+			return CloseOrder{IdempotencyKey: "k1", OrderID: "order.1", ExpectedVersion: 1, Reason: r}
+		},
+	}
+	bad := map[string]string{
+		"only spaces":          "  ",
+		"tab and newline only": "\t\n",
+		"NUL":                  "bad\x00text",
+		"another control":      "bad\x1btext",
+		"invalid UTF-8":        "bad\xed\xa0\x80",
+		"over 2000 characters": strings.Repeat("x", 2001),
+	}
+	for name, build := range commands {
+		for _, good := range []string{"合成测试：客户条件变化", strings.Repeat("理", 2000), "x"} {
+			if err := build(good).Validate(); err != nil {
+				t.Errorf("%s with %.12q: %v", name, good, err)
+			}
+		}
+		for what, r := range bad {
+			if got := pathOf(build(r).Validate()); got != "SCHEMA_INVALID /args/reason" {
+				t.Errorf("%s, %s: %s", name, what, got)
+			}
+		}
+		empty := pathOf(build("").Validate())
+		if name == "order.close" {
+			if empty != "OK" {
+				t.Errorf("order.close without a reason: %s", empty)
+			}
+		} else if empty != "SCHEMA_INVALID /args/reason" {
+			t.Errorf("%s without a reason: %s", name, empty)
+		}
+	}
+}
+
 // The order codes are the error catalog's rows with their categories (ORDER_REVIEW_STALE and
 // ORDER_RISK_UNACKNOWLEDGED 409, the rest 422); TRD declares them once.
 func TestOrderCodesFollowTheErrorCatalog(t *testing.T) {

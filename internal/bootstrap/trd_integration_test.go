@@ -171,10 +171,12 @@ func lockWaiter(t *testing.T, text string) bool {
 
 // Python test_t03_quote_review.py test_revise_and_discard_preserve_sealed_history (PYT-0440) and the
 // S3-01 half of test_t03_write_contract.py test_public_contract_executes_all_thirteen_actions
-// (PYT-0455), TRD-INV-002 positive: an AI agent drafts, a human freezes; the frozen revision holds
-// the commercial document its business hash covers, QuoteFrozen is in the Outbox, the key replays;
-// the frozen revision takes no save and no second freeze; revise copies it into a new number,
-// discard keeps the revision, and no number is reused.
+// (PYT-0455), test_t03_a6_authority.py test_ai_can_save_a_draft_but_cannot_freeze (PYT-0401),
+// TRD-INV-002 positive: an AI agent drafts, its own freeze is PERMISSION_DENIED and leaves the
+// revision working (the author freezes it at the same root version), a human freezes; the frozen
+// revision holds the commercial document its business hash covers, QuoteFrozen is in the Outbox,
+// the key replays; the frozen revision takes no save and no second freeze; revise copies it into a
+// new number, discard keeps the revision, and no number is reused.
 func TestQuoteDraftFreezeReviseAndDiscard(t *testing.T) {
 	q := newTrdWorld(t)
 	agent := q.actorOf(kernel.ActorAI, "agent.1")
@@ -188,6 +190,10 @@ func TestQuoteDraftFreezeReviseAndDiscard(t *testing.T) {
 	}
 	_, err = q.freezeQuote(agent, "quote.1", 2, 1)
 	q.want(err, kernel.CodePermissionDenied)
+	if v := q.getQuote("quote.1"); v.RootVersion != 2 || v.WorkingRevision != 1 || v.Revisions[0].Status != trdapi.StatusWorking ||
+		len(q.frozenEvents()) != 0 {
+		t.Fatalf("after the agent's freeze %+v", v)
+	}
 
 	cmd := trdapi.Freeze{IdempotencyKey: q.key(), QuoteID: "quote.1", ExpectedVersion: 2, WorkingRevision: 1}
 	f, err := q.c.TRD.Freeze(q.author, cmd)
@@ -429,7 +435,9 @@ func TestQuoteRootScopeIsEnforced(t *testing.T) {
 // refuse AI agents and the system with PERMISSION_DENIED, whatever they hold; object_control.bind
 // admits the system and refuses an AI agent; drafts admit AI agents and refuse the system (Python
 // test_t03_quote_review.py test_ai_cannot_decide_review_and_rollback_leaves_no_event, the freeze
-// half; test_t03_write_contract.py test_schema_ai_authority_and_server_control_are_enforced).
+// half; test_t03_write_contract.py test_schema_ai_authority_and_server_control_are_enforced;
+// test_t03_a6_authority.py test_ai_can_save_a_draft_but_cannot_freeze, PYT-0401: the revision stays
+// working).
 func TestHumanOnlyQuoteCommandsRefuseAIAndSystem(t *testing.T) {
 	q := newTrdWorld(t)
 	agent, system := q.actorOf(kernel.ActorAI, "agent.1"), q.actorOf(kernel.ActorSystem, "tsk.1")
@@ -546,7 +554,20 @@ func TestConcurrentQuoteWritesHaveOneWinner(t *testing.T) {
 // test_stale_master_row_version_rolls_back_formalization, PYT-0454, for the freeze): an older RFQ
 // version, an older customer revision, a retired template, a quantity other than the RFQ's and a
 // validity beyond the pricing policy's are each refused with the owner's verdict or TRD's code, and
-// the revision stays working.
+// the revision stays working; a refused freeze changes no business state of TRD — no revision, root
+// version, ledger entry or event (TRD's business state, audit trail aside).
+// Also, through the command as Python's public path:
+//   - test_t03_a27_cost_scope.py test_public_wrong_quantity_has_no_success_ledger_or_partial_freeze
+//     (PYT-0292): another quantity is COMPARISON_BASIS_MISMATCH, with no action result;
+//   - test_t03_a27_cost_scope.py test_public_missing_rfq_fails_closed (PYT-0293): no RFQ is
+//     DRAFT_NOT_READY;
+//   - test_t03_a28_sales_terms.py test_missing_issuer_cannot_skip_sales_tax_party_binding (PYT-0316):
+//     no issuer is DRAFT_NOT_READY;
+//   - test_t03_a29_trade_parties.py test_public_failure_leaves_no_business_residue (PYT-0351): an
+//     address the customer does not have is REFERENCE_INVALID and leaves nothing;
+//   - test_t03_server_calculation.py test_structured_quote_validity_is_bounded_by_server_policy
+//     (PYT-0443): beyond policy.1's seven days is QUOTE_VALIDITY_INVALID, an expiry already passed
+//     at the freeze QUOTE_EXPIRED.
 func TestFreezeRefusesWhatIsNotInEffect(t *testing.T) {
 	q := newTrdWorld(t)
 	old := q.configure(q.author, q.reviewer, polapi.KindQuoteDocumentTemplate, "quote.template.old", 0, q.win.from, time.Time{},
@@ -573,19 +594,31 @@ func TestFreezeRefusesWhatIsNotInEffect(t *testing.T) {
 		{"a validity of eight days", func(d *trdapi.QuoteData) { d.ExpiresAt = kernel.FormatTimestamp(time.Now().Add(8 * 24 * time.Hour)) },
 			trdapi.CodeQuoteValidityInvalid, "/args/data/expires_at"},
 		{"no snapshot", func(d *trdapi.QuoteData) { d.CostSnapshotRef = nil }, trdapi.CodeCostSnapshotMissing, "/args/data/cost_snapshot_ref"},
+		{"PYT-0293: no RFQ", func(d *trdapi.QuoteData) { d.RfqRef = nil }, kernel.CodeDraftNotReady, "/args/data/rfq_ref"},
+		{"PYT-0316: no issuer", func(d *trdapi.QuoteData) { d.IssuerRef = nil }, kernel.CodeDraftNotReady, "/args/data/issuer_ref"},
+		{"PYT-0351: an address the customer does not have", func(d *trdapi.QuoteData) {
+			d.CustomerAddressRefs = []trdapi.AddressRoleRef{{PartyID: "customer.1", PartyRevision: 2, AddressID: "missing"}}
+		}, kernel.CodeReferenceInvalid, "/args/data/customer_address_refs/0"},
+		{"PYT-0443: an expiry already passed", func(d *trdapi.QuoteData) { d.ExpiresAt = kernel.FormatTimestamp(time.Now().Add(-time.Minute)) },
+			trdapi.CodeQuoteExpired, "/args/data/expires_at"},
 	}
+	r := qeqvReaderOf(q)
 	for i, c := range cases {
 		id := "quote." + string(rune('a'+i))
 		d := q.data()
 		c.edit(&d)
 		_, err := q.saveQuote(q.author, id, 0, d)
 		q.must(err)
+		before := r.state()
 		_, err = q.freezeQuote(q.author, id, 1, 1)
 		if code(err) != c.code || (c.path != "" && path(err) != c.path) {
 			t.Errorf("%s: %s at %s, want %s at %s", c.name, code(err), path(err), c.code, c.path)
 		}
 		if v := q.getQuote(id); v.Revisions[0].Status != trdapi.StatusWorking || v.RootVersion != 1 {
 			t.Errorf("%s: %+v", c.name, v.Revisions[0])
+		}
+		if after := r.state(); after != before {
+			t.Errorf("%s: the refused freeze changed TRD's business state:\n%s\n%s", c.name, before, after)
 		}
 	}
 	if len(q.frozenEvents()) != 0 {

@@ -44,7 +44,7 @@ func TestBindScopeRefusals(t *testing.T) {
 			func(q *Quote, _ *Facts) { q.Delivery.Date = "2026-11-14" }, CodeComparisonBasisMismatch, "/args/data/delivery"},
 		{"other trade terms (Go has no trade_scope; the terms carry the sale)", "test_scope_cannot_switch_from_export_sale_to_purchase (PYT-0264)",
 			func(q *Quote, _ *Facts) { q.TradeTerms.ID = "terms.purchase" }, CodeComparisonBasisMismatch, "/args/data/trade_terms_ref"},
-		{"no RFQ", "test_missing_rfq_is_not_a_way_to_skip_scope_checks (PYT-0266)",
+		{"no RFQ", "test_missing_rfq_is_not_a_way_to_skip_scope_checks (PYT-0266), test_public_missing_rfq_fails_closed (PYT-0293)",
 			func(q *Quote, _ *Facts) { q.Rfq = RfqRef{} }, "DRAFT_NOT_READY", "/args/data/rfq_ref"},
 		{"no RFQ line mapping", "test_missing_line_mapping_is_rejected (PYT-0267)",
 			func(q *Quote, _ *Facts) { q.Lines[0].RfqLineID = "" }, "DRAFT_NOT_READY", "/args/data/lines/0/rfq_line_id"},
@@ -108,9 +108,11 @@ func TestBindScopeRefusals(t *testing.T) {
 			func(_ *Quote, f *Facts) { f.Policy.Ref.Revision = 2 }, CodeComparisonBasisMismatch, "/args/data/pricing_policy_ref"},
 		{"the policy's calculation currency is not the snapshot's", "_server_calculation snapshot currency; T03 §5.2",
 			func(_ *Quote, f *Facts) { f.Policy.CalculationCurrency = eur }, CodeComparisonBasisMismatch, "/args/data/pricing_policy_ref"},
-		{"not the trading profile's trade terms", "t03_trade_parties.bind profile terms (A29)",
+		{"not the trading profile's trade terms",
+			"test_t03_a29_trade_parties.py test_profile_must_match_customer_contact_terms_and_supported_address_role (PYT-0349)",
 			func(_ *Quote, f *Facts) { f.Profile.TradeTerms.ID = "terms.other" }, CodeComparisonBasisMismatch, "/args/data/trade_terms_ref"},
-		{"not the trading profile's payment terms", "t03_trade_parties.bind profile terms (A29)",
+		{"not the trading profile's payment terms",
+			"test_t03_a29_trade_parties.py test_profile_must_match_customer_contact_terms_and_supported_address_role (PYT-0349)",
 			func(_ *Quote, f *Facts) { f.Profile.PaymentTerms.Revision = 2 }, CodeComparisonBasisMismatch, "/args/data/payment_terms_ref"},
 		{"the costing misses an RFQ line", "t03_cost_scope.bind set(covered) == set(demand)",
 			func(_ *Quote, f *Facts) {
@@ -209,8 +211,10 @@ func TestTheQuoteCoversTheCompleteRfq(t *testing.T) {
 	}
 }
 
-// Python test_freeze_to_activation_does_not_trust_stale_scope_receipt (PYT-0295), the rule: a later
-// decision binds the current RFQ again, and a changed RFQ line fails it or yields another binding.
+// Python test_t03_a27_cost_scope.py test_current_scope_failure_does_not_rewrite_committed_quote_history
+// (PYT-0296), the rule quote_ready applies: binding the current RFQ again, a changed RFQ line fails it
+// (COMPARISON_BASIS_MISMATCH) or yields another binding than the frozen one. (Activation does not
+// rebind: RfqGuard v1 rechecks the RFQ's row version there.)
 func TestRebindingTheCurrentRfqDetectsAChange(t *testing.T) {
 	q, f := quote(), facts(t)
 	frozen, err := BindScope(q, f)

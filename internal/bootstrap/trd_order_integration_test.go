@@ -150,7 +150,12 @@ func (q *trdWorld) orderRows() (orders, reviews, commits int) {
 // (PYT-0243), test_t04_a38_order_review.py test_end_to_end_and_historical_replay (PYT-0479),
 // test_t04_a41_public_review.py test_public_request_and_decision_commit_and_replay (PYT-0514) and
 // test_t04_a42_public_review_query.py test_pending_approved_revoked_and_activated_projections
-// (PYT-0519); TRD-INV-010, 013, 016, SM-TRD-ORDER: an AI agent prepares the order of the accepted
+// (PYT-0519), and the order halves of test_t04_a37_response_verification.py
+// test_full_unconditional_response_becomes_bound_acceptance_and_order (PYT-0468: the verified
+// acceptance prepares a draft order) and test_t04_a45_response_query_recovery.py
+// test_new_public_response_feeds_existing_order_workflow (PYT-0550: the same key returns the same
+// order; another key is CONVERSION_SLOT_CONFLICT, TestOnePreparationPerRoot); TRD-INV-010, 013, 016,
+// SM-TRD-ORDER: an AI agent prepares the order of the accepted
 // revision (人工或 AI), taking the quote's conversion slot; the snapshot copies the sealed commercial
 // document whole, with the acceptance it binds, and hashes to the order hash; an AI agent requests
 // the review, the reviewer approves it, the author activates: the order is active with its commit

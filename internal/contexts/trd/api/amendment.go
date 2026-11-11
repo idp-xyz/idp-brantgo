@@ -431,12 +431,12 @@ func (c WithdrawAmendment) Validate() error {
 	return nil
 }
 
-// Validate checks the closed contract.
+// Validate checks the closed contract: a reason (reasonText) and 0–200 evidence entries.
 func (c CloseOrderRemainder) Validate() error {
 	if err := orderHead(c.IdempotencyKey, c.OrderID, c.ExpectedVersion); err != nil {
 		return err
 	}
-	if !text(c.Reason, maxText) {
+	if !reasonText(c.Reason, maxText) {
 		return schema("/args/reason")
 	}
 	if len(c.Evidence) > 0 {
@@ -445,12 +445,12 @@ func (c CloseOrderRemainder) Validate() error {
 	return nil
 }
 
-// Validate checks the closed contract: the reason is optional.
+// Validate checks the closed contract: the reason is optional; a given one is a reasonText.
 func (c CloseOrder) Validate() error {
 	if err := orderHead(c.IdempotencyKey, c.OrderID, c.ExpectedVersion); err != nil {
 		return err
 	}
-	if c.Reason != "" && !text(c.Reason, maxText) {
+	if c.Reason != "" && !reasonText(c.Reason, maxText) {
 		return schema("/args/reason")
 	}
 	if len(c.Evidence) > 0 {

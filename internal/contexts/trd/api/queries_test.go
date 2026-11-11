@@ -8,10 +8,10 @@ import (
 
 // Python test_t03_query_contract.py test_query_contract_rejects_bad_shape_and_keeps_unimplemented_kinds_explicit
 // (PYT-0436) and test_quote_history_requires_a_specific_revision_and_current_dependencies (PYT-0429,
-// the shape half), test_t04_a45_response_query_recovery.py test_closed_request_and_response_schemas
-// (PYT-0534, the request half for TRD's queries): the queries are closed — an identifier that is not
-// one, a negative position, a page beyond MaxPage and a dispatch without its revision are
-// SCHEMA_INVALID at their member; an empty limit is the default page.
+// the shape half): the queries are closed — an identifier that is not one, a negative position, a
+// page beyond MaxPage and a dispatch without its revision are SCHEMA_INVALID at their member; an
+// empty limit is the default page. (The customer response read of Python T04 A45, which takes the
+// response's ID alone, is ported on PostgreSQL in TestCustomerResponseReadsRefuseMalformedIDs.)
 func TestQueryContracts(t *testing.T) {
 	path := func(err error) string {
 		rej, ok := kernel.AsRejection(err)

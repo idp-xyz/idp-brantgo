@@ -21,8 +21,12 @@ import (
 // calls PTY's guard functions with the downstream's own executor, against the real PTY commands.
 // What Python checks inside its quote transactions (test_t03_a29_trade_parties.py
 // test_retired_profile_blocks_activation_and_ready, test_order_activation_rechecks_profile;
-// test_t03_snapshot.py test_stale_master_row_version_rolls_back_formalization) TRD ports on top of
-// these guards; here is PTY's half: the verdicts and every commit order.
+// test_t03_snapshot.py test_stale_master_row_version_rolls_back_formalization;
+// test_t03_a30_contact_profiles.py test_retired_contact_profile_blocks_formalization and
+// test_new_contact_profile_revision_blocks_old_reference, on the contact the profile pins: Brant
+// has no contact profile) TRD ports on top of these guards; here is PTY's half: the verdicts
+// (contact revised: contact_changed) and every commit order. TRD's half is
+// TestLapsedInputsBlockActivation.
 
 var (
 	errReferenceRefused = errors.New("downstream: reference does not serve new business")
