@@ -35,16 +35,20 @@ var codes = map[string]kernel.Category{
 	CodeReferenceStale:        kernel.CategoryConflict,
 }
 
-// Category returns the category of a code TRD declares, QuoteRoot's or the calculation's.
+// Category returns the category of a code TRD declares: QuoteRoot's, the calculation's or the
+// formal document's.
 func Category(code string) (kernel.Category, bool) {
 	if c, ok := codes[code]; ok {
 		return c, true
 	}
-	return CalcCategory(code)
+	if c, ok := CalcCategory(code); ok {
+		return c, true
+	}
+	return DocumentCategory(code)
 }
 
-// Reject returns a rejection with a code TRD declares, QuoteRoot's or the calculation's, at path of
-// the caller's request. It panics on a code TRD does not declare.
+// Reject returns a rejection with a code TRD declares (QuoteRoot's, the calculation's or the
+// formal document's), at path of the caller's request. It panics on a code TRD does not declare.
 func Reject(code, path string) *kernel.Rejection {
 	c, ok := Category(code)
 	if !ok {
