@@ -8,16 +8,17 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
+	"go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/costing"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 )
 
-// facts asks INQ, CAT and POL about the references of d, each in a transaction of its own, before
-// CST's transaction (Context Map R08, R51, R10). POL answers at the command's instant. The
-// specification standings are asked for verification only: a draft may name a revision that is no
-// longer current.
-func (s Service) facts(ctx context.Context, d costing.Data, verify bool) (costing.Facts, error) {
+// facts asks INQ, CAT, POL and EVD about the references of d, and EVD about the sources the command
+// cites besides, each in a transaction of its own, before CST's transaction (Context Map R08, R51,
+// R10, R64). POL answers at the command's instant. The specification standings are asked for
+// verification only: a draft may name a revision that is no longer current.
+func (s Service) facts(ctx context.Context, d costing.Data, verify bool, evidence ...api.Evidence) (costing.Facts, error) {
 	f := costing.Facts{Skus: map[string]bool{}, Specs: map[costing.Spec]func(string) error{}, Configs: map[costing.Ref]costing.Config{}}
 	if d.Rfq != nil {
 		rfqs, err := s.Upstream.Rfqs.ResolveRfqs(ctx, []string{d.Rfq.RfqID})
@@ -60,9 +61,6 @@ func (s Service) facts(ctx context.Context, d costing.Data, verify bool) (costin
 	for _, r := range d.ConfigRefs() {
 		refs = append(refs, polapi.ConfigRef{Kind: r.Kind, ConfigID: r.ID, Revision: r.Revision})
 	}
-	if len(refs) == 0 {
-		return f, nil
-	}
 	// A reference POL cannot hold (an unknown kind or an over-long ID) is simply unknown.
 	var asked []polapi.ConfigRef
 	for _, r := range refs {
@@ -96,7 +94,15 @@ func (s Service) facts(ctx context.Context, d costing.Data, verify bool) (costin
 		}
 		f.Configs[costing.Ref{Kind: ref.Kind, ID: ref.ConfigID, Revision: ref.Revision}] = c
 	}
-	return f, nil
+	ids := cited(evidence)
+	for _, a := range d.Assumptions {
+		for _, e := range a.Evidence {
+			ids = append(ids, e.SourceID)
+		}
+	}
+	var err error
+	f.Sources, err = s.sources(ctx, ids)
+	return f, err
 }
 
 // guard re-checks, inside CST's transaction and after the costing context root is locked FOR

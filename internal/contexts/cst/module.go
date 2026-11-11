@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/application"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -33,10 +34,11 @@ var (
 )
 
 // New wires CST to db, a transaction owner that belongs to CST alone, and to the lookups of its
-// upstream contexts INQ (RfqRef v1, R08), CAT (SkuRef v1, R51) and POL (ConfigRef v1, R10).
-func New(db *bentopg.DB, rfqs inqapi.RfqLookups, skus catapi.Queries, configs polapi.Queries) (*Module, error) {
-	if rfqs == nil || skus == nil || configs == nil {
-		return nil, errors.New("cst: module needs the lookups of INQ, CAT and POL")
+// upstream contexts EVD (SourceRef v1, R64: the sources cited evidence names), INQ (RfqRef v1,
+// R08), CAT (SkuRef v1, R51) and POL (ConfigRef v1, R10).
+func New(db *bentopg.DB, sources evdapi.Queries, rfqs inqapi.RfqLookups, skus catapi.Queries, configs polapi.Queries) (*Module, error) {
+	if sources == nil || rfqs == nil || skus == nil || configs == nil {
+		return nil, errors.New("cst: module needs the lookups of EVD, INQ, CAT and POL")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {
@@ -48,7 +50,7 @@ func New(db *bentopg.DB, rfqs inqapi.RfqLookups, skus catapi.Queries, configs po
 	}
 	clock := bento.SystemClock{}
 	return &Module{application.Service{Clock: clock,
-		Upstream: application.Upstream{Rfqs: rfqs, Skus: skus, Configs: configs},
+		Upstream: application.Upstream{Sources: sources, Rfqs: rfqs, Skus: skus, Configs: configs},
 		Ledger: &action.Ledger{
 			DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 			Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetContext, Visible: application.Visible,

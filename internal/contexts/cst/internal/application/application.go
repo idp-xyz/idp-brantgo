@@ -3,9 +3,10 @@
 // calculation rules of domain/rules); SQL lives in adapters/postgres.
 //
 // CST's upstream contexts are INQ (Context Map R08, RfqRef v1 with a guard lock), CAT (R51, SkuRef
-// v1) and POL (R10, ConfigRef v1 with ConfigGuard). A command reads them through their api
-// packages before CST's transaction begins (the ledger's Preparer step), and the domain judges
-// what they said. costing_context.verify then re-checks, inside CST's transaction and after the
+// v1), POL (R10, ConfigRef v1 with ConfigGuard) and EVD (R64, SourceRef v1: the actor reads every
+// source cited evidence names, evidence.go). A command reads them through their api packages
+// before CST's transaction begins (the ledger's Preparer step), and the domain judges what they
+// said. costing_context.verify then re-checks, inside CST's transaction and after the
 // context root is locked FOR UPDATE, the RFQ through RfqGuard v1 and every POL configuration
 // through ConfigGuard v1, in context code order (ADR-BR-004 option B, ADR-BR-011): a cancellation,
 // closure, supersession or retirement either committed first and the verification is refused, or
@@ -24,6 +25,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/costing"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/measurement"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -84,6 +86,7 @@ func measurementCommand(command string) bool {
 
 // Upstream are the contexts CST reads references from.
 type Upstream struct {
+	Sources evdapi.Queries    // SourceRef v1 (R64)
 	Rfqs    inqapi.RfqLookups // RfqRef v1 (R08)
 	Skus    catapi.Queries    // SkuRef v1 (R51)
 	Configs polapi.Queries    // ConfigRef v1 (R10)
@@ -218,8 +221,8 @@ type preparedContext struct{ *contextCommand }
 func (p *preparedContext) Prepare(ctx context.Context) error { return p.prepare(ctx) }
 
 // SaveContext saves the whole working revision of a costing context (Python
-// costing_context.save_draft). The references the draft states must exist and be readable; their
-// effect is judged at verification.
+// costing_context.save_draft). The references the draft states must exist and be readable, the
+// sources its assumptions cite included; their effect is judged at verification.
 func (s Service) SaveContext(ctx context.Context, cmd api.SaveContext) (api.Receipt, error) {
 	data := contextData(cmd.Data)
 	h := &contextCommand{s: s, id: cmd.ContextID}
@@ -280,9 +283,10 @@ func (s Service) DiscardContextDraft(ctx context.Context, cmd api.DiscardContext
 		Reason: cmd.Reason}, cmd, cmd.Validate(), h)
 }
 
-// VerifyContext seals the working revision (Python costing_context.verify, T02 §13.1, §13.2): INQ,
-// CAT and POL are read before the transaction and judged; inside it, after the root is locked, the
-// RFQ binding is re-checked through RfqGuard v1 and each configuration through ConfigGuard v1.
+// VerifyContext seals the working revision (Python costing_context.verify, T02 §13.1, §13.2): EVD,
+// INQ, CAT and POL are read before the transaction and judged; inside it, after the root is locked,
+// the RFQ binding is re-checked through RfqGuard v1 and each configuration through ConfigGuard v1.
+// The verifier reads the sources of the draft's assumptions and of its own evidence.
 func (s Service) VerifyContext(ctx context.Context, cmd api.VerifyContext) (api.Receipt, error) {
 	h := &contextCommand{s: s, id: cmd.ContextID}
 	var facts costing.Facts
@@ -297,11 +301,16 @@ func (s Service) VerifyContext(ctx context.Context, cmd api.VerifyContext) (api.
 			}
 			return err
 		})
-		if err != nil || stored == nil || stored.Working() == nil {
-			return err // Apply refuses what is missing, in the contract's order
+		if err != nil {
+			return err
 		}
-		seen = stored.RootVersion
-		facts, err = s.facts(ctx, stored.Working().Data, true)
+		// Apply refuses a context that is missing or has no working revision, in the contract's
+		// order; the evidence the command cites is asked about all the same.
+		var data costing.Data
+		if stored != nil && stored.Working() != nil {
+			seen, data = stored.RootVersion, stored.Working().Data
+		}
+		facts, err = s.facts(ctx, data, true, cmd.Evidence...)
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
@@ -320,6 +329,11 @@ func (s Service) VerifyContext(ctx context.Context, cmd api.VerifyContext) (api.
 		if err != nil {
 			return action.Outcome{}, err
 		}
+		// The command's own evidence is judged last, before the guards lock upstream rows (Python
+		// verify; SUP's seal).
+		if err = readable(cmd.Evidence, facts.Sources, "/args/evidence"); err != nil {
+			return action.Outcome{}, err
+		}
 		if err = guard(ctx, exec, r.Data, r.Seal.Rfq, now); err != nil {
 			return action.Outcome{}, err
 		}
@@ -333,9 +347,15 @@ func (s Service) VerifyContext(ctx context.Context, cmd api.VerifyContext) (api.
 		cmd, cmd.Validate(), &preparedContext{h})
 }
 
-// WithdrawContext withdraws a sealed revision (Python costing_context.withdraw).
+// WithdrawContext withdraws a sealed revision (Python costing_context.withdraw); the withdrawer
+// reads the sources of its evidence.
 func (s Service) WithdrawContext(ctx context.Context, cmd api.WithdrawContext) (api.Receipt, error) {
 	h := &contextCommand{s: s, id: cmd.ContextID}
+	var sources map[string]bool
+	h.prepare = func(ctx context.Context) (err error) {
+		sources, err = s.sources(ctx, cited(cmd.Evidence))
+		return err
+	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 		if err := costing.Check(h.cc, h.visible(d), cmd.ExpectedVersion); err != nil {
 			return action.Outcome{}, err
@@ -344,19 +364,30 @@ func (s Service) WithdrawContext(ctx context.Context, cmd api.WithdrawContext) (
 		if err != nil {
 			return action.Outcome{}, err
 		}
+		if err = readable(cmd.Evidence, sources, "/args/evidence"); err != nil {
+			return action.Outcome{}, err
+		}
 		return h.save(ctx, exec, false, r)
 	}
 	return s.run(ctx, action.Command{Name: api.CommandWithdrawContext, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ContextID,
-		Reason: cmd.Reason}, cmd, cmd.Validate(), h)
+		Reason: cmd.Reason}, cmd, cmd.Validate(), &preparedContext{h})
 }
 
-// measurementHandler locks the measurement root and applies one command.
+// measurementHandler locks the measurement root and applies one command. Each measurement command
+// cites evidence, which prepare asks EVD about before the transaction.
 type measurementHandler struct {
-	s     Service
-	id    string
-	m     *measurement.Snapshot
-	from  int64
-	apply func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error)
+	s       Service
+	id      string
+	m       *measurement.Snapshot
+	from    int64
+	cited   []api.Evidence
+	sources map[string]bool // the cited sources the caller reads
+	apply   func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error)
+}
+
+func (h *measurementHandler) Prepare(ctx context.Context) (err error) {
+	h.sources, err = h.s.sources(ctx, cited(h.cited))
+	return err
 }
 
 func (h *measurementHandler) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -386,11 +417,16 @@ func (h *measurementHandler) recorded(r *measurement.Revision, supersedes int64)
 			"supersedes_revision": supersedes}}
 }
 
-// RecordMeasurement records a new measurement snapshot (Python measurement.record_verified).
+// RecordMeasurement records a new measurement snapshot (Python measurement.record_verified). The
+// recorder reads the sources of the data's evidence, judged before the measurement rules (Python
+// _access_document before _document_ready).
 func (s Service) RecordMeasurement(ctx context.Context, cmd api.RecordMeasurement) (api.Receipt, error) {
-	h := &measurementHandler{s: s, id: cmd.MeasurementID}
+	h := &measurementHandler{s: s, id: cmd.MeasurementID, cited: cmd.Data.Evidence}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 		if err := measurement.CheckRecord(h.m); err != nil {
+			return action.Outcome{}, err
+		}
+		if err := readable(cmd.Data.Evidence, h.sources, "/args/data/evidence"); err != nil {
 			return action.Outcome{}, err
 		}
 		var err error
@@ -404,11 +440,18 @@ func (s Service) RecordMeasurement(ctx context.Context, cmd api.RecordMeasuremen
 		cmd, cmd.Validate(), h)
 }
 
-// SupersedeMeasurement records the next revision of a measurement (Python measurement.supersede).
+// SupersedeMeasurement records the next revision of a measurement (Python measurement.supersede),
+// with the evidence judged as in RecordMeasurement, after the revision it supersedes.
 func (s Service) SupersedeMeasurement(ctx context.Context, cmd api.SupersedeMeasurement) (api.Receipt, error) {
-	h := &measurementHandler{s: s, id: cmd.MeasurementID}
+	h := &measurementHandler{s: s, id: cmd.MeasurementID, cited: cmd.Data.Evidence}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 		if err := measurement.Check(h.m, h.m != nil && d.Sees(h.m.OwnerActor, h.m.OwnerTeam), cmd.ExpectedVersion); err != nil {
+			return action.Outcome{}, err
+		}
+		if err := h.m.CheckSupersede(cmd.ActiveRevision); err != nil {
+			return action.Outcome{}, err
+		}
+		if err := readable(cmd.Data.Evidence, h.sources, "/args/data/evidence"); err != nil {
 			return action.Outcome{}, err
 		}
 		r, err := h.m.Supersede(cmd.ActiveRevision, measurementData(cmd.Data), d.Actor, d.Epoch, s.Clock.Now(), cmd.Reason)
@@ -421,15 +464,19 @@ func (s Service) SupersedeMeasurement(ctx context.Context, cmd api.SupersedeMeas
 		Reason: cmd.Reason}, cmd, cmd.Validate(), h)
 }
 
-// WithdrawMeasurement withdraws a measurement revision (Python measurement.withdraw).
+// WithdrawMeasurement withdraws a measurement revision (Python measurement.withdraw); the
+// withdrawer reads the sources of its evidence.
 func (s Service) WithdrawMeasurement(ctx context.Context, cmd api.WithdrawMeasurement) (api.Receipt, error) {
-	h := &measurementHandler{s: s, id: cmd.MeasurementID}
+	h := &measurementHandler{s: s, id: cmd.MeasurementID, cited: cmd.Evidence}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 		if err := measurement.Check(h.m, h.m != nil && d.Sees(h.m.OwnerActor, h.m.OwnerTeam), cmd.ExpectedVersion); err != nil {
 			return action.Outcome{}, err
 		}
 		r, err := h.m.Withdraw(cmd.TargetRevision, d.Actor, d.Epoch, s.Clock.Now(), cmd.Reason, measurementEvidence(cmd.Evidence))
 		if err != nil {
+			return action.Outcome{}, err
+		}
+		if err = readable(cmd.Evidence, h.sources, "/args/evidence"); err != nil {
 			return action.Outcome{}, err
 		}
 		return h.save(ctx, exec, false, r)

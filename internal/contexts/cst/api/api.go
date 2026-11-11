@@ -83,7 +83,10 @@ type ConfigRef struct {
 // kind fits the field and the revision exists is decided against POL (REFERENCE_INVALID).
 func (r ConfigRef) Validate(path string) error { return ref(r.Kind, r.ID, r.Revision, path) }
 
-// Evidence is a source a human relied on, with where in it: EVD source ID and locator.
+// Evidence is a source a human relied on, with where in it: EVD source ID and locator. The actor of
+// the command reads the source in EVD (Context Map R64, SourceRef v1): REFERENCE_INVALID at the
+// entry's source_id otherwise, alike for a source that does not exist, and PERMISSION_DENIED
+// without EVD's read permission.
 type Evidence struct {
 	SourceID string
 	Locator  string

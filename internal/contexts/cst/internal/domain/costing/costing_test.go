@@ -69,6 +69,7 @@ func facts() Facts {
 		Skus:    map[string]bool{"sku.1": true},
 		Specs:   map[Spec]func(string) error{{SkuID: "sku.1", Revision: 1}: func(string) error { return nil }},
 		Configs: map[Ref]Config{},
+		Sources: map[string]bool{"s": true},
 	}
 	for _, r := range []Ref{fee, trade, payment, calendar} {
 		f.Configs[r] = inForce(r.Kind)
@@ -289,6 +290,10 @@ func TestReady(t *testing.T) {
 		}, nil, "OK", ""},
 		{"unsupported assumption", assume("/context/calculation_currency_ref", "USD"), nil, CodeDependencyNotSupported,
 			"/args/data/assumptions/0/path"},
+		// Context Map R64: the verifier reads the assumptions' sources; a reference, judged before
+		// the document's rules (here the value an assumption states).
+		{"assumption on a source the verifier does not read", assume("/context/lines/0/quantity", "100"), func(f *Facts) { f.Sources = nil },
+			kernel.CodeReferenceInvalid, "/args/data/assumptions/0/evidence/0/source_id"},
 	}
 	for _, k := range cases {
 		t.Run(k.name, func(t *testing.T) {
@@ -348,6 +353,17 @@ func TestCheckDraft(t *testing.T) {
 	d = fixture()
 	d.RequestedCurrency = &policyR
 	want(t, CheckDraft(d, facts()), kernel.CodeReferenceInvalid, "/args/data/requested_currency_ref/kind")
+	// Context Map R64: every source an assumption cites is one the caller reads; each entry is
+	// judged, duplicates included, and the first unread one is refused at its source_id.
+	d = fixture()
+	assume("/context/lines/0/quantity", "120")(&d)
+	d.Assumptions[0].Evidence = append(d.Assumptions[0].Evidence, Evidence{SourceID: "s", Locator: "again"}, Evidence{SourceID: "private", Locator: "l"})
+	want(t, CheckDraft(d, facts()), kernel.CodeReferenceInvalid, "/args/data/assumptions/0/evidence/2/source_id")
+	f = facts()
+	f.Sources["private"] = true
+	if err := CheckDraft(d, f); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Verify seals the working revision with the RFQ binding and supersedes the active one; the content
