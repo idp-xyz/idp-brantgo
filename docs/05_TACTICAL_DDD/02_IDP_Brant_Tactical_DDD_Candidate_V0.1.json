@@ -351,7 +351,7 @@
           ],
           "goPackage": "internal/contexts/pol/internal/domain/config",
           "pythonSource": "foundation.py save／publish／retire；t03_config.py",
-          "notes": "kind 封闭枚举：company_profile、currency、unit、unit_conversion、fx_rate、calendar、trade_terms、payment_terms、tax_profile、tax_application、fee_category、pricing_policy、bank_account、number_sequence、document_template、quote_document_template、screening_regulation（启用的筛查名单与合规法规、复筛频率）、credit_policy（默认额度、额度来源、审批层级与金额阈值、逾期容忍天数）。"
+          "notes": "kind 封闭枚举：company_profile、currency、unit、unit_conversion、fx_rate、calendar、trade_terms、payment_terms、tax_profile、tax_application、fee_category、pricing_policy、bank_account、number_sequence、document_template、quote_document_template、screening_regulation（启用的筛查名单与合规法规、复筛频率）、credit_policy（默认额度、额度来源、审批层级与金额阈值、逾期容忍天数）、legal_terms（适用法律、CISG 适用或排除、合同成立规则、争议解决；公司档案可指定租户默认；WBS S3-17，F-02）、order_document_template（外销合同／形式发票版式；WBS S3-15）。"
         },
         {
           "id": "POL-AGG-FoundationSnapshot",
@@ -1048,6 +1048,7 @@
             "OrderClosedUnfulfilled",
             "OrderAmendmentRequested",
             "OrderAmendmentDecided",
+            "OrderAmendmentWithdrawn",
             "OrderAmended",
             "OrderRemainderClosed",
             "OrderClosed",
@@ -2769,22 +2770,28 @@
       ],
       "initial": "valid",
       "terminal": [
-        "invalidated",
-        "disputed"
+        "invalidated"
       ],
       "transitions": [
         {
           "from": "valid",
           "command": "acceptance.invalidate",
           "to": "invalidated",
-          "guard": "人工；expected_effectivity_version；原因与新证据（待实现）",
+          "guard": "人工；expected_effectivity_version；原因与新证据",
           "actor": "human"
         },
         {
           "from": "valid",
           "command": "acceptance.mark_disputed",
           "to": "disputed",
-          "guard": "同上；生效后建立争议处置（待实现）",
+          "guard": "同上；生效后建立争议处置",
+          "actor": "human"
+        },
+        {
+          "from": "disputed",
+          "command": "acceptance.invalidate",
+          "to": "invalidated",
+          "guard": "人工；expected_effectivity_version；原因与新证据。争议承诺须先作废，其报价修订方可替代、撤回或取消（负责人决定 2026-11-11）",
           "actor": "human"
         }
       ],

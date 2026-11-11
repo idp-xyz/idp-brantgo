@@ -1,5 +1,33 @@
 # IDP Brant 主档案变更记录
 
+## V1.7 · 2026-11-11 · S3 完成：报价、确认、订单与采购草稿
+
+S3 合并：TRD 报价根（工作稿、冻结与服务端计算、商业哈希、对象控制）、审核与毛利例外、正式化（报价模板与确定性渲染、POL 编号、文件字节、提交证据、风险暂停）、替代、撤回与取消、客户回复与承诺效力账本、合同成立、外销订单（准备、审核与风险确认、生效）、订单变更与生效订单的终止、外销合同与形式发票、查询与动作对账、适用法律与争议解决；PUR 采购草稿、需求分配与草稿作废；PTY 与 CAT 为 TRD、PUR 发布的守卫。BRC-001 全链在 PostgreSQL 16 上经 HTTP 重放；执行证据回写到 09 阶段。
+
+### 新增
+- 09：S3 执行报告 V0.1 与 09_S3_EVIDENCE（含每次合并的 make race 记录与 BRC-001 链路记录）。
+- POL：配置类型 legal_terms（WBS S3-17，F-02）与 order_document_template（WBS S3-15），共 20 种；公司档案可指定租户默认适用法律；编号单据类型 proforma_invoice。
+
+### 更新
+- 03：Context Map 的 TRD 事实补上 AcceptanceDisputed、OrderReviewRequested、OrderAmendmentRequested、OrderAmendmentDecided、OrderAmendmentWithdrawn；R22 为 PartyRef v1＋PartyGuard v1；R52 改为守卫锁定（SkuRef v1＋SkuGuard v1），负责人决定。
+- 05：战术模型的 POL 封闭枚举加入 legal_terms 与 order_document_template；SM-TRD-ACCEPTANCE 增加 disputed → invalidated（acceptance.invalidate），争议承诺须先作废，其报价修订方可替代、撤回或取消（负责人决定）；SalesOrder 事件加入 OrderAmendmentWithdrawn。
+- 08：Python 测试映射 T03、T04 的 417 行全部有结论：@@S3MAPPINGROWS@@ 集成门 IG-03（BC-AT15、BC-AT17）与 IG-04（跨上下文资格重查）为 DONE_CI，IG-08（正式文档字节）与 IG-09（编号）为 PARTIAL。
+- 09：WBS 中 S3-01 至 S3-17 改为 DONE_CI；S3 完成。
+- 构建器：版本 1.7；新增 S3 已移植测试表与 S3 证据检查，“最新证据快照”依次取 S3、S2、S1、M0。
+
+### 负责人决定（2026-11-10 至 11-11）
+- S3 不接入 STL 信用守卫（R57）、CNX 贸易合规守卫（R58）与 TSK 对象控制命令（R17），登记为 S4—S5 接入；订单生效的提交证据与 OrderActivated 记录 not_wired，不视为通过。
+- 毛利审批岗获得 quote.review.decide；销售经办获得 number.issue 与 quote.metadata.update。
+- 已有有效或争议承诺的报价修订不得替代、撤回或取消，须先由人工作废承诺（ACCEPTANCE_ALREADY_EXISTS）。
+- 报价修订生效后，其批准的有效期不再影响 quote_ready（与订单生效一致，ADR-BR-013）。
+- purchase.overbuy.approve 在 S3 不授予任何岗位，超采待 S5 的独立承诺审批。
+- 适用法律配置与公司默认适用法律由管理员起草与发布，与其他 POL 配置相同。
+
+### 限制
+- STL、CNX 守卫与 TSK 对象控制未接入；FUL、STK、STL 的事实在订单终止中记录为 not_wired，S3 中生效订单的关闭与剩余关闭因此不能完成。
+- 适用法律只实现 CISG 与中国法的到达规则；其他法律在冻结时拒绝。
+- 订单审批没有 POL 政策（有效期只要求晚于决定时刻）；EVD 文件登记的消费、上游事件触发的风险暂停未做。G0、G1 结论不变。
+
 ## V1.6 · 2026-11-10 · S2 完成：寻源与核价
 
 S2 合并：SUP 供应条件与 SupplyConditionGuard v1，CST 计算规则、核价上下文与测量、场景评估、冻结快照、来源否认与 AdoptabilityGuard v1，INQ 的 RfqGuard v1。T02 的 660.00 USD 基线在 PostgreSQL 16 上冻结；执行证据回写到 09 阶段。
