@@ -652,6 +652,7 @@ type Queries interface {
 	GetActiveRevision(ctx context.Context, quoteID string) (FormalRevision, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 	AcceptanceQueries
+	ReadQueries
 }
 
 // Command is one of TRD's commands.
