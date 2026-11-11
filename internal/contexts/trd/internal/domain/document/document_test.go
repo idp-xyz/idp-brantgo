@@ -25,10 +25,11 @@ func formalize(t *testing.T, r Revision, tpl Template, f Facts, number string) *
 	return formal
 }
 
-// TRD-INV-009 and WBS S3-04 (确定性渲染): the frozen fixture, sealed by the S3-01 freeze, renders the
-// bytes Python's document.render prints for the same values (testdata vector "go fixture mirror":
-// Python's example normalized, with this fixture's business hash, contact, buyer address, trade
-// terms as scope and microsecond instants), and the same bytes on every run.
+// TRD-INV-009 and WBS S3-04 (确定性渲染): the frozen fixture, sealed by the freeze with the server
+// calculation, renders the bytes Python's document.render prints for the same values (testdata
+// vector "go fixture mirror": Python's example normalized, with this fixture's business hash,
+// contact, buyer address, trade terms as scope, delivery and microsecond instants), and the same
+// bytes on every run.
 func TestFrozenRevisionRendersPythonBytes(t *testing.T) {
 	v := renderVectors(t)["go fixture mirror"]
 	r := seal(t, nil)
@@ -68,7 +69,7 @@ func TestDocumentShowsNoInternalCostFields(t *testing.T) {
 // lexical form of their decimals freeze to one business hash and render one document, decimals as
 // the normalized document holds them.
 func TestEquivalentDecimalsRenderOneDocument(t *testing.T) {
-	short := seal(t, func(d *quote.Data, _ *quote.Facts, _ *quote.Calculation) {
+	short := seal(t, func(d *quote.Data, _ *quote.Facts) {
 		d.Lines[0].Quantity, d.Lines[0].UnitPrice, d.Lines[0].PriceBasisQuantity, d.Lines[0].DiscountRatio = "120", "8", "1", "0"
 	})
 	long := seal(t, nil)
@@ -82,15 +83,20 @@ func TestEquivalentDecimalsRenderOneDocument(t *testing.T) {
 	}
 }
 
-// Charges print after the lines, with their amounts, in the document's order (Python
-// document.render); the recipient is addressed at the buyer address, else the billing address.
+// Charges print after the lines, with the amounts the server calculation gives them, in the
+// document's order (Python document.render); the recipient is addressed at the buyer address, else
+// the billing address.
 func TestChargesAndRecipientAddress(t *testing.T) {
-	charged := seal(t, func(d *quote.Data, _ *quote.Facts, c *quote.Calculation) {
+	vat := quote.Ref{Kind: quote.KindTaxProfile, ID: "tax.vat13", Revision: 1}
+	charged := seal(t, func(d *quote.Data, f *quote.Facts) {
 		d.Addresses = []quote.AddressRef{buyer, billing}
 		d.Charges = []quote.Charge{{ChargeID: "C1", FeeCategory: freight, ObligationKey: "freight.export", Amount: "50.00",
 			Inclusion: quote.InclusionSeparate, TaxApplication: chargeTax, Evidence: proof}}
-		c.Charges = []quote.AmountLine{{ID: "C1", NetMinor: "5000", TaxMinor: "650", PayableMinor: "5650"}}
-		c.NetMinor, c.TaxMinor, c.PayableMinor, c.Payments[0].AmountMinor = "101000", "650", "101650", "101650"
+		f.Configs[chargeTax] = quote.Config{ContentHash: hashOf("charge"), Nested: []quote.Ref{vat}}
+		f.Configs[vat] = quote.Config{ContentHash: hashOf("vat13")}
+	}, func(q *calc.Quote, _ *calc.Facts, _ map[string]quote.Stage) {
+		q.Charges[0].Tax.Profile = calc.TaxProfile{Ref: quote.CalcRef(vat), Rate: kernel.MustDecimal("0.13"), PriceBasis: calc.TaxExclusive,
+			Recovery: calc.Nonrecoverable}
 	})
 	text := string(formalize(t, charged, template(), facts(), "SYN-Q-2026-00001").File.Content)
 	for _, want := range []string{
@@ -102,7 +108,7 @@ func TestChargesAndRecipientAddress(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, text)
 		}
 	}
-	billed := seal(t, func(d *quote.Data, _ *quote.Facts, _ *quote.Calculation) { d.Addresses = []quote.AddressRef{billing} })
+	billed := seal(t, func(d *quote.Data, _ *quote.Facts) { d.Addresses = []quote.AddressRef{billing} })
 	if text := string(formalize(t, billed, template(), facts(), "Q-1").File.Content); !strings.Contains(text,
 		"Customer: Synthetic Buyer Ltd\nSynthetic billing address\nContact: ") {
 		t.Errorf("billing address:\n%s", text)
@@ -112,30 +118,35 @@ func TestChargesAndRecipientAddress(t *testing.T) {
 	}
 }
 
-// Forms beyond Python's (package doc): a stage without a day basis counts calendar days and one
-// without a calendar prints no calendar; a lead-time delivery prints its days, anchor and calendar;
-// a delivery without a milestone or time zone leaves them out.
+// Forms beyond Python's (package doc): a stage of payment terms without a day basis counts
+// calendar days and one without a calendar prints no calendar; a lead-time delivery prints its
+// days, day basis, anchor and calendar in place of the date.
 func TestFormsBeyondPython(t *testing.T) {
-	r := seal(t, func(_ *quote.Data, _ *quote.Facts, c *quote.Calculation) {
-		c.Payments[0].DayBasis, c.Payments[0].Calendar = "", nil
+	anchor := quote.BusinessRef{Kind: "delivery_anchor", ID: "order_confirmed", Revision: 1}
+	cn := quote.Ref{Kind: quote.KindCalendar, ID: "cal.cn", Revision: 2}
+	r := seal(t, func(d *quote.Data, f *quote.Facts) {
+		d.Delivery = &quote.Delivery{Kind: "lead_time", Anchor: &anchor, Days: 30, DayBasis: "working", Calendar: &cn,
+			Milestone: "goods_ready", Place: deham, TimeZone: "Asia/Shanghai"}
+		f.Configs[cn] = quote.Config{ContentHash: hashOf("cal.cn")}
+	}, func(q *calc.Quote, f *calc.Facts, stages map[string]quote.Stage) {
+		f.Cost.Delivery = q.Delivery // the costing compared its candidates on the same lead time
+		stages["P1"] = quote.Stage{Trigger: "before_shipment"}
 	})
-	lead := facts()
-	lead.Delivery = Delivery{Kind: DeliveryLeadTime, AnchorEvent: "order_confirmed", Days: 30, DayBasis: "working",
-		Calendar: &quote.Ref{Kind: quote.KindCalendar, ID: "cal.cn", Revision: 2}, TimeZone: "Asia/Shanghai"}
-	text := string(formalize(t, r, template(), lead, "Q-1").File.Content)
+	text := string(formalize(t, r, template(), facts(), "Q-1").File.Content)
 	for _, want := range []string{
 		"\nP1 | 100% | 96000 | before_shipment | 0 calendar days\n\n",
-		"\nDelivery: 30 working days after order_confirmed | calendar cal.cn r2 | Asia/Shanghai\n\n",
+		"\nDelivery: 30 working days after order_confirmed r1 | calendar cal.cn r2 | goods_ready | Asia/Shanghai\n\n",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in\n%s", want, text)
 		}
 	}
-	bare := facts()
-	bare.Delivery = Delivery{Kind: DeliveryFixedDate, Date: "2026-11-15"}
-	working := seal(t, func(_ *quote.Data, _ *quote.Facts, c *quote.Calculation) { c.Payments[0].DayBasis = "working" })
-	text = string(formalize(t, working, template(), bare, "Q-1").File.Content)
-	if !strings.Contains(text, "\nDelivery: 2026-11-15\n\n") || !strings.Contains(text, "| 0 working days | calendar payment.calendar r1\n") {
+	working := seal(t, nil, func(_ *calc.Quote, _ *calc.Facts, stages map[string]quote.Stage) {
+		stages["P1"] = quote.Stage{Trigger: "before_shipment", DayBasis: "working", Calendar: &calendar}
+	})
+	text = string(formalize(t, working, template(), facts(), "Q-1").File.Content)
+	if !strings.Contains(text, "\nDelivery: 2027-01-31 | handover | Asia/Shanghai\n\n") ||
+		!strings.Contains(text, "| 0 working days | calendar payment.calendar r1\n") {
 		t.Errorf("%s", text)
 	}
 }
@@ -276,6 +287,17 @@ func TestPrepareRefusals(t *testing.T) {
 	unfit := edited(t, good, func(doc map[string]any) {
 		member(doc, "calculation")["payments"].([]any)[0].(map[string]any)["amount_minor"] = "1"
 	})
+	uncalculated := edited(t, good, func(doc map[string]any) { doc["calculation"] = nil })
+	delivery := func(edit func(d map[string]any)) Revision {
+		return edited(t, good, func(doc map[string]any) { edit(member(doc, "data", "delivery")) })
+	}
+	leadTime := func(days int64) func(d map[string]any) {
+		return func(d map[string]any) {
+			delete(d, "date")
+			d["kind"], d["days"], d["day_basis"] = "lead_time", days, "calendar"
+			d["calendar_ref"] = map[string]any{"kind": "calendar", "id": "payment.calendar", "revision": int64(1)}
+		}
+	}
 	cases := []struct {
 		name string
 		rev  Revision
@@ -287,7 +309,7 @@ func TestPrepareRefusals(t *testing.T) {
 			want: "BUSINESS_HASH_MISMATCH at /business_hash"},
 		{name: "not the normalized canonical form", rev: Revision{Commercial: indented.Bytes(), BusinessHash: quote.Hash(indented.Bytes())},
 			want: "BUSINESS_HASH_MISMATCH at /business_hash"},
-		{name: "no server calculation", rev: sealed(t, draft(), freezeFacts(), nil), want: "REFERENCE_INVALID at /calculation"},
+		{name: "no server calculation", rev: uncalculated, want: "REFERENCE_INVALID at /calculation"},
 		{name: "a calculation that does not fit", rev: unfit, want: "INVALID_KNOWN_VALUE at /calculation/payments"},
 		{name: "a template the manifest does not pin", rev: unpinned, want: "REFERENCE_INVALID at /data/document_template_ref"},
 		{name: "no buyer or billing address", rev: consignee, want: "REFERENCE_INVALID at /party_snapshots/customer/addresses"},
@@ -312,13 +334,17 @@ func TestPrepareRefusals(t *testing.T) {
 		{name: "another trade terms revision", fact: func(f *Facts) { f.TradeTerms.Ref.Revision = 2 }, want: "REFERENCE_INVALID at /data/trade_terms_ref"},
 		{name: "trade terms content not pinned", fact: func(f *Facts) { f.TradeTerms.ContentHash = "" }, want: "REFERENCE_STALE at /data/trade_terms_ref"},
 		{name: "no Incoterm", fact: func(f *Facts) { f.TradeTerms.Incoterm = "" }, want: "REFERENCE_INVALID at /data/trade_terms_ref"},
-		{name: "no delivery", fact: func(f *Facts) { f.Delivery = Delivery{} }, want: "REFERENCE_INVALID at /data/trade_terms_ref"},
-		{name: "a date that does not exist", fact: func(f *Facts) { f.Delivery.Date = "2026-02-30" }, want: "REFERENCE_INVALID at /data/trade_terms_ref"},
-		{name: "a lead time without anchor", fact: func(f *Facts) { f.Delivery = Delivery{Kind: DeliveryLeadTime, DayBasis: "calendar"} },
-			want: "REFERENCE_INVALID at /data/trade_terms_ref"},
-		{name: "a lead time beyond ten years", fact: func(f *Facts) {
-			f.Delivery = Delivery{Kind: DeliveryLeadTime, AnchorEvent: "order_confirmed", DayBasis: "calendar", Days: 3651}
-		}, want: "REFERENCE_INVALID at /data/trade_terms_ref"},
+		{name: "a delivery of no known kind", rev: delivery(func(d map[string]any) { d["kind"] = "fixed_date" }),
+			want: "REFERENCE_INVALID at /data/delivery"},
+		{name: "a date that does not exist", rev: delivery(func(d map[string]any) { d["date"] = "2026-02-30" }),
+			want: "REFERENCE_INVALID at /data/delivery"},
+		{name: "no milestone", rev: delivery(func(d map[string]any) { d["milestone"] = "" }), want: "REFERENCE_INVALID at /data/delivery"},
+		{name: "no time zone", rev: delivery(func(d map[string]any) { delete(d, "time_zone") }), want: "REFERENCE_INVALID at /data/delivery"},
+		{name: "a lead time without anchor", rev: delivery(leadTime(30)), want: "REFERENCE_INVALID at /data/delivery"},
+		{name: "a lead time beyond ten years", rev: delivery(func(d map[string]any) {
+			leadTime(3651)(d)
+			d["anchor_ref"] = map[string]any{"kind": "delivery_anchor", "id": "order_confirmed", "revision": int64(1)}
+		}), want: "REFERENCE_INVALID at /data/delivery"},
 		{name: "a name that is not UTF-8", fact: func(f *Facts) { f.Contact.Name = "Wang \xff" }, want: "REFERENCE_INVALID at /"},
 		{name: "over 1 MiB", tpl: func(t *Template) { t.FooterNote = strings.Repeat("页", MaxDocumentBytes/3) }, want: "CALCULATION_LIMIT_EXCEEDED at /"},
 	}

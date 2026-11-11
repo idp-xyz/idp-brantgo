@@ -21,7 +21,7 @@ var golden = map[string]string{
 	"python-v050-commercial.json":        "1f252abdbbd7a245319f52e4cc1438b0d07de1943e485548c86db57241c2b5ac",
 	"python-v050-document.json":          "ad6e0a49dd67b3b5087bb5ade89faed28549769ba2ffe48358f09781bd688603",
 	"python-v050-registry.json":          "83de806a87854bf1fe90028134ea886aa181490ef0b6a5076f307d06443d72d5",
-	"python-v050-render-vectors.json":    "1f2782c57a7af83429e75ecc27df3e80b5b89592e2527ffce6087a1418f37cdc",
+	"python-v050-render-vectors.json":    "74082c28c223c47377221f444dcfd507a4e4110a6d28b4b095083e891c13a0c0",
 	"python-v050-plaintext-vectors.json": "100ffd7d879d4bb35a1aef17d84d8ecdd7f19ec9a00e7f47a81bb62a93e6bdb3",
 }
 

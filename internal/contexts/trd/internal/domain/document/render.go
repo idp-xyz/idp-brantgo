@@ -183,7 +183,7 @@ func compose(c quote.Commercial, hash string, f Facts) (sheet, error) {
 	}
 	s.incoterm, s.edition, s.responsibility, s.namedPlace, s.scope = tt.Incoterm, tt.Edition, tt.ResponsibilityNote, tt.NamedPlace,
 		refText(d.TradeTerms)
-	parts, err := deliveryParts(f.Delivery)
+	parts, err := deliveryParts(d.Delivery)
 	if err != nil {
 		return sheet{}, err
 	}
@@ -208,32 +208,38 @@ func recipientAddress(addresses []quote.AddressSnapshot) (string, bool) {
 	return "", false
 }
 
-func deliveryParts(d Delivery) ([]string, error) {
-	const p = "/data/trade_terms_ref"
+// Delivery kinds of a frozen document (TRD api.Delivery, CST's form).
+const (
+	deliveryFixed    = "fixed"
+	deliveryLeadTime = "lead_time"
+)
+
+// deliveryParts prints the delivery the document binds (data.delivery): Python's "<date> |
+// <milestone> | <time zone>" for a fixed date; a lead time prints "<days> <day basis> days after
+// <anchor id> r<revision> | calendar <id> r<revision>" in place of the date. Every freeze seals one
+// of these forms whole; any other stored delivery is REFERENCE_INVALID.
+func deliveryParts(d quote.Delivery) ([]string, error) {
+	const p = "/data/delivery"
 	var parts []string
 	switch d.Kind {
-	case DeliveryFixedDate:
+	case deliveryFixed:
 		if day, err := time.Parse(time.DateOnly, d.Date); err != nil || day.Format(time.DateOnly) != d.Date {
 			return nil, fail(refInvalid, p, "A fixed delivery has a date")
 		}
 		parts = append(parts, d.Date)
-	case DeliveryLeadTime:
-		if blank(d.AnchorEvent) || blank(d.DayBasis) || d.Days < 0 || d.Days > 3650 {
-			return nil, fail(refInvalid, p, "A lead time has an anchor event, a day basis and 0 to 3650 days")
+	case deliveryLeadTime:
+		if d.Anchor == nil || d.Calendar == nil || blank(d.DayBasis) || d.Days < 0 || d.Days > 3650 {
+			return nil, fail(refInvalid, p, "A lead time has an anchor, 0 to 3650 days, a day basis and a calendar")
 		}
-		parts = append(parts, strconv.Itoa(d.Days)+" "+d.DayBasis+" days after "+d.AnchorEvent)
-		if d.Calendar != nil {
-			parts = append(parts, "calendar "+refText(*d.Calendar))
-		}
+		parts = append(parts, strconv.Itoa(d.Days)+" "+d.DayBasis+" days after "+d.Anchor.ID+" r"+strconv.FormatInt(d.Anchor.Revision, 10),
+			"calendar "+refText(*d.Calendar))
 	default:
 		return nil, fail(refInvalid, p, "The delivery is a fixed date or a lead time")
 	}
-	for _, s := range []string{d.Milestone, d.TimeZone} {
-		if s != "" {
-			parts = append(parts, s)
-		}
+	if blank(d.Milestone) || blank(d.TimeZone) {
+		return nil, fail(refInvalid, p, "A delivery has a milestone and a time zone")
 	}
-	return parts, nil
+	return append(parts, d.Milestone, d.TimeZone), nil
 }
 
 // pinned checks that r is pinned by c's dependency manifest with content hash hash: a revision the

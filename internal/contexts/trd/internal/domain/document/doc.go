@@ -62,15 +62,17 @@
 //     normalization keeps the author's form.
 //   - The customer address is the buyer address, else the billing address, of the party snapshot;
 //     Python's quote names exactly one address of either role.
-//   - Scope is the trade terms revision: TRD's trade terms carry the Incoterm, the named place and
-//     the delivery that Python spread over trade_terms_ref, trade_scope_ref and named_place_ref.
+//   - Scope is the trade terms revision, and the named place the trade terms' named place: TRD's
+//     trade terms carry the Incoterm and the named place's name that Python spread over
+//     trade_terms_ref, trade_scope_ref and named_place_ref (TRD's named_place_ref is a location
+//     no Brant context names). The delivery is the document's own (data.delivery), as in Python.
 //   - Beyond Python's forms: a payment stage without a day basis counts calendar days (POL), one
-//     without a calendar prints no calendar part, a lead-time delivery prints
-//     "<days> <day basis> days after <anchor event>" and its calendar, and a delivery without a
-//     milestone or time zone leaves that part out.
+//     without a calendar prints no calendar part, and a lead-time delivery prints
+//     "<days> <day basis> days after <anchor id> r<revision> | calendar <id> r<revision>" in
+//     place of the date.
 //   - Only language en: Python's renderer has no zh-CN layout (DEPENDENCY_NOT_SUPPORTED).
 //
 // Refusals point into the inputs: the stored commercial document by its own JSON Pointers
-// ("/calculation", "/data/currency_ref", "/party_snapshots/customer/addresses"), the template at
+// ("/calculation", "/data/delivery", "/party_snapshots/customer/addresses"), the template at
 // "/template/<member>", the number at "/number" and plain-text values at "/values/<field>".
 package document

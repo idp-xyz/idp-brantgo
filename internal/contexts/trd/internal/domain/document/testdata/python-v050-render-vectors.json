@@ -1554,7 +1554,7 @@
   "size_bytes": 1375
  },
  {
-  "business_hash": "aad6e5272e73086e46b45ce7d17dbab100bce293c8bfba9927edf9c9a3381a00",
+  "business_hash": "d3a86433baa7dc31f3ea495c49579fe3943b007854728cead9e2e2181103cc30",
   "commercial": {
    "business_revision": 1,
    "calculation": {
@@ -1628,11 +1628,11 @@
      "row_version": 2
     },
     "delivery": {
-     "date": "2026-11-15",
+     "date": "2027-01-31",
      "kind": "fixed",
      "milestone": "handover",
      "place_ref": {
-      "id": "named.place",
+      "id": "DEHAM",
       "kind": "location",
       "revision": 1
      },
@@ -1687,7 +1687,7 @@
      }
     ],
     "named_place_ref": {
-     "id": "named.place",
+     "id": "DEHAM",
      "kind": "location",
      "revision": 1
     },
@@ -2140,8 +2140,8 @@
    },
    "quote_id": "quote.1"
   },
-  "content_sha256": "7bd537d41ee0508c2285c44d786c1b4995ccf532ca4ffa5862804399462baaf6",
-  "content_text": "SYNTHETIC QUOTATION — CONTRACT EXAMPLE ONLY\n\nIssuer: SYNTHETIC Exporter — no actual trade\nSynthetic Shanghai address\n\nCustomer: Synthetic Buyer Ltd\nSynthetic buyer address\n上海\nContact: Synthetic Contact 联系人\n\nNumber: SYN-Q-2026-00001\nQuote: quote.1 r1\nBusiness SHA-256: aad6e5272e73086e46b45ce7d17dbab100bce293c8bfba9927edf9c9a3381a00\n\nLines (all amounts in currency minor units):\nL1 | 合成商品 | SPEC-1 | 120 PCS | price 8 per 1 | discount 0 | net 96000 | tax 0 | payable 96000\n\nCurrency: USD | minor digits: 2\nNet: 96000 | Tax: 0 | Payable: 96000\n\nTerms: FCA 2020 | Synthetic negotiated terms; not legal guidance\nNamed place: 合成地点 | Scope: terms.test r1\n\nDelivery: 2026-11-15 | handover | Asia/Shanghai\n\nPayment plan (minor units; not receipts):\nP1 | 100% | 96000 | before_shipment | 0 calendar days | calendar payment.calendar r1\n\nCommercial issue: 2026-10-22T09:00:00.000000Z\nExpires exclusively: 2026-10-28T08:00:00.000000Z\n\n客户可见说明：合成样例\nKeep this line break.\nSynthetic data. Not an actual offer or customer acceptance.\n",
+  "content_sha256": "db9046fe528454924feb8b79ce5702149ab857a3712bf20f9040542de6e42248",
+  "content_text": "SYNTHETIC QUOTATION — CONTRACT EXAMPLE ONLY\n\nIssuer: SYNTHETIC Exporter — no actual trade\nSynthetic Shanghai address\n\nCustomer: Synthetic Buyer Ltd\nSynthetic buyer address\n上海\nContact: Synthetic Contact 联系人\n\nNumber: SYN-Q-2026-00001\nQuote: quote.1 r1\nBusiness SHA-256: d3a86433baa7dc31f3ea495c49579fe3943b007854728cead9e2e2181103cc30\n\nLines (all amounts in currency minor units):\nL1 | 合成商品 | SPEC-1 | 120 PCS | price 8 per 1 | discount 0 | net 96000 | tax 0 | payable 96000\n\nCurrency: USD | minor digits: 2\nNet: 96000 | Tax: 0 | Payable: 96000\n\nTerms: FCA 2020 | Synthetic negotiated terms; not legal guidance\nNamed place: 合成地点 | Scope: terms.test r1\n\nDelivery: 2027-01-31 | handover | Asia/Shanghai\n\nPayment plan (minor units; not receipts):\nP1 | 100% | 96000 | before_shipment | 0 calendar days | calendar payment.calendar r1\n\nCommercial issue: 2026-10-22T09:00:00.000000Z\nExpires exclusively: 2026-10-28T08:00:00.000000Z\n\n客户可见说明：合成样例\nKeep this line break.\nSynthetic data. Not an actual offer or customer acceptance.\n",
   "name": "go fixture mirror",
   "number": "SYN-Q-2026-00001",
   "records": [
@@ -2240,7 +2240,7 @@
      "name": "合成地点"
     },
     "ref": {
-     "id": "named.place",
+     "id": "DEHAM",
      "kind": "location",
      "revision": 1
     }
