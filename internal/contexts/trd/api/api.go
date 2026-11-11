@@ -27,7 +27,11 @@
 // quote.activate and quote.replace bind its formal document, number and commit evidence and make it
 // the root's one active revision; quote.withdraw and quote.cancel end a revision. Steps relying on a
 // formal revision resolve it (Lookups) and re-check it in their transaction (QuoteRevisionGuard v1,
-// guard.go).
+// guard.go). The customer's reply to an active formal revision is recorded and verified into an
+// acceptance, which forms the contract when it arrived before the revision expired, and is
+// invalidated or disputed later (WBS S3-06, S3-13; acceptance.go); steps relying on a formed
+// contract resolve the acceptance (AcceptanceLookups) and re-check it in their transaction
+// (AcceptanceGuard v1, acceptance_guard.go).
 package api
 
 import (
@@ -627,6 +631,7 @@ type Commands interface {
 	Replace(ctx context.Context, cmd Replace) (FormalizationReceipt, error)
 	Withdraw(ctx context.Context, cmd Withdraw) (RevisionReceipt, error)
 	Cancel(ctx context.Context, cmd Cancel) (RevisionReceipt, error)
+	AcceptanceCommands
 }
 
 // Queries is TRD's audited read side.
@@ -646,6 +651,7 @@ type Queries interface {
 	// quote.active.get (trd.read); NO_ACTIVE_REVISION when there is none.
 	GetActiveRevision(ctx context.Context, quoteID string) (FormalRevision, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
+	AcceptanceQueries
 }
 
 // Command is one of TRD's commands.

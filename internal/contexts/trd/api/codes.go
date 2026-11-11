@@ -2,10 +2,10 @@ package api
 
 import "go.idp.xyz/idp-brant/internal/kernel"
 
-// Codes TRD declares for QuoteRoot (error catalog V0.1, rows whose contexts include TRD), with the
-// category the catalog gives them (409 conflict, 422 invalid). The codes the server calculation
-// decides are in calc_codes.go; QuoteRoot's freeze answers with some of those too
-// (COMPARISON_BASIS_MISMATCH, BASE_QUANTITY_MISMATCH, DEPENDENCY_NOT_SUPPORTED,
+// Codes TRD declares for QuoteRoot, customer responses and acceptance (error catalog V0.1, rows whose
+// contexts include TRD), with the category the catalog gives them (409 conflict, 422 invalid). The
+// codes the server calculation decides are in calc_codes.go; QuoteRoot's freeze answers with some
+// of those too (COMPARISON_BASIS_MISMATCH, BASE_QUANTITY_MISMATCH, DEPENDENCY_NOT_SUPPORTED,
 // CHARGE_SCOPE_UNRESOLVED, FX_SCOPE_MISMATCH). TRD also answers with the shared kernel codes
 // (SCHEMA_INVALID, NOT_FOUND, VERSION_CONFLICT, INVALID_STATE, DRAFT_NOT_READY, REFERENCE_INVALID,
 // DUPLICATE_LINE_ID, INVALID_KNOWN_VALUE, PERMISSION_DENIED and the rest) and passes on its
@@ -38,6 +38,18 @@ const (
 	// Formalization and conversion (WBS S3-04, S3-05; formal.go).
 	CodeRootConversionLocked   = "ROOT_CONVERSION_LOCKED"   // 409: the conversion slot is taken; the active revision is neither replaced nor cancelled
 	CodeConversionSlotConflict = "CONVERSION_SLOT_CONFLICT" // 409: the root's full_v1 conversion slot is taken
+
+	// Customer responses and acceptance (WBS S3-06, S3-13; acceptance.go).
+	CodeAcceptanceNotUnconditional    = "ACCEPTANCE_NOT_UNCONDITIONAL"    // the response is not a complete, unconditional acceptance
+	CodeAcceptanceScopeMismatch       = "ACCEPTANCE_SCOPE_MISMATCH"       // the customer, contact, revision or hash is not the accepted revision's
+	CodeAcceptanceLinesMismatch       = "ACCEPTANCE_LINES_MISMATCH"       // the accepted lines are not the revision's complete line set
+	CodeAcceptanceTimeConflict        = "ACCEPTANCE_TIME_CONFLICT"        // the arrival is after the recording or verification, or before the formalization
+	CodeAcceptanceLate                = "ACCEPTANCE_LATE"                 // the acceptance arrived at or after the revision's expires_at
+	CodeAcceptanceNotValid            = "ACCEPTANCE_NOT_VALID"            // 409: the acceptance is invalidated or disputed
+	CodeAcceptanceAlreadyExists       = "ACCEPTANCE_ALREADY_EXISTS"       // 409: the acceptance ID is taken, or the revision has a valid acceptance
+	CodeSourceMessageDuplicate        = "SOURCE_MESSAGE_DUPLICATE"        // 409: the customer's message backs a live acceptance
+	CodeResponseImmutable             = "RESPONSE_IMMUTABLE"              // the response ID is recorded with other content
+	CodeResponseVerificationImmutable = "RESPONSE_VERIFICATION_IMMUTABLE" // the response was verified into another live acceptance
 )
 
 var codes = map[string]kernel.Category{
@@ -65,6 +77,17 @@ var codes = map[string]kernel.Category{
 
 	CodeRootConversionLocked:   kernel.CategoryConflict,
 	CodeConversionSlotConflict: kernel.CategoryConflict,
+
+	CodeAcceptanceNotUnconditional:    kernel.CategoryInvalid,
+	CodeAcceptanceScopeMismatch:       kernel.CategoryInvalid,
+	CodeAcceptanceLinesMismatch:       kernel.CategoryInvalid,
+	CodeAcceptanceTimeConflict:        kernel.CategoryInvalid,
+	CodeAcceptanceLate:                kernel.CategoryInvalid,
+	CodeAcceptanceNotValid:            kernel.CategoryConflict,
+	CodeAcceptanceAlreadyExists:       kernel.CategoryConflict,
+	CodeSourceMessageDuplicate:        kernel.CategoryConflict,
+	CodeResponseImmutable:             kernel.CategoryInvalid,
+	CodeResponseVerificationImmutable: kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code TRD declares: QuoteRoot's, the calculation's or the

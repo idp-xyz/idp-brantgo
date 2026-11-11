@@ -209,9 +209,16 @@ func TestCodesHaveCatalogCategories(t *testing.T) {
 		CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 		// Formalization and conversion: both 409.
 		CodeRootConversionLocked: kernel.CategoryConflict, CodeConversionSlotConflict: kernel.CategoryConflict,
+		// Customer responses and acceptance: SOURCE_MESSAGE_DUPLICATE, ACCEPTANCE_ALREADY_EXISTS and
+		// ACCEPTANCE_NOT_VALID 409, the rest 422.
+		CodeAcceptanceNotUnconditional: kernel.CategoryInvalid, CodeAcceptanceScopeMismatch: kernel.CategoryInvalid,
+		CodeAcceptanceLinesMismatch: kernel.CategoryInvalid, CodeAcceptanceTimeConflict: kernel.CategoryInvalid,
+		CodeAcceptanceLate: kernel.CategoryInvalid, CodeAcceptanceNotValid: kernel.CategoryConflict,
+		CodeAcceptanceAlreadyExists: kernel.CategoryConflict, CodeSourceMessageDuplicate: kernel.CategoryConflict,
+		CodeResponseImmutable: kernel.CategoryInvalid, CodeResponseVerificationImmutable: kernel.CategoryInvalid,
 	}
 	if len(codes) != len(want) {
-		t.Fatalf("%d QuoteRoot codes, want %d", len(codes), len(want))
+		t.Fatalf("%d TRD codes, want %d", len(codes), len(want))
 	}
 	for code, category := range want {
 		if got, ok := Category(code); !ok || got != category {

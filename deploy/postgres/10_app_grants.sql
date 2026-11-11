@@ -173,3 +173,9 @@ GRANT UPDATE (effectivity, effectivity_version, revoked_by_kind, revoked_by_id, 
 GRANT SELECT, INSERT ON brant_trd.quote_document, brant_trd.quote_commit_evidence, brant_trd.quote_revision_closure,
     brant_trd.quote_risk_hold, brant_trd.quote_conversion_slot TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint, text) TO brant_app;
+-- Customer responses and the effectivity ledger are only inserted (triggers); an acceptance changes
+-- its effectivity once (trigger), and acceptance.invalidate and acceptance.mark_disputed lock it FOR
+-- UPDATE, which needs the column grant. TRD publishes its acceptance guard.
+GRANT SELECT, INSERT ON brant_trd.customer_response, brant_trd.acceptance, brant_trd.acceptance_effectivity TO brant_app;
+GRANT UPDATE (effectivity, effectivity_version) ON brant_trd.acceptance TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_trd.guard_acceptance_valid_v1(text, text, bigint, text) TO brant_app;

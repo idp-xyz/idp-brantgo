@@ -40,7 +40,9 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   internal metadata, the root's object control and control epoch fence; review requests,
                                   approvals with revocation and margin exceptions; activation and replacement with the
                                   quote-text/0.1.0 formal document, POL number and commit evidence in one transaction,
-                                  withdrawal, cancellation, risk holds, the conversion slot; QuoteRevisionGuard v1
+                                  withdrawal, cancellation, risk holds, the conversion slot; QuoteRevisionGuard v1;
+                                  customer responses, their verification into acceptances that form the contract when
+                                  they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only

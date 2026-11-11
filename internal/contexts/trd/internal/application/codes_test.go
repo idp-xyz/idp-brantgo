@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/acceptance"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/calc"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/document"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/response"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -15,7 +17,8 @@ import (
 // The codes the domain packages decide are the codes package api declares, with the same
 // categories, so a refusal reaches transports with the catalog's status.
 func TestDomainCodesAreDeclaredByTheAPI(t *testing.T) {
-	for name, m := range map[string]map[string]kernel.Category{"quote": quote.Categories, "calc": calc.Categories, "document": document.Categories} {
+	for name, m := range map[string]map[string]kernel.Category{"quote": quote.Categories, "calc": calc.Categories, "document": document.Categories,
+		"response": response.Categories, "acceptance": acceptance.Categories} {
 		for code, category := range m {
 			if got, ok := api.Category(code); !ok || got != category {
 				t.Errorf("%s code %s: api says %v (declared %v), domain %v", name, code, got, ok, category)
@@ -51,6 +54,14 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 		CommandCheckApproval:      {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 		CommandGetFormalDocument:  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 		CommandGetActiveRevision:  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		// Customer responses and acceptance: the command catalog's 人工或 AI for the record, the
+		// tactical model's humanOnlyCommands for the rest.
+		api.CommandRecordResponse:       {kernel.ActorHuman, kernel.ActorAI},
+		api.CommandVerifyResponse:       {kernel.ActorHuman},
+		api.CommandInvalidateAcceptance: {kernel.ActorHuman},
+		api.CommandDisputeAcceptance:    {kernel.ActorHuman},
+		CommandGetResponse:              {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandGetAcceptance:            {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 	}
 	for command, kinds := range want {
 		r, err := policy.Rule(command)
@@ -66,12 +77,14 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 				t.Errorf("%s admits %s: %v", command, k, r.Admits(k))
 			}
 		}
-		reads := []string{CommandGetQuote, CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision}
+		reads := []string{CommandGetQuote, CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision, CommandGetResponse,
+			CommandGetAcceptance}
 		if !slices.Contains(reads, command) && r.Permission != command {
 			t.Errorf("%s needs permission %s", command, r.Permission)
 		}
 	}
-	for _, read := range []string{CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision} {
+	for _, read := range []string{CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision, CommandGetResponse,
+		CommandGetAcceptance} {
 		if r, _ := policy.Rule(read); r.Permission != PermissionRead {
 			t.Errorf("%s needs %s", read, r.Permission)
 		}
