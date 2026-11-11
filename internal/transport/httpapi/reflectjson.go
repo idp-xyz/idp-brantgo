@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"unicode"
 
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // POL's configuration data and the screening views are plain api structures without JSON tags. The
@@ -70,7 +72,10 @@ func taggedKind(t reflect.Type) reflect.Type {
 				continue
 			}
 			name := snake(f.Name)
-			if _, hasID := t.FieldByName("ID"); f.Name == "ConfigID" && !hasID {
+			if explicit, _, _ := strings.Cut(f.Tag.Get("json"), ","); explicit != "" && explicit != "-" {
+				// An api package that names a member explicitly (CST's RfqRef.RfqID is "id") wins.
+				name = explicit
+			} else if _, hasID := t.FieldByName("ID"); f.Name == "ConfigID" && !hasID {
 				// A configuration reference is {"kind","id","revision"} wherever it appears.
 				name = "id"
 			}
@@ -157,3 +162,64 @@ func configDataField(kind string) (reflect.StructField, bool) {
 
 // kindOf is the configuration kind a ConfigData field holds (FXRate → fx_rate).
 func kindOf(field string) string { return snake(field) }
+
+// reflected builds a commandFunc for an api command structure C whose members, apart from
+// IdempotencyKey and Kind, are its arguments: the member named idField is "id", ExpectedVersion is
+// the required "expected_version", the others follow the reflective mapping. kind, when not empty,
+// fills C's Kind (SUP's revise, discard, seal and end commands serve three kinds).
+func reflected[C any, R result](idField, kind string, call func(context.Context, C) (R, error)) commandFunc {
+	ct := reflect.TypeFor[C]()
+	var fields []reflect.StructField
+	var source []int // index in C of each args field
+	for f := range ct.Fields() {
+		var sf reflect.StructField
+		switch f.Name {
+		case "IdempotencyKey", "Kind":
+			continue
+		case idField:
+			sf = reflect.StructField{Name: f.Name, Type: f.Type, Tag: `json:"id"`}
+		case "ExpectedVersion":
+			sf = reflect.StructField{Name: f.Name, Type: reflect.TypeFor[*int64](), Tag: `json:"expected_version"`}
+		default:
+			tagged := taggedType(reflect.StructOf([]reflect.StructField{f}))
+			sf = tagged.Field(0)
+		}
+		fields = append(fields, sf)
+		source = append(source, f.Index[0])
+	}
+	at := reflect.StructOf(fields)
+	return commandFunc{args: at, call: func(ctx context.Context, key string, args json.RawMessage, maxValues int) (receipt, error) {
+		a := reflect.New(at)
+		if err := decodeArgs(args, a.Interface(), maxValues); err != nil {
+			return receipt{}, err
+		}
+		c := reflect.New(ct).Elem()
+		c.FieldByName("IdempotencyKey").SetString(key)
+		if kind != "" {
+			c.FieldByName("Kind").SetString(kind)
+		}
+		for i, idx := range source {
+			src, dst := a.Elem().Field(i), c.Field(idx)
+			if fields[i].Name == "ExpectedVersion" {
+				if src.IsNil() {
+					return receipt{}, schemaError{kernel.Reject(kernel.CodeSchemaInvalid, "/args/expected_version", "required")}
+				}
+				dst.SetInt(src.Elem().Int())
+				continue
+			}
+			copyValue(dst, src)
+		}
+		r, err := call(ctx, c.Interface().(C))
+		if err != nil {
+			return receipt{}, err
+		}
+		v := struct {
+			ActionID   string
+			ObjectID   string
+			RowVersion int64
+			Status     string
+			Replayed   bool
+		}(r)
+		return receipt{ActionID: v.ActionID, ObjectID: v.ObjectID, RowVersion: v.RowVersion, Status: v.Status, Replayed: v.Replayed}, nil
+	}}
+}

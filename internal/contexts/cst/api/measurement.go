@@ -17,7 +17,7 @@ const (
 // and net and gross weight in kilograms, holding goods of the RFQ lines LineIDs. Decimals are
 // positive with at most 6 fractional digits.
 type Package struct {
-	PackageID string
+	PackageID string `json:"id"`
 	Count     int64
 	LengthM   string
 	WidthM    string

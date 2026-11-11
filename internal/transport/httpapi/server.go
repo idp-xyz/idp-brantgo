@@ -15,9 +15,11 @@ import (
 
 	"go.idp.xyz/idp-bento-go/application"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
+	cstapi "go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
+	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
@@ -80,6 +82,8 @@ type Config struct {
 	INQ      INQ
 	POL      POL
 	REF      REF
+	SUP      SUP
+	CST      CST
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -98,7 +102,7 @@ const (
 
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
-	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.Verifier == nil ||
+	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.Verifier == nil ||
 		cfg.Clock == nil {
 		return nil, errors.New("httpapi: contexts, verifier and clock are required")
 	}
@@ -110,7 +114,7 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	s := &server{cfg: cfg, contexts: map[string]*commandSet{}}
 	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL),
-		refCommands(cfg.REF)} {
+		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST)} {
 		s.contexts[set.bc] = set
 	}
 	mux := http.NewServeMux()
@@ -137,6 +141,17 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/inq/rfqs/{id}", s.authenticated(read(s, cfg.INQ.GetRfq, rfqView)))
 	mux.Handle("GET /api/brant/v1/pol/configs/{kind}/{id}", s.authenticated(s.configRead))
 	mux.Handle("GET /api/brant/v1/pol/snapshots/{id}", s.authenticated(read(s, cfg.POL.GetSnapshot, snapshotView)))
+	mux.Handle("GET /api/brant/v1/sup/supplier_rfqs/{id}", s.authenticated(read(s, cfg.SUP.GetSupplierRfq, okView[supapi.SupplierRfqView])))
+	for _, k := range supConditionKinds {
+		get := func(ctx context.Context, id string) (supapi.ConditionView, error) {
+			return cfg.SUP.GetCondition(ctx, k.kind, id)
+		}
+		mux.Handle("GET /api/brant/v1/sup/"+k.route+"/{id}", s.authenticated(read(s, get, okView[supapi.ConditionView])))
+	}
+	mux.Handle("GET /api/brant/v1/cst/costing_contexts/{id}", s.authenticated(read(s, cfg.CST.GetContext, okView[cstapi.ContextView])))
+	mux.Handle("GET /api/brant/v1/cst/measurements/{id}", s.authenticated(read(s, cfg.CST.GetMeasurement, okView[cstapi.MeasurementView])))
+	mux.Handle("GET /api/brant/v1/cst/cost_scenarios/{id}", s.authenticated(read(s, cfg.CST.GetScenario, okView[cstapi.ScenarioView])))
+	mux.Handle("GET /api/brant/v1/cst/cost_evaluations/{id}", s.authenticated(read(s, cfg.CST.GetEvaluation, okView[cstapi.EvaluationView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	return s.correlated(mux), nil

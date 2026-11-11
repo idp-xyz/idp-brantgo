@@ -51,7 +51,7 @@ const (
 
 // RfqRef binds a costing context to an INQ RFQ at an exact row version (RfqRef v1).
 type RfqRef struct {
-	RfqID      string
+	RfqID      string `json:"id"`
 	RowVersion int64
 }
 
@@ -108,7 +108,7 @@ type ComparisonBasis struct {
 // Pointer to that input, ValueText its explicit value. It is never executed and never replaces a
 // missing value; any assumption keeps a result provisional, so it cannot be frozen.
 type Assumption struct {
-	AssumptionID string
+	AssumptionID string `json:"id"`
 	Path         string
 	ValueText    string
 	Reason       string
@@ -121,7 +121,7 @@ type Assumption struct {
 // requests for idempotency; an empty Lines is refused.
 type ContextData struct {
 	RfqRef                   *RfqRef
-	Kind                     string
+	Kind                     string `json:"context_kind"`
 	Lines                    []ContextLine
 	CalculationCurrencyRef   *ConfigRef
 	PricingPolicyRef         *ConfigRef
