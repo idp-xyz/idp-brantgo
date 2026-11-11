@@ -85,6 +85,9 @@ func OpenAPI() ([]byte, error) {
 		for _, p := range r.params {
 			params = append(params, map[string]any{"name": p, "in": "path", "required": true, "schema": map[string]any{"type": "string"}})
 		}
+		for _, p := range readQuery[r.path] {
+			params = append(params, map[string]any{"name": p, "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 0}})
+		}
 		if params != nil {
 			get["parameters"] = params
 		}
@@ -165,6 +168,20 @@ var reads = []readRoute{
 		"Whether an approval releases its revision now (a refusal is a code in the answer, not an error)", []string{"id", "approval_id"}, false},
 	{"/api/brant/v1/trd/quotes/{id}/revisions/{revision}/document", "trd.quote.document.get", "trd",
 		"A formal quote document: its binding and bytes (Base64), verified on read", []string{"id", "revision"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/ready", "trd.quote.ready", "trd",
+		"Whether a revision (?business_revision=, the active one by default) serves the next step now: every check that fails is a reason (quote_ready)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/history", "trd.quote.history", "trd", "A page of the quote's revisions with their events (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/approvals", "trd.quote.approval.history", "trd",
+		"A page of the quote's review requests and approvals with their effectivity events (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/documents", "trd.quote.document.history", "trd",
+		"A page of the quote's formal documents with their integrity now (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/commits", "trd.quote.commit.history", "trd", "A page of the quote's commit evidence (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/outbox", "trd.quote.outbox.history", "trd",
+		"A page of the Outbox events of the quote, its responses and acceptances with their relay state; external delivery is not started (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_preflight", "trd.quote.dispatch.preflight", "trd",
+		"What must hold before the formal document of a revision is sent to the customer, checked now", []string{"id", "revision"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_target", "trd.quote.dispatch.target", "trd",
+		"The recipient snapshot of a revision and whether a delivery channel serves it (none is configured)", []string{"id", "revision"}, false},
 	{"/api/brant/v1/trd/customer_responses/{id}", "trd.customer_response.get", "trd", "A customer response and its acceptances", []string{"id"}, false},
 	{"/api/brant/v1/trd/acceptances/{id}", "trd.acceptance.get", "trd", "An acceptance and its effectivity history", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
@@ -172,6 +189,16 @@ var reads = []readRoute{
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},
 	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
 		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)", []string{"source", "event_id"}, true},
+}
+
+// readQuery names the optional integer query parameters of a read.
+var readQuery = map[string][]string{
+	"/api/brant/v1/trd/quotes/{id}/ready":     {"business_revision"},
+	"/api/brant/v1/trd/quotes/{id}/history":   {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/approvals": {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/documents": {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/commits":   {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/outbox":    {"after", "limit"},
 }
 
 func commandResponses() map[string]any {
