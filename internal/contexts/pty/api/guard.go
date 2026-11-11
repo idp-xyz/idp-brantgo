@@ -159,3 +159,98 @@ func orEmpty(s *string) string {
 	}
 	return *s
 }
+
+// PartyGuard v1 (ADR-BR-004 option B, Context Map R22 PTY->PUR "PartyRef v1", guardLock true) lets
+// a downstream context re-check, inside its own transaction, that a party it adopts at a bound row
+// version is still confirmed at that row version, and keeps it so until that transaction ends. PUR
+// binds the supplier of a supply condition as SUP verified it ({party_id, row_version}). PTY
+// publishes it as a SECURITY DEFINER function in its schema with a fixed search_path
+// (migrations/pty/000005_pty_party_guard.sql):
+//
+//	brant_pty.guard_party_current_v1(p_party_id text, p_row_version bigint)
+//	    RETURNS TABLE (known boolean, status text, row_version bigint, revision bigint, roles text[], code text, stale text)
+//
+// It always returns one row in the caller's scope and locks the party row FOR SHARE in the caller's
+// transaction: party.save_draft, party.confirm, party.revise and party.deactivate update that row,
+// so each either committed before the guard read it, and the verdict is stale, or waits until the
+// caller's transaction ends. It decides what ResolveParties shows before the transaction (status and
+// row version). A downstream command locks its own aggregate root FOR UPDATE first and calls the
+// guard after, in context code order, with its own executor:
+//
+//	b := ptyapi.PartyBinding{PartyID: id, RowVersion: version}
+//	v, err := ptyapi.ScanPartyGuard(b, exec.QueryRow(ctx, ptyapi.PartyGuardSQL, ptyapi.PartyGuardArgs(b)...).Scan)
+//	if err == nil {
+//		err = v.Check(path)
+//	}
+//
+// The guard does not apply the caller's data scope (own, team) and does not judge roles: the
+// downstream checks visibility when it resolves the party before its transaction, and the role it
+// needs with HasRole.
+const (
+	PartyGuardFunction = "brant_pty.guard_party_current_v1"
+	PartyGuardSQL      = `SELECT known, status, row_version, revision, roles, code, stale FROM brant_pty.guard_party_current_v1($1, $2)`
+)
+
+// PartyBinding is a party as a downstream fact binds it: at the row version its author saw.
+type PartyBinding struct {
+	PartyID    string
+	RowVersion int64
+}
+
+// PartyGuardArgs returns the arguments of PartyGuardSQL for b.
+func PartyGuardArgs(b PartyBinding) []any { return []any{b.PartyID, b.RowVersion} }
+
+// PartyGuardVerdict is the guard's answer for Ref. Known is false when the party does not exist in
+// the caller's company (Code REFERENCE_INVALID). Otherwise Status, RowVersion, Revision (its latest
+// confirmed revision, 0 when never confirmed) and Roles describe the party now, and Code is empty
+// when it is confirmed at Ref.RowVersion, or REFERENCE_STALE with Stale StalePartyUnavailable (not
+// confirmed now) or StalePartyChanged (confirmed at another row version).
+type PartyGuardVerdict struct {
+	Ref        PartyBinding
+	Known      bool
+	Status     string
+	RowVersion int64
+	Revision   int64
+	Roles      []string
+	Code       string
+	Stale      string
+}
+
+// ScanPartyGuard reads the row of PartyGuardSQL for b through scan, such as a pgx row's Scan.
+func ScanPartyGuard(b PartyBinding, scan func(dest ...any) error) (PartyGuardVerdict, error) {
+	v := PartyGuardVerdict{Ref: b}
+	var status, code, stale *string
+	var version, revision *int64
+	var roles []string
+	if err := scan(&v.Known, &status, &version, &revision, &roles, &code, &stale); err != nil {
+		return PartyGuardVerdict{}, err
+	}
+	v.Status, v.Code, v.Stale, v.Roles = orEmpty(status), orEmpty(code), orEmpty(stale), roles
+	if version != nil {
+		v.RowVersion = *version
+	}
+	if revision != nil {
+		v.Revision = *revision
+	}
+	return v, nil
+}
+
+// Current reports whether the party is confirmed at the bound row version.
+func (v PartyGuardVerdict) Current() bool { return v.Known && v.Code == "" }
+
+// HasRole reports whether the party has role now.
+func (v PartyGuardVerdict) HasRole(role string) bool {
+	for _, r := range v.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+// Check returns nil when the party is confirmed at the bound row version and, at path of the
+// caller's request, REFERENCE_INVALID for an unknown party and REFERENCE_STALE (409, refresh and
+// resubmit) otherwise.
+func (v PartyGuardVerdict) Check(path string) error {
+	return guardCheck(v.Known, v.Code, v.Stale, path)
+}

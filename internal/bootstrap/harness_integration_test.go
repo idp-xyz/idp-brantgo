@@ -22,7 +22,7 @@ import (
 // PostgreSQL 16 database. Each test runs in a fresh tenant with company.A and company.B, so tests
 // never see each other's data. Test names cite the Python V0.50 test they port.
 
-// every S1 permission, SUP's, CST's and TRD's, Python's "*".
+// every S1 permission, SUP's, CST's, TRD's and PUR's, Python's "*".
 var allPermissions = []string{
 	"source.register", "file.register", "evd.read", "evd.audit",
 	"party.save_draft", "party.confirm", "party.revise", "party.deactivate", "contact.save_draft", "contact.confirm", "contact.revise",
@@ -48,6 +48,7 @@ var allPermissions = []string{
 	"quote.submit_review", "quote.review.decide", "quote.approval.revoke", "quote.margin_exception.approve",
 	"quote.activate", "quote.replace", "quote.withdraw", "quote.cancel",
 	"quote.response.record", "quote.response.verify", "acceptance.invalidate", "acceptance.mark_disputed",
+	"purchase.draft.prepare", "purchase.draft.void", "purchase.overbuy.approve", "pur.read", "pur.audit",
 }
 
 type world struct {

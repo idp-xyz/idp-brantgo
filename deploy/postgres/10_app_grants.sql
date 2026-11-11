@@ -63,6 +63,8 @@ GRANT UPDATE (status, content_hash, party_revision, payment_terms_id, payment_te
 -- transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_pty.guard_trading_profile_current_v1(text, bigint),
     brant_pty.guard_address_role_current_v1(text, bigint, text) TO brant_app;
+-- PartyGuard v1 (R22): PUR calls it in its own transactions with its own executor.
+GRANT EXECUTE ON FUNCTION brant_pty.guard_party_current_v1(text, bigint) TO brant_app;
 
 -- CAT: SKUs change through their lifecycle; specification revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_cat TO brant_app;
@@ -179,3 +181,17 @@ GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint,
 GRANT SELECT, INSERT ON brant_trd.customer_response, brant_trd.acceptance, brant_trd.acceptance_effectivity TO brant_app;
 GRANT UPDATE (effectivity, effectivity_version) ON brant_trd.acceptance TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_acceptance_valid_v1(text, text, bigint, text) TO brant_app;
+
+-- PUR: a purchase draft is inserted prepared with its lines and only voided, once (trigger); its
+-- lines never change; a DemandAllocation root moves its balance, order revision and version by one
+-- per command (trigger), and its entries are taken once and released once (trigger); nothing is
+-- deleted; the ledger only grows. FOR UPDATE on drafts and roots needs the column grants. The
+-- purchase draft commands call SUP's, CST's, POL's, PTY's and CAT's guard functions, granted above,
+-- and TRD's OrderGuard v1 once sales orders exist.
+GRANT USAGE ON SCHEMA brant_pur TO brant_app;
+GRANT SELECT, INSERT ON brant_pur.purchase_draft, brant_pur.purchase_draft_line, brant_pur.demand_allocation,
+    brant_pur.allocation_entry, brant_pur.action_result, brant_pur.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, voided_by_kind, voided_by_id, void_epoch, voided_at, void_reason)
+    ON brant_pur.purchase_draft TO brant_app;
+GRANT UPDATE (order_revision, demand, allocated, row_version, updated_at) ON brant_pur.demand_allocation TO brant_app;
+GRANT UPDATE (released_version, released_at) ON brant_pur.allocation_entry TO brant_app;
