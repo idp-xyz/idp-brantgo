@@ -338,6 +338,7 @@
         "quote.save_draft",
         "quote.revise",
         "quote.discard_draft",
+        "quote.metadata.update",
         "quote.freeze",
         "quote.submit_review",
         "quote.review.decide",
