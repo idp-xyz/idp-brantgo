@@ -72,7 +72,7 @@ func (f *fakeINQ) GetRfq(_ context.Context, id string) (inqapi.RfqView, error) {
 
 func newServer(t *testing.T, inq *fakeINQ) http.Handler {
 	t.Helper()
-	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: inq, POL: struct{ POL }{}, REF: struct{ REF }{}, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{},
+	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: inq, POL: struct{ POL }{}, REF: struct{ REF }{}, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{},
 		Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
 	if err != nil {
 		t.Fatal(err)
@@ -246,7 +246,7 @@ func TestDeadLetterReplayRoute(t *testing.T) {
 		{messaging.ErrAlreadyReplayed, 422, "INVALID_STATE"},
 		{messaging.ErrReplayFailed, 502, ""},
 	} {
-		h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: struct{ REF }{}, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{},
+		h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: struct{ REF }{}, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{},
 			Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{}), Replayer: fakeReplayer{c.err}})
 		if err != nil {
 			t.Fatal(err)
@@ -278,7 +278,7 @@ func (f *fakeREF) AuditRejected(context.Context, string, string, string) error {
 // admitted there and nowhere else.
 func TestListImportHasItsOwnIngressLimits(t *testing.T) {
 	ref := &fakeREF{}
-	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: ref, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{},
+	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: ref, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{},
 		Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
 	if err != nil {
 		t.Fatal(err)

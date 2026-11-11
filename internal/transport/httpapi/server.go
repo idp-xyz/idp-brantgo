@@ -19,6 +19,7 @@ import (
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
+	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -87,6 +88,7 @@ type Config struct {
 	SUP      SUP
 	CST      CST
 	TRD      TRD
+	PUR      PUR
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -105,7 +107,7 @@ const (
 
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
-	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.TRD == nil || cfg.Verifier == nil ||
+	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.TRD == nil || cfg.PUR == nil || cfg.Verifier == nil ||
 		cfg.Clock == nil {
 		return nil, errors.New("httpapi: contexts, verifier and clock are required")
 	}
@@ -117,7 +119,7 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	s := &server{cfg: cfg, contexts: map[string]*commandSet{}}
 	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL),
-		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD)} {
+		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD), purCommands(cfg.PUR)} {
 		s.contexts[set.bc] = set
 	}
 	mux := http.NewServeMux()
@@ -175,6 +177,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/orders/{id}/check", s.authenticated(s.orderCheck))
 	mux.Handle("GET /api/brant/v1/trd/customer_responses/{id}", s.authenticated(read(s, cfg.TRD.GetCustomerResponse, okView[trdapi.CustomerResponseView])))
 	mux.Handle("GET /api/brant/v1/trd/acceptances/{id}", s.authenticated(read(s, cfg.TRD.GetAcceptance, okView[trdapi.AcceptanceView])))
+	mux.Handle("GET /api/brant/v1/pur/purchase_drafts/{id}", s.authenticated(read(s, cfg.PUR.GetDraft, okView[purapi.DraftView])))
+	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocations", s.authenticated(s.allocations))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	return s.correlated(mux), nil

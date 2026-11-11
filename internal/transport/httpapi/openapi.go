@@ -23,7 +23,7 @@ func OpenAPI() ([]byte, error) {
 	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
 		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{}),
 		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{}),
-		trdCommands(struct{ TRD }{})}
+		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{})}
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -188,6 +188,10 @@ var reads = []readRoute{
 		"The checks order.activate would make now on ?review_id= (none: the source and upstream risks only); a refusal is the answer", []string{"id"}, false},
 	{"/api/brant/v1/trd/customer_responses/{id}", "trd.customer_response.get", "trd", "A customer response and its acceptances", []string{"id"}, false},
 	{"/api/brant/v1/trd/acceptances/{id}", "trd.acceptance.get", "trd", "An acceptance and its effectivity history", []string{"id"}, false},
+	{"/api/brant/v1/pur/purchase_drafts/{id}", "pur.purchase_draft.get", "pur",
+		"A purchase draft: its state now (prepared, supply_expired or voided), the exact document its hash covers, lines, totals and void; the caller's access to the order and every supply condition is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/pur/orders/{id}/allocations", "pur.demand_allocation.get", "pur",
+		"The demand allocation of every drafted line of a sales order: demand, allocated, remaining and the drafts holding it", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},

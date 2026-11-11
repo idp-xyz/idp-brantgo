@@ -33,7 +33,7 @@ func TestReceiptOfUnwrapsTheEmbeddedReceipt(t *testing.T) {
 	freeze := func(_ context.Context, c trdapi.Freeze) (trdapi.FreezeReceipt, error) {
 		return trdapi.FreezeReceipt{Receipt: trdapi.Receipt{ObjectID: c.QuoteID, RowVersion: 2, Status: trdapi.StatusFrozen}, BusinessHash: "h"}, nil
 	}
-	r, err := receiptOf(freeze)(context.Background(), trdapi.Freeze{QuoteID: "quote.1"})
+	r, err := receiptOf[trdapi.Receipt](freeze)(context.Background(), trdapi.Freeze{QuoteID: "quote.1"})
 	if err != nil || r != (trdapi.Receipt{ObjectID: "quote.1", RowVersion: 2, Status: trdapi.StatusFrozen}) {
 		t.Fatalf("%+v, %v", r, err)
 	}
