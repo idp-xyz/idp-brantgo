@@ -204,7 +204,7 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.CST, err = cst.New(db, c.EVD, c.INQ, c.CAT, c.POL)
+		c.CST, err = cst.New(db, c.EVD, c.INQ, c.CAT, c.POL, c.SUP)
 	}
 	if err != nil {
 		return nil, err
