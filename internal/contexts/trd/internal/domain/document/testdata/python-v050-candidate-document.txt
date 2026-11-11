@@ -1,0 +1,33 @@
+SYNTHETIC QUOTATION — CONTRACT EXAMPLE ONLY
+
+Issuer: SYNTHETIC Exporter — no actual trade
+Synthetic Shanghai address
+
+Customer: Synthetic Buyer Ltd
+Synthetic buyer address
+Contact: contact.1
+
+Number: SYN-Q-2026-00001
+Quote: quote.1 r1
+Business SHA-256: 5cd0587b31ce8e4fa1461655d06925b29c42ee53f6e516c97afce76781c4468d
+
+Lines (all amounts in currency minor units):
+L1 | 合成商品 | SPEC-1 | 120.000000 PCS | price 8.0000 per 1.0 | discount 0.00 | net 96000 | tax 0 | payable 96000
+
+Currency: USD | minor digits: 2
+Net: 96000 | Tax: 0 | Payable: 96000
+
+Terms: FCA 2020 | Synthetic negotiated terms; not legal guidance
+Named place: 合成地点 | Scope: scope.sale r1
+
+Delivery: 2026-11-15 | handover | Asia/Shanghai
+
+Payment plan (minor units; not receipts):
+P1 | 100% | 96000 | before_shipment | 0 calendar days | calendar payment.calendar r1
+
+Commercial issue: 2026-10-22T09:00:00Z
+Expires exclusively: 2026-10-28T08:00:00Z
+
+客户可见说明：合成样例
+Keep this line break.
+Synthetic data. Not an actual offer or customer acceptance.
