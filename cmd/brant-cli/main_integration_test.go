@@ -16,9 +16,9 @@ import (
 
 // Python test_cli.py test_foundation_demo_has_explicit_synthetic_truth_values (PYT-0003): the demo
 // writes explicit synthetic truth values into foundation-demo-result.json. Python publishes 22
-// configurations of its 18 kinds; Brant publishes 20 of POL's 18 kinds, because sku_profile,
+// configurations of its 18 kinds; Brant publishes 21 of POL's 19 kinds, because sku_profile,
 // party_profile, contact_profile and code_mapping are not POL kinds and POL has tax_application,
-// quote_document_template, credit_policy and screening_regulation (bootstrap.FoundationDemo). A
+// quote_document_template, credit_policy, screening_regulation and legal_terms (bootstrap.FoundationDemo). A
 // second run into the same directory is refused and leaves the result as it was (Python requires a
 // fresh directory).
 func TestFoundationDemoHasExplicitSyntheticTruthValues(t *testing.T) {
@@ -49,8 +49,8 @@ func TestFoundationDemoHasExplicitSyntheticTruthValues(t *testing.T) {
 	if err = json.Unmarshal(raw, &saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.ConfigurationKinds != 18 || saved.Configurations != 20 {
-		t.Fatalf("kinds, configurations = %d, %d; want 18, 20 (Python 18, 22)", saved.ConfigurationKinds, saved.Configurations)
+	if saved.ConfigurationKinds != 19 || saved.Configurations != 21 {
+		t.Fatalf("kinds, configurations = %d, %d; want 19, 21 (Python 18, 22)", saved.ConfigurationKinds, saved.Configurations)
 	}
 	if want := map[string]string{"amount": "854.81", "currency": "CNY"}; !reflect.DeepEqual(saved.FX, want) {
 		t.Fatalf("fx %v, want %v", saved.FX, want)
@@ -79,8 +79,8 @@ func TestFoundationDemoHasExplicitSyntheticTruthValues(t *testing.T) {
 	if err = json.Unmarshal(stdout.Bytes(), &summary); err != nil {
 		t.Fatalf("stdout %q: %v", stdout.String(), err)
 	}
-	if summary["synthetic"] != true || summary["result_file"] != file || summary["configurations"] != float64(20) ||
-		summary["configuration_kinds"] != float64(18) || summary["company"] != saved.Company {
+	if summary["synthetic"] != true || summary["result_file"] != file || summary["configurations"] != float64(21) ||
+		summary["configuration_kinds"] != float64(19) || summary["company"] != saved.Company {
 		t.Fatalf("summary %v", summary)
 	}
 

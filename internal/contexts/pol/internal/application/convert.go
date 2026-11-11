@@ -20,7 +20,9 @@ func content(cmd api.SaveDraft) config.Content {
 	d := cmd.Data
 	switch {
 	case d.CompanyProfile != nil:
-		c.CompanyProfile = ptr(config.CompanyProfile(*d.CompanyProfile))
+		p := d.CompanyProfile
+		c.CompanyProfile = &config.CompanyProfile{LegalName: p.LegalName, RegistrationNo: p.RegistrationNo, Country: p.Country, Address: p.Address,
+			BaseCurrency: p.BaseCurrency, TimeZone: p.TimeZone, PolicyScope: p.PolicyScope, DefaultLegalTerms: toRef(p.DefaultLegalTerms)}
 	case d.Currency != nil:
 		c.Currency = ptr(config.Currency(*d.Currency))
 	case d.Unit != nil:
@@ -84,6 +86,10 @@ func content(cmd api.SaveDraft) config.Content {
 			v.Lists[i] = config.ScreeningList(l)
 		}
 		c.ScreeningRegulation = &v
+	case d.LegalTerms != nil:
+		l := d.LegalTerms
+		c.LegalTerms = &config.LegalTerms{Name: l.Name, GoverningLaw: l.GoverningLaw, CISG: l.CISG, FormationRule: l.FormationRule,
+			DisputeResolution: config.DisputeResolution(l.DisputeResolution)}
 	}
 	return c
 }
@@ -116,7 +122,9 @@ func data(c config.Content) api.ConfigData {
 	var d api.ConfigData
 	switch {
 	case c.CompanyProfile != nil:
-		d.CompanyProfile = ptr(api.CompanyProfile(*c.CompanyProfile))
+		p := c.CompanyProfile
+		d.CompanyProfile = &api.CompanyProfile{LegalName: p.LegalName, RegistrationNo: p.RegistrationNo, Country: p.Country, Address: p.Address,
+			BaseCurrency: p.BaseCurrency, TimeZone: p.TimeZone, PolicyScope: p.PolicyScope, DefaultLegalTerms: fromRef(p.DefaultLegalTerms)}
 	case c.Currency != nil:
 		d.Currency = ptr(api.Currency(*c.Currency))
 	case c.Unit != nil:
@@ -178,6 +186,10 @@ func data(c config.Content) api.ConfigData {
 			v.Lists[i] = api.ScreeningList(l)
 		}
 		d.ScreeningRegulation = &v
+	case c.LegalTerms != nil:
+		l := c.LegalTerms
+		d.LegalTerms = &api.LegalTerms{Name: l.Name, GoverningLaw: l.GoverningLaw, CISG: l.CISG, FormationRule: l.FormationRule,
+			DisputeResolution: api.DisputeResolution(l.DisputeResolution)}
 	}
 	return d
 }

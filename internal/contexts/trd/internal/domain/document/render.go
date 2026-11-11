@@ -37,6 +37,7 @@ type sheet struct {
 	delivery                                 []string // the parts after "Delivery: "
 	payments                                 []paymentRow
 	issuedAt, expiresAt, customerNotes       string
+	legal                                    []string // the legal_terms section's lines (quote-text/0.2.0)
 }
 
 type lineRow struct {
@@ -113,8 +114,10 @@ func block(t Template, s sheet, name string) string {
 		return "Commercial issue: " + s.issuedAt + "\nExpires exclusively: " + s.expiresAt
 	case "notes":
 		return s.customerNotes + "\n" + t.FooterNote
+	case SectionLegalTerms:
+		return strings.Join(s.legal, "\n")
 	}
-	panic("document: unchecked section " + name) // Supported admits the ten sections only
+	panic("document: unchecked section " + name) // Supported admits its renderer's sections only
 }
 
 // refText prints a reference as Python does: "<id> r<revision>".
@@ -193,7 +196,66 @@ func compose(c quote.Commercial, hash string, f Facts) (sheet, error) {
 		s.payments = append(s.payments, paymentRow{stage: p.StageID, percent: p.Percent, amount: p.AmountMinor, trigger: p.Trigger,
 			dayBasis: p.DayBasis, days: p.Days, calendar: p.Calendar})
 	}
+	if c.LegalTerms != nil {
+		if s.legal, err = legalLines(c); err != nil {
+			return sheet{}, err
+		}
+	}
 	return s, nil
+}
+
+// Printed forms of a formation (quote-text/0.2.0).
+var (
+	formationRules  = map[string]string{quote.FormationArrival: "acceptance effective on arrival"}
+	formationBases  = map[string]string{quote.FormationBasisCISG: "CISG Art. 18(2), 23", quote.FormationBasisPRC: "PRC Civil Code Art. 137, 483, 484"}
+	disputeMethods  = []string{quote.DisputeArbitration, quote.DisputeLitigation}
+	legalCISGValues = []string{quote.CISGApplies, quote.CISGExcluded}
+)
+
+// legalLines prints the legal terms document c seals (quote-text/0.2.0, WBS S3-17):
+//
+//	Legal terms: <id> r<revision>
+//	Governing law: <governing_law> | CISG: <applies or excluded>
+//	Contract formation: acceptance effective on arrival | <basis>
+//	Disputes: arbitration | <institution> | seat <seat> | language <language>
+//	Disputes: litigation | <court>
+//
+// The revision is the document's legal_terms_ref, pinned by its manifest; the basis is "CISG Art.
+// 18(2), 23" or "PRC Civil Code Art. 137, 483, 484". Terms a freeze could not have sealed are
+// REFERENCE_INVALID at /legal_terms.
+func legalLines(c quote.Commercial) ([]string, error) {
+	const p = "/legal_terms"
+	l, ref := c.LegalTerms, c.Data.LegalTerms
+	if ref == nil {
+		return nil, fail(refInvalid, "/data/legal_terms_ref", "The legal terms' revision is needed")
+	}
+	if !manifested(c, *ref) {
+		return nil, fail(refInvalid, "/data/legal_terms_ref", "The dependency manifest does not pin the legal terms")
+	}
+	rule, basis := formationRules[l.Formation.Rule], formationBases[l.Formation.Basis]
+	d := l.DisputeResolution
+	switch {
+	case blank(l.GoverningLaw) || !slices.Contains(legalCISGValues, l.CISG):
+		return nil, fail(refInvalid, p, "Legal terms name the governing law and whether the CISG applies")
+	case rule == "" || basis == "":
+		return nil, fail(refInvalid, p+"/formation", "The formation is arrival under the CISG or PRC law")
+	case !slices.Contains(disputeMethods, d.Method) || (d.Method == quote.DisputeArbitration && (blank(d.Institution) || blank(d.Seat) ||
+		blank(d.Language))) || (d.Method == quote.DisputeLitigation && blank(d.Court)):
+		return nil, fail(refInvalid, p+"/dispute_resolution", "Disputes go to arbitration with institution, seat and language, or to a court")
+	}
+	disputes := "Disputes: arbitration | " + d.Institution + " | seat " + d.Seat + " | language " + d.Language
+	if d.Method == quote.DisputeLitigation {
+		disputes = "Disputes: litigation | " + d.Court
+	}
+	return []string{"Legal terms: " + refText(*ref), "Governing law: " + l.GoverningLaw + " | CISG: " + l.CISG,
+		"Contract formation: " + rule + " | " + basis, disputes}, nil
+}
+
+// manifested reports whether c's dependency manifest pins r.
+func manifested(c quote.Commercial, r quote.Ref) bool {
+	return slices.ContainsFunc(c.DependencyManifest, func(d quote.Dependency) bool {
+		return d.Kind == r.Kind && d.ID == r.ID && d.Version == r.Revision
+	})
 }
 
 // recipientAddress returns the address that addresses the quote: the buyer's, else the billing one.

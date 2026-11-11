@@ -72,6 +72,20 @@
 //     place of the date.
 //   - Only language en: Python's renderer has no zh-CN layout (DEPENDENCY_NOT_SUPPORTED).
 //
+// # quote-text/0.2.0
+//
+// quote-text/0.1.0 with an eleventh section, legal_terms, which a template lists among the others
+// (WBS S3-17; G0 F-02): the legal terms the document seals (legalLines). A document that seals legal
+// terms is rendered by quote-text/0.2.0 only, and one that seals none by quote-text/0.1.0 only, so
+// every document rendered before legal terms existed keeps its renderer and its bytes, and a
+// document never drops the legal terms it seals:
+//
+//	legal_terms  Legal terms: <id> r<revision>
+//	             Governing law: <governing_law> | CISG: <applies or excluded>
+//	             Contract formation: acceptance effective on arrival | <CISG Art. 18(2), 23 or PRC Civil Code Art. 137, 483, 484>
+//	             Disputes: arbitration | <institution> | seat <seat> | language <language>
+//	             (or) Disputes: litigation | <court>
+//
 // Refusals point into the inputs: the stored commercial document by its own JSON Pointers
 // ("/calculation", "/data/delivery", "/party_snapshots/customer/addresses"), the template at
 // "/template/<member>", the number at "/number" and plain-text values at "/values/<field>".

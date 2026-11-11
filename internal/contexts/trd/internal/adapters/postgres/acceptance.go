@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/acceptance"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/response"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -83,9 +84,16 @@ func InsertResponse(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	return err
 }
 
+// acceptanceColumns are an acceptance's columns and the formation its revision seals (the
+// commercial document's legal_terms.formation, NULL for a revision without legal terms: the
+// default), read in a scalar subquery so that a load FOR UPDATE locks the acceptance only. The
+// revision's document never changes, so neither does the formation the acceptance was judged by.
 const acceptanceColumns = `acceptance_id, response_id, quote_id, revision, business_hash, number, customer_party_id, customer_revision,
 	contact_id, contact_row_version, line_ids, message_source_id, message_locator, arrival_at, arrival_basis, expires_at, verified_by_kind,
-	verified_by_id, verify_epoch, verified_at, effectivity, effectivity_version`
+	verified_by_id, verify_epoch, verified_at, effectivity, effectivity_version,
+	(SELECT (r.commercial::jsonb #> '{legal_terms,formation}')::text FROM brant_trd.quote_revision r
+		WHERE r.tenant_id = acceptance.tenant_id AND r.company_id = acceptance.company_id AND r.quote_id = acceptance.quote_id
+			AND r.revision = acceptance.revision)`
 
 // AcceptanceFilter selects acceptances: by ID, of a quote (and revision), of a response, or the live
 // one of a customer message.
@@ -177,13 +185,19 @@ func LoadAcceptance(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 }
 
 func scanAcceptance(row pgx.CollectableRow) (*acceptance.Acceptance, error) {
-	a := &acceptance.Acceptance{}
+	a := &acceptance.Acceptance{Formation: quote.DefaultFormation}
 	var kind, effectivity string
+	var formation *string
 	err := row.Scan(&a.ID, &a.ResponseID, &a.QuoteID, &a.Revision, &a.BusinessHash, &a.Number, &a.Customer.PartyID, &a.Customer.Revision,
 		&a.Contact.ContactID, &a.Contact.RowVersion, &a.LineIDs, &a.Message.SourceID, &a.Message.Locator, &a.ArrivalAt, &a.ArrivalBasis,
-		&a.ExpiresAt, &kind, &a.Verified.By.ID, &a.Verified.Epoch, &a.Verified.At, &effectivity, &a.Version)
+		&a.ExpiresAt, &kind, &a.Verified.By.ID, &a.Verified.Epoch, &a.Verified.At, &effectivity, &a.Version, &formation)
 	if err != nil {
 		return nil, err
+	}
+	if formation != nil {
+		if err = json.Unmarshal([]byte(*formation), &a.Formation); err != nil {
+			return nil, err
+		}
 	}
 	a.Verified.By.Kind, a.Effectivity = kernel.ActorKind(kind), acceptance.Effectivity(effectivity)
 	a.ArrivalAt, a.ExpiresAt, a.Verified.At = kernel.Instant(a.ArrivalAt), kernel.Instant(a.ExpiresAt), kernel.Instant(a.Verified.At)

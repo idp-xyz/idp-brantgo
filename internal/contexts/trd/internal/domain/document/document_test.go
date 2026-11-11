@@ -316,7 +316,7 @@ func TestPrepareRefusals(t *testing.T) {
 		{name: "another template revision", tpl: func(t *Template) { t.Ref.Revision = 2 }, want: "REFERENCE_INVALID at /data/document_template_ref"},
 		{name: "a plain-text template", tpl: func(t *Template) { t.Ref.Kind = "document_template" }, want: "REFERENCE_INVALID at /data/document_template_ref"},
 		{name: "template content not pinned", tpl: func(t *Template) { t.ContentHash = hashOf("changed") }, want: "REFERENCE_STALE at /data/document_template_ref"},
-		{name: "another renderer", tpl: func(t *Template) { t.RendererVersion = "quote-text/0.2.0" }, want: "DEPENDENCY_NOT_SUPPORTED at /template/renderer_version"},
+		{name: "another renderer", tpl: func(t *Template) { t.RendererVersion = "quote-text/0.3.0" }, want: "DEPENDENCY_NOT_SUPPORTED at /template/renderer_version"},
 		{name: "nine sections", tpl: func(t *Template) { t.Sections = t.Sections[1:] }, want: "REFERENCE_INVALID at /template/sections"},
 		{name: "a repeated section", tpl: func(t *Template) { t.Sections[9] = "issuer" }, want: "REFERENCE_INVALID at /template/sections/9"},
 		{name: "an unknown section", tpl: func(t *Template) { t.Sections[3] = "cost" }, want: "REFERENCE_INVALID at /template/sections/3"},

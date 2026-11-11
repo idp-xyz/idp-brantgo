@@ -52,7 +52,9 @@ type Plan struct {
 // order: the stored document is the business-hashed one in its normalized canonical form
 // (BUSINESS_HASH_MISMATCH), it has a server calculation that fits it (REFERENCE_INVALID, then
 // Calculation.Check), the template is the revision the document names and pins
-// (REFERENCE_INVALID, REFERENCE_STALE) and one the renderer supports (Template.Supported), the
+// (REFERENCE_INVALID, REFERENCE_STALE), one the renderer supports (Template.Supported) and one
+// that prints the legal terms exactly when the document seals them (quote-text/0.2.0;
+// DEPENDENCY_NOT_SUPPORTED for 0.1.0 with legal terms, REFERENCE_INVALID for 0.2.0 without), the
 // facts are those of the references the document binds, the text is UTF-8 (REFERENCE_INVALID) and
 // the document fits MaxDocumentBytes with the longest number (CALCULATION_LIMIT_EXCEEDED). Nothing
 // is rendered for good yet: the number is still to be issued.
@@ -78,6 +80,12 @@ func Prepare(r Revision, t Template, f Facts) (*Plan, error) {
 	}
 	if err = t.Supported(); err != nil {
 		return nil, err
+	}
+	switch {
+	case c.LegalTerms != nil && t.RendererVersion == RendererVersion:
+		return nil, fail(CodeDependencyNotSupported, "/template/renderer_version", "quote-text/0.1.0 prints no legal terms; the document seals them")
+	case c.LegalTerms == nil && t.RendererVersion == RendererVersion020:
+		return nil, fail(refInvalid, "/legal_terms", "quote-text/0.2.0 prints the legal terms of a document that seals them")
 	}
 	s, err := compose(c, r.BusinessHash, f)
 	if err != nil {
@@ -151,7 +159,8 @@ func (p *Plan) Formalize(number string) (*Formal, error) {
 	file := newFile(number, text(p.template, s))
 	return &Formal{File: file, Binding: Binding{QuoteID: p.QuoteID, BusinessRevision: p.BusinessRevision, BusinessHash: p.BusinessHash,
 		Number: number, Sequence: p.Number.Sequence, BusinessRef: p.Number.BusinessRef, Template: p.Template, TemplateHash: p.TemplateHash,
-		RendererVersion: RendererVersion, FileName: file.Name, MimeType: file.MimeType, ContentSHA256: file.SHA256, SizeBytes: file.Size}}, nil
+		RendererVersion: p.template.RendererVersion, FileName: file.Name, MimeType: file.MimeType, ContentSHA256: file.SHA256,
+		SizeBytes: file.Size}}, nil
 }
 
 func validNumber(n string) bool { return kernel.ValidIdentifier(n) && !strings.Contains(n, ":") }

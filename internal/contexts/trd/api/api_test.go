@@ -60,6 +60,12 @@ func TestSaveDraftContract(t *testing.T) {
 		"SCHEMA_INVALID /args/data/customer_address_refs/0/party_revision": func(c *SaveDraft) {
 			c.Data.CustomerAddressRefs = []AddressRoleRef{{PartyID: "p", AddressID: "a"}}
 		},
+		"SCHEMA_INVALID /args/data/legal_terms_ref/revision": func(c *SaveDraft) {
+			c.Data.LegalTermsRef = &ConfigRef{Kind: "legal_terms", ID: "legal.de-hamburg"}
+		},
+		"OK": func(c *SaveDraft) {
+			c.Data.LegalTermsRef = &ConfigRef{Kind: "legal_terms", ID: "legal.de-hamburg", Revision: 1}
+		},
 	} {
 		c := ok
 		c.Data.Lines = []Line{line()}

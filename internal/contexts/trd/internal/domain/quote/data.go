@@ -24,6 +24,7 @@ const (
 	KindNumberSequence        = "number_sequence"
 	KindQuoteDocumentTemplate = "quote_document_template"
 	KindCalendar              = "calendar"
+	KindLegalTerms            = "legal_terms"
 )
 
 // Charge inclusions.
@@ -168,7 +169,9 @@ type Charge struct {
 // optional in a draft; the freeze requires what Complete names. A line or charge, once present,
 // is complete (the contract checks its form). ExpiresAt is stored in kernel.FormatTimestamp form.
 // CustomerNotes are customer-visible and part of the commercial content; internal labels and
-// notes live on the root (quote.metadata.update) and never enter the business hash.
+// notes live on the root (quote.metadata.update) and never enter the business hash. LegalTerms
+// names the quote's legal terms (legal.go); omitted when absent, so a draft without them hashes as
+// it did before the member existed.
 type Data struct {
 	Issuer           *Ref         `json:"issuer_ref,omitempty"`
 	Customer         *PartyRef    `json:"customer_ref,omitempty"`
@@ -191,6 +194,7 @@ type Data struct {
 	ExpiresAt        string       `json:"expires_at,omitempty"`
 	CustomerNotes    *string      `json:"customer_notes,omitempty"`
 	Evidence         []Evidence   `json:"evidence,omitempty"`
+	LegalTerms       *Ref         `json:"legal_terms_ref,omitempty"`
 }
 
 // Hash returns the content hash of the draft as saved: the SHA-256 of its canonical JSON (the
@@ -246,6 +250,7 @@ func (d Data) Fields() []Field {
 	}
 	add(d.DocumentTemplate, KindQuoteDocumentTemplate, p+"/document_template_ref")
 	add(d.Sequence, KindNumberSequence, p+"/sequence_ref")
+	add(d.LegalTerms, KindLegalTerms, p+"/legal_terms_ref")
 	return out
 }
 

@@ -256,7 +256,7 @@ func (s Service) VerifyResponse(ctx context.Context, cmd api.VerifyResponse) (ap
 		out.Events = []action.Event{acceptanceEvent(api.EventAcceptanceVerified, a, map[string]any{"arrival_at": kernel.FormatTimestamp(a.ArrivalAt),
 			"arrival_basis": a.ArrivalBasis, "expires_at": kernel.FormatTimestamp(a.ExpiresAt), "formed": a.Formed(), "number": a.Number,
 			"customer_party_id": a.Customer.PartyID, "customer_revision": a.Customer.Revision, "contact_id": a.Contact.ContactID,
-			"contact_row_version": a.Contact.RowVersion})}
+			"contact_row_version": a.Contact.RowVersion, "formation_rule": a.FormedBy().Rule, "formation_basis": a.FormedBy().Basis})}
 		return out, nil
 	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandVerifyResponse, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ResponseID},
@@ -358,6 +358,7 @@ func (s Service) acceptanceReceipt(ctx context.Context, r api.Receipt, replay bo
 			out.ResponseID, out.QuoteID, out.BusinessRevision, out.BusinessHash, out.Number = a.ResponseID, a.QuoteID, a.Revision, a.BusinessHash,
 				a.Number
 			out.ArrivalAt, out.ArrivalBasis, out.ExpiresAt, out.Formed = a.ArrivalAt, a.ArrivalBasis, a.ExpiresAt, a.Formed()
+			out.FormationRule, out.FormationBasis = a.FormedBy().Rule, a.FormedBy().Basis
 		}
 		return err
 	})
@@ -554,8 +555,8 @@ func acceptanceView(a *acceptance.Acceptance) api.AcceptanceView {
 		BusinessHash: a.BusinessHash, Number: a.Number, CustomerRef: api.PartyRef{PartyID: a.Customer.PartyID, Revision: a.Customer.Revision},
 		ContactRef: api.ContactRef{ContactID: a.Contact.ContactID, RowVersion: a.Contact.RowVersion}, LineIDs: slices.Clone(a.LineIDs),
 		SourceRef: api.Evidence{SourceID: a.Message.SourceID, Locator: a.Message.Locator}, ArrivalAt: a.ArrivalAt, ArrivalBasis: a.ArrivalBasis,
-		ExpiresAt: a.ExpiresAt, Formed: a.Formed(), VerifiedBy: a.Verified.By, VerifiedAt: a.Verified.At, Effectivity: string(a.Effectivity),
-		EffectivityVersion: a.Version}
+		ExpiresAt: a.ExpiresAt, Formed: a.Formed(), FormationRule: a.FormedBy().Rule, FormationBasis: a.FormedBy().Basis, VerifiedBy: a.Verified.By,
+		VerifiedAt: a.Verified.At, Effectivity: string(a.Effectivity), EffectivityVersion: a.Version}
 	for _, c := range a.History {
 		v.History = append(v.History, api.EffectivityView{EffectivityVersion: c.Version, Effectivity: string(c.Effectivity),
 			ChangedBy: c.Act.By, ChangedAt: c.Act.At, Reason: c.Act.Reason, Evidence: apiEvidence(c.Act.Evidence)})
@@ -570,5 +571,6 @@ func acceptanceFact(a *acceptance.Acceptance) api.AcceptanceFact {
 		CustomerRef: api.PartyRef{PartyID: a.Customer.PartyID, Revision: a.Customer.Revision},
 		ContactRef:  api.ContactRef{ContactID: a.Contact.ContactID, RowVersion: a.Contact.RowVersion}, LineIDs: slices.Clone(a.LineIDs),
 		Effectivity: string(a.Effectivity), EffectivityVersion: a.Version, ArrivalAt: a.ArrivalAt, ArrivalBasis: a.ArrivalBasis,
-		ExpiresAt: a.ExpiresAt, Formed: a.Formed(), VerifiedBy: a.Verified.By, VerifiedAt: a.Verified.At, Code: a.Code()}
+		ExpiresAt: a.ExpiresAt, Formed: a.Formed(), FormationRule: a.FormedBy().Rule, FormationBasis: a.FormedBy().Basis, VerifiedBy: a.Verified.By,
+		VerifiedAt: a.Verified.At, Code: a.Code()}
 }

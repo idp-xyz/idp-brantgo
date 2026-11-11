@@ -159,7 +159,8 @@ type DemoIssuedNumber struct {
 // party_profile and contact_profile (PTY) and code_mapping (CAT item-code mapping). The 16 Python
 // configurations of the other 14 kinds are published here under POL's names, and one configuration
 // of each kind Python did not have (tax_application, quote_document_template, credit_policy,
-// screening_regulation), so the demo publishes 20 configurations of POL's 18 kinds. Python's clock
+// screening_regulation, and legal_terms: the tenant's default, the CISG with PRC law, which the
+// company profile names), so the demo publishes 21 configurations of POL's 19 kinds. Python's clock
 // is fixed at 2026-10-22T09:00:00Z; POL publishes at the system clock, so the business clock is the
 // start of the run and the bounded configurations are valid from the hour before it for a day.
 func (p *Platform) FoundationDemo(ctx context.Context, cfg DemoConfig) (DemoResult, error) {
@@ -355,16 +356,26 @@ type demoRefs struct {
 }
 
 // configurations publishes Python's configurations in Python's order under POL's kinds, then one
-// configuration of each kind Python did not have.
+// configuration of each kind Python did not have; the default legal terms come before the company
+// profile that names them.
 func (d *demo) configurations(sku catapi.SkuRef) (demoRefs, error) {
 	var r demoRefs
+	var legal polapi.ConfigRef
 	steps := []func() error{
 		func() error { return d.publish(polapi.KindCurrency, "CNY", false, currency("CNY"), nil) },
 		func() error { return d.publish(polapi.KindCurrency, "USD", false, currency("USD"), nil) },
+		// The tenant's default legal terms, which the company profile names (WBS S3-17, G0 F-02: 默认
+		// CISG 与中国法): published before the profile, which adopts its exact revision.
+		func() error {
+			return d.publish(polapi.KindLegalTerms, "legal.default", false, polapi.ConfigData{LegalTerms: &polapi.LegalTerms{
+				Name: "synthetic default: CISG with PRC law", GoverningLaw: polapi.GoverningLawCN, CISG: polapi.CISGApplies,
+				FormationRule: polapi.FormationArrival, DisputeResolution: polapi.DisputeResolution{Method: polapi.DisputeArbitration,
+					Institution: "synthetic arbitration institution", Seat: "Shanghai", Language: polapi.LanguageZhCN}}}, &legal)
+		},
 		func() error {
 			return d.publish(polapi.KindCompanyProfile, d.company, false, polapi.ConfigData{CompanyProfile: &polapi.CompanyProfile{
 				LegalName: "合成外贸企业", RegistrationNo: "SYNTHETIC-NOT-REAL", Country: "CN", Address: "测试地址", BaseCurrency: "CNY",
-				TimeZone: "Asia/Shanghai", PolicyScope: "synthetic general trade scenario"}}, &r.company)
+				TimeZone: "Asia/Shanghai", PolicyScope: "synthetic general trade scenario", DefaultLegalTerms: &legal}}, &r.company)
 		},
 		func() error { return d.publish(polapi.KindUnit, "PCS", false, unit("PCS", "件"), nil) },
 		func() error { return d.publish(polapi.KindUnit, "DOZEN", false, unit("DOZEN", "打"), nil) },

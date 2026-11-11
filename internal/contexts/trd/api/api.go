@@ -34,6 +34,20 @@
 // (AcceptanceGuard v1, acceptance_guard.go). An accepted revision converts into a sales order, which
 // is reviewed and activated (WBS S3-07, S3-13; order.go); PUR resolves active orders
 // (ActiveOrderLookups) and re-checks them in its transaction (OrderGuard v1, order_guard.go).
+//
+// Legal terms (WBS S3-17; the simulated G0 walkthrough's decision F-02, the condition of ADR-BR-013):
+// a draft names POL legal terms (legal_terms_ref) or, naming none, the freeze adopts the default its
+// issuer's company profile names (default_legal_terms; the design's default is the CISG with PRC
+// law, configured by the tenant). The freeze binds them like every POL revision and seals their
+// content into the commercial document (member legal_terms: source, governing_law, cisg,
+// dispute_resolution, and formation {rule, basis}); the formal document prints them (renderer
+// quote-text/0.2.0, which a quote with legal terms needs: DEPENDENCY_NOT_SUPPORTED at
+// document_template_ref otherwise). The contract forms by the rule the terms imply: arrival under
+// the CISG (Art. 18(2), 23) and under PRC law (Civil Code Art. 137, 483, 484), the only rule Brant
+// implements; terms under another law without the CISG, or stating another rule, are refused at the
+// freeze with DEPENDENCY_NOT_SUPPORTED. A quote without legal terms seals no legal_terms member and
+// hashes and renders as quotes did before legal terms existed; its acceptance forms by arrival, the
+// design's default.
 package api
 
 import (
@@ -260,7 +274,8 @@ type Charge struct {
 // (DRAFT_NOT_READY, CUSTOMER_REFERENCE_MISSING, CONTACT_REFERENCE_MISSING or COST_SNAPSHOT_MISSING
 // at the first missing one). Trade terms, named place, payment terms and delivery are the adopted
 // costing's comparison basis (Python T03 A27). CustomerNotes are customer-visible and part of the
-// business hash.
+// business hash. LegalTermsRef (legal_terms, optional) names the quote's legal terms; without it
+// the freeze adopts the issuer's default legal terms, if its company profile names one.
 type QuoteData struct {
 	IssuerRef           *ConfigRef
 	CustomerRef         *PartyRef
@@ -283,6 +298,7 @@ type QuoteData struct {
 	ExpiresAt           string
 	CustomerNotes       *string
 	Evidence            []Evidence
+	LegalTermsRef       *ConfigRef
 }
 
 // SaveDraft creates a quote root with working revision 1 at ExpectedVersion 0, or replaces the
@@ -474,6 +490,7 @@ func (d QuoteData) Validate(path string) error {
 			}
 			return nil
 		},
+		func() error { return optionalRef(d.LegalTermsRef, path+"/legal_terms_ref") },
 	}
 	for _, check := range checks {
 		if err := check(); err != nil {

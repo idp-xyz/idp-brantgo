@@ -51,9 +51,13 @@ import (
 // (ACCEPTANCE_TIME_CONFLICT otherwise). The arrival that judges the acceptance is the counting one,
 // or else the server's verification time (arrival_basis verification).
 //
-// Contract formation (ADR-BR-013, TRD-INV-012, UL TRD-ContractFormation): the contract forms when
-// the acceptance arrives before the revision's expires_at; quote.response.verify judges it, and the
-// verification itself may come after the quote expired. An acceptance that arrived at or after
+// Contract formation (ADR-BR-013, TRD-INV-012, UL TRD-ContractFormation): the contract forms by the
+// rule the revision's legal terms imply (WBS S3-17, G0 F-02: 合同成立规则按适用法律选择; api.go): the
+// arrival rule under the CISG (basis cisg), under PRC law (prc_civil_code) or, for a revision
+// without legal terms, under the design's default of both (default) — the only rule Brant
+// implements, so the contract forms when the acceptance arrives before the revision's expires_at.
+// A revision sealing another rule is refused with DEPENDENCY_NOT_SUPPORTED (the freeze seals none).
+// quote.response.verify judges it, and the verification itself may come after the quote expired. An acceptance that arrived at or after
 // expires_at is late (UL TRD-LateAcceptance): verify refuses it with ACCEPTANCE_LATE and creates no
 // acceptance; the response stays recorded and reads show it late. The design gives late acceptance
 // no confirmation path: it is the customer's new offer, answered by a new quote revision and a new
@@ -111,6 +115,12 @@ const (
 
 	// StatusRecorded is the receipt status of quote.response.record.
 	StatusRecorded = "recorded"
+
+	// The formation rule an acceptance was judged by and its basis (the revision's legal terms).
+	FormationArrival      = "arrival"
+	FormationBasisCISG    = "cisg"
+	FormationBasisPRC     = "prc_civil_code"
+	FormationBasisDefault = "default"
 
 	// Effectivity of an acceptance (SM-TRD-ACCEPTANCE).
 	AcceptanceValid       = "valid"
@@ -307,8 +317,8 @@ type ResponseReceipt struct {
 // AcceptanceReceipt is the answer of quote.response.verify, acceptance.invalidate and
 // acceptance.mark_disputed: the receipt (ObjectID the acceptance ID, RowVersion its effectivity
 // version, Status its effectivity; Replayed also when quote.response.verify found the response
-// verified into the same acceptance under another key) and the acceptance's formation. A replay
-// rebuilds it from the stored acceptance.
+// verified into the same acceptance under another key) and the acceptance's formation, with the
+// rule and basis it was judged by. A replay rebuilds it from the stored acceptance.
 type AcceptanceReceipt struct {
 	Receipt
 	ResponseID       string
@@ -320,6 +330,8 @@ type AcceptanceReceipt struct {
 	ArrivalBasis     string
 	ExpiresAt        time.Time
 	Formed           bool
+	FormationRule    string
+	FormationBasis   string
 }
 
 // CustomerResponseView is a recorded response with the acceptances verified from it, oldest first.
@@ -347,8 +359,8 @@ type CustomerResponseView struct {
 }
 
 // AcceptanceView is an acceptance: what it binds, its formation (ArrivalAt on ArrivalBasis, before
-// ExpiresAt), who verified it, and its effectivity with every change, version 1 (valid, at the
-// verification) first.
+// ExpiresAt, by FormationRule on FormationBasis), who verified it, and its effectivity with every
+// change, version 1 (valid, at the verification) first.
 type AcceptanceView struct {
 	AcceptanceID       string
 	ResponseID         string
@@ -364,6 +376,8 @@ type AcceptanceView struct {
 	ArrivalBasis       string
 	ExpiresAt          time.Time
 	Formed             bool
+	FormationRule      string
+	FormationBasis     string
 	VerifiedBy         kernel.ActorRef
 	VerifiedAt         time.Time
 	Effectivity        string
@@ -409,10 +423,11 @@ func (DisputeAcceptance) trdCommand()    {}
 // AcceptanceFact is what TRD says of an acceptance now, for the steps that rely on a formed contract
 // (TRD's order step; contexts the Context Map makes TRD upstream of): what it binds (the revision,
 // its business hash and document number, the customer, the contact and the accepted lines), its
-// effectivity at its version, its formation (ArrivalAt on ArrivalBasis before ExpiresAt), who
-// verified it, and Code, the first reason it does not stand for a formed contract now (""
-// when it does; ACCEPTANCE_NOT_VALID while invalidated or disputed). An order binds AcceptanceID at
-// EffectivityVersion, ArrivalAt and the formation; it never compares its own clock with ExpiresAt.
+// effectivity at its version, its formation (ArrivalAt on ArrivalBasis before ExpiresAt, by
+// FormationRule on FormationBasis), who verified it, and Code, the first reason it does not stand
+// for a formed contract now ("" when it does; ACCEPTANCE_NOT_VALID while invalidated or disputed).
+// An order binds AcceptanceID at EffectivityVersion, ArrivalAt and the formation with its rule and
+// basis; it never compares its own clock with ExpiresAt.
 type AcceptanceFact struct {
 	AcceptanceID       string
 	ResponseID         string
@@ -428,6 +443,8 @@ type AcceptanceFact struct {
 	ArrivalBasis       string
 	ExpiresAt          time.Time
 	Formed             bool
+	FormationRule      string
+	FormationBasis     string
 	VerifiedBy         kernel.ActorRef
 	VerifiedAt         time.Time
 	Code               string

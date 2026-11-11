@@ -63,7 +63,8 @@ func apiEvidence(es []quote.Evidence) []api.Evidence {
 func quoteData(a api.QuoteData) quote.Data {
 	d := quote.Data{Issuer: optRef(a.IssuerRef), Currency: optRef(a.CurrencyRef), PricingPolicy: optRef(a.PricingPolicyRef),
 		SalesFX: optRef(a.SalesFXRef), TradeTerms: optRef(a.TradeTermsRef), PaymentTerms: optRef(a.PaymentTermsRef),
-		DocumentTemplate: optRef(a.DocumentTemplateRef), Sequence: optRef(a.SequenceRef), Evidence: evidence(a.Evidence)}
+		DocumentTemplate: optRef(a.DocumentTemplateRef), Sequence: optRef(a.SequenceRef), Evidence: evidence(a.Evidence),
+		LegalTerms: optRef(a.LegalTermsRef)}
 	if r := a.CustomerRef; r != nil {
 		d.Customer = &quote.PartyRef{PartyID: r.PartyID, Revision: r.Revision}
 	}
@@ -124,7 +125,7 @@ func apiData(d quote.Data) api.QuoteData {
 	a := api.QuoteData{IssuerRef: optAPIRef(d.Issuer), CurrencyRef: optAPIRef(d.Currency), PricingPolicyRef: optAPIRef(d.PricingPolicy),
 		SalesFXRef: optAPIRef(d.SalesFX), TradeTermsRef: optAPIRef(d.TradeTerms), PaymentTermsRef: optAPIRef(d.PaymentTerms),
 		DocumentTemplateRef: optAPIRef(d.DocumentTemplate), SequenceRef: optAPIRef(d.Sequence), ExpiresAt: d.ExpiresAt,
-		Evidence: apiEvidence(d.Evidence)}
+		Evidence: apiEvidence(d.Evidence), LegalTermsRef: optAPIRef(d.LegalTerms)}
 	if r := d.Customer; r != nil {
 		a.CustomerRef = &api.PartyRef{PartyID: r.PartyID, Revision: r.Revision}
 	}
