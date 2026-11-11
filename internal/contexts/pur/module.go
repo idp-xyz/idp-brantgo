@@ -9,8 +9,10 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/api"
+	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/orders"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/application"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
@@ -53,6 +55,10 @@ const (
 	OrderApprovalRevoked  = application.OrderApprovalRevoked
 	OrderStale            = application.OrderStale
 )
+
+// TRDOrders is PUR's port to TRD on TRD's api: ActiveOrderLookups before PUR's transaction and
+// OrderGuard v1 inside it with PUR's own executor.
+func TRDOrders(lookups trdapi.ActiveOrderLookups) Orders { return orders.TRD{Lookups: lookups} }
 
 // New wires PUR to db, a transaction owner that belongs to PUR alone, and to its upstreams.
 func New(db *bentopg.DB, upstream Upstream) (*Module, error) {

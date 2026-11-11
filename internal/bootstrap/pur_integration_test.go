@@ -230,7 +230,7 @@ func (w *purWorld) drafts() int { return w.count("company.A", "brant_pur.purchas
 
 // secondSupplier verifies offer.b of supplier.2 at 5.30 USD per PCS with an MOQ of 40 (Python
 // BRC-001's supplier.B) and returns its ID.
-func (w *purWorld) secondSupplier() string {
+func (w *scenWorld) secondSupplier() string {
 	w.t.Helper()
 	version := w.staffParty(w.author, "supplier.2", []string{ptyapi.RoleSupplier}).RowVersion
 	app := w.configure(w.author, w.reviewer, polapi.KindTaxApplication, "tax.goods.2", 0, w.win.from, time.Time{},
@@ -245,7 +245,7 @@ func (w *purWorld) secondSupplier() string {
 }
 
 // moq40 verifies a variant of offer.1 with an MOQ of 40 and returns its ID.
-func (w *purWorld) moq40() string {
+func (w *scenWorld) moq40() string {
 	return w.variant(func(l *supapi.ConditionLine) { l.MOQ.Quantity = "40" })
 }
 

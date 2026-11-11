@@ -20,8 +20,8 @@ import (
 //     revocation, a cancellation or a closure either committed first and the draft is refused, or
 //     waits for PUR to commit (ADR-BR-004 option B).
 //
-// PUR never calls TRD's transaction owner. The adapter on trdapi (ActiveOrderLookups and
-// OrderGuardSQL) arrives with TRD's sales orders (S3-07); until then tests implement the port.
+// PUR never calls TRD's transaction owner. adapters/orders implements the port on trdapi
+// (ActiveOrderLookups and OrderGuardSQL); tests may implement it to steer TRD's answers.
 type Orders interface {
 	ResolveOrders(ctx context.Context, orderIDs []string) (map[string]Order, error)
 	GuardOrder(ctx context.Context, exec bentopg.Executor, b OrderBinding) (OrderVerdict, error)

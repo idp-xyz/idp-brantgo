@@ -25,6 +25,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
+	"go.idp.xyz/idp-brant/internal/contexts/pur"
 	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/contexts/trd"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -156,6 +157,7 @@ type Contexts struct {
 	SUP *sup.Module
 	CST *cst.Module
 	TRD *trd.Module
+	PUR *pur.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -214,6 +216,13 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	if err == nil {
 		c.TRD, err = trd.New(db, trd.Upstream{Sources: c.EVD, Parties: c.PTY, Profiles: c.PTY, Skus: c.CAT, Configs: c.POL, Numbers: c.POL,
 			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		c.PUR, err = pur.New(db, pur.Upstream{Orders: pur.TRDOrders(c.TRD), Supply: c.SUP, Snapshots: c.CST, Parties: c.PTY, Configs: c.POL,
+			Skus: c.CAT})
 	}
 	if err != nil {
 		return nil, err
