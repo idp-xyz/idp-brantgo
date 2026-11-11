@@ -154,7 +154,7 @@ func (s Service) RevokeApproval(ctx context.Context, cmd api.RevokeApproval) (ap
 		if err := h.admit(ctx, d, false); err != nil {
 			return action.Outcome{}, err
 		}
-		a, err := h.q.Revoke(quote.Revocation{ApprovalID: cmd.ApprovalID, ExpectedEffectivity: cmd.ExpectedEffectivityVersion,
+		a, hold, err := h.q.Revoke(quote.Revocation{ApprovalID: cmd.ApprovalID, ExpectedEffectivity: cmd.ExpectedEffectivityVersion,
 			Reason: cmd.Reason, Evidence: proofs}, d.Actor, d.Epoch, s.Clock.Now())
 		if err != nil {
 			return action.Outcome{}, err
@@ -163,9 +163,13 @@ func (s Service) RevokeApproval(ctx context.Context, cmd api.RevokeApproval) (ap
 			return action.Outcome{}, moved(err, "/args/data/evidence", "/args/evidence")
 		}
 		reviewID = a.ReviewID
-		return h.save(ctx, exec, false, api.ApprovalRevoked, h.event(api.EventQuoteApprovalRevoked, map[string]any{"quote_id": h.q.ID,
-			"business_revision": a.Revision, "business_hash": a.BusinessHash, "approval_id": a.ID, "review_request_id": a.ReviewID,
-			"effectivity_version": a.EffectivityVersion}))
+		fields := map[string]any{"quote_id": h.q.ID, "business_revision": a.Revision, "business_hash": a.BusinessHash, "approval_id": a.ID,
+			"review_request_id": a.ReviewID, "effectivity_version": a.EffectivityVersion, "risk_hold": hold != nil}
+		if hold != nil {
+			// The approval formalized the active revision: its forward use is paused (RiskHold).
+			fields["hold_id"], fields["held_revision"], fields["hold_code"] = hold.ID, hold.Revision, hold.Code
+		}
+		return h.save(ctx, exec, false, api.ApprovalRevoked, h.event(api.EventQuoteApprovalRevoked, fields))
 	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandRevokeApproval, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.QuoteID,
 		Reason: cmd.Reason}, cmd, cmd.Validate(), &preparedQuote{h})

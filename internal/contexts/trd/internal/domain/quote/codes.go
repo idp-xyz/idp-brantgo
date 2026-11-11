@@ -9,12 +9,16 @@
 //	frozen → pending_approval     quote.submit_review: a review request for quote.activate or
 //	                              quote.replace (review.go)
 //	pending_approval → frozen     quote.review.decide return or reject
+//	pending_approval → active     quote.activate, quote.replace (the active one → superseded): the
+//	                              formal document and commit evidence bound (formal.go)
+//	frozen, pending → withdrawn   quote.withdraw
+//	active → cancelled            quote.cancel
 //
 // One working revision is saved whole (quote.save_draft) or copied from a frozen one
 // (quote.revise). A frozen revision's commercial document and business hash never change
 // (TRD-INV-002); internal labels and notes live on the root and change its version only
-// (quote.metadata.update). At most one revision of a root is active (TRD-INV-001): activation comes
-// with formalization; the storage admits one active revision per root.
+// (quote.metadata.update). At most one revision of a root is active (TRD-INV-001); a risk hold
+// pauses its forward use, and the conversion slot, once taken, keeps it (TRD-INV-010).
 //
 // A review request (SM-TRD-REVIEW) is decided by an independent human; an approval
 // (SM-TRD-APPROVAL) binds the revision, its hash, its target and the rule versions, and is valid
@@ -59,6 +63,10 @@ const (
 	CodeIndependentReviewRequired    = "INDEPENDENT_REVIEW_REQUIRED"
 	CodeMarginExceptionNotAuthorized = "MARGIN_EXCEPTION_NOT_AUTHORIZED"
 	CodeMarginPolicyRequiresApproval = "MARGIN_POLICY_REQUIRES_APPROVAL"
+
+	CodeRootConversionLocked   = "ROOT_CONVERSION_LOCKED"
+	CodeConversionSlotConflict = "CONVERSION_SLOT_CONFLICT"
+	CodeFXStale                = "FX_STALE"
 )
 
 // Categories maps the codes above to their error catalog category.
@@ -87,6 +95,10 @@ var Categories = map[string]kernel.Category{
 	CodeIndependentReviewRequired:    kernel.CategoryInvalid,
 	CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 	CodeMarginPolicyRequiresApproval: kernel.CategoryInvalid,
+
+	CodeRootConversionLocked:   kernel.CategoryConflict,
+	CodeConversionSlotConflict: kernel.CategoryConflict,
+	CodeFXStale:                kernel.CategoryInvalid,
 }
 
 func fail(code, path, reason string) error {

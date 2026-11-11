@@ -1,6 +1,7 @@
 package application
 
 import (
+	"slices"
 	"testing"
 
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
@@ -42,8 +43,14 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 		api.CommandSubmitReview:   {kernel.ActorHuman},
 		api.CommandDecideReview:   {kernel.ActorHuman},
 		api.CommandRevokeApproval: {kernel.ActorHuman},
+		api.CommandActivate:       {kernel.ActorHuman},
+		api.CommandReplace:        {kernel.ActorHuman},
+		api.CommandWithdraw:       {kernel.ActorHuman},
+		api.CommandCancel:         {kernel.ActorHuman},
 		CommandGetQuote:           {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 		CommandCheckApproval:      {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandGetFormalDocument:  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandGetActiveRevision:  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 	}
 	for command, kinds := range want {
 		r, err := policy.Rule(command)
@@ -59,16 +66,28 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 				t.Errorf("%s admits %s: %v", command, k, r.Admits(k))
 			}
 		}
-		if command != CommandGetQuote && command != CommandCheckApproval && r.Permission != command {
+		reads := []string{CommandGetQuote, CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision}
+		if !slices.Contains(reads, command) && r.Permission != command {
 			t.Errorf("%s needs permission %s", command, r.Permission)
 		}
 	}
-	if r, _ := policy.Rule(CommandCheckApproval); r.Permission != PermissionRead {
-		t.Errorf("%s needs %s", CommandCheckApproval, r.Permission)
+	for _, read := range []string{CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision} {
+		if r, _ := policy.Rule(read); r.Permission != PermissionRead {
+			t.Errorf("%s needs %s", read, r.Permission)
+		}
 	}
 	// The domain's permission names are the api's command and read names.
 	if quote.PermissionReview != api.CommandDecideReview || quote.PermissionMarginException != api.PermissionMarginException ||
 		quote.PermissionRead != PermissionRead {
 		t.Error("permission names differ")
+	}
+}
+
+// The idempotency key of POL's number.issue is a valid identifier, fixed by the formalization
+// command and its key, and differs between commands and keys.
+func TestNumberKeyIsAnIdentifierPerCommandAndKey(t *testing.T) {
+	a, b, c := numberKey(api.CommandActivate, "k1"), numberKey(api.CommandReplace, "k1"), numberKey(api.CommandActivate, "k2")
+	if !kernel.ValidIdentifier(a) || a != numberKey(api.CommandActivate, "k1") || a == b || a == c || len(a) > 64 {
+		t.Fatalf("%s %s %s", a, b, c)
 	}
 }

@@ -42,7 +42,7 @@ import (
 // never overridable.
 //
 // Whether an approval releases its revision is decided at the use (quote.activate and
-// quote.replace, which come with formalization; CheckApproval meanwhile): the approval is valid
+// quote.replace in their transaction, formal.go; CheckApproval in a read): the approval is valid
 // (not revoked) and bound to this revision, hash, target and the current rule versions; neither
 // the quote nor the approval expired (as_of < expires_at, the instant compared exactly: Python T03
 // A35); the reviewer is still independent, human, holds quote.review.decide and trd.read and sees

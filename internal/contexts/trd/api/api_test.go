@@ -167,7 +167,7 @@ func TestPlaceAndDeliveryContract(t *testing.T) {
 // except object_control.bind's own task; the claim comes from the trusted adapter's context only.
 func TestTaskIdentityIsNotACommandMember(t *testing.T) {
 	for _, c := range []any{SaveDraft{}, Revise{}, DiscardDraft{}, Freeze{}, UpdateMetadata{}, StopControl{}, ReleaseControl{}, QuoteData{}, Line{}, Charge{},
-		SubmitReview{}, DecideReview{}, RevokeApproval{}, MarginException{}} {
+		SubmitReview{}, DecideReview{}, RevokeApproval{}, MarginException{}, Activate{}, Replace{}, Withdraw{}, Cancel{}} {
 		ty := reflect.TypeOf(c)
 		for i := range ty.NumField() {
 			name := ty.Field(i).Name
@@ -207,6 +207,8 @@ func TestCodesHaveCatalogCategories(t *testing.T) {
 		CodeApprovalExpired: kernel.CategoryInvalid, CodeApprovalStale: kernel.CategoryConflict,
 		CodeApprovalReferenceMismatch: kernel.CategoryInvalid, CodeIndependentReviewRequired: kernel.CategoryInvalid,
 		CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
+		// Formalization and conversion: both 409.
+		CodeRootConversionLocked: kernel.CategoryConflict, CodeConversionSlotConflict: kernel.CategoryConflict,
 	}
 	if len(codes) != len(want) {
 		t.Fatalf("%d QuoteRoot codes, want %d", len(codes), len(want))

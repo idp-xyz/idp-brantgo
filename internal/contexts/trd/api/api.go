@@ -23,7 +23,11 @@
 // The freeze computes the quote's amounts on the server (WBS S3-02: internal/domain/calc) and seals
 // them in the commercial document's calculation. A frozen revision is reviewed (WBS S3-03, S3-14;
 // review.go): quote.submit_review, quote.review.decide with its margin exception, and
-// quote.approval.revoke.
+// quote.approval.revoke. An approved revision is formalized (WBS S3-04, S3-05; formal.go):
+// quote.activate and quote.replace bind its formal document, number and commit evidence and make it
+// the root's one active revision; quote.withdraw and quote.cancel end a revision. Steps relying on a
+// formal revision resolve it (Lookups) and re-check it in their transaction (QuoteRevisionGuard v1,
+// guard.go).
 package api
 
 import (
@@ -619,6 +623,10 @@ type Commands interface {
 	SubmitReview(ctx context.Context, cmd SubmitReview) (ReviewReceipt, error)
 	DecideReview(ctx context.Context, cmd DecideReview) (ReviewReceipt, error)
 	RevokeApproval(ctx context.Context, cmd RevokeApproval) (ReviewReceipt, error)
+	Activate(ctx context.Context, cmd Activate) (FormalizationReceipt, error)
+	Replace(ctx context.Context, cmd Replace) (FormalizationReceipt, error)
+	Withdraw(ctx context.Context, cmd Withdraw) (RevisionReceipt, error)
+	Cancel(ctx context.Context, cmd Cancel) (RevisionReceipt, error)
 }
 
 // Queries is TRD's audited read side.
@@ -631,6 +639,12 @@ type Queries interface {
 	// quote.approval.check (trd.read): the check quote.activate and quote.replace make in their
 	// transaction (review.go), run in a read transaction. It changes nothing.
 	CheckApproval(ctx context.Context, quoteID, approvalID string) (ApprovalCheck, error)
+	// GetFormalDocument returns the formal document of a revision with its bytes, audited as
+	// quote.document.get (trd.read). The bytes are verified against the binding on every read.
+	GetFormalDocument(ctx context.Context, quoteID string, businessRevision int64) (FormalDocument, error)
+	// GetActiveRevision returns the root's active revision as Lookups describe it, audited as
+	// quote.active.get (trd.read); NO_ACTIVE_REVISION when there is none.
+	GetActiveRevision(ctx context.Context, quoteID string) (FormalRevision, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 }
 
@@ -648,6 +662,10 @@ func (ReleaseControl) trdCommand() {}
 func (SubmitReview) trdCommand()   {}
 func (DecideReview) trdCommand()   {}
 func (RevokeApproval) trdCommand() {}
+func (Activate) trdCommand()       {}
+func (Replace) trdCommand()        {}
+func (Withdraw) trdCommand()       {}
+func (Cancel) trdCommand()         {}
 
 // Reconciliation is what became of a command whose answer the caller lost.
 type Reconciliation struct {

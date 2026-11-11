@@ -19,6 +19,8 @@ type QuoteView struct {
 	Revisions       []RevisionView
 	Reviews         []ReviewView   // in the order they were requested
 	Approvals       []ApprovalView // in the order they were given
+	Holds           []HoldView     // risk holds, in the order they were registered
+	Conversion      *ConversionView
 }
 
 // ControlView is the root's object control.
@@ -56,7 +58,9 @@ type RevisionView struct {
 	DiscardedAt    time.Time
 	DiscardReason  string
 	DiscardProofs  []Evidence
-	AuthorityEpoch int64 // of the last save
+	AuthorityEpoch int64        // of the last save
+	Formal         *FormalView  // active, superseded or cancelled: its formal document and commit evidence
+	Closed         *ClosureView // withdrawn or cancelled
 }
 
 // CalculationView is the server calculation a frozen revision seals (its commercial document's
