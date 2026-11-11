@@ -31,7 +31,9 @@
 // acceptance, which forms the contract when it arrived before the revision expired, and is
 // invalidated or disputed later (WBS S3-06, S3-13; acceptance.go); steps relying on a formed
 // contract resolve the acceptance (AcceptanceLookups) and re-check it in their transaction
-// (AcceptanceGuard v1, acceptance_guard.go).
+// (AcceptanceGuard v1, acceptance_guard.go). An accepted revision converts into a sales order, which
+// is reviewed and activated (WBS S3-07, S3-13; order.go); PUR resolves active orders
+// (ActiveOrderLookups) and re-checks them in its transaction (OrderGuard v1, order_guard.go).
 package api
 
 import (
@@ -632,6 +634,7 @@ type Commands interface {
 	Withdraw(ctx context.Context, cmd Withdraw) (RevisionReceipt, error)
 	Cancel(ctx context.Context, cmd Cancel) (RevisionReceipt, error)
 	AcceptanceCommands
+	OrderCommands
 }
 
 // Queries is TRD's audited read side.
@@ -652,6 +655,7 @@ type Queries interface {
 	GetActiveRevision(ctx context.Context, quoteID string) (FormalRevision, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 	AcceptanceQueries
+	OrderQueries
 }
 
 // Command is one of TRD's commands.

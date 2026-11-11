@@ -508,6 +508,10 @@ func (s Standing) qualified(needs ...string) bool {
 	return true
 }
 
+// Qualified reports whether the standing is an active human grant seeing the quote root and
+// holding every permission of needs (an order's reviewer at its activation: package order).
+func (s Standing) Qualified(needs ...string) bool { return s.qualified(needs...) }
+
 // Standings reads an actor's standing now.
 type Standings func(actorID string) (Standing, error)
 

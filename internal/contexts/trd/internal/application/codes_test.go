@@ -8,6 +8,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/acceptance"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/calc"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/document"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/order"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/response"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -18,7 +19,7 @@ import (
 // categories, so a refusal reaches transports with the catalog's status.
 func TestDomainCodesAreDeclaredByTheAPI(t *testing.T) {
 	for name, m := range map[string]map[string]kernel.Category{"quote": quote.Categories, "calc": calc.Categories, "document": document.Categories,
-		"response": response.Categories, "acceptance": acceptance.Categories} {
+		"response": response.Categories, "acceptance": acceptance.Categories, "order": order.Categories} {
 		for code, category := range m {
 			if got, ok := api.Category(code); !ok || got != category {
 				t.Errorf("%s code %s: api says %v (declared %v), domain %v", name, code, got, ok, category)
@@ -62,6 +63,17 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 		api.CommandDisputeAcceptance:    {kernel.ActorHuman},
 		CommandGetResponse:              {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 		CommandGetAcceptance:            {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		// Sales orders: the command catalog's 人工或 AI（按动作权限） for the preparation and the review
+		// request, the tactical model's humanOnlyCommands for the rest.
+		api.CommandPrepareOrder:          {kernel.ActorHuman, kernel.ActorAI},
+		api.CommandRequestOrderReview:    {kernel.ActorHuman, kernel.ActorAI},
+		api.CommandDecideOrderReview:     {kernel.ActorHuman},
+		api.CommandActivateOrder:         {kernel.ActorHuman},
+		api.CommandRevokeOrderApproval:   {kernel.ActorHuman},
+		api.CommandCancelOrder:           {kernel.ActorHuman},
+		api.CommandCloseOrderUnfulfilled: {kernel.ActorHuman},
+		CommandGetOrder:                  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandCheckOrder:                {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 	}
 	for command, kinds := range want {
 		r, err := policy.Rule(command)
@@ -78,20 +90,20 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 			}
 		}
 		reads := []string{CommandGetQuote, CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision, CommandGetResponse,
-			CommandGetAcceptance}
+			CommandGetAcceptance, CommandGetOrder, CommandCheckOrder}
 		if !slices.Contains(reads, command) && r.Permission != command {
 			t.Errorf("%s needs permission %s", command, r.Permission)
 		}
 	}
 	for _, read := range []string{CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision, CommandGetResponse,
-		CommandGetAcceptance} {
+		CommandGetAcceptance, CommandGetOrder, CommandCheckOrder} {
 		if r, _ := policy.Rule(read); r.Permission != PermissionRead {
 			t.Errorf("%s needs %s", read, r.Permission)
 		}
 	}
 	// The domain's permission names are the api's command and read names.
 	if quote.PermissionReview != api.CommandDecideReview || quote.PermissionMarginException != api.PermissionMarginException ||
-		quote.PermissionRead != PermissionRead {
+		quote.PermissionRead != PermissionRead || order.PermissionDecide != api.CommandDecideOrderReview || order.PermissionRead != PermissionRead {
 		t.Error("permission names differ")
 	}
 }
