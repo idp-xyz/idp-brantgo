@@ -6,7 +6,8 @@ import "go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 // The command resolves each from the exact revision the frozen document binds, before its
 // transaction; Prepare refuses a fact for another reference (REFERENCE_INVALID) and a POL revision
 // whose content hash is not the one the dependency manifest pins (REFERENCE_STALE). Unit and
-// currency codes need no fact: a POL unit's and currency's config_id is its code.
+// currency codes need no fact: a POL unit's and currency's config_id is its code. The delivery
+// needs none either: the frozen document holds it whole (data.delivery, as in Python).
 type Facts struct {
 	// Customer is the customer's name at the bound party revision (PTY PartyRevision.Name; Python
 	// party_snapshots.customer.name).
@@ -20,12 +21,9 @@ type Facts struct {
 	// Currency is the quote currency's revision (POL currency).
 	Currency Currency
 	// TradeTerms is the trade terms revision (POL trade_terms); it also plays Python's trade scope
-	// and named place location.
+	// and names the named place (Python's location name of named_place_ref): the document's
+	// named_place_ref is a location no Brant context names.
 	TradeTerms TradeTerms
-	// Delivery is the delivery the revision binds: the trade terms' delivery (POL
-	// TradeTerms.Delivery) with the milestone and time zone of the customer's delivery requirement
-	// where one is known (Python data.delivery; calc.Delivery). POL trade terms carry neither.
-	Delivery Delivery
 }
 
 // Party is a party at a confirmed revision and its name.
@@ -63,24 +61,4 @@ type TradeTerms struct {
 	Edition            string
 	ResponsibilityNote string
 	NamedPlace         string
-}
-
-// Delivery kinds (POL Delivery).
-const (
-	DeliveryFixedDate = "fixed_date"
-	DeliveryLeadTime  = "lead_time"
-)
-
-// Delivery is a fixed date (Kind fixed_date with Date), or a lead time (Kind lead_time) of Days
-// after AnchorEvent counted on DayBasis, in Calendar when one is named; Milestone and TimeZone are
-// optional.
-type Delivery struct {
-	Kind        string
-	Date        string // fixed_date: YYYY-MM-DD
-	AnchorEvent string // lead_time
-	Days        int    // lead_time: 0–3650
-	DayBasis    string // lead_time
-	Calendar    *quote.Ref
-	Milestone   string
-	TimeZone    string
 }
