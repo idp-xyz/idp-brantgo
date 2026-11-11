@@ -346,9 +346,6 @@ func TestCustomerResponseReadsRefuseMalformedIDs(t *testing.T) {
 		if _, err := q.c.TRD.GetCustomerResponse(q.author, id); code(err) != kernel.CodeNotFound {
 			t.Errorf("response %q: %v", id, err)
 		}
-		if id == "" {
-			continue
-		}
 		if _, err := q.c.TRD.GetAcceptance(q.author, id); code(err) != kernel.CodeNotFound {
 			t.Errorf("acceptance %q: %v", id, err)
 		}

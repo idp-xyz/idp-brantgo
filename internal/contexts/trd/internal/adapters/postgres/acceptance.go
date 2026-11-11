@@ -177,6 +177,9 @@ func LoadAcceptances(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 
 // LoadAcceptance returns acceptance id with its ledger, or nil, locking it as lock says.
 func LoadAcceptance(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string, lock Lock) (*acceptance.Acceptance, error) {
+	if id == "" { // no acceptance has an empty ID; an empty filter would select nothing at all
+		return nil, nil
+	}
 	out, err := LoadAcceptances(ctx, exec, scope, AcceptanceFilter{ID: id}, lock)
 	if err != nil || len(out) == 0 {
 		return nil, err
