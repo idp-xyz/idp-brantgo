@@ -22,8 +22,9 @@ internal/bootstrap/               composition root: one connection pool, a Bento
 internal/contexts/evd/            EVD: text sources (content, origin, import) and business files, immutable; SourceRef lookup
 internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup;
                                   address roles, service roles, trading profiles; party screening with positive and negative
-                                  lists and PartyScreeningGuard v1
-internal/contexts/cat/            CAT: SKUs and specification revisions, item-code mappings; SkuRef and ItemCodeMappingRef lookups
+                                  lists and PartyScreeningGuard v1; TradingProfileGuard v1 and AddressRoleGuard v1 for TRD
+internal/contexts/cat/            CAT: SKUs and specification revisions, item-code mappings; SkuRef and ItemCodeMappingRef lookups;
+                                  SkuGuard v1 for TRD
 internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed; RfqLineRef lookup
 internal/contexts/sup/            SUP: supplier RFQs; supplier offers, purchase terms and logistics offers in sealed
                                   revisions (verify/publish independently, supersede, withdraw/retire);
