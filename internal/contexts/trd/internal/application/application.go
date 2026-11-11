@@ -81,7 +81,6 @@ type Upstream struct {
 	Configs   polapi.Queries         // ConfigRef v1 (R15)
 	Rfqs      inqapi.RfqLookups      // RfqRef v1 (R12)
 	Snapshots cstapi.SnapshotLookups // CostSnapshotRef v1 (R11)
-	Guards    Guards                 // PTY's and CAT's guard functions, once published (freeze.go)
 }
 
 // Service runs TRD's use cases.

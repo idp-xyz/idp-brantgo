@@ -77,7 +77,7 @@ func Tree(doc []byte) (any, error) {
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNotCanonical, err)
+		return nil, fmt.Errorf("%w: %w", ErrNotCanonical, err)
 	}
 	if dec.More() {
 		return nil, fmt.Errorf("%w: trailing data", ErrNotCanonical)
@@ -90,7 +90,7 @@ func Tree(doc []byte) (any, error) {
 func TreeOf(v any) (any, error) {
 	doc, err := json.Marshal(v)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNotCanonical, err)
+		return nil, fmt.Errorf("%w: %w", ErrNotCanonical, err)
 	}
 	return Tree(doc)
 }
@@ -178,7 +178,7 @@ func sortItems(items []any, keys []string, path string) error {
 		for j := range tuples[a] {
 			c, err := compare(tuples[a][j], tuples[b][j])
 			if err != nil && failure == nil {
-				failure = fmt.Errorf("%w: %s: %v", ErrNotCanonical, path, err)
+				failure = fmt.Errorf("%w: %s: %w", ErrNotCanonical, path, err)
 			}
 			if c != 0 {
 				return c

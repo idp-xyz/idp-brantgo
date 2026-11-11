@@ -396,9 +396,7 @@ func SealDraft(id string, rev int64, d Data, f Facts, calc *Calculation, now tim
 	configs := closure(d, f)
 	doc := Commercial{QuoteID: id, BusinessRevision: rev, IssuedAt: kernel.FormatTimestamp(issued), Data: terms, Calculation: calc,
 		PartySnapshots: parties(terms, f), NormalizationVersion: NormalizationVersion}
-	for _, c := range configs {
-		doc.DependencyManifest = append(doc.DependencyManifest, c)
-	}
+	doc.DependencyManifest = append(doc.DependencyManifest, configs...)
 	rfq := Dependency{Kind: DependencyRfq, ID: terms.Rfq.RfqID, Version: terms.Rfq.RowVersion, ContentHash: f.Rfq.LinesHash}
 	doc.DependencyManifest = append(doc.DependencyManifest, rfq,
 		Dependency{Kind: DependencyCostSnapshot, ID: terms.Snapshot.SnapshotID, Version: 1, ContentHash: f.Snapshot.EvidenceHash},

@@ -119,13 +119,40 @@ func TestTaskIdentityIsNotACommandMember(t *testing.T) {
 	}
 }
 
+// Error catalog V0.1: the QuoteRoot rows with their categories (OBJECT_CONTROL_CONFLICT and
+// CONTROL_EPOCH_STALE 409, REFERENCE_STALE 409, the rest 422). Category and Reject answer for
+// QuoteRoot's codes and the calculation's alike; the two maps share no code.
 func TestCodesHaveCatalogCategories(t *testing.T) {
-	for code, want := range map[string]kernel.Category{
+	want := map[string]kernel.Category{
 		CodeObjectControlConflict: kernel.CategoryConflict, CodeControlEpochStale: kernel.CategoryConflict,
-		CodeQuoteExpired: kernel.CategoryInvalid, CodeBusinessHashMismatch: kernel.CategoryInvalid, CodeReferenceStale: kernel.CategoryConflict,
-	} {
-		if got, ok := Category(code); !ok || got != want {
+		CodeQuoteExpired: kernel.CategoryInvalid, CodeQuoteValidityInvalid: kernel.CategoryInvalid,
+		CodeCostSnapshotMissing: kernel.CategoryInvalid, CodeBusinessHashMismatch: kernel.CategoryInvalid,
+		CodeCustomerReferenceMiss: kernel.CategoryInvalid, CodeContactReferenceMiss: kernel.CategoryInvalid,
+		CodeReferenceStale: kernel.CategoryConflict,
+	}
+	if len(codes) != len(want) {
+		t.Fatalf("%d QuoteRoot codes, want %d", len(codes), len(want))
+	}
+	for code, category := range want {
+		if got, ok := Category(code); !ok || got != category {
 			t.Errorf("%s: %v", code, got)
 		}
+		if r := Reject(code, "/args/quote_id"); r.Code != code || r.Category != category {
+			t.Errorf("Reject(%s) = %+v", code, r)
+		}
 	}
+	for code := range calcCodes {
+		if _, clash := codes[code]; clash {
+			t.Errorf("%s is declared twice", code)
+		}
+		if got, ok := Category(code); !ok || got != kernel.CategoryInvalid {
+			t.Errorf("calculation code %s: %v", code, got)
+		}
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("an undeclared code must panic")
+		}
+	}()
+	_ = Reject(kernel.CodeSchemaInvalid, "/")
 }

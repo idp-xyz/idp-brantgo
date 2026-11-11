@@ -1,7 +1,9 @@
 package application
 
 import (
+	"cmp"
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
+	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -34,14 +37,22 @@ import (
 //  1. the quote root FOR UPDATE (the handler's Lock), which also holds its object control;
 //  2. the company's authority guard row FOR SHARE (the ledger's Authorize);
 //  3. after the domain sealed the draft, the upstream guard rows FOR SHARE through their guard
-//     functions, in context code order (guardUpstream): CAT, CST (AdoptabilityGuard v1, which in
-//     turn locks the snapshot, its sources and inputs), INQ (RfqGuard v1), POL (ConfigGuard v1 per
-//     adopted revision in kind, ID and revision order), PTY;
+//     functions, in context code order (guardUpstream): CAT (SkuGuard v1 per specification
+//     revision), CST (AdoptabilityGuard v1, which in turn locks the snapshot, its sources and
+//     inputs), INQ (RfqGuard v1), POL (ConfigGuard v1 per adopted revision in kind, ID and
+//     revision order), PTY (TradingProfileGuard v1, which also locks the party and the pinned
+//     contacts, then AddressRoleGuard v1 per address);
 //  4. the revision, the action result, the audit entry and QuoteFrozen in the Outbox.
 //
 // An upstream change that ends what the freeze binds (a source denial, an RFQ cancellation, a
-// configuration retirement) either committed before its guard read the row, and the freeze is
-// refused with the owner's verdict, or waits until the freeze commits.
+// configuration retirement, a party or specification revision) either committed before its guard
+// read the row, and the freeze is refused with the owner's verdict, or waits until the freeze
+// commits.
+//
+// STL's CreditGuard v1 (Context Map R57) and CNX's TradeComplianceGuard v1 (R58) are not freeze
+// guards: the design checks credit and trade compliance at order.activate (TRD-INV-022, 023), which
+// comes with the order wave; by the owner's decision of 2026-11-10 both are S4–S5 integration and
+// stay recorded gaps there. In context code order CNX falls between CAT and CST, STL after PTY.
 
 // Calculator is the server calculation of WBS S3-02 (sales charges, tax, sales FX, margin, payment
 // allocation): the one place a freeze takes amounts from, never from the client. It computes on
@@ -57,29 +68,6 @@ type CalculationInput struct {
 	Configs  map[polapi.ConfigRef]polapi.ResolvedConfig // every POL revision the draft adopts, direct and nested
 	Snapshot cstapi.ResolvedSnapshot
 	At       time.Time
-}
-
-// Guards are the guard functions of upstream contexts whose guards are not published yet. The
-// freeze calls each, when set, at its place in context code order inside its transaction, with
-// TRD's own executor (ADR-BR-004 option B).
-type Guards struct {
-	// Catalog re-checks and locks FOR SHARE the SKU specification revisions the quote binds
-	// (Context Map R14, CAT SkuRef v1 guard). Until it is set the freeze relies on CAT's
-	// ResolveSpecs before the transaction: a specification revised between that read and the
-	// commit is not caught (recorded gap).
-	Catalog func(ctx context.Context, exec bentopg.Executor, specs []catapi.SpecRef, path string) error
-	// Parties re-checks and locks FOR SHARE the customer party revision, the contact, the trading
-	// profile revision and the addresses the quote binds (Context Map R13, PTY guards). Until it is
-	// set the freeze relies on PTY's lookups before the transaction (recorded gap).
-	Parties func(ctx context.Context, exec bentopg.Executor, b PartyBinding) error
-}
-
-// PartyBinding is what a frozen quote binds of PTY.
-type PartyBinding struct {
-	Party     ptyapi.PartyRef // PartyID and Revision
-	Contact   ptyapi.ContactRef
-	Profile   ptyapi.TradingProfileRef
-	Addresses []ptyapi.AddressRoleRef
 }
 
 // facts are what the upstreams said before the transaction: the domain's view and the raw answers
@@ -135,7 +123,7 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 		if err != nil {
 			return action.Outcome{}, err
 		}
-		if err = s.guardUpstream(ctx, exec, w.Data, seal, now); err != nil {
+		if err = s.guardUpstream(ctx, exec, w.Data, seal, f.Facts, now); err != nil {
 			return action.Outcome{}, err
 		}
 		if _, err = h.q.Freeze(cmd.WorkingRevision, seal, d.Actor, d.Epoch, now); err != nil {
@@ -167,17 +155,25 @@ func (s Service) calculate(d quote.Data, f facts, at time.Time) (*quote.Calculat
 }
 
 // guardUpstream re-checks, inside TRD's transaction after the root is locked FOR UPDATE, what the
-// freeze binds upstream, in context code order; each guard locks its upstream row FOR SHARE until
-// TRD's transaction ends.
-func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, d quote.Data, seal *quote.Seal, at time.Time) error {
+// freeze binds upstream, in context code order; each guard locks its upstream rows FOR SHARE until
+// TRD's transaction ends, so a change that would end a bound fact either committed first and the
+// freeze is refused with the owner's verdict, or waits until the freeze commits.
+func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, d quote.Data, seal *quote.Seal, f quote.Facts, at time.Time) error {
 	const p = "/args/data"
-	// CAT (R14): the SKU specification revisions — extension point for CAT's guard.
-	if g := s.Upstream.Guards.Catalog; g != nil {
-		specs := make([]catapi.SpecRef, len(d.Lines))
-		for i, l := range d.Lines {
-			specs[i] = catapi.SpecRef{SkuID: l.Sku.SkuID, SpecRevision: l.Sku.SpecRevision}
+	// CAT (R14): SkuGuard v1 on every SKU specification revision, in (SKU, revision) order.
+	specs := map[catapi.SpecRef]string{}
+	for i, l := range d.Lines {
+		ref := catapi.SpecRef{SkuID: l.Sku.SkuID, SpecRevision: l.Sku.SpecRevision}
+		if _, ok := specs[ref]; !ok {
+			specs[ref] = fmt.Sprintf("%s/lines/%d/sku_ref", p, i)
 		}
-		if err := g(ctx, exec, specs, p+"/lines"); err != nil {
+	}
+	for _, ref := range slices.SortedFunc(maps.Keys(specs), compareSpec) {
+		v, err := catapi.ScanSkuGuard(ref, exec.QueryRow(ctx, catapi.SkuGuardSQL, catapi.SkuGuardArgs(ref)...).Scan)
+		if err != nil {
+			return err
+		}
+		if err = v.Check(specs[ref]); err != nil {
 			return err
 		}
 	}
@@ -221,22 +217,43 @@ func (s Service) guardUpstream(ctx context.Context, exec bentopg.Executor, d quo
 			return err
 		}
 		if v.ContentHash != c.ContentHash {
-			return kernel.RejectAs(api.CodeReferenceStale, kernel.CategoryConflict, path, "The configuration changed since it was read")
+			return api.Reject(api.CodeReferenceStale, path)
 		}
 	}
-	// PTY (R13): party, contact, trading profile and addresses — extension point for PTY's guards.
-	if g := s.Upstream.Guards.Parties; g != nil {
-		b := PartyBinding{Party: ptyapi.PartyRef{PartyID: d.Customer.PartyID, Revision: d.Customer.Revision},
-			Contact: ptyapi.ContactRef{ContactID: d.Contact.ContactID, PartyID: d.Customer.PartyID, RowVersion: d.Contact.RowVersion},
-			Profile: ptyapi.TradingProfileRef{PartyID: d.Profile.PartyID, Revision: d.Profile.Revision}}
-		for _, a := range d.Addresses {
-			b.Addresses = append(b.Addresses, ptyapi.AddressRoleRef{PartyID: a.PartyID, PartyRevision: a.PartyRevision, AddressID: a.AddressID})
+	// PTY (R13): TradingProfileGuard v1 on the exact profile revision (it also locks the party row
+	// and the pinned contacts' rows, so the customer revision and the contact the domain matched
+	// against the profile stay as read), then AddressRoleGuard v1 on every address in (party,
+	// revision, address) order.
+	profile := ptyapi.TradingProfileRef{PartyID: d.Profile.PartyID, Revision: d.Profile.Revision}
+	pv, err := ptyapi.ScanTradingProfileGuard(profile, exec.QueryRow(ctx, ptyapi.TradingProfileGuardSQL, ptyapi.TradingProfileGuardArgs(profile)...).Scan)
+	if err != nil {
+		return err
+	}
+	if err = pv.Check(p + "/trading_profile_ref"); err != nil {
+		return err
+	}
+	if pv.ContentHash != f.Profile.ContentHash || pv.PartyRevision != d.Customer.Revision {
+		return api.Reject(api.CodeReferenceStale, p+"/trading_profile_ref")
+	}
+	addresses := map[ptyapi.AddressRoleRef]string{}
+	for i, a := range d.Addresses {
+		addresses[ptyapi.AddressRoleRef{PartyID: a.PartyID, PartyRevision: a.PartyRevision, AddressID: a.AddressID}] =
+			fmt.Sprintf("%s/customer_address_refs/%d", p, i)
+	}
+	for _, a := range slices.SortedFunc(maps.Keys(addresses), compareAddress) {
+		v, err := ptyapi.ScanAddressRoleGuard(a, exec.QueryRow(ctx, ptyapi.AddressRoleGuardSQL, ptyapi.AddressRoleGuardArgs(a)...).Scan)
+		if err != nil {
+			return err
 		}
-		if err = g(ctx, exec, b); err != nil {
+		if err = v.Check(addresses[a]); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func compareAddress(a, b ptyapi.AddressRoleRef) int {
+	return cmp.Or(cmp.Compare(a.PartyID, b.PartyID), cmp.Compare(a.PartyRevision, b.PartyRevision), cmp.Compare(a.AddressID, b.AddressID))
 }
 
 // freezeReceipt completes the receipt of a freeze, executed or replayed, from the stored revision.
@@ -257,11 +274,15 @@ func (s Service) freezeReceipt(ctx context.Context, r api.Receipt) (api.FreezeRe
 }
 
 // facts asks EVD, PTY, INQ, CAT, POL and CST about the references of d at instant at, each in a
-// transaction of its own, before TRD's.
+// transaction of its own, before TRD's. The company is the verified principal's (no transaction
+// scope exists yet).
 func (s Service) facts(ctx context.Context, d quote.Data, at time.Time) (facts, error) {
-	f := facts{Facts: quote.Facts{Company: string(scope(ctx).Company), Addresses: map[quote.AddressRef]quote.Address{},
+	p, err := identity.FromContext(ctx)
+	if err != nil {
+		return facts{}, err
+	}
+	f := facts{Facts: quote.Facts{Company: string(p.Scope.Company), Addresses: map[quote.AddressRef]quote.Address{},
 		Specs: map[quote.SkuRef]quote.Verdict{}, Configs: map[quote.Ref]quote.Config{}}, configs: map[polapi.ConfigRef]polapi.ResolvedConfig{}}
-	var err error
 	if f.Sources, err = s.sources(ctx, d.Sources()); err != nil {
 		return f, err
 	}
@@ -322,13 +343,7 @@ func (s Service) facts(ctx context.Context, d quote.Data, at time.Time) (facts, 
 }
 
 func compareSpec(a, b catapi.SpecRef) int {
-	if a.SkuID != b.SkuID {
-		if a.SkuID < b.SkuID {
-			return -1
-		}
-		return 1
-	}
-	return int(a.SpecRevision - b.SpecRevision)
+	return cmp.Or(cmp.Compare(a.SkuID, b.SkuID), cmp.Compare(a.SpecRevision, b.SpecRevision))
 }
 
 // parties asks PTY about the customer, the contact, the trading profile and the addresses.
@@ -397,9 +412,11 @@ func termsRef(t ptyapi.TermsRef) quote.Ref {
 func (s Service) configs(ctx context.Context, refs []quote.Ref, at time.Time, f *facts) error {
 	for round := 0; round < 2 && len(refs) > 0; round++ {
 		var asked []polapi.ConfigRef
+		seen := map[polapi.ConfigRef]bool{}
 		for _, r := range refs {
 			pr := polapi.ConfigRef{Kind: r.Kind, ConfigID: r.ID, Revision: r.Revision}
-			if _, done := f.configs[pr]; !done && pr.Validate("/") == nil {
+			if _, done := f.configs[pr]; !done && !seen[pr] && pr.Validate("/") == nil {
+				seen[pr] = true
 				asked = append(asked, pr)
 			}
 		}

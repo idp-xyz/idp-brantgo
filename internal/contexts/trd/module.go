@@ -49,10 +49,9 @@ type Upstream struct {
 }
 
 // New wires TRD to db, a transaction owner that belongs to TRD alone, and to the lookups of its
-// upstream contexts. The freeze calls CST's, INQ's and POL's guard functions itself; the guards of
-// PTY and CAT (application.Guards) and the S3-02 server calculation (application.Calculator) are
-// wired here once they exist: until then the freeze relies on PTY's and CAT's lookups before its
-// transaction and seals calculation null.
+// upstream contexts. The freeze calls the guard functions of CAT, CST, INQ, POL and PTY itself. The
+// S3-02 server calculation (application.Calculator) is wired here once its inputs are available to
+// TRD; until then the freeze seals calculation null.
 func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	if up.Sources == nil || up.Parties == nil || up.Profiles == nil || up.Skus == nil || up.Configs == nil || up.Rfqs == nil || up.Snapshots == nil {
 		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL, INQ and CST")
