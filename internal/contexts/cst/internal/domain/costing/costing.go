@@ -15,10 +15,10 @@
 // quantities (CST-INV-001 input, T02 §13.1). Assumptions stay unverified: any assumption keeps a
 // result provisional, so it is never frozen (T02 §15.2).
 //
-// The upstream facts (INQ, CAT, POL) are read before CST's transaction and judged here as Facts;
-// the transaction re-checks the RFQ and the configurations through the upstream guards. Checks run
-// in the Python order: existence, root version, state, completeness, independence, effect of the
-// references, then the document.
+// The upstream facts (EVD, INQ, CAT, POL) are read before CST's transaction and judged here as
+// Facts; the transaction re-checks the RFQ and the configurations through the upstream guards.
+// Checks run in the Python order: existence, root version, state, completeness, independence,
+// effect of the references, then the document.
 package costing
 
 import (
@@ -538,14 +538,15 @@ func (d Data) Complete() error {
 	return nil
 }
 
-// Facts are what INQ, CAT and POL said about the references of a revision, each in a transaction
-// of its own before CST's. A reference that is absent does not exist or lies outside the caller's
-// data scope.
+// Facts are what EVD, INQ, CAT and POL said about the references of a revision, each in a
+// transaction of its own before CST's. A reference that is absent does not exist or lies outside
+// the caller's data scope.
 type Facts struct {
 	Rfq     *Rfq // nil: unknown
 	Skus    map[string]bool
 	Specs   map[Spec]func(path string) error // CAT's standing of each specification revision: nil when current
 	Configs map[Ref]Config
+	Sources map[string]bool // the EVD sources the caller reads (SourceRef v1, Context Map R64)
 }
 
 // Rfq is RfqRef v1 as INQ answered it.
@@ -593,8 +594,10 @@ type Conversion struct {
 
 // CheckDraft judges the content of a save (Python _access_document on a draft): the lines once, each
 // reference of the kind its field takes, and every reference the draft states known to its
-// upstream; assumptions once each with a supported path; delivery anchors of mapped kinds. A draft
-// may reference an RFQ that is not ready or configurations not in force.
+// upstream; assumptions once each with a supported path, on evidence the caller reads; delivery
+// anchors of mapped kinds. A draft may reference an RFQ that is not ready or configurations not in
+// force. Verification judges the stored draft again, so the verifier must read the assumptions'
+// evidence too (Python verify: _access_document on the draft).
 func CheckDraft(d Data, f Facts) error {
 	const p = "/args/data"
 	seen := map[string]bool{}
@@ -627,7 +630,20 @@ func CheckDraft(d Data, f Facts) error {
 			return err
 		}
 	}
-	return checkAssumptions(d.Assumptions)
+	if err := checkAssumptions(d.Assumptions); err != nil {
+		return err
+	}
+	for i, a := range d.Assumptions {
+		for j, e := range a.Evidence {
+			if !f.Sources[e.SourceID] {
+				// A missing origin and one outside the caller's data scope are refused alike, so the
+				// refusal reveals nothing (Python _source_ref, as in the S1 contexts and SUP).
+				return kernel.Reject(kernel.CodeReferenceInvalid, fmt.Sprintf("%s/assumptions/%d/evidence/%d/source_id", p, i, j),
+					"Source is not accessible")
+			}
+		}
+	}
+	return nil
 }
 
 // allowedAssumption is the closed set of inputs an assumption may annotate (Python

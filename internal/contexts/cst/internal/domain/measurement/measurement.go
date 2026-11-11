@@ -238,13 +238,22 @@ func (s *Snapshot) append(d Data, by kernel.ActorRef, epoch int64, now time.Time
 	return r
 }
 
-// Supersede appends the next revision and supersedes revision active, which must be the active one
-// (REFERENCE_STALE otherwise, Python measurement.supersede).
-func (s *Snapshot) Supersede(active int64, d Data, by kernel.ActorRef, epoch int64, now time.Time, reason string) (*Revision, error) {
-	a := s.Active()
-	if a == nil || a.Number != active {
-		return nil, kernel.RejectAs(CodeReferenceStale, kernel.CategoryConflict, "/args/active_revision", "The revision to supersede is not the active one")
+// CheckSupersede admits superseding revision active, before the new data is judged: it must be the
+// active one (REFERENCE_STALE otherwise, Python measurement.supersede).
+func (s *Snapshot) CheckSupersede(active int64) error {
+	if a := s.Active(); a == nil || a.Number != active {
+		return kernel.RejectAs(CodeReferenceStale, kernel.CategoryConflict, "/args/active_revision", "The revision to supersede is not the active one")
 	}
+	return nil
+}
+
+// Supersede appends the next revision and supersedes revision active, which must be the active one
+// (CheckSupersede).
+func (s *Snapshot) Supersede(active int64, d Data, by kernel.ActorRef, epoch int64, now time.Time, reason string) (*Revision, error) {
+	if err := s.CheckSupersede(active); err != nil {
+		return nil, err
+	}
+	a := s.Active()
 	if err := d.Check("/args/data", now); err != nil {
 		return nil, err
 	}

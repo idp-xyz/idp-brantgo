@@ -85,7 +85,7 @@ func TestEffectHead(t *testing.T) {
 		t.Fatal("check")
 	}
 	_, err = s.Supersede(2, fixture(), recorder, 1, clock, "重新实测")
-	if code(err) != "REFERENCE_STALE /args/active_revision" {
+	if code(err) != "REFERENCE_STALE /args/active_revision" || code(s.CheckSupersede(2)) != code(err) || s.CheckSupersede(1) != nil {
 		t.Fatalf("supersede a revision that is not active: %v", err)
 	}
 	bad := fixture()
