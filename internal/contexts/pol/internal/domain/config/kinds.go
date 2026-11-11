@@ -31,6 +31,7 @@ const (
 	KindQuoteDocumentTemplate Kind = "quote_document_template"
 	KindCreditPolicy          Kind = "credit_policy"
 	KindScreeningRegulation   Kind = "screening_regulation"
+	KindOrderDocumentTemplate Kind = "order_document_template"
 )
 
 // Closed values the rules below compare.
@@ -231,6 +232,20 @@ type QuoteDocumentTemplate struct {
 	RendererVersion string   `json:"renderer_version"`
 	Title           string   `json:"title"`
 	Sections        []string `json:"sections"`
+	FooterNote      string   `json:"footer_note"`
+}
+
+// OrderDocumentTemplate is the layout of an export sales contract or a proforma invoice for the fixed
+// order-text renderer: its kind, language, title, the order of its sections, its clauses and a
+// footer note.
+type OrderDocumentTemplate struct {
+	Name            string   `json:"name"`
+	DocumentKind    string   `json:"document_kind"`
+	Language        string   `json:"language"`
+	RendererVersion string   `json:"renderer_version"`
+	Title           string   `json:"title"`
+	Sections        []string `json:"sections"`
+	Clauses         []string `json:"clauses"`
 	FooterNote      string   `json:"footer_note"`
 }
 

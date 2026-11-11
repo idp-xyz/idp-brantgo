@@ -390,6 +390,50 @@
         },
         "type": "object"
       },
+      "pol.order_document_template": {
+        "additionalProperties": false,
+        "properties": {
+          "clauses": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "document_kind": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "footer_note": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "language": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "renderer_version": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "pol.payment_terms": {
         "additionalProperties": false,
         "properties": {
@@ -9983,6 +10027,10 @@
                           {
                             "$ref": "#/components/schemas/pol.number_sequence",
                             "title": "number_sequence"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.order_document_template",
+                            "title": "order_document_template"
                           },
                           {
                             "$ref": "#/components/schemas/pol.payment_terms",

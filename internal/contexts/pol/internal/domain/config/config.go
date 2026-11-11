@@ -107,6 +107,7 @@ type Content struct {
 	QuoteDocumentTemplate *QuoteDocumentTemplate
 	CreditPolicy          *CreditPolicy
 	ScreeningRegulation   *ScreeningRegulation
+	OrderDocumentTemplate *OrderDocumentTemplate
 }
 
 // Validity returns the revision's validity interval.
@@ -161,6 +162,8 @@ func (c Content) Data() any {
 		return present(c.CreditPolicy)
 	case KindScreeningRegulation:
 		return present(c.ScreeningRegulation)
+	case KindOrderDocumentTemplate:
+		return present(c.OrderDocumentTemplate)
 	}
 	return nil
 }
@@ -246,6 +249,8 @@ func (c *Content) DecodeData(raw []byte) error {
 		return decode(raw, &c.CreditPolicy)
 	case KindScreeningRegulation:
 		return decode(raw, &c.ScreeningRegulation)
+	case KindOrderDocumentTemplate:
+		return decode(raw, &c.OrderDocumentTemplate)
 	}
 	return fmt.Errorf("pol: no data of kind %q", c.Kind)
 }

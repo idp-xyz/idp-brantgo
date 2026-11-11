@@ -69,6 +69,13 @@ func content(cmd api.SaveDraft) config.Content {
 		v := config.QuoteDocumentTemplate(*d.QuoteDocumentTemplate)
 		v.Sections = slices.Clone(v.Sections)
 		c.QuoteDocumentTemplate = &v
+	case d.OrderDocumentTemplate != nil:
+		v := config.OrderDocumentTemplate(*d.OrderDocumentTemplate)
+		v.Sections, v.Clauses = slices.Clone(v.Sections), slices.Clone(v.Clauses)
+		if v.Clauses == nil {
+			v.Clauses = []string{}
+		}
+		c.OrderDocumentTemplate = &v
 	case d.CreditPolicy != nil:
 		p := d.CreditPolicy
 		v := config.CreditPolicy{Name: p.Name, Currency: p.Currency, DefaultLimit: p.DefaultLimit, LimitSources: slices.Clone(p.LimitSources),
@@ -163,6 +170,10 @@ func data(c config.Content) api.ConfigData {
 		v := api.QuoteDocumentTemplate(*c.QuoteDocumentTemplate)
 		v.Sections = slices.Clone(v.Sections)
 		d.QuoteDocumentTemplate = &v
+	case c.OrderDocumentTemplate != nil:
+		v := api.OrderDocumentTemplate(*c.OrderDocumentTemplate)
+		v.Sections, v.Clauses = slices.Clone(v.Sections), slices.Clone(v.Clauses)
+		d.OrderDocumentTemplate = &v
 	case c.CreditPolicy != nil:
 		p := c.CreditPolicy
 		v := api.CreditPolicy{Name: p.Name, Currency: p.Currency, DefaultLimit: p.DefaultLimit, LimitSources: slices.Clone(p.LimitSources),

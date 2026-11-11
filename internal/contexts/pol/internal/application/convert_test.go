@@ -43,6 +43,10 @@ func TestEveryKindConvertsBothWays(t *testing.T) {
 			FieldNames: []string{"document.number"}}},
 		api.KindQuoteDocumentTemplate: {QuoteDocumentTemplate: &api.QuoteDocumentTemplate{Name: "n", Language: "en",
 			RendererVersion: "quote-text/0.1.0", Title: "Quotation", Sections: api.QuoteSections(), FooterNote: "f"}},
+		api.KindOrderDocumentTemplate: {OrderDocumentTemplate: &api.OrderDocumentTemplate{Name: "n", DocumentKind: "proforma_invoice",
+			Language: "en", RendererVersion: "order-text/0.1.0", Title: "Proforma invoice",
+			Sections: []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "clauses", "notes"},
+			Clauses:  []string{"Bank charges outside China are the buyer's."}, FooterNote: "f"}},
 		api.KindCreditPolicy: {CreditPolicy: &api.CreditPolicy{Name: "n", Currency: "CNY", DefaultLimit: "0", LimitSources: []string{"internal_assessment"},
 			ApprovalTiers: []api.CreditApprovalTier{{Level: "officer", MaxAmount: "1000"}}, OverdueToleranceDays: 30}},
 	} {

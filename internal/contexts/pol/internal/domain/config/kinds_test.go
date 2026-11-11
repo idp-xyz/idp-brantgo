@@ -260,6 +260,8 @@ func TestEveryKindRoundTripsThroughItsStoredData(t *testing.T) {
 		template("{document.number}", "document.number"),
 		{Kind: KindQuoteDocumentTemplate, QuoteDocumentTemplate: &QuoteDocumentTemplate{Name: "q", Language: "en", RendererVersion: "quote-text/0.1.0",
 			Title: "Quotation", Sections: []string{"issuer"}, FooterNote: ""}},
+		{Kind: KindOrderDocumentTemplate, OrderDocumentTemplate: &OrderDocumentTemplate{Name: "pi", DocumentKind: "proforma_invoice", Language: "en",
+			RendererVersion: "order-text/0.1.0", Title: "Proforma invoice", Sections: []string{"seller"}, Clauses: []string{}, FooterNote: ""}},
 		credit("0", CreditApprovalTier{Level: "credit_officer", MaxAmount: "1000"}),
 	}
 	for _, c := range contents {

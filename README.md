@@ -30,8 +30,9 @@ internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, cl
 internal/contexts/sup/            SUP: supplier RFQs; supplier offers, purchase terms and logistics offers in sealed
                                   revisions (verify/publish independently, supersede, withdraw/retire);
                                   SupplyConditionRef lookup and SupplyConditionGuard v1
-internal/contexts/pol/            POL: eighteen configuration kinds with independent publication, ConfigGuard v1, FX, tax and
-                                  unit lookups, document numbers, foundation snapshots
+internal/contexts/pol/            POL: nineteen configuration kinds with independent publication (S3 adds
+                                  order_document_template), ConfigGuard v1, FX, tax and unit lookups, document numbers,
+                                  foundation snapshots
 internal/contexts/cst/            CST: costing contexts and measurements in sealed revisions, the calculation rules, cost
                                   scenarios with deterministic evaluations, frozen cost snapshots (once per scenario),
                                   source attestations and denials; CostSnapshotRef lookup and AdoptabilityGuard v1
