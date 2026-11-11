@@ -537,6 +537,7 @@
     "clm.read",
     "cnx.audit",
     "cnx.read",
+    "costing.attest_source",
     "crm.audit",
     "crm.read",
     "cst.audit",

@@ -72,7 +72,7 @@
     ["QUOTE_VALIDITY_INVALID", "报价", 422, "否", "TRD", "有效期不满足政策"],
     ["COST_SNAPSHOT_MISSING", "报价", 422, "否", "TRD／PUR", "缺少成本快照"],
     ["COST_SNAPSHOT_NOT_ELIGIBLE", "报价", 422, "否", "TRD", "快照不可用于报价"],
-    ["COST_SNAPSHOT_INELIGIBLE", "报价", 422, "否", "TRD", "快照当前不可采纳"],
+    ["COST_SNAPSHOT_INELIGIBLE", "报价", 422, "否", "CST／TRD／PUR", "快照当前不可采纳"],
     ["MARGIN_POLICY_REQUIRES_APPROVAL", "报价", 422, "否", "TRD", "低于最低毛利，须独立的毛利例外批准；普通内容批准不覆盖"],
     ["APPROVAL_REQUIRED", "报价", 422, "否", "TRD", "缺少适用批准"],
     ["APPROVAL_REVOKED", "报价", 422, "否", "TRD", "批准已撤销"],

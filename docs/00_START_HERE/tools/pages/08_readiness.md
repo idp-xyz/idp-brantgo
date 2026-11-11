@@ -66,7 +66,7 @@ foot: Go Migration Readiness V0.1 · 2026-11-06
 | idp-bento-go | v0.1.0-rc.2 由 go.mod 精确引用，h1 与 Cargo 记录一致；Outbox Store 与 testkit 已在 M0 使用 | go.sum；06_M0_EVIDENCE 01 |
 | idp-platform-go | v0.1.0-rc.1 在本机模块缓存中，尚未引用 | 待 IG-09 |
 | 事务语义 | 另一 owner 的事务中返回 transactionConflict（AC4 已在 PG16 实测）；隔离级别 READ COMMITTED | internal/foundation/bento 集成测试 |
-| 产品仓库 | idp-brantgo 根目录为 Go Module（M0 完成；S1 完成：EVD、PTY（主体筛查、交易档案、地址与服务方角色）、CAT（货号映射）、INQ、POL、筛查名单参考数据、HTTP 入口、OIDC、岗位模板与 brant-cli 演示）；docs/ 为本主档案；私有远程仓库 idpxyz/idp-brantgo，GitHub Actions 通过 | [S1 执行报告](../09_IMPLEMENTATION_PLAN/04_IDP_Brant_S1_Execution_Report_V0.1.html) |
+| 产品仓库 | idp-brantgo 根目录为 Go Module（M0 完成；S1 完成：EVD、PTY（主体筛查、交易档案、地址与服务方角色）、CAT（货号映射）、INQ、POL、筛查名单参考数据、HTTP 入口、OIDC、岗位模板与 brant-cli 演示；S2 完成：SUP 供应条件与 CST 核价）；docs/ 为本主档案；私有远程仓库 idpxyz/idp-brantgo，GitHub Actions 通过 | [S1 执行报告](../09_IMPLEMENTATION_PLAN/04_IDP_Brant_S1_Execution_Report_V0.1.html) |
 | PostgreSQL 16 | 专用开发容器 brant-pg16（16.12，与 CI 同一 digest）；迁移、角色与 RLS 已实测 | 06_M0_EVIDENCE 05、07、08 |
 | CI | .github/workflows/ci.yml 已定义，本机等价 make ci 通过；远程运行待仓库创建 | 06_M0_EVIDENCE 03 |
 
@@ -87,4 +87,4 @@ foot: Go Migration Readiness V0.1 · 2026-11-06
 ## 08 就绪结论 {#s8}
 
 > [!warn] 结论：尚未就绪
-> 设计与映射已覆盖 Python V0.50 的全部唯一测试方法。M0 建立了产品仓库、PostgreSQL 16 迁移与 FORCE RLS、授权守卫与 Outbox 中继；S1（2026-11-10 完成）加入命令账本、EVD、PTY（含主体筛查与交易档案）、CAT（含货号映射）、INQ、POL（全部 18 种配置与 ConfigGuard）、筛查名单参考数据、HTTP 入口与 OpenAPI 候选、OIDC 令牌校验、岗位模板、Outbox 死信与 Inbox 去重，远程 CI 通过，Go 移植数为 {{=goTestsPorted}}。真实身份提供方（延后至 B0 试点门之前）与受保护主干（负责人接受的缺口）尚未就绪，审批仍为模拟评审，G1 保持 NO-GO。
+> 设计与映射已覆盖 Python V0.50 的全部唯一测试方法。M0 建立了产品仓库、PostgreSQL 16 迁移与 FORCE RLS、授权守卫与 Outbox 中继；S1、S2（2026-11-10 完成）加入命令账本、EVD、PTY（含主体筛查与交易档案）、CAT（含货号映射）、INQ、POL（全部 18 种配置与 ConfigGuard）、筛查名单参考数据、SUP 供应条件与 CST 核价（冻结快照与可采纳守卫）、HTTP 入口与 OpenAPI 候选、OIDC 令牌校验、岗位模板、Outbox 死信与 Inbox 去重，远程 CI 通过，Go 移植数为 {{=goTestsPorted}}。真实身份提供方（延后至 B0 试点门之前）与受保护主干（负责人接受的缺口）尚未就绪，审批仍为模拟评审，G1 保持 NO-GO。
