@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/document"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -28,9 +29,6 @@ type Facts struct {
 	TradeTerms TradeTerms
 	// Sequence is the POL number_sequence revision the number is issued from and its document type.
 	Sequence Sequence
-	// Law is the governing law and dispute resolution the order revision binds, as printed text; nil
-	// while no revision binds them (WBS S3-17).
-	Law *Law
 }
 
 // Party is a party at a confirmed revision and its name.
@@ -72,29 +70,23 @@ type Sequence struct {
 	DocumentType string
 }
 
-// Law is the governing law and the dispute resolution a contract states (F-02).
-type Law struct {
-	GoverningLaw      string
-	DisputeResolution string
-}
-
 // sheet is an order document as order-text/0.1.0 prints it: every value in its printed form.
 type sheet struct {
-	kind                                  string
-	sellerName, sellerAddress, sellerReg  string
-	sellerCountry                         string
-	buyerName, buyerAddress, contact      string
-	number, orderID, orderHash            string
-	orderRevision                         int64
-	quote, amendment, date                string
-	lines, charges                        []string
-	currency, net, tax, total             string
-	incoterm, edition, responsibility     string
-	namedPlace, tradeTerms                string
-	delivery                              []string
-	payments                              []string
-	clauses                               []string
-	governingLaw, disputeResolution, note string
+	kind                                 string
+	sellerName, sellerAddress, sellerReg string
+	sellerCountry                        string
+	buyerName, buyerAddress, contact     string
+	number, orderID, orderHash           string
+	orderRevision                        int64
+	quote, amendment, date               string
+	lines, charges                       []string
+	currency, net, tax, total            string
+	incoterm, edition, responsibility    string
+	namedPlace, tradeTerms               string
+	delivery                             []string
+	payments                             []string
+	clauses, legal                       []string
+	note                                 string
 }
 
 // text renders s with t: the title, a blank line, the sections in t's order separated by blank
@@ -147,7 +139,7 @@ func block(s sheet, name string) string {
 		}
 		return "Clauses:\n" + strings.Join(out, "\n")
 	case SectionLaw:
-		return "Governing law: " + s.governingLaw + "\nDispute resolution: " + s.disputeResolution
+		return strings.Join(s.legal, "\n")
 	case SectionSignatures:
 		return "Signatures (this generated copy is unsigned; signed copies are recorded as evidence):\nSeller: " + s.sellerName + "\nBuyer: " + s.buyerName
 	case SectionNotes:
@@ -270,11 +262,10 @@ func compose(r *orderrev.Revision, t Template, f Facts, at time.Time) (sheet, er
 		}
 		s.payments = append(s.payments, strings.Join(parts, " | "))
 	}
-	if f.Law != nil {
-		if blank(f.Law.GoverningLaw) || blank(f.Law.DisputeResolution) {
-			return sheet{}, fail(kernel.CodeReferenceInvalid, "/facts/law", "Governing law and dispute resolution are stated both")
+	if r.LegalTerms != nil && r.LegalTermsRef != nil {
+		if s.legal, err = document.LegalLines(*r.LegalTermsRef, *r.LegalTerms, "/revision/legal_terms"); err != nil {
+			return sheet{}, err
 		}
-		s.governingLaw, s.disputeResolution = f.Law.GoverningLaw, f.Law.DisputeResolution
 	}
 	return s, nil
 }

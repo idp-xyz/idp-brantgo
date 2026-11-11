@@ -86,6 +86,10 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 		api.CommandCloseOrder:          {kernel.ActorHuman},
 		CommandGetOrder:                {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 		CommandCheckOrder:              {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		// Order documents: the command catalog's 人工或 AI（按动作权限） and 仅人工.
+		api.CommandGenerateOrderDocument:     {kernel.ActorHuman, kernel.ActorAI},
+		api.CommandRecordSignedOrderDocument: {kernel.ActorHuman},
+		CommandGetOrderDocument:              {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 	}
 	for command, kinds := range want {
 		r, err := policy.Rule(command)
@@ -102,13 +106,13 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 			}
 		}
 		reads := []string{CommandGetQuote, CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision, CommandGetResponse,
-			CommandGetAcceptance, CommandGetOrder, CommandCheckOrder}
+			CommandGetAcceptance, CommandGetOrder, CommandCheckOrder, CommandGetOrderDocument}
 		if !slices.Contains(reads, command) && r.Permission != command {
 			t.Errorf("%s needs permission %s", command, r.Permission)
 		}
 	}
 	for _, read := range []string{CommandCheckApproval, CommandGetFormalDocument, CommandGetActiveRevision, CommandGetResponse,
-		CommandGetAcceptance, CommandGetOrder, CommandCheckOrder} {
+		CommandGetAcceptance, CommandGetOrder, CommandCheckOrder, CommandGetOrderDocument} {
 		if r, _ := policy.Rule(read); r.Permission != PermissionRead {
 			t.Errorf("%s needs %s", read, r.Permission)
 		}
@@ -130,6 +134,11 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 	if !slices.Equal(amendment.Areas(), api.ImpactAreas()) {
 		t.Error("impact areas differ")
 	}
+	// The order documents' kinds and signed copies are the api's.
+	if orderdoc.KindSalesContract != api.DocumentSalesContract || orderdoc.KindProformaInvoice != api.DocumentProformaInvoice ||
+		orderdoc.Signed != api.SignatureSigned || orderdoc.Countersigned != api.SignatureCountersigned {
+		t.Error("document kinds differ")
+	}
 }
 
 // The idempotency key of POL's number.issue is a valid identifier, fixed by the formalization
@@ -138,5 +147,8 @@ func TestNumberKeyIsAnIdentifierPerCommandAndKey(t *testing.T) {
 	a, b, c := numberKey(api.CommandActivate, "k1"), numberKey(api.CommandReplace, "k1"), numberKey(api.CommandActivate, "k2")
 	if !kernel.ValidIdentifier(a) || a != numberKey(api.CommandActivate, "k1") || a == b || a == c || len(a) > 64 {
 		t.Fatalf("%s %s %s", a, b, c)
+	}
+	if d := numberKey(api.CommandGenerateOrderDocument, "k1"); !kernel.ValidIdentifier(d) || d == a || d == b {
+		t.Fatalf("order document: %s", d)
 	}
 }

@@ -42,7 +42,7 @@ const (
 var orderWrites = []string{api.CommandPrepareOrder, api.CommandRequestOrderReview, api.CommandDecideOrderReview, api.CommandActivateOrder,
 	api.CommandRevokeOrderApproval, api.CommandCancelOrder, api.CommandCloseOrderUnfulfilled, api.CommandPrepareAmendment,
 	api.CommandSubmitAmendment, api.CommandDecideAmendment, api.CommandApplyAmendment, api.CommandWithdrawAmendment,
-	api.CommandCloseOrderRemainder, api.CommandCloseOrder}
+	api.CommandCloseOrderRemainder, api.CommandCloseOrder, api.CommandGenerateOrderDocument, api.CommandRecordSignedOrderDocument}
 
 // orderCommand locks the quote root an order converts and the order, and applies one command.
 // order.prepare names the quote; the others resolve it from the order, whose quote never changes.
@@ -437,6 +437,7 @@ func orderView(o *order.Order, now time.Time) api.OrderView {
 			Evidence: apiEvidence(c.Closed.Evidence), RowVersion: c.RowVersion}
 	}
 	amendmentViews(o, &v)
+	v.Documents = documentViews(o)
 	return v
 }
 

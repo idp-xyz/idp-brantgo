@@ -73,6 +73,8 @@ func TestCommandsCiteTheirSources(t *testing.T) {
 		"verify":           {api.VerifyResponse{}, nil, true},
 		"freeze":           {api.Freeze{}, nil, false},
 		"activate":         {api.Activate{}, nil, false},
+		"record_signed":    {api.RecordSignedOrderDocument{Evidence: ev("a")}, []string{"a"}, false},
+		"generate":         {api.GenerateOrderDocument{}, nil, false},
 	} {
 		ids, of := cited(c.cmd)
 		slices.Sort(ids)

@@ -411,3 +411,56 @@ func golden(t *testing.T, name string, got []byte) {
 		t.Fatalf("%s differs from the golden vector:\n got %s\nwant %s", name, got, want)
 	}
 }
+
+// WBS S3-17: the legal terms the source quote sealed reach the order revision from the snapshot's
+// commercial document — never from POL — and every later revision carries them unchanged; terms
+// without their revision, or the reverse, are not a snapshot order.prepare wrote.
+func TestLegalTermsComeFromTheSourceQuote(t *testing.T) {
+	doc, _ := snapshot(t, sealed(t))
+	legal := map[string]any{"source": "issuer_default", "governing_law": "CN", "cisg": "applies",
+		"dispute_resolution": map[string]any{"method": "arbitration", "institution": "CIETAC", "seat": "Shanghai", "language": "en"},
+		"formation":          map[string]any{"rule": "arrival", "basis": "cisg"}}
+	ref := map[string]any{"kind": quote.KindLegalTerms, "id": "legal.default", "revision": 1}
+	with := func(terms, termsRef any) ([]byte, string) {
+		tree, _ := quote.Tree(doc)
+		src := tree.(map[string]any)["source_quote_snapshot"].(map[string]any)
+		if terms != nil {
+			src["legal_terms"] = terms
+		}
+		if termsRef != nil {
+			src["data"].(map[string]any)["legal_terms_ref"] = termsRef
+		}
+		b, err := quote.Canonical(tree)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b, quote.Hash(b)
+	}
+	b, h := with(legal, ref)
+	r1, err := FromSnapshot(b, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r1.LegalTermsRef == nil || *r1.LegalTermsRef != (quote.Ref{Kind: quote.KindLegalTerms, ID: "legal.default", Revision: 1}) ||
+		r1.LegalTerms == nil || r1.LegalTerms.GoverningLaw != "CN" || r1.LegalTerms.DisputeResolution.Seat != "Shanghai" ||
+		r1.LegalTerms.Formation.Basis != quote.FormationBasisCISG {
+		t.Fatalf("revision 1's legal terms: %+v %+v", r1.LegalTermsRef, r1.LegalTerms)
+	}
+	p := ProposalOf(r1)
+	p.Lines[3].Quantity = "44"
+	r2, _, err := Next(r1, amendment1, p, Fulfilment{}, facts(), "/args")
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := Parse(r2.Document, r2.Hash)
+	if err != nil || *back.LegalTerms != *r1.LegalTerms || *back.LegalTermsRef != *r1.LegalTermsRef ||
+		!strings.Contains(string(r2.Document), `"legal_terms":{"cisg":"applies"`) {
+		t.Fatalf("revision 2's legal terms: %v %s", err, r2.Document)
+	}
+	for name, b := range map[string][2]any{"terms without their revision": {legal, nil}, "a revision without terms": {nil, ref}} {
+		doc, hash := with(b[0], b[1])
+		if _, err := FromSnapshot(doc, hash); code(err) != "REFERENCE_INVALID at /snapshot/source_quote_snapshot/legal_terms" {
+			t.Errorf("%s: %s", name, code(err))
+		}
+	}
+}

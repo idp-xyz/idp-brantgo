@@ -224,14 +224,21 @@ var (
 // 18(2), 23" or "PRC Civil Code Art. 137, 483, 484". Terms a freeze could not have sealed are
 // REFERENCE_INVALID at /legal_terms.
 func legalLines(c quote.Commercial) ([]string, error) {
-	const p = "/legal_terms"
-	l, ref := c.LegalTerms, c.Data.LegalTerms
+	ref := c.Data.LegalTerms
 	if ref == nil {
 		return nil, fail(refInvalid, "/data/legal_terms_ref", "The legal terms' revision is needed")
 	}
 	if !manifested(c, *ref) {
 		return nil, fail(refInvalid, "/data/legal_terms_ref", "The dependency manifest does not pin the legal terms")
 	}
+	return LegalLines(*ref, *c.LegalTerms, "/legal_terms")
+}
+
+// LegalLines prints sealed legal terms l of revision ref as every formal document of TRD prints
+// them (quote-text/0.2.0's legal_terms section; the order documents' law section): the revision, the
+// governing law and the CISG choice, the formation and the dispute resolution. Terms a freeze could
+// not have sealed are REFERENCE_INVALID at p.
+func LegalLines(ref quote.Ref, l quote.LegalTerms, p string) ([]string, error) {
 	rule, basis := formationRules[l.Formation.Rule], formationBases[l.Formation.Basis]
 	d := l.DisputeResolution
 	switch {
@@ -247,7 +254,7 @@ func legalLines(c quote.Commercial) ([]string, error) {
 	if d.Method == quote.DisputeLitigation {
 		disputes = "Disputes: litigation | " + d.Court
 	}
-	return []string{"Legal terms: " + refText(*ref), "Governing law: " + l.GoverningLaw + " | CISG: " + l.CISG,
+	return []string{"Legal terms: " + refText(ref), "Governing law: " + l.GoverningLaw + " | CISG: " + l.CISG,
 		"Contract formation: " + rule + " | " + basis, disputes}, nil
 }
 

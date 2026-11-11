@@ -204,6 +204,9 @@ GRANT UPDATE (base_revision, base_hash, content, amendment_hash, status, version
               decision_evidence, applied_by_kind, applied_by_id, apply_epoch, applied_at, applied_revision, withdrawn_by_kind,
               withdrawn_by_id, withdraw_epoch, withdrawn_at, withdraw_reason, withdraw_evidence, updated_at)
     ON brant_trd.sales_order_amendment TO brant_app;
+-- Order documents and their signed copies (S3-15, TRD-INV-020): only inserted, for the order's
+-- current revision (trigger).
+GRANT SELECT, INSERT ON brant_trd.sales_order_document, brant_trd.sales_order_document_signature TO brant_app;
 
 -- PUR: a purchase draft is inserted prepared with its lines and only voided, once (trigger); its
 -- lines never change; a DemandAllocation root moves its balance, order revision and version by one
