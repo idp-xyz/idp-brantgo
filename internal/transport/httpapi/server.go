@@ -152,6 +152,9 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/cst/measurements/{id}", s.authenticated(read(s, cfg.CST.GetMeasurement, okView[cstapi.MeasurementView])))
 	mux.Handle("GET /api/brant/v1/cst/cost_scenarios/{id}", s.authenticated(read(s, cfg.CST.GetScenario, okView[cstapi.ScenarioView])))
 	mux.Handle("GET /api/brant/v1/cst/cost_evaluations/{id}", s.authenticated(read(s, cfg.CST.GetEvaluation, okView[cstapi.EvaluationView])))
+	mux.Handle("GET /api/brant/v1/cst/cost_snapshots/{id}", s.authenticated(read(s, cfg.CST.GetSnapshot, okView[cstapi.SnapshotView])))
+	mux.Handle("GET /api/brant/v1/cst/cost_snapshots/{id}/adoptability", s.authenticated(read(s, cfg.CST.QuerySnapshot, okView[cstapi.SnapshotQuery])))
+	mux.Handle("GET /api/brant/v1/cst/source_attestations/{id}", s.authenticated(read(s, cfg.CST.GetAttestation, okView[cstapi.AttestationView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	return s.correlated(mux), nil

@@ -19,6 +19,8 @@ type (
 		cstapi.Queries
 		cstapi.ScenarioCommands
 		cstapi.ScenarioQueries
+		cstapi.SnapshotCommands
+		cstapi.SnapshotQueries
 		cstapi.Auditor
 	}
 )
@@ -56,6 +58,11 @@ func cstCommands(c CST) *commandSet {
 		r, err := c.EvaluateScenario(ctx, cmd)
 		return r.Receipt, err
 	}
+	// The freeze answers the closed receipt too; the snapshot is read by its ID (the object_id).
+	freeze := func(ctx context.Context, cmd cstapi.FreezeSnapshot) (cstapi.Receipt, error) {
+		r, err := c.FreezeSnapshot(ctx, cmd)
+		return r.Receipt, err
+	}
 	return &commandSet{bc: "cst", contract: cstapi.Contract, auditor: c, audit: c.Audit, commands: map[string]commandFunc{
 		cstapi.CommandSaveContext:          reflected("ContextID", "", c.SaveContext),
 		cstapi.CommandReviseContext:        reflected("ContextID", "", c.ReviseContext),
@@ -67,5 +74,8 @@ func cstCommands(c CST) *commandSet {
 		cstapi.CommandWithdrawMeasurement:  reflected("MeasurementID", "", c.WithdrawMeasurement),
 		cstapi.CommandSaveScenario:         reflected("ScenarioID", "", c.SaveScenario),
 		cstapi.CommandEvaluateScenario:     reflected("ScenarioID", "", evaluate),
+		// Python cost_snapshot.freeze names the scenario scenario_id (the object made is the snapshot).
+		cstapi.CommandFreezeSnapshot: reflected("", "", freeze),
+		cstapi.CommandAttestSource:   reflected("AttestationID", "", c.AttestSource),
 	}}
 }
