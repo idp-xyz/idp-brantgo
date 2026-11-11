@@ -19,7 +19,8 @@ var (
 	expires    = time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC)
 	arrived    = time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)
 	verifiedOn = time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC)
-	hash       = strings.Repeat("b", 64)
+	commercial = []byte(`{"business_revision":1,"quote_id":"quote.1"}`) // a sealed document without legal terms
+	hash       = quote.Hash(commercial)
 	customer   = quote.PartyRef{PartyID: "customer.1", Revision: 2}
 	contact    = quote.ContactRef{ContactID: "contact.1", RowVersion: 2}
 	clerk      = kernel.ActorRef{Kind: kernel.ActorHuman, ID: "clerk"}
@@ -31,7 +32,7 @@ func activeQuote() *quote.Quote {
 	q := quote.New("quote.1", "clerk", "trade")
 	q.Revisions = []*quote.Revision{{Number: 1, Status: quote.Active,
 		Data:   quote.Data{Customer: &customer, Contact: &contact, Lines: []quote.Line{{LineID: "L1"}, {LineID: "L2"}}},
-		Seal:   &quote.Seal{BusinessHash: hash, ExpiresAt: expires},
+		Seal:   &quote.Seal{Commercial: commercial, BusinessHash: hash, ExpiresAt: expires},
 		Formal: &quote.Formalization{Document: quote.Document{Number: "QT-2026-00001"}, Commit: quote.Commit{At: formalized}}}}
 	return q
 }

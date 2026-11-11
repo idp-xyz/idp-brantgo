@@ -195,6 +195,26 @@
             "minLength": 1,
             "type": "string"
           },
+          "default_legal_terms": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
           "legal_name": {
             "minLength": 1,
             "type": "string"
@@ -359,6 +379,54 @@
             "type": "string"
           },
           "to_currency": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.legal_terms": {
+        "additionalProperties": false,
+        "properties": {
+          "cisg": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "dispute_resolution": {
+            "additionalProperties": false,
+            "properties": {
+              "court": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "institution": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "language": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "method": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "seat": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "formation_rule": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "governing_law": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
             "minLength": 1,
             "type": "string"
           }
@@ -9979,6 +10047,10 @@
                           {
                             "$ref": "#/components/schemas/pol.fx_rate",
                             "title": "fx_rate"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.legal_terms",
+                            "title": "legal_terms"
                           },
                           {
                             "$ref": "#/components/schemas/pol.number_sequence",
@@ -23641,6 +23713,26 @@
                             ],
                             "type": "object"
                           },
+                          "legal_terms_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
                           "lines": {
                             "items": {
                               "additionalProperties": false,
@@ -24368,6 +24460,26 @@
                             "type": "string"
                           },
                           "issuer_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "legal_terms_ref": {
                             "additionalProperties": false,
                             "properties": {
                               "id": {

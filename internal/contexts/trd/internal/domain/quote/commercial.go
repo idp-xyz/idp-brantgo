@@ -43,7 +43,9 @@ const (
 
 // Terms is the commercial data of a frozen revision: the draft complete, with every member the
 // commercial document requires present (charges and customer notes possibly empty), the customer
-// addresses in address ID order and stated base quantities without trailing zeros.
+// addresses in address ID order and stated base quantities without trailing zeros. LegalTerms is
+// the legal terms revision the freeze adopted, the draft's or its issuer's default; absent when
+// none (legal.go).
 type Terms struct {
 	Issuer           Ref          `json:"issuer_ref"`
 	Customer         PartyRef     `json:"customer_ref"`
@@ -66,13 +68,16 @@ type Terms struct {
 	ExpiresAt        string       `json:"expires_at"`
 	CustomerNotes    string       `json:"customer_notes"`
 	Evidence         []Evidence   `json:"evidence"`
+	LegalTerms       *Ref         `json:"legal_terms_ref,omitempty"`
 }
 
 // Commercial is the commercial document a freeze seals (Python commercial.schema.json, on TRD's
 // references): what the customer is offered, the server calculation (calculation.go), the parties
 // as they read then, and every upstream fact it rests on with its content hash. Its business hash is
 // Digest(document) (canonical.go). Documents sealed before the calculation was wired carry
-// calculation null; nothing reviews or activates them.
+// calculation null; nothing reviews or activates them. LegalTerms are the legal terms the revision
+// seals and the formation they imply (legal.go); a document without legal terms has no such member
+// and hashes as documents did before it existed.
 type Commercial struct {
 	QuoteID              string         `json:"quote_id"`
 	BusinessRevision     int64          `json:"business_revision"`
@@ -82,6 +87,7 @@ type Commercial struct {
 	PartySnapshots       PartySnapshots `json:"party_snapshots"`
 	DependencyManifest   []Dependency   `json:"dependency_manifest"`
 	NormalizationVersion string         `json:"normalization_version"`
+	LegalTerms           *LegalTerms    `json:"legal_terms,omitempty"`
 }
 
 // PartySnapshots are the parties as the freeze read them: the issuer's company profile and the
@@ -204,15 +210,18 @@ type Snapshot struct {
 // Config is what POL said about one configuration revision at the freeze's instant: its verdict,
 // content hash and the data the freeze judges itself. Nested are the revisions it names itself (a
 // pricing policy's or tax application's tax profile, a payment or trade terms calendar), which the
-// freeze adopts and guards too.
+// freeze adopts and guards too. A company profile's DefaultLegalTerms is adopted only by a quote
+// that names no legal terms of its own (legal.go), so it is not Nested.
 type Config struct {
-	Check        Verdict
-	ContentHash  string
-	Nested       []Ref
-	Policy       *Policy         // pricing_policy
-	SequenceType string          // number_sequence: its document type
-	Renderer     string          // quote_document_template: its renderer version
-	Company      *IssuerSnapshot // company_profile
+	Check             Verdict
+	ContentHash       string
+	Nested            []Ref
+	Policy            *Policy         // pricing_policy
+	SequenceType      string          // number_sequence: its document type
+	Renderer          string          // quote_document_template: its renderer version
+	Company           *IssuerSnapshot // company_profile
+	DefaultLegalTerms *Ref            // company_profile: its default legal terms, nil for none
+	Legal             *Legal          // legal_terms
 }
 
 // Policy is what the freeze reads of a POL pricing policy: how long its quotes are valid.
@@ -300,7 +309,9 @@ func (d Data) Complete() error {
 // addresses, RFQ, specifications, configurations, cost snapshot), what the freeze judges itself
 // (issuer, template, number sequence, the snapshot's RFQ line set), the validity window
 // (TRD-INV-005), then the calculation: the cost scope (TRD-INV-006), the sales terms, the
-// amounts, the comparison currency, the margin verdict and the payment plan (calc.Calculate).
+// amounts, the comparison currency, the margin verdict and the payment plan (calc.Calculate). The
+// legal terms (the draft's or the issuer's default) and the formation they imply are judged with
+// what the freeze decides itself, after the template (legal.go).
 func SealDraft(id string, rev int64, d Data, f Facts, calculate Calculate, now time.Time) (*Seal, error) {
 	if calculate == nil {
 		return nil, ErrNoCalculation
@@ -321,6 +332,10 @@ func SealDraft(id string, rev int64, d Data, f Facts, calculate Calculate, now t
 	if err := content(d, f); err != nil {
 		return nil, err
 	}
+	legalRef, legal, err := legalTerms(d, f)
+	if err != nil {
+		return nil, err
+	}
 	issued := kernel.Instant(now)
 	expires, err := validity(d, f, issued)
 	if err != nil {
@@ -334,12 +349,17 @@ func SealDraft(id string, rev int64, d Data, f Facts, calculate Calculate, now t
 		return nil, ErrNoCalculation
 	}
 	terms := sealedTerms(d)
+	terms.LegalTerms = legalRef
 	if err = calc.Check(terms); err != nil {
 		return nil, err
 	}
-	configs := closure(d, f)
+	var adopted []Ref
+	if legalRef != nil {
+		adopted = append(adopted, *legalRef)
+	}
+	configs := closure(d, f, adopted...)
 	doc := Commercial{QuoteID: id, BusinessRevision: rev, IssuedAt: kernel.FormatTimestamp(issued), Data: terms, Calculation: calc,
-		PartySnapshots: parties(terms, f), NormalizationVersion: NormalizationVersion}
+		PartySnapshots: parties(terms, f), NormalizationVersion: NormalizationVersion, LegalTerms: legal}
 	doc.DependencyManifest = append(doc.DependencyManifest, configs...)
 	rfq := Dependency{Kind: DependencyRfq, ID: terms.Rfq.RfqID, Version: terms.Rfq.RowVersion, ContentHash: f.Rfq.LinesHash}
 	doc.DependencyManifest = append(doc.DependencyManifest, rfq,
@@ -480,7 +500,7 @@ func content(d Data, f Facts) error {
 	if f.Configs[*d.Issuer].Company == nil {
 		return kernel.Reject(kernel.CodeReferenceInvalid, p+"/issuer_ref", "")
 	}
-	if f.Configs[*d.DocumentTemplate].Renderer != QuoteRendererV010 {
+	if r := f.Configs[*d.DocumentTemplate].Renderer; r != QuoteRendererV010 && r != QuoteRendererV020 {
 		return fail(CodeDependencyNotSupported, p+"/document_template_ref", "The template's renderer is not supported")
 	}
 	if f.Configs[*d.Sequence].SequenceType != DocumentTypeQuote {
@@ -543,10 +563,11 @@ func sealedTerms(d Data) Terms {
 	return t
 }
 
-// closure returns the POL revisions the draft adopts, directly, through the calculation (Adopted)
-// or through the revisions those name, with their content hashes, in kind, ID and revision order.
-func closure(d Data, f Facts) []Dependency {
-	direct := append(d.ConfigRefs(), f.Adopted...)
+// closure returns the POL revisions the draft adopts, directly, through the calculation (Adopted),
+// as legal terms (its issuer's default) or through the revisions those name, with their content
+// hashes, in kind, ID and revision order.
+func closure(d Data, f Facts, legal ...Ref) []Dependency {
+	direct := append(append(d.ConfigRefs(), f.Adopted...), legal...)
 	refs := slices.Clone(direct)
 	for _, r := range direct {
 		refs = append(refs, f.Configs[r].Nested...)

@@ -32,7 +32,8 @@ import (
 // contact, the trading profile and the addresses, INQ the RFQ (with its customer, contact and line
 // set), CAT the SKU specifications, CST the cost snapshot with its adoptability and the costing
 // context it froze (its comparison basis), POL every configuration the draft names and the
-// costing's comparison currency and cost units (and, in a second round, the revisions those name).
+// costing's comparison currency and cost units (and, in a second round, the revisions those name,
+// and the issuer's default legal terms, which a draft without legal terms adopts).
 //
 // Inside the transaction the lock and guard order is (ADR-BR-011, tactical lockOrder):
 //
@@ -479,6 +480,9 @@ func (s Service) configs(ctx context.Context, refs []quote.Ref, at time.Time, f 
 				c := config(rc)
 				f.Configs[quote.Ref{Kind: ref.Kind, ID: ref.ConfigID, Revision: ref.Revision}] = c
 				next = append(next, c.Nested...)
+				if c.DefaultLegalTerms != nil {
+					next = append(next, *c.DefaultLegalTerms) // adopted only by a draft without legal terms (quote/legal.go)
+				}
 			}
 		}
 		refs = next
@@ -499,6 +503,13 @@ func config(rc polapi.ResolvedConfig) quote.Config {
 	case d.CompanyProfile != nil:
 		p := d.CompanyProfile
 		c.Company = &quote.IssuerSnapshot{LegalName: p.LegalName, RegistrationNo: p.RegistrationNo, Country: p.Country, Address: p.Address}
+		if r := p.DefaultLegalTerms; r != nil {
+			c.DefaultLegalTerms = &quote.Ref{Kind: r.Kind, ID: r.ConfigID, Revision: r.Revision}
+		}
+	case d.LegalTerms != nil:
+		l := d.LegalTerms
+		c.Legal = &quote.Legal{GoverningLaw: l.GoverningLaw, CISG: l.CISG, FormationRule: l.FormationRule,
+			DisputeResolution: quote.DisputeResolution(l.DisputeResolution)}
 	case d.TradeTerms != nil:
 		nested(d.TradeTerms.Delivery.Calendar)
 	case d.PaymentTerms != nil:

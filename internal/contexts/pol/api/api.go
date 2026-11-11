@@ -1,7 +1,7 @@
 // Package api is the contract of the POL bounded context (policy and configuration: the company
 // profile, currencies, units and their conversions, exchange rates, calendars, trade and payment
-// terms, taxes, fees, pricing and credit policies, bank accounts, document templates and
-// numbering) for transports, the AI layer and the contexts downstream of POL. It exposes no POL
+// terms, taxes, fees, pricing and credit policies, bank accounts, document templates, legal terms
+// and numbering) for transports, the AI layer and the contexts downstream of POL. It exposes no POL
 // domain type.
 //
 // A configuration is identified by (tenant, company, kind, config_id). Its content lives in
@@ -55,9 +55,9 @@ const (
 	StatusCaptured   = "captured"
 )
 
-// Kinds of configuration: the closed enumeration of the tactical model (POL-AGG-ConfigurationRoot).
-// Only the kinds KindImplemented reports are accepted so far; screening_regulation is refused with
-// UNSUPPORTED_CONTRACT until its contract lands.
+// Kinds of configuration: the closed enumeration of the tactical model (POL-AGG-ConfigurationRoot)
+// and legal_terms, the clause template the simulated G0 walkthrough's decision F-02 adds (WBS
+// S3-17, the condition of ADR-BR-013). Only the kinds KindImplemented reports are accepted.
 const (
 	KindCompanyProfile        = "company_profile"
 	KindCurrency              = "currency"
@@ -77,6 +77,7 @@ const (
 	KindQuoteDocumentTemplate = "quote_document_template"
 	KindScreeningRegulation   = "screening_regulation"
 	KindCreditPolicy          = "credit_policy"
+	KindLegalTerms            = "legal_terms"
 )
 
 // Closed values of configuration data.
@@ -134,7 +135,7 @@ const (
 var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
-		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy}
+		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy, KindLegalTerms}
 	implemented   = slices.Clone(kinds)
 	purposes      = []string{PurposeCostEstimate, PurposeQuotation}
 	dimensions    = []string{DimensionCount, DimensionMass, DimensionLength, DimensionVolume}
@@ -146,7 +147,7 @@ var (
 // PercentFormat is the lexical form of a payment stage's percentage.
 var PercentFormat = kernel.DecimalFormat{IntDigits: 3, Scale: 6}
 
-// KindKnown reports whether kind is one of the eighteen configuration kinds.
+// KindKnown reports whether kind is one of the nineteen configuration kinds.
 func KindKnown(kind string) bool { return slices.Contains(kinds, kind) }
 
 // KindImplemented reports whether POL accepts configurations of kind yet.

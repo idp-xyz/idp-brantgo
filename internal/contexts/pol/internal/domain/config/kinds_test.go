@@ -261,6 +261,9 @@ func TestEveryKindRoundTripsThroughItsStoredData(t *testing.T) {
 		{Kind: KindQuoteDocumentTemplate, QuoteDocumentTemplate: &QuoteDocumentTemplate{Name: "q", Language: "en", RendererVersion: "quote-text/0.1.0",
 			Title: "Quotation", Sections: []string{"issuer"}, FooterNote: ""}},
 		credit("0", CreditApprovalTier{Level: "credit_officer", MaxAmount: "1000"}),
+		legal("DE", "applies", "arrival"),
+		{Kind: KindLegalTerms, LegalTerms: &LegalTerms{Name: "n", GoverningLaw: "CN", CISG: "excluded", FormationRule: "arrival",
+			DisputeResolution: DisputeResolution{Method: "litigation", Court: "Shanghai International Commercial Court"}}},
 	}
 	for _, c := range contents {
 		c.ValidFrom = start
