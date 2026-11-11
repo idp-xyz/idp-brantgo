@@ -186,6 +186,8 @@ var reads = []readRoute{
 		"A sales order: its binding, the exact snapshot bytes (verified on read), reviews with acknowledged risks, commit evidence and closure", []string{"id"}, false},
 	{"/api/brant/v1/trd/orders/{id}/check", "trd.order.check", "trd",
 		"The checks order.activate would make now on ?review_id= (none: the source and upstream risks only); a refusal is the answer", []string{"id"}, false},
+	{"/api/brant/v1/trd/orders/{id}/revisions/{revision}/documents/{kind}", "trd.order.document.get", "trd",
+		"The export sales contract (sales_contract) or proforma invoice (proforma_invoice) of an order revision: binding, signed copies and bytes (Base64), verified on read", []string{"id", "revision", "kind"}, false},
 	{"/api/brant/v1/trd/customer_responses/{id}", "trd.customer_response.get", "trd", "A customer response and its acceptances", []string{"id"}, false},
 	{"/api/brant/v1/trd/acceptances/{id}", "trd.acceptance.get", "trd", "An acceptance and its effectivity history", []string{"id"}, false},
 	{"/api/brant/v1/pur/purchase_drafts/{id}", "pur.purchase_draft.get", "pur",

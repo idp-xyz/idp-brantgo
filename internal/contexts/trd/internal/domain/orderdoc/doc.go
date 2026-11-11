@@ -55,8 +55,11 @@
 //	            <stage_id> | <percent>% | <amount> | <trigger> | <days> <day basis> days[ | calendar <id> r<revision>]
 //	clauses     Clauses:
 //	            1. <clause>
-//	law         Governing law: <governing law>
-//	            Dispute resolution: <dispute resolution>
+//	law         Legal terms: <id> r<revision>
+//	            Governing law: <governing_law> | CISG: <applies or excluded>
+//	            Contract formation: acceptance effective on arrival | <CISG Art. 18(2), 23 or PRC Civil Code Art. 137, 483, 484>
+//	            Disputes: arbitration | <institution> | seat <seat> | language <language>
+//	            (or) Disputes: litigation | <court>
 //	signatures  Signatures (this generated copy is unsigned; signed copies are recorded as evidence):
 //	            Seller: <legal name>
 //	            Buyer: <customer name>
@@ -72,11 +75,12 @@
 // totals, terms, delivery, payments and notes, and may list clauses and law. A template that lists
 // clauses has 1–50 of them; one that does not has none.
 //
-// The law section is the slot for WBS S3-17 (F-02: 适用法律与争议解决条款): once an order revision
-// binds governing law and dispute resolution terms, the command resolves them into Facts.Law and a
-// template must print them (REFERENCE_INVALID otherwise: a contract never leaves out the law it
-// binds). Until then no revision binds them, and a template that lists law is
-// DEPENDENCY_NOT_SUPPORTED.
+// The law section prints the legal terms the order revision carries (WBS S3-17, F-02: 适用法律与争议解决
+// 条款) — the source quote revision's sealed legal terms, copied by the order's snapshot and never
+// read from POL's current revision — in the lines the quote's formal document printed them
+// (document.LegalLines, quote-text/0.2.0). A template prints the law section exactly when the
+// revision carries legal terms (REFERENCE_INVALID at /template/sections otherwise): a contract never
+// leaves out the legal terms its order binds, and never prints terms it does not bind.
 //
 // Only language en (DEPENDENCY_NOT_SUPPORTED otherwise), as quote-text/0.1.0. Refusals point into the
 // inputs: the revision at /revision, the template at /template/<member>, the facts at

@@ -173,7 +173,8 @@ func Next(base *Revision, by AmendmentRef, p Proposal, f Fulfilment, facts Facts
 	}
 	next := &Revision{Contract: RevisionContract, Scope: base.Scope, OrderID: base.OrderID, Number: base.Number + 1,
 		Previous: &Link{Revision: base.Number, Hash: base.Hash}, Amendment: &by, Source: base.Source, Parties: base.Parties,
-		Customer: base.Customer, Contact: base.Contact, Currency: base.Currency, Lines: []Line{}, Charges: []Charge{},
+		Customer: base.Customer, Contact: base.Contact, Currency: base.Currency, LegalTermsRef: base.LegalTermsRef, LegalTerms: base.LegalTerms,
+		Lines: []Line{}, Charges: []Charge{},
 		Amounts: Amounts{Lines: []quote.AmountLine{}, Charges: []quote.AmountLine{}, Payments: []quote.Payment{}}}
 	if err := checkTerms(p.Terms, path+"/terms"); err != nil {
 		return nil, nil, err

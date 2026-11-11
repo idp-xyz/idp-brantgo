@@ -35,8 +35,10 @@ Delivery: 45 working days after deposit.received r1 | calendar cn.workdays r1 | 
 Terms: FCA Incoterms 2020 | Synthetic negotiated terms; not legal guidance
 Named place: Hamburg (DEHAM) | Trade terms: terms.fca r1
 
-Governing law: Laws of the People's Republic of China; CISG applies
-Dispute resolution: CIETAC, Shanghai, in English
+Legal terms: legal.default r1
+Governing law: CN | CISG: applies
+Contract formation: acceptance effective on arrival | CISG Art. 18(2), 23
+Disputes: arbitration | China International Economic and Trade Arbitration Commission (CIETAC) | seat Shanghai | language en
 
 Clauses:
 1. Packing: export cartons, 12 pieces each.

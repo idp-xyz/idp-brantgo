@@ -397,6 +397,7 @@
         "OrderAmended",
         "OrderRemainderClosed",
         "OrderClosed",
+        "OrderDocumentGenerated",
         "OrderDocumentSigned"
       ],
       "invariants": [

@@ -223,6 +223,7 @@ type Order struct {
 	Amendments       []*amendment.Amendment
 	AmendmentCommits []*AmendmentCommit
 	End              *End
+	Documents        []*Document // the S/C and PI of its revisions (document.go)
 	current          *orderrev.Revision
 	NewRevision      *orderrev.Revision // the revision an apply produced, to write
 	Fresh            bool

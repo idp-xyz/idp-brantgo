@@ -37,39 +37,41 @@ func trdCommands(c TRD) *commandSet {
 	// TRD's commands name their objects as Python's T03/T04 contracts do (quote_id, response_id,
 	// acceptance_id, order_id), so no member is renamed to id.
 	return &commandSet{bc: "trd", contract: trdapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
-		trdapi.CommandSaveDraft:             reflected("", "", receiptOf[trdapi.Receipt](c.SaveDraft)),
-		trdapi.CommandRevise:                reflected("", "", receiptOf[trdapi.Receipt](c.Revise)),
-		trdapi.CommandDiscardDraft:          reflected("", "", receiptOf[trdapi.Receipt](c.DiscardDraft)),
-		trdapi.CommandFreeze:                reflected("", "", receiptOf[trdapi.Receipt](c.Freeze)),
-		trdapi.CommandUpdateMetadata:        reflected("", "", receiptOf[trdapi.Receipt](c.UpdateMetadata)),
-		trdapi.CommandBindControl:           reflected("", "", receiptOf[trdapi.Receipt](c.BindControl)),
-		trdapi.CommandStopControl:           reflected("", "", receiptOf[trdapi.Receipt](c.StopControl)),
-		trdapi.CommandReleaseControl:        reflected("", "", receiptOf[trdapi.Receipt](c.ReleaseControl)),
-		trdapi.CommandSubmitReview:          reflected("", "", receiptOf[trdapi.Receipt](c.SubmitReview)),
-		trdapi.CommandDecideReview:          reflected("", "", receiptOf[trdapi.Receipt](c.DecideReview)),
-		trdapi.CommandRevokeApproval:        reflected("", "", receiptOf[trdapi.Receipt](c.RevokeApproval)),
-		trdapi.CommandActivate:              reflected("", "", receiptOf[trdapi.Receipt](c.Activate)),
-		trdapi.CommandReplace:               reflected("", "", receiptOf[trdapi.Receipt](c.Replace)),
-		trdapi.CommandWithdraw:              reflected("", "", receiptOf[trdapi.Receipt](c.Withdraw)),
-		trdapi.CommandCancel:                reflected("", "", receiptOf[trdapi.Receipt](c.Cancel)),
-		trdapi.CommandRecordResponse:        reflected("", "", receiptOf[trdapi.Receipt](c.RecordResponse)),
-		trdapi.CommandVerifyResponse:        reflected("", "", receiptOf[trdapi.Receipt](c.VerifyResponse)),
-		trdapi.CommandInvalidateAcceptance:  reflected("", "", receiptOf[trdapi.Receipt](c.InvalidateAcceptance)),
-		trdapi.CommandDisputeAcceptance:     reflected("", "", receiptOf[trdapi.Receipt](c.DisputeAcceptance)),
-		trdapi.CommandPrepareOrder:          reflected("", "", receiptOf[trdapi.Receipt](c.PrepareOrder)),
-		trdapi.CommandRequestOrderReview:    reflected("", "", receiptOf[trdapi.Receipt](c.RequestOrderReview)),
-		trdapi.CommandDecideOrderReview:     reflected("", "", receiptOf[trdapi.Receipt](c.DecideOrderReview)),
-		trdapi.CommandActivateOrder:         reflected("", "", receiptOf[trdapi.Receipt](c.ActivateOrder)),
-		trdapi.CommandRevokeOrderApproval:   reflected("", "", receiptOf[trdapi.Receipt](c.RevokeOrderApproval)),
-		trdapi.CommandCancelOrder:           reflected("", "", receiptOf[trdapi.Receipt](c.CancelOrder)),
-		trdapi.CommandCloseOrderUnfulfilled: reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrderUnfulfilled)),
-		trdapi.CommandPrepareAmendment:      reflected("", "", receiptOf[trdapi.Receipt](c.PrepareAmendment)),
-		trdapi.CommandSubmitAmendment:       reflected("", "", receiptOf[trdapi.Receipt](c.SubmitAmendment)),
-		trdapi.CommandDecideAmendment:       reflected("", "", receiptOf[trdapi.Receipt](c.DecideAmendment)),
-		trdapi.CommandApplyAmendment:        reflected("", "", receiptOf[trdapi.Receipt](c.ApplyAmendment)),
-		trdapi.CommandWithdrawAmendment:     reflected("", "", receiptOf[trdapi.Receipt](c.WithdrawAmendment)),
-		trdapi.CommandCloseOrderRemainder:   reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrderRemainder)),
-		trdapi.CommandCloseOrder:            reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrder)),
+		trdapi.CommandSaveDraft:                 reflected("", "", receiptOf[trdapi.Receipt](c.SaveDraft)),
+		trdapi.CommandRevise:                    reflected("", "", receiptOf[trdapi.Receipt](c.Revise)),
+		trdapi.CommandDiscardDraft:              reflected("", "", receiptOf[trdapi.Receipt](c.DiscardDraft)),
+		trdapi.CommandFreeze:                    reflected("", "", receiptOf[trdapi.Receipt](c.Freeze)),
+		trdapi.CommandUpdateMetadata:            reflected("", "", receiptOf[trdapi.Receipt](c.UpdateMetadata)),
+		trdapi.CommandBindControl:               reflected("", "", receiptOf[trdapi.Receipt](c.BindControl)),
+		trdapi.CommandStopControl:               reflected("", "", receiptOf[trdapi.Receipt](c.StopControl)),
+		trdapi.CommandReleaseControl:            reflected("", "", receiptOf[trdapi.Receipt](c.ReleaseControl)),
+		trdapi.CommandSubmitReview:              reflected("", "", receiptOf[trdapi.Receipt](c.SubmitReview)),
+		trdapi.CommandDecideReview:              reflected("", "", receiptOf[trdapi.Receipt](c.DecideReview)),
+		trdapi.CommandRevokeApproval:            reflected("", "", receiptOf[trdapi.Receipt](c.RevokeApproval)),
+		trdapi.CommandActivate:                  reflected("", "", receiptOf[trdapi.Receipt](c.Activate)),
+		trdapi.CommandReplace:                   reflected("", "", receiptOf[trdapi.Receipt](c.Replace)),
+		trdapi.CommandWithdraw:                  reflected("", "", receiptOf[trdapi.Receipt](c.Withdraw)),
+		trdapi.CommandCancel:                    reflected("", "", receiptOf[trdapi.Receipt](c.Cancel)),
+		trdapi.CommandRecordResponse:            reflected("", "", receiptOf[trdapi.Receipt](c.RecordResponse)),
+		trdapi.CommandVerifyResponse:            reflected("", "", receiptOf[trdapi.Receipt](c.VerifyResponse)),
+		trdapi.CommandInvalidateAcceptance:      reflected("", "", receiptOf[trdapi.Receipt](c.InvalidateAcceptance)),
+		trdapi.CommandDisputeAcceptance:         reflected("", "", receiptOf[trdapi.Receipt](c.DisputeAcceptance)),
+		trdapi.CommandPrepareOrder:              reflected("", "", receiptOf[trdapi.Receipt](c.PrepareOrder)),
+		trdapi.CommandRequestOrderReview:        reflected("", "", receiptOf[trdapi.Receipt](c.RequestOrderReview)),
+		trdapi.CommandDecideOrderReview:         reflected("", "", receiptOf[trdapi.Receipt](c.DecideOrderReview)),
+		trdapi.CommandActivateOrder:             reflected("", "", receiptOf[trdapi.Receipt](c.ActivateOrder)),
+		trdapi.CommandRevokeOrderApproval:       reflected("", "", receiptOf[trdapi.Receipt](c.RevokeOrderApproval)),
+		trdapi.CommandCancelOrder:               reflected("", "", receiptOf[trdapi.Receipt](c.CancelOrder)),
+		trdapi.CommandCloseOrderUnfulfilled:     reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrderUnfulfilled)),
+		trdapi.CommandPrepareAmendment:          reflected("", "", receiptOf[trdapi.Receipt](c.PrepareAmendment)),
+		trdapi.CommandSubmitAmendment:           reflected("", "", receiptOf[trdapi.Receipt](c.SubmitAmendment)),
+		trdapi.CommandDecideAmendment:           reflected("", "", receiptOf[trdapi.Receipt](c.DecideAmendment)),
+		trdapi.CommandApplyAmendment:            reflected("", "", receiptOf[trdapi.Receipt](c.ApplyAmendment)),
+		trdapi.CommandWithdrawAmendment:         reflected("", "", receiptOf[trdapi.Receipt](c.WithdrawAmendment)),
+		trdapi.CommandCloseOrderRemainder:       reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrderRemainder)),
+		trdapi.CommandCloseOrder:                reflected("", "", receiptOf[trdapi.Receipt](c.CloseOrder)),
+		trdapi.CommandGenerateOrderDocument:     reflected("", "", receiptOf[trdapi.Receipt](c.GenerateOrderDocument)),
+		trdapi.CommandRecordSignedOrderDocument: reflected("", "", receiptOf[trdapi.Receipt](c.RecordSignedOrderDocument)),
 	}}
 }
 
@@ -195,4 +197,18 @@ func (s *server) orderCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, okView(v))
+}
+
+// orderDocument answers GET /api/brant/v1/trd/orders/<id>/revisions/<revision>/documents/<kind>:
+// the S/C or PI of that order revision with its binding and bytes (Base64), verified on every read.
+func (s *server) orderDocument(w http.ResponseWriter, r *http.Request) {
+	rev, err := revisionParam(r)
+	if err == nil {
+		var v trdapi.OrderDocument
+		if v, err = s.cfg.TRD.GetOrderDocument(r.Context(), r.PathValue("id"), rev, r.PathValue("kind")); err == nil {
+			writeJSON(w, http.StatusOK, okView(v))
+			return
+		}
+	}
+	s.fail(w, r, err)
 }

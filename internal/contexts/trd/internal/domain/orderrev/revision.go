@@ -131,6 +131,11 @@ type Revision struct {
 	Lines     []Line               `json:"lines"`
 	Charges   []Charge             `json:"charges"`
 	Amounts   Amounts              `json:"amounts"`
+	// The legal terms the source quote revision sealed (WBS S3-17) and their POL revision, copied
+	// from its commercial document and never from POL's current revision; absent when it sealed
+	// none. No amendment changes them.
+	LegalTermsRef *quote.Ref        `json:"legal_terms_ref,omitempty"`
+	LegalTerms    *quote.LegalTerms `json:"legal_terms,omitempty"`
 
 	Hash     string `json:"-"`
 	Document []byte `json:"-"`
@@ -204,6 +209,10 @@ type snapshotDoc struct {
 	AcceptanceID         string             `json:"acceptance_id"`
 	Quote                struct {
 		PartySnapshots quote.PartySnapshots `json:"party_snapshots"`
+		LegalTerms     *quote.LegalTerms    `json:"legal_terms"`
+		Data           struct {
+			LegalTerms *quote.Ref `json:"legal_terms_ref"`
+		} `json:"data"`
 	} `json:"source_quote_snapshot"`
 }
 
@@ -235,6 +244,7 @@ func FromSnapshot(doc []byte, orderHash string) (*Revision, error) {
 		Source: Source{QuoteID: s.SourceQuoteID, Revision: s.SourceQuoteRevision, BusinessHash: s.SourceQuoteHash, Number: s.SourceQuoteNumber,
 			DocumentSHA256: s.SourceDocumentSHA256, AcceptanceID: s.AcceptanceID},
 		Parties: s.Quote.PartySnapshots, Customer: s.Customer, Contact: s.Contact, Currency: s.Currency,
+		LegalTermsRef: s.Quote.Data.LegalTerms, LegalTerms: s.Quote.LegalTerms,
 		Terms: Terms{TradeTerms: s.Terms.TradeTerms, NamedPlace: s.Terms.NamedPlace, PaymentTerms: s.Terms.PaymentTerms, Delivery: s.Terms.Delivery},
 		Lines: []Line{}, Charges: []Charge{},
 		Amounts: Amounts{Lines: []quote.AmountLine{}, Charges: []quote.AmountLine{}, Net: c.NetMinor, Tax: c.TaxMinor,
@@ -274,6 +284,9 @@ func FromSnapshot(doc []byte, orderHash string) (*Revision, error) {
 	}
 	if len(r.Lines) == 0 {
 		return bad("/lines", "has no lines")
+	}
+	if (r.LegalTerms == nil) != (r.LegalTermsRef == nil) {
+		return bad("/source_quote_snapshot/legal_terms", "seals legal terms without their revision, or a revision without its terms")
 	}
 	sortRevision(r)
 	return r, nil

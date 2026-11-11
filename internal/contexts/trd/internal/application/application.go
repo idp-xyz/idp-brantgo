@@ -112,6 +112,11 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandCloseOrder, api.CommandCloseOrder),
 		{Command: CommandGetOrder, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandCheckOrder, Permission: PermissionRead, ActorKinds: anyActor},
+		// Order documents (S3-15): the command catalog's 人工或 AI（按动作权限） for the generation,
+		// 仅人工 for a signed copy.
+		{Command: api.CommandGenerateOrderDocument, Permission: api.CommandGenerateOrderDocument, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandRecordSignedOrderDocument, api.CommandRecordSignedOrderDocument),
+		{Command: CommandGetOrderDocument, Permission: PermissionRead, ActorKinds: anyActor},
 	}, readRules()...)
 }
 
@@ -282,6 +287,12 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.CloseOrder:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandCloseOrder, key, c
+	case api.GenerateOrderDocument:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandGenerateOrderDocument, key, c
+	case api.RecordSignedOrderDocument:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRecordSignedOrderDocument, key, c
 	}
 	return "", "", nil
 }

@@ -653,6 +653,7 @@ type Commands interface {
 	AcceptanceCommands
 	OrderCommands
 	ActiveOrderCommands
+	OrderDocumentCommands
 }
 
 // Queries is TRD's audited read side.
