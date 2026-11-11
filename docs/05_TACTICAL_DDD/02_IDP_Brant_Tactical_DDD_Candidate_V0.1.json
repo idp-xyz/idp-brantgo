@@ -634,6 +634,8 @@
           ],
           "commands": [
             "purchase_terms.save_draft",
+            "purchase_terms.revise",
+            "purchase_terms.discard_draft",
             "purchase_terms.publish",
             "purchase_terms.retire"
           ],
@@ -664,11 +666,14 @@
           "invariants": [],
           "commands": [
             "logistics_offer.save_draft",
+            "logistics_offer.revise",
+            "logistics_offer.discard_draft",
             "logistics_offer.verify",
             "logistics_offer.withdraw"
           ],
           "events": [
-            "LogisticsOfferVerified"
+            "LogisticsOfferVerified",
+            "LogisticsOfferWithdrawn"
           ],
           "goPackage": "internal/contexts/sup/internal/domain/logistics",
           "pythonSource": "T02 规格 6",
@@ -713,7 +718,9 @@
           "commands": [
             "costing_context.save_draft",
             "costing_context.revise",
-            "costing_context.verify"
+            "costing_context.discard_draft",
+            "costing_context.verify",
+            "costing_context.withdraw"
           ],
           "events": [
             "CostingContextVerified"
@@ -5301,6 +5308,9 @@
     "trade_compliance.decide",
     "export_license.register",
     "export_license.release",
-    "party_screening.block"
+    "party_screening.block",
+    "costing_context.withdraw",
+    "measurement.supersede",
+    "measurement.withdraw"
   ]
 }
