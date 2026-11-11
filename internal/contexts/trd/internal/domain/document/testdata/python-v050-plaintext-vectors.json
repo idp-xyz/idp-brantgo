@@ -1,0 +1,53 @@
+[
+ {
+  "content_sha256": "f57552b3b6d5a14c777ba7c02b1179321f0d395633d40273cc93139dfda473dd",
+  "content_text": "DRAFT / 业务草稿（未绑定已生效报价）\n报价 QT-2026-00001：合成客户，960.00 USD",
+  "field_names": [
+   "document.number",
+   "customer.name",
+   "quote.total",
+   "quote.currency"
+  ],
+  "name": "PYT-0135 test_number_and_plaintext_template_bind_snapshot",
+  "number": "QT-2026-00001",
+  "template_text": "报价 {document.number}：{customer.name}，{quote.total} {quote.currency}",
+  "values": {
+   "customer.name": "合成客户",
+   "quote.currency": "USD",
+   "quote.total": "960.00"
+  }
+ },
+ {
+  "content_sha256": "3ad2d1565071d83f6024a8b60d88fd3bbb417dca3022a9313f1637f1dff3cceb",
+  "content_text": "DRAFT / 业务草稿（未绑定已生效报价）\n{{x}} }{ 1,234.501,234.50\r\n2026-10-22|L1 120 PCS\nL2 🚢|{",
+  "field_names": [
+   "customer.name",
+   "quote.total",
+   "document.date",
+   "lines.summary",
+   "company.name"
+  ],
+  "name": "escaped braces and repeated fields",
+  "number": "QT-2026-00002",
+  "template_text": "{{{customer.name}}} }}{{ {quote.total}{quote.total}\r\n{document.date}|{lines.summary}|{company.name}{{",
+  "values": {
+   "company.name": "",
+   "customer.name": "{x}",
+   "document.date": "2026-10-22",
+   "lines.summary": "L1 120 PCS\nL2 🚢",
+   "quote.currency": "unused",
+   "quote.total": "1,234.50"
+  }
+ },
+ {
+  "content_sha256": "2580ef656c3ee2a56c41dea6b5a5643044636af8c2240593a1bec4a3cb82f7b6",
+  "content_text": "DRAFT / 业务草稿（未绑定已生效报价）\nNo other fields {here}: QT-2026-00003.",
+  "field_names": [
+   "document.number"
+  ],
+  "name": "number only",
+  "number": "QT-2026-00003",
+  "template_text": "No other fields {{here}}: {document.number}.",
+  "values": {}
+ }
+]

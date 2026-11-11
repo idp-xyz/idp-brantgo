@@ -1,0 +1,1715 @@
+{
+  "as_of": "2026-10-22T09:00:00Z",
+  "server_scope": {
+    "tenant": "tenant.live",
+    "company": "company.live"
+  },
+  "manifest_access": [
+    {
+      "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+      "id": "context.1",
+      "kind": "business_verification.costing_context",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+      "id": "log.1",
+      "kind": "business_verification.logistics_offer",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+      "id": "provider.role",
+      "kind": "business_verification.service_party_role",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+      "id": "offer.1",
+      "kind": "business_verification.supplier_offer",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "dab57a90971a0d92d050c4295dc9f8e7c489ef7ccb173b08eab043cc63ffe582",
+      "id": "payment.calendar",
+      "kind": "calendar",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "fe501c9eba7bf13f1627a04642c9858f392dcc4d4746310139f9640a462bfa26",
+      "id": "context.1",
+      "kind": "costing_context",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "32b4ecf2281628ac312cb65a7fcdf78218a9308dbd0b2aff8ca4d29780f9fb0e",
+      "id": "USD",
+      "kind": "currency",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "1a052123cb87bb80646f7a20d5399a49a62d0bf3a7205df011f7334a81833ca7",
+      "id": "freight",
+      "kind": "fee_type",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "6f1ee263ee810e0547503425ac7b00e432f61bd53e8838f0a89ee0affe3cd7ba",
+      "id": "payment.calendar",
+      "kind": "foundation_publication.calendar",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "fb9fd9c34e364685b009e9d5ba498aa9c2f6f17a7c9df4f52861b4fdb2ee5c72",
+      "id": "USD",
+      "kind": "foundation_publication.currency",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "5d586ccf148b196b40f0e1bcb244ebfe565ec6436d69526a21d13d4b4b6be876",
+      "id": "freight",
+      "kind": "foundation_publication.fee_type",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "3b59f924b2a8ffbaf80050285785680a2da2ea7b46eeb083d71411a58a286d47",
+      "id": "origin.test",
+      "kind": "foundation_publication.location",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "3b59f924b2a8ffbaf80050285785680a2da2ea7b46eeb083d71411a58a286d47",
+      "id": "port.test",
+      "kind": "foundation_publication.location",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "f04b0d3a459e21c006d53b83a75e8ee48481b9dc4021b19837bb2f8764d1bf55",
+      "id": "payment.test",
+      "kind": "foundation_publication.payment_terms",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "7828296ff0bacecc5e445f1560ac1636f212f03c84ea24fbc471f361f6c27c03",
+      "id": "policy.1",
+      "kind": "foundation_publication.pricing_policy",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "58f8539f9f357877588397989e5a5966b4e9000b7970a52d36db087e90c8a1e2",
+      "id": "sku.1.profile",
+      "kind": "foundation_publication.sku_profile",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "6a0c9aef312c9255b4d3f0c74a91e48915cf6820a2bd7b48a89bc1e38ad85d32",
+      "id": "tax.goods",
+      "kind": "foundation_publication.tax_application",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "991a48516add6ad44c8ca54693577580074f0e0d36ccfeabe75eefa8f58cf5b4",
+      "id": "tax.service",
+      "kind": "foundation_publication.tax_application",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "f896fe882b40a759466d774691f35081f1d550b7e432176e76814f9833f4bd42",
+      "id": "tax.zero",
+      "kind": "foundation_publication.tax_profile",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "a8dc90a26e9716c011c93fbb6f3e3f3f6aff85096742a5a2df26545ed28985ef",
+      "id": "scope.purchase",
+      "kind": "foundation_publication.trade_scope",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "a8dc90a26e9716c011c93fbb6f3e3f3f6aff85096742a5a2df26545ed28985ef",
+      "id": "scope.sale",
+      "kind": "foundation_publication.trade_scope",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "eb7df01a6d2dbe45bc5877641f349e022b427fe4057dc0ac59c86703c7e263a4",
+      "id": "terms.test",
+      "kind": "foundation_publication.trade_terms",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "7a4daffe496f2ac63e9716567b4c73c3ebf3b68dc2484d25a54ea99ff4ff36d1",
+      "id": "PCS",
+      "kind": "foundation_publication.unit",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "62cd6ab14a67e83862ebaaa0535eae7b621bf5b3501f0655ed66a026d1129d8e",
+      "id": "origin.test",
+      "kind": "location",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "bfda0b59662336143b6290894c123ae80e2764c1595fd77ccd2071d601b0d5d9",
+      "id": "port.test",
+      "kind": "location",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "b0b730f1666da28eaa8cebd3095319061e727c7e100cda96d15fd643fdbdbcd0",
+      "id": "log.1",
+      "kind": "logistics_offer",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "5b4f6d4ac0b309e9d416348caecc1cbed62b4d7d528c3cd5276a5a3a0e39b21b",
+      "id": "sku.1",
+      "kind": "master.sku",
+      "version": 2,
+      "readable": true
+    },
+    {
+      "content_hash": "d8c588b9e62110eaba64fa3b555a08c98d1de90d846ec88c72dcd3c90b8656fb",
+      "id": "provider.1",
+      "kind": "master.supplier",
+      "version": 2,
+      "readable": true
+    },
+    {
+      "content_hash": "c366a6a92c44cc3a7e012cbc9858bbab6e290805aee45bf50edc79d3a2c53881",
+      "id": "supplier.1",
+      "kind": "master.supplier",
+      "version": 2,
+      "readable": true
+    },
+    {
+      "content_hash": "aa74be0c55702d4a436f2ed74c54762df16db2248c93cd1e301587ea6fbd61d3",
+      "id": "payment.test",
+      "kind": "payment_terms",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "a4ac0e016b9bbdefbd4bda7f2fed0339cfa7bbc85b78e5242d89f12e62f2b3b6",
+      "id": "policy.1",
+      "kind": "pricing_policy",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "4863936d3938e34ec7c4cdaf70ba11e00205863f6c44c5309a36557a8e458488",
+      "id": "rfq.1",
+      "kind": "rfq",
+      "version": 2,
+      "readable": true
+    },
+    {
+      "content_hash": "ee867d8253e47ef8ce85b1992213038832800affb100efe64723344899cb0a8a",
+      "id": "provider.role",
+      "kind": "service_party_role",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "4fe007604135ed6746550dda4ed726ab5a8d3b93989539469f95dbc65e52e61e",
+      "id": "sku.1.profile",
+      "kind": "sku_profile",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61",
+      "id": "source.1",
+      "kind": "source",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "4c758903de3820fd8bca16b67660bfa4762fa990db65fa9325e29eee663abe9c",
+      "id": "offer.1",
+      "kind": "supplier_offer",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "b0c558fad1e8161114f5e36861738d586f193da6d614cd5a788e5d64eaef4016",
+      "id": "tax.goods",
+      "kind": "tax_application",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "5bed2e52b27bc3d5f2e5c0bc6b7dd71a38b31cff8975d0ce161c8854cf7bf4a0",
+      "id": "tax.service",
+      "kind": "tax_application",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "163b54162e7e8ecbec3901f446c3dcb717476ca3ae48eb49d7d57fe0423a2955",
+      "id": "tax.zero",
+      "kind": "tax_profile",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "7cd9cfad1bce3c94dc96a1e14554493bae3a5b96637cb21fe15a9f7a2c8579d0",
+      "id": "scope.purchase",
+      "kind": "trade_scope",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "f46dc3130848e9cbed162951481060625c529fc7d277c8bc73d764ca46b0081f",
+      "id": "scope.sale",
+      "kind": "trade_scope",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "430211c26d9834322c29986731a044935f7f0b05f7f59bd8470c60b52cba9730",
+      "id": "terms.test",
+      "kind": "trade_terms",
+      "version": 1,
+      "readable": true
+    },
+    {
+      "content_hash": "5a58e5d4e3f1e3cbb68e02db35ac66708c1ed53cbe15841390af95f6254b515d",
+      "id": "PCS",
+      "kind": "unit",
+      "version": 1,
+      "readable": true
+    }
+  ],
+  "classification": "synthetic captured reference facts",
+  "records": [
+    {
+      "ref": {
+        "kind": "unit",
+        "id": "PCS",
+        "revision": 1
+      },
+      "data": {
+        "code": "PCS",
+        "dimension": "count",
+        "name": "件",
+        "precision": 0
+      },
+      "content_hash": "5a58e5d4e3f1e3cbb68e02db35ac66708c1ed53cbe15841390af95f6254b515d",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "currency",
+        "id": "USD",
+        "revision": 1
+      },
+      "data": {
+        "code": "USD",
+        "minor_units": 2,
+        "name": "美元",
+        "rounding": "HALF_UP"
+      },
+      "content_hash": "32b4ecf2281628ac312cb65a7fcdf78218a9308dbd0b2aff8ca4d29780f9fb0e",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "sku_profile",
+        "id": "sku.1.profile",
+        "revision": 1
+      },
+      "data": {
+        "base_unit": {
+          "id": "PCS",
+          "kind": "unit",
+          "revision": 1
+        },
+        "description": "合成规格",
+        "item_name": "合成商品",
+        "sku_id": "sku.1",
+        "sku_row_version": 2,
+        "specification_version": "SPEC-1"
+      },
+      "content_hash": "4fe007604135ed6746550dda4ed726ab5a8d3b93989539469f95dbc65e52e61e",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "tax_profile",
+        "id": "tax.zero",
+        "revision": 1
+      },
+      "data": {
+        "name": "Synthetic zero tax",
+        "policy_basis": "Synthetic data only; not a current tax rule",
+        "price_basis": "exclusive",
+        "rate": "0",
+        "recovery_treatment": "nonrecoverable",
+        "valid_from": "2026-10-22T00:00:00Z",
+        "valid_until": "2026-10-29T00:00:00Z"
+      },
+      "content_hash": "163b54162e7e8ecbec3901f446c3dcb717476ca3ae48eb49d7d57fe0423a2955",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "pricing_policy",
+        "id": "policy.1",
+        "revision": 1
+      },
+      "data": {
+        "calculation_currency": {
+          "id": "USD",
+          "kind": "currency",
+          "revision": 1
+        },
+        "independent_review": true,
+        "max_fx_age_seconds": 3600,
+        "minimum_margin": "0.1",
+        "name": "合成核价政策",
+        "quote_valid_days": 7,
+        "tax_profile": {
+          "id": "tax.zero",
+          "kind": "tax_profile",
+          "revision": 1
+        }
+      },
+      "content_hash": "a4ac0e016b9bbdefbd4bda7f2fed0339cfa7bbc85b78e5242d89f12e62f2b3b6",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "trade_terms",
+        "id": "terms.test",
+        "revision": 1
+      },
+      "data": {
+        "delivery": {
+          "date": "2026-11-15",
+          "kind": "fixed_date"
+        },
+        "edition": "2020",
+        "incoterm": "FCA",
+        "named_place": "SYNTHETIC-PORT",
+        "responsibility_note": "Synthetic negotiated terms; not legal guidance"
+      },
+      "content_hash": "430211c26d9834322c29986731a044935f7f0b05f7f59bd8470c60b52cba9730",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "calendar",
+        "id": "payment.calendar",
+        "revision": 1
+      },
+      "data": {
+        "holidays": [],
+        "timezone": "Asia/Shanghai",
+        "working_weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "content_hash": "dab57a90971a0d92d050c4295dc9f8e7c489ef7ccb173b08eab043cc63ffe582",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "payment_terms",
+        "id": "payment.test",
+        "revision": 1
+      },
+      "data": {
+        "name": "Synthetic full payment before shipment",
+        "stages": [
+          {
+            "calendar": {
+              "id": "payment.calendar",
+              "kind": "calendar",
+              "revision": 1
+            },
+            "day_basis": "calendar",
+            "days": 0,
+            "percent": "100",
+            "stage_id": "P1",
+            "trigger": "before_shipment"
+          }
+        ]
+      },
+      "content_hash": "aa74be0c55702d4a436f2ed74c54762df16db2248c93cd1e301587ea6fbd61d3",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "fee_type",
+        "id": "freight",
+        "revision": 1
+      },
+      "data": {
+        "allocation_basis": "quantity",
+        "category": "freight",
+        "inclusion": "separate",
+        "name": "合成运费",
+        "policy_basis": "合成依据",
+        "side": "purchase_cost"
+      },
+      "content_hash": "1a052123cb87bb80646f7a20d5399a49a62d0bf3a7205df011f7334a81833ca7",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "location",
+        "id": "port.test",
+        "revision": 1
+      },
+      "data": {
+        "code": "port.test",
+        "country": "CN",
+        "name": "合成地点",
+        "place_type": "port"
+      },
+      "content_hash": "bfda0b59662336143b6290894c123ae80e2764c1595fd77ccd2071d601b0d5d9",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "location",
+        "id": "origin.test",
+        "revision": 1
+      },
+      "data": {
+        "code": "origin.test",
+        "country": "CN",
+        "name": "合成地点",
+        "place_type": "port"
+      },
+      "content_hash": "62cd6ab14a67e83862ebaaa0535eae7b621bf5b3501f0655ed66a026d1129d8e",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "trade_scope",
+        "id": "scope.sale",
+        "revision": 1
+      },
+      "data": {
+        "allowed_modes": [
+          "sea"
+        ],
+        "basis_note": "Synthetic reviewed mapping; no responsibility inferred from the term label",
+        "name": "Synthetic export_sale scope",
+        "named_place_ref": {
+          "id": "port.test",
+          "kind": "location",
+          "revision": 1
+        },
+        "obligations": [
+          {
+            "bearer": "seller",
+            "fee_type_ref": {
+              "id": "freight",
+              "kind": "fee_type",
+              "revision": 1
+            },
+            "obligation_id": "freight.1"
+          }
+        ],
+        "role": "export_sale",
+        "trade_terms_ref": {
+          "id": "terms.test",
+          "kind": "trade_terms",
+          "revision": 1
+        },
+        "valid_from": "2026-10-22T00:00:00Z",
+        "valid_until": "2026-10-29T00:00:00Z"
+      },
+      "content_hash": "f46dc3130848e9cbed162951481060625c529fc7d277c8bc73d764ca46b0081f",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "trade_scope",
+        "id": "scope.purchase",
+        "revision": 1
+      },
+      "data": {
+        "allowed_modes": [
+          "sea"
+        ],
+        "basis_note": "Synthetic reviewed mapping; no responsibility inferred from the term label",
+        "name": "Synthetic supplier_purchase scope",
+        "named_place_ref": {
+          "id": "port.test",
+          "kind": "location",
+          "revision": 1
+        },
+        "obligations": [
+          {
+            "bearer": "buyer",
+            "fee_type_ref": {
+              "id": "freight",
+              "kind": "fee_type",
+              "revision": 1
+            },
+            "obligation_id": "freight.1"
+          }
+        ],
+        "role": "supplier_purchase",
+        "trade_terms_ref": {
+          "id": "terms.test",
+          "kind": "trade_terms",
+          "revision": 1
+        },
+        "valid_from": "2026-10-22T00:00:00Z",
+        "valid_until": "2026-10-29T00:00:00Z"
+      },
+      "content_hash": "7cd9cfad1bce3c94dc96a1e14554493bae3a5b96637cb21fe15a9f7a2c8579d0",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "tax_application",
+        "id": "tax.goods",
+        "revision": 1
+      },
+      "data": {
+        "basis_note": "Synthetic reviewed applicability; not a tax entitlement",
+        "business_model": "CN-M01",
+        "cost_kind": "goods",
+        "counterparty_ref": {
+          "id": "supplier.1",
+          "kind": "supplier",
+          "row_version": 2
+        },
+        "jurisdiction": "CN",
+        "name": "Synthetic goods tax application",
+        "subject_ref": {
+          "id": "sku.1.profile",
+          "kind": "sku_profile",
+          "revision": 1
+        },
+        "tax_profile_ref": {
+          "id": "tax.zero",
+          "kind": "tax_profile",
+          "revision": 1
+        },
+        "valid_from": "2026-10-22T00:00:00Z",
+        "valid_until": "2026-10-29T00:00:00Z"
+      },
+      "content_hash": "b0c558fad1e8161114f5e36861738d586f193da6d614cd5a788e5d64eaef4016",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "tax_application",
+        "id": "tax.service",
+        "revision": 1
+      },
+      "data": {
+        "basis_note": "Synthetic reviewed applicability; not a tax entitlement",
+        "business_model": "CN-M01",
+        "cost_kind": "service",
+        "counterparty_ref": {
+          "id": "provider.1",
+          "kind": "supplier",
+          "row_version": 2
+        },
+        "jurisdiction": "CN",
+        "name": "Synthetic service tax application",
+        "subject_ref": {
+          "id": "freight",
+          "kind": "fee_type",
+          "revision": 1
+        },
+        "tax_profile_ref": {
+          "id": "tax.zero",
+          "kind": "tax_profile",
+          "revision": 1
+        },
+        "valid_from": "2026-10-22T00:00:00Z",
+        "valid_until": "2026-10-29T00:00:00Z"
+      },
+      "content_hash": "5bed2e52b27bc3d5f2e5c0bc6b7dd71a38b31cff8975d0ce161c8854cf7bf4a0",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "customer",
+        "id": "customer.1",
+        "row_version": 2
+      },
+      "data": {
+        "tenant": "tenant.live",
+        "company": "company.live",
+        "id": "customer.1",
+        "kind": "customer",
+        "name": "customer.1",
+        "parent_customer_id": null,
+        "base_uom": null,
+        "status": "confirmed",
+        "row_version": 2
+      },
+      "content_hash": "b94242d934c8134760e9223a4a576da1e5eec734ccabcef1a6697c1d12a482c8",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "contact",
+        "id": "contact.1",
+        "row_version": 2
+      },
+      "data": {
+        "tenant": "tenant.live",
+        "company": "company.live",
+        "id": "contact.1",
+        "kind": "contact",
+        "name": "contact.1",
+        "parent_customer_id": "customer.1",
+        "base_uom": null,
+        "status": "confirmed",
+        "row_version": 2
+      },
+      "content_hash": "f23dd057fb3d71c1a5f071726243c61f60a886b6302f50e1ec6c0db8d69dbaae",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "sku",
+        "id": "sku.1",
+        "row_version": 2
+      },
+      "data": {
+        "tenant": "tenant.live",
+        "company": "company.live",
+        "id": "sku.1",
+        "kind": "sku",
+        "name": "sku.1",
+        "parent_customer_id": null,
+        "base_uom": "PCS",
+        "status": "confirmed",
+        "row_version": 2
+      },
+      "content_hash": "10956e46fa35b55f4e5cdf83f0b3aa7917831790f2b4e77a96e104d27aa4f81a",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "supplier",
+        "id": "supplier.1",
+        "row_version": 2
+      },
+      "data": {
+        "tenant": "tenant.live",
+        "company": "company.live",
+        "id": "supplier.1",
+        "kind": "supplier",
+        "name": "supplier.1",
+        "parent_customer_id": null,
+        "base_uom": null,
+        "status": "confirmed",
+        "row_version": 2
+      },
+      "content_hash": "4ce889ba55fea1864aa848f61a193d727cc6a5ca69bcc319b4e6814a3627af25",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "supplier",
+        "id": "provider.1",
+        "row_version": 2
+      },
+      "data": {
+        "tenant": "tenant.live",
+        "company": "company.live",
+        "id": "provider.1",
+        "kind": "supplier",
+        "name": "provider.1",
+        "parent_customer_id": null,
+        "base_uom": null,
+        "status": "confirmed",
+        "row_version": 2
+      },
+      "content_hash": "d9afba674db23e06443cc968bc55a3471d1748ae0eb61c028942dfffc4a24c4a",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "rfq",
+        "id": "rfq.1",
+        "row_version": 2
+      },
+      "data": {
+        "tenant": "tenant.live",
+        "company": "company.live",
+        "id": "rfq.1",
+        "customer_id": "customer.1",
+        "contact_id": "contact.1",
+        "status": "ready",
+        "row_version": 2,
+        "unresolved_fields": [],
+        "lines": [
+          {
+            "tenant": "tenant.live",
+            "company": "company.live",
+            "rfq_id": "rfq.1",
+            "line_id": "L1",
+            "sku_id": "sku.1",
+            "quantity": "120",
+            "uom": "PCS",
+            "requested_item": null,
+            "source_id": "source.1",
+            "locator": "第1行"
+          }
+        ],
+        "source_ids": [
+          "source.1"
+        ]
+      },
+      "content_hash": "3ee92f1118c480ab32896c9bbb35186fa05687b9e44c43f0e1544527267c868f",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "currency",
+        "id": "CNY",
+        "revision": 1
+      },
+      "data": {
+        "code": "CNY",
+        "name": "人民币",
+        "minor_units": 2,
+        "rounding": "HALF_UP"
+      },
+      "content_hash": "e67a1876c7a3b7934468915df5539e1a12883e34b574c34b853e240af15b406f",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "company",
+        "id": "company.live",
+        "revision": 1
+      },
+      "data": {
+        "legal_name": "SYNTHETIC Exporter — no actual trade",
+        "registration_no": "SYNTHETIC-NOT-REAL",
+        "country": "CN",
+        "address": "Synthetic Shanghai address",
+        "base_currency": {
+          "kind": "currency",
+          "id": "CNY",
+          "revision": 1
+        },
+        "timezone": "Asia/Shanghai",
+        "policy_scope": "Synthetic CN-M01 / S01"
+      },
+      "content_hash": "e885af5516160d7d4dd73f3e817d5406279377edb45dd005c45565f96be08efc",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "party_profile",
+        "id": "customer.profile",
+        "revision": 1
+      },
+      "data": {
+        "party_id": "customer.1",
+        "party_row_version": 2,
+        "contact_refs": [
+          {
+            "id": "contact.1",
+            "row_version": 2
+          }
+        ],
+        "legal_name": "Synthetic Buyer Ltd",
+        "country": "GB",
+        "addresses": [
+          {
+            "address_id": "buyer.address",
+            "role": "buyer",
+            "address": "Synthetic buyer address"
+          }
+        ],
+        "trade_terms": {
+          "kind": "trade_terms",
+          "id": "terms.test",
+          "revision": 1
+        },
+        "payment_terms": {
+          "kind": "payment_terms",
+          "id": "payment.test",
+          "revision": 1
+        }
+      },
+      "content_hash": "9572be119f04ad3072f7a8f98a14a6946efeec50764cb45d43bce99deafe8090",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "sequence",
+        "id": "quote.sequence",
+        "revision": 1
+      },
+      "data": {
+        "document_type": "quote",
+        "company": {
+          "kind": "company",
+          "id": "company.live",
+          "revision": 1
+        },
+        "prefix": "SYN-Q-",
+        "width": 5,
+        "reset": "annual"
+      },
+      "content_hash": "fe55034aabede467f87f766c19f031594259835c2dd1879c518404dd48d5d183",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "quote_document_template",
+        "id": "quote.template",
+        "revision": 1
+      },
+      "data": {
+        "name": "Synthetic quote template",
+        "language": "en",
+        "renderer_version": "quote-text/0.1.0",
+        "title": "SYNTHETIC QUOTATION — CONTRACT EXAMPLE ONLY",
+        "sections": [
+          "issuer",
+          "recipient",
+          "identity",
+          "lines",
+          "totals",
+          "terms",
+          "delivery",
+          "payments",
+          "validity",
+          "notes"
+        ],
+        "footer_note": "Synthetic data. Not an actual offer or customer acceptance."
+      },
+      "content_hash": "8c5808b4f38d9f2b5a60decb1b49a3e442ca2e0d66bdcdb3781afc74e945f65f",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "sales_tax_application",
+        "id": "tax.sale",
+        "revision": 1
+      },
+      "data": {
+        "name": "Synthetic sales tax applicability",
+        "business_model": "CN-M01",
+        "use": "quotation_sale",
+        "subject_kind": "sku_profile",
+        "subject_ref": {
+          "kind": "sku_profile",
+          "id": "sku.1.profile",
+          "revision": 1
+        },
+        "issuer_ref": {
+          "kind": "company",
+          "id": "company.live",
+          "revision": 1
+        },
+        "customer_ref": {
+          "kind": "customer",
+          "id": "customer.1",
+          "row_version": 2
+        },
+        "tax_profile_ref": {
+          "kind": "tax_profile",
+          "id": "tax.zero",
+          "revision": 1
+        },
+        "jurisdiction": "SYNTHETIC-CN",
+        "basis_note": "Reviewed synthetic sale scope; no tax-law claim",
+        "valid_from": "2026-10-22T00:00:00Z",
+        "valid_until": "2026-10-29T00:00:00Z"
+      },
+      "content_hash": "9338b0fa21f8972bac4f4fd2869a59ffc2891dbb77b3f31f1dc1a53cab3a271c",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    },
+    {
+      "ref": {
+        "kind": "cost_snapshot",
+        "id": "snapshot.1",
+        "revision": 1
+      },
+      "data": {
+        "snapshot": {
+          "assumptions": [],
+          "calculation_time": "2026-10-22T09:00:00Z",
+          "commercial_checks": [
+            {
+              "category": "tax_application",
+              "path": "/components/fee.1/tax_application_ref",
+              "reason": "Reviewed CN-M01 service application matches provider, fee type and tax revision",
+              "refs": [
+                {
+                  "id": "tax.service",
+                  "kind": "tax_application",
+                  "revision": 1
+                },
+                {
+                  "id": "tax.zero",
+                  "kind": "tax_profile",
+                  "revision": 1
+                }
+              ],
+              "status": "matched"
+            },
+            {
+              "category": "payment_terms",
+              "path": "/context/comparison_basis/sales_payment_terms_ref",
+              "reason": "Customer receipts and supplier payments are separate obligations; nominal direct cost excludes imputed financing, expected credit loss and unrealized hedging",
+              "refs": [
+                {
+                  "id": "payment.test",
+                  "kind": "payment_terms",
+                  "revision": 1
+                }
+              ],
+              "status": "matched"
+            },
+            {
+              "category": "obligation",
+              "path": "/obligations/freight.1",
+              "reason": "Responsibility, price inclusion and explicit charges reconciled without guessing from an Incoterms label",
+              "refs": [
+                {
+                  "id": "scope.sale",
+                  "kind": "trade_scope",
+                  "revision": 1
+                }
+              ],
+              "status": "normalized"
+            },
+            {
+              "category": "payment_terms",
+              "path": "/supplier_offer/offer.1/lines/OL1/payment_terms_ref",
+              "reason": "Separate receipt/payment schedules retained; no automatic financing adjustment to nominal direct cost",
+              "refs": [
+                {
+                  "id": "payment.test",
+                  "kind": "payment_terms",
+                  "revision": 1
+                },
+                {
+                  "id": "payment.test",
+                  "kind": "payment_terms",
+                  "revision": 1
+                }
+              ],
+              "status": "matched"
+            },
+            {
+              "category": "trade_terms",
+              "path": "/supplier_offer/offer.1/lines/OL1/purchase_trade_scope_ref",
+              "reason": "Supplier contract and export sales contract retain their own parties; explicit price inclusions and exporter charges define the cost bridge",
+              "refs": [
+                {
+                  "id": "scope.purchase",
+                  "kind": "trade_scope",
+                  "revision": 1
+                },
+                {
+                  "id": "scope.sale",
+                  "kind": "trade_scope",
+                  "revision": 1
+                }
+              ],
+              "status": "normalized"
+            },
+            {
+              "category": "tax_application",
+              "path": "/supplier_offer/offer.1/lines/OL1/tax_application_ref",
+              "reason": "Reviewed CN-M01 goods application matches counterparty, SKU and tax revision; no tax entitlement inferred",
+              "refs": [
+                {
+                  "id": "tax.goods",
+                  "kind": "tax_application",
+                  "revision": 1
+                },
+                {
+                  "id": "tax.zero",
+                  "kind": "tax_profile",
+                  "revision": 1
+                }
+              ],
+              "status": "matched"
+            }
+          ],
+          "comparison_status": "comparable",
+          "components": [
+            {
+              "allocations": [
+                {
+                  "amount_minor": "6000",
+                  "base_integer": "120",
+                  "basis": "quantity",
+                  "line_id": "L1"
+                }
+              ],
+              "amount_minor": "6000",
+              "id": "fee.1",
+              "obligation_id": "freight.1"
+            },
+            {
+              "allocations": [
+                {
+                  "amount_minor": "60000",
+                  "base_integer": "120",
+                  "basis": "quantity",
+                  "line_id": "L1"
+                }
+              ],
+              "amount_minor": "60000",
+              "id": "purchase.1",
+              "obligation_id": "goods.1"
+            }
+          ],
+          "context_ref": {
+            "id": "context.1",
+            "kind": "costing_context",
+            "revision": 1
+          },
+          "cost_basis": "nominal_direct_cost",
+          "currency": "USD",
+          "delivery_checks": [
+            {
+              "date": "2026-11-15",
+              "milestone": "handover",
+              "path": "/context/comparison_basis/delivery",
+              "place_ref": {
+                "id": "port.test",
+                "kind": "location",
+                "revision": 1
+              },
+              "role": "requirement",
+              "status": "resolved",
+              "time_zone": "Asia/Shanghai"
+            },
+            {
+              "date": "2026-11-15",
+              "milestone": "handover",
+              "path": "/supplier_offer/offer.1/lines/OL1/delivery",
+              "place_ref": {
+                "id": "port.test",
+                "kind": "location",
+                "revision": 1
+              },
+              "role": "supply",
+              "status": "resolved",
+              "time_zone": "Asia/Shanghai"
+            }
+          ],
+          "differences": [],
+          "engine_version": "reference.integrated.0.8",
+          "evaluation_id": "result.1",
+          "evidence_hash": "9ab88276e6f6ef6306032bbfd36822673b111d36cb4b939cb4c49b11e4f0ecfd",
+          "excluded_components": [],
+          "excluded_cost_categories": [
+            "imputed_financing_cost",
+            "expected_credit_loss",
+            "unrealized_fx_hedge"
+          ],
+          "frozen_scenario_version": 2,
+          "id": "snapshot.1",
+          "input_hash": "f3fe094cb864c41fbcdb9ee97726438219f782e19882b231b204a6baf51bd9b2",
+          "input_manifest": [
+            {
+              "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+              "id": "context.1",
+              "kind": "business_verification.costing_context",
+              "version": 1
+            },
+            {
+              "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+              "id": "log.1",
+              "kind": "business_verification.logistics_offer",
+              "version": 1
+            },
+            {
+              "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+              "id": "provider.role",
+              "kind": "business_verification.service_party_role",
+              "version": 1
+            },
+            {
+              "content_hash": "f424b071643869f3e5d5dfa776f827480e8d641f4804cd82d637bc1d3e0a7909",
+              "id": "offer.1",
+              "kind": "business_verification.supplier_offer",
+              "version": 1
+            },
+            {
+              "content_hash": "dab57a90971a0d92d050c4295dc9f8e7c489ef7ccb173b08eab043cc63ffe582",
+              "id": "payment.calendar",
+              "kind": "calendar",
+              "version": 1
+            },
+            {
+              "content_hash": "fe501c9eba7bf13f1627a04642c9858f392dcc4d4746310139f9640a462bfa26",
+              "id": "context.1",
+              "kind": "costing_context",
+              "version": 1
+            },
+            {
+              "content_hash": "32b4ecf2281628ac312cb65a7fcdf78218a9308dbd0b2aff8ca4d29780f9fb0e",
+              "id": "USD",
+              "kind": "currency",
+              "version": 1
+            },
+            {
+              "content_hash": "1a052123cb87bb80646f7a20d5399a49a62d0bf3a7205df011f7334a81833ca7",
+              "id": "freight",
+              "kind": "fee_type",
+              "version": 1
+            },
+            {
+              "content_hash": "6f1ee263ee810e0547503425ac7b00e432f61bd53e8838f0a89ee0affe3cd7ba",
+              "id": "payment.calendar",
+              "kind": "foundation_publication.calendar",
+              "version": 1
+            },
+            {
+              "content_hash": "fb9fd9c34e364685b009e9d5ba498aa9c2f6f17a7c9df4f52861b4fdb2ee5c72",
+              "id": "USD",
+              "kind": "foundation_publication.currency",
+              "version": 1
+            },
+            {
+              "content_hash": "5d586ccf148b196b40f0e1bcb244ebfe565ec6436d69526a21d13d4b4b6be876",
+              "id": "freight",
+              "kind": "foundation_publication.fee_type",
+              "version": 1
+            },
+            {
+              "content_hash": "3b59f924b2a8ffbaf80050285785680a2da2ea7b46eeb083d71411a58a286d47",
+              "id": "origin.test",
+              "kind": "foundation_publication.location",
+              "version": 1
+            },
+            {
+              "content_hash": "3b59f924b2a8ffbaf80050285785680a2da2ea7b46eeb083d71411a58a286d47",
+              "id": "port.test",
+              "kind": "foundation_publication.location",
+              "version": 1
+            },
+            {
+              "content_hash": "f04b0d3a459e21c006d53b83a75e8ee48481b9dc4021b19837bb2f8764d1bf55",
+              "id": "payment.test",
+              "kind": "foundation_publication.payment_terms",
+              "version": 1
+            },
+            {
+              "content_hash": "7828296ff0bacecc5e445f1560ac1636f212f03c84ea24fbc471f361f6c27c03",
+              "id": "policy.1",
+              "kind": "foundation_publication.pricing_policy",
+              "version": 1
+            },
+            {
+              "content_hash": "58f8539f9f357877588397989e5a5966b4e9000b7970a52d36db087e90c8a1e2",
+              "id": "sku.1.profile",
+              "kind": "foundation_publication.sku_profile",
+              "version": 1
+            },
+            {
+              "content_hash": "6a0c9aef312c9255b4d3f0c74a91e48915cf6820a2bd7b48a89bc1e38ad85d32",
+              "id": "tax.goods",
+              "kind": "foundation_publication.tax_application",
+              "version": 1
+            },
+            {
+              "content_hash": "991a48516add6ad44c8ca54693577580074f0e0d36ccfeabe75eefa8f58cf5b4",
+              "id": "tax.service",
+              "kind": "foundation_publication.tax_application",
+              "version": 1
+            },
+            {
+              "content_hash": "f896fe882b40a759466d774691f35081f1d550b7e432176e76814f9833f4bd42",
+              "id": "tax.zero",
+              "kind": "foundation_publication.tax_profile",
+              "version": 1
+            },
+            {
+              "content_hash": "a8dc90a26e9716c011c93fbb6f3e3f3f6aff85096742a5a2df26545ed28985ef",
+              "id": "scope.purchase",
+              "kind": "foundation_publication.trade_scope",
+              "version": 1
+            },
+            {
+              "content_hash": "a8dc90a26e9716c011c93fbb6f3e3f3f6aff85096742a5a2df26545ed28985ef",
+              "id": "scope.sale",
+              "kind": "foundation_publication.trade_scope",
+              "version": 1
+            },
+            {
+              "content_hash": "eb7df01a6d2dbe45bc5877641f349e022b427fe4057dc0ac59c86703c7e263a4",
+              "id": "terms.test",
+              "kind": "foundation_publication.trade_terms",
+              "version": 1
+            },
+            {
+              "content_hash": "7a4daffe496f2ac63e9716567b4c73c3ebf3b68dc2484d25a54ea99ff4ff36d1",
+              "id": "PCS",
+              "kind": "foundation_publication.unit",
+              "version": 1
+            },
+            {
+              "content_hash": "62cd6ab14a67e83862ebaaa0535eae7b621bf5b3501f0655ed66a026d1129d8e",
+              "id": "origin.test",
+              "kind": "location",
+              "version": 1
+            },
+            {
+              "content_hash": "bfda0b59662336143b6290894c123ae80e2764c1595fd77ccd2071d601b0d5d9",
+              "id": "port.test",
+              "kind": "location",
+              "version": 1
+            },
+            {
+              "content_hash": "b0b730f1666da28eaa8cebd3095319061e727c7e100cda96d15fd643fdbdbcd0",
+              "id": "log.1",
+              "kind": "logistics_offer",
+              "version": 1
+            },
+            {
+              "content_hash": "5b4f6d4ac0b309e9d416348caecc1cbed62b4d7d528c3cd5276a5a3a0e39b21b",
+              "id": "sku.1",
+              "kind": "master.sku",
+              "version": 2
+            },
+            {
+              "content_hash": "d8c588b9e62110eaba64fa3b555a08c98d1de90d846ec88c72dcd3c90b8656fb",
+              "id": "provider.1",
+              "kind": "master.supplier",
+              "version": 2
+            },
+            {
+              "content_hash": "c366a6a92c44cc3a7e012cbc9858bbab6e290805aee45bf50edc79d3a2c53881",
+              "id": "supplier.1",
+              "kind": "master.supplier",
+              "version": 2
+            },
+            {
+              "content_hash": "aa74be0c55702d4a436f2ed74c54762df16db2248c93cd1e301587ea6fbd61d3",
+              "id": "payment.test",
+              "kind": "payment_terms",
+              "version": 1
+            },
+            {
+              "content_hash": "a4ac0e016b9bbdefbd4bda7f2fed0339cfa7bbc85b78e5242d89f12e62f2b3b6",
+              "id": "policy.1",
+              "kind": "pricing_policy",
+              "version": 1
+            },
+            {
+              "content_hash": "4863936d3938e34ec7c4cdaf70ba11e00205863f6c44c5309a36557a8e458488",
+              "id": "rfq.1",
+              "kind": "rfq",
+              "version": 2
+            },
+            {
+              "content_hash": "ee867d8253e47ef8ce85b1992213038832800affb100efe64723344899cb0a8a",
+              "id": "provider.role",
+              "kind": "service_party_role",
+              "version": 1
+            },
+            {
+              "content_hash": "4fe007604135ed6746550dda4ed726ab5a8d3b93989539469f95dbc65e52e61e",
+              "id": "sku.1.profile",
+              "kind": "sku_profile",
+              "version": 1
+            },
+            {
+              "content_hash": "0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61",
+              "id": "source.1",
+              "kind": "source",
+              "version": 1
+            },
+            {
+              "content_hash": "4c758903de3820fd8bca16b67660bfa4762fa990db65fa9325e29eee663abe9c",
+              "id": "offer.1",
+              "kind": "supplier_offer",
+              "version": 1
+            },
+            {
+              "content_hash": "b0c558fad1e8161114f5e36861738d586f193da6d614cd5a788e5d64eaef4016",
+              "id": "tax.goods",
+              "kind": "tax_application",
+              "version": 1
+            },
+            {
+              "content_hash": "5bed2e52b27bc3d5f2e5c0bc6b7dd71a38b31cff8975d0ce161c8854cf7bf4a0",
+              "id": "tax.service",
+              "kind": "tax_application",
+              "version": 1
+            },
+            {
+              "content_hash": "163b54162e7e8ecbec3901f446c3dcb717476ca3ae48eb49d7d57fe0423a2955",
+              "id": "tax.zero",
+              "kind": "tax_profile",
+              "version": 1
+            },
+            {
+              "content_hash": "7cd9cfad1bce3c94dc96a1e14554493bae3a5b96637cb21fe15a9f7a2c8579d0",
+              "id": "scope.purchase",
+              "kind": "trade_scope",
+              "version": 1
+            },
+            {
+              "content_hash": "f46dc3130848e9cbed162951481060625c529fc7d277c8bc73d764ca46b0081f",
+              "id": "scope.sale",
+              "kind": "trade_scope",
+              "version": 1
+            },
+            {
+              "content_hash": "430211c26d9834322c29986731a044935f7f0b05f7f59bd8470c60b52cba9730",
+              "id": "terms.test",
+              "kind": "trade_terms",
+              "version": 1
+            },
+            {
+              "content_hash": "5a58e5d4e3f1e3cbb68e02db35ac66708c1ed53cbe15841390af95f6254b515d",
+              "id": "PCS",
+              "kind": "unit",
+              "version": 1
+            }
+          ],
+          "input_scenario_version": 1,
+          "kind": "snapshot",
+          "minor_units": 2,
+          "result_hash": "2a809a7b878bb2bedba3eed7534ecd55d43952b41bad144babe3c2d289cc677f",
+          "rfq_ref": {
+            "id": "rfq.1",
+            "row_version": 2
+          },
+          "scenario_id": "scenario.1",
+          "selection_reason": "同口径成本已核实",
+          "total_minor": "66000",
+          "verification_status": "verified"
+        },
+        "context": {
+          "id": "context.1",
+          "root_version": 2,
+          "revision": 1,
+          "sealed": true,
+          "data": {
+            "calculation_currency_ref": {
+              "id": "USD",
+              "kind": "currency",
+              "revision": 1
+            },
+            "comparison_basis": {
+              "cost_basis": "nominal_direct_cost",
+              "delivery": {
+                "date": "2026-11-15",
+                "kind": "fixed",
+                "milestone": "handover",
+                "place_ref": {
+                  "id": "port.test",
+                  "kind": "location",
+                  "revision": 1
+                },
+                "time_zone": "Asia/Shanghai"
+              },
+              "named_place_ref": {
+                "id": "port.test",
+                "kind": "location",
+                "revision": 1
+              },
+              "required_fee_type_refs": [
+                {
+                  "id": "freight",
+                  "kind": "fee_type",
+                  "revision": 1
+                }
+              ],
+              "sales_payment_terms_ref": {
+                "id": "payment.test",
+                "kind": "payment_terms",
+                "revision": 1
+              },
+              "sales_trade_scope_ref": {
+                "id": "scope.sale",
+                "kind": "trade_scope",
+                "revision": 1
+              },
+              "specification_basis": "SPEC-1",
+              "tax_basis": "synthetic_zero_nonrecoverable"
+            },
+            "context_kind": "actual",
+            "lines": [
+              {
+                "line_id": "L1",
+                "quantity": "120",
+                "sku_profile_ref": {
+                  "id": "sku.1.profile",
+                  "kind": "sku_profile",
+                  "revision": 1
+                },
+                "unit_ref": {
+                  "id": "PCS",
+                  "kind": "unit",
+                  "revision": 1
+                }
+              }
+            ],
+            "pricing_policy_ref": {
+              "id": "policy.1",
+              "kind": "pricing_policy",
+              "revision": 1
+            },
+            "rfq_ref": {
+              "id": "rfq.1",
+              "row_version": 2
+            }
+          }
+        }
+      },
+      "content_hash": "3668d7dc21b908c3ef5b25ffab99b94193b51c785d0f66a41950fed5107d221b",
+      "active": true,
+      "readable": true,
+      "evidence": [
+        {
+          "source_id": "source.1",
+          "locator": "合成核实依据"
+        }
+      ]
+    }
+  ],
+  "sources": {
+    "source.1": {
+      "content_hash": "0397250103796959c07c27f59f03da066db3e42b27d81da397a18d2f2b936a61",
+      "verified": true,
+      "denied": false,
+      "readable": true
+    }
+  },
+  "snapshot_eligibility": {
+    "snapshot.1": {
+      "currently_eligible_for_quote": true,
+      "eligibility_checked_at": "2026-10-22T09:00:00Z"
+    }
+  }
+}
