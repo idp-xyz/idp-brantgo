@@ -59,11 +59,17 @@ GRANT UPDATE (status, content_hash, party_revision, payment_terms_id, payment_te
               owner_actor_id, owner_team_id, saved_by_kind, saved_by_id, saved_epoch, saved_at, published_by_kind, published_by_id,
               publish_epoch, published_at, evidence_ids, ended_at)
     ON brant_pty.trading_profile_revision TO brant_app;
+-- TradingProfileGuard v1 and AddressRoleGuard v1: downstream contexts call them in their own
+-- transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_pty.guard_trading_profile_current_v1(text, bigint),
+    brant_pty.guard_address_role_current_v1(text, bigint, text) TO brant_app;
 
 -- CAT: SKUs change through their lifecycle; specification revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_cat TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_cat.sku TO brant_app;
 GRANT SELECT, INSERT ON brant_cat.sku_revision, brant_cat.action_result, brant_cat.audit_event TO brant_app;
+-- SkuGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_cat.guard_sku_spec_current_v1(text, bigint) TO brant_app;
 -- CAT item code mappings: a root's version and a draft revision change; a published revision changes
 -- only its status and supersession (trigger); the key never changes.
 GRANT SELECT, INSERT ON brant_cat.item_code_mapping, brant_cat.item_code_mapping_revision TO brant_app;

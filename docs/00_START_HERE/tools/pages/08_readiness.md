@@ -87,4 +87,4 @@ foot: Go Migration Readiness V0.1 · 2026-11-06
 ## 08 就绪结论 {#s8}
 
 > [!warn] 结论：尚未就绪
-> 设计与映射已覆盖 Python V0.50 的全部唯一测试方法。M0 建立了产品仓库、PostgreSQL 16 迁移与 FORCE RLS、授权守卫与 Outbox 中继；S1、S2（2026-11-10 完成）加入命令账本、EVD、PTY（含主体筛查与交易档案）、CAT（含货号映射）、INQ、POL（全部 18 种配置与 ConfigGuard）、筛查名单参考数据、SUP 供应条件与 CST 核价（冻结快照与可采纳守卫）、HTTP 入口与 OpenAPI 候选、OIDC 令牌校验、岗位模板、Outbox 死信与 Inbox 去重，远程 CI 通过，Go 移植数为 {{=goTestsPorted}}。真实身份提供方（延后至 B0 试点门之前）与受保护主干（仓库公开后可配置，待负责人决定）尚未就绪，审批仍为模拟评审，G1 保持 NO-GO。
+> 设计与映射已覆盖 Python V0.50 的全部唯一测试方法。M0 建立了产品仓库、PostgreSQL 16 迁移与 FORCE RLS、授权守卫与 Outbox 中继；S1、S2（2026-11-10 完成）加入命令账本、EVD、PTY（含主体筛查与交易档案）、CAT（含货号映射）、INQ、POL（全部 18 种配置与 ConfigGuard）、筛查名单参考数据、SUP 供应条件与 CST 核价（冻结快照与可采纳守卫）、HTTP 入口与 OpenAPI 候选、OIDC 令牌校验、岗位模板、Outbox 死信与 Inbox 去重，远程 CI 通过，Go 移植数为 {{=goTestsPorted}}。真实身份提供方（延后至 B0 试点门之前）与受保护主干只要求 CI 通过（评审与签名溯源按负责人决定不要求），审批仍为模拟评审，G1 保持 NO-GO。

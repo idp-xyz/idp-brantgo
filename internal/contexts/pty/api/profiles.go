@@ -420,12 +420,14 @@ type ProfileQueries interface {
 	GetTradingProfile(ctx context.Context, partyID string) (TradingProfileView, error)
 	// ResolveAddressRoles answers AddressRoleRef v1 lookups. Like ResolveParties it needs no
 	// permission beyond an active grant; references to a party the caller does not see, or to a
-	// revision or address that does not exist, are absent. Ask before opening your own transaction.
+	// revision or address that does not exist, are absent. Ask before opening your own transaction;
+	// inside it, AddressRoleGuard v1 decides the same.
 	ResolveAddressRoles(ctx context.Context, refs []AddressRoleRef) (map[AddressRoleRef]ResolvedAddressRole, error)
 	// ResolveServiceRoles answers ServiceRoleRef v1 lookups at instant at, as ResolveAddressRoles.
 	ResolveServiceRoles(ctx context.Context, refs []ServiceRoleRef, at time.Time) (map[ServiceRoleRef]ResolvedServiceRole, error)
 	// ResolveTradingProfiles answers TradingProfileRef v1 lookups of published revisions, keyed by
 	// the reference asked (Revision 0: the active revision, absent without one), as
-	// ResolveAddressRoles. A working revision is not a TradingProfileRef and is absent.
+	// ResolveAddressRoles. A working revision is not a TradingProfileRef and is absent. Inside your
+	// own transaction, TradingProfileGuard v1 decides the same for the exact revision.
 	ResolveTradingProfiles(ctx context.Context, refs []TradingProfileRef) (map[TradingProfileRef]ResolvedTradingProfile, error)
 }

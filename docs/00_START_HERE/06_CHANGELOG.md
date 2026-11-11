@@ -18,7 +18,7 @@ S2 合并：SUP 供应条件与 SupplyConditionGuard v1，CST 计算规则、核
 
 ### 仓库
 - 2026-11-11 按负责人决定，仓库由个人账号 idpxyz 转入组织 idp-xyz，并改为公开（github.com/idp-xyz/idp-brantgo）；提交、分支、PR #1—#5 与 Actions 运行记录随仓库转移，旧链接自动跳转。公开前扫描了全部历史：没有令牌、密钥或个人邮箱，唯一的口令是 Makefile 中仅供本机开发库使用的口令。
-- G1 C09 改为“可配置，待负责人决定”：公开仓库在 GitHub 免费版上可以配置分支保护。
+- 2026-11-11 按负责人决定，main 设为受保护分支：必须通过 brant-ci（GitHub Actions），对管理员同样生效，禁止强推与删除；不要求评审与签名溯源。G1 C09 为 PARTIAL（必需检查已配置）。
 
 ### 限制
 - 主体与 SKU 主数据修订不进入成本快照的可采纳判定（PTY 不是 CST 的上游，CAT 不发布守卫）。
