@@ -42,6 +42,31 @@ func WithinRelease(before, shipping, released kernel.Decimal, path string) error
 	return nil
 }
 
+// Before returns what was consumed before this shipment: c itself for a shipment not yet
+// confirmed, and c less the shipment's own lines for a confirmed one (a document release re-judges
+// the quantities its shipment already consumed).
+func (s *Shipment) Before(c Consumed) Consumed {
+	if s.Status != StatusConfirmed {
+		return c
+	}
+	out := Consumed{OrderLines: map[string]kernel.Decimal{}, Deliveries: map[DeliveryRef]kernel.Decimal{}, Releases: map[string]kernel.Decimal{}}
+	for k, v := range c.OrderLines {
+		out.OrderLines[k] = v
+	}
+	for k, v := range c.Deliveries {
+		out.Deliveries[k] = v
+	}
+	for k, v := range c.Releases {
+		out.Releases[k] = v
+	}
+	for _, l := range s.Lines {
+		out.OrderLines[l.OrderLineID] = out.OrderLines[l.OrderLineID].Sub(l.Quantity)
+		out.Deliveries[l.Delivery] = out.Deliveries[l.Delivery].Sub(l.Quantity)
+		out.Releases[l.ReleaseID] = out.Releases[l.ReleaseID].Sub(l.Quantity)
+	}
+	return out
+}
+
 // CheckOrderLines judges FUL-INV-001 for the whole shipment at its confirmation, against the order
 // line quantities of the order revision it binds — the order's current revision, as OrderGuard v1
 // proved in the same transaction.

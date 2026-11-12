@@ -1,0 +1,215 @@
+package application
+
+import (
+	"context"
+	"time"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/api"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/release"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
+	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
+	"go.idp.xyz/idp-brant/internal/kernel"
+)
+
+// judgement is what every guard answered in one FUL transaction for a shipment and a release
+// scope: the evidence entries and bindings, STL's payment verdict, the first unmet guard with its
+// refusal, the first unmet guard other than the payment condition, and the exception that covered
+// the payment condition.
+type judgement struct {
+	entries   []shipment.Entry
+	bindings  release.Bindings
+	payment   release.PaymentVerdict
+	failure   *kernel.Rejection
+	guard     string
+	other     *kernel.Rejection
+	exception int64
+}
+
+// note records the refusal of guard, if any: the first one decides the outcome, the first one
+// that is not the payment condition decides an exception. An error that is not a refusal is
+// returned.
+func (j *judgement) note(guard string, err error) error {
+	if err == nil {
+		return nil
+	}
+	rej, ok := kernel.AsRejection(err)
+	if !ok {
+		return err
+	}
+	if j.failure == nil {
+		j.failure, j.guard = rej, guard
+	}
+	if guard != shipment.GuardPaymentCondition && j.other == nil {
+		j.other = rej
+	}
+	return nil
+}
+
+// upstream turns a refusal an upstream contract's Check gave into FUL's own code at the same path
+// (shipment.Upstream: a code FUL does not declare is REFERENCE_INVALID).
+func upstream(err error) error {
+	rej, ok := kernel.AsRejection(err)
+	if !ok || len(rej.Fields) == 0 {
+		return err
+	}
+	return shipment.Upstream(rej.Code, rej.Fields[0].Path, rej.Fields[0].Reason)
+}
+
+// licenseLines are the shipment's lines as CNX's ExportLicenseGuard v1 compares them with the
+// allocation (cnxapi.LinesHash): the unit is FUL's unit ID.
+func licenseLines(s *shipment.Shipment) []cnxapi.ShipmentLine {
+	out := make([]cnxapi.ShipmentLine, 0, len(s.Lines))
+	for _, l := range s.Lines {
+		out = append(out, cnxapi.ShipmentLine{LineID: l.ID, SkuID: l.SkuID, SpecRevision: l.SpecRevision, Quantity: postgres.Text(l.Quantity),
+			Unit: l.UnitID})
+	}
+	return out
+}
+
+func paymentVerdict(v stlapi.PaymentVerdict) release.PaymentVerdict {
+	return release.PaymentVerdict{Scope: v.Query.Scope, Satisfied: v.Satisfied(), Status: v.Status, Reason: v.Reason, OrderRevision: v.OrderRevision,
+		OrderHash: v.OrderHash, Currency: v.Currency, RequiredMinor: v.RequiredMinor, AppliedMinor: v.AppliedMinor, StageID: v.StageID,
+		StageTrigger: v.StageTrigger, StageDueMinor: v.StageDueMinor, StageAppliedMinor: v.StageAppliedMinor, ShortfallMinor: v.ShortfallMinor}
+}
+
+// judge runs, with FUL's executor in the caller's transaction (which holds the shipment, the
+// order's fulfilment root and the release FOR UPDATE), every guard of a shipment for a release
+// scope in context code order (ADR-BR-011, FUL-INV-002, D-11), each keeping its rows FOR SHARE until
+// the transaction ends: CNX TradeComplianceGuard v1 on the order revision the shipment binds and,
+// when its clear conclusion says a licence is required, ExportLicenseGuard v1 on the shipment's
+// lines (R56); PTY PartyScreeningGuard v1 on every party (R44); PUR SupplierDeliveryGuard v1 on
+// every delivery line (R59, FUL-INV-003); QLT QualityReleaseGuard v1 on every release (R26); STL
+// PaymentConditionGuard v1 for the scope (R45), which a live exception of rel may cover; TRD
+// OrderGuard v1 (R27); then FUL-INV-001. The quantities are judged on what FUL's confirmed shipments
+// consumed besides this one. Every guard runs; the first refusal in this order decides. rel may be
+// nil.
+func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.Shipment, consumed shipment.Consumed, scope string,
+	rel *release.Release, now time.Time) (*judgement, error) {
+	const at = "/args/shipment_id"
+	j := &judgement{entries: []shipment.Entry{{Name: "guards_checked_at", Value: kernel.FormatTimestamp(now)}},
+		bindings: release.Bindings{Screenings: []release.ScreeningBinding{}, Deliveries: []release.DeliveryBinding{},
+			QualityReleases: []release.QualityBinding{}}}
+	b := cnxapi.OrderBinding{OrderID: sh.Order.OrderID, OrderRevision: sh.Order.OrderRevision, OrderHash: sh.Order.OrderHash}
+	cv, err := s.Upstream.Compliance.GuardTradeCompliance(ctx, exec, b, now)
+	if err != nil {
+		return nil, err
+	}
+	j.entries = append(j.entries, shipment.Entry{Name: shipment.GuardTradeCompliance, Value: cv.Evidence()})
+	j.bindings.TradeCompliance = &release.ComplianceBinding{Status: cv.Status, CheckID: cv.CheckID, DecisionID: cv.DecisionID,
+		LicenseRequired: cv.LicenseRequired, RegulationID: cv.RegulationID, RegulationRevision: cv.RegulationRevision, ValidUntil: cv.ValidUntil}
+	clear := cv.Check(at)
+	if err = j.note(shipment.GuardTradeCompliance, upstream(clear)); err != nil {
+		return nil, err
+	}
+	if clear == nil && cv.LicenseRequired {
+		lv, err := s.Upstream.Compliance.GuardExportLicense(ctx, exec, sh.ID, now)
+		if err != nil {
+			return nil, err
+		}
+		j.entries = append(j.entries, shipment.Entry{Name: shipment.GuardExportLicense, Value: lv.Evidence()})
+		j.bindings.ExportLicense = &release.LicenseBinding{Status: lv.Status, LicenseID: lv.LicenseID, AllocationID: lv.AllocationID,
+			LinesHash: lv.LinesHash, Quantity: lv.Quantity, Unit: lv.Unit}
+		if err = j.note(shipment.GuardExportLicense, upstream(lv.Check(at, licenseLines(sh)))); err != nil {
+			return nil, err
+		}
+	}
+	for _, id := range sh.ScreenedParties() {
+		g, err := s.Upstream.Screening.GuardScreening(ctx, exec, id, now)
+		if err != nil {
+			return nil, err
+		}
+		e, refused := sh.CheckScreening(id, shipment.ScreeningVerdict{Clear: g.Clear, Status: g.Status, Reason: g.Reason, ScreeningID: g.ScreeningID,
+			PartyRevision: g.PartyRevision})
+		j.entries = append(j.entries, e)
+		j.bindings.Screenings = append(j.bindings.Screenings, release.ScreeningBinding{PartyID: id, Status: g.Status, ScreeningID: g.ScreeningID,
+			PartyRevision: g.PartyRevision})
+		if err = j.note(shipment.GuardPartyScreening, refused); err != nil {
+			return nil, err
+		}
+	}
+	before := sh.Before(consumed)
+	for _, u := range sh.Deliveries() {
+		l, err := s.Upstream.Deliveries.GuardDeliveryLine(ctx, exec, api.DeliveryLineRef{DeliveryID: u.Ref.DeliveryID, LineID: u.Ref.LineID,
+			Version: u.Version})
+		if err != nil {
+			return nil, err
+		}
+		e, refused := sh.CheckDelivery(u, deliveryVerdict(l), before.Deliveries[u.Ref])
+		j.entries = append(j.entries, e)
+		j.bindings.Deliveries = append(j.bindings.Deliveries, release.DeliveryBinding{DeliveryID: u.Ref.DeliveryID, LineID: u.Ref.LineID,
+			Version: u.Version, Status: l.Status, VerifiedVersion: l.VerifiedVersion, Verified: l.VerifiedQuantity})
+		if err = j.note(shipment.GuardSupplierDelivery, refused); err != nil {
+			return nil, err
+		}
+	}
+	for _, u := range sh.Releases() {
+		v, err := s.Upstream.Releases.GuardRelease(ctx, exec, releaseRef(u.ID), now)
+		if err != nil {
+			return nil, err
+		}
+		e, refused := sh.CheckRelease(u, releaseVerdict(v), before.Releases[u.ID])
+		j.entries = append(j.entries, e)
+		j.bindings.QualityReleases = append(j.bindings.QualityReleases, release.QualityBinding{ReleaseID: u.ID, Status: v.Status,
+			Released: v.Quantity, ValidUntil: v.ValidUntil})
+		if err = j.note(shipment.GuardQualityRelease, refused); err != nil {
+			return nil, err
+		}
+	}
+	q := stlapi.PaymentQuery{OrderID: sh.Order.OrderID, OrderRevision: sh.Order.OrderRevision, Scope: scope, At: now}
+	pv, err := s.Upstream.Payments.GuardPaymentCondition(ctx, exec, q)
+	if err != nil {
+		return nil, err
+	}
+	j.payment = paymentVerdict(pv)
+	e, exception, refused := rel.CheckPayment(j.payment, now, at)
+	j.entries, j.exception = append(j.entries, e), exception
+	p := j.payment
+	j.bindings.Payment = &release.PaymentBinding{Scope: scope, Status: p.Status, Reason: p.Reason, OrderRevision: p.OrderRevision,
+		OrderHash: p.OrderHash, Currency: p.Currency, RequiredMinor: p.RequiredMinor, AppliedMinor: p.AppliedMinor, StageID: p.StageID,
+		ShortfallMinor: p.ShortfallMinor, ExceptionSeq: exception}
+	if err = j.note(shipment.GuardPaymentCondition, refused); err != nil {
+		return nil, err
+	}
+	ov, err := s.Upstream.Orders.GuardOrder(ctx, exec, binding(sh.Order))
+	if err != nil {
+		return nil, err
+	}
+	e, refused = shipment.CheckOrder(sh.Order, orderVerdict(ov), at)
+	j.entries = append(j.entries, e)
+	j.bindings.Order = &release.OrderBindingSeen{OrderID: sh.Order.OrderID, OrderRevision: ov.OrderRevision, OrderHash: sh.Order.OrderHash,
+		Status: ov.Status}
+	if err = j.note(shipment.GuardOrder, refused); err != nil {
+		return nil, err
+	}
+	if err = j.note(release.GuardFulfilment, sh.CheckOrderLines(before.OrderLines)); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+// releaseRoots locks, after shipment sh (held FOR UPDATE by the caller), the order's fulfilment root
+// FOR UPDATE, reads what the order's confirmed shipments consumed, and locks the shipment's release
+// of releaseScope FOR UPDATE (nil when it has none): FUL's own roots before the authority guard.
+func releaseRoots(ctx context.Context, exec bentopg.Executor, sh *shipment.Shipment, releaseScope string) (shipment.Consumed, *release.Release, error) {
+	sc := scope(ctx)
+	if err := postgres.LockFulfilment(ctx, exec, sc, sh.Order.OrderID); err != nil {
+		return shipment.Consumed{}, nil, err
+	}
+	var refs []shipment.DeliveryRef
+	var ids []string
+	for _, u := range sh.Deliveries() {
+		refs = append(refs, u.Ref)
+	}
+	for _, u := range sh.Releases() {
+		ids = append(ids, u.ID)
+	}
+	consumed, err := postgres.LoadConsumed(ctx, exec, sc, sh.Order.OrderID, refs, ids)
+	if err != nil {
+		return consumed, nil, err
+	}
+	rel, err := postgres.LoadRelease(ctx, exec, sc, sh.ID, releaseScope, postgres.ForUpdate)
+	return consumed, rel, err
+}

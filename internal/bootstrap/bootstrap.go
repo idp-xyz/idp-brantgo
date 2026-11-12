@@ -274,10 +274,9 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		// FUL last of S5. The CNX and STL guards and FUL's commercial release are extension points
-		// until S5 unit C1, recorded as not wired.
+		// FUL last of S5: its commercial release and confirmation call CNX's and STL's guards (C1).
 		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.PURDeliveries(c.PUR),
-			Screening: ful.PTYScreening(), Sources: c.EVD})
+			Screening: ful.PTYScreening(), Sources: c.EVD, Compliance: ful.CNXCompliance(), Payments: ful.STLPayments()})
 	}
 	if err != nil {
 		return nil, err

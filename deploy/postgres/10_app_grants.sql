@@ -354,3 +354,12 @@ GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed
               guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at,
               cancel_reason) ON brant_ful.shipment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;
+
+-- FUL commercial release (S5-07): a release moves only by an evaluation, an exception or its
+-- consumption, once (trigger); evaluations and exceptions are only inserted; nothing is deleted.
+-- FOR UPDATE on releases needs the column grants. The release commands and shipment.confirm call
+-- CNX's, PTY's, PUR's, QLT's, STL's and TRD's guard functions, granted above.
+GRANT SELECT, INSERT ON brant_ful.commercial_release, brant_ful.commercial_release_evaluation, brant_ful.commercial_release_exception
+    TO brant_app;
+GRANT UPDATE (status, row_version, evaluations, exceptions, consumed_command, consumed_by_kind, consumed_by_id, consume_epoch, consumed_at,
+              consume_evidence_ids, consume_entries, consume_entries_sha256, document_release_kind) ON brant_ful.commercial_release TO brant_app;
