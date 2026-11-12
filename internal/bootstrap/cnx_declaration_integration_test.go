@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -707,6 +708,7 @@ func TestCNAT02DeclaresMultiLineLotsFromFUL(t *testing.T) {
 	w.shipment("shipment.1", "30", "commitment.1", "commitment.2")
 	w.shipment("shipment.2", "30", "commitment.3", "commitment.4")
 	for _, id := range []string{"shipment.1", "shipment.2"} {
+		w.granted(id)
 		_, err := w.confirm(w.merch, id, 1)
 		w.must(err)
 	}
@@ -815,6 +817,23 @@ func TestExportLicenceOnAFULShipmentReleasedOnADeclarationReceipt(t *testing.T) 
 	_, err = w.cnx.AllocateLicense(doc, cnxapi.AllocateLicense{IdempotencyKey: w.key(), LicenseID: reg.LicenseID, AllocationID: "alloc.none",
 		Target: cnxapi.ExportTarget{Kind: cnxapi.TargetShipment, ID: "shipment.none"}})
 	w.want(err, kernel.CodeReferenceInvalid)
+	// ExportLicenseGuard v1 covers the shipment's lines exactly as FUL holds them (the allocation's
+	// lines hash is of the lines CNX's adapter read from FUL), as FUL's release will check them.
+	sv, err := w.ful.GetShipment(w.merch, "shipment.L")
+	w.must(err)
+	var lines []cnxapi.ShipmentLine
+	for _, l := range sv.Lines {
+		lines = append(lines, cnxapi.ShipmentLine{LineID: l.LineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision, Quantity: l.Quantity, Unit: l.UnitID})
+	}
+	w.must(w.cx.inApp("company.A", func(ctx context.Context, exec bentopg.Executor) error {
+		v, err := cnxapi.ScanExportLicenseGuard("shipment.L", exec.QueryRow(ctx, cnxapi.ExportLicenseGuardSQL,
+			cnxapi.ExportLicenseGuardArgs("shipment.L", time.Now())...).Scan)
+		if err != nil {
+			return err
+		}
+		return v.Check("/args/shipment_id", lines)
+	}))
+	w.granted("shipment.L")
 	_, err = w.confirm(w.merch, "shipment.L", 1)
 	w.must(err)
 	_, err = w.registerLot(w.merch, "lot.L", "shipment.L", lotLine("E1", "S1", "50"))
@@ -866,6 +885,7 @@ func TestExportLicenceOnAFULShipmentReleasedOnADeclarationReceipt(t *testing.T) 
 func TestTaxRefundCaseBindsTheExportDateOfTheDeclaration(t *testing.T) {
 	w := newDeclWorld(t)
 	w.shipment("shipment.T", "60", "commitment.1")
+	w.granted("shipment.T")
 	_, err := w.confirm(w.merch, "shipment.T", 1)
 	w.must(err)
 	_, err = w.registerLot(w.merch, "lot.T", "shipment.T", lotLine("E1", "S1", "60"))
@@ -919,6 +939,7 @@ func TestTaxRefundCaseBindsTheExportDateOfTheDeclaration(t *testing.T) {
 func TestDeclarationsAndBundlesOverHTTP(t *testing.T) {
 	w := newDeclWorld(t)
 	w.shipment("shipment.H", "40", "commitment.1")
+	w.granted("shipment.H")
 	_, err := w.confirm(w.merch, "shipment.H", 1)
 	w.must(err)
 	_, err = w.registerLot(w.merch, "lot.H", "shipment.H", lotLine("E1", "S1", "40"))
@@ -1001,6 +1022,45 @@ func TestDeclarationsAndBundlesOverHTTP(t *testing.T) {
 		{"/api/brant/v1/cnx/document_bundles", "document_bundles"}} {
 		if status, list := doc1.do("GET", x.path, nil); status != 200 || len(list[x.member].([]any)) != 1 {
 			t.Fatalf("%s %d %v", x.path, status, list)
+		}
+	}
+}
+
+// CNX-INV-003 concurrency ("两份回执并发登记按案件根锁裁决"): two receipts recorded at once on the same
+// version of a case queue on its root FOR UPDATE; one is recorded, the other is VERSION_CONFLICT and
+// records nothing; sent again on the new version it is stale or follows, never both.
+func TestConcurrentReceiptsAreDecidedByTheCaseRoot(t *testing.T) {
+	w := newInvoiceWorld(t)
+	d := w.declare
+	for round := 0; round < 4; round++ {
+		lot := "lot.cc" + strconv.Itoa(round)
+		w.dlot(lot, "x1", "10", "PCS")
+		s := d.submitted(lot, items("x1"))
+		received, accepted := d.receipt(s, cnxapi.DeclarationReceived, 1), d.receipt(s, cnxapi.DeclarationAccepted, 2)
+		var wg sync.WaitGroup
+		errs := make([]error, 2)
+		for i, r := range []cnxapi.RecordReceipt{received, accepted} {
+			wg.Add(1)
+			go func(i int, r cnxapi.RecordReceipt) {
+				defer wg.Done()
+				_, errs[i] = w.cnx.RecordReceipt(d.doc, r)
+			}(i, r)
+		}
+		wg.Wait()
+		ok, conflict := 0, 0
+		for _, err := range errs {
+			switch code(err) {
+			case "OK":
+				ok++
+			case kernel.CodeVersionConflict:
+				conflict++
+			default:
+				t.Fatalf("round %d: %v", round, err)
+			}
+		}
+		v := w.declaration(s.DeclarationID)
+		if ok != 1 || conflict != 1 || len(v.Receipts) != 1 || v.RowVersion != s.RowVersion+1 {
+			t.Fatalf("round %d: %d recorded, %d conflicts, %+v", round, ok, conflict, v.Receipts)
 		}
 	}
 }

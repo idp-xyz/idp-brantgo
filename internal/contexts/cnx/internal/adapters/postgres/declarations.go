@@ -130,7 +130,7 @@ func InsertVersion(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	_, err := exec.Exec(ctx, `INSERT INTO brant_cnx.declaration_version (tenant_id, company_id, declaration_id, version_no, kind, mapping, document,
 		document_sha256, receipt_id, created_by_kind, created_by_id, authority_epoch, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, nullif($9, ''), $10, $11, $12, $13)`,
-		scoped(scope, v.DeclarationID, v.Document.Version, v.Kind, v.Mapping, string(v.Bytes), v.SHA256, v.ReceiptID, string(by.Kind), by.ID, epoch,
+		scoped(scope, v.DeclarationID, v.Version, v.Kind, v.Mapping, string(v.Bytes), v.SHA256, v.ReceiptID, string(by.Kind), by.ID, epoch,
 			kernel.Instant(at))...)
 	return err
 }

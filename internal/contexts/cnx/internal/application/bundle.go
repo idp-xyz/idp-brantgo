@@ -53,12 +53,11 @@ func bundleRequest(cmd api.Command) (name, key string, args any) {
 // visibleDeclaration is Visible's part for declarations and bundles, which are company-wide like
 // licences: ok reports whether command is one of them.
 func visibleDeclaration(ctx context.Context, exec bentopg.Executor, command, id string) (ok, visible bool, err error) {
-	switch {
-	case command == api.CommandPrepareDeclaration || command == api.CommandConfirmDeclaration || command == api.CommandRecordSubmission ||
-		command == api.CommandRecordReceipt:
+	switch command {
+	case api.CommandPrepareDeclaration, api.CommandConfirmDeclaration, api.CommandRecordSubmission, api.CommandRecordReceipt:
 		c, err := postgres.LoadDeclaration(ctx, exec, scope(ctx), id, postgres.NoLock)
 		return true, c != nil, err
-	case command == api.CommandCheckBundle || command == api.CommandResolveReconciliation:
+	case api.CommandCheckBundle, api.CommandResolveReconciliation:
 		b, err := postgres.LoadBundle(ctx, exec, scope(ctx), id, postgres.NoLock)
 		return true, b != nil, err
 	}
