@@ -23,7 +23,7 @@ func OpenAPI() ([]byte, error) {
 	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
 		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{}),
 		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{}),
-		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{})}
+		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{}), qltCommands(struct{ QLT }{})}
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -194,6 +194,12 @@ var reads = []readRoute{
 		"A purchase draft: its state now (prepared, supply_expired or voided), the exact document its hash covers, lines, totals and void; the caller's access to the order and every supply condition is re-checked", []string{"id"}, false},
 	{"/api/brant/v1/pur/orders/{id}/allocations", "pur.demand_allocation.get", "pur",
 		"The demand allocation of every drafted line of a sales order: demand, allocated, remaining and the drafts holding it", []string{"id"}, false},
+	{"/api/brant/v1/qlt/inspections/{id}", "qlt.inspection.get", "qlt",
+		"An inspection: its subject as PUR bound it, result, sampling, standard and report bindings, inspector, disposition and supersession; the caller's access to the subject and the cited sources is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/qlt/quality_releases/{id}", "qlt.quality_release.get", "qlt",
+		"A quality release: its state now (granted, not_yet_valid, expired or revoked), scope, quantity, validity, the conforming and released quantities it was judged on, and its revocation", []string{"id"}, false},
+	{"/api/brant/v1/qlt/subjects/{kind}/{id}/lines/{line_id}", "qlt.inspection_subject.get", "qlt",
+		"A subject's quality standing now: what its valid inspections cover and find conforming, what was released (revoked releases included) and what may still be released", []string{"kind", "id", "line_id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},

@@ -26,6 +26,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/contexts/pur"
+	"go.idp.xyz/idp-brant/internal/contexts/qlt"
 	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/contexts/trd"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -158,6 +159,7 @@ type Contexts struct {
 	CST *cst.Module
 	TRD *trd.Module
 	PUR *pur.Module
+	QLT *qlt.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -223,6 +225,14 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	if err == nil {
 		c.PUR, err = pur.New(db, pur.Upstream{Orders: pur.TRDOrders(c.TRD), Supply: c.SUP, Snapshots: c.CST, Parties: c.PTY, Configs: c.POL,
 			Skus: c.CAT})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// PUR publishes no InspectionSubject v1 yet (S5 unit A4): QLT's port to it answers
+		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup.
+		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.SubjectsNotWired(), Sources: c.EVD, Parties: c.PTY})
 	}
 	if err != nil {
 		return nil, err
@@ -315,7 +325,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
 	if cfg.ReplaySinkURL != "" {
 		replayer, err := p.Replayer(ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout})

@@ -221,3 +221,17 @@ GRANT UPDATE (status, row_version, voided_by_kind, voided_by_id, void_epoch, voi
     ON brant_pur.purchase_draft TO brant_app;
 GRANT UPDATE (order_revision, demand, allocated, row_version, updated_at) ON brant_pur.demand_allocation TO brant_app;
 GRANT UPDATE (released_version, released_at) ON brant_pur.allocation_entry TO brant_app;
+
+-- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
+-- once each (trigger); disposition items are written with the disposition and never change; a
+-- release is inserted granted on the quantities its subject's rows give (trigger) and only revoked,
+-- once; nothing is deleted; the ledger only grows. FOR UPDATE on inspections and releases needs the
+-- column grants. FUL's transactions execute QualityReleaseGuard v1.
+GRANT USAGE ON SCHEMA brant_qlt TO brant_app;
+GRANT SELECT, INSERT ON brant_qlt.inspection, brant_qlt.disposition_item, brant_qlt.quality_release, brant_qlt.action_result,
+    brant_qlt.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, disposed_by_kind, disposed_by_id, dispose_epoch, disposed_at, disposition_reason,
+    disposition_evidence_ids, superseded_by_inspection_id, superseded_at) ON brant_qlt.inspection TO brant_app;
+GRANT UPDATE (status, row_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence_ids)
+    ON brant_qlt.quality_release TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_qlt.guard_quality_release_v1(text, timestamptz) TO brant_app;
