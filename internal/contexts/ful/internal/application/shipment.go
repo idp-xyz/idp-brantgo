@@ -18,13 +18,15 @@ import (
 // prepareCommand runs shipment.prepare. Before the transaction it reads the order from TRD, the
 // releases from QLT and the delivery lines from PUR; inside it, it locks the shipment its ID names,
 // or else opens and locks the order's fulfilment root, reads what the order's confirmed shipments
-// consumed, decides, re-checks the order with OrderGuard v1 and writes the shipment. Nothing is
-// reserved: shipment.confirm decides again.
+// consumed, decides, re-checks the order with OrderGuard v1 and writes the shipment with the price of
+// each line at the order revision it binds (S5-03b). Nothing is reserved: shipment.confirm decides
+// again.
 type prepareCommand struct {
 	s          Service
 	cmd        api.PrepareShipment
 	req        shipment.Request
 	order      *shipment.OrderFact
+	prices     shipment.PriceFact
 	releases   map[string]shipment.ReleaseFact
 	deliveries map[shipment.DeliveryRef]shipment.DeliveryFact
 	existing   *shipment.Shipment
@@ -47,7 +49,7 @@ func (h *prepareCommand) Prepare(ctx context.Context) error {
 		return err
 	}
 	if f, ok := orders[h.req.OrderID]; ok {
-		h.order = orderFact(f)
+		h.order, h.prices = orderFact(f), priceFact(f)
 	}
 	var ids []string
 	var refs []api.DeliveryLineRef
@@ -125,6 +127,10 @@ func (h *prepareCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	prices, err := s.Prices(h.prices)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	v, err := h.s.Upstream.Orders.GuardOrder(ctx, exec, binding(s.Order))
 	if err != nil {
 		return action.Outcome{}, err
@@ -133,6 +139,9 @@ func (h *prepareCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 		return action.Outcome{}, err
 	}
 	if err = postgres.InsertShipment(ctx, exec, scope(ctx), s); err != nil {
+		return action.Outcome{}, err
+	}
+	if err = postgres.InsertPrices(ctx, exec, scope(ctx), s, prices); err != nil {
 		return action.Outcome{}, err
 	}
 	return action.Outcome{ObjectID: s.ID, RowVersion: s.RowVersion, Status: s.Status}, nil
