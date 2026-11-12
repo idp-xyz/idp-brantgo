@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -109,9 +108,6 @@ func (h *confirmCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	for _, u := range s.Deliveries() {
 		l, err := h.s.Upstream.Deliveries.GuardDeliveryLine(ctx, exec, api.DeliveryLineRef{DeliveryID: u.Ref.DeliveryID, LineID: u.Ref.LineID,
 			Version: u.Version})
-		if errors.Is(err, ErrDeliveriesNotWired) {
-			return action.Outcome{}, deliveriesNotWired(shipment.StoredLinePath(u.Line, "supplier_delivery"))
-		}
 		if err != nil {
 			return action.Outcome{}, err
 		}

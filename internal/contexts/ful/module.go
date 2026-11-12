@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/upstream"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/application"
+	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -50,10 +51,6 @@ type (
 	ExtensionCall = application.ExtensionCall
 )
 
-// ErrDeliveriesNotWired is what the Deliveries port answers while PUR publishes no supplier
-// deliveries.
-var ErrDeliveriesNotWired = application.ErrDeliveriesNotWired
-
 // TRDOrders is the port to TRD over its ActiveOrderRef v1 lookup and OrderGuard v1.
 func TRDOrders(orders trdapi.ActiveOrderLookups) Orders { return upstream.TRD{Orders: orders} }
 
@@ -63,9 +60,11 @@ func QLTReleases(releases qltapi.ReleaseLookups) Releases { return upstream.QLT{
 // PTYScreening is the port to PTY's PartyScreeningGuard v1.
 func PTYScreening() Screening { return upstream.PTY{} }
 
-// DeliveriesNotWired is the port to PUR while PUR publishes no supplier deliveries (S5 unit B3):
-// shipment.prepare and shipment.confirm answer DEPENDENCY_NOT_SUPPORTED.
-func DeliveriesNotWired() Deliveries { return application.NotWired{} }
+// PURDeliveries is the port to PUR over its supplier delivery lookup (ResolveDeliveryLines) and
+// SupplierDeliveryGuard v1 (R59).
+func PURDeliveries(deliveries purapi.DeliveryLookups) Deliveries {
+	return upstream.PUR{Deliveries: deliveries}
+}
 
 // New wires FUL to db, a transaction owner that belongs to FUL alone, and to its upstreams.
 func New(db *bentopg.DB, up Upstream) (*Module, error) {

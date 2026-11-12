@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -59,30 +58,10 @@ type DeliveryLine struct {
 // Deliveries is FUL's port to PUR's supplier deliveries (R59): ResolveDeliveryLines before FUL's
 // transaction (only lines the caller reads), GuardDeliveryLine — SupplierDeliveryGuard v1,
 // brant_pur.guard_supplier_delivery_v1(delivery_id, line_id, version), which locks the delivery
-// FOR SHARE — with FUL's executor inside it. Either answers ErrDeliveriesNotWired while PUR does
-// not publish them.
+// FOR SHARE — with FUL's executor inside it.
 type Deliveries interface {
 	ResolveDeliveryLines(ctx context.Context, refs []api.DeliveryLineRef) (map[api.DeliveryLineRef]DeliveryLine, error)
 	GuardDeliveryLine(ctx context.Context, exec bentopg.Executor, ref api.DeliveryLineRef) (DeliveryLine, error)
-}
-
-// ErrDeliveriesNotWired is what Deliveries answers while PUR publishes no supplier deliveries (S5
-// unit B3): shipment.prepare and shipment.confirm answer DEPENDENCY_NOT_SUPPORTED.
-var ErrDeliveriesNotWired = errors.New("ful: PUR's supplier deliveries are not wired")
-
-// NotWired is the Deliveries port while PUR publishes no supplier deliveries.
-type NotWired struct{}
-
-func (NotWired) ResolveDeliveryLines(context.Context, []api.DeliveryLineRef) (map[api.DeliveryLineRef]DeliveryLine, error) {
-	return nil, ErrDeliveriesNotWired
-}
-
-func (NotWired) GuardDeliveryLine(context.Context, bentopg.Executor, api.DeliveryLineRef) (DeliveryLine, error) {
-	return DeliveryLine{}, ErrDeliveriesNotWired
-}
-
-func deliveriesNotWired(path string) error {
-	return api.Reject(api.CodeDependencyNotSupported, path, "PUR's supplier deliveries (SupplierDeliveryGuard v1) are not wired")
 }
 
 // ExtensionCall is what an extension guard is asked about: the shipment, the order it binds and

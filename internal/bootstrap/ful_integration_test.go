@@ -429,10 +429,10 @@ func TestShipmentPreparePackConfirmBT11(t *testing.T) {
 	}
 }
 
-// D-10: the stock route waits for STK; in the composed process PUR publishes no supplier deliveries
-// yet (S5 unit B3), so a supplier direct shipment is DEPENDENCY_NOT_SUPPORTED there too. Nothing is
-// stored either way.
-func TestStockRouteAndUnwiredDeliveries(t *testing.T) {
+// D-10: the stock route waits for STK. The composed process asks PUR itself (ful.PURDeliveries): a
+// delivery line PUR does not have, such as this world's in-memory one, is REFERENCE_INVALID. Nothing
+// is stored either way.
+func TestStockRouteAndUnknownDeliveries(t *testing.T) {
 	w := newFulWorld(t)
 	rel := w.released("commitment.1", "50")
 	d := w.delivered("commitment.1", "50")
@@ -444,15 +444,16 @@ func TestStockRouteAndUnwiredDeliveries(t *testing.T) {
 	}
 	composed := w.c.FUL.PrepareShipment
 	_, err = composed(w.merch, w.prepareCmd("shipment.composed", "10", d, rel))
-	if code(err) != fulapi.CodeDependencyNotSupported || path(err) != "/args/lines/0/supplier_delivery" {
-		t.Fatalf("not wired %s at %s", code(err), path(err))
+	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/lines/0/supplier_delivery" {
+		t.Fatalf("a delivery line PUR does not have: %s at %s", code(err), path(err))
 	}
 	if w.count("company.A", "brant_ful.shipment") != 0 || w.count("company.A", "brant_ful.order_fulfilment") != 0 {
 		t.Fatal("nothing stored")
 	}
 	audit, err := w.c.FUL.Audit(w.assign("admin.1", "administrator"))
 	w.must(err)
-	if len(audit) != 2 || audit[0].Outcome != "rejected" || audit[0].Code != fulapi.CodeDependencyNotSupported {
+	if len(audit) != 2 || audit[0].Outcome != "rejected" || audit[0].Code != fulapi.CodeDependencyNotSupported ||
+		audit[1].Code != kernel.CodeReferenceInvalid {
 		t.Fatalf("audit %+v", audit)
 	}
 }
