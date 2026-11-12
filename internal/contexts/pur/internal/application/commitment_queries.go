@@ -48,11 +48,56 @@ func commitmentView(c *commitment.Commitment, now time.Time) api.CommitmentView 
 		v.IssueFileID, v.IssueFileSHA256 = is.FileID, is.FileSHA256
 	}
 	for _, f := range c.Confirmations {
-		v.Confirmations = append(v.Confirmations, api.ConfirmationView{CommitmentVersion: f.Version, Result: f.Result, ReceivedAt: f.ReceivedAt,
-			Deviation: f.Deviation, SupplierReference: f.SupplierReference, Evidence: evidenceView(f.Evidence), RecordedBy: f.By, RecordedAt: f.At,
-			AuthorityEpoch: f.Epoch})
+		v.Confirmations = append(v.Confirmations, api.ConfirmationView{CommitmentVersion: f.Version, CommitmentRevision: f.Revision,
+			Result: f.Result, ReceivedAt: f.ReceivedAt, Deviation: f.Deviation, SupplierReference: f.SupplierReference,
+			Evidence: evidenceView(f.Evidence), RecordedBy: f.By, RecordedAt: f.At, AuthorityEpoch: f.Epoch})
+	}
+	v.Revision, v.Lines, v.Revisions, v.CancelEvidence = c.Revision, []api.CommitmentLineView{}, []api.RevisionView{}, []api.Evidence{}
+	for _, r := range c.Revisions {
+		v.Revisions = append(v.Revisions, api.RevisionView{Revision: r.Number, Kind: r.Kind, ChangeID: r.ChangeID, OrderRevision: r.OrderRevision,
+			OrderHash: r.OrderHash, DocumentHash: r.DocumentHash, Lines: revisionLines(r.Lines), CreatedBy: r.By, CreatedAt: r.At,
+			AuthorityEpoch: r.Epoch})
+	}
+	if x := c.Cancellation; x != nil {
+		v.CancelledBy, v.CancelledAt, v.CancelEpoch, v.CancelReason, v.CancelEvidence = x.By, x.At, x.Epoch, x.Reason, evidenceView(x.Evidence)
 	}
 	return v
+}
+
+// revisionLines are lines as the reads show them.
+func revisionLines(ls []commitment.LineQuantity) []api.RevisionLineView {
+	out := []api.RevisionLineView{}
+	for _, l := range ls {
+		out = append(out, api.RevisionLineView{OrderLineID: l.OrderLineID, AllocatedQuantity: text(l.Allocated), OverbuyQuantity: text(l.Overbuy),
+			PurchaseQuantity: text(l.Purchased()), SupplierDate: l.SupplierDate})
+	}
+	return out
+}
+
+// withLines completes v, the view of commitment c, with what it buys of each line at its revision in
+// force, what the verified deliveries add up to and whether it is fulfilled; a draft that is not
+// intact leaves the lines out.
+func withLines(ctx context.Context, exec bentopg.Executor, c *commitment.Commitment, v *api.CommitmentView) error {
+	sc := scope(ctx)
+	dr, err := postgres.LoadDraft(ctx, exec, sc, c.DraftID, postgres.NoLock)
+	if err != nil || dr == nil || dr.Verify(sc, "/") != nil {
+		return err
+	}
+	lines, err := c.Lines(dr)
+	if err != nil {
+		return nil //nolint:nilerr // a draft whose document does not decode shows no lines
+	}
+	verified, err := postgres.VerifiedOfCommitment(ctx, exec, sc, c.ID, "")
+	if err != nil {
+		return err
+	}
+	for _, l := range lines {
+		v.Lines = append(v.Lines, api.CommitmentLineView{OrderLineID: l.OrderLineID, AllocatedQuantity: text(l.Allocated),
+			OverbuyQuantity: text(l.Overbuy), PurchaseQuantity: text(l.Purchased()), VerifiedQuantity: text(verified[l.OrderLineID]),
+			SupplierDate: l.SupplierDate})
+	}
+	v.Fulfilled = commitment.IsOpen(c.Status) && commitment.Fulfilled(lines, verified)
+	return nil
 }
 
 func (s Service) refuseRead(ctx context.Context, command, path string) error {
@@ -95,7 +140,7 @@ func (s Service) GetCommitment(ctx context.Context, id string) (api.CommitmentVi
 			return kernel.Reject(kernel.CodeReferenceInvalid, "/id", "The caller no longer reads the commitment's order")
 		}
 		v = commitmentView(c, s.Clock.Now())
-		return nil
+		return withLines(ctx, exec, c, &v)
 	})
 	return v, err
 }
@@ -132,7 +177,11 @@ func (s Service) GetOrderCommitments(ctx context.Context, orderID string) ([]api
 				return err
 			}
 			if c != nil {
-				out = append(out, commitmentView(c, now))
+				v := commitmentView(c, now)
+				if err = withLines(ctx, exec, c, &v); err != nil {
+					return err
+				}
+				out = append(out, v)
 			}
 		}
 		return nil
@@ -176,11 +225,16 @@ func (s Service) ResolveCommitmentLines(ctx context.Context, refs []api.Commitme
 			if err != nil {
 				continue
 			}
-			i := slices.IndexFunc(doc.Lines, func(x draft.DocLine) bool { return x.OrderLineID == ref.OrderLineID })
-			if i < 0 {
+			lines, err := l.c.Lines(l.dr)
+			if err != nil {
 				continue
 			}
-			out[ref] = commitmentLine(l.c, doc.Lines[i])
+			i := slices.IndexFunc(doc.Lines, func(x draft.DocLine) bool { return x.OrderLineID == ref.OrderLineID })
+			q := slices.IndexFunc(lines, func(x commitment.LineQuantity) bool { return x.OrderLineID == ref.OrderLineID })
+			if i < 0 || q < 0 {
+				continue
+			}
+			out[ref] = commitmentLine(l.c, doc.Lines[i], lines[q])
 		}
 		return nil
 	})
@@ -188,17 +242,20 @@ func (s Service) ResolveCommitmentLines(ctx context.Context, refs []api.Commitme
 }
 
 // commitmentLine is line dl of the document of commitment c's draft as InspectionSubject v1 shows
-// it: a line of an issued or confirmed commitment has Code "".
-func commitmentLine(c *commitment.Commitment, dl draft.DocLine) api.CommitmentLine {
+// it, with what c buys of it at its revision in force (q) and the order revision and hash of that
+// revision (S5-19): a line of an issued or confirmed commitment has Code "", one of a cancelled
+// commitment INVALID_STATE.
+func commitmentLine(c *commitment.Commitment, dl draft.DocLine, q commitment.LineQuantity) api.CommitmentLine {
+	orderRevision, orderHash := c.OrderBinding()
 	line := api.CommitmentLine{Ref: api.CommitmentLineRef{CommitmentID: c.ID, OrderLineID: dl.OrderLineID}, Status: c.Status,
-		RowVersion: c.RowVersion, DraftID: c.DraftID, DraftHash: c.DraftHash, OrderID: c.OrderID, OrderRevision: c.OrderRevision,
-		OrderHash: c.OrderHash, SupplierID: c.SupplierID, SkuID: dl.Sku.SkuID, SpecRevision: dl.Sku.SpecRevision, UnitID: dl.UnitRef.ID,
-		UnitRevision: dl.UnitRef.Revision, AllocatedQuantity: dl.AllocatedQuantity, PurchaseQuantity: dl.PurchaseQuantity,
-		SupplierDate: dl.Delivery.SupplierDate}
+		RowVersion: c.RowVersion, DraftID: c.DraftID, DraftHash: c.DraftHash, OrderID: c.OrderID, OrderRevision: orderRevision,
+		OrderHash: orderHash, SupplierID: c.SupplierID, SkuID: dl.Sku.SkuID, SpecRevision: dl.Sku.SpecRevision, UnitID: dl.UnitRef.ID,
+		UnitRevision: dl.UnitRef.Revision, AllocatedQuantity: text(q.Allocated), PurchaseQuantity: text(q.Purchased()),
+		SupplierDate: q.SupplierDate}
 	if c.Issue != nil {
 		line.PONumber = c.Issue.Number
 	}
-	if !commitment.IsCommitted(c.Status) {
+	if !commitment.IsOpen(c.Status) {
 		line.Code = kernel.CodeInvalidState
 	}
 	return line

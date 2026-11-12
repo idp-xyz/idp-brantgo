@@ -257,6 +257,19 @@ GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, 
     ON brant_pur.supplier_delivery_version TO brant_app;
 GRANT UPDATE (verified_quantity) ON brant_pur.supplier_delivery_line TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_pur.guard_supplier_delivery_v1(text, text, bigint) TO brant_app;
+-- PUR commitment changes and cancellation (S5-19): a change is inserted as a draft with its lines and
+-- then changes only by its decision and its application, once each (trigger); a revision is inserted
+-- with its lines and never changes; a commitment moves to its next revision or is cancelled (trigger);
+-- nothing is deleted. The triggers' deferred checks call PUR's helper functions as the application role.
+GRANT SELECT, INSERT ON brant_pur.purchase_commitment_change, brant_pur.purchase_commitment_change_line,
+    brant_pur.purchase_commitment_revision, brant_pur.purchase_commitment_revision_line TO brant_app;
+GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason, acknowledgements,
+              applied_by_kind, applied_by_id, apply_epoch, applied_at, applied_revision, updated_at)
+    ON brant_pur.purchase_commitment_change TO brant_app;
+GRANT UPDATE (revision, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at, cancel_reason, cancel_evidence)
+    ON brant_pur.purchase_commitment TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pur.commitment_lines(text, text, text), brant_pur.commitment_line_verified(text, text, text, text),
+    brant_pur.draft_claims_whole(text, text, text) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a

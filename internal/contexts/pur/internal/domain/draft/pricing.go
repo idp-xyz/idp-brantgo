@@ -235,3 +235,33 @@ func compareDelivery(supply *SupplyDelivery, required RequiredDelivery, now time
 	return DocDelivery{Milestone: supply.Milestone, Place: supply.Place, TimeZone: supply.TimeZone, SupplierDate: supply.Date,
 		RequiredDate: required.Date, SlackDays: int(deadline.Sub(supplied).Hours() / 24)}, nil
 }
+
+// changedDelivery compares, for a commitment change (Change), the supplier's date the change states
+// (stated; "" for the supply condition's) with the order's requirement: the supply's milestone,
+// place and time zone are the order's (DELIVERY_UNRESOLVED, DELIVERY_NOT_COMPARABLE as for a draft),
+// but a date after the order's or already passed is recorded, not refused — SlackDays negative, and
+// ConditionDate the condition's date when the stated one differs — for the change's decision to
+// acknowledge.
+func changedDelivery(supply *SupplyDelivery, stated string, required RequiredDelivery, path string) (DocDelivery, error) {
+	if supply == nil || supply.Kind != DeliveryFixed {
+		return DocDelivery{}, fail(CodeDeliveryUnresolved, path, "The supplier's delivery is a lead time after an event; no date is estimated")
+	}
+	if supply.Milestone != required.Milestone || supply.Place != required.Place || supply.TimeZone != required.TimeZone {
+		return DocDelivery{}, fail(CodeDeliveryNotComparable, path, "Delivery milestone, place or time zone differs from the order's")
+	}
+	date := supply.Date
+	if stated != "" {
+		date = stated
+	}
+	supplied, err1 := time.Parse(time.DateOnly, date)
+	deadline, err2 := time.Parse(time.DateOnly, required.Date)
+	if err1 != nil || err2 != nil {
+		return DocDelivery{}, fail(kernel.CodeReferenceInvalid, path, "A delivery date does not parse")
+	}
+	d := DocDelivery{Milestone: supply.Milestone, Place: supply.Place, TimeZone: supply.TimeZone, SupplierDate: date,
+		RequiredDate: required.Date, SlackDays: int(deadline.Sub(supplied).Hours() / 24)}
+	if date != supply.Date {
+		d.ConditionDate = supply.Date
+	}
+	return d, nil
+}

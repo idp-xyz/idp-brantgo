@@ -1,8 +1,8 @@
 // Package pur assembles the PUR bounded context (procurement and supply allocation: purchase
 // drafts and the demand allocation of active order lines, purchase commitments and supplier
-// confirmations, supplier deliveries on the direct delivery route; commitment changes are a later
-// S5 unit). Code outside PUR uses it through package api; everything under internal/ is private to
-// PUR.
+// confirmations, supplier deliveries on the direct delivery route, commitment changes and
+// cancellation). Code outside PUR uses it through package api; everything under internal/ is private
+// to PUR.
 package pur
 
 import (

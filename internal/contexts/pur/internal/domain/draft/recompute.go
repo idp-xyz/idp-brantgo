@@ -51,7 +51,55 @@ func (d *Draft) Recompute(p *Prepared, path string) error {
 	if err != nil {
 		return fail(kernel.CodeReferenceInvalid, path, "The stored draft is not intact")
 	}
+	return same(stored, p.Doc, path, "the draft", "; prepare a new draft")
+}
+
+// SealRevision returns the document of the commitment revision p proposes (S5-19; p prepared with
+// Change): contract RevisionContract, bound to rev, with the cost snapshot's adoptability as
+// AdoptabilityGuard v1 decided it inside the change's transaction, as canonical JSON with its SHA-256.
+func (p *Prepared) SealRevision(rev DocRevision, status, code, input string) ([]byte, string, error) {
+	doc := p.Doc
+	doc.Contract, doc.Revision = RevisionContract, &rev
+	doc.CostingSnapshot.Adoptability, doc.CostingSnapshot.Code, doc.CostingSnapshot.Input = status, code, input
+	b, err := canonical(doc)
+	if err != nil {
+		return nil, "", err
+	}
+	return b, Hash(b), nil
+}
+
+// DecodeRevision returns a commitment revision's stored document, refusing anything that is not one.
+func DecodeRevision(b []byte) (Document, error) {
+	var doc Document
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&doc); err != nil {
+		return Document{}, err
+	}
+	if again, err := canonical(doc); err != nil || !bytes.Equal(again, b) || doc.Contract != RevisionContract || doc.Revision == nil {
+		return Document{}, fmt.Errorf("draft: not a commitment revision document")
+	}
+	return doc, nil
+}
+
+// RecomputeRevision compares p, a change's proposed revision prepared again on the facts as they are
+// now, with the revision document stored when the change was prepared, field by field, leaving out
+// what Recompute leaves out (PUR-INV-011: 重算与偏差确认同 PUR-INV-009). Any other difference is
+// PURCHASE_DRAFT_STALE at path, naming the first field that differs: the change no longer stands
+// and is prepared anew.
+func RecomputeRevision(stored []byte, p *Prepared, path string) error {
+	doc, err := DecodeRevision(stored)
+	if err != nil {
+		return fail(kernel.CodeReferenceInvalid, path, "The stored change is not intact")
+	}
 	again := p.Doc
+	again.Contract, again.Revision = doc.Contract, doc.Revision
+	return same(doc, again, path, "the change", "; prepare a new change")
+}
+
+// same compares again with stored, leaving out when and by whom the document was prepared, the cost
+// snapshot's adoptability and an S3 preparer's overbuy approval.
+func same(stored, again Document, path, noun, advice string) error {
 	again.CheckedAt, again.PreparedBy, again.AuthorityEpoch = stored.CheckedAt, stored.PreparedBy, stored.AuthorityEpoch
 	c := &again.CostingSnapshot
 	c.Adoptability, c.Code, c.Input = stored.CostingSnapshot.Adoptability, stored.CostingSnapshot.Code, stored.CostingSnapshot.Input
@@ -75,7 +123,7 @@ func (d *Draft) Recompute(p *Prepared, path string) error {
 	if bytes.Equal(a, b) {
 		return nil
 	}
-	return fail(CodePurchaseDraftStale, path, "Recomputed now, the draft differs at "+difference(a, b)+"; prepare a new draft")
+	return fail(CodePurchaseDraftStale, path, "Recomputed now, "+noun+" differs at "+difference(a, b)+advice)
 }
 
 // difference returns the JSON Pointer of the first member where the canonical documents a and b
