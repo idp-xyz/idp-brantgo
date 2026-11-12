@@ -14,7 +14,7 @@
   {
    "code": "sales_clerk",
    "name": "销售经办",
-   "duties": "客户询价、报价编制与提交、客户回复登记、订单准备与生效、订单变更编制、客户主体与联系人草稿；为订单在额度内申请信用占用，超额生成信用决定由信用人员裁决（S5 D-7，负责人决定 2026-11-12）",
+   "duties": "客户询价、报价编制与提交、客户回复登记、订单准备与生效、订单变更编制、客户主体与联系人草稿；为订单在额度内申请信用占用，超额生成信用决定由信用人员裁决（S5 D-7，负责人决定 2026-11-12）；可释放自己申请的、尚未被订单消耗的信用占用（负责人决定 2026-11-12）",
    "permissions": [
     "acceptance.mark_disputed",
     "action.reconcile",
@@ -30,6 +30,7 @@
     "cnx.read",
     "contact.revise",
     "contact.save_draft",
+    "credit.release",
     "credit.reserve",
     "credit_limit.request",
     "credit_note.request",
@@ -191,7 +192,7 @@
   {
    "code": "purchaser",
    "name": "采购",
-   "duties": "供应商询价与报价核实、采购条款、采购草稿与承诺申请、供应商确认与交付、供应商主体与 SKU 草稿；承诺变更编制与应用、承诺取消、订单变更的分配复核",
+   "duties": "供应商询价与报价核实、采购条款、采购草稿与承诺申请、供应商确认与交付、供应商主体与 SKU 草稿；承诺变更编制与应用、承诺取消、订单变更的分配复核；发出采购承诺时取采购订单编号（负责人决定 2026-11-12）",
    "permissions": [
     "action.reconcile",
     "action.record_attempt",
@@ -219,6 +220,7 @@
     "logistics_offer.verify",
     "logistics_offer.withdraw",
     "mfg.read",
+    "number.issue",
     "party.revise",
     "party.save_draft",
     "pol.read",
