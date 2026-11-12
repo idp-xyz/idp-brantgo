@@ -89,6 +89,21 @@ func (w *fulWorld) clearedOnce(order string) {
 	c.cleared(order)
 }
 
+// amendedReleasable makes order id releasable again at TRD's current revision once an amendment was
+// applied (S5 D-9; B4, C4b-STL): compliance clears the new revision (order.amendment.apply does not
+// check it) and the treasurer opens the payment plan review of that revision, which moves the order
+// account to it — what was applied stands on the stages of the same ID (STL-INV-003). In the
+// composed process stl.order_account does that on the relayed OrderAmended; the FUL world relays
+// nothing.
+func (w *fulWorld) amendedReleasable(id string) {
+	w.t.Helper()
+	w.compliance().cleared(id)
+	b := w.orderBinding(id)
+	_, err := w.c.STL.OpenPaymentPlanReview(w.treasury, stlapi.OpenPaymentPlanReview{IdempotencyKey: w.key(), OrderID: id,
+		OrderRevision: b.OrderRevision, OrderHash: b.OrderHash})
+	w.must(err)
+}
+
 // minorText is a USD amount in minor units as a decimal amount (96000 → 960.00).
 func minorText(minor string) string {
 	for len(minor) < 3 {

@@ -127,6 +127,7 @@ func TestExportLotFromPreparedAndConfirmedShipments(t *testing.T) {
 		l.CustomerID != "customer.1" || l.RegisteredBy.ID != "merch.1" || l.Lines[0].OrderLineID != "L1" || l.Lines[0].ShipmentLineQuantity != "50" {
 		t.Fatalf("lot of the prepared shipment %+v", l)
 	}
+	w.granted("shipment.1")
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
 	l = w.exportLot("lot.1")
@@ -135,6 +136,7 @@ func TestExportLotFromPreparedAndConfirmedShipments(t *testing.T) {
 		t.Fatalf("lot after the confirmation %+v", l)
 	}
 
+	w.granted("shipment.2")
 	_, err = w.confirm(w.merch, "shipment.2", 1)
 	w.must(err)
 	if r, err := w.registerLot(w.milestoneAgent(), "lot.2", "shipment.2", lotLine("E1", "S1", "70")); err != nil || r.Status != fulapi.LotRegistered {
@@ -168,6 +170,7 @@ func TestExportLotMarkedForReviewWhenTheConfirmationDiffers(t *testing.T) {
 	}
 	_, err := w.registerLot(w.merch, "lot.a", "shipment.a", lotLine("E1", "S1", "30"))
 	w.must(err)
+	w.granted("shipment.a")
 	_, err = w.confirm(w.merch, "shipment.a", 1)
 	w.must(err)
 	a := w.exportLot("lot.a")
@@ -190,6 +193,7 @@ func TestExportLotMarkedForReviewWhenTheConfirmationDiffers(t *testing.T) {
 		t.Fatalf("a lot of a cancelled shipment: %s at %s", code(err), path(err))
 	}
 
+	w.granted("shipment.c")
 	_, err = w.confirm(w.merch, "shipment.c", 1)
 	w.must(err)
 	_, err = w.registerLot(w.merch, "lot.c", "shipment.c", lotLine("E1", "S1", "5"))
@@ -218,6 +222,7 @@ func TestExportLotsMapSplitShipmentsCNAT02(t *testing.T) {
 				{LineID: "S1", OrderLineID: "L1", Quantity: "30", SupplierDelivery: d1, QualityReleaseID: rel1},
 				{LineID: "S2", OrderLineID: "L1", Quantity: "30", SupplierDelivery: d2, QualityReleaseID: rel2}}})
 		w.must(err)
+		w.granted(id)
 		_, err = w.confirm(w.merch, id, 1)
 		w.must(err)
 	}
@@ -283,6 +288,7 @@ func TestShipmentLineAndExportLotLookups(t *testing.T) {
 	d := w.delivered("commitment.1", "100")
 	_, err := w.prepare(w.merch, "shipment.1", "50", d, rel)
 	w.must(err)
+	w.granted("shipment.1")
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
 	_, err = w.prepare(w.merch2, "shipment.2", "20", d, rel)
@@ -433,6 +439,8 @@ func TestExportLotRegistrationMeetsConfirmationAndCancellation(t *testing.T) {
 		_, err := w.prepare(w.merch, id, "10", d, rel)
 		w.must(err)
 	}
+	w.granted("shipment.a")
+	w.granted("shipment.b")
 	register := func(lot, shipment string) func() error {
 		return func() error {
 			_, err := w.registerLot(w.merch, lot, shipment, lotLine("E1", "S1", "10"))

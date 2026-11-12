@@ -64,14 +64,15 @@ func (w *fulWorld) onOrder(o trdapi.OrderReceipt) func() {
 }
 
 // sc08 is SC-08's order before the difference is resolved: order.quote.sc08 amended to 30/70
-// before shipment (revision 2), cleared by compliance, its account open; 288.00 received and
+// before shipment (revision 2; no stage after shipment, so no credit reservation for it), revision
+// 2 cleared by compliance (activeOrder cleared revision 1 only), its account open; 288.00 received and
 // applied to P1; 672.00 remitted of which 670.00 credited with 2.00 bank charges on the advice,
 // 670.00 applied to P2 (the 2.00 is unexplained and cannot be applied, STL-INV-006); shipment
 // shipment.sc08 of all 120 PCS prepared on its own release and delivery line.
 func (w *fulWorld) sc08() trdapi.OrderReceipt {
 	w.t.Helper()
 	o := w.amendTerms(w.activeOrder("quote.sc08"), "amendment.sc08", sc08Stages)
-	w.cnx.cleared(o.ObjectID)
+	w.compliance().cleared(o.ObjectID)
 	if snap := w.account(o.ObjectID); len(snap.Stages) != 2 || snap.Stages[0].AmountMinor != "28800" || snap.Stages[1].AmountMinor != "67200" ||
 		snap.Stages[1].Trigger != polapi.TriggerBeforeShipment {
 		w.t.Fatalf("SC-08 terms %+v", snap.Stages)
@@ -89,13 +90,12 @@ func (w *fulWorld) sc08() trdapi.OrderReceipt {
 	return o
 }
 
-// shortOrder activates order "order.<quote>" (960.00, 100 % before shipment), clears it, opens its
-// account with 959.00 applied (1.00 short) and prepares shipment id of 100 PCS on release
-// rel.commitment.<quote suffix> and its delivery line.
+// shortOrder activates order "order.<quote>" (960.00, 100 % before shipment; activeOrder has
+// compliance clear it), opens its account with 959.00 applied (1.00 short) and prepares shipment
+// id of 100 PCS on release rel.commitment.<quote suffix> and its delivery line.
 func (w *fulWorld) shortOrder(quote, id string) trdapi.OrderReceipt {
 	w.t.Helper()
 	o := w.activeOrder(quote)
-	w.cnx.cleared(o.ObjectID)
 	stage := w.account(o.ObjectID).Stages[0].StageID
 	w.receive("fund."+quote, "959.00", "959.00", "")
 	w.stlApply("app."+quote, "fund."+quote, o.ObjectID, stage, "959.00")

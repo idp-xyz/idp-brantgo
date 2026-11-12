@@ -25,37 +25,77 @@ import (
 // document_release.record, both commit orders), on the FUL world.
 
 // concluded has the compliance officer evaluate order at its current revision and conclude it
-// (clear with license_required license, or blocked).
+// (clear with license_required license, or blocked). A clear conclusion is not evaluated again
+// (CNX: reopened first), so a test calls it on a draft order, before readyToActivate.
 func (w *fulWorld) concluded(order, conclusion string, license bool) {
 	w.t.Helper()
-	b := w.cnx.binding(order)
+	c := w.compliance()
+	b := c.binding(order)
 	var expected int64
-	if cs, err := w.cnx.cnx.OrderChecks(w.cnx.compliance, order); err == nil {
-		for _, c := range cs {
-			if c.OrderRevision == b.OrderRevision {
-				expected = c.RowVersion
+	if cs, err := c.cnx.OrderChecks(c.compliance, order); err == nil {
+		for _, k := range cs {
+			if k.OrderRevision == b.OrderRevision {
+				expected = k.RowVersion
 			}
 		}
 	}
-	e, err := w.cnx.cnx.Evaluate(w.cnx.compliance, w.cnx.evaluateCmd(order, b.OrderRevision, expected, syntheticClear))
+	e, err := c.cnx.Evaluate(c.compliance, c.evaluateCmd(order, b.OrderRevision, expected, syntheticClear))
 	w.must(err)
-	_, err = w.cnx.cnx.Decide(w.cnx.compliance, w.cnx.decideCmd(e, conclusion, license))
+	_, err = c.cnx.Decide(c.compliance, c.decideCmd(e, conclusion, license))
 	w.must(err)
 }
 
-// paidOrder activates order "order.<quote>", has conclude record its compliance conclusion, opens
-// its account with the 960.00 applied and prepares shipment id of all 120 PCS.
+// embargoed turns the clear conclusion of order's current revision blocked after the order
+// activated on it (SM-CNX-COMPLIANCE clear → reopen → pending → evaluate → blocked; B4's recipe):
+// a new version of the synthetic CN programme list is imported, the compliance officer reopens the
+// conclusion (programme_updated), evaluates the destination AQ, which the CN programme embargoes,
+// and concludes blocked. Every other conclusion that used the list's first version answers pending
+// (list_updated) from then on, so a test calls it last.
+func (w *fulWorld) embargoed(order string) {
+	w.t.Helper()
+	c := w.compliance()
+	rev := w.getOrder(order).OrderRevision
+	list := syntheticCountryProgrammes(cnProgrammeList, "v2", "2026-11-10")
+	list.IdempotencyKey = w.key()
+	_, err := w.c.REF.ImportCountryProgrammes(c.compliance, list)
+	w.must(err)
+	checks, err := c.cnx.OrderChecks(c.compliance, order)
+	w.must(err)
+	var check cnxapi.CheckSummary
+	for _, k := range checks {
+		if k.OrderRevision == rev {
+			check = k
+		}
+	}
+	r, err := c.cnx.Reopen(c.compliance, cnxapi.Reopen{IdempotencyKey: w.key(), Cause: cnxapi.CauseProgrammeUpdated, CheckID: check.CheckID,
+		ExpectedVersion: check.RowVersion, Reason: "合成国别项目名单新版本"})
+	w.must(err)
+	e, err := c.cnx.Evaluate(c.compliance, c.evaluateCmd(order, rev, r.RowVersion, syntheticEmbargoed))
+	w.must(err)
+	_, err = c.cnx.Decide(c.compliance, c.decideCmd(e, cnxapi.ConclusionBlocked, false))
+	w.must(err)
+}
+
+// paidOrder has order "order.<quote>" prepared, conclude (nil: none) record its compliance
+// conclusion while it is a draft — readyToActivate then leaves that check alone —, reviewed and
+// activated; it opens the order's account with the 960.00 applied and prepares shipment id of all
+// 120 PCS.
 func (w *fulWorld) paidOrder(quote, id string, conclude func(order string)) trdapi.OrderReceipt {
 	w.t.Helper()
-	o := w.activeOrder(quote)
-	conclude(o.ObjectID)
+	_, draft := w.prepared(quote)
+	if conclude != nil {
+		conclude(draft.ObjectID)
+	}
+	d := w.reviewed(draft, "review."+quote)
+	o, err := w.c.TRD.ActivateOrder(w.author, w.activateOrderCmd(draft.ObjectID, d.RowVersion, "review."+quote))
+	w.must(err)
 	stage := w.account(o.ObjectID).Stages[0].StageID
 	w.receive("fund."+quote, "960.00", "960.00", "")
 	w.stlApply("app."+quote, "fund."+quote, o.ObjectID, stage, "960.00")
 	restore := w.onOrder(o)
 	defer restore()
 	c := "commitment." + strings.TrimPrefix(quote, "quote.")
-	_, err := w.prepare(w.merch, id, "120", w.delivered(c, "120"), w.released(c, "120"))
+	_, err = w.prepare(w.merch, id, "120", w.delivered(c, "120"), w.released(c, "120"))
 	w.must(err)
 	return o
 }
@@ -67,30 +107,20 @@ func (w *fulWorld) exceptionCmd(id string, version int64, stage string) fulapi.G
 }
 
 // TD-AT12, FUL half ("出运放行均返回 TRADE_COMPLIANCE_NOT_CLEAR；普通审批不能覆盖"), CNX-INV-001, FUL-INV-002, D-9:
-// an order whose destination compliance concluded blocked is evaluated blocked with
-// TRADE_COMPLIANCE_NOT_CLEAR, the credit manager's exception and the confirmation are refused with
-// it. On the world's order, amended to 110 PCS after a release of its revision 1 was granted: the
+// on the world's order, amended to 110 PCS after a release of its revision 1 was granted, the
 // confirmation of that shipment is REFERENCE_STALE (OrderGuard) and the release is not consumed; a
 // shipment of revision 2, which has no conclusion, is TRADE_COMPLIANCE_NOT_CLEAR (pending,
 // order_revised) and no exception covers it; once compliance clears revision 2, the order account
 // still holds revision 1 (STL's review pending): COMMERCIAL_RELEASE_BLOCKED, which is not an unpaid
-// stage, so no exception either.
+// stage, so no exception either. Then an order activated on a clear conclusion whose destination
+// compliance, reopened on a new programme list version, concludes blocked (embargoed; B4: no order
+// activates on a blocked one) is evaluated blocked with TRADE_COMPLIANCE_NOT_CLEAR, and the credit
+// manager's exception and the confirmation are refused with it.
 func TestTradeComplianceGatesTheReleaseTDAT12(t *testing.T) {
 	w := newFulWorld(t)
-	w.paidOrder("quote.embargo", "shipment.embargo", func(o string) { w.concluded(o, cnxapi.ConclusionBlocked, false) })
-	r, err := w.evaluateRelease(w.ful, "shipment.embargo", fulapi.ScopeShipment)
-	if err != nil || r.Status != fulapi.ReleaseBlocked || r.Code != fulapi.CodeTradeComplianceNotClear || r.Guard != fulapi.GuardTradeCompliance ||
-		!strings.Contains(r.Reason, "blocked") {
-		t.Fatalf("blocked conclusion %+v %v", r, err)
-	}
-	_, err = w.ful.GrantReleaseException(w.manager, w.exceptionCmd("shipment.embargo", 1, "P1"))
-	w.want(err, fulapi.CodeTradeComplianceNotClear)
-	_, err = w.confirm(w.merch, "shipment.embargo", 1)
-	w.want(err, fulapi.CodeTradeComplianceNotClear)
-
 	rel := w.released("commitment.1", "120")
 	d := w.delivered("commitment.1", "120")
-	_, err = w.prepare(w.merch, "shipment.r1", "50", d, rel)
+	_, err := w.prepare(w.merch, "shipment.r1", "50", d, rel)
 	w.must(err)
 	first := w.granted("shipment.r1")
 	v1 := w.getOrder(w.order.ObjectID)
@@ -117,20 +147,32 @@ func TestTradeComplianceGatesTheReleaseTDAT12(t *testing.T) {
 	_, err = w.prepare(w.merch, "shipment.r2", "50", w.delivered("commitment.2", "120"), w.released("commitment.2", "120"))
 	restore()
 	w.must(err)
-	r, err = w.evaluateRelease(w.ful, "shipment.r2", fulapi.ScopeShipment)
+	r, err := w.evaluateRelease(w.ful, "shipment.r2", fulapi.ScopeShipment)
 	if err != nil || r.Code != fulapi.CodeTradeComplianceNotClear || !strings.Contains(r.Reason, cnxapi.ReasonOrderRevised) {
 		t.Fatalf("revision 2 without a conclusion %+v %v", r, err)
 	}
 	stage := w.snapshots(w.author, w.order.ObjectID)[w.order.ObjectID].Stages[0].StageID
 	_, err = w.ful.GrantReleaseException(w.manager, w.exceptionCmd("shipment.r2", 1, stage))
 	w.want(err, fulapi.CodeTradeComplianceNotClear)
-	w.cnx.cleared(w.order.ObjectID)
+	w.compliance().cleared(w.order.ObjectID)
 	r, err = w.evaluateRelease(w.ful, "shipment.r2", fulapi.ScopeShipment)
 	if err != nil || r.Code != fulapi.CodeCommercialReleaseBlocked || !strings.Contains(r.Reason, "revision 1") {
 		t.Fatalf("the account at revision 1 %+v %v", r, err)
 	}
 	_, err = w.ful.GrantReleaseException(w.manager, w.exceptionCmd("shipment.r2", 2, stage))
 	w.want(err, fulapi.CodeCommercialReleaseBlocked)
+
+	o := w.paidOrder("quote.embargo", "shipment.embargo", nil)
+	w.embargoed(o.ObjectID)
+	r, err = w.evaluateRelease(w.ful, "shipment.embargo", fulapi.ScopeShipment)
+	if err != nil || r.Status != fulapi.ReleaseBlocked || r.Code != fulapi.CodeTradeComplianceNotClear || r.Guard != fulapi.GuardTradeCompliance ||
+		!strings.Contains(r.Reason, "blocked") {
+		t.Fatalf("blocked conclusion %+v %v", r, err)
+	}
+	_, err = w.ful.GrantReleaseException(w.manager, w.exceptionCmd("shipment.embargo", 1, "P1"))
+	w.want(err, fulapi.CodeTradeComplianceNotClear)
+	_, err = w.confirm(w.merch, "shipment.embargo", 1)
+	w.want(err, fulapi.CodeTradeComplianceNotClear)
 }
 
 // ExportLicenseGuard v1 at the release (R56, CNX-INV-002, FUL-INV-002; B5's contract): a clear
@@ -156,7 +198,8 @@ func TestExportLicenseGatesTheRelease(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
 	cx, err := cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(w.c.TRD), Countries: cnx.PTYCountries(w.c.PTY), Profiles: cnx.CATProfiles(w.c.CAT),
-		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: exports})
+		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: exports, Purchases: cnx.PURLines(w.c.PUR),
+		Funds: cnx.STLFunds(w.c.STL)})
 	w.must(err)
 	_, err = w.file(w.doc, "licence.1", "licence.txt", evdapi.MimeText, "合成出口许可证（测试数据）", "")
 	w.must(err)

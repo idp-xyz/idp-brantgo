@@ -25,12 +25,14 @@ import (
 // composed process's (q.c.TRD), so its reads run brant_ful.order_shipped_v1 and
 // brant_pur.order_commitments_v1 with TRD's executor inside its transaction.
 
-// confirmed has merch.1 prepare and confirm shipment id of quantity of L1 on delivery d and release
-// rel, on FUL module w.ful.
+// confirmed has merch.1 prepare shipment id of quantity of L1 on delivery d and release rel, the
+// documentation clerk have its commercial release granted (S5-07) and merch.1 confirm it, on FUL
+// module w.ful.
 func (w *fulWorld) confirmed(id, quantity string, d fulapi.DeliveryLineRef, rel string) {
 	w.t.Helper()
 	_, err := w.prepare(w.merch, id, quantity, d, rel)
 	w.must(err)
+	w.granted(id)
 	_, err = w.confirm(w.merch, id, 1)
 	w.must(err)
 }
@@ -117,7 +119,9 @@ func TestAmendmentAgainstFULShipmentsTDAT01(t *testing.T) {
 	if f := facts[id]; f.Binding.OrderRevision != 2 || f.Lines[0].Quantity != "44" {
 		t.Fatalf("ActiveOrderRef %+v", f)
 	}
-	// FUL ships against revision 2 up to its 44 (FUL-INV-001), and TRD still counts every revision.
+	// FUL ships against revision 2 up to its 44 (FUL-INV-001), and TRD still counts every revision;
+	// revision 2 is releasable once compliance cleared it and STL's account moved to it.
+	w.amendedReleasable(id)
 	_, err = w.prepare(w.merch, "shipment.2", "5", d, rel)
 	w.want(err, fulapi.CodeShipmentQuantityExceeded)
 	w.confirmed("shipment.3", "4", d, rel)
@@ -284,6 +288,7 @@ func TestCloseRemainderWaitsForPURCommitment(t *testing.T) {
 		t.Helper()
 		_, err := w.ship(w.c.FUL, w.merch, sid, quantity, d1)
 		w.must(err)
+		w.grantedOn(w.c.FUL, sid, fulapi.ScopeShipment)
 		_, err = w.c.FUL.ConfirmShipment(w.merch, w.confirmCmd(sid, 1))
 		w.must(err)
 	}
@@ -344,6 +349,7 @@ func TestOrderCancelAndShipmentConfirmationInBothCommitOrders(t *testing.T) {
 		rel, dl := w.released("commitment.1", "120"), w.delivered("commitment.1", "120")
 		_, err := w.prepare(w.merch, "shipment.1", "40", dl, rel)
 		w.must(err)
+		w.granted("shipment.1")
 		cmd := w.confirmCmd("shipment.1", 1)
 		blocker, unblock := d.keyBlocker(t, "brant_ful", fulapi.CommandConfirmShipment, cmd.IdempotencyKey)
 		confirmed := make(chan finished, 1)
@@ -386,6 +392,7 @@ func TestOrderCancelAndShipmentConfirmationInBothCommitOrders(t *testing.T) {
 		rel, dl := w.released("commitment.1", "120"), w.delivered("commitment.1", "120")
 		_, err := w.prepare(w.merch, "shipment.1", "40", dl, rel)
 		w.must(err)
+		w.granted("shipment.1")
 		cmd := trdapi.CancelOrder{IdempotencyKey: q.key(), OrderID: id, ExpectedVersion: q.orderVersion(id), Reason: "客户撤单", Evidence: q.proof}
 		blocker, unblock := d.keyBlocker(t, "brant_trd", trdapi.CommandCancelOrder, cmd.IdempotencyKey)
 		cancelled := make(chan finished, 1)
