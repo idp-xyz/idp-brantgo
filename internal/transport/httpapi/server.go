@@ -90,6 +90,7 @@ type Config struct {
 	CST      CST
 	TRD      TRD
 	PUR      PUR
+	STL      STL // the settlement context (S5); nil leaves its routes out
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -122,6 +123,9 @@ func New(cfg Config) (http.Handler, error) {
 	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL),
 		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD), purCommands(cfg.PUR)} {
 		s.contexts[set.bc] = set
+	}
+	if cfg.STL != nil {
+		s.contexts["stl"] = stlCommands(cfg.STL)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +186,9 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/acceptances/{id}", s.authenticated(read(s, cfg.TRD.GetAcceptance, okView[trdapi.AcceptanceView])))
 	mux.Handle("GET /api/brant/v1/pur/purchase_drafts/{id}", s.authenticated(read(s, cfg.PUR.GetDraft, okView[purapi.DraftView])))
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocations", s.authenticated(s.allocations))
+	if cfg.STL != nil {
+		s.stlRoutes(mux)
+	}
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}", s.authenticated(read(s, cfg.REF.GetProgrammeList, okView[refapi.ProgrammeListView])))

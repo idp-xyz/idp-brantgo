@@ -90,6 +90,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000001_trd_quote_roots", "brant:000002_trd_quote_reviews", "brant:000003_trd_quote_formalization",
 		"brant:000004_trd_customer_acceptance", "brant:000005_trd_sales_orders", "brant:000006_trd_order_amendments", "brant:000007_trd_order_documents",
 		"brant:000001_pur_purchase_drafts",
+		"brant:000001_stl_customer_credit",
 	}
 	if got := strings.Join(ids, " "); got != strings.Join(want, " ") {
 		t.Fatalf("migration order = %s", got)
