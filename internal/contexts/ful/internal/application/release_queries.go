@@ -49,6 +49,10 @@ func releaseView(r *release.Release) api.ReleaseView {
 		v.Consumption = &api.ConsumptionView{Command: c.Command, ReleaseKind: c.ReleaseKind, EvidenceIDs: slices.Clone(c.Evidence),
 			Guards: guardViews(c.Entries), GuardsSHA256: c.EntriesSHA256, ConsumedBy: c.Consumed.By, ConsumedAt: c.Consumed.At,
 			AuthorityEpoch: c.Consumed.Epoch}
+		if b := c.BillOfLading; b != nil {
+			v.Consumption.BillOfLading = &api.BillOfLadingRef{DocumentSetID: b.DocumentSetID, Version: b.Version, Number: b.Number,
+				ContentSHA256: b.ContentSHA256}
+		}
 	}
 	return v
 }

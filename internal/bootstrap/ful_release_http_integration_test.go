@@ -91,6 +91,7 @@ func TestCommercialReleaseOverHTTP(t *testing.T) {
 	if x := manager.command("ful", fulapi.Contract, fulapi.CommandGrantReleaseException, exception); x["status"] != fulapi.ReleaseGranted {
 		t.Fatalf("documents exception %v", x)
 	}
+	w.issuedBillOfLading(w.c.FUL, "shipment.sc08") // S5-08: documents are released on the issued B/L record
 	r := doc.command("ful", fulapi.Contract, fulapi.CommandRecordDocumentRelease, map[string]any{"shipment_id": "shipment.sc08", "expected_version": 2,
 		"release_kind": fulapi.ReleaseOriginalBL, "evidence_ids": []any{"evidence"}})
 	if r["status"] != fulapi.ReleaseConsumed || r["row_version"] != float64(3) {

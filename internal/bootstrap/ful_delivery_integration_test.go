@@ -214,7 +214,7 @@ func TestDeliveryCorrectionWaitsForTheConfirmation(t *testing.T) {
 	w.must(err)
 	fl, err := ful.New(db, ful.Upstream{Orders: ful.TRDOrders(w.c.TRD), Releases: ful.QLTReleases(w.c.QLT),
 		Deliveries: heldDeliveries{Deliveries: ful.PURDeliveries(w.c.PUR), hold: w.hold}, Screening: ful.PTYScreening(), Sources: w.c.EVD,
-		Compliance: ful.CNXCompliance(), Payments: ful.STLPayments()})
+		Compliance: ful.CNXCompliance(), Payments: ful.STLPayments(), Documents: ful.DocumentPorts(w.c.POL, w.c.PTY, w.c.TRD)})
 	w.must(err)
 	d1 := w.verified("delivery.1", "50", "50")
 	_, err = w.ship(fl, w.merch, "shipment.1", "30", d1)

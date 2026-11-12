@@ -1,0 +1,53 @@
+COMMERCIAL INVOICE
+
+Seller: SYNTHETIC Exporter Co., Ltd.
+Synthetic Road 1
+Shanghai
+Registration: SYNTHETIC-NOT-REAL | Country: CN
+
+Buyer: Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+
+Consignee: Synthetic Logistics KG
+Synthetic warehouse
+Hamburg port
+
+Notify: Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+
+Number: CI-2026-00001
+Version: 1
+Document set: docs.1 | Shipment: shipment.1
+Order: order.1 r1
+Order SHA-256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Date: 2026-11-12T08:30:00.123456Z
+
+Booking: SHA2611001 | Vessel: SYNTHETIC STAR | Voyage: 026E | ETD: 2026-12-20
+Port of loading: CNSHA | Port of discharge: DEHAM
+
+Lines (amounts in USD):
+S1 | sku.1 r1 | Cotton shirt, red | 50 PCS | price 8 | net 400.00 | tax 0.00 | total 400.00
+S2 | sku.2 r3 | Gift set | 24 SET | price 12.5 | net 300.00 | tax 39.00 | total 339.00
+
+Currency: USD
+Quantity: 50 PCS; 24 SET
+Net: 700.00 | Tax: 39.00 | Total: 739.00
+
+Terms: FCA Incoterms 2020 | Named place: DEHAM
+Payment: P1 | 30% | order_confirmed | 0 calendar days
+Payment: P2 | 70% | after_shipment | 30 calendar days
+
+Marks:
+SYNTHETIC BUYER
+HAMBURG
+C/NO. 1-7
+
+Clauses:
+1. We certify the goods are of Chinese origin.
+
+Signatures (this generated copy is unsigned; signed or stamped copies are recorded as evidence):
+Seller: SYNTHETIC Exporter Co., Ltd.
+
+Synthetic data. Not an actual trade. 合成数据。

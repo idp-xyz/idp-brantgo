@@ -188,6 +188,7 @@ func TestSC08ReleaseWaitsForTheUnexplainedDifference(t *testing.T) {
 	_, err = w.evaluateRelease(w.ful, "shipment.sc08", fulapi.ScopeShipment)
 	w.want(err, kernel.CodeInvalidState)
 
+	w.issuedBillOfLading(w.ful, "shipment.sc08") // S5-08: documents are released on the issued B/L record
 	docs := w.grantedOn(w.ful, "shipment.sc08", fulapi.ScopeDocuments)
 	record := fulapi.RecordDocumentRelease{IdempotencyKey: w.key(), ShipmentID: "shipment.sc08", ExpectedVersion: 1, ReleaseKind: fulapi.ReleaseTelexRelease,
 		EvidenceIDs: []string{"evidence"}}
@@ -207,7 +208,8 @@ func TestSC08ReleaseWaitsForTheUnexplainedDifference(t *testing.T) {
 	w.want(err, kernel.CodeInvalidState)
 	d := w.releaseView(docs.ReleaseID)
 	if d.Consumption == nil || d.Consumption.Command != fulapi.CommandRecordDocumentRelease || d.Consumption.ReleaseKind != fulapi.ReleaseTelexRelease ||
-		d.Consumption.EvidenceIDs[0] != "evidence" || d.Consumption.ConsumedBy.ID != "doc.1" {
+		d.Consumption.EvidenceIDs[0] != "evidence" || d.Consumption.ConsumedBy.ID != "doc.1" || d.Consumption.BillOfLading == nil ||
+		d.Consumption.BillOfLading.Number != "BL-shipment.sc08" {
 		t.Fatalf("documents released %+v", d)
 	}
 	if ev := w.fulEventsOf(fulapi.EventDocumentsReleased); len(ev) != 1 || ev[0].Payload["release_id"] != docs.ReleaseID ||
