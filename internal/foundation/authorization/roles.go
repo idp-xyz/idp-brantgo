@@ -210,6 +210,20 @@ func (Grants) Roles(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	return out, rows.Err()
 }
 
+// Templates returns the sorted role templates actorID holds in scope: each template assigned to it
+// directly and the templates of each tenant role assigned to it (BC-D02). A command that decides by
+// the actor's job, such as STL's credit approval tiers (S5 D-6), reads it after Authorize or
+// Qualify in its own transaction: their FOR SHARE lock on the scope's guard row keeps every role
+// change, which locks that row FOR NO KEY UPDATE first, from moving the answer until the command
+// commits. An actor without roles holds no template.
+func (g Grants) Templates(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, actorID string) ([]string, error) {
+	roles, err := g.Roles(ctx, exec, scope, actorID)
+	if err != nil {
+		return nil, err
+	}
+	return g.templatesOf(ctx, exec, scope, roles)
+}
+
 // reassign re-derives an actor's permissions after one of its roles changed.
 func (g Grants) reassign(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, actorID string, at time.Time) (int64, error) {
 	roles, err := g.Roles(ctx, exec, scope, actorID)

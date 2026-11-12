@@ -259,3 +259,20 @@ GRANT UPDATE (status, row_version, disposed_by_kind, disposed_by_id, dispose_epo
 GRANT UPDATE (status, row_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence_ids)
     ON brant_qlt.quality_release TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_qlt.guard_quality_release_v1(text, timestamptz) TO brant_app;
+
+-- STL customer credit (S5-12a): a credit root moves its version and its count of limit versions by
+-- one per command (trigger); a limit request and a decision change only their state, version and
+-- decision until decided, once (triggers); limit versions and approvals are only inserted; a
+-- reservation moves reserved → consumed → released or reserved → released (trigger); nothing is
+-- deleted; the ledger only grows. FOR UPDATE on the root needs the column grant. The credit commands
+-- call POL's ConfigGuard, granted above; STL publishes CreditGuard v1 (R57) for TRD.
+GRANT USAGE ON SCHEMA brant_stl TO brant_app;
+GRANT SELECT, INSERT ON brant_stl.customer_credit, brant_stl.credit_limit_request, brant_stl.credit_limit_version, brant_stl.credit_decision,
+    brant_stl.credit_approval, brant_stl.credit_reservation, brant_stl.action_result, brant_stl.audit_event TO brant_app;
+GRANT UPDATE (row_version, limit_version, updated_at) ON brant_stl.customer_credit TO brant_app;
+GRANT UPDATE (status, version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason, limit_version)
+    ON brant_stl.credit_limit_request TO brant_app;
+GRANT UPDATE (status, version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason) ON brant_stl.credit_decision TO brant_app;
+GRANT UPDATE (status, version, consumed_by_kind, consumed_by_id, consume_epoch, consumed_at, activated_at, released_by_kind, released_by_id,
+              release_epoch, released_at, release_reason) ON brant_stl.credit_reservation TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_stl.guard_credit_reservation_v1(text, bigint, numeric, text, timestamptz) TO brant_app;

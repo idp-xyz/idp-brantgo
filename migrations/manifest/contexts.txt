@@ -24,3 +24,5 @@ cst
 trd
 pur
 qlt
+# stl (S5): after pur, in the fixed S5 order qlt, stl, cnx, ful; TRD's activation calls its CreditGuard v1 at run time only.
+stl
