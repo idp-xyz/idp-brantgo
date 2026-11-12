@@ -25,7 +25,8 @@ func TargetOf(kind string) string {
 
 // StatementInput is an application.apply to a statement as the rules see it, with the fund record,
 // the statement and what stands on each of its installments (by seq) read under their locks.
-// StageID picks a receivable's installment ("" the first one still open, in due order).
+// StageID picks a receivable's installment ("" the first one still open, in due order). FX is the
+// settlement rate named for a fund in another currency than the statement's (STL-INV-007; nil: none).
 type StatementInput struct {
 	ID          string
 	Fund        *fundrecord.FundRecord
@@ -34,6 +35,7 @@ type StatementInput struct {
 	StageID     string
 	Applied     map[int]kernel.Money
 	Amount      kernel.Money
+	FX          *FXInput
 	By          fundrecord.Act
 	Team        string
 }
@@ -43,9 +45,65 @@ func zero(c kernel.Currency) kernel.Money {
 	return z
 }
 
+func appliedOn(st *settlement.Statement, i *settlement.Installment, applied map[int]kernel.Money) kernel.Money {
+	if a, ok := applied[i.Seq]; ok {
+		return a
+	}
+	return zero(st.Currency())
+}
+
+// installment picks the installment of statement st an application targets: of stage, or the first one
+// still open ("" stage).
+func installment(st *settlement.Statement, stage string, applied map[int]kernel.Money) (*settlement.Installment, error) {
+	if stage != "" {
+		inst := st.InstallmentOf(stage)
+		if inst == nil {
+			return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/target/stage_id", "The receivable has no installment of this payment stage")
+		}
+		return inst, nil
+	}
+	for i := range st.Installments {
+		if x := &st.Installments[i]; settlement.OpenOf(*x, appliedOn(st, x, applied)).Sign() > 0 {
+			return x, nil
+		}
+	}
+	return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsOpen, "/args/amount", "Nothing of "+st.ID+" is open")
+}
+
+// withinOpen refuses target more than is open on installment inst (APPLICATION_EXCEEDS_OPEN).
+func withinOpen(target kernel.Money, st *settlement.Statement, inst *settlement.Installment, applied map[int]kernel.Money) error {
+	open := settlement.OpenOf(*inst, appliedOn(st, inst, applied))
+	if c, _ := target.Cmp(open); c > 0 {
+		what := "the payable"
+		if inst.StageID != "" {
+			what = "the installment of stage " + inst.StageID
+		} else if TargetOf(st.Kind) == TargetReceivable {
+			what = "the installment beyond the payment plan"
+		}
+		return fundrecord.Reject(fundrecord.CodeApplicationExceedsOpen, "/args/amount", "Only "+open.String()+" of "+what+" is open")
+	}
+	return nil
+}
+
+// withinAvailable refuses more than fund f has available (APPLICATION_EXCEEDS_AVAILABLE, or
+// FUND_DIFFERENCE_UNEXPLAINED when only its unexplained difference would cover it).
+func withinAvailable(amount kernel.Money, f *fundrecord.FundRecord, e fundrecord.Entries) error {
+	available := f.Available(e)
+	if c, _ := amount.Cmp(available); c > 0 {
+		covered, err := available.Add(f.Unexplained())
+		if c2, _ := amount.Cmp(covered); err == nil && c2 <= 0 {
+			return fundrecord.Reject(fundrecord.CodeFundDifferenceUnexplained, "/args/amount",
+				"Only "+available.String()+" is available: "+f.Unexplained().String()+" of the difference is unexplained")
+		}
+		return fundrecord.Reject(fundrecord.CodeApplicationExceedsAvailable, "/args/amount", "Only "+available.String()+" is available")
+	}
+	return nil
+}
+
 // ApplyToStatement applies application.apply's rules to a receivable or payable: a receipt of the
-// statement's customer to a receivable, a payment to its supplier to a payable, in its currency,
-// within what the fund has available and what is open on the installment.
+// statement's customer to a receivable, a payment to its supplier to a payable, in its currency — or,
+// at a settlement rate, in another (STL-INV-007) — within what the fund has available and what is open
+// on the installment.
 func ApplyToStatement(in StatementInput) (*Application, error) {
 	f, st := in.Fund, in.Statement
 	target := TargetOf(st.Kind)
@@ -57,59 +115,36 @@ func ApplyToStatement(in StatementInput) (*Application, error) {
 			"A "+f.Kind+" is not applied to receivables: only receipts are (non-goods money waits for verification)")
 	case target == TargetPayable && f.Kind != fundrecord.KindPayment:
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/fund_record_id", "A "+f.Kind+" is not applied to payables: only payments are")
-	case f.Currency() != st.Currency():
-		return nil, fundrecord.Reject(fundrecord.CodeFXScopeMismatch, "/args/fund_record_id",
+	case f.Currency() != st.Currency() && in.FX == nil:
+		return nil, fundrecord.Reject(fundrecord.CodeFXScopeMismatch, "/args/fx_rate",
 			"The fund is in "+f.Currency().Code()+", the statement in "+st.Currency().Code()+": cross-currency write-off needs a settlement rate")
 	case f.CounterpartyID != st.CounterpartyID:
 		return nil, fundrecord.Reject(fundrecord.CodePartyEntityMismatch, "/args/fund_record_id",
 			"The fund's party "+f.CounterpartyID+" is not the statement's "+st.CounterpartyID)
 	}
-	applied := func(i *settlement.Installment) kernel.Money {
-		if a, ok := in.Applied[i.Seq]; ok {
-			return a
-		}
-		return zero(st.Currency())
-	}
-	var inst *settlement.Installment
-	if in.StageID != "" {
-		if inst = st.InstallmentOf(in.StageID); inst == nil {
-			return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/target/stage_id", "The receivable has no installment of this payment stage")
-		}
-	} else {
-		for i := range st.Installments {
-			if x := &st.Installments[i]; settlement.OpenOf(*x, applied(x)).Sign() > 0 {
-				inst = x
-				break
-			}
-		}
-		if inst == nil {
-			return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsOpen, "/args/amount", "Nothing of "+st.ID+" is open")
-		}
+	inst, err := installment(st, in.StageID, in.Applied)
+	if err != nil {
+		return nil, err
 	}
 	if in.Amount.Currency() != f.Currency() || in.Amount.Sign() <= 0 {
 		return nil, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/amount", "The amount is above zero")
 	}
-	available := f.Available(in.FundEntries)
-	if c, _ := in.Amount.Cmp(available); c > 0 {
-		covered, err := available.Add(f.Unexplained())
-		if c2, _ := in.Amount.Cmp(covered); err == nil && c2 <= 0 {
-			return nil, fundrecord.Reject(fundrecord.CodeFundDifferenceUnexplained, "/args/amount",
-				"Only "+available.String()+" is available: "+f.Unexplained().String()+" of the difference is unexplained")
-		}
-		return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsAvailable, "/args/amount", "Only "+available.String()+" is available")
+	fx := in.FX
+	if fx != nil && target == TargetPayable {
+		fx = &FXInput{Rate: fx.Rate, Use: fx.Use} // a payable has no order analysis rate
 	}
-	open := settlement.OpenOf(*inst, applied(inst))
-	if c, _ := in.Amount.Cmp(open); c > 0 {
-		what := "the payable"
-		if inst.StageID != "" {
-			what = "the installment of stage " + inst.StageID
-		} else if target == TargetReceivable {
-			what = "the installment beyond the payment plan"
-		}
-		return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsOpen, "/args/amount", "Only "+open.String()+" of "+what+" is open")
+	amount, conv, err := convert(in.Amount, st.Currency(), fx)
+	if err != nil {
+		return nil, err
 	}
-	x := &Application{ID: in.ID, FundRecordID: f.ID, TargetKind: target, StatementID: st.ID, InstallmentSeq: inst.Seq, Amount: in.Amount,
-		Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team, Applied: in.By}
+	if err = withinAvailable(in.Amount, f, in.FundEntries); err != nil {
+		return nil, err
+	}
+	if err = withinOpen(amount, st, inst, in.Applied); err != nil {
+		return nil, err
+	}
+	x := &Application{ID: in.ID, FundRecordID: f.ID, TargetKind: target, StatementID: st.ID, InstallmentSeq: inst.Seq, Amount: amount,
+		Conversion: conv, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team, Applied: in.By}
 	if target == TargetReceivable {
 		x.OrderID, x.OrderRevision, x.StageID = st.OrderID, st.OrderRevision, inst.StageID
 	}
@@ -155,13 +190,17 @@ func MoveToReceivable(st *settlement.Statement, standing []Application, newID fu
 			}
 			need, _ = need.Sub(part)
 			m := Move{From: from}
+			var moved, kept *Conversion // a cross-currency prepayment moves its conversion in proportion (C8)
+			if from.Conversion != nil {
+				moved, kept = from.Conversion.part(part, from.Amount)
+			}
 			m.Replacement = &Application{ID: newID(), FundRecordID: from.FundRecordID, TargetKind: TargetReceivable, OrderID: st.OrderID,
 				OrderRevision: st.OrderRevision, StageID: inst.StageID, StatementID: st.ID, InstallmentSeq: inst.Seq, MovedFrom: from.ID,
-				Amount: part, Status: StatusApplied, Version: 1, OwnerActor: by.By.ID, OwnerTeam: team, Applied: by}
+				Amount: part, Conversion: moved, Status: StatusApplied, Version: 1, OwnerActor: by.By.ID, OwnerTeam: team, Applied: by}
 			if rest, _ := from.Amount.Sub(part); rest.Sign() > 0 {
 				m.Remainder = &Application{ID: newID(), FundRecordID: from.FundRecordID, TargetKind: TargetOrderStage, OrderID: from.OrderID,
-					OrderRevision: from.OrderRevision, StageID: from.StageID, MovedFrom: from.ID, Amount: rest, Status: StatusApplied, Version: 1,
-					OwnerActor: by.By.ID, OwnerTeam: team, Applied: by}
+					OrderRevision: from.OrderRevision, StageID: from.StageID, MovedFrom: from.ID, Amount: rest, Conversion: kept, Status: StatusApplied,
+					Version: 1, OwnerActor: by.By.ID, OwnerTeam: team, Applied: by}
 			}
 			from.Status, from.Version = StatusMoved, from.Version+1
 			out = append(out, m)

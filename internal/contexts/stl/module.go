@@ -45,6 +45,10 @@ var (
 
 	_ api.SettlementCommands = (*Module)(nil)
 	_ api.SettlementQueries  = (*Module)(nil)
+
+	_ api.CreditNoteCommands = (*Module)(nil)
+	_ api.CreditNoteQueries  = (*Module)(nil)
+	_ api.CreditNoteLookups  = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),
@@ -58,6 +62,8 @@ type (
 	OrderBinding = application.OrderBinding
 	OrderStage   = application.OrderStage
 	CurrencyRef  = application.CurrencyRef
+	// OrderAnalysis is the order's analysis rate (TRD AnalysisFX) a cross-currency application compares with (C8).
+	OrderAnalysis = application.OrderAnalysis
 )
 
 // Order states TRD reports.

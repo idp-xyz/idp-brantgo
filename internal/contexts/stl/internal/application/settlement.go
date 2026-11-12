@@ -278,12 +278,17 @@ func (s Service) ConfirmSettlement(ctx context.Context, cmd api.ConfirmSettlemen
 }
 
 // lockStatementRoots locks the roots an application to statement st touches FOR UPDATE in ID order:
-// its fund record, the statement and, for a receivable, the order account (the receivable
-// application counts for the account's stage, which PaymentConditionGuard v1 reads under the
-// account's lock). It returns the fund record and the statement read under their locks.
+// its fund record (none for a credit note, an entity of the statement: C8), the statement and, for a
+// receivable, the order account (the receivable application counts for the account's stage, which
+// PaymentConditionGuard v1 reads under the account's lock). It returns the fund record and the
+// statement read under their locks. settlement.reverse and the credit note commands lock the same
+// roots without a fund.
 func lockStatementRoots(ctx context.Context, exec bentopg.Executor, fundID string, st *settlement.Statement) (*fr.FundRecord, *settlement.Statement, error) {
 	sc := scope(ctx)
-	roots := []root{{id: fundID, kind: rootFund}, {id: st.ID, kind: rootStatement}}
+	roots := []root{{id: st.ID, kind: rootStatement}}
+	if fundID != "" {
+		roots = append(roots, root{id: fundID, kind: rootFund})
+	}
 	if st.OrderID != "" {
 		roots = append(roots, root{id: st.OrderID, kind: rootAccount})
 	}
@@ -314,9 +319,47 @@ func lockStatementRoots(ctx context.Context, exec bentopg.Executor, fundID strin
 type applyStatement struct {
 	s         Service
 	cmd       api.Apply
+	order     *Order
+	rate      settlementRate
 	fund      *fr.FundRecord
 	statement *settlement.Statement
 	taken     bool
+}
+
+// Prepare reads, for a cross-currency application (C8, STL-INV-007), the fund's and the statement's
+// currencies, POL's settlement rate and TRD's analysis rate of the statement's order.
+func (h *applyStatement) Prepare(ctx context.Context) error {
+	if h.cmd.FXRate == nil {
+		return nil
+	}
+	var from, to, order string
+	err := h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		sc := scope(ctx)
+		f, err := postgres.LoadFund(ctx, exec, sc, h.cmd.FundRecordID, false)
+		if err != nil || f == nil {
+			return err
+		}
+		st, err := postgres.LoadStatement(ctx, exec, sc, h.cmd.Target.StatementID, false)
+		if err != nil || st == nil {
+			return err
+		}
+		from, to, order = f.Currency().Code(), st.Currency().Code(), st.OrderID
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if order != "" {
+		orders, err := h.s.Upstream.Orders.ResolveOrders(ctx, []string{order})
+		if err != nil {
+			return err
+		}
+		if o, ok := orders[order]; ok {
+			h.order = &o
+		}
+	}
+	h.rate, err = h.s.lookupRate(ctx, h.cmd.FXRate, from, to)
+	return err
 }
 
 func (h *applyStatement) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -363,8 +406,12 @@ func (h *applyStatement) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	fx, err := h.rate.input(ctx, exec, now, basisOf(h.order, f.Currency(), st.Currency()))
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	x, err := fa.ApplyToStatement(fa.StatementInput{ID: c.ApplicationID, Fund: f, FundEntries: entries, Statement: st, StageID: c.Target.StageID,
-		Applied: applied, Amount: amount, By: fundAct(d, now, ""), Team: d.Team})
+		Applied: applied, Amount: amount, FX: fx, By: fundAct(d, now, ""), Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
 	}

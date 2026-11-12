@@ -341,6 +341,16 @@ GRANT UPDATE (status, version, settled_by_kind, settled_by_id, settle_epoch, set
 GRANT SELECT, INSERT ON brant_stl.settlement_statement, brant_stl.settlement_line, brant_stl.settlement_installment TO brant_app;
 GRANT UPDATE (updated_at) ON brant_stl.settlement_statement TO brant_app;
 
+-- STL credit notes and settlement reversal (S5-18): a statement root moves by one version per credit note
+-- requested or decided and once more when reversed (trigger: confirmed → reversed, terminal); its lines move
+-- settled → reversed with it; a credit note is decided once (trigger); reversals are only inserted; nothing is
+-- deleted. FOR UPDATE on statements needs the column grant above.
+GRANT UPDATE (status, version) ON brant_stl.settlement_statement TO brant_app;
+GRANT UPDATE (status) ON brant_stl.settlement_line TO brant_app;
+GRANT SELECT, INSERT ON brant_stl.credit_note, brant_stl.settlement_reversal TO brant_app;
+GRANT UPDATE (status, version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason, updated_at)
+    ON brant_stl.credit_note TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on

@@ -219,8 +219,9 @@ func FundEntries(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, f 
 	}
 	t, c := ts(sc)
 	var applied string
-	if err = exec.QueryRow(ctx, `SELECT coalesce(sum(amount_minor), 0)::text FROM brant_stl.application WHERE tenant_id = $1 AND company_id = $2
-		AND fund_record_id = $3 AND status = 'applied'`, t, c, f.ID).Scan(&applied); err != nil {
+	// A conversion takes its source amount from the fund (migrations/stl/000005).
+	if err = exec.QueryRow(ctx, `SELECT coalesce(sum(coalesce(source_amount_minor, amount_minor)), 0)::text FROM brant_stl.application
+		WHERE tenant_id = $1 AND company_id = $2 AND fund_record_id = $3 AND status = 'applied'`, t, c, f.ID).Scan(&applied); err != nil {
 		return e, err
 	}
 	e.Applied, err = money(f.Currency(), applied)
@@ -354,19 +355,26 @@ func InsertApplication(ctx context.Context, exec bentopg.Executor, sc kernel.Sco
 	if x.InstallmentSeq > 0 {
 		installment = &x.InstallmentSeq
 	}
+	cv := conversionArgs(x.Conversion)
 	_, err := exec.Exec(ctx, `INSERT INTO brant_stl.application (tenant_id, company_id, application_id, fund_record_id, target_kind, order_id,
 		order_revision, stage_id, currency, minor_units, amount_minor, status, version, owner_actor_id, owner_team_id, applied_by_kind, applied_by_id,
-		apply_epoch, applied_at, updated_at, statement_id, installment_seq, moved_from) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-		$11::text::numeric, $12, $13, $14, $15, $16, $17, $18, $19, $19, $20, $21, $22)`, t, c, x.ID, x.FundRecordID, x.TargetKind, nullable(x.OrderID),
-		revision, nullable(x.StageID), x.Amount.Currency().Code(), int16(x.Amount.Currency().MinorUnits()), x.Amount.MinorString(), x.Status, x.Version,
-		x.OwnerActor, team(x.OwnerTeam), kind, id, epoch, at, nullable(x.StatementID), installment, nullable(x.MovedFrom))
+		apply_epoch, applied_at, updated_at, statement_id, installment_seq, moved_from, credit_note_id, source_currency, source_minor_units,
+		source_amount_minor, fx_rate_id, fx_rate_revision, fx_rate_hash, fx_rate, analysis_currency, analysis_minor_units, analysis_rate,
+		fx_difference_minor) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::numeric, $12, $13, $14, $15, $16, $17, $18, $19, $19, $20,
+		$21, $22, $23, $24, $25, $26::text::numeric, $27, $28, $29, $30::text::numeric, $31, $32, $33::text::numeric, $34::text::numeric)`,
+		t, c, x.ID, nullable(x.FundRecordID), x.TargetKind, nullable(x.OrderID), revision, nullable(x.StageID), x.Amount.Currency().Code(),
+		int16(x.Amount.Currency().MinorUnits()), x.Amount.MinorString(), x.Status, x.Version, x.OwnerActor, team(x.OwnerTeam), kind, id, epoch, at,
+		nullable(x.StatementID), installment, nullable(x.MovedFrom), nullable(x.CreditNoteID), cv.currency, cv.units, cv.amount, cv.rateID,
+		cv.rateRevision, cv.rateHash, cv.rate, cv.analysisCurrency, cv.analysisUnits, cv.analysisRate, cv.difference)
 	return err
 }
 
-const applicationColumns = `a.application_id, a.fund_record_id, a.target_kind, coalesce(a.order_id, ''), coalesce(a.order_revision, 0),
+const applicationColumns = `a.application_id, coalesce(a.fund_record_id, ''), a.target_kind, coalesce(a.order_id, ''), coalesce(a.order_revision, 0),
 	coalesce(a.stage_id, ''), a.currency, a.minor_units, a.amount_minor::text, a.status, a.version, a.owner_actor_id, coalesce(a.owner_team_id, ''),
 	a.applied_by_kind, a.applied_by_id, a.apply_epoch, a.applied_at, u.unapplied_by_kind, u.unapplied_by_id, u.unapply_epoch, u.unapplied_at, u.reason,
-	coalesce(a.statement_id, ''), coalesce(a.installment_seq, 0), coalesce(a.moved_from, '')`
+	coalesce(a.statement_id, ''), coalesce(a.installment_seq, 0), coalesce(a.moved_from, ''), coalesce(a.credit_note_id, ''), a.source_currency,
+	a.source_minor_units, a.source_amount_minor::text, a.fx_rate_id, a.fx_rate_revision, a.fx_rate_hash, a.fx_rate::text, a.analysis_currency,
+	a.analysis_minor_units, a.analysis_rate::text, a.fx_difference_minor::text`
 
 const applicationFrom = ` FROM brant_stl.application a LEFT JOIN brant_stl.application_unapply u ON u.tenant_id = a.tenant_id
 	AND u.company_id = a.company_id AND u.application_id = a.application_id`
@@ -380,8 +388,11 @@ func scanApplication(row pgx.Row) (*fa.Application, error) {
 	var uKind, uBy, uReason *string
 	var uEpoch *int64
 	var uAt *time.Time
+	var cv conversionRow
 	err := row.Scan(&x.ID, &x.FundRecordID, &x.TargetKind, &x.OrderID, &x.OrderRevision, &x.StageID, &code, &units, &amount, &x.Status, &x.Version,
-		&x.OwnerActor, &x.OwnerTeam, &kind, &by, &epoch, &at, &uKind, &uBy, &uEpoch, &uAt, &uReason, &x.StatementID, &x.InstallmentSeq, &x.MovedFrom)
+		&x.OwnerActor, &x.OwnerTeam, &kind, &by, &epoch, &at, &uKind, &uBy, &uEpoch, &uAt, &uReason, &x.StatementID, &x.InstallmentSeq, &x.MovedFrom,
+		&x.CreditNoteID, &cv.currency, &cv.units, &cv.amount, &cv.rateID, &cv.rateRevision, &cv.rateHash, &cv.rate, &cv.analysisCurrency,
+		&cv.analysisUnits, &cv.analysisRate, &cv.difference)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -393,6 +404,9 @@ func scanApplication(row pgx.Row) (*fa.Application, error) {
 		return nil, err
 	}
 	if x.Amount, err = money(cur, amount); err != nil {
+		return nil, err
+	}
+	if x.Conversion, err = cv.conversion(); err != nil {
 		return nil, err
 	}
 	x.Applied = frAct(kind, by, epoch, at, "")

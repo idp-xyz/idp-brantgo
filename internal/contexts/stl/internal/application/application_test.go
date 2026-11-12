@@ -125,3 +125,72 @@ func TestPolicyOf(t *testing.T) {
 		t.Fatal("more digits than USD")
 	}
 }
+
+// C8: credit_note.request is the sales clerk's, by a person or AI (S5-18 "销售经办; human|ai");
+// credit.confirm and settlement.reverse are humanOnlyCommands held by the credit manager; credit_note.get
+// is a read. Their request hashes leave the key and the expected version out.
+func TestActorKindsOfCreditNotesAndReversal(t *testing.T) {
+	policy, err := authorization.NewPolicy(Rules()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for c, kinds := range map[string][]kernel.ActorKind{
+		api.CommandRequestCreditNote: {kernel.ActorHuman, kernel.ActorAI},
+		api.CommandConfirmCredit:     {kernel.ActorHuman},
+		api.CommandReverseSettlement: {kernel.ActorHuman},
+	} {
+		r, err := policy.Rule(c)
+		if err != nil || r.Permission != c || len(r.ActorKinds) != len(kinds) {
+			t.Errorf("%s: %+v, %v", c, r, err)
+			continue
+		}
+		for _, k := range kinds {
+			if !r.Admits(k) {
+				t.Errorf("%s does not admit %s", c, k)
+			}
+		}
+	}
+	if r, err := policy.Rule(api.CommandGetCreditNote); err != nil || r.Permission != api.PermissionRead {
+		t.Errorf("credit_note.get: %+v, %v", r, err)
+	}
+	a := api.ConfirmCredit{IdempotencyKey: "k1", CreditNoteID: "cn.1", ExpectedVersion: 1, Decision: api.DecisionConfirm, Reason: "r"}
+	b := a
+	b.IdempotencyKey, b.ExpectedVersion = "k2", 3
+	if _, _, x := request(a); x != func() any { _, _, y := request(b); return y }() {
+		t.Fatal("confirm hash args differ")
+	}
+	for _, c := range []api.Command{api.RequestCreditNote{}, api.ConfirmCredit{}, api.ReverseSettlement{}} {
+		if name, _, _ := request(c); name == "" {
+			t.Errorf("%T has no name", c)
+		}
+	}
+}
+
+// The analysis basis of a conversion (STL-INV-007, baseline 4.5): TRD's AnalysisFX when the analysis currency is
+// the fund's (its rate) or the order's own (exactly 1); none for a third currency, another target currency, no
+// AnalysisFX or an unreadable rate.
+func TestBasisOfAConversion(t *testing.T) {
+	usd, cny, eur := kernel.MustCurrency("USD", 2), kernel.MustCurrency("CNY", 2), kernel.MustCurrency("EUR", 2)
+	o := &Order{Analysis: &OrderAnalysis{OrderCurrency: "USD", Currency: "CNY", Rate: "7.0"}}
+	if b := basisOf(o, cny, usd); b == nil || b.Currency != cny || b.Rate.String() != "7" {
+		t.Fatalf("in the fund's currency %+v", b)
+	}
+	own := &Order{Analysis: &OrderAnalysis{OrderCurrency: "USD", Currency: "USD"}}
+	if b := basisOf(own, cny, usd); b == nil || b.Currency != usd || b.Rate.String() != "1" {
+		t.Fatalf("in the order's currency %+v", b)
+	}
+	for name, c := range map[string]struct {
+		o              *Order
+		source, target kernel.Currency
+	}{
+		"third currency": {o, eur, usd},
+		"other target":   {o, cny, eur},
+		"no analysis":    {&Order{}, cny, usd},
+		"no order":       {nil, cny, usd},
+		"bad rate":       {&Order{Analysis: &OrderAnalysis{OrderCurrency: "USD", Currency: "CNY", Rate: "7,0"}}, cny, usd},
+	} {
+		if b := basisOf(c.o, c.source, c.target); b != nil {
+			t.Errorf("%s: %+v", name, b)
+		}
+	}
+}

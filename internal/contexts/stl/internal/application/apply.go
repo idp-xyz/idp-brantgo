@@ -157,6 +157,12 @@ func appEvent(typ string, x *fa.Application) action.Event {
 	if x.StatementID != "" {
 		e.Fields["statement_id"], e.Fields["installment_seq"] = x.StatementID, x.InstallmentSeq
 	}
+	if x.CreditNoteID != "" {
+		e.Fields["credit_note_id"] = x.CreditNoteID
+	}
+	if c := x.Conversion; c != nil {
+		e.Fields["fx_rate_id"], e.Fields["fx_rate_revision"] = c.Rate.ID, c.Rate.Revision
+	}
 	return e
 }
 
@@ -168,6 +174,7 @@ type applyFund struct {
 	s       Service
 	cmd     api.Apply
 	order   *Order
+	rate    settlementRate
 	fund    *fr.FundRecord
 	account *oa.Account
 	taken   bool
@@ -181,7 +188,14 @@ func (h *applyFund) Prepare(ctx context.Context) error {
 	if o, ok := orders[h.cmd.Target.OrderID]; ok {
 		h.order = &o
 	}
-	return nil
+	if h.cmd.FXRate == nil || h.order == nil {
+		return nil
+	}
+	from, err := h.s.fundCurrency(ctx, h.cmd.FundRecordID)
+	if err == nil {
+		h.rate, err = h.s.lookupRate(ctx, h.cmd.FXRate, from, h.order.Currency.ID)
+	}
+	return err
 }
 
 func (h *applyFund) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -226,8 +240,12 @@ func (h *applyFund) Apply(ctx context.Context, exec bentopg.Executor, d authoriz
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	fx, err := h.rate.input(ctx, exec, now, basisOf(o, f.Currency(), a.Currency()))
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	x, err := fa.Apply(fa.ApplyInput{ID: c.ApplicationID, Fund: f, FundEntries: entries, Account: a, StageID: c.Target.StageID,
-		StageApplied: stageApplied, Amount: amount, By: fundAct(d, now, ""), Team: d.Team})
+		StageApplied: stageApplied, Amount: amount, FX: fx, By: fundAct(d, now, ""), Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -240,7 +258,10 @@ func (h *applyFund) Apply(ctx context.Context, exec bentopg.Executor, d authoriz
 // Apply allocates part of a receipt to an order stage (application.apply). Human only.
 func (s Service) Apply(ctx context.Context, cmd api.Apply) (api.ApplicationReceipt, error) {
 	var h action.Handler = &applyFund{s: s, cmd: cmd}
-	if cmd.Target.Kind == api.TargetReceivable || cmd.Target.Kind == api.TargetPayable {
+	switch {
+	case cmd.CreditNoteID != "":
+		h = &applyCreditNote{s: s, cmd: cmd}
+	case cmd.Target.Kind == api.TargetReceivable || cmd.Target.Kind == api.TargetPayable:
 		h = &applyStatement{s: s, cmd: cmd}
 	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandApply, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ApplicationID}, cmd,
@@ -315,6 +336,7 @@ func (s Service) applicationReceipt(ctx context.Context, res api.Receipt) (api.A
 		}
 		out.FundRecordID, out.OrderID, out.OrderRevision, out.StageID = x.FundRecordID, x.OrderID, x.OrderRevision, x.StageID
 		out.Currency, out.AmountMinor = x.Amount.Currency().Code(), x.Amount.MinorString()
+		out.CreditNoteID, out.Conversion = x.CreditNoteID, conversionView(x.Conversion)
 		out.TargetKind, out.StatementID, out.InstallmentSeq = x.TargetKind, x.StatementID, x.InstallmentSeq
 		if x.StatementID != "" {
 			st, err := postgres.LoadStatement(ctx, exec, sc, x.StatementID, false)
@@ -327,15 +349,17 @@ func (s Service) applicationReceipt(ctx context.Context, res api.Receipt) (api.A
 			}
 			out.StatementOpenMinor = st.Open(applied).MinorString()
 		}
-		f, err := postgres.LoadFund(ctx, exec, sc, x.FundRecordID, false)
-		if err != nil || f == nil {
-			return err
+		if x.FundRecordID != "" {
+			f, err := postgres.LoadFund(ctx, exec, sc, x.FundRecordID, false)
+			if err != nil || f == nil {
+				return err
+			}
+			e, err := postgres.FundEntries(ctx, exec, sc, f)
+			if err != nil {
+				return err
+			}
+			out.FundAvailableMinor = f.Available(e).MinorString()
 		}
-		e, err := postgres.FundEntries(ctx, exec, sc, f)
-		if err != nil {
-			return err
-		}
-		out.FundAvailableMinor = f.Available(e).MinorString()
 		if x.OrderID == "" {
 			return nil
 		}
