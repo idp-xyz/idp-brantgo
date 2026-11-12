@@ -35,7 +35,24 @@ func purCommands(c PUR) *commandSet {
 			purapi.CommandDecideCommitmentChange:  reflected("", "", receiptOf[purapi.Receipt](c.DecideCommitmentChange)),
 			purapi.CommandApplyCommitmentChange:   reflected("", "", receiptOf[purapi.Receipt](c.ApplyCommitmentChange)),
 			purapi.CommandCancelCommitment:        reflected("", "", receiptOf[purapi.Receipt](c.CancelCommitment)),
+			// Allocation reviews after an order change (S5-09b); a review names its object review_id.
+			// allocation_review.open is the Inbox consumer's and is not routed.
+			purapi.CommandSettleAllocationReview: reflected("", "", receiptOf[purapi.Receipt](c.SettleAllocationReview)),
 		}}
+}
+
+// orderAllocationReviews answers GET /api/brant/v1/pur/orders/<id>/allocation_reviews: the allocation
+// reviews of the order, by order version.
+func (s *server) orderAllocationReviews(w http.ResponseWriter, r *http.Request) {
+	v, err := s.cfg.PUR.GetAllocationReviews(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if v == nil {
+		v = []purapi.AllocationReviewView{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "order_id": r.PathValue("id"), "allocation_reviews": wire(v)})
 }
 
 // commitmentChanges answers GET /api/brant/v1/pur/purchase_commitments/<id>/changes: the changes of

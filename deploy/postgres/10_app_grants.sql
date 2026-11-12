@@ -272,6 +272,15 @@ GRANT UPDATE (revision, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancel
     ON brant_pur.purchase_commitment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_pur.commitment_lines(text, text, text), brant_pur.commitment_line_verified(text, text, text, text),
     brant_pur.draft_claims_whole(text, text, text) TO brant_app;
+-- PUR allocation reviews (S5-09b): a review is inserted open with its items and changes once, settled
+-- or superseded (trigger); an item changes only by its disposition, once (trigger); nothing is
+-- deleted. FOR UPDATE on reviews needs the column grants.
+GRANT SELECT, INSERT ON brant_pur.allocation_review, brant_pur.allocation_review_item TO brant_app;
+GRANT UPDATE (status, row_version, settled_by_kind, settled_by_id, settle_epoch, settled_at, settle_reason, superseded_by, superseded_at)
+    ON brant_pur.allocation_review TO brant_app;
+GRANT UPDATE (disposition, disposition_draft_id, disposition_change_id, disposition_commitment_id, disposition_revision, disposition_at,
+              disposition_reason)
+    ON brant_pur.allocation_review_item TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a
