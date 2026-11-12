@@ -51,9 +51,12 @@ type invoiceWorld struct {
 	files                       int
 }
 
-func newInvoiceWorld(t *testing.T) *invoiceWorld {
+func newInvoiceWorld(t *testing.T) *invoiceWorld { return newInvoiceWorldDelivered(t, "120") }
+
+// newInvoiceWorldDelivered is the world with delivered PCS of commitment.1 verified.
+func newInvoiceWorldDelivered(t *testing.T, delivered string) *invoiceWorld {
 	w := &invoiceWorld{deliveryWorld: newDeliveryWorld(t), ful: &fakeExports{exports: map[cnx.ExportRef]cnx.Export{}}}
-	w.verified("delivery.1", "120", "120")
+	w.verified("delivery.1", delivered, delivered)
 	ed, rv := w.author, w.reviewer
 	if v, err := w.c.POL.GetConfig(ed, polapi.KindCurrency, "CNY"); err == nil && v.ActiveRevision > 0 {
 		w.cny = polapi.ConfigRef{Kind: polapi.KindCurrency, ConfigID: "CNY", Revision: v.ActiveRevision}
@@ -372,6 +375,32 @@ func TestCNAT15BuyerEntityMismatchStaysInReview(t *testing.T) {
 		Permissions: []string{"cnx.read"}, DataScope: "company"})
 	if _, err := w.cnx.GetInvoice(outside, r.PurchaseInvoiceID); code(err) != kernel.CodeNotFound {
 		t.Fatalf("company.B: %v", err)
+	}
+}
+
+// Matching on PUR's commitment revisions (S5 C11, PurchaseLineRef v1 answers with the revision in
+// force): commitment.1 buys 120 PCS, 70 are verified delivered; an invoice matched before the
+// cancellation keeps its match; once the commitment is cancelled its line has Code INVALID_STATE
+// and a new match to it is refused, and the quantity it buys is what was delivered (70).
+func TestMatchesFollowTheCommitmentRevisionInForce(t *testing.T) {
+	w := newInvoiceWorldDelivered(t, "70")
+	before := w.invoice(w.facts("SYN0111", "50"), l1("50"))
+	if _, err := w.pur.CancelCommitment(w.author, purapi.CancelCommitment{IdempotencyKey: w.key(), CommitmentID: "commitment.1", ExpectedVersion: 3,
+		Reason: "合成：工厂停产，双方确认取消余量", Evidence: purChangeEvidence}); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	ref := purapi.CommitmentLineRef{CommitmentID: "commitment.1", OrderLineID: "L1"}
+	lines, err := w.pur.ResolvePurchaseLines(w.tax, []purapi.CommitmentLineRef{ref})
+	if pl := lines[ref]; err != nil || pl.Line.Code != kernel.CodeInvalidState || pl.Line.PurchaseQuantity != "70" {
+		t.Fatalf("the cancelled line %+v %v", pl, err)
+	}
+	after := w.imported(w.purchaser, w.facts("SYN0112", "10"))
+	_, err = w.cnx.VerifyInvoice(w.tax, w.verifyCmd(after, w.facts("SYN0112", "10"), l1("10")))
+	if code(err) != kernel.CodeInvalidState || path(err) != "/args/matches/0/commitment_id" {
+		t.Fatalf("a match to a cancelled commitment: %s %s", code(err), path(err))
+	}
+	if v := w.view(before.PurchaseInvoiceID); len(v.Matches) != 1 || v.Matches[0].Status != cnxapi.MatchStanding || v.Matches[0].PurchaseQuantity != "120" {
+		t.Fatalf("the earlier match stays as made %+v", v.Matches)
 	}
 }
 
