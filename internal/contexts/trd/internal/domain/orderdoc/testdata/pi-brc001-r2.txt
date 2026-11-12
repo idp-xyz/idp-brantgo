@@ -1,0 +1,38 @@
+SYNTHETIC PROFORMA INVOICE
+
+Seller: SYNTHETIC Exporter — no actual trade
+Synthetic Shanghai address
+Registration: SYNTHETIC-NOT-REAL | Country: CN
+
+Buyer: Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+Contact: Synthetic Contact 联系人
+
+Number: PI-2026-00003
+Order: order.1 r2
+Order SHA-256: f3d848f2c5d1d6246947f5f6048f5245b0137e99c6eeef4eb8a2fea2bac8d68c
+Quote: QT-2026-00001 (quote.1 r1) | Acceptance: acceptance.1
+Amendment: amendment.1 of r1
+Date: 2026-11-02T03:04:05.000006Z
+Not a commercial invoice or a tax invoice.
+
+Lines (amounts in USD):
+L1 | ST01 衬衫 red S | ST01.red.S r1 | 24 PCS | price 8 per 1 PCS | discount 0 | net 192.00 | tax 0.00 | total 192.00
+L2 | ST01 衬衫 red M | ST01.red.M r1 | 36 PCS | price 8 per 1 PCS | discount 0 | net 288.00 | tax 0.00 | total 288.00
+L3 | ST01 衬衫 blue S | ST01.blue.S r1 | 12 PCS | price 8 per 1 PCS | discount 0 | net 96.00 | tax 0.00 | total 96.00
+L4 | ST01 衬衫 blue M | ST01.blue.M r1 | 44 PCS | price 8 per 1 PCS | discount 0 | net 352.00 | tax 0.00 | total 352.00
+
+Currency: USD
+Net: 928.00 | Tax: 0.00 | Total: 928.00
+
+Terms: FCA Incoterms 2020 | Synthetic negotiated terms; not legal guidance
+Named place: Hamburg (DEHAM) | Trade terms: terms.fca r1
+
+Delivery: 2027-01-31 | handover | Asia/Shanghai
+
+Payment plan (planned amounts, not receipts):
+P1 | 30% | 278.40 | order_confirmed | 0 calendar days
+P2 | 70% | 649.60 | after_shipment | 30 calendar days
+
+Synthetic data. Pay against the order, not this document.

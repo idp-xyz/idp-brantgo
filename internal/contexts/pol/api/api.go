@@ -1,7 +1,7 @@
 // Package api is the contract of the POL bounded context (policy and configuration: the company
 // profile, currencies, units and their conversions, exchange rates, calendars, trade and payment
-// terms, taxes, fees, pricing and credit policies, bank accounts, document templates and
-// numbering) for transports, the AI layer and the contexts downstream of POL. It exposes no POL
+// terms, taxes, fees, pricing and credit policies, bank accounts, document templates, legal terms
+// and numbering) for transports, the AI layer and the contexts downstream of POL. It exposes no POL
 // domain type.
 //
 // A configuration is identified by (tenant, company, kind, config_id). Its content lives in
@@ -55,9 +55,9 @@ const (
 	StatusCaptured   = "captured"
 )
 
-// Kinds of configuration: the closed enumeration of the tactical model (POL-AGG-ConfigurationRoot).
-// Only the kinds KindImplemented reports are accepted so far; screening_regulation is refused with
-// UNSUPPORTED_CONTRACT until its contract lands.
+// Kinds of configuration: the closed enumeration of the tactical model (POL-AGG-ConfigurationRoot)
+// and legal_terms, the clause template the simulated G0 walkthrough's decision F-02 adds (WBS
+// S3-17, the condition of ADR-BR-013). Only the kinds KindImplemented reports are accepted.
 const (
 	KindCompanyProfile        = "company_profile"
 	KindCurrency              = "currency"
@@ -77,6 +77,11 @@ const (
 	KindQuoteDocumentTemplate = "quote_document_template"
 	KindScreeningRegulation   = "screening_regulation"
 	KindCreditPolicy          = "credit_policy"
+	KindLegalTerms            = "legal_terms"
+	// KindOrderDocumentTemplate is the layout of an export sales contract or proforma invoice (TRD
+	// order-text renderer; WBS S3-15, TRD-INV-020). The tactical model's closed enumeration lists
+	// eighteen kinds; legal_terms (S3-17) and this one (S3-15) are additions, pending the archive.
+	KindOrderDocumentTemplate = "order_document_template"
 )
 
 // Closed values of configuration data.
@@ -102,6 +107,9 @@ const (
 	DocumentTypeOrder         = "order"
 	DocumentTypePurchaseOrder = "purchase_order"
 	DocumentTypeInvoice       = "invoice"
+	// DocumentTypeProformaInvoice numbers proforma invoices apart from commercial invoices (UL
+	// TRD-SalesContractDocument: a PI is not a commercial invoice); an S/C is numbered as an order.
+	DocumentTypeProformaInvoice = "proforma_invoice"
 
 	// Jurisdictions of a screening list a screening_regulation enables (ADR-BR-017).
 	JurisdictionCN      = "CN"
@@ -134,19 +142,21 @@ const (
 var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
-		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy}
+		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy, KindLegalTerms,
+		KindOrderDocumentTemplate}
 	implemented   = slices.Clone(kinds)
 	purposes      = []string{PurposeCostEstimate, PurposeQuotation}
 	dimensions    = []string{DimensionCount, DimensionMass, DimensionLength, DimensionVolume}
 	triggers      = []string{TriggerOrderConfirmed, TriggerBeforeShipment, TriggerAfterShipment, TriggerAfterInvoice}
-	documentTypes = []string{DocumentTypeRfq, DocumentTypeQuote, DocumentTypeOrder, DocumentTypePurchaseOrder, DocumentTypeInvoice}
+	documentTypes = []string{DocumentTypeRfq, DocumentTypeQuote, DocumentTypeOrder, DocumentTypePurchaseOrder, DocumentTypeInvoice,
+		DocumentTypeProformaInvoice}
 	jurisdictions = []string{JurisdictionCN, JurisdictionUN, JurisdictionForeign}
 )
 
 // PercentFormat is the lexical form of a payment stage's percentage.
 var PercentFormat = kernel.DecimalFormat{IntDigits: 3, Scale: 6}
 
-// KindKnown reports whether kind is one of the eighteen configuration kinds.
+// KindKnown reports whether kind is one of the twenty configuration kinds.
 func KindKnown(kind string) bool { return slices.Contains(kinds, kind) }
 
 // KindImplemented reports whether POL accepts configurations of kind yet.

@@ -23,6 +23,8 @@ const (
 		WHERE tenant_id = $1 AND company_id = $2 FOR SHARE`
 	lockGrantShared = `SELECT actor_kind, active, $4 = ANY (permissions), data_scope, coalesce(team_id, '')
 		FROM brant_auth.actor_grant WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3 FOR SHARE`
+	lockGrantHolding = `SELECT actor_kind, active, permissions, data_scope, coalesce(team_id, '')
+		FROM brant_auth.actor_grant WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3 FOR SHARE`
 	lockScopeForChange = `SELECT authority_epoch FROM brant_auth.authority_scope
 		WHERE tenant_id = $1 AND company_id = $2 FOR NO KEY UPDATE`
 	readGrant = `SELECT actor_kind, active, permissions FROM brant_auth.actor_grant
@@ -116,6 +118,60 @@ func (a Authorizer) Access(ctx context.Context, exec bentopg.Executor) (Decision
 		return Decision{}, err
 	}
 	return guard(ctx, exec, p, "", "access")
+}
+
+// Holding is an actor's grant in a scope as Qualify read it: its kind, whether it is active, the
+// permissions it holds and its data scope. A missing grant is an inactive Holding of no
+// permission.
+type Holding struct {
+	Actor       kernel.ActorRef // the actor as granted: its kind is the grant's
+	Active      bool
+	Permissions []string
+	DataScope   DataScope
+	Team        string
+}
+
+// Holds reports whether the grant is active and holds permission.
+func (h Holding) Holds(permission string) bool {
+	return h.Active && slices.Contains(h.Permissions, permission)
+}
+
+// Sees reports whether the grant's actor sees a record owned by ownerActor and ownerTeam, as
+// Decision.Sees decides it; an inactive grant sees nothing.
+func (h Holding) Sees(ownerActor, ownerTeam string) bool {
+	return h.Active && Decision{Actor: h.Actor, DataScope: h.DataScope, Team: h.Team}.Sees(ownerActor, ownerTeam)
+}
+
+// Qualify reads the current grant of actorID in the scope of the caller's transaction, a check a
+// command makes of another actor than its own (such as the reviewer whose approval a later command
+// relies on: T03 A33). It locks the scope's guard row and then the actor's grant row FOR SHARE, in
+// the order Authorize takes them, so a change of that grant either committed before and is seen, or
+// waits until the caller's transaction ends. exec is the caller's executor; Qualify decides nothing.
+func (Authorizer) Qualify(ctx context.Context, exec bentopg.Executor, actorID string) (Holding, error) {
+	scope, ok := bento.ScopeFromContext(ctx)
+	if !ok {
+		return Holding{}, fmt.Errorf("%w: no transaction scope", ErrScopeMismatch)
+	}
+	tenant, company := string(scope.Tenant), string(scope.Company)
+	var epoch int64
+	err := exec.QueryRow(ctx, lockScopeShared, tenant, company).Scan(&epoch)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Holding{Actor: kernel.ActorRef{ID: actorID}}, nil
+	}
+	if err != nil {
+		return Holding{}, err
+	}
+	h := Holding{Actor: kernel.ActorRef{ID: actorID}}
+	var kind, dataScope string
+	err = exec.QueryRow(ctx, lockGrantHolding, tenant, company, actorID).Scan(&kind, &h.Active, &h.Permissions, &dataScope, &h.Team)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Holding{Actor: kernel.ActorRef{ID: actorID}}, nil
+	}
+	if err != nil {
+		return Holding{}, err
+	}
+	h.Actor.Kind, h.DataScope = kernel.ActorKind(kind), DataScope(dataScope)
+	return h, nil
 }
 
 // guard locks the scope's guard row and then the actor's grant row FOR SHARE. An empty permission

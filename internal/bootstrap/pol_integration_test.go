@@ -515,7 +515,10 @@ func TestPublicationSupersedesAndResolvesAtAnInstant(t *testing.T) {
 	}
 }
 
-// SM-POL-REVISION working → discarded: human only; the number is not reused.
+// SM-POL-REVISION working → discarded: human only; the number is not reused (also Python
+// test_t03_configuration_runtime.py test_discarded_working_revision_keeps_history_and_allocates_a_new_number,
+// PYT-0409, which discards a quote document template: the discarded revision stays in the history
+// and the next draft is revision 2; POL's discard takes a reason, no evidence).
 func TestDiscardedDraftKeepsItsNumber(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()
@@ -554,7 +557,11 @@ func TestDiscardedDraftKeepsItsNumber(t *testing.T) {
 }
 
 // Published revisions are immutable in the database too, and the database refuses a publisher who
-// is the revision's last editor (POL-INV-001); issued numbers never change.
+// is the revision's last editor (POL-INV-001); issued numbers never change. Python
+// test_t03_configuration_runtime.py test_runtime_schemas_match_candidate_contract_and_sealed_history_is_immutable
+// (PYT-0408), its sealed-history half: no update or delete of a published revision passes, whatever
+// the kind (one table holds every kind). Its schema-identity half has no Go counterpart (typed api),
+// and POL's events are Outbox messages, not a history table.
 func TestDatabaseKeepsPublishedRevisionsImmutable(t *testing.T) {
 	w := newWorld(t)
 	editor, reviewer := w.polActors()

@@ -38,7 +38,7 @@ func TestFoundationDemoPublishesEveryKindIndependently(t *testing.T) {
 		t.Fatalf("the file holds %+v, the run returned %+v", saved, result)
 	}
 
-	if len(saved.Configs) != 20 || len(saved.Kinds) != 18 || slices.ContainsFunc(saved.Kinds, func(k string) bool { return !polapi.KindKnown(k) }) {
+	if len(saved.Configs) != 21 || len(saved.Kinds) != 19 || slices.ContainsFunc(saved.Kinds, func(k string) bool { return !polapi.KindKnown(k) }) {
 		t.Fatalf("configs %v, kinds %v", saved.Configs, saved.Kinds)
 	}
 	reader := w.provision(bootstrap.Grant{Scope: kernel.Scope{Tenant: bootstrap.DemoTenant, Company: kernel.CompanyID(saved.Company)},
@@ -71,7 +71,7 @@ func TestFoundationDemoPublishesEveryKindIndependently(t *testing.T) {
 			t.Fatalf("lookup %+v adopted a revision the snapshot does not hold", l)
 		}
 	}
-	if saved.Number.DocumentNumber != "QT-"+quoteYear(t)+"-00001" || len(saved.Commands) != 45 {
+	if saved.Number.DocumentNumber != "QT-"+quoteYear(t)+"-00001" || len(saved.Commands) != 47 {
 		t.Fatalf("number %+v after %d commands", saved.Number, len(saved.Commands))
 	}
 

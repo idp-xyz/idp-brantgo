@@ -59,11 +59,19 @@ GRANT UPDATE (status, content_hash, party_revision, payment_terms_id, payment_te
               owner_actor_id, owner_team_id, saved_by_kind, saved_by_id, saved_epoch, saved_at, published_by_kind, published_by_id,
               publish_epoch, published_at, evidence_ids, ended_at)
     ON brant_pty.trading_profile_revision TO brant_app;
+-- TradingProfileGuard v1 and AddressRoleGuard v1: downstream contexts call them in their own
+-- transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_pty.guard_trading_profile_current_v1(text, bigint),
+    brant_pty.guard_address_role_current_v1(text, bigint, text) TO brant_app;
+-- PartyGuard v1 (R22): PUR calls it in its own transactions with its own executor.
+GRANT EXECUTE ON FUNCTION brant_pty.guard_party_current_v1(text, bigint) TO brant_app;
 
 -- CAT: SKUs change through their lifecycle; specification revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_cat TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_cat.sku TO brant_app;
 GRANT SELECT, INSERT ON brant_cat.sku_revision, brant_cat.action_result, brant_cat.audit_event TO brant_app;
+-- SkuGuard v1: downstream contexts call it in their own transactions with their own executors.
+GRANT EXECUTE ON FUNCTION brant_cat.guard_sku_spec_current_v1(text, bigint) TO brant_app;
 -- CAT item code mappings: a root's version and a draft revision change; a published revision changes
 -- only its status and supersession (trigger); the key never changes.
 GRANT SELECT, INSERT ON brant_cat.item_code_mapping, brant_cat.item_code_mapping_revision TO brant_app;
@@ -142,3 +150,74 @@ GRANT UPDATE (status, data, content_hash, valid_from, valid_until, validity_mode
     ON brant_sup.condition_revision TO brant_app;
 -- SupplyConditionGuard v1: downstream contexts call it in their own transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_sup.guard_supply_condition_v1(text, text, bigint, timestamptz) TO brant_app;
+
+-- TRD: a quote root moves its version and its object control (trigger: identity and owner fixed,
+-- versions and control epochs only grow); a working revision is edited, frozen or discarded, a sealed
+-- one only changes its status along SM-TRD-REVISION, a discarded one never changes (trigger); a review
+-- is decided once, an approval revoked once, a margin exception never changes (triggers); formal
+-- documents, commit evidence, closures, risk holds and conversion slots are only inserted (triggers);
+-- nothing is deleted; the ledger only grows. The freeze, activation and replacement call CST's, INQ's,
+-- CAT's, PTY's and POL's guard functions, granted above; TRD publishes its quote revision guard.
+GRANT USAGE ON SCHEMA brant_trd TO brant_app;
+GRANT SELECT, INSERT ON brant_trd.quote_root, brant_trd.quote_revision, brant_trd.action_result, brant_trd.audit_event TO brant_app;
+GRANT UPDATE (root_version, last_revision, labels, internal_note, control_state, control_epoch, control_task_id,
+              control_authority_epoch, control_by_kind, control_by_id, control_changed_at, updated_at)
+    ON brant_trd.quote_root TO brant_app;
+GRANT UPDATE (status, data, content_hash, contributors, saved_by_kind, saved_by_id, saved_epoch, saved_at, business_hash, commercial,
+              issued_at, expires_at, frozen_by_kind, frozen_by_id, freeze_epoch, frozen_at, frozen_root_version, ended_by_kind,
+              ended_by_id, end_epoch, ended_at, end_reason, end_evidence)
+    ON brant_trd.quote_revision TO brant_app;
+GRANT SELECT, INSERT ON brant_trd.quote_review, brant_trd.quote_approval, brant_trd.quote_margin_exception TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decided_epoch, decided_at, decision_reason, decision_evidence)
+    ON brant_trd.quote_review TO brant_app;
+GRANT UPDATE (effectivity, effectivity_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
+    ON brant_trd.quote_approval TO brant_app;
+GRANT SELECT, INSERT ON brant_trd.quote_document, brant_trd.quote_commit_evidence, brant_trd.quote_revision_closure,
+    brant_trd.quote_risk_hold, brant_trd.quote_conversion_slot TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint, text) TO brant_app;
+-- Customer responses and the effectivity ledger are only inserted (triggers); an acceptance changes
+-- its effectivity once (trigger), and acceptance.invalidate and acceptance.mark_disputed lock it FOR
+-- UPDATE, which needs the column grant. TRD publishes its acceptance guard.
+GRANT SELECT, INSERT ON brant_trd.customer_response, brant_trd.acceptance, brant_trd.acceptance_effectivity TO brant_app;
+GRANT UPDATE (effectivity, effectivity_version) ON brant_trd.acceptance TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_trd.guard_acceptance_valid_v1(text, text, bigint, text) TO brant_app;
+-- Sales orders: an order is inserted with its snapshot and then changes only its status, row version
+-- and activating review (trigger); a review is decided once and revoked once (trigger); commit
+-- evidence and closures are only inserted. Every order command locks the order FOR UPDATE, which
+-- needs the column grants. order.activate calls PTY's PartyScreeningGuard, granted above; TRD
+-- publishes its order guard (ActiveOrderRef v1, R19).
+GRANT SELECT, INSERT ON brant_trd.sales_order, brant_trd.sales_order_review, brant_trd.sales_order_commit_evidence,
+    brant_trd.sales_order_closure TO brant_app;
+GRANT UPDATE (status, row_version, activated_review_id, updated_at) ON brant_trd.sales_order TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason, decision_evidence, expires_at,
+              acknowledged_risks, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
+    ON brant_trd.sales_order_review TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_trd.guard_order_active_v1(text, bigint, text) TO brant_app;
+-- Active orders' amendments, revisions and ends (S3-15): an order moves to its next revision only
+-- with the revision row and the amendment's commit evidence (trigger), which, like the end of an
+-- active order, are only inserted; an amendment changes along SM-TRD-ORDER-AMENDMENT (trigger).
+GRANT SELECT, INSERT ON brant_trd.sales_order_amendment, brant_trd.sales_order_revision, brant_trd.sales_order_amendment_commit,
+    brant_trd.sales_order_end TO brant_app;
+GRANT UPDATE (order_revision, order_hash) ON brant_trd.sales_order TO brant_app;
+GRANT UPDATE (base_revision, base_hash, content, amendment_hash, status, version, preparations, submitted_by_kind, submitted_by_id,
+              submit_epoch, submitted_at, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason,
+              decision_evidence, applied_by_kind, applied_by_id, apply_epoch, applied_at, applied_revision, withdrawn_by_kind,
+              withdrawn_by_id, withdraw_epoch, withdrawn_at, withdraw_reason, withdraw_evidence, updated_at)
+    ON brant_trd.sales_order_amendment TO brant_app;
+-- Order documents and their signed copies (S3-15, TRD-INV-020): only inserted, for the order's
+-- current revision (trigger).
+GRANT SELECT, INSERT ON brant_trd.sales_order_document, brant_trd.sales_order_document_signature TO brant_app;
+
+-- PUR: a purchase draft is inserted prepared with its lines and only voided, once (trigger); its
+-- lines never change; a DemandAllocation root moves its balance, order revision and version by one
+-- per command (trigger), and its entries are taken once and released once (trigger); nothing is
+-- deleted; the ledger only grows. FOR UPDATE on drafts and roots needs the column grants. The
+-- purchase draft commands call SUP's, CST's, POL's, PTY's, CAT's and TRD's guard functions, granted
+-- above.
+GRANT USAGE ON SCHEMA brant_pur TO brant_app;
+GRANT SELECT, INSERT ON brant_pur.purchase_draft, brant_pur.purchase_draft_line, brant_pur.demand_allocation,
+    brant_pur.allocation_entry, brant_pur.action_result, brant_pur.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, voided_by_kind, voided_by_id, void_epoch, voided_at, void_reason)
+    ON brant_pur.purchase_draft TO brant_app;
+GRANT UPDATE (order_revision, demand, allocated, row_version, updated_at) ON brant_pur.demand_allocation TO brant_app;
+GRANT UPDATE (released_version, released_at) ON brant_pur.allocation_entry TO brant_app;

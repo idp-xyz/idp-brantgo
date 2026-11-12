@@ -1,6 +1,7 @@
 package api
 
 import (
+	"regexp"
 	"slices"
 	"strconv"
 	"time"
@@ -56,9 +57,28 @@ const (
 	LanguageZhCN         = "zh-CN"
 	LanguageEn           = "en"
 	QuoteRendererVersion = "quote-text/0.1.0"
+	// QuoteRendererVersion020 is quote-text/0.1.0 with an eleventh section, legal_terms, that prints
+	// the legal terms a quote seals (WBS S3-17). A quote with legal terms needs a template of it.
+	QuoteRendererVersion020 = "quote-text/0.2.0"
+	QuoteSectionLegalTerms  = "legal_terms"
+	OrderRendererVersion    = "order-text/0.1.0"
+
+	// Document kinds of an order document template.
+	OrderDocumentSalesContract   = "sales_contract"
+	OrderDocumentProformaInvoice = "proforma_invoice"
 
 	LimitSourceInternalAssessment = "internal_assessment"
 	LimitSourceSinosureBuyerLimit = "sinosure_buyer_limit"
+
+	// Legal terms (legal_terms, WBS S3-17).
+	CISGApplies        = "applies"
+	CISGExcluded       = "excluded"
+	FormationArrival   = "arrival"
+	FormationDispatch  = "dispatch"
+	DisputeArbitration = "arbitration"
+	DisputeLitigation  = "litigation"
+	// GoverningLawCN is the law of the People's Republic of China.
+	GoverningLawCN = "CN"
 )
 
 // Limits of configuration data.
@@ -71,6 +91,8 @@ const (
 	maxTitleCharacters = 2000
 	maxNoteCharacters  = 5000
 	maxTemplateText    = 50000
+	MaxClauses         = 50
+	maxClauseChars     = 2000
 	minAccountNumber   = 4
 	maxAccountNumber   = 64
 )
@@ -93,6 +115,23 @@ var (
 	limitSources   = []string{LimitSourceInternalAssessment, LimitSourceSinosureBuyerLimit}
 	templateFields = []string{"company.name", "customer.name", "document.number", "document.date", "lines.summary", "quote.total", "quote.currency"}
 	quoteSections  = []string{"issuer", "recipient", "identity", "lines", "totals", "terms", "delivery", "payments", "validity", "notes"}
+	cisgChoices    = []string{CISGApplies, CISGExcluded}
+	formationRules = []string{FormationArrival, FormationDispatch}
+
+	// governingLaw is an ISO 3166-1 alpha-2 country, optionally with an ISO 3166-2 subdivision
+	// (GB-ENG for England and Wales, US-NY for New York).
+	governingLaw = regexp.MustCompile(`^[A-Z]{2}(-[A-Z0-9]{1,3})?$`)
+	// languageTag is a BCP 47 language tag of a language, an optional script and an optional region.
+	languageTag   = regexp.MustCompile(`^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$`)
+	orderRequired = map[string][]string{
+		OrderDocumentSalesContract: {"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "clauses", "signatures",
+			"notes"},
+		OrderDocumentProformaInvoice: {"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes"},
+	}
+	orderOptional = map[string][]string{
+		OrderDocumentSalesContract:   {"law"},
+		OrderDocumentProformaInvoice: {"clauses", "law"},
+	}
 )
 
 // AmountFormat is the lexical form of a credit amount before its currency's minor units are known:
@@ -102,8 +141,28 @@ var AmountFormat = kernel.DecimalFormat{IntDigits: kernel.MaxMinorDigits - 4, Sc
 // TemplateFields returns the fields a plain-text document template may name.
 func TemplateFields() []string { return slices.Clone(templateFields) }
 
-// QuoteSections returns the ten sections of a quote document template.
+// QuoteSections returns the ten sections of a quote document template of quote-text/0.1.0.
 func QuoteSections() []string { return slices.Clone(quoteSections) }
+
+// QuoteSectionsFor returns the sections a quote document template of renderer version lists: the
+// ten of quote-text/0.1.0, and those and legal_terms for quote-text/0.2.0; nil for another version.
+func QuoteSectionsFor(version string) []string {
+	switch version {
+	case QuoteRendererVersion:
+		return QuoteSections()
+	case QuoteRendererVersion020:
+		return append(QuoteSections(), QuoteSectionLegalTerms)
+	}
+	return nil
+}
+
+// OrderDocumentSections returns the sections an order document template of document kind kind lists
+// once each, and those it may list at most once (nil for an unknown kind). The law section is the
+// slot of governing law and dispute resolution (WBS S3-17); TRD renders it once an order revision
+// binds them.
+func OrderDocumentSections(kind string) (required, optional []string) {
+	return slices.Clone(orderRequired[kind]), slices.Clone(orderOptional[kind])
+}
 
 // ConfigData is the content of one configuration kind; exactly the member of the revision's kind
 // is set. Decimals are strings in their contract format, never floats. POL stores every member as
@@ -129,18 +188,24 @@ type ConfigData struct {
 	QuoteDocumentTemplate *QuoteDocumentTemplate
 	CreditPolicy          *CreditPolicy
 	ScreeningRegulation   *ScreeningRegulation
+	LegalTerms            *LegalTerms
+	OrderDocumentTemplate *OrderDocumentTemplate
 }
 
 // CompanyProfile is the company of the scope; its config_id is the company's ID (at most
-// MaxConfigIDLength characters), so a company has one profile.
+// MaxConfigIDLength characters), so a company has one profile. DefaultLegalTerms is the tenant's
+// default legal terms (G0 walkthrough F-02: 默认 CISG 与中国法，由租户配置): a quote issued by the
+// company that names no legal terms of its own seals these at its freeze. Nil: no default is
+// configured, and such a quote seals none.
 type CompanyProfile struct {
-	LegalName      string
-	RegistrationNo string
-	Country        string // ISO 3166-1 alpha-2: ^[A-Z]{2}$
-	Address        string
-	BaseCurrency   string // currency code, configured and in force
-	TimeZone       string // IANA time zone, such as Asia/Shanghai
-	PolicyScope    string
+	LegalName         string
+	RegistrationNo    string
+	Country           string // ISO 3166-1 alpha-2: ^[A-Z]{2}$
+	Address           string
+	BaseCurrency      string // currency code, configured and in force
+	TimeZone          string // IANA time zone, such as Asia/Shanghai
+	PolicyScope       string
+	DefaultLegalTerms *ConfigRef // a legal_terms revision in force, or nil
 }
 
 // Currency is an ISO 4217 currency; its config_id is its code. Code, minor units and rounding are
@@ -313,9 +378,24 @@ type DocumentTemplate struct {
 type QuoteDocumentTemplate struct {
 	Name            string
 	Language        string   // zh-CN or en
-	RendererVersion string   // quote-text/0.1.0
+	RendererVersion string   // quote-text/0.1.0, or quote-text/0.2.0 for quotes with legal terms
 	Title           string   // 1–2000 characters
-	Sections        []string // the ten QuoteSections, each once, in rendering order
+	Sections        []string // QuoteSectionsFor(RendererVersion), each once, in rendering order
+	FooterNote      string   // 0–5000 characters
+}
+
+// OrderDocumentTemplate is the layout of an order document — an export sales contract (S/C) or a
+// proforma invoice (PI) — for the fixed order-text renderer: its kind and language, the title, the
+// order of its sections (the kind's required ones once each, its optional ones at most once), the
+// numbered clauses its clauses section prints, and a footer note.
+type OrderDocumentTemplate struct {
+	Name            string
+	DocumentKind    string   // sales_contract or proforma_invoice
+	Language        string   // zh-CN or en
+	RendererVersion string   // order-text/0.1.0
+	Title           string   // 1–2000 characters
+	Sections        []string // OrderDocumentSections of the kind, in rendering order
+	Clauses         []string // 1–50 clauses of 1–2000 characters when the template lists clauses; none otherwise
 	FooterNote      string   // 0–5000 characters
 }
 
@@ -356,6 +436,59 @@ type ScreeningList struct {
 	LegalConfirmationEvidenceID string // required for a foreign list
 }
 
+// LegalTerms are the legal terms of a quotation and of the export contract it becomes (WBS S3-17;
+// the simulated G0 walkthrough's decision F-02, the condition of ADR-BR-013): the law that governs
+// the contract, whether the CISG applies, the contract-formation rule that law implies, and how
+// disputes are resolved. TRD binds an exact revision to a quote revision (legal_terms_ref) and seals
+// its content into the commercial document; the issuer's company profile may name the tenant's
+// default (CompanyProfile.DefaultLegalTerms), which the design sets as the CISG with PRC law. Brant
+// records the terms a tenant's legal function publishes; it gives no legal opinion.
+//
+// POL checks the formation rule where the terms fix it: when the CISG applies, an acceptance takes
+// effect when it reaches the offeror and the contract is concluded then (CISG Art. 18(2), 23), and
+// PRC law says the same (Civil Code Art. 137, 483, 484), so both are arrival (INVALID_KNOWN_VALUE
+// otherwise). For another law without the CISG the publisher states the rule; TRD refuses to freeze
+// a quote under a law whose rule Brant does not implement (DEPENDENCY_NOT_SUPPORTED).
+type LegalTerms struct {
+	Name              string
+	GoverningLaw      string // ISO 3166-1 alpha-2, optionally "-" and an ISO 3166-2 subdivision: CN, DE, GB-ENG, US-NY
+	CISG              string // applies or excluded (CISG Art. 6)
+	FormationRule     string // arrival: an acceptance takes effect when it reaches the offeror; dispatch: when it is sent
+	DisputeResolution DisputeResolution
+}
+
+// DisputeResolution is arbitration by Institution seated at Seat and conducted in Language, or
+// litigation before Court; the other method's fields stay empty.
+type DisputeResolution struct {
+	Method      string // arbitration or litigation
+	Institution string // arbitration: the institution and its rules, such as CIETAC
+	Seat        string // arbitration: the seat, such as Hamburg
+	Language    string // arbitration: the language of the proceedings, a BCP 47 tag such as en, de or zh-CN
+	Court       string // litigation: the court with jurisdiction
+}
+
+func (l *LegalTerms) validate() error {
+	if err := first(field{"name", name(l.Name)}, field{"governing_law", governingLaw.MatchString(l.GoverningLaw)},
+		field{"cisg", slices.Contains(cisgChoices, l.CISG)}, field{"formation_rule", slices.Contains(formationRules, l.FormationRule)}); err != nil {
+		return err
+	}
+	d := l.DisputeResolution
+	switch d.Method {
+	case DisputeArbitration:
+		if d.Court != "" {
+			return schema("/args/data/dispute_resolution/court")
+		}
+		return first(field{"dispute_resolution/institution", name(d.Institution)}, field{"dispute_resolution/seat", name(d.Seat)},
+			field{"dispute_resolution/language", languageTag.MatchString(d.Language)})
+	case DisputeLitigation:
+		if d.Institution != "" || d.Seat != "" || d.Language != "" {
+			return schema("/args/data/dispute_resolution")
+		}
+		return first(field{"dispute_resolution/court", name(d.Court)})
+	}
+	return schema("/args/data/dispute_resolution/method")
+}
+
 func (r *ScreeningRegulation) validate() error {
 	if len(r.Lists) < 1 || len(r.Lists) > MaxScreeningLists {
 		return schema("/args/data/lists")
@@ -390,7 +523,8 @@ func (d ConfigData) validate(kind string) error {
 		KindTaxApplication: d.TaxApplication != nil, KindFeeCategory: d.FeeCategory != nil, KindPricingPolicy: d.PricingPolicy != nil,
 		KindBankAccount: d.BankAccount != nil, KindNumberSequence: d.NumberSequence != nil, KindDocumentTemplate: d.DocumentTemplate != nil,
 		KindQuoteDocumentTemplate: d.QuoteDocumentTemplate != nil, KindCreditPolicy: d.CreditPolicy != nil,
-		KindScreeningRegulation: d.ScreeningRegulation != nil,
+		KindScreeningRegulation: d.ScreeningRegulation != nil, KindLegalTerms: d.LegalTerms != nil,
+		KindOrderDocumentTemplate: d.OrderDocumentTemplate != nil,
 	}
 	for k, present := range members {
 		if present != (k == kind) {
@@ -434,6 +568,10 @@ func (d ConfigData) validate(kind string) error {
 		return d.CreditPolicy.validate()
 	case KindScreeningRegulation:
 		return d.ScreeningRegulation.validate()
+	case KindLegalTerms:
+		return d.LegalTerms.validate()
+	case KindOrderDocumentTemplate:
+		return d.OrderDocumentTemplate.validate()
 	}
 	return schema("/args/kind")
 }
@@ -455,9 +593,12 @@ func first(fields ...field) error {
 }
 
 func (c *CompanyProfile) validate() error {
-	return first(field{"legal_name", name(c.LegalName)}, field{"registration_no", name(c.RegistrationNo)},
+	if err := first(field{"legal_name", name(c.LegalName)}, field{"registration_no", name(c.RegistrationNo)},
 		field{"country", country(c.Country)}, field{"address", name(c.Address)}, field{"base_currency", currencyCode(c.BaseCurrency)},
-		field{"time_zone", text(c.TimeZone, maxTimeZoneCharacters)}, field{"policy_scope", name(c.PolicyScope)})
+		field{"time_zone", text(c.TimeZone, maxTimeZoneCharacters)}, field{"policy_scope", name(c.PolicyScope)}); err != nil {
+		return err
+	}
+	return optionalRef(c.DefaultLegalTerms, KindLegalTerms, "/args/data/default_legal_terms")
 }
 
 func (c *Currency) validate() error {
@@ -629,11 +770,42 @@ func (t *DocumentTemplate) validate() error {
 
 func (t *QuoteDocumentTemplate) validate() error {
 	sections := slices.Sorted(slices.Values(t.Sections))
+	want := QuoteSectionsFor(t.RendererVersion)
 	return first(field{"name", name(t.Name)}, field{"language", slices.Contains(languages, t.Language)},
-		field{"renderer_version", t.RendererVersion == QuoteRendererVersion},
+		field{"renderer_version", want != nil},
 		field{"title", nonBlank(t.Title, maxTitleCharacters)},
-		field{"sections", slices.Equal(sections, slices.Sorted(slices.Values(quoteSections)))},
+		field{"sections", slices.Equal(sections, slices.Sorted(slices.Values(want)))},
 		field{"footer_note", utf8.ValidString(t.FooterNote) && utf8.RuneCountInString(t.FooterNote) <= maxNoteCharacters})
+}
+
+func (t *OrderDocumentTemplate) validate() error {
+	need, may := orderRequired[t.DocumentKind], orderOptional[t.DocumentKind]
+	if err := first(field{"name", name(t.Name)}, field{"document_kind", need != nil}, field{"language", slices.Contains(languages, t.Language)},
+		field{"renderer_version", t.RendererVersion == OrderRendererVersion}, field{"title", nonBlank(t.Title, maxTitleCharacters)},
+		field{"footer_note", utf8.ValidString(t.FooterNote) && utf8.RuneCountInString(t.FooterNote) <= maxNoteCharacters}); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for i, s := range t.Sections {
+		if seen[s] || (!slices.Contains(need, s) && !slices.Contains(may, s)) {
+			return schema("/args/data/sections/" + strconv.Itoa(i))
+		}
+		seen[s] = true
+	}
+	for _, s := range need {
+		if !seen[s] {
+			return schema("/args/data/sections")
+		}
+	}
+	if seen["clauses"] != (len(t.Clauses) > 0) || len(t.Clauses) > MaxClauses {
+		return schema("/args/data/clauses")
+	}
+	for i, c := range t.Clauses {
+		if !nonBlank(c, maxClauseChars) {
+			return schema("/args/data/clauses/" + strconv.Itoa(i))
+		}
+	}
+	return nil
 }
 
 func (p *CreditPolicy) validate() error {

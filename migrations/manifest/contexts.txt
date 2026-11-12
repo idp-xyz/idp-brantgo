@@ -7,7 +7,9 @@
 # guard function, so it precedes pty. Bounded contexts follow in the order of their upstream
 # relationships: evd before pty, cat and pol (R63), all four before inq; sup after its upstreams inq,
 # pty, cat, pol and evd (R04–R07, R53); cst after inq, sup, cat and pol (R08, R09, R51, R10), whose
-# guard functions its transactions call.
+# guard functions its transactions call; trd after cst, inq, pty, cat, pol and evd (R11–R16), whose
+# guard functions its freeze calls; pur after trd, sup, cst, pty, pol and cat (R19–R22, R48, R52), whose
+# guard functions its purchase drafts call.
 auth
 msg
 ref
@@ -18,3 +20,5 @@ pol
 inq
 sup
 cst
+trd
+pur

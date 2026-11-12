@@ -53,12 +53,17 @@ type commandSet struct {
 		AuditRejected(ctx context.Context, command, objectID, code string) error
 	}
 	audit func(context.Context) ([]kernel.AuditEntry, error)
+	// reconcile, when set, reconciles the commands whose type it names (contract 06, 动作对账).
+	reconcile *reconcileFunc
 }
 
-// commandFunc decodes args of type args within maxValues JSON values and runs the command.
+// commandFunc decodes args of type args within maxValues JSON values into the context's command
+// (of type cmd) and runs it.
 type commandFunc struct {
-	args reflect.Type
-	call func(ctx context.Context, key string, args json.RawMessage, maxValues int) (receipt, error)
+	args  reflect.Type
+	cmd   reflect.Type
+	build func(key string, args json.RawMessage, maxValues int) (any, error)
+	run   func(ctx context.Context, cmd any) (receipt, error)
 }
 
 // envelope is the uniform command request. Presence is checked field by field, so the members are
@@ -120,7 +125,9 @@ func unwrapExecuted(err error) error {
 	return err
 }
 
-func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run commandFunc) (receipt, error) {
+// decodeCommand checks the request against the command's contract and returns the context's
+// command: size and closed JSON, contract and command, the structure of the arguments.
+func (s *server) decodeCommand(r *http.Request, set *commandSet, name string, run commandFunc) (any, error) {
 	limit, values := s.cfg.MaxBodyBytes, strictjson.DefaultMaxValues
 	if l := set.limits[name]; l.MaxBytes > limit {
 		limit, values = l.MaxBytes, max(l.MaxValues, values)
@@ -130,35 +137,53 @@ func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return receipt{}, kernel.Reject(kernel.CodeRequestTooLarge, "/", "")
+			return nil, kernel.Reject(kernel.CodeRequestTooLarge, "/", "")
 		}
-		return receipt{}, err
+		return nil, err
 	}
 	var env envelope
 	if err = strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit, MaxValues: values}); err != nil {
-		return receipt{}, err
+		return nil, err
 	}
 	switch {
 	case env.Contract == nil || *env.Contract != set.contract:
-		return receipt{}, kernel.Reject(kernel.CodeUnsupportedContract, "/contract", "")
-	case env.Command == nil || *env.Command != name || run.call == nil:
-		return receipt{}, kernel.Reject(kernel.CodeUnsupportedContract, "/command", "")
+		return nil, kernel.Reject(kernel.CodeUnsupportedContract, "/contract", "")
+	case env.Command == nil || *env.Command != name || run.build == nil:
+		return nil, kernel.Reject(kernel.CodeUnsupportedContract, "/command", "")
 	case env.IdempotencyKey == nil:
-		return receipt{}, kernel.Reject(kernel.CodeSchemaInvalid, "/idempotency_key", "required")
+		return nil, kernel.Reject(kernel.CodeSchemaInvalid, "/idempotency_key", "required")
 	case len(env.Args) == 0 || env.Args[0] != '{':
-		return receipt{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args", "required object")
+		return nil, kernel.Reject(kernel.CodeSchemaInvalid, "/args", "required object")
 	}
 	if p := emptyString(raw); p != "" {
 		// Every string of these contracts has at least one character; an unknown value is omitted.
-		return receipt{}, kernel.Reject(kernel.CodeSchemaInvalid, p, "empty string")
+		return nil, kernel.Reject(kernel.CodeSchemaInvalid, p, "empty string")
 	}
-	res, err := run.call(r.Context(), *env.IdempotencyKey, env.Args, values)
+	cmd, err := run.build(*env.IdempotencyKey, env.Args, values)
 	if err != nil {
-		var schema schemaError
-		if errors.As(err, &schema) {
-			return receipt{}, schema.rejection
-		}
-		return receipt{}, executedError{err}
+		return nil, contextError(err)
+	}
+	return cmd, nil
+}
+
+// contextError keeps a rejection found while decoding args as the transport's own and marks any
+// other error as the context's.
+func contextError(err error) error {
+	var schema schemaError
+	if errors.As(err, &schema) {
+		return schema.rejection
+	}
+	return executedError{err}
+}
+
+func (s *server) decodeAndRun(r *http.Request, set *commandSet, name string, run commandFunc) (receipt, error) {
+	cmd, err := s.decodeCommand(r, set, name, run)
+	if err != nil {
+		return receipt{}, err
+	}
+	res, err := run.run(r.Context(), cmd)
+	if err != nil {
+		return receipt{}, contextError(err)
 	}
 	return res, nil
 }
@@ -224,16 +249,21 @@ func findEmpty(v any, path string) string {
 
 // handle builds a commandFunc that decodes A, converts it to the context's command C and runs it.
 func handle[A any, C any, R result](build func(key string, a A) (C, error), call func(context.Context, C) (R, error)) commandFunc {
-	return commandFunc{args: reflect.TypeFor[A](), call: func(ctx context.Context, key string, args json.RawMessage, maxValues int) (receipt, error) {
-		var a A
-		if err := decodeArgs(args, &a, maxValues); err != nil {
-			return receipt{}, err
-		}
-		c, err := build(key, a)
-		if err != nil {
-			return receipt{}, err
-		}
-		r, err := call(ctx, c)
+	return commandFunc{args: reflect.TypeFor[A](), cmd: reflect.TypeFor[C](),
+		build: func(key string, args json.RawMessage, maxValues int) (any, error) {
+			var a A
+			if err := decodeArgs(args, &a, maxValues); err != nil {
+				return nil, err
+			}
+			return build(key, a)
+		},
+		run: runner(call)}
+}
+
+// runner runs the context's command C and returns its closed receipt.
+func runner[C any, R result](call func(context.Context, C) (R, error)) func(context.Context, any) (receipt, error) {
+	return func(ctx context.Context, cmd any) (receipt, error) {
+		r, err := call(ctx, cmd.(C))
 		if err != nil {
 			return receipt{}, err
 		}
@@ -245,7 +275,7 @@ func handle[A any, C any, R result](build func(key string, a A) (C, error), call
 			Replayed   bool
 		}(r)
 		return receipt{ActionID: v.ActionID, ObjectID: v.ObjectID, RowVersion: v.RowVersion, Status: v.Status, Replayed: v.Replayed}, nil
-	}}
+	}
 }
 
 // version returns a required expected_version.
@@ -560,7 +590,7 @@ func inqCommands(c INQ) *commandSet {
 		SourceIDs        []string `json:"source_ids"`
 		UnresolvedFields []string `json:"unresolved_fields"`
 	}
-	return &commandSet{bc: "inq", contract: inqapi.Contract, auditor: c, audit: c.Audit, commands: map[string]commandFunc{
+	return &commandSet{bc: "inq", contract: inqapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
 		inqapi.CommandSaveRfq: handle(func(key string, a saveRfq) (inqapi.SaveRfq, error) {
 			v, err := version(a.ExpectedVersion)
 			cmd := inqapi.SaveRfq{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, CustomerID: a.CustomerID, ContactID: a.ContactID,

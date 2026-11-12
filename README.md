@@ -8,7 +8,7 @@
 - Repository: `github.com/idp-xyz/idp-brantgo`, public (moved from the personal account `idpxyz` to the `idp-xyz` organization on 2026-11-11; links under the old name redirect).
 - The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is published with the repository. `docs/00_START_HERE/00_INDEX.html` is its entry page.
 
-M0 built the engineering baseline. S1 (master data and inquiry) is done: EVD, PTY with party screening, trading profiles, address roles and service roles, CAT with item-code mappings, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. `brant-cli foundation-demo` publishes a synthetic foundation. S2 (sourcing and costing) is done too: SUP supply conditions with SupplyConditionGuard v1, and CST costing contexts, measurements, deterministic scenario evaluation, frozen cost snapshots, source denial and AdoptabilityGuard v1; T02's 660.00 USD baseline freezes on PostgreSQL 16. The connection to a real identity provider is deferred to the B0 pilot gate. S3 (quotes, acceptance, orders, purchase drafts) is next.
+M0 built the engineering baseline. S1 (master data and inquiry) is done: EVD, PTY with party screening, trading profiles, address roles and service roles, CAT with item-code mappings, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. `brant-cli foundation-demo` publishes a synthetic foundation. S2 (sourcing and costing) is done too: SUP supply conditions with SupplyConditionGuard v1, and CST costing contexts, measurements, deterministic scenario evaluation, frozen cost snapshots, source denial and AdoptabilityGuard v1; T02's 660.00 USD baseline freezes on PostgreSQL 16. S3 (quotes, acceptance, orders, purchase drafts) is done as well: TRD quotes freeze with the server calculation and a business hash, pass an independent review (with margin exceptions), are formalized with a number, document bytes and commit evidence, and become contracts when a verified acceptance arrives in time under the governing law's rule; sales orders activate after an independent review acknowledges every upstream risk and move through hashed revisions by amendment; PUR prepares purchase drafts from active order lines against a demand allocation. BRC-001 runs end to end over HTTP on PostgreSQL 16 (quote 960.00, order 960.00, purchase draft 600.00). STL credit and CNX trade compliance guards are deferred to S4–S5. The connection to a real identity provider is deferred to the B0 pilot gate. S4 (business tasks and AI-native operation) is next.
 
 ## Layout
 
@@ -22,17 +22,46 @@ internal/bootstrap/               composition root: one connection pool, a Bento
 internal/contexts/evd/            EVD: text sources (content, origin, import) and business files, immutable; SourceRef lookup
 internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup;
                                   address roles, service roles, trading profiles; party screening with positive and negative
-                                  lists and PartyScreeningGuard v1
-internal/contexts/cat/            CAT: SKUs and specification revisions, item-code mappings; SkuRef and ItemCodeMappingRef lookups
-internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed; RfqLineRef lookup
+                                  lists and PartyScreeningGuard v1; TradingProfileGuard v1 and AddressRoleGuard v1 for TRD;
+                                  PartyGuard v1 for PUR
+internal/contexts/cat/            CAT: SKUs and specification revisions, item-code mappings; SkuRef and ItemCodeMappingRef lookups;
+                                  SkuGuard v1 for TRD
+internal/contexts/inq/            INQ: customer RFQs draft, ready, cancelled, closed; RfqLineRef and RfqRef (with customer and
+                                  contact) lookups, RfqGuard v1
 internal/contexts/sup/            SUP: supplier RFQs; supplier offers, purchase terms and logistics offers in sealed
                                   revisions (verify/publish independently, supersede, withdraw/retire);
                                   SupplyConditionRef lookup and SupplyConditionGuard v1
-internal/contexts/pol/            POL: eighteen configuration kinds with independent publication, ConfigGuard v1, FX, tax and
-                                  unit lookups, document numbers, foundation snapshots
+internal/contexts/pol/            POL: twenty configuration kinds (S3 adds legal_terms with the tenant's default, S3-17,
+                                  and order_document_template, S3-15) with independent publication, ConfigGuard v1, FX,
+                                  tax and unit lookups, document numbers,
+                                  foundation snapshots
 internal/contexts/cst/            CST: costing contexts and measurements in sealed revisions, the calculation rules, cost
                                   scenarios with deterministic evaluations, frozen cost snapshots (once per scenario),
                                   source attestations and denials; CostSnapshotRef lookup and AdoptabilityGuard v1
+internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working drafts, the human freeze with the server calculation
+                                  (calc), its commercial document and business hash (Python protocol.py, golden vectors),
+                                  internal metadata, the root's object control and control epoch fence; review requests,
+                                  approvals with revocation and margin exceptions; activation and replacement with the
+                                  quote-text/0.1.0 formal document, POL number and commit evidence in one transaction,
+                                  withdrawal, cancellation, risk holds, the conversion slot; QuoteRevisionGuard v1;
+                                  customer responses, their verification into acceptances that form the contract when
+                                  they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1;
+                                  the read side: quote_ready, paged quote, approval, document, commit and Outbox
+                                  histories, dispatch preflight and target, reconciliation and replays that re-check
+                                  the caller's grant, data scope and EVD sources;
+                                  sales orders: preparation taking the conversion slot, review with risk
+                                  acknowledgement, activation re-checking the source and upstream (STL/CNX extension
+                                  points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR;
+                                  active orders: amendments (prepare, submit, independent decision, apply) that move the
+                                  order to its next hashed order revision, so OrderGuard v1 refuses the old binding;
+                                  cancellation, short closing and closing (FUL and PUR facts not wired); the S/C and PI
+                                  of an order revision (order-text/0.1.0 with the source quote's legal terms, POL
+                                  template and number, bytes and commit evidence in one transaction, stale once the
+                                  order is amended) and their signed and countersigned copies (EVD files)
+internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding active order lines to chosen supply condition
+                                  lines (immutable, hashed, not committed; server calculation of MOQ, multiples, tiers, tax
+                                  and delivery; costing comparison), the demand allocation ledger per order line (several
+                                  drafts and suppliers, never above the line's quantity), overbuy approval, purchase.draft.void
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only
@@ -53,7 +82,7 @@ migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
 migrations/msg/                   brant_msg: dead letters of the Outbox relay (FORCE RLS)
 migrations/ref/                   brant_ref: screening list versions and entries, immutable (FORCE RLS)
-migrations/{evd,pty,cat,pol,inq,sup,cst}/ brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
+migrations/{evd,pty,cat,pol,inq,sup,cst,trd,pur}/ brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
 deploy/postgres/                  roles (brant_migrator, brant_app) and application grants
 scripts/dev-postgres.sh           development PostgreSQL 16 container brant-pg16 on 127.0.0.1:55471
 contracts/openapi/                candidate OpenAPI 3.1 document, generated by tools/openapigen
@@ -98,7 +127,7 @@ Against another PostgreSQL 16:
 
 ## Status of evidence
 
-S1, 2026-11-10: GitHub Actions runs the workflow on this repository (then the private `idpxyz/idp-brantgo`, public as `idp-xyz/idp-brantgo` since 2026-11-11); every branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). Branch protection and required reviews are not configured: GitHub did not offer them for the private repository on the Free plan, and the owner decided on 2026-11-10 to go without them (G1 control C09 is not blocking); now that the repository is public they are available and await the owner's decision. Contributors open pull requests and merge only after the CI check passes. The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
+S1, 2026-11-10: GitHub Actions runs the workflow on this repository (then the private `idpxyz/idp-brantgo`, public as `idp-xyz/idp-brantgo` since 2026-11-11); every branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). `main` is a protected branch since 2026-11-11 (owner decision, once the repository was public): a change reaches it only through a pull request whose `brant-ci` check passed, for administrators too; force pushes and deletion are refused. Reviews and signed provenance are not required (G1 control C09 stays partial by that decision). The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
 
 - The command ledger orders a command as the Python service does (contract, permission, stored result, CAS and state, references) and commits the change, the action result, the audit entry and the Outbox events together; replays re-check the current permission and visibility.
 - 53 Python V0.50 tests of T01 and the shared foundation are ported (08 stage mapping); the front of BRC-001 (four lines, 120 PCS, ready) replays on PostgreSQL 16 directly and over HTTP with OIDC access tokens.

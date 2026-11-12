@@ -54,9 +54,88 @@ func valid() map[string]ConfigData {
 			LimitSources:         []string{LimitSourceInternalAssessment, LimitSourceSinosureBuyerLimit},
 			ApprovalTiers:        []CreditApprovalTier{{Level: "credit_officer", MaxAmount: "1000"}, {Level: "credit_manager", MaxAmount: "10000.00"}},
 			OverdueToleranceDays: 30}},
+		KindOrderDocumentTemplate: {OrderDocumentTemplate: &OrderDocumentTemplate{Name: "sales contract", DocumentKind: OrderDocumentSalesContract,
+			Language: LanguageEn, RendererVersion: OrderRendererVersion, Title: "SALES CONTRACT",
+			Sections: []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "clauses", "signatures", "notes"},
+			Clauses:  []string{"Packing: export cartons."}}},
 		KindScreeningRegulation: {ScreeningRegulation: &ScreeningRegulation{RescreenIntervalDays: 90,
 			Lists: []ScreeningList{{ListCode: "cn.export_control", Jurisdiction: JurisdictionCN},
 				{ListCode: "eu.consolidated", Jurisdiction: JurisdictionForeign, LegalConfirmationEvidenceID: "src.legal.1"}}}},
+		KindLegalTerms: {LegalTerms: &LegalTerms{Name: "CISG with PRC law", GoverningLaw: GoverningLawCN, CISG: CISGApplies,
+			FormationRule: FormationArrival, DisputeResolution: DisputeResolution{Method: DisputeArbitration,
+				Institution: "China International Economic and Trade Arbitration Commission", Seat: "Shanghai", Language: "en"}}},
+	}
+}
+
+// WBS S3-17 (G0 F-02): legal terms name a jurisdiction whose law governs, whether the CISG applies,
+// the formation rule and either arbitration (institution, seat, language) or litigation (court); a
+// company profile may name its default legal terms by exact revision; a quote template of
+// quote-text/0.2.0 lists the legal_terms section besides the ten.
+func TestLegalTermsContract(t *testing.T) {
+	court := func(d *ConfigData) {
+		d.LegalTerms.DisputeResolution = DisputeResolution{Method: DisputeLitigation, Court: "Shanghai International Commercial Court"}
+	}
+	for _, c := range []struct {
+		kind string
+		edit func(*ConfigData)
+		want string
+	}{
+		{KindLegalTerms, func(*ConfigData) {}, "OK"},
+		{KindLegalTerms, court, "OK"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.GoverningLaw = "GB-ENG" }, "OK"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.GoverningLaw = "US-NY" }, "OK"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.GoverningLaw = "de" }, "SCHEMA_INVALID /args/data/governing_law"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.GoverningLaw = "German law" }, "SCHEMA_INVALID /args/data/governing_law"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.GoverningLaw = "GB-ENGL" }, "SCHEMA_INVALID /args/data/governing_law"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.CISG = "yes" }, "SCHEMA_INVALID /args/data/cisg"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.FormationRule = "receipt" }, "SCHEMA_INVALID /args/data/formation_rule"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.Name = " " }, "SCHEMA_INVALID /args/data/name"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.DisputeResolution.Method = "mediation" },
+			"SCHEMA_INVALID /args/data/dispute_resolution/method"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.DisputeResolution.Seat = "" }, "SCHEMA_INVALID /args/data/dispute_resolution/seat"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.DisputeResolution.Language = "English" },
+			"SCHEMA_INVALID /args/data/dispute_resolution/language"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.DisputeResolution.Language = "zh-Hans-CN" }, "OK"},
+		{KindLegalTerms, func(d *ConfigData) { d.LegalTerms.DisputeResolution.Court = "a court" },
+			"SCHEMA_INVALID /args/data/dispute_resolution/court"},
+		{KindLegalTerms, func(d *ConfigData) { court(d); d.LegalTerms.DisputeResolution.Seat = "Hamburg" },
+			"SCHEMA_INVALID /args/data/dispute_resolution"},
+		{KindLegalTerms, func(d *ConfigData) { court(d); d.LegalTerms.DisputeResolution.Court = "" },
+			"SCHEMA_INVALID /args/data/dispute_resolution/court"},
+		{KindCompanyProfile, func(d *ConfigData) {
+			d.CompanyProfile.DefaultLegalTerms = &ConfigRef{Kind: KindLegalTerms, ConfigID: "legal.default", Revision: 1}
+		}, "OK"},
+		{KindCompanyProfile, func(d *ConfigData) {
+			d.CompanyProfile.DefaultLegalTerms = &ConfigRef{Kind: KindTradeTerms, ConfigID: "legal.default", Revision: 1}
+		}, "SCHEMA_INVALID /args/data/default_legal_terms/kind"},
+		{KindCompanyProfile, func(d *ConfigData) {
+			d.CompanyProfile.DefaultLegalTerms = &ConfigRef{Kind: KindLegalTerms, ConfigID: "legal.default"}
+		}, "SCHEMA_INVALID /args/data/default_legal_terms/revision"},
+		{KindQuoteDocumentTemplate, func(d *ConfigData) {
+			d.QuoteDocumentTemplate.RendererVersion = QuoteRendererVersion020
+		}, "SCHEMA_INVALID /args/data/sections"},
+		{KindQuoteDocumentTemplate, func(d *ConfigData) {
+			d.QuoteDocumentTemplate.RendererVersion = QuoteRendererVersion020
+			d.QuoteDocumentTemplate.Sections = append([]string{QuoteSectionLegalTerms}, QuoteSections()...)
+		}, "OK"},
+		{KindQuoteDocumentTemplate, func(d *ConfigData) {
+			d.QuoteDocumentTemplate.Sections = append(QuoteSections(), QuoteSectionLegalTerms)
+		}, "SCHEMA_INVALID /args/data/sections"},
+		{KindQuoteDocumentTemplate, func(d *ConfigData) { d.QuoteDocumentTemplate.RendererVersion = "quote-text/0.3.0" },
+			"SCHEMA_INVALID /args/data/renderer_version"},
+	} {
+		d := valid()[c.kind]
+		c.edit(&d)
+		if got := code(save(c.kind, d).Validate()); got != c.want {
+			t.Errorf("%s: %s, want %s", c.kind, got, c.want)
+		}
+	}
+	if s := QuoteSectionsFor(QuoteRendererVersion020); len(s) != 11 || s[10] != QuoteSectionLegalTerms || len(QuoteSections()) != 10 ||
+		QuoteSectionsFor("quote-text/9") != nil || !slices.Equal(QuoteSectionsFor(QuoteRendererVersion), QuoteSections()) {
+		t.Fatal(s)
+	}
+	if !KindKnown(KindLegalTerms) || !KindImplemented(KindLegalTerms) || !KindKnown(KindOrderDocumentTemplate) || len(kinds) != 20 {
+		t.Fatal("legal_terms and order_document_template are the nineteenth and twentieth kinds")
 	}
 }
 
@@ -124,6 +203,43 @@ func TestSecondBatchContracts(t *testing.T) {
 		{KindQuoteDocumentTemplate, func(d *ConfigData) { slices.Reverse(d.QuoteDocumentTemplate.Sections) }, "OK"},
 		{KindQuoteDocumentTemplate, func(d *ConfigData) { d.QuoteDocumentTemplate.FooterNote = strings.Repeat("注", 5001) },
 			"SCHEMA_INVALID /args/data/footer_note"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { slices.Reverse(d.OrderDocumentTemplate.Sections) }, "OK"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			d.OrderDocumentTemplate.Sections = append(d.OrderDocumentTemplate.Sections, "law")
+		}, "OK"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.DocumentKind = "commercial_invoice" },
+			"SCHEMA_INVALID /args/data/document_kind"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.RendererVersion = QuoteRendererVersion },
+			"SCHEMA_INVALID /args/data/renderer_version"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Sections = d.OrderDocumentTemplate.Sections[1:] },
+			"SCHEMA_INVALID /args/data/sections"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Sections[1] = "seller" }, "SCHEMA_INVALID /args/data/sections/1"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Sections[0] = "issuer" }, "SCHEMA_INVALID /args/data/sections/0"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = nil }, "SCHEMA_INVALID /args/data/clauses"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = make([]string, MaxClauses+1) },
+			"SCHEMA_INVALID /args/data/clauses"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = []string{" "} }, "SCHEMA_INVALID /args/data/clauses/0"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Clauses = []string{strings.Repeat("条", 2001)} },
+			"SCHEMA_INVALID /args/data/clauses/0"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) { d.OrderDocumentTemplate.Title = "" }, "SCHEMA_INVALID /args/data/title"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			t := d.OrderDocumentTemplate
+			t.DocumentKind = OrderDocumentProformaInvoice
+			t.Sections = []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes"}
+			t.Clauses = nil
+		}, "OK"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			t := d.OrderDocumentTemplate
+			t.DocumentKind = OrderDocumentProformaInvoice
+			t.Sections = []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes", "signatures"}
+			t.Clauses = nil
+		}, "SCHEMA_INVALID /args/data/sections/9"},
+		{KindOrderDocumentTemplate, func(d *ConfigData) {
+			t := d.OrderDocumentTemplate
+			t.DocumentKind = OrderDocumentProformaInvoice
+			t.Sections = []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "notes"}
+		}, "SCHEMA_INVALID /args/data/clauses"},
+		{KindNumberSequence, func(d *ConfigData) { d.NumberSequence.DocumentType = DocumentTypeProformaInvoice }, "OK"},
 		{KindCreditPolicy, func(d *ConfigData) { d.CreditPolicy.LimitSources = []string{"guess"} }, "SCHEMA_INVALID /args/data/limit_sources/0"},
 		{KindCreditPolicy, func(d *ConfigData) { d.CreditPolicy.ApprovalTiers = nil }, "SCHEMA_INVALID /args/data/approval_tiers"},
 		{KindCreditPolicy, func(d *ConfigData) { d.CreditPolicy.DefaultLimit = "-1" }, "SCHEMA_INVALID /args/data/default_limit"},
@@ -134,7 +250,9 @@ func TestSecondBatchContracts(t *testing.T) {
 			t.Errorf("%s: %s, want %s", c.kind, got, c.want)
 		}
 	}
-	if !slices.Equal(TemplateFields(), templateFields) || len(QuoteSections()) != 10 {
+	required, optional := OrderDocumentSections(OrderDocumentProformaInvoice)
+	if !slices.Equal(TemplateFields(), templateFields) || len(QuoteSections()) != 10 || len(required) != 9 ||
+		!slices.Equal(optional, []string{"clauses", "law"}) {
 		t.Fatal("fixed lists")
 	}
 }

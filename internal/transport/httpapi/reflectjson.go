@@ -188,10 +188,10 @@ func reflected[C any, R result](idField, kind string, call func(context.Context,
 		source = append(source, f.Index[0])
 	}
 	at := reflect.StructOf(fields)
-	return commandFunc{args: at, call: func(ctx context.Context, key string, args json.RawMessage, maxValues int) (receipt, error) {
+	build := func(key string, args json.RawMessage, maxValues int) (any, error) {
 		a := reflect.New(at)
 		if err := decodeArgs(args, a.Interface(), maxValues); err != nil {
-			return receipt{}, err
+			return nil, err
 		}
 		c := reflect.New(ct).Elem()
 		c.FieldByName("IdempotencyKey").SetString(key)
@@ -202,24 +202,14 @@ func reflected[C any, R result](idField, kind string, call func(context.Context,
 			src, dst := a.Elem().Field(i), c.Field(idx)
 			if fields[i].Name == "ExpectedVersion" {
 				if src.IsNil() {
-					return receipt{}, schemaError{kernel.Reject(kernel.CodeSchemaInvalid, "/args/expected_version", "required")}
+					return nil, schemaError{kernel.Reject(kernel.CodeSchemaInvalid, "/args/expected_version", "required")}
 				}
 				dst.SetInt(src.Elem().Int())
 				continue
 			}
 			copyValue(dst, src)
 		}
-		r, err := call(ctx, c.Interface().(C))
-		if err != nil {
-			return receipt{}, err
-		}
-		v := struct {
-			ActionID   string
-			ObjectID   string
-			RowVersion int64
-			Status     string
-			Replayed   bool
-		}(r)
-		return receipt{ActionID: v.ActionID, ObjectID: v.ObjectID, RowVersion: v.RowVersion, Status: v.Status, Replayed: v.Replayed}, nil
-	}}
+		return c.Interface().(C), nil
+	}
+	return commandFunc{args: at, cmd: ct, build: build, run: runner(call)}
 }

@@ -22,7 +22,8 @@ const OpenAPIPath = "contracts/openapi/brant-api.openapi.json"
 func OpenAPI() ([]byte, error) {
 	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
 		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{}),
-		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{})}
+		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{}),
+		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{})}
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -49,21 +50,33 @@ func OpenAPI() ([]byte, error) {
 			if l := set.limits[n]; l.MaxBytes > int64(limit) {
 				limit, values = int(l.MaxBytes), max(l.MaxValues, values)
 			}
+			ingress := "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token."
+			body := map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "args"},
+				"properties": map[string]any{
+					"contract":        map[string]any{"const": set.contract},
+					"command":         map[string]any{"const": n},
+					"idempotency_key": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
+					"args":            args,
+				}}}}}
 			paths["/api/brant/v1/"+set.bc+"/commands/"+n] = map[string]any{"post": map[string]any{
 				"operationId": set.bc + "." + n,
 				"tags":        []string{set.bc},
 				"summary":     n,
-				"description": "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token.",
-				"requestBody": map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
-					"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "args"},
-					"properties": map[string]any{
-						"contract":        map[string]any{"const": set.contract},
-						"command":         map[string]any{"const": n},
-						"idempotency_key": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
-						"args":            args,
-					}}}}},
-				"responses": commandResponses(),
+				"description": ingress,
+				"requestBody": body,
+				"responses":   commandResponses(),
 			}}
+			if set.reconcilable(n) {
+				paths["/api/brant/v1/"+set.bc+"/commands/"+n+"/reconcile"] = map[string]any{"post": map[string]any{
+					"operationId": set.bc + "." + n + ".reconcile",
+					"tags":        []string{set.bc},
+					"summary":     "What became of " + n + " sent with this idempotency key (动作对账)",
+					"description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. " + ingress,
+					"requestBody": body,
+					"responses":   reconcileResponses(),
+				}}
+			}
 		}
 	}
 	for _, r := range reads {
@@ -71,6 +84,9 @@ func OpenAPI() ([]byte, error) {
 		var params []any
 		for _, p := range r.params {
 			params = append(params, map[string]any{"name": p, "in": "path", "required": true, "schema": map[string]any{"type": "string"}})
+		}
+		for _, p := range readQuery[r.path] {
+			params = append(params, map[string]any{"name": p, "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 0}})
 		}
 		if params != nil {
 			get["parameters"] = params
@@ -85,6 +101,7 @@ func OpenAPI() ([]byte, error) {
 		"200": map[string]any{"description": "The process serves requests."}}}}
 	schemas := map[string]any{
 		"Receipt":        schemaOf(reflect.TypeFor[receipt]()),
+		"Reconciliation": schemaOf(reflect.TypeFor[reconciliation]()),
 		"Rejection":      schemaOf(reflect.TypeFor[rejection]()),
 		"TransportError": schemaOf(reflect.TypeFor[transportError]()),
 	}
@@ -144,11 +161,54 @@ var reads = []readRoute{
 	{"/api/brant/v1/cst/cost_snapshots/{id}/adoptability", "cst.cost_snapshot.query", "cst",
 		"Whether the snapshot may be adopted now, as AdoptabilityGuard v1 decides it (Python snapshot_query)", []string{"id"}, false},
 	{"/api/brant/v1/cst/source_attestations/{id}", "cst.source_attestation.get", "cst", "A source attestation or denial", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}", "trd.quote.get", "trd",
+		"A quote: root versions, object control, every revision with its calculation, reviews, approvals, holds and the conversion slot", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/active", "trd.quote.active.get", "trd", "The quote's active formal revision", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check", "trd.quote.approval.check", "trd",
+		"Whether an approval releases its revision now (a refusal is a code in the answer, not an error)", []string{"id", "approval_id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/revisions/{revision}/document", "trd.quote.document.get", "trd",
+		"A formal quote document: its binding and bytes (Base64), verified on read", []string{"id", "revision"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/ready", "trd.quote.ready", "trd",
+		"Whether a revision (?business_revision=, the active one by default) serves the next step now: every check that fails is a reason (quote_ready)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/history", "trd.quote.history", "trd", "A page of the quote's revisions with their events (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/approvals", "trd.quote.approval.history", "trd",
+		"A page of the quote's review requests and approvals with their effectivity events (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/documents", "trd.quote.document.history", "trd",
+		"A page of the quote's formal documents with their integrity now (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/commits", "trd.quote.commit.history", "trd", "A page of the quote's commit evidence (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/outbox", "trd.quote.outbox.history", "trd",
+		"A page of the Outbox events of the quote, its responses and acceptances with their relay state; external delivery is not started (?after=, ?limit=)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_preflight", "trd.quote.dispatch.preflight", "trd",
+		"What must hold before the formal document of a revision is sent to the customer, checked now", []string{"id", "revision"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_target", "trd.quote.dispatch.target", "trd",
+		"The recipient snapshot of a revision and whether a delivery channel serves it (none is configured)", []string{"id", "revision"}, false},
+	{"/api/brant/v1/trd/orders/{id}", "trd.order.get", "trd",
+		"A sales order: its binding, the exact snapshot bytes (verified on read), reviews with acknowledged risks, commit evidence and closure", []string{"id"}, false},
+	{"/api/brant/v1/trd/orders/{id}/check", "trd.order.check", "trd",
+		"The checks order.activate would make now on ?review_id= (none: the source and upstream risks only); a refusal is the answer", []string{"id"}, false},
+	{"/api/brant/v1/trd/orders/{id}/revisions/{revision}/documents/{kind}", "trd.order.document.get", "trd",
+		"The export sales contract (sales_contract) or proforma invoice (proforma_invoice) of an order revision: binding, signed copies and bytes (Base64), verified on read", []string{"id", "revision", "kind"}, false},
+	{"/api/brant/v1/trd/customer_responses/{id}", "trd.customer_response.get", "trd", "A customer response and its acceptances", []string{"id"}, false},
+	{"/api/brant/v1/trd/acceptances/{id}", "trd.acceptance.get", "trd", "An acceptance and its effectivity history", []string{"id"}, false},
+	{"/api/brant/v1/pur/purchase_drafts/{id}", "pur.purchase_draft.get", "pur",
+		"A purchase draft: its state now (prepared, supply_expired or voided), the exact document its hash covers, lines, totals and void; the caller's access to the order and every supply condition is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/pur/orders/{id}/allocations", "pur.demand_allocation.get", "pur",
+		"The demand allocation of every drafted line of a sales order: demand, allocated, remaining and the drafts holding it", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},
 	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
 		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)", []string{"source", "event_id"}, true},
+}
+
+// readQuery names the optional integer query parameters of a read.
+var readQuery = map[string][]string{
+	"/api/brant/v1/trd/quotes/{id}/ready":     {"business_revision"},
+	"/api/brant/v1/trd/quotes/{id}/history":   {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/approvals": {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/documents": {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/commits":   {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/outbox":    {"after", "limit"},
 }
 
 func commandResponses() map[string]any {
@@ -163,6 +223,15 @@ func commandResponses() map[string]any {
 	return out
 }
 
+func reconcileResponses() map[string]any {
+	out := readResponses()
+	out["200"] = map[string]any{"description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key).",
+		"content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/Reconciliation"}}}}
+	out["400"] = commandResponses()["400"]
+	out["413"] = commandResponses()["413"]
+	return out
+}
+
 func readResponses() map[string]any {
 	ref := func(name, desc string) map[string]any {
 		return map[string]any{"description": desc, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/" + name}}}}
@@ -173,7 +242,7 @@ func readResponses() map[string]any {
 		"403": ref("Rejection", "PERMISSION_DENIED"),
 		"404": ref("Rejection", "NOT_FOUND: missing or outside the caller's data scope"),
 		"422": ref("Rejection", "SCHEMA_INVALID or a business rejection"),
-		"503": ref("TransportError", "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile by replaying the same idempotency key"),
+		"503": ref("TransportError", "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"),
 	}
 }
 

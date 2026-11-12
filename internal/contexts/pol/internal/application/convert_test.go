@@ -43,9 +43,21 @@ func TestEveryKindConvertsBothWays(t *testing.T) {
 			FieldNames: []string{"document.number"}}},
 		api.KindQuoteDocumentTemplate: {QuoteDocumentTemplate: &api.QuoteDocumentTemplate{Name: "n", Language: "en",
 			RendererVersion: "quote-text/0.1.0", Title: "Quotation", Sections: api.QuoteSections(), FooterNote: "f"}},
+		api.KindOrderDocumentTemplate: {OrderDocumentTemplate: &api.OrderDocumentTemplate{Name: "n", DocumentKind: "proforma_invoice",
+			Language: "en", RendererVersion: "order-text/0.1.0", Title: "Proforma invoice",
+			Sections: []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "clauses", "notes"},
+			Clauses:  []string{"Bank charges outside China are the buyer's."}, FooterNote: "f"}},
 		api.KindCreditPolicy: {CreditPolicy: &api.CreditPolicy{Name: "n", Currency: "CNY", DefaultLimit: "0", LimitSources: []string{"internal_assessment"},
 			ApprovalTiers: []api.CreditApprovalTier{{Level: "officer", MaxAmount: "1000"}}, OverdueToleranceDays: 30}},
+		api.KindLegalTerms: {LegalTerms: &api.LegalTerms{Name: "n", GoverningLaw: "DE", CISG: "applies", FormationRule: "arrival",
+			DisputeResolution: api.DisputeResolution{Method: "arbitration", Institution: "i", Seat: "Hamburg", Language: "de"}}},
+		"company_profile with its default legal terms": {CompanyProfile: &api.CompanyProfile{LegalName: "合成企业", RegistrationNo: "S",
+			Country: "CN", Address: "a", BaseCurrency: "CNY", TimeZone: "Asia/Shanghai", PolicyScope: "p",
+			DefaultLegalTerms: &api.ConfigRef{Kind: api.KindLegalTerms, ConfigID: "legal.default", Revision: 3}}},
 	} {
+		if d.CompanyProfile != nil {
+			kind = api.KindCompanyProfile
+		}
 		c := content(api.SaveDraft{Kind: kind, ValidFrom: "2026-10-22T00:00:00Z", ValidUntil: "2026-10-23T00:00:00Z", Data: d})
 		raw, err := c.DataJSON()
 		if err != nil {

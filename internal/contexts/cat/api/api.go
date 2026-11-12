@@ -184,7 +184,8 @@ type Queries interface {
 	ResolveSkus(ctx context.Context, ids []string) (map[string]SkuRef, error)
 	// ResolveSpecs tells downstream contexts whether each specification revision is the SKU's
 	// current confirmed one, for new use; every reference asked is answered. It needs no permission
-	// beyond an active grant. Ask before opening your own transaction.
+	// beyond an active grant. Ask before opening your own transaction; inside it, SkuGuard v1
+	// decides the same.
 	ResolveSpecs(ctx context.Context, refs []SpecRef) (map[SpecRef]SpecStanding, error)
 	// GetItemCodeMapping returns a mapping and its revisions, audited as item_code_mapping.get.
 	GetItemCodeMapping(ctx context.Context, mappingID string) (ItemCodeMappingView, error)

@@ -4,6 +4,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ import (
 // PostgreSQL 16 database. Each test runs in a fresh tenant with company.A and company.B, so tests
 // never see each other's data. Test names cite the Python V0.50 test they port.
 
-// every S1 permission and CST's, Python's "*".
+// every S1 permission, SUP's, CST's, TRD's and PUR's, Python's "*".
 var allPermissions = []string{
 	"source.register", "file.register", "evd.read", "evd.audit",
 	"party.save_draft", "party.confirm", "party.revise", "party.deactivate", "contact.save_draft", "contact.confirm", "contact.revise",
@@ -43,6 +44,15 @@ var allPermissions = []string{
 	"purchase_terms.save_draft", "purchase_terms.revise", "purchase_terms.discard_draft", "purchase_terms.publish", "purchase_terms.retire",
 	"logistics_offer.save_draft", "logistics_offer.revise", "logistics_offer.discard_draft", "logistics_offer.verify",
 	"logistics_offer.withdraw", "sup.read", "sup.audit",
+	"quote.save_draft", "quote.revise", "quote.discard_draft", "quote.freeze", "quote.metadata.update",
+	"object_control.bind", "object_control.stop", "object_control.release", "trd.read", "trd.audit",
+	"quote.submit_review", "quote.review.decide", "quote.approval.revoke", "quote.margin_exception.approve",
+	"quote.activate", "quote.replace", "quote.withdraw", "quote.cancel",
+	"quote.response.record", "quote.response.verify", "acceptance.invalidate", "acceptance.mark_disputed",
+	"order.prepare", "order.review.request", "order.review.decide", "order.activate", "order.approval.revoke", "order.cancel",
+	"order.close_unfulfilled", "order.amendment.prepare", "order.amendment.submit", "order.amendment.decide", "order.amendment.apply",
+	"order.amendment.withdraw", "order.close_remainder", "order.close", "order.document.generate", "order.document.record_signed",
+	"purchase.draft.prepare", "purchase.draft.void", "purchase.overbuy.approve", "pur.read", "pur.audit",
 }
 
 type world struct {
@@ -50,7 +60,7 @@ type world struct {
 	platform *bootstrap.Platform
 	c        *bootstrap.Contexts
 	tenant   string
-	serial   int
+	serial   atomic.Int64 // keys may be drawn from concurrent goroutines
 }
 
 func newWorld(t *testing.T) *world {
@@ -95,8 +105,8 @@ func (w *world) provision(g bootstrap.Grant) context.Context {
 
 // key returns a fresh idempotency key, like the Python tests' k1, k2, ...
 func (w *world) key() string {
-	w.serial++
-	return "k" + string(rune('0'+w.serial/100%10)) + string(rune('0'+w.serial/10%10)) + string(rune('0'+w.serial%10))
+	n := w.serial.Add(1)
+	return "k" + string(rune('0'+n/100%10)) + string(rune('0'+n/10%10)) + string(rune('0'+n%10))
 }
 
 func code(err error) string {

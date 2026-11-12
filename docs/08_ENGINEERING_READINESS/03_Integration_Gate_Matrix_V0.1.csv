@@ -1,13 +1,13 @@
 ﻿id,gate,name,evidence,owner,state
 IG-01,G1,PG16 迁移与回滚,brant-migrate 空库、重复、篡改、失败回滚（本机 PG16 实测）；GitHub Actions 每次运行在全新 PG16 上迁移并复跑幂等（S1 证据 05）,DBA,DONE_CI
 IG-02,G1,RLS 与数据库角色负向测试,跨租户、跨公司、brant_app 无 DDL（brant_auth、brant_msg 负向测试；S1 上下文跨公司隔离），本机 PG16 与 GitHub Actions,DBA＋安全,DONE_CI
-IG-03,G1,同根并发（SC-03、BC-AT15、BC-AT17）,SC-03 已实测（根行 FOR UPDATE）；BC-AT15、BC-AT17 随 S3,TRD Owner＋技术负责人,PARTIAL
-IG-04,G1,跨上下文资格重查（SC-04）,M0-10 实测支持方案 B；待 ADR-BR-004 裁决，生产守卫随 S2-06,首席架构师,PARTIAL
+IG-03,G1,同根并发（SC-03、BC-AT15、BC-AT17）,SC-03 已实测（根行 FOR UPDATE）；BC-AT15（两个请求键并发准备订单，只有一个成功）与 BC-AT17（替代与转单并发，订单占用名额后替代为 ROOT_CONVERSION_LOCKED）在本机 PG16 与 GitHub Actions 通过（S3 证据）,TRD Owner＋技术负责人,DONE_CI
+IG-04,G1,跨上下文资格重查（SC-04）,方案 B 的生产守卫：ConfigGuard、PartyScreeningGuard、RfqGuard、SupplyConditionGuard、AdoptabilityGuard、TradingProfileGuard、AddressRoleGuard、SkuGuard、QuoteRevisionGuard、AcceptanceGuard、OrderGuard、PartyGuard，各有提交顺序测试（本机 PG16 与 GitHub Actions）；STL 信用与 CNX 贸易合规守卫按负责人决定 S4—S5 接入,首席架构师,DONE_CI
 IG-05,G1,Outbox 中继与崩溃演练,SIGKILL 后重投、SIGTERM 正常退出；四条放弃路径写入死信并告警、人工重放（本机 PG16 与 GitHub Actions）,技术负责人,DONE_CI
 IG-06,G2,Inbox 去重与重放,事件 ID 去重、乱序与重复投递,技术负责人,NOT_STARTED
 IG-07,G1,OIDC 身份与 authority_epoch,撤权与生效竞争、AI 人工命令拒绝已实测；OIDC 访问令牌校验与经 HTTP 的端到端测试通过（本地签发者）；未接入真实身份提供方,安全负责人,PARTIAL
-IG-08,G2,文件存储与正式文档字节,同事务封存、字节完整性读取校验,TRD Owner,NOT_STARTED
-IG-09,G2,编号服务（POL 或 idp-platform-go）,原子分配、幂等、号段不回收,POL Owner＋平台负责人,NOT_STARTED
+IG-08,G2,文件存储与正式文档字节,同事务封存、字节完整性读取校验：报价正式文档已实现（S3-04）；EVD 文件登记的消费与对象存储未做,TRD Owner,PARTIAL
+IG-09,G2,编号服务（POL 或 idp-platform-go）,原子分配、幂等、号段不回收：POL NumberIssue v1 在 TRD 事务之前以幂等键分配，被拒绝的试运行不占号，之后的失败只留下号段空缺，重试取回同一编号（S3-04）；idp-platform-go 编号服务未接入,POL Owner＋平台负责人,PARTIAL
 IG-10,G2,EER 执行适配,停止屏障、恢复、预算强制,集成负责人,NOT_STARTED
 IG-11,G2,BIP／邮件渠道,外发授权、operation_id、unknown 对账,集成负责人,NOT_STARTED
 IG-12,G2,真实模型调用与评测（BC-AT28）,试次、修正、成本与权威断言,AI Owner,NOT_STARTED

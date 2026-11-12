@@ -67,6 +67,7 @@ CST,costing.attest_source,仅人工,attest_costing_source（本地接口）,POST
 TRD,quote.save_draft,人工或 AI（按动作权限）,quote.save_draft,POST /api/brant/v1/trd/commands/quote.save_draft,S3
 TRD,quote.revise,人工或 AI（按动作权限）,quote.revise,POST /api/brant/v1/trd/commands/quote.revise,S3
 TRD,quote.discard_draft,人工或 AI（按动作权限）,quote.discard_draft,POST /api/brant/v1/trd/commands/quote.discard_draft,S3
+TRD,quote.metadata.update,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/trd/commands/quote.metadata.update,S3
 TRD,quote.freeze,仅人工,quote.freeze,POST /api/brant/v1/trd/commands/quote.freeze,S3
 TRD,quote.submit_review,仅人工,quote.submit_review,POST /api/brant/v1/trd/commands/quote.submit_review,S3
 TRD,quote.review.decide,仅人工,quote.review.decide,POST /api/brant/v1/trd/commands/quote.review.decide,S3

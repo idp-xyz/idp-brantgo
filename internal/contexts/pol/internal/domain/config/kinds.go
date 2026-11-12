@@ -31,6 +31,8 @@ const (
 	KindQuoteDocumentTemplate Kind = "quote_document_template"
 	KindCreditPolicy          Kind = "credit_policy"
 	KindScreeningRegulation   Kind = "screening_regulation"
+	KindLegalTerms            Kind = "legal_terms"
+	KindOrderDocumentTemplate Kind = "order_document_template"
 )
 
 // Closed values the rules below compare.
@@ -45,6 +47,11 @@ const (
 	// JurisdictionForeign is the jurisdiction of a screening list a tenant enables only with its
 	// legal confirmation (ADR-BR-017, SR-19).
 	JurisdictionForeign = "foreign"
+
+	// Legal terms (WBS S3-17): the CISG applies, an acceptance takes effect on arrival, PRC law.
+	CISGApplies      = "applies"
+	FormationArrival = "arrival"
+	GoverningLawCN   = "CN"
 )
 
 // Ref is a ConfigRef v1 inside configuration data: the exact revision of another configuration.
@@ -55,15 +62,18 @@ type Ref struct {
 	Revision int64  `json:"revision"`
 }
 
-// CompanyProfile is the company of the scope; its config_id is the company's ID.
+// CompanyProfile is the company of the scope; its config_id is the company's ID. DefaultLegalTerms,
+// the legal terms a quote of the company seals when it names none, is omitted when not configured,
+// so a profile without it keeps the content hash it had before the member existed.
 type CompanyProfile struct {
-	LegalName      string `json:"legal_name"`
-	RegistrationNo string `json:"registration_no"`
-	Country        string `json:"country"`
-	Address        string `json:"address"`
-	BaseCurrency   string `json:"base_currency"`
-	TimeZone       string `json:"time_zone"`
-	PolicyScope    string `json:"policy_scope"`
+	LegalName         string `json:"legal_name"`
+	RegistrationNo    string `json:"registration_no"`
+	Country           string `json:"country"`
+	Address           string `json:"address"`
+	BaseCurrency      string `json:"base_currency"`
+	TimeZone          string `json:"time_zone"`
+	PolicyScope       string `json:"policy_scope"`
+	DefaultLegalTerms *Ref   `json:"default_legal_terms,omitempty"`
 }
 
 // Currency is an ISO 4217 currency; code, minor units and rounding are its meaning.
@@ -234,6 +244,20 @@ type QuoteDocumentTemplate struct {
 	FooterNote      string   `json:"footer_note"`
 }
 
+// OrderDocumentTemplate is the layout of an export sales contract or a proforma invoice for the fixed
+// order-text renderer: its kind, language, title, the order of its sections, its clauses and a
+// footer note.
+type OrderDocumentTemplate struct {
+	Name            string   `json:"name"`
+	DocumentKind    string   `json:"document_kind"`
+	Language        string   `json:"language"`
+	RendererVersion string   `json:"renderer_version"`
+	Title           string   `json:"title"`
+	Sections        []string `json:"sections"`
+	Clauses         []string `json:"clauses"`
+	FooterNote      string   `json:"footer_note"`
+}
+
 // CreditPolicy is how customer credit is limited: the default limit of a new customer, the
 // accepted sources of a limit, the approval levels by the largest excess each may approve, and how
 // many days a payment may be overdue. Amounts are in Currency.
@@ -269,6 +293,25 @@ func zone(tz string) bool {
 func ratio(s string) bool {
 	d, err := kernel.ParseDecimal(s, kernel.FactorFormat)
 	return err == nil && d.Sign() >= 0 && d.Cmp(kernel.DecimalFromInt(1)) <= 0
+}
+
+// LegalTerms are the governing law, whether the CISG applies, the contract-formation rule and the
+// dispute resolution of a quotation and its contract (WBS S3-17, G0 F-02).
+type LegalTerms struct {
+	Name              string            `json:"name"`
+	GoverningLaw      string            `json:"governing_law"`
+	CISG              string            `json:"cisg"`
+	FormationRule     string            `json:"formation_rule"`
+	DisputeResolution DisputeResolution `json:"dispute_resolution"`
+}
+
+// DisputeResolution is arbitration (institution, seat, language) or litigation (court).
+type DisputeResolution struct {
+	Method      string `json:"method"`
+	Institution string `json:"institution,omitempty"`
+	Seat        string `json:"seat,omitempty"`
+	Language    string `json:"language,omitempty"`
+	Court       string `json:"court,omitempty"`
 }
 
 // ScreeningRegulation is the screening lists a company enables and its re-screening interval.
@@ -368,6 +411,20 @@ func Validate(id string, c Content) error {
 					"A foreign list needs the tenant's legal confirmation")
 			}
 		}
+	case KindLegalTerms:
+		return checkFormation(c.LegalTerms)
+	}
+	return nil
+}
+
+// checkFormation requires the contract-formation rule where the legal terms fix it (WBS S3-17): when
+// the CISG applies an acceptance takes effect when it reaches the offeror and the contract is
+// concluded then (CISG Art. 18(2), 23), and so under PRC law (Civil Code Art. 137, 483, 484). For
+// another law without the CISG the rule is the publisher's statement.
+func checkFormation(l *LegalTerms) error {
+	if l.FormationRule != FormationArrival && (l.CISG == CISGApplies || l.GoverningLaw == GoverningLawCN) {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/formation_rule",
+			"Under the CISG and under PRC law an acceptance takes effect when it reaches the offeror")
 	}
 	return nil
 }
@@ -502,8 +559,9 @@ type Reference struct {
 }
 
 // References returns what c refers to. Currencies and units are named by code: their meaning never
-// changes (POL-INV-002). Tax profiles and calendars are named by exact revision. A fee category a
-// tax application applies to is named by ID; a SKU, a party or a company is not a configuration.
+// changes (POL-INV-002). Tax profiles, calendars and a company's default legal terms are named by
+// exact revision. A fee category a tax application applies to is named by ID; a SKU, a party or a
+// company is not a configuration.
 func (c Content) References() []Reference {
 	var out []Reference
 	byID := func(path string, kind Kind, id string) {
@@ -517,6 +575,7 @@ func (c Content) References() []Reference {
 	switch c.Kind {
 	case KindCompanyProfile:
 		byID("/args/data/base_currency", KindCurrency, c.CompanyProfile.BaseCurrency)
+		exact("/args/data/default_legal_terms", c.CompanyProfile.DefaultLegalTerms)
 	case KindUnitConversion:
 		byID("/args/data/from_unit", KindUnit, c.UnitConversion.FromUnit)
 		byID("/args/data/to_unit", KindUnit, c.UnitConversion.ToUnit)

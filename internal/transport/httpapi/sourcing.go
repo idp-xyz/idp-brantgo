@@ -21,6 +21,7 @@ type (
 		cstapi.ScenarioQueries
 		cstapi.SnapshotCommands
 		cstapi.SnapshotQueries
+		cstapi.Reconciler
 		cstapi.Auditor
 	}
 )
@@ -63,7 +64,7 @@ func cstCommands(c CST) *commandSet {
 		r, err := c.FreezeSnapshot(ctx, cmd)
 		return r.Receipt, err
 	}
-	return &commandSet{bc: "cst", contract: cstapi.Contract, auditor: c, audit: c.Audit, commands: map[string]commandFunc{
+	return &commandSet{bc: "cst", contract: cstapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
 		cstapi.CommandSaveContext:          reflected("ContextID", "", c.SaveContext),
 		cstapi.CommandReviseContext:        reflected("ContextID", "", c.ReviseContext),
 		cstapi.CommandDiscardContextDraft:  reflected("ContextID", "", c.DiscardContextDraft),

@@ -28,12 +28,13 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.6"
-ARCHIVE_DATE = "2026-11-10"
+ARCHIVE_VERSION = "1.7"
+ARCHIVE_DATE = "2026-11-11"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
 S1_EVIDENCE = "09_IMPLEMENTATION_PLAN/05_S1_EVIDENCE"
 S2_EVIDENCE = "09_IMPLEMENTATION_PLAN/07_S2_EVIDENCE"
+S3_EVIDENCE = "09_IMPLEMENTATION_PLAN/09_S3_EVIDENCE"
 M0_EVIDENCE_FILES = [
     "README.md", "01_environment.json", "02_go_source_manifest.txt", "03_make_ci_go1.26.5.txt", "04_make_ci_go1.26.8.txt",
     "05_integration_verbose_go1.26.5.txt", "06_kernel_fuzz.txt", "07_migrate_first_run.txt", "08_migrate_second_run.txt",
@@ -45,6 +46,8 @@ S1_EVIDENCE_FILES = [
     "04_integration_verbose_go1.26.5.txt", "05_github_actions_runs.json.txt", "06_strictjson_fuzz.txt",
 ]
 S2_EVIDENCE_FILES = S1_EVIDENCE_FILES  # the same runs, taken when S2 was merged
+# S3 adds the BRC-001 chain record over HTTP (WBS S3-12); make ci already includes the race run.
+S3_EVIDENCE_FILES = S1_EVIDENCE_FILES + ["07_brc001_chain.json"]
 # Spike outcomes the M0 report states; the build fails if the evidence says otherwise.
 SPIKE_EXPECTED = {
     "SC-04-A": "violation", "SC-04-B1": "consistent", "SC-04-B2": "consistent", "SC-04-B3": "consistent",
@@ -921,6 +924,15 @@ def inc_s2_evidence(a):
     return inc_m0_evidence(a, S2_EVIDENCE, S2_EVIDENCE_FILES)
 
 
+def inc_s3_ported(a):
+    slices = sorted({r["slice"] for r in _mapping_rows() if r["slice"].startswith(("T03", "T04"))})
+    return inc_s1_ported(a, tuple(slices), "s3-ported")
+
+
+def inc_s3_evidence(a):
+    return inc_m0_evidence(a, S3_EVIDENCE, S3_EVIDENCE_FILES)
+
+
 def inc_m0_evidence(a, folder=M0_EVIDENCE, files=M0_EVIDENCE_FILES):
     base = DOCS / folder
     rows = []
@@ -1315,6 +1327,7 @@ def write_registry(pages: list[str]) -> None:
             "V1.3 远程 CI 跑通并回写 S1 第一批：命令账本、EVD、PTY、CAT、INQ、POL（首批 5 种配置）、HTTP 入口与 OIDC、Outbox 死信；主体筛查未完成，受保护主干按负责人决定不配置。",
             "V1.4 回写 S1 第二批：POL 全部 18 种配置与 ConfigGuard、主体筛查与筛查名单、岗位模板、OpenAPI 候选、Inbox 去重与提交结果未知对账；G1 的 C07 为 MET，真实身份提供方接入延后。",
             "V1.6 S2 完成：SUP 供应条件与 CST 核价（场景评估、冻结快照、来源否认与可采纳守卫），T02 的 660.00 USD 基线在 PostgreSQL 16 上冻结；R64 EVD→CST。",
+            "V1.7 S3 完成：TRD 报价、审核与毛利例外、正式化、客户接受与合同成立、外销订单与订单变更、适用法律；PUR 采购草稿与需求分配；BRC-001 全链在 PostgreSQL 16 上经 HTTP 重放（报价 960.00、订单 960.00、草稿 600.00）。",
             "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1 仍为 NO-GO。",
         ],
@@ -1469,14 +1482,15 @@ def validate(pages: list[str]) -> list[dict]:
     check("M0 证据文件齐全", [f for f in M0_EVIDENCE_FILES if not (DOCS / M0_EVIDENCE / f).exists()], f"{len(M0_EVIDENCE_FILES)} 个文件")
     check("S1 证据文件齐全", [f for f in S1_EVIDENCE_FILES if not (DOCS / S1_EVIDENCE / f).exists()], f"{len(S1_EVIDENCE_FILES)} 个文件")
     check("S2 证据文件齐全", [f for f in S2_EVIDENCE_FILES if not (DOCS / S2_EVIDENCE / f).exists()], f"{len(S2_EVIDENCE_FILES)} 个文件")
+    check("S3 证据文件齐全", [f for f in S3_EVIDENCE_FILES if not (DOCS / S3_EVIDENCE / f).exists()], f"{len(S3_EVIDENCE_FILES)} 个文件")
     got = {r["id"]: r["verdict"] for r in SPIKE["results"]}
     check("M0 一致性实测结论与报告一致", [f"{k}: {got.get(k)}≠{v}" for k, v in SPIKE_EXPECTED.items() if got.get(k) != v] + sorted(set(got) - set(SPIKE_EXPECTED)),
           f"{len(got)} 个场景")
     check("M0 实测场景均有中文说明", sorted(set(got) - set(SPIKE_CN)) + [f"{r['id']}: {k}" for r in SPIKE["results"] for k in list(r["outcomes"]) + list(r["outcomes"].values()) if k not in SPIKE_WORDS and not k.isdigit()])
     # Evidence was produced from the sources listed in the manifest; code that changed since then needs new evidence.
-    # The latest evidence snapshot is the one the current code must match: S2, else S1, else M0.
+    # The latest evidence snapshot is the one the current code must match: S3, else S2, else S1, else M0.
     drift = []
-    manifest = next((DOCS / e / "02_go_source_manifest.txt" for e in (S2_EVIDENCE, S1_EVIDENCE, M0_EVIDENCE)
+    manifest = next((DOCS / e / "02_go_source_manifest.txt" for e in (S3_EVIDENCE, S2_EVIDENCE, S1_EVIDENCE, M0_EVIDENCE)
                      if (DOCS / e / "02_go_source_manifest.txt").exists()), DOCS / M0_EVIDENCE / "02_go_source_manifest.txt")
     if manifest.exists():
         for ln in manifest.read_text(encoding="utf-8").splitlines():
@@ -1539,7 +1553,7 @@ def main() -> int:
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "builder": "00_START_HERE/tools/build_archive.py",
         "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；"
                  "M0 与 S1 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
-        "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE、07_S2_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
+        "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE、07_S2_EVIDENCE、09_S3_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
         "result": "PASS" if not failed else "FAIL", "checks": results, "counts": counts(),
     }
     (DOCS / "00_START_HERE/05_VALIDATION_REPORT.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
