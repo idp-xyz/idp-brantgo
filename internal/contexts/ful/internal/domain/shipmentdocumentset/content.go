@@ -161,10 +161,12 @@ type TotalsContent struct {
 	VolumeCbm     string         `json:"volume_cbm,omitempty"`
 }
 
-// Record is a record of an external document: a bill of lading or a certificate of origin.
+// Record is a record of an external document: a bill of lading, a certificate of origin or an
+// insurance policy (S5-16, insurance.go).
 type Record struct {
-	BillOfLading *BillOfLading `json:"bill_of_lading,omitempty"`
-	Certificate  *Certificate  `json:"certificate,omitempty"`
+	BillOfLading *BillOfLading    `json:"bill_of_lading,omitempty"`
+	Certificate  *Certificate     `json:"certificate,omitempty"`
+	Insurance    *InsurancePolicy `json:"insurance_policy,omitempty"`
 }
 
 // BillOfLading is what an external bill of lading states (BillOfLadingRecord).

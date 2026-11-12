@@ -132,6 +132,7 @@ func Reconcile(s *Set, f Facts) []Difference {
 	if bl != nil && bl.Record != nil && bl.Record.BillOfLading != nil {
 		billOfLading(x, bl, plContent, ciContent, actual, f.Booking)
 	}
+	insurance(x, s, ci, bl) // S5-16: the CIF/CIP policy record (insurance.go)
 	sort.SliceStable(x.out, func(i, j int) bool { return x.out[i].Path < x.out[j].Path })
 	return x.out
 }

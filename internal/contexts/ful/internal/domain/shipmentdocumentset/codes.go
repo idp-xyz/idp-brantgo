@@ -17,6 +17,10 @@ const (
 	CodeDependencyNotSupported = "DEPENDENCY_NOT_SUPPORTED"
 	// CodeBusinessKeyConflict (409): the set ID or the shipment's set is taken.
 	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT"
+	// CodeInsuranceCoverageInsufficient (422): the insured amount of a CIF or CIP policy is below the
+	// contract percentage of the invoice value, or in another currency than the invoice (FUL-INV-005;
+	// S5-16).
+	CodeInsuranceCoverageInsufficient = "INSURANCE_COVERAGE_INSUFFICIENT"
 )
 
 // Codes maps every code of the set's rules to its category.
@@ -26,6 +30,7 @@ var Codes = map[string]kernel.Category{
 	CodeReferenceStale:                kernel.CategoryConflict,
 	CodeDependencyNotSupported:        kernel.CategoryInvalid,
 	CodeBusinessKeyConflict:           kernel.CategoryConflict,
+	CodeInsuranceCoverageInsufficient: kernel.CategoryInvalid,
 }
 
 // Reject returns a rejection with a code of the set's rules or a shared kernel code, at path.

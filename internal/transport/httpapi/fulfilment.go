@@ -25,6 +25,9 @@ type FUL interface {
 	fulapi.BookingQueries
 	fulapi.DocumentCommands
 	fulapi.DocumentQueries
+	// S5-16: the CIF/CIP insurance policy record.
+	fulapi.InsuranceCommands
+	fulapi.InsuranceQueries
 	// S5-09b: shipment reviews after an order change.
 	fulapi.ReviewCommands
 	fulapi.ReviewQueries
@@ -51,6 +54,8 @@ func fulCommands(c FUL) *commandSet {
 			fulapi.CommandPrepareShipmentDocument:      reflected("", "", receiptOf[fulapi.Receipt](c.PrepareShipmentDocument)),
 			fulapi.CommandIssueShipmentDocuments:       reflected("", "", receiptOf[fulapi.Receipt](c.IssueShipmentDocuments)),
 			fulapi.CommandRecordSignedShipmentDocument: reflected("", "", c.RecordSignedShipmentDocument),
+			// S5-16
+			fulapi.CommandRecordInsurance: reflected("", "", receiptOf[fulapi.Receipt](c.RecordInsurance)),
 			// S5-09b: a review names its object review_id; shipment_review.open is the Inbox consumer's
 			// and is not routed.
 			fulapi.CommandSettleShipmentReview: reflected("", "", c.SettleShipmentReview),
@@ -77,6 +82,8 @@ var fulReads = []readRoute{
 		"A shipment document set: every version of its commercial invoice, packing list, bill of lading and certificate of origin records with state, number, POL revisions, sources, renditions, commit evidence and signed copies, its issues with the differences they accepted, and the item-by-item reconciliation now (differences with their paths)", []string{"id"}, false},
 	{"/api/brant/v1/ful/document_sets/{id}/documents/{kind}/versions/{version}/{language}", "ful.shipment_document.get", "ful",
 		"One language of a rendered commercial invoice or packing list version with its bytes in Base64, verified against the stored SHA-256 on every read", []string{"id", "kind", "version", "language"}, false},
+	{"/api/brant/v1/ful/document_sets/{id}/insurance", "ful.insurance.get", "ful",
+		"A document set's insurance: the Incoterm of the commercial invoice it stands on and whether that needs a policy (CIF, CIP), the current policy record and FUL-INV-005 applied to it now (invoice total, percentage, amount required HALF_UP, amount insured, sufficient), and every version with insurer, policy number, clauses, amounts, file, the cover and the premium's comparison with the costing's insurance component (equal, different, not_comparable, no_component, unavailable) found when it was recorded", []string{"id"}, false},
 	{"/api/brant/v1/ful/shipment_reviews/{id}", "ful.shipment_review.get", "ful",
 		"A shipment review after an order change: the order revision, change and TRD event it follows, its state (open, settled or superseded) and responsible role, every item — a prepared shipment that can no longer be confirmed with its lines set against the amended revision, its current packing plan and actual packing, booking and draft documents, a granted release nothing can consume — with what FUL knew of it then, and each item's disposition with the replacement shipment and counterpart it names; the caller's access to the order is re-checked", []string{"id"}, false},
 	{"/api/brant/v1/ful/orders/{id}/shipment_reviews", "ful.shipment_review.list", "ful",
@@ -95,6 +102,7 @@ func (s *server) fulRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/ful/shipments/{id}/bookings", s.authenticated(read(s, s.cfg.FUL.GetBookings, okView[fulapi.ShipmentBookingsView])))
 	mux.Handle("GET /api/brant/v1/ful/document_sets/{id}", s.authenticated(read(s, s.cfg.FUL.GetDocumentSet, okView[fulapi.DocumentSetView])))
 	mux.Handle("GET /api/brant/v1/ful/document_sets/{id}/documents/{kind}/versions/{version}/{language}", s.authenticated(s.shipmentDocument))
+	mux.Handle("GET /api/brant/v1/ful/document_sets/{id}/insurance", s.authenticated(read(s, s.cfg.FUL.GetInsurance, okView[fulapi.InsuranceView])))
 	mux.Handle("GET /api/brant/v1/ful/shipment_reviews/{id}", s.authenticated(read(s, s.cfg.FUL.GetShipmentReview, okView[fulapi.ShipmentReviewView])))
 	mux.Handle("GET /api/brant/v1/ful/orders/{id}/shipment_reviews", s.authenticated(read(s, s.cfg.FUL.ListShipmentReviews,
 		okView[fulapi.OrderShipmentReviews])))
