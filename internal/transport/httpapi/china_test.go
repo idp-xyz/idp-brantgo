@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-bento-go/application"
@@ -16,6 +18,7 @@ type fakeCNX struct {
 	evaluated []cnxapi.Evaluate
 	decided   []cnxapi.Decide
 	reopened  []cnxapi.Reopen
+	asked     []string
 }
 
 func (f *fakeCNX) Evaluate(_ context.Context, cmd cnxapi.Evaluate) (cnxapi.CheckReceipt, error) {
@@ -40,6 +43,62 @@ func (f *fakeCNX) OrderChecks(_ context.Context, id string) ([]cnxapi.CheckSumma
 		return nil, kernel.Reject(kernel.CodeNotFound, "/id", "")
 	}
 	return nil, nil
+}
+
+func (f *fakeCNX) ChecksByRegulation(_ context.Context, id string, revision int64) ([]cnxapi.ClearCheck, error) {
+	f.asked = append(f.asked, id+"@"+strconv.FormatInt(revision, 10))
+	if id != "screening" {
+		return nil, nil
+	}
+	return []cnxapi.ClearCheck{{CheckID: "tcc-1", OrderID: "o1", OrderRevision: 1, RegulationID: id, RegulationRevision: 1,
+		Programmes: []cnxapi.ProgrammeView{{Code: "cn.embargo", Jurisdiction: "CN", Version: "v1"}}, State: "clear", Reason: "cleared"}}, nil
+}
+
+func (f *fakeCNX) ChecksByList(_ context.Context, code, version string) ([]cnxapi.ClearCheck, error) {
+	f.asked = append(f.asked, code+"@"+version)
+	return nil, nil
+}
+
+// The follow-up reads (unit C4b-CNX; S5 D-18, MD-47): the clear conclusions of a screening_regulation
+// (optionally of one revision) and of a programme list (optionally of one version); an empty answer
+// is an empty list, a query parameter of another name or a malformed revision is SCHEMA_INVALID
+// before CNX is asked.
+func TestCNXFollowReads(t *testing.T) {
+	cnx := &fakeCNX{}
+	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: struct{ REF }{},
+		SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{}, CNX: cnx, Verifier: tokens{"Bearer good": alice},
+		Clock: application.Clock(fixedClock{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := call(t, h, http.MethodGet, "/api/brant/v1/cnx/regulations/screening/trade_compliance?revision=1", "Bearer good", "")
+	checks, ok := a.body["checks"].([]any)
+	if a.status != http.StatusOK || !ok || len(checks) != 1 || a.body["regulation_id"] != "screening" {
+		t.Fatalf("%d %v", a.status, a.body)
+	}
+	if c := checks[0].(map[string]any); c["check_id"] != "tcc-1" || c["regulation_revision"] != float64(1) || c["state"] != "clear" ||
+		c["programmes"].([]any)[0].(map[string]any)["version"] != "v1" {
+		t.Fatalf("check %v", c)
+	}
+	a = call(t, h, http.MethodGet, "/api/brant/v1/cnx/programme_lists/cn.embargo/trade_compliance?version=v2", "Bearer good", "")
+	if checks, ok := a.body["checks"].([]any); a.status != http.StatusOK || !ok || len(checks) != 0 || a.body["list_code"] != "cn.embargo" {
+		t.Fatalf("%d %v", a.status, a.body)
+	}
+	a = call(t, h, http.MethodGet, "/api/brant/v1/cnx/programme_lists/cn.embargo/trade_compliance", "Bearer good", "")
+	if a.status != http.StatusOK {
+		t.Fatalf("%d %v", a.status, a.body)
+	}
+	for _, url := range []string{"/api/brant/v1/cnx/regulations/screening/trade_compliance?revision=x",
+		"/api/brant/v1/cnx/regulations/screening/trade_compliance?version=1",
+		"/api/brant/v1/cnx/programme_lists/cn.embargo/trade_compliance?revision=1",
+		"/api/brant/v1/cnx/programme_lists/cn.embargo/trade_compliance?version=v1&version=v2"} {
+		if a = call(t, h, http.MethodGet, url, "Bearer good", ""); a.status != http.StatusUnprocessableEntity || a.body["code"] != kernel.CodeSchemaInvalid {
+			t.Errorf("%s: %d %v", url, a.status, a.body)
+		}
+	}
+	if strings.Join(cnx.asked, ",") != "screening@1,cn.embargo@v2,cn.embargo@" {
+		t.Fatalf("asked %v", cnx.asked)
+	}
 }
 
 // CNX's commands decode their members by the reflective mapping (S3-D149): nested destination,

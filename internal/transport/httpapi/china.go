@@ -4,12 +4,14 @@ import (
 	"net/http"
 
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // CNX is what the transport needs from the China export context.
 type CNX interface {
 	cnxapi.Commands
 	cnxapi.Queries
+	cnxapi.FollowQueries
 	cnxapi.LicenseCommands
 	cnxapi.LicenseQueries
 	cnxapi.Reconciler
@@ -36,6 +38,10 @@ var cnxReads = []readRoute{
 		"A trade compliance check of an order revision: its state now as TradeComplianceGuard v1 decides it, every evaluation with its facts, findings and gaps, every decision and reopening", []string{"id"}, false},
 	{"/api/brant/v1/cnx/orders/{id}/trade_compliance", "cnx.trade_compliance.order_checks", "cnx",
 		"The trade compliance checks of a sales order's revisions, newest first, each with its state now", []string{"id"}, false},
+	{"/api/brant/v1/cnx/regulations/{id}/trade_compliance", "cnx.trade_compliance.by_regulation", "cnx",
+		"The clear trade compliance conclusions that follow a screening_regulation, at ?revision= only (a positive integer) when given, each with the programme list versions it used and its state now", []string{"id"}, false},
+	{"/api/brant/v1/cnx/programme_lists/{id}/trade_compliance", "cnx.trade_compliance.by_list", "cnx",
+		"The clear trade compliance conclusions whose evaluation used a country programme list, at ?version= only when given, each with its state now (pending, list_updated when the list has a newer version)", []string{"id"}, false},
 	{"/api/brant/v1/cnx/export_licenses", "cnx.export_license.list", "cnx",
 		"The company's export licences, newest first, each with its state now and its usage (licensed, allocated, available quantity and value)", nil, false},
 	{"/api/brant/v1/cnx/export_licenses/{id}", "cnx.export_license.get", "cnx",
@@ -48,6 +54,8 @@ var cnxReads = []readRoute{
 func (s *server) cnxRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/cnx/trade_compliance_checks/{id}", s.authenticated(read(s, s.cfg.CNX.GetCheck, okView[cnxapi.CheckView])))
 	mux.Handle("GET /api/brant/v1/cnx/orders/{id}/trade_compliance", s.authenticated(s.orderComplianceChecks))
+	mux.Handle("GET /api/brant/v1/cnx/regulations/{id}/trade_compliance", s.authenticated(s.regulationComplianceChecks))
+	mux.Handle("GET /api/brant/v1/cnx/programme_lists/{id}/trade_compliance", s.authenticated(s.listComplianceChecks))
 	mux.Handle("GET /api/brant/v1/cnx/export_licenses", s.authenticated(s.exportLicenses))
 	mux.Handle("GET /api/brant/v1/cnx/export_licenses/{id}", s.authenticated(read(s, s.cfg.CNX.GetLicense, okView[cnxapi.LicenseView])))
 	mux.Handle("GET /api/brant/v1/cnx/shipments/{id}/export_license",
@@ -65,6 +73,47 @@ func (s *server) orderComplianceChecks(w http.ResponseWriter, r *http.Request) {
 		v = []cnxapi.CheckSummary{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "order_id": r.PathValue("id"), "checks": wire(v)})
+}
+
+// regulationComplianceChecks answers GET /api/brant/v1/cnx/regulations/<id>/trade_compliance[?revision=N].
+func (s *server) regulationComplianceChecks(w http.ResponseWriter, r *http.Request) {
+	q, err := queryInts(r, "revision")
+	var v []cnxapi.ClearCheck
+	if err == nil {
+		v, err = s.cfg.CNX.ChecksByRegulation(r.Context(), r.PathValue("id"), q["revision"])
+	}
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "regulation_id": r.PathValue("id"), "checks": wire(clearChecks(v))})
+}
+
+// listComplianceChecks answers GET /api/brant/v1/cnx/programme_lists/<code>/trade_compliance[?version=v].
+func (s *server) listComplianceChecks(w http.ResponseWriter, r *http.Request) {
+	var v []cnxapi.ClearCheck
+	var err error
+	q := r.URL.Query()
+	for k := range q {
+		if k != "version" || len(q[k]) != 1 {
+			err = kernel.Reject(kernel.CodeSchemaInvalid, "/"+k, "unknown or repeated query parameter")
+		}
+	}
+	if err == nil {
+		v, err = s.cfg.CNX.ChecksByList(r.Context(), r.PathValue("id"), q.Get("version"))
+	}
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "list_code": r.PathValue("id"), "checks": wire(clearChecks(v))})
+}
+
+func clearChecks(v []cnxapi.ClearCheck) []cnxapi.ClearCheck {
+	if v == nil {
+		return []cnxapi.ClearCheck{}
+	}
+	return v
 }
 
 // exportLicenses answers GET /api/brant/v1/cnx/export_licenses.

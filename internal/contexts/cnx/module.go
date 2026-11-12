@@ -13,6 +13,7 @@ import (
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/upstream"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/application"
@@ -21,6 +22,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 )
 
 // Module is CNX wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -35,6 +37,7 @@ var (
 	_ api.LicenseQueries  = (*Module)(nil)
 	_ api.Auditor         = (*Module)(nil)
 	_ api.Reconciler      = (*Module)(nil)
+	_ api.FollowQueries   = (*Module)(nil)
 )
 
 // Upstream are the contracts of CNX's upstreams: TRD's orders (R46), PTY's address countries
@@ -121,4 +124,12 @@ func New(db *bentopg.DB, u Upstream) (*Module, error) {
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetCheck, Visible: application.Visible,
 	}}}, nil
+}
+
+// Subscriptions are CNX's Inbox consumers on its own transaction owner (repository structure §07):
+// cnx.trade_compliance, which opens a pending check for an amended order revision (R46, PL-14) and
+// reopens the clear conclusions a new screening_regulation revision (R50) or a re-imported country
+// programme list makes inapplicable (S5 D-18, MD-47).
+func (m *Module) Subscriptions() []messaging.Subscription {
+	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

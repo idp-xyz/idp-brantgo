@@ -13,8 +13,10 @@ import (
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	cstapi "go.idp.xyz/idp-brant/internal/contexts/cst/api"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
+	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
 // allowlistPath is the cross-context allowlist tools/dependency-check generates from the Context
@@ -58,11 +60,15 @@ func readAllowlist(t *testing.T) map[string]bool {
 
 // contextMapViolations reports every subscription whose source is not an upstream of its
 // consumer's context in allow (rule D1: a context subscribes only to the events of its registered
-// upstreams).
+// upstreams). Reference data is no context of the Context Map: every context uses it through
+// internal/reference/api (dependency rule D1), so any context may consume its events.
 func contextMapViolations(subs []messaging.Subscription, allow map[string]bool) []string {
 	var out []string
 	for _, s := range subs {
 		down, up := messaging.ConsumerContext(s.Consumer), messaging.SourceContext(s.Source)
+		if down != "" && s.Source == refapi.Source {
+			continue
+		}
 		if down == "" || up == "" || !allow[down+" "+up] {
 			out = append(out, fmt.Sprintf("%s subscribes to %s, which is not an upstream of %q in %s", s.Consumer, s.Source, down, allowlistPath))
 		}
@@ -95,11 +101,13 @@ func TestContextMapCheckRefusesSubscriptionsAgainstTheMap(t *testing.T) {
 	sub := func(consumer eventing.InboxConsumer, source string) messaging.Subscription {
 		return messaging.Subscription{Consumer: consumer, Source: source}
 	}
-	if v := contextMapViolations([]messaging.Subscription{sub("pur.order_review", trdapi.Source), sub("trd.cost_source_holds", cstapi.Source)}, allow); len(v) != 0 {
+	if v := contextMapViolations([]messaging.Subscription{sub("pur.order_review", trdapi.Source), sub("trd.cost_source_holds", cstapi.Source),
+		sub("cnx.trade_compliance", refapi.Source)}, allow); len(v) != 0 {
 		t.Fatalf("allowed subscriptions refused: %v", v)
 	}
 	for _, s := range []messaging.Subscription{
 		sub("inq.quote_events", "idp-brant.trd"), sub("pur.probe", "trd"), sub("zzz.probe", trdapi.Source), sub("probe", trdapi.Source),
+		sub("probe", refapi.Source),
 	} {
 		if v := contextMapViolations([]messaging.Subscription{s}, allow); len(v) != 1 {
 			t.Errorf("%s from %s: %v, want one violation", s.Consumer, s.Source, v)
@@ -130,7 +138,11 @@ var policyConsumers = []struct {
 	{"PL-09 OrderAmended → STL reviews the payment plan", "stl", trdapi.Source,
 		[]eventing.EventType{trdapi.EventOrderAmended}, "S5-09b, unit C4b"},
 	{"PL-14 OrderAmended → CNX re-checks trade compliance", "cnx", trdapi.Source,
-		[]eventing.EventType{trdapi.EventOrderAmended}, "CNX is not built yet (S5-09b, unit C4b)"},
+		[]eventing.EventType{trdapi.EventOrderAmended}, ""},
+	{"D-18 screening_regulation published → CNX reopens the clear conclusions of earlier revisions", "cnx", polapi.Source,
+		[]eventing.EventType{polapi.EventConfigPublished}, ""},
+	{"MD-47 country programme list re-imported → CNX reopens the clear conclusions that used another version", "cnx", refapi.Source,
+		[]eventing.EventType{refapi.EventCountryProgrammesImported}, ""},
 	{"WF-03 CostSourceDenied → TRD registers the risk hold", "trd", cstapi.Source,
 		[]eventing.EventType{cstapi.EventCostSourceDenied}, "S4-06b (S4 plan unit B3)"},
 	{"R65 QuoteActivated, QuoteReplaced → EVD registers the formal file", "evd", trdapi.Source,
