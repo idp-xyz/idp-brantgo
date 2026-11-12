@@ -402,24 +402,30 @@ func TestOrderLineSplitsAcrossSuppliersUpToItsQuantity(t *testing.T) {
 	}
 }
 
-// PUR-INV-005: an overbuy is marked with its quantity and reason and approved, and its cost is kept
-// out of the cost of goods sold; without the marking the MOQ refuses, without a reason or the
-// approval it is OVERBUY_NOT_APPROVED. The allocation counts the allocated quantity only.
-func TestOverbuyIsMarkedApprovedAndKeptOutOfCostOfGoodsSold(t *testing.T) {
+// PUR-INV-005 as S5 decision D-14 amends it: an overbuy is marked with its quantity and reason, and
+// its cost is kept out of the cost of goods sold; without the marking the MOQ refuses, without a
+// reason it is OVERBUY_NOT_APPROVED. The draft carries no approval of it: the purchase commitment
+// decision approves it (domain/commitment). The allocation counts the allocated quantity only.
+func TestOverbuyIsMarkedAndKeptOutOfCostOfGoodsSold(t *testing.T) {
 	w := fixture()
 	src := w.variant("offer.moq150", func(c *Condition) { c.MOQ.Quantity = "150" })
 	w.with(src).refused(t, "MOQ_NOT_MET /args/lines/0/quantity")
 	w.req.Lines[0].Overbuy = &Overbuy{Quantity: kernel.MustDecimal("30"), Reason: " "}
 	w.refused(t, "OVERBUY_NOT_APPROVED /args/lines/0/overbuy/reason")
 	w.req.Lines[0].Overbuy.Reason = "MOQ 150; the remainder goes to stock"
-	w.refused(t, "OVERBUY_NOT_APPROVED /args/lines/0/overbuy")
-	w.in.OverbuyApproved = true
 	p := w.prepare(t)
 	l := p.Doc.Lines[0]
 	if l.AllocatedQuantity != "120" || l.OverbuyQuantity != "30" || l.PurchaseQuantity != "150" || l.NetMinor != "75000" ||
 		l.SoldCostMinor != "60000" || l.OverbuyCostMinor != "15000" || *l.CostingReference.CostVarianceMinor != "0" ||
-		l.Overbuy == nil || l.Overbuy.ApprovedBy.ID != "author" || l.Overbuy.AuthorityEpoch != 7 || l.MOQ.Purchased != "150" {
+		l.Overbuy == nil || l.Overbuy.ApprovedBy != nil || l.Overbuy.AuthorityEpoch != 0 || l.MOQ.Purchased != "150" {
 		t.Fatalf("line %+v", l)
+	}
+	if b, err := canonical(l.Overbuy); err != nil || string(b) != `{"quantity":"30","reason":"MOQ 150; the remainder goes to stock"}` {
+		t.Fatalf("overbuy %s, %v", b, err)
+	}
+	s3 := DocOverbuy{Quantity: "30", Reason: "r", ApprovedBy: &DocActor{Kind: "human", ID: "author"}, AuthorityEpoch: 7}
+	if b, err := canonical(s3); err != nil || string(b) != `{"approved_by":{"id":"author","kind":"human"},"authority_epoch":7,"quantity":"30","reason":"r"}` {
+		t.Fatalf("an S3 draft's overbuy keeps its bytes: %s, %v", b, err)
 	}
 	if p.Allocations[0].Allocated.String() != "120" || !p.Lines[0].Overbuy.Equal(kernel.MustDecimal("30")) {
 		t.Fatalf("allocation %+v", p.Allocations[0])
@@ -488,30 +494,33 @@ func TestDraftIsImmutableAndVerified(t *testing.T) {
 	}
 }
 
-// TD-AT06 and SM-PUR-DRAFT: a prepared or supply_expired draft is voided once at its version; a
-// committed draft is PURCHASE_DRAFT_COMMITTED (commitments come with S5).
+// TD-AT06, SM-PUR-DRAFT and PUR-INV-010: a prepared or supply_expired draft is voided once at its
+// version; a draft one of whose purchase commitments was issued is PURCHASE_DRAFT_COMMITTED.
 func TestVoidTransitions(t *testing.T) {
 	w := fixture()
 	d, err := w.prepare(t).Seal("adoptable", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code(d.Voidable(2)) != "VERSION_CONFLICT /args/expected_version" {
+	if code(d.Voidable(2, false)) != "VERSION_CONFLICT /args/expected_version" {
 		t.Fatal("version")
 	}
-	committed := *d
-	committed.CommitmentState = "committed"
-	if r, _ := kernel.AsRejection(committed.Voidable(1)); r == nil || r.Code != CodePurchaseDraftCommitted || r.Category != kernel.CategoryConflict {
+	if r, _ := kernel.AsRejection(d.Voidable(1, true)); r == nil || r.Code != CodePurchaseDraftCommitted || r.Category != kernel.CategoryConflict {
 		t.Fatalf("committed: %v", r)
 	}
-	if err = d.Voidable(1); err != nil {
+	tampered := *d
+	tampered.CommitmentState = "committed"
+	if r, _ := kernel.AsRejection(tampered.Voidable(1, false)); r == nil || r.Code != CodePurchaseDraftCommitted {
+		t.Fatalf("a stored state other than not_committed: %v", r)
+	}
+	if err = d.Voidable(1, false); err != nil {
 		t.Fatal(err)
 	}
 	d.VoidBy(kernel.ActorRef{Kind: kernel.ActorHuman, ID: "author"}, 8, now.Add(time.Hour), "Wrong supply condition chosen")
 	if d.Status != StatusVoided || d.RowVersion != 2 || d.State(now) != StatusVoided || d.Void.Reason != "Wrong supply condition chosen" {
 		t.Fatalf("voided %+v", d)
 	}
-	if code(d.Voidable(2)) != "INVALID_STATE /args/draft_id" {
+	if code(d.Voidable(2, false)) != "INVALID_STATE /args/draft_id" {
 		t.Fatal("voided once")
 	}
 	if err = d.Verify(w.in.Scope, "/id"); err != nil {

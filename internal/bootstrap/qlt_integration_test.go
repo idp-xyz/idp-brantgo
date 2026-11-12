@@ -28,7 +28,7 @@ import (
 //
 // PUR's InspectionSubject v1 (R24) is planned for S5 unit A4 and not published yet, so QLT runs here
 // on an in-memory implementation of its Subjects port that answers purchase commitment lines as
-// PUR will; the composed process (bootstrap.Contexts) wires qlt.SubjectsNotWired. EVD (R72) and PTY
+// PUR will; the composed process (bootstrap.Contexts) wires qlt.PURSubjects over PUR. EVD (R72) and PTY
 // (R73) are the real contexts.
 
 // fakeSubjects answers QLT's port to PUR from memory.
@@ -320,26 +320,26 @@ func TestExternalAgencyReportAndReleaseByOurQC(t *testing.T) {
 	x.want(err, kernel.CodeNotFound)
 }
 
-// The composed process has no InspectionSubject v1 from PUR yet (S5 unit A4): QLT answers
-// DEPENDENCY_NOT_SUPPORTED, records nothing, and audits the refusal.
-func TestQLTWithoutPURSubjects(t *testing.T) {
+// The composed process reads subjects from PUR's InspectionSubject v1 (R24, wired at the A4 merge):
+// a commitment line PUR does not know is no subject — QLT refuses, records nothing, and audits the
+// refusal. The full path over real PUR commitments runs in the S5 chain (D1).
+func TestQLTReadsSubjectsFromPUR(t *testing.T) {
 	x := newQltWorld(t)
 	_, err := x.c.QLT.RecordInspection(x.qc, x.inspection("insp.1", subjectOf("commitment.1"), "1", "1"))
-	if code(err) != qltapi.CodeDependencyNotSupported || path(err) != "/args/subject" {
-		t.Fatalf("record without PUR: %s at %s", code(err), path(err))
+	if err == nil || code(err) == qltapi.CodeDependencyNotSupported || path(err) != "/args/subject" {
+		t.Fatalf("record on an unknown PUR line: %s at %s", code(err), path(err))
 	}
+	refusal := code(err)
 	_, err = x.c.QLT.GrantRelease(x.qc, x.grantCmd("rel.1", subjectOf("commitment.1"), "1"))
-	x.want(err, qltapi.CodeDependencyNotSupported)
-	_, err = x.c.QLT.GetSubject(x.qc, subjectOf("commitment.1"))
-	x.want(err, qltapi.CodeDependencyNotSupported)
+	x.want(err, refusal)
 	if x.count("company.A", "brant_qlt.inspection") != 0 {
-		t.Fatal("recorded without PUR")
+		t.Fatal("recorded an unknown subject")
 	}
 	admin := x.actor("auditor", "qlt.audit")
 	entries, err := x.c.QLT.Audit(admin)
 	x.must(err)
 	if !slices.ContainsFunc(entries, func(e kernel.AuditEntry) bool {
-		return e.Command == qltapi.CommandRecordInspection && e.Code == qltapi.CodeDependencyNotSupported && e.Outcome == "rejected"
+		return e.Command == qltapi.CommandRecordInspection && e.Code == refusal && e.Outcome == "rejected"
 	}) {
 		t.Fatalf("audit %+v", entries)
 	}

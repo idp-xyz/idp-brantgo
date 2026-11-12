@@ -238,7 +238,7 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		c.PUR, err = pur.New(db, pur.Upstream{Orders: pur.TRDOrders(c.TRD), Supply: c.SUP, Snapshots: c.CST, Parties: c.PTY, Configs: c.POL,
-			Skus: c.CAT})
+			Numbers: c.POL, Skus: c.CAT, Sources: c.EVD})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -246,7 +246,7 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	if err == nil {
 		// PUR publishes no InspectionSubject v1 yet (S5 unit A4): QLT's port to it answers
 		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup.
-		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.SubjectsNotWired(), Sources: c.EVD, Parties: c.PTY})
+		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Parties: c.PTY})
 	}
 	if err != nil {
 		return nil, err

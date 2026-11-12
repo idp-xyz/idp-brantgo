@@ -35,34 +35,48 @@ const (
 	CodePurchaseDraftImmutable     = "PURCHASE_DRAFT_IMMUTABLE"     // the draft ID holds another request or another preparer's draft
 	CodePurchaseDraftCommitted     = "PURCHASE_DRAFT_COMMITTED"     // 409: a committed draft is not voided
 	CodePurchaseAllocationExceeded = "PURCHASE_ALLOCATION_EXCEEDED" // 409: the line's effective allocations would exceed its demand
+
+	// Purchase commitments (S5-01; PUR-INV-009, 010).
+	CodePurchaseDraftStale              = "PURCHASE_DRAFT_STALE"              // 409: recomputed now, the draft differs field by field (A47 #3)
+	CodeIndependentReviewRequired       = "INDEPENDENT_REVIEW_REQUIRED"       // the decider prepared the draft or requested the commitment
+	CodePurchaseDeviationUnacknowledged = "PURCHASE_DEVIATION_UNACKNOWLEDGED" // a deviation of the draft is not acknowledged with a reason
+	CodePurchaseCommitmentNotApproved   = "PURCHASE_COMMITMENT_NOT_APPROVED"  // 409: no live, unrevoked approval of a qualified decider
+	CodeApprovalExpired                 = "APPROVAL_EXPIRED"                  // the approval's validity has ended
+	CodeSupplyConditionExpired          = "SUPPLY_CONDITION_EXPIRED"          // the draft's supply validity has ended
 )
 
 var codes = map[string]kernel.Category{
-	CodeOrderNotActive:             kernel.CategoryInvalid,
-	CodeOrderApprovalRequired:      kernel.CategoryInvalid,
-	CodeOrderApprovalRevoked:       kernel.CategoryInvalid,
-	CodeOrderLineNotFound:          kernel.CategoryNotFound,
-	CodeReferenceStale:             kernel.CategoryConflict,
-	CodeSupplierMismatch:           kernel.CategoryInvalid,
-	CodePurchaseTermsInconsistent:  kernel.CategoryInvalid,
-	CodeSupplyScopeMismatch:        kernel.CategoryInvalid,
-	CodeSpecificationMismatch:      kernel.CategoryInvalid,
-	CodeDeliveryNotComparable:      kernel.CategoryInvalid,
-	CodeDeliveryLate:               kernel.CategoryInvalid,
-	CodeDeliveryDatePassed:         kernel.CategoryInvalid,
-	CodeDeliveryUnresolved:         kernel.CategoryInvalid,
-	CodeMOQNotMet:                  kernel.CategoryInvalid,
-	CodeOrderMultipleInvalid:       kernel.CategoryInvalid,
-	CodeOverbuyNotApproved:         kernel.CategoryInvalid,
-	CodePriceTierAmbiguous:         kernel.CategoryInvalid,
-	CodeUnsupportedPricingMode:     kernel.CategoryInvalid,
-	CodeDependencyNotSupported:     kernel.CategoryInvalid,
-	CodeTaxTreatmentUnknown:        kernel.CategoryInvalid,
-	CodeCalculationLimitExceeded:   kernel.CategoryInvalid,
-	CodeCostSnapshotMissing:        kernel.CategoryInvalid,
-	CodePurchaseDraftImmutable:     kernel.CategoryInvalid,
-	CodePurchaseDraftCommitted:     kernel.CategoryConflict,
-	CodePurchaseAllocationExceeded: kernel.CategoryConflict,
+	CodeOrderNotActive:                  kernel.CategoryInvalid,
+	CodeOrderApprovalRequired:           kernel.CategoryInvalid,
+	CodeOrderApprovalRevoked:            kernel.CategoryInvalid,
+	CodeOrderLineNotFound:               kernel.CategoryNotFound,
+	CodeReferenceStale:                  kernel.CategoryConflict,
+	CodeSupplierMismatch:                kernel.CategoryInvalid,
+	CodePurchaseTermsInconsistent:       kernel.CategoryInvalid,
+	CodeSupplyScopeMismatch:             kernel.CategoryInvalid,
+	CodeSpecificationMismatch:           kernel.CategoryInvalid,
+	CodeDeliveryNotComparable:           kernel.CategoryInvalid,
+	CodeDeliveryLate:                    kernel.CategoryInvalid,
+	CodeDeliveryDatePassed:              kernel.CategoryInvalid,
+	CodeDeliveryUnresolved:              kernel.CategoryInvalid,
+	CodeMOQNotMet:                       kernel.CategoryInvalid,
+	CodeOrderMultipleInvalid:            kernel.CategoryInvalid,
+	CodeOverbuyNotApproved:              kernel.CategoryInvalid,
+	CodePriceTierAmbiguous:              kernel.CategoryInvalid,
+	CodeUnsupportedPricingMode:          kernel.CategoryInvalid,
+	CodeDependencyNotSupported:          kernel.CategoryInvalid,
+	CodeTaxTreatmentUnknown:             kernel.CategoryInvalid,
+	CodeCalculationLimitExceeded:        kernel.CategoryInvalid,
+	CodeCostSnapshotMissing:             kernel.CategoryInvalid,
+	CodePurchaseDraftImmutable:          kernel.CategoryInvalid,
+	CodePurchaseDraftCommitted:          kernel.CategoryConflict,
+	CodePurchaseAllocationExceeded:      kernel.CategoryConflict,
+	CodePurchaseDraftStale:              kernel.CategoryConflict,
+	CodeIndependentReviewRequired:       kernel.CategoryInvalid,
+	CodePurchaseDeviationUnacknowledged: kernel.CategoryInvalid,
+	CodePurchaseCommitmentNotApproved:   kernel.CategoryConflict,
+	CodeApprovalExpired:                 kernel.CategoryInvalid,
+	CodeSupplyConditionExpired:          kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code PUR declares.

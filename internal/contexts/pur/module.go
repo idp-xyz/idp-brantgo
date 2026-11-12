@@ -1,6 +1,7 @@
 // Package pur assembles the PUR bounded context (procurement and supply allocation: purchase
-// drafts and the demand allocation of active order lines; commitments and supplier deliveries are
-// S5). Code outside PUR uses it through package api; everything under internal/ is private to PUR.
+// drafts and the demand allocation of active order lines, purchase commitments and supplier
+// confirmations; supplier deliveries and commitment changes are later S5 units). Code outside PUR
+// uses it through package api; everything under internal/ is private to PUR.
 package pur
 
 import (
@@ -28,12 +29,21 @@ var (
 	_ api.Queries    = (*Module)(nil)
 	_ api.Auditor    = (*Module)(nil)
 	_ api.Reconciler = (*Module)(nil)
+
+	_ api.InspectionSubjects = (*Module)(nil)
 )
 
 // Upstream are the lookups of PUR's upstream contexts: TRD's orders through PUR's port Orders (R19),
 // SUP's supply conditions (R20), CST's cost snapshots (R21), PTY's parties (R22), POL's
-// configurations (R48) and CAT's specifications (R52).
+// configurations and purchase order numbers (R48), CAT's specifications (R52) and EVD's sources and
+// files (R76).
 type Upstream = application.Upstream
+
+// Numbers is POL's NumberIssue v1 and Sources EVD's SourceRef v1 and FileRef v1, as PUR uses them.
+type (
+	Numbers = application.Numbers
+	Sources = application.Sources
+)
 
 // The port to TRD (ActiveOrderRef v1 and OrderGuard v1) and what passes through it.
 type (
@@ -63,7 +73,7 @@ func TRDOrders(lookups trdapi.ActiveOrderLookups) Orders { return orders.TRD{Loo
 // New wires PUR to db, a transaction owner that belongs to PUR alone, and to its upstreams.
 func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 	if !upstream.Complete() {
-		return nil, errors.New("pur: module needs TRD's orders and the lookups of SUP, CST, PTY, POL and CAT")
+		return nil, errors.New("pur: module needs TRD's orders, POL's numbers and the lookups of SUP, CST, PTY, POL, CAT and EVD")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {

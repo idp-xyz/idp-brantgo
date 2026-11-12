@@ -9,8 +9,10 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/subjects"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/internal/application"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -43,6 +45,9 @@ type (
 // SubjectsNotWired is the port to PUR while PUR publishes no InspectionSubject v1 (S5 unit A4):
 // every command and read that needs a subject answers DEPENDENCY_NOT_SUPPORTED.
 func SubjectsNotWired() Subjects { return application.NotWired{} }
+
+// PURSubjects is the port to PUR over its InspectionSubject v1 lookup (R24).
+func PURSubjects(lines purapi.InspectionSubjects) Subjects { return subjects.PUR{Lines: lines} }
 
 // New wires QLT to db, a transaction owner that belongs to QLT alone, and to its upstreams.
 func New(db *bentopg.DB, upstream Upstream) (*Module, error) {

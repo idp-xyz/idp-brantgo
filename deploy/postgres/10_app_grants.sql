@@ -233,6 +233,18 @@ GRANT UPDATE (status, row_version, voided_by_kind, voided_by_id, void_epoch, voi
     ON brant_pur.purchase_draft TO brant_app;
 GRANT UPDATE (order_revision, demand, allocated, row_version, updated_at) ON brant_pur.demand_allocation TO brant_app;
 GRANT UPDATE (released_version, released_at) ON brant_pur.allocation_entry TO brant_app;
+-- PUR purchase commitments (S5-01): a commitment is inserted requested and then changes only along
+-- SM-PUR-COMMITMENT, each step writing its own columns (trigger); supplier confirmations are only
+-- inserted; FOR UPDATE on a commitment needs the column grants. Decisions and issues call the guard
+-- functions granted above, and the issue POL's number.issue before the transaction. TRD executes
+-- DownstreamCommitments v1 (R71) inside its own transactions.
+GRANT SELECT, INSERT ON brant_pur.purchase_commitment, brant_pur.supplier_confirmation TO brant_app;
+GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, valid_until, decision_reason,
+              acknowledgements, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, issued_by_kind, issued_by_id,
+              issue_epoch, issued_at, po_number, sequence_id, sequence_revision, sent_at, issue_evidence, issue_file_id, issue_file_sha256,
+              updated_at)
+    ON brant_pur.purchase_commitment TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pur.order_commitments_v1(text) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a

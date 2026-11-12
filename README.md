@@ -62,7 +62,11 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
 internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding active order lines to chosen supply condition
                                   lines (immutable, hashed, not committed; server calculation of MOQ, multiples, tiers, tax
                                   and delivery; costing comparison), the demand allocation ledger per order line (several
-                                  drafts and suppliers, never above the line's quantity), overbuy approval, purchase.draft.void
+                                  drafts and suppliers, never above the line's quantity), marked overbuys, purchase.draft.void;
+                                  purchase commitments (S5-01): request, an independent decision that recomputes the draft and
+                                  acknowledges deviations and overbuys, revocation, issue with a POL purchase order number
+                                  and evidence, supplier confirmations; DownstreamCommitments v1 for TRD, InspectionSubject v1
+                                  for QLT
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only

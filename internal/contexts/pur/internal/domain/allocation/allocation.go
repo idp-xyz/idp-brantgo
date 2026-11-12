@@ -137,6 +137,23 @@ func (a *Allocation) Release(draftID string, at time.Time) (kernel.Decimal, erro
 	return e.Quantity, nil
 }
 
+// Without returns a copy of the root as it would be had draft draftID never taken its effective
+// entry: what a purchase commitment decision prepares the draft's request again against (A47 #3).
+// The copy is judged, never stored.
+func (a *Allocation) Without(draftID string) *Allocation {
+	out := *a
+	out.Entries = nil
+	for _, e := range a.Entries {
+		if e.DraftID == draftID && e.Effective() {
+			out.Allocated = out.Allocated.Sub(e.Quantity)
+			continue
+		}
+		e.fresh = false
+		out.Entries = append(out.Entries, e)
+	}
+	return &out
+}
+
 // Fresh returns the entries taken since the root was loaded.
 func (a *Allocation) Fresh() []Entry {
 	var out []Entry

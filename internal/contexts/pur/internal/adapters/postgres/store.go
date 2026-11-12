@@ -1,5 +1,5 @@
-// Package postgres stores PUR's purchase drafts and demand allocations in schema brant_pur, on the
-// executor of PUR's own transaction.
+// Package postgres stores PUR's purchase drafts, demand allocations and purchase commitments in
+// schema brant_pur, on the executor of PUR's own transaction.
 package postgres
 
 import (

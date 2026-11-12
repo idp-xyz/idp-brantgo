@@ -77,8 +77,8 @@ type picked struct {
 // (CAT's and POL's verdicts), one unit throughout (DEPENDENCY_NOT_SUPPORTED: no conversion in this
 // stage), quantities exact at the unit's precision and at most 10^6 (INVALID_KNOWN_VALUE) and the
 // delivery (PUR-INV-006); then one supplier and one set of terms (SUPPLIER_MISMATCH,
-// PURCHASE_TERMS_INCONSISTENT, PUR-INV-003); every overbuy marked with a reason and approved
-// (OVERBUY_NOT_APPROVED); MOQ and order multiple on the purchased quantities (MOQ_NOT_MET,
+// PURCHASE_TERMS_INCONSISTENT, PUR-INV-003); every overbuy marked with a reason
+// (OVERBUY_NOT_APPROVED; the purchase commitment decision approves it, S5 decision D-14); MOQ and order multiple on the purchased quantities (MOQ_NOT_MET,
 // ORDER_MULTIPLE_INVALID, PUR-INV-005); and a cost snapshot to compare with (COST_SNAPSHOT_MISSING,
 // REFERENCE_INVALID). It never chooses a source and never raises a quantity.
 func Prepare(req Request, in Inputs) (*Prepared, error) {
@@ -135,13 +135,9 @@ func Prepare(req Request, in Inputs) (*Prepared, error) {
 		}
 	}
 	for _, pk := range picks {
-		if ob := pk.req.Overbuy; ob != nil {
-			if strings.TrimSpace(ob.Reason) == "" {
-				return nil, fail(CodeOverbuyNotApproved, pk.path+"/overbuy/reason", "An overbuy is marked with its reason")
-			}
-			if !in.OverbuyApproved {
-				return nil, fail(CodeOverbuyNotApproved, pk.path+"/overbuy", "The preparer may not approve an overbuy")
-			}
+		if ob := pk.req.Overbuy; ob != nil && strings.TrimSpace(ob.Reason) == "" {
+			// Marked here, approved by the purchase commitment decision (S5 decision D-14).
+			return nil, fail(CodeOverbuyNotApproved, pk.path+"/overbuy/reason", "An overbuy is marked with its reason")
 		}
 	}
 	if err := checkMOQ(picks); err != nil {
@@ -479,8 +475,7 @@ func (in Inputs) document(req Request, picks []picked, out *Prepared) error {
 			SoldCostMinor: minor(sold), OverbuyCostMinor: minor(extra), TaxProfileRef: docRef(*pk.cond.TaxProfile),
 			TaxApplicationRef: docRef(*pk.cond.TaxApplication), OrderMultiple: pk.cond.OrderMultiple, Delivery: pk.delivery}
 		if ob := pk.req.Overbuy; ob != nil {
-			line.Overbuy = &DocOverbuy{Quantity: text(ob.Quantity), Reason: ob.Reason,
-				ApprovedBy: DocActor{Kind: string(in.Preparer.Kind), ID: in.Preparer.ID}, AuthorityEpoch: in.Epoch}
+			line.Overbuy = &DocOverbuy{Quantity: text(ob.Quantity), Reason: ob.Reason}
 		}
 		if m := pk.cond.MOQ; m != nil {
 			line.MOQ = &DocMOQ{Quantity: m.Quantity, UnitRef: docRef(*m.Unit), Scope: m.Scope, GroupID: m.GroupID,
