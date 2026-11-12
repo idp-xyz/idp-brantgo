@@ -66,7 +66,10 @@ internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding
                                   purchase commitments (S5-01): request, an independent decision that recomputes the draft and
                                   acknowledges deviations and overbuys, revocation, issue with a POL purchase order number
                                   and evidence, supplier confirmations; DownstreamCommitments v1 for TRD, InspectionSubject v1
-                                  for QLT
+                                  for QLT; supplier direct deliveries (S5-15): claims recorded by a human or an AI against
+                                  issued commitment lines, verified by an independent human, corrections that supersede,
+                                  never above what a line buys; SupplierDeliveryGuard v1 for FUL, PurchaseSettlementSource v1
+                                  for STL, PurchaseLineRef v1 for CNX
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only

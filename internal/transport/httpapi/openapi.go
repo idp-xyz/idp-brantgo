@@ -27,6 +27,7 @@ func OpenAPI() ([]byte, error) {
 		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{}), qltCommands(struct{ QLT }{})}
 	sets = append(sets, stlCommands(struct{ STL }{}))
 	sets = append(sets, cnxCommands(struct{ CNX }{}))
+	sets = append(sets, fulCommands(struct{ FUL }{}))
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -82,7 +83,7 @@ func OpenAPI() ([]byte, error) {
 			}
 		}
 	}
-	for _, r := range slices.Concat(reads, stlReads, cnxReads) {
+	for _, r := range slices.Concat(reads, stlReads, cnxReads, fulReads) {
 		get := map[string]any{"operationId": r.id, "tags": []string{r.tag}, "summary": r.summary, "responses": readResponses()}
 		var params []any
 		for _, p := range r.params {
@@ -207,6 +208,10 @@ var reads = []readRoute{
 		"A purchase commitment: its draft and order binding, its state now (requested, approved, expired, rejected, revoked, issued or confirmed), the decision with its validity and acknowledged deviations, the revocation, the issue with the purchase order number and the evidence of sending, and the supplier's confirmations; the caller's access to the order is re-checked", []string{"id"}, false},
 	{"/api/brant/v1/pur/orders/{id}/commitments", "pur.purchase_commitment.list", "pur",
 		"The purchase commitments of a sales order the caller sees, by commitment ID", []string{"id"}, false},
+	{"/api/brant/v1/pur/supplier_deliveries/{id}", "pur.supplier_delivery.get", "pur",
+		"A supplier delivery on the direct delivery route: its commitment, its status now, the version verified now and the one awaiting verification, and every version with its claimed and verified quantities, handover, evidence, decision and supersession; the caller's access to the order is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/pur/purchase_commitments/{id}/deliveries", "pur.supplier_delivery.list", "pur",
+		"The supplier deliveries of a purchase commitment, by delivery ID, and for each commitment line what it buys, what is verified now and what may still be verified (claims never count)", []string{"id"}, false},
 	{"/api/brant/v1/qlt/inspections/{id}", "qlt.inspection.get", "qlt",
 		"An inspection: its subject as PUR bound it, result, sampling, standard and report bindings, inspector, disposition and supersession; the caller's access to the subject and the cited sources is re-checked", []string{"id"}, false},
 	{"/api/brant/v1/qlt/quality_releases/{id}", "qlt.quality_release.get", "qlt",

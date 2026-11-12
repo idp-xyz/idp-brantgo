@@ -53,6 +53,18 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGetReservation, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetDecision, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
+		// Funds (B2a): fund.record, fund.resolve_difference, application.apply and application.unapply
+		// are humanOnlyCommands (D-16, D-17); order_account.open adopts an order revision's stages with
+		// the permission of payment_plan_review.open, by a person or the system (SM-STL-PAYMENT-PLAN-REVIEW).
+		authorization.HumanOnly(api.CommandRecordFund, api.CommandRecordFund),
+		authorization.HumanOnly(api.CommandResolveDifference, api.CommandResolveDifference),
+		{Command: api.CommandOpenOrderAccount, Permission: api.PermissionOpenOrderAccount,
+			ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
+		authorization.HumanOnly(api.CommandApply, api.CommandApply),
+		authorization.HumanOnly(api.CommandUnapply, api.CommandUnapply),
+		{Command: api.CommandGetFundRecord, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetOrderAccount, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetApplication, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -85,6 +97,9 @@ func scope(ctx context.Context) kernel.Scope {
 // Visible reports whether d's actor sees the object a stored result names: a limit request, a
 // reservation or a decision (credit.reserve names a decision when it opened one).
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
+	if visible, handled, err := visibleFund(ctx, exec, d, command, id); handled {
+		return visible, err
+	}
 	sc := scope(ctx)
 	var subjects []string
 	switch command {
@@ -202,6 +217,21 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.ConsumeCredit:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandConsume, key, c
+	case api.RecordFund:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRecordFund, key, c
+	case api.ResolveFundDifference:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandResolveDifference, key, c
+	case api.OpenOrderAccount:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandOpenOrderAccount, key, c
+	case api.Apply:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandApply, key, c
+	case api.Unapply:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandUnapply, key, c
 	}
 	return "", "", nil
 }

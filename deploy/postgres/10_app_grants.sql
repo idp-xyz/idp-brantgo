@@ -247,6 +247,18 @@ GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch,
               updated_at)
     ON brant_pur.purchase_commitment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_pur.order_commitments_v1(text) TO brant_app;
+-- PUR supplier deliveries (S5-15): a delivery root is inserted with its first version and then only
+-- moves its version counters (trigger); a version is inserted recorded and changes only by its
+-- decision and its supersession, once each (trigger); a line is written with its version and only
+-- takes its verified quantity, once (trigger); nothing is deleted. FOR UPDATE on a delivery root
+-- needs the column grants. FUL's transactions execute SupplierDeliveryGuard v1 (R59).
+GRANT SELECT, INSERT ON brant_pur.supplier_delivery, brant_pur.supplier_delivery_version, brant_pur.supplier_delivery_line TO brant_app;
+GRANT UPDATE (row_version, latest_version, verified_version, updated_at) ON brant_pur.supplier_delivery TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason, decision_evidence,
+              superseded_by_version, superseded_at)
+    ON brant_pur.supplier_delivery_version TO brant_app;
+GRANT UPDATE (verified_quantity) ON brant_pur.supplier_delivery_line TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pur.guard_supplier_delivery_v1(text, text, bigint) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a
@@ -279,6 +291,19 @@ GRANT UPDATE (status, version, consumed_by_kind, consumed_by_id, consume_epoch, 
               release_epoch, released_at, release_reason) ON brant_stl.credit_reservation TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_stl.guard_credit_reservation_v1(text, bigint, numeric, text, timestamptz) TO brant_app;
 
+-- STL funds and applications (S5-04a, S5-07): a fund record moves only a receipt's state and version
+-- by one per resolution (trigger); resolutions, order accounts, their stages and unapplies are only
+-- inserted; an application moves once, applied → unapplied (trigger); nothing is deleted. FOR UPDATE
+-- on fund records and order accounts needs the column grants (an order account itself does not
+-- change: its trigger refuses). fund.record and order_account.open call POL's ConfigGuard, granted
+-- above; STL publishes PaymentConditionGuard v1 (R45) for FUL.
+GRANT SELECT, INSERT ON brant_stl.fund_record, brant_stl.fund_difference_resolution, brant_stl.order_account, brant_stl.order_account_stage,
+    brant_stl.application, brant_stl.application_unapply TO brant_app;
+GRANT UPDATE (status, version, updated_at) ON brant_stl.fund_record TO brant_app;
+GRANT UPDATE (updated_at) ON brant_stl.order_account TO brant_app;
+GRANT UPDATE (status, version, updated_at) ON brant_stl.application TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_stl.guard_payment_condition_v1(text, bigint, text, timestamptz) TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on
@@ -291,3 +316,20 @@ GRANT SELECT, INSERT ON brant_cnx.trade_compliance_check, brant_cnx.trade_compli
 GRANT UPDATE (status, row_version, current_evaluation_id, current_decision_id, updated_at) ON brant_cnx.trade_compliance_check TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.trade_compliance_state(text, bigint, text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_trade_compliance_v1(text, bigint, text, timestamptz) TO brant_app;
+
+-- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
+-- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
+-- every update. A shipment is inserted prepared with its lines and parties and then changes only by
+-- a packing record, its confirmation or its cancellation, once (trigger); lines, parties, packing
+-- records, packages and their contents are only inserted; nothing is deleted; the ledger only
+-- grows. The shipment commands call PTY's, QLT's and TRD's guard functions, granted above; TRD
+-- executes ShipmentFacts v1 (R70) inside its own transactions.
+GRANT USAGE ON SCHEMA brant_ful TO brant_app;
+GRANT SELECT, INSERT ON brant_ful.order_fulfilment, brant_ful.shipment, brant_ful.shipment_line, brant_ful.shipment_party,
+    brant_ful.shipment_packing, brant_ful.shipment_package, brant_ful.shipment_package_content, brant_ful.action_result,
+    brant_ful.audit_event TO brant_app;
+GRANT UPDATE (order_id) ON brant_ful.order_fulfilment TO brant_app;
+GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at, confirm_evidence_ids,
+              guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at,
+              cancel_reason) ON brant_ful.shipment TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;

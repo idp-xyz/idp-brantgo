@@ -180,21 +180,26 @@ func (s Service) ResolveCommitmentLines(ctx context.Context, refs []api.Commitme
 			if i < 0 {
 				continue
 			}
-			dl := doc.Lines[i]
-			c := l.c
-			line := api.CommitmentLine{Ref: ref, Status: c.Status, RowVersion: c.RowVersion, DraftID: c.DraftID, DraftHash: c.DraftHash,
-				OrderID: c.OrderID, OrderRevision: c.OrderRevision, OrderHash: c.OrderHash, SupplierID: c.SupplierID, SkuID: dl.Sku.SkuID,
-				SpecRevision: dl.Sku.SpecRevision, UnitID: dl.UnitRef.ID, UnitRevision: dl.UnitRef.Revision, AllocatedQuantity: dl.AllocatedQuantity,
-				PurchaseQuantity: dl.PurchaseQuantity, SupplierDate: dl.Delivery.SupplierDate}
-			if c.Issue != nil {
-				line.PONumber = c.Issue.Number
-			}
-			if !commitment.IsCommitted(c.Status) {
-				line.Code = kernel.CodeInvalidState
-			}
-			out[ref] = line
+			out[ref] = commitmentLine(l.c, doc.Lines[i])
 		}
 		return nil
 	})
 	return out, err
+}
+
+// commitmentLine is line dl of the document of commitment c's draft as InspectionSubject v1 shows
+// it: a line of an issued or confirmed commitment has Code "".
+func commitmentLine(c *commitment.Commitment, dl draft.DocLine) api.CommitmentLine {
+	line := api.CommitmentLine{Ref: api.CommitmentLineRef{CommitmentID: c.ID, OrderLineID: dl.OrderLineID}, Status: c.Status,
+		RowVersion: c.RowVersion, DraftID: c.DraftID, DraftHash: c.DraftHash, OrderID: c.OrderID, OrderRevision: c.OrderRevision,
+		OrderHash: c.OrderHash, SupplierID: c.SupplierID, SkuID: dl.Sku.SkuID, SpecRevision: dl.Sku.SpecRevision, UnitID: dl.UnitRef.ID,
+		UnitRevision: dl.UnitRef.Revision, AllocatedQuantity: dl.AllocatedQuantity, PurchaseQuantity: dl.PurchaseQuantity,
+		SupplierDate: dl.Delivery.SupplierDate}
+	if c.Issue != nil {
+		line.PONumber = c.Issue.Number
+	}
+	if !commitment.IsCommitted(c.Status) {
+		line.Code = kernel.CodeInvalidState
+	}
+	return line
 }

@@ -54,7 +54,7 @@ var allPermissions = []string{
 	"order.amendment.withdraw", "order.close_remainder", "order.close", "order.document.generate", "order.document.record_signed",
 	"purchase.draft.prepare", "purchase.draft.void", "pur.read", "pur.audit",
 	"purchase.commitment.request", "purchase.commitment.decide", "purchase.commitment.revoke", "purchase.commitment.issue",
-	"purchase.supplier_confirmation.record",
+	"purchase.supplier_confirmation.record", "supplier_delivery.record", "supplier_delivery.verify",
 }
 
 type world struct {

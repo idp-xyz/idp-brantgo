@@ -23,6 +23,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
+	"go.idp.xyz/idp-brant/internal/contexts/ful"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
@@ -178,6 +179,7 @@ type Contexts struct {
 	QLT *qlt.Module
 	STL *stl.Module
 	CNX *cnx.Module
+	FUL *ful.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -267,6 +269,16 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		// CNX after PUR (S5: QLT, STL, CNX, FUL).
 		c.CNX, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(c.TRD), Countries: cnx.PTYCountries(c.PTY), Profiles: cnx.CATProfiles(c.CAT),
 			Programmes: cnx.REFProgrammes(c.REF), Configs: c.POL, Sources: c.EVD})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// FUL last of S5. PUR publishes no supplier deliveries yet (S5 unit B3): FUL's port to them
+		// answers DEPENDENCY_NOT_SUPPORTED. The CNX and STL guards and FUL's commercial release are
+		// extension points until S5 unit C1, recorded as not wired.
+		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.DeliveriesNotWired(),
+			Screening: ful.PTYScreening(), Sources: c.EVD})
 	}
 	if err != nil {
 		return nil, err
@@ -366,6 +378,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
 	tc.STL = c.STL
 	tc.CNX = c.CNX
+	tc.FUL = c.FUL
 	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {
 		rc := ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout}
 		if cfg.ReplayDispatch {

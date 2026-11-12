@@ -10,6 +10,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/orders"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/application"
@@ -17,6 +18,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 )
 
 // Module is STL wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -29,6 +31,10 @@ var (
 	_ api.Queries    = (*Module)(nil)
 	_ api.Auditor    = (*Module)(nil)
 	_ api.Reconciler = (*Module)(nil)
+
+	_ api.FundCommands      = (*Module)(nil)
+	_ api.FundQueries       = (*Module)(nil)
+	_ api.FundRecordLookups = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),
@@ -72,4 +78,11 @@ func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetReservation, Visible: application.Visible,
 	}}}, nil
+}
+
+// Subscriptions are STL's Inbox consumers on its own transaction owner (repository structure §07):
+// stl.order_credit, which has TRD's order events consume and release the order's credit reservations
+// (Context Map R32; PL-12, PL-13).
+func (m *Module) Subscriptions() []messaging.Subscription {
+	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

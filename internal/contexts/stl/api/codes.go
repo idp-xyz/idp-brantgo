@@ -19,6 +19,15 @@ const (
 	CodeApprovalExpired             = "APPROVAL_EXPIRED"               // the decision's validity ended
 	CodeOrderNotActive              = "ORDER_NOT_ACTIVE"               // the order is neither a draft nor active
 	CodeReferenceStale              = "REFERENCE_STALE"                // 409: a bound revision or hash no longer applies
+
+	// Funds, applications and order accounts (B2a).
+	CodeApplicationExceedsAvailable = "APPLICATION_EXCEEDS_AVAILABLE" // 409: more than the fund record has available
+	CodeApplicationExceedsOpen      = "APPLICATION_EXCEEDS_OPEN"      // 409: more than is open on the target
+	CodeFundDifferenceUnexplained   = "FUND_DIFFERENCE_UNEXPLAINED"   // 409: only the unexplained difference would cover it
+	CodePartyEntityMismatch         = "PARTY_ENTITY_MISMATCH"         // 409: payer or receiving entity is not the business party
+	CodeIndependentReviewRequired   = "INDEPENDENT_REVIEW_REQUIRED"   // 422: the recorder resolves its own difference
+	CodeBusinessKeyConflict         = "BUSINESS_KEY_CONFLICT"         // 409: the bank reference is recorded on the account
+	CodeCommercialReleaseBlocked    = "COMMERCIAL_RELEASE_BLOCKED"    // 409: the payment condition of the scope is not met
 )
 
 var codes = map[string]kernel.Category{
@@ -30,6 +39,13 @@ var codes = map[string]kernel.Category{
 	CodeApprovalExpired:             kernel.CategoryInvalid,
 	CodeOrderNotActive:              kernel.CategoryInvalid,
 	CodeReferenceStale:              kernel.CategoryConflict,
+	CodeApplicationExceedsAvailable: kernel.CategoryConflict,
+	CodeApplicationExceedsOpen:      kernel.CategoryConflict,
+	CodeFundDifferenceUnexplained:   kernel.CategoryConflict,
+	CodePartyEntityMismatch:         kernel.CategoryConflict,
+	CodeIndependentReviewRequired:   kernel.CategoryInvalid,
+	CodeBusinessKeyConflict:         kernel.CategoryConflict,
+	CodeCommercialReleaseBlocked:    kernel.CategoryConflict,
 }
 
 // Category returns the category of a code STL declares.
