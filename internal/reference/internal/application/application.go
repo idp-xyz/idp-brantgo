@@ -1,5 +1,6 @@
-// Package application runs the commands and queries of screening list reference data on the
-// command ledger. List rules live in lists; SQL lives in postgres.
+// Package application runs the commands and queries of reference data (screening lists and
+// country programme lists) on the command ledger. List rules live in lists and programmes; SQL
+// lives in postgres.
 package application
 
 import (
@@ -30,12 +31,15 @@ const (
 
 var anyActor = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}
 
-// Rules is the authorization policy of reference data: only a human imports a list version (the
-// compliance lead confirms list sources, S1-09).
+// Rules is the authorization policy of reference data: only a human imports a screening list
+// version (the compliance lead confirms list sources, S1-09) or a country programme list version
+// (ADR-BR-017, S5 E-3); reads need ref.read.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		authorization.HumanOnly(api.CommandImportScreeningList, api.CommandImportScreeningList),
+		authorization.HumanOnly(api.CommandImportCountryProgrammes, api.CommandImportCountryProgrammes),
 		{Command: CommandGetList, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetProgrammeList, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 }

@@ -342,11 +342,15 @@ const (
 )
 
 // ResolvedAddressRole is what PTY says about one AddressRoleRef now. Code is empty when the party
-// is confirmed in PartyRevision now; otherwise it is REFERENCE_STALE with Stale saying why.
+// is confirmed in PartyRevision now; otherwise it is REFERENCE_STALE with Stale saying why. Country
+// is the ISO 3166-1 alpha-2 code the confirmed revision keeps for the address, empty when it states
+// none (Context Map R77: AddressRoleRef v1 with the country code); like the role and the text it
+// never changes for the revision.
 type ResolvedAddressRole struct {
 	Ref             AddressRoleRef
 	Role            string
 	Address         string
+	Country         string
 	PartyStatus     string
 	CurrentRevision int64 // the party's latest confirmed revision
 	Code            string

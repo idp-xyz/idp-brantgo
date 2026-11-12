@@ -109,15 +109,16 @@ func InsertPartyRevision(ctx context.Context, exec bentopg.Executor, scope kerne
 		if err != nil {
 			return err
 		}
-		_, err = exec.Exec(ctx, `INSERT INTO brant_pty.party_revision_address (tenant_id, company_id, party_id, revision, address_id, role, address)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`, string(scope.Tenant), string(scope.Company), p.ID, p.Revision, a.ID, string(a.Role), a.Text)
+		_, err = exec.Exec(ctx, `INSERT INTO brant_pty.party_revision_address (tenant_id, company_id, party_id, revision, address_id, role, address,
+			country) VALUES ($1, $2, $3, $4, $5, $6, $7, nullif($8, ''))`, string(scope.Tenant), string(scope.Company), p.ID, p.Revision, a.ID,
+			string(a.Role), a.Text, a.Country)
 	}
 	return err
 }
 
 // Addresses returns the current addresses of a party, ordered by ID.
 func Addresses(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, partyID string) ([]party.Address, error) {
-	rows, err := exec.Query(ctx, `SELECT address_id, role, address FROM brant_pty.party_address
+	rows, err := exec.Query(ctx, `SELECT address_id, role, address, coalesce(country, '') FROM brant_pty.party_address
 		WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3 ORDER BY address_id`, string(scope.Tenant), string(scope.Company), partyID)
 	if err != nil {
 		return nil, err
@@ -128,7 +129,7 @@ func Addresses(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, p
 func scanAddress(row pgx.CollectableRow) (party.Address, error) {
 	var a party.Address
 	var role string
-	err := row.Scan(&a.ID, &role, &a.Text)
+	err := row.Scan(&a.ID, &role, &a.Text, &a.Country)
 	a.Role = party.AddressRole(role)
 	return a, err
 }
@@ -141,8 +142,9 @@ func ReplaceAddresses(ctx context.Context, exec bentopg.Executor, scope kernel.S
 		if err != nil {
 			return err
 		}
-		_, err = exec.Exec(ctx, `INSERT INTO brant_pty.party_address (tenant_id, company_id, party_id, address_id, role, address)
-			VALUES ($1, $2, $3, $4, $5, $6)`, string(scope.Tenant), string(scope.Company), p.ID, a.ID, string(a.Role), a.Text)
+		_, err = exec.Exec(ctx, `INSERT INTO brant_pty.party_address (tenant_id, company_id, party_id, address_id, role, address, country)
+			VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''))`, string(scope.Tenant), string(scope.Company), p.ID, a.ID, string(a.Role), a.Text,
+			a.Country)
 	}
 	return err
 }
@@ -176,7 +178,7 @@ func PartyRevisions(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	if err != nil || len(revisions) == 0 {
 		return revisions, err
 	}
-	rows, err = exec.Query(ctx, `SELECT revision, address_id, role, address FROM brant_pty.party_revision_address
+	rows, err = exec.Query(ctx, `SELECT revision, address_id, role, address, coalesce(country, '') FROM brant_pty.party_revision_address
 		WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3 ORDER BY revision, address_id`,
 		string(scope.Tenant), string(scope.Company), id)
 	if err != nil {
@@ -189,7 +191,7 @@ func PartyRevisions(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	addresses, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (revisionAddress, error) {
 		var ra revisionAddress
 		var role string
-		err := row.Scan(&ra.revision, &ra.address.ID, &role, &ra.address.Text)
+		err := row.Scan(&ra.revision, &ra.address.ID, &role, &ra.address.Text, &ra.address.Country)
 		ra.address.Role = party.AddressRole(role)
 		return ra, err
 	})

@@ -335,6 +335,7 @@ func ptyCommands(c PTY) *commandSet {
 		AddressID string `json:"address_id"`
 		Role      string `json:"role"`
 		Address   string `json:"address"`
+		Country   string `json:"country"` // optional: ISO 3166-1 alpha-2 (S5 D-8)
 	}
 	type saveParty struct {
 		ID              string    `json:"id"`
@@ -482,7 +483,8 @@ type decideScreening struct {
 
 // MaxListImportBody and MaxListImportValues are the ingress limits of screening_list.import: up
 // to refapi.MaxEntries entries with their aliases. Published lists are far smaller (the UN list
-// about 1,000 entries, the OFAC SDN list about 18,000).
+// about 1,000 entries, the OFAC SDN list about 18,000). country_programme.import shares them: up
+// to refapi.MaxProgrammes programmes naming every country fit well within.
 const (
 	MaxListImportBody   = 32 << 20
 	MaxListImportValues = 1_000_000
@@ -508,8 +510,10 @@ func refCommands(c REF) *commandSet {
 		Entries      []entry `json:"entries"`
 	}
 	return &commandSet{bc: "ref", contract: refapi.Contract, auditor: c, audit: c.Audit,
-		limits: map[string]strictjson.Limits{refapi.CommandImportScreeningList: {MaxBytes: MaxListImportBody, MaxValues: MaxListImportValues}},
+		limits: map[string]strictjson.Limits{refapi.CommandImportScreeningList: {MaxBytes: MaxListImportBody, MaxValues: MaxListImportValues},
+			refapi.CommandImportCountryProgrammes: {MaxBytes: MaxListImportBody, MaxValues: MaxListImportValues}},
 		commands: map[string]commandFunc{
+			refapi.CommandImportCountryProgrammes: programmeImport(c),
 			refapi.CommandImportScreeningList: handle(func(key string, a importList) (refapi.ImportScreeningList, error) {
 				cmd := refapi.ImportScreeningList{IdempotencyKey: key, ListCode: a.ListCode, Jurisdiction: a.Jurisdiction, Version: a.Version,
 					SourceName: a.SourceName, SourceURL: a.SourceURL, PublishedOn: a.PublishedOn, FileSHA256: a.FileSHA256, EntryCount: a.EntryCount}

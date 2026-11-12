@@ -7,7 +7,8 @@
 // versions it uses, with their source, publication date, import time, importer, the SHA-256 of the
 // source file and the entry count. Imported entries never change; a new version of a list becomes
 // its current version, and the contexts that screened against the previous one see that through
-// the list guard (ScreeningListGuardFunction).
+// the list guard (ScreeningListGuardFunction). Country programme lists (S5 E-3) follow the same
+// pattern; see programmes.go.
 package api
 
 import (

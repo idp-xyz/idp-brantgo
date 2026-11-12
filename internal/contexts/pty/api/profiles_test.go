@@ -31,6 +31,14 @@ func TestPartyAddressContract(t *testing.T) {
 		{with(Address{AddressID: "hq", Role: AddressPayer, Address: "x"}, Address{AddressID: "hq", Role: AddressPayee, Address: "y"}),
 			"INVALID_KNOWN_VALUE /args/addresses/1/address_id"},
 		{with(make([]Address, MaxAddresses+1)...), "SCHEMA_INVALID /args/addresses"},
+		// S5 D-8: the country is optional and, when stated, an assigned ISO 3166-1 alpha-2 code.
+		{with(Address{AddressID: "dock", Role: AddressConsignee, Address: "合成收货地址", Country: "DE"}), "OK"},
+		{with(Address{AddressID: "hq", Role: AddressBuyer, Address: "x", Country: "AQ"}, Address{AddressID: "ap", Role: AddressBilling, Address: "y"}), "OK"},
+		{with(Address{AddressID: "dock", Role: AddressConsignee, Address: "x", Country: "de"}), "SCHEMA_INVALID /args/addresses/0/country"},
+		{with(Address{AddressID: "dock", Role: AddressConsignee, Address: "x", Country: "DEU"}), "SCHEMA_INVALID /args/addresses/0/country"},
+		{with(Address{AddressID: "dock", Role: AddressConsignee, Address: "x", Country: "UK"}), "SCHEMA_INVALID /args/addresses/0/country"},
+		{with(Address{AddressID: "hq", Role: AddressBuyer, Address: "x"}, Address{AddressID: "dock", Role: AddressConsignee, Address: "y", Country: "XK"}),
+			"SCHEMA_INVALID /args/addresses/1/country"},
 	} {
 		if got := code(c.cmd.Validate()); got != c.want {
 			t.Errorf("%+v: %s, want %s", c.cmd.Addresses, got, c.want)
