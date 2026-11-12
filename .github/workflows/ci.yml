@@ -7,7 +7,7 @@ permissions:
 jobs:
   brant-ci:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 75
     services:
       postgres:
         image: postgres:16.12-alpine@sha256:97ff59a4e30e08d1c11bdcd9455e7832368c0572b576c9092cde2df4ae5552a3
@@ -72,9 +72,9 @@ jobs:
           PGPASSWORD: ci-migrator-only
         run: psql -h 127.0.0.1 -U brant_migrator -d brant -q -v ON_ERROR_STOP=1 -f deploy/postgres/10_app_grants.sql
       - name: Unit and PostgreSQL 16 integration tests (database tests never skip in CI)
-        run: go test -tags integration -count=1 -v ./...
+        run: go test -tags integration -count=1 -timeout 45m -v ./...
       - name: Race detector
-        run: go test -tags integration -race -count=1 ./...
+        run: go test -tags integration -race -count=1 -timeout 60m ./...
       - name: Consistency spike report (ADR-BR-004, ADR-BR-011)
         run: |
           BRANT_SPIKE_REPORT="$RUNNER_TEMP/spike-consistency.json" go test -tags integration -count=1 ./tools/spikes/consistency

@@ -9642,7 +9642,7 @@
             "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
           }
         },
-        "summary": "Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)",
+        "summary": "Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink or -replay-dispatch)",
         "tags": [
           "msg"
         ]

@@ -1,5 +1,7 @@
-// Package messaging holds Brant's reliable messaging: the Outbox relay and event transport adapters.
-// The HTTP webhook is a replaceable adapter, not a broker decision.
+// Package messaging holds Brant's reliable messaging: the Outbox relay with dead letters and replay,
+// the Inbox consumer that deduplicates by event ID, the subscriptions contexts declare and the
+// Dispatcher that delivers to them in process, and event transport adapters. The HTTP webhook is a
+// replaceable adapter, not a broker decision.
 package messaging
 
 import (

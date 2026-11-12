@@ -204,7 +204,7 @@ var reads = []readRoute{
 	{"/api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", "ref.country_programme_list_version.get", "ref",
 		"One imported version of a country programme list with its programmes", []string{"id", "version"}, false},
 	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
-		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)", []string{"source", "event_id"}, true},
+		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink or -replay-dispatch)", []string{"source", "event_id"}, true},
 }
 
 // readQuery names the optional integer query parameters of a read.

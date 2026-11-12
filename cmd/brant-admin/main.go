@@ -6,9 +6,16 @@
 //	brant-admin grant -tenant t -company c -actor alice -kind human -permissions rfq.save_draft,inq.read -data-scope company
 //	brant-admin role -tenant t -company c -role trade.clerk -name 外贸业务员 -templates sales_clerk,merchandiser
 //	brant-admin assign -tenant t -company c -actor alice -kind human -roles trade.clerk -data-scope team -team east
+//	brant-admin inbox -tenant t -company c
 //
 // Roles and their templates are BC-D02: templates come from the master archive; a forbidden
 // combination (separation of duties) is refused.
+//
+// inbox provisions the event consumers of every context (brant-worker -dispatch): each consumer's
+// system actor system:inbox.<consumer> gets exactly the permissions its subscriptions declare,
+// with data scope company. Run it for every company the consumers serve, and again after a release
+// that adds a consumer or changes its permissions. One consumer can also be set by hand with
+// grant -kind system -actor inbox.<consumer>.
 package main
 
 import (
@@ -34,8 +41,11 @@ func run(args []string) error {
 	if len(args) > 0 && (args[0] == "role" || args[0] == "assign") {
 		return roles(args)
 	}
+	if len(args) > 0 && args[0] == "inbox" {
+		return inbox(args)
+	}
 	if len(args) == 0 || args[0] != "grant" {
-		return errors.New("usage: brant-admin grant|role|assign -tenant ... -company ... (see the package comment)")
+		return errors.New("usage: brant-admin grant|role|assign|inbox -tenant ... -company ... (see the package comment)")
 	}
 	fs := flag.NewFlagSet("grant", flag.ContinueOnError)
 	tenant := fs.String("tenant", "", "tenant ID")
@@ -110,6 +120,36 @@ func roles(args []string) error {
 		return err
 	}
 	fmt.Printf("DONE %s %s/%s, authority epoch %d\n", args[0], *tenant, *company, epoch)
+	return nil
+}
+
+// inbox grants the system actor of every event consumer what its subscriptions declare.
+func inbox(args []string) error {
+	fs := flag.NewFlagSet("inbox", flag.ContinueOnError)
+	tenant := fs.String("tenant", "", "tenant ID")
+	company := fs.String("company", "", "company ID")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	dsn := os.Getenv("IDP_BRANT_POSTGRES_DSN")
+	if dsn == "" {
+		return errors.New("IDP_BRANT_POSTGRES_DSN is required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	platform, err := bootstrap.Open(ctx, bootstrap.Config{PostgresDSN: dsn})
+	if err != nil {
+		return err
+	}
+	defer platform.Close()
+	grants, epoch, err := platform.ProvisionInboxFor(ctx, *tenant, *company)
+	if err != nil {
+		return err
+	}
+	for _, g := range grants {
+		fmt.Printf("GRANTED %s/%s %s %d permissions %s\n", *tenant, *company, g.Actor, len(g.Permissions), strings.Join(g.Permissions, ","))
+	}
+	fmt.Printf("DONE inbox %s/%s, %d consumers, authority epoch %d\n", *tenant, *company, len(grants), epoch)
 	return nil
 }
 
