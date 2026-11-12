@@ -558,6 +558,8 @@ func catCommands(c CAT) *commandSet {
 			return catapi.PublishItemCodeMapping{IdempotencyKey: key, MappingID: a.ID, ExpectedVersion: v, Revision: a.Revision,
 				EvidenceIDs: a.EvidenceIDs, Reason: a.Reason}, err
 		}, c.PublishItemCodeMapping),
+		catapi.CommandSaveDeclarationProfile:   reflected("ProfileID", "", c.SaveDeclarationProfile),
+		catapi.CommandVerifyDeclarationProfile: reflected("ProfileID", "", c.VerifyDeclarationProfile),
 	}}
 }
 

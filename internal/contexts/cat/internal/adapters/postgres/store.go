@@ -1,5 +1,5 @@
-// Package postgres stores CAT SKUs and item code mappings in schema brant_cat, on the executor of
-// CAT's own transaction.
+// Package postgres stores CAT SKUs, item code mappings and declaration profiles in schema
+// brant_cat, on the executor of CAT's own transaction.
 package postgres
 
 import (

@@ -79,6 +79,13 @@ GRANT UPDATE (root_version, last_revision, updated_at) ON brant_cat.item_code_ma
 GRANT UPDATE (status, sku_id, spec_revision, saved_by_kind, saved_by_id, saved_epoch, saved_at, published_by_kind,
               published_by_id, publish_epoch, published_at, evidence_ids, superseded_at)
     ON brant_cat.item_code_mapping_revision TO brant_app;
+-- CAT declaration profiles: a root's version and a draft revision change; a verified revision changes
+-- only its status and supersession (trigger); the key never changes; nothing is deleted.
+GRANT SELECT, INSERT ON brant_cat.declaration_profile, brant_cat.declaration_profile_revision TO brant_app;
+GRANT UPDATE (root_version, last_revision, updated_at) ON brant_cat.declaration_profile TO brant_app;
+GRANT UPDATE (status, content, content_hash, saved_by_kind, saved_by_id, saved_epoch, saved_at, verified_by_kind, verified_by_id,
+              verify_epoch, verified_at, evidence_ids, superseded_at)
+    ON brant_cat.declaration_profile_revision TO brant_app;
 
 -- POL: a root's version and a working revision change; a published revision changes only its status and
 -- end (trigger); counters count up; issued numbers, snapshots and the ledger only grow.
