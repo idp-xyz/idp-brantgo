@@ -43,3 +43,50 @@ type DeliverySource struct {
 	Line  settlement.DeliveryLine
 	Check func(path string) error
 }
+
+// The order-level halves of STL's ports to FUL and PUR, for the order result (S5 unit C9, WBS S5-17), read before
+// STL's transaction like their siblings:
+//
+//   - OrderShipments (FUL, R30 ShipmentLineRef v1): ResolveOrderShipments answers, for orders, the lines of every
+//     shipment of the order the caller sees, in any state — the batches of the confirmed result, the shipment
+//     lines a closed result needs settled, and the shipments a charge may go to.
+//   - OrderPurchases (PUR, R31 "采购承诺与收货或直发交付证据"): ResolveOrderPurchases answers the order's purchase
+//     commitment lines with what each buys for (the expected purchase cost) and its verified deliveries (which a
+//     closed result needs settled); shown is false when PUR shows the caller nothing of the order.
+//
+// adapters/sources implements both on FUL's and PUR's api beside Shipments and Deliveries. A port value that does
+// not implement them (a stand-in of an earlier unit's tests) answers nothing: the order result then says FUL or
+// PUR showed nothing, never that there was nothing.
+type (
+	OrderShipments interface {
+		ResolveOrderShipments(ctx context.Context, orderIDs []string) (map[string][]OrderShipmentLine, error)
+	}
+	OrderPurchases interface {
+		ResolveOrderPurchases(ctx context.Context, orderID string) (lines []OrderPurchaseLine, shown bool, err error)
+	}
+)
+
+// OrderShipmentLine is a line of a FUL shipment of an order: its state (prepared, confirmed, cancelled), the order
+// line, unit and quantity.
+type OrderShipmentLine struct {
+	ShipmentID  string
+	LineID      string
+	Status      string
+	OrderLineID string
+	UnitID      string
+	Quantity    string
+}
+
+// OrderPurchaseLine is a line of a PUR purchase commitment of an order: the commitment's status, supplier, the
+// sealed net amount of the line in minor units of Currency, and its verified deliveries {DeliveryID, LineID (the
+// order line), Version}.
+type OrderPurchaseLine struct {
+	CommitmentID string
+	OrderLineID  string
+	Status       string
+	SupplierID   string
+	Currency     string
+	MinorUnits   int
+	NetMinor     string
+	Deliveries   []api.SettlementSourceRef
+}

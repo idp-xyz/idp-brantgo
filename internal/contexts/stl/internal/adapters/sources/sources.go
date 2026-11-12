@@ -97,3 +97,83 @@ func (p PUR) ResolveDeliverySources(ctx context.Context, refs []api.SettlementSo
 	}
 	return out, nil
 }
+
+var (
+	_ application.OrderShipments = FUL{}
+	_ application.OrderPurchases = PUR{}
+)
+
+// ResolveOrderShipments asks FUL's ResolveOrderShipmentLines (an active grant, FUL's data scope) for the lines of
+// every shipment of the orders, in batches of fulapi.MaxOrderLookups.
+func (f FUL) ResolveOrderShipments(ctx context.Context, orderIDs []string) (map[string][]application.OrderShipmentLine, error) {
+	out := map[string][]application.OrderShipmentLine{}
+	var lookups fulapi.ShipmentLineLookups
+	if f.Lookups != nil {
+		lookups = f.Lookups()
+	}
+	if lookups == nil {
+		return out, nil
+	}
+	for start := 0; start < len(orderIDs); start += fulapi.MaxOrderLookups {
+		found, err := lookups.ResolveOrderShipmentLines(ctx, orderIDs[start:min(start+fulapi.MaxOrderLookups, len(orderIDs))])
+		if err != nil {
+			return nil, err
+		}
+		for id, lines := range found {
+			list := []application.OrderShipmentLine{}
+			for _, r := range lines {
+				list = append(list, application.OrderShipmentLine{ShipmentID: r.Key.ShipmentID, LineID: r.Key.LineID, Status: r.ShipmentStatus,
+					OrderLineID: r.OrderLineID, UnitID: r.UnitID, Quantity: r.Quantity})
+			}
+			out[id] = list
+		}
+	}
+	return out, nil
+}
+
+// ResolveOrderPurchases asks PUR for the order's commitments (its audited purchase.commitment.list, pur.read)
+// and their lines' PurchaseLineRef v1 (amounts and verified deliveries). PUR refusing the read (no pur.read, an
+// order the caller does not see) is "not shown", not an error.
+func (p PUR) ResolveOrderPurchases(ctx context.Context, orderID string) ([]application.OrderPurchaseLine, bool, error) {
+	q, ok := p.Lookups.(purapi.CommitmentQueries)
+	if !ok || p.Lookups == nil {
+		return nil, false, nil
+	}
+	views, err := q.GetOrderCommitments(ctx, orderID)
+	if _, refused := kernel.AsRejection(err); refused {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	var refs []purapi.CommitmentLineRef
+	status := map[string]purapi.CommitmentView{}
+	for _, v := range views {
+		status[v.CommitmentID] = v
+		for _, l := range v.Lines {
+			refs = append(refs, purapi.CommitmentLineRef{CommitmentID: v.CommitmentID, OrderLineID: l.OrderLineID})
+		}
+	}
+	var out []application.OrderPurchaseLine
+	for start := 0; start < len(refs); start += purapi.MaxCommitmentLineRefs {
+		ask := refs[start:min(start+purapi.MaxCommitmentLineRefs, len(refs))]
+		found, err := p.Lookups.ResolvePurchaseLines(ctx, ask)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, r := range ask {
+			l, ok := found[r]
+			if !ok {
+				continue
+			}
+			v := status[r.CommitmentID]
+			line := application.OrderPurchaseLine{CommitmentID: r.CommitmentID, OrderLineID: r.OrderLineID, Status: v.Status, SupplierID: v.SupplierID,
+				Currency: l.Currency, MinorUnits: l.MinorUnits, NetMinor: l.NetMinor}
+			for _, d := range l.Deliveries {
+				line.Deliveries = append(line.Deliveries, api.SettlementSourceRef{DeliveryID: d.Ref.DeliveryID, LineID: d.Ref.LineID, Version: d.Ref.Version})
+			}
+			out = append(out, line)
+		}
+	}
+	return out, true, nil
+}
