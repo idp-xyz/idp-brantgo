@@ -2,8 +2,8 @@
 // packing records and confirmations, the order fulfilment root, ShipmentFacts v1 for TRD; WBS
 // S5-03a; milestone plans, export lots, ShipmentLineRef v1 for STL and ExportLotRef v1 for CNX; WBS
 // S5-03b; the commercial release of a shipment and its documents; WBS S5-07; bookings and the
-// shipment document set; WBS S5-08). Code outside FUL uses it through package api; everything under
-// internal/ is private to FUL.
+// shipment document set; WBS S5-08; the shipment reviews that follow an order change; WBS S5-09b).
+// Code outside FUL uses it through package api; everything under internal/ is private to FUL.
 package ful
 
 import (
@@ -12,6 +12,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/api"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/upstream"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/application"
@@ -23,6 +24,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 )
 
 // Module is FUL wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -54,6 +56,10 @@ var (
 	_ api.BookingQueries   = (*Module)(nil)
 	_ api.DocumentCommands = (*Module)(nil)
 	_ api.DocumentQueries  = (*Module)(nil)
+
+	// S5-09b: shipment reviews after an order change.
+	_ api.ReviewCommands = (*Module)(nil)
+	_ api.ReviewQueries  = (*Module)(nil)
 )
 
 // Upstream are the lookups and guards of FUL's upstream contexts: TRD's orders (R27), QLT's quality
@@ -132,4 +138,11 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetShipment, Visible: application.Visible,
 	}}}, nil
+}
+
+// Subscriptions are FUL's Inbox consumers on its own transaction owner (repository structure §07):
+// ful.shipment_review, which has TRD's OrderAmended, OrderCancelled and OrderRemainderClosed open a
+// shipment review of what the change leaves stale (Context Map R27; PL-09; WF-06 step 5).
+func (m *Module) Subscriptions() []messaging.Subscription {
+	return events.Subscriptions(m.Ledger.DB, m.Service)
 }
