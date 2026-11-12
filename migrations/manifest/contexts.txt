@@ -26,3 +26,7 @@ pur
 qlt
 # stl (S5): after pur, in the fixed S5 order qlt, stl, cnx, ful; TRD's activation calls its CreditGuard v1 at run time only.
 stl
+# cnx follows pur (S5 fixed order after pur: qlt, stl, cnx, ful): TRD's order activation and FUL's
+# release call CNX's trade compliance guard at run time only, and CNX's own transactions call POL's
+# guard function.
+cnx

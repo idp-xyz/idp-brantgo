@@ -20,6 +20,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
+	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
@@ -176,6 +177,7 @@ type Contexts struct {
 	PUR *pur.Module
 	QLT *qlt.Module
 	STL *stl.Module
+	CNX *cnx.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -255,6 +257,15 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		c.STL, err = stl.New(db, stl.Upstream{Orders: stl.TRDOrders(c.TRD), Configs: c.POL, Parties: c.PTY, Sources: c.EVD})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// CNX after PUR (S5: QLT, STL, CNX, FUL). CAT's declaration profiles (S5 A5) are wired when
+		// A5 merges; until then that port answers DEPENDENCY_NOT_SUPPORTED.
+		c.CNX, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(c.TRD), Countries: cnx.PTYCountries(c.PTY), Profiles: cnx.ProfilesNotWired(),
+			Programmes: cnx.REFProgrammes(c.REF), Configs: c.POL, Sources: c.EVD})
 	}
 	if err != nil {
 		return nil, err
@@ -353,6 +364,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
 	tc.STL = c.STL
+	tc.CNX = c.CNX
 	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {
 		rc := ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout}
 		if cfg.ReplayDispatch {

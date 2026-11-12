@@ -83,18 +83,21 @@ type DeadLetterReplayer interface {
 
 // Config wires the transport.
 type Config struct {
-	EVD      EVD
-	PTY      PTY
-	CAT      CAT
-	INQ      INQ
-	POL      POL
-	REF      REF
-	SUP      SUP
-	CST      CST
-	TRD      TRD
-	PUR      PUR
+	EVD EVD
+	PTY PTY
+	CAT CAT
+	INQ INQ
+	POL POL
+	REF REF
+	SUP SUP
+	CST CST
+	TRD TRD
+	PUR PUR
+	// The S5 contexts are optional: nil leaves a context's commands and routes out, so a transport
+	// that serves or tests other contexts needs no stand-in for them. The composed process sets all.
 	QLT      QLT
-	STL      STL // the settlement context (S5); nil leaves its routes out
+	STL      STL
+	CNX      CNX
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -113,7 +116,7 @@ const (
 
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
-	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.TRD == nil || cfg.PUR == nil || cfg.QLT == nil || cfg.Verifier == nil ||
+	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.TRD == nil || cfg.PUR == nil || cfg.Verifier == nil ||
 		cfg.Clock == nil {
 		return nil, errors.New("httpapi: contexts, verifier and clock are required")
 	}
@@ -125,11 +128,17 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	s := &server{cfg: cfg, contexts: map[string]*commandSet{}}
 	for _, set := range []*commandSet{evdCommands(cfg.EVD), ptyCommands(cfg.PTY), catCommands(cfg.CAT), inqCommands(cfg.INQ), polCommands(cfg.POL),
-		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD), purCommands(cfg.PUR), qltCommands(cfg.QLT)} {
+		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD), purCommands(cfg.PUR)} {
 		s.contexts[set.bc] = set
+	}
+	if cfg.QLT != nil {
+		s.contexts["qlt"] = qltCommands(cfg.QLT)
 	}
 	if cfg.STL != nil {
 		s.contexts["stl"] = stlCommands(cfg.STL)
+	}
+	if cfg.CNX != nil {
+		s.contexts["cnx"] = cnxCommands(cfg.CNX)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -194,9 +203,11 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocations", s.authenticated(s.allocations))
 	mux.Handle("GET /api/brant/v1/pur/purchase_commitments/{id}", s.authenticated(read(s, cfg.PUR.GetCommitment, okView[purapi.CommitmentView])))
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/commitments", s.authenticated(s.orderCommitments))
-	mux.Handle("GET /api/brant/v1/qlt/inspections/{id}", s.authenticated(read(s, cfg.QLT.GetInspection, okView[qltapi.InspectionView])))
-	mux.Handle("GET /api/brant/v1/qlt/quality_releases/{id}", s.authenticated(read(s, cfg.QLT.GetRelease, okView[qltapi.ReleaseView])))
-	mux.Handle("GET /api/brant/v1/qlt/subjects/{kind}/{id}/lines/{line_id}", s.authenticated(s.qualitySubject))
+	if cfg.QLT != nil {
+		mux.Handle("GET /api/brant/v1/qlt/inspections/{id}", s.authenticated(read(s, cfg.QLT.GetInspection, okView[qltapi.InspectionView])))
+		mux.Handle("GET /api/brant/v1/qlt/quality_releases/{id}", s.authenticated(read(s, cfg.QLT.GetRelease, okView[qltapi.ReleaseView])))
+		mux.Handle("GET /api/brant/v1/qlt/subjects/{kind}/{id}/lines/{line_id}", s.authenticated(s.qualitySubject))
+	}
 	if cfg.STL != nil {
 		s.stlRoutes(mux)
 	}
@@ -204,6 +215,9 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}", s.authenticated(read(s, cfg.REF.GetProgrammeList, okView[refapi.ProgrammeListView])))
 	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", s.authenticated(s.programmeListVersion))
+	if cfg.CNX != nil {
+		s.cnxRoutes(mux)
+	}
 	return s.correlated(mux), nil
 }
 

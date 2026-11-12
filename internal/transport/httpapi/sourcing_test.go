@@ -50,7 +50,7 @@ func (f *fakeCST) AuditRejected(context.Context, string, string, string) error {
 func TestReflectedCommandsDecodeTheApiStructures(t *testing.T) {
 	sup, cst := &fakeSUP{}, &fakeCST{}
 	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{},
-		REF: struct{ REF }{}, SUP: sup, CST: cst, TRD: struct{ TRD }{}, PUR: struct{ PUR }{}, QLT: struct{ QLT }{}, Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
+		REF: struct{ REF }{}, SUP: sup, CST: cst, TRD: struct{ TRD }{}, PUR: struct{ PUR }{}, QLT: struct{ QLT }{}, CNX: struct{ CNX }{}, Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
 	if err != nil {
 		t.Fatal(err)
 	}
