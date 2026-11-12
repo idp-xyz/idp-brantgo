@@ -7,7 +7,8 @@
 // customer's responses to an active formal revision, their verification into acceptances that form
 // the contract when they arrived in time, and the acceptances' effectivity ledger; then the sales
 // order an accepted revision converts into, its review and activation (ActiveOrderRef v1 for PUR),
-// its amendments and end, and the S/C and PI of its revisions with their signed copies.
+// its amendments and end, and the S/C and PI of its revisions with their signed copies; and, for
+// STL, CNX and FUL, OrderCommercialSnapshot v1 of drafts and active orders (OrderSnapshotLookups).
 // Code outside TRD uses it through package api; everything under internal/ is private to TRD.
 package trd
 
@@ -41,6 +42,7 @@ var (
 	_ api.Lookups               = (*Module)(nil)
 	_ api.AcceptanceLookups     = (*Module)(nil)
 	_ api.ActiveOrderLookups    = (*Module)(nil)
+	_ api.OrderSnapshotLookups  = (*Module)(nil)
 	_ api.ActiveOrderCommands   = (*Module)(nil)
 	_ api.OrderDocumentCommands = (*Module)(nil)
 	_ api.Auditor               = (*Module)(nil)

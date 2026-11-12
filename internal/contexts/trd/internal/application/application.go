@@ -117,6 +117,8 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGenerateOrderDocument, Permission: api.CommandGenerateOrderDocument, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandRecordSignedOrderDocument, api.CommandRecordSignedOrderDocument),
 		{Command: CommandGetOrderDocument, Permission: PermissionRead, ActorKinds: anyActor},
+		// The order's snapshot fact (S5 unit A2) as OrderSnapshotLookups gives it, read and audited.
+		{Command: CommandGetOrderSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
 	}, readRules()...)
 }
 

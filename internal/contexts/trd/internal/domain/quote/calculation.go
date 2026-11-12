@@ -73,15 +73,19 @@ type AmountLine struct {
 }
 
 // Payment is one stage of the payment schedule with its amount: the payment terms' stage, trigger
-// and days, the terms' day basis and calendar when they count working days.
+// and days, the terms' day basis and calendar when they count working days, and the stage's
+// release control (D-5, F-04: "documents" when FUL holds the shipping documents back until the
+// stage is paid). ReleaseControl is omitted when empty, so every document sealed before POL stated
+// one hashes as it did.
 type Payment struct {
-	StageID     string `json:"stage_id"`
-	Percent     string `json:"percent"`
-	Trigger     string `json:"trigger"`
-	Days        int    `json:"days"`
-	DayBasis    string `json:"day_basis,omitempty"`
-	Calendar    *Ref   `json:"calendar,omitempty"`
-	AmountMinor string `json:"amount_minor"`
+	StageID        string `json:"stage_id"`
+	Percent        string `json:"percent"`
+	Trigger        string `json:"trigger"`
+	Days           int    `json:"days"`
+	DayBasis       string `json:"day_basis,omitempty"`
+	Calendar       *Ref   `json:"calendar,omitempty"`
+	AmountMinor    string `json:"amount_minor"`
+	ReleaseControl string `json:"release_control,omitempty"`
 }
 
 // ScopeBinding is the cost scope the calculation bound (calc.ScopeBinding): the RFQ revision, the
@@ -144,10 +148,11 @@ type ChargeBinding struct {
 
 // Stage is what payment terms say of a stage beyond its percentage, and of how its days count.
 type Stage struct {
-	Trigger  string
-	Days     int
-	DayBasis string
-	Calendar *Ref
+	Trigger        string
+	Days           int
+	DayBasis       string
+	Calendar       *Ref
+	ReleaseControl string // "" or documents (D-5)
 }
 
 // NewCalculation is the document form of c, the result of calc.Calculate: comparison is the POL
@@ -177,7 +182,7 @@ func NewCalculation(c calc.Calculation, comparison Ref, stages map[string]Stage)
 	for _, p := range c.Payments {
 		s := stages[p.StageID]
 		out.Payments = append(out.Payments, Payment{StageID: p.StageID, Percent: exact(p.Percent), Trigger: s.Trigger, Days: s.Days,
-			DayBasis: s.DayBasis, Calendar: s.Calendar, AmountMinor: p.Amount.MinorString()})
+			DayBasis: s.DayBasis, Calendar: s.Calendar, AmountMinor: p.Amount.MinorString(), ReleaseControl: s.ReleaseControl})
 	}
 	return out
 }

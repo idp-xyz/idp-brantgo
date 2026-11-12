@@ -545,4 +545,5 @@ type OrderQueries interface {
 	// (trd.read). A refusal of the check is its answer, not an error.
 	CheckOrder(ctx context.Context, orderID, reviewID string) (OrderCheck, error)
 	OrderDocumentQueries
+	OrderSnapshotQueries
 }
