@@ -95,24 +95,31 @@ type Commitment struct {
 	Lines      []CommitmentLine
 }
 
-// From returns what commitment c and its stored, verified draft d say to a delivery; a draft whose
-// document does not show its lines is REFERENCE_INVALID at path.
+// From returns what commitment c and its stored, verified draft d say to a delivery: the lines of the
+// draft, each with what the commitment buys of it at its revision in force (S5-19: a change or the
+// cancellation moves it; Committed only while it is issued or confirmed); a draft whose document
+// does not show its lines is REFERENCE_INVALID at path.
 func From(c *commitment.Commitment, d *draft.Draft, path string) (Commitment, error) {
 	bad := fail(kernel.CodeReferenceInvalid, path, "The commitment's draft is not intact")
 	doc, err := d.Decode()
 	if err != nil {
 		return Commitment{}, bad
 	}
-	out := Commitment{ID: c.ID, Status: c.Status, Committed: commitment.IsCommitted(c.Status), OrderID: c.OrderID, SupplierID: c.SupplierID,
+	current, err := c.Lines(d)
+	if err != nil {
+		return Commitment{}, bad
+	}
+	out := Commitment{ID: c.ID, Status: c.Status, Committed: commitment.IsOpen(c.Status), OrderID: c.OrderID, SupplierID: c.SupplierID,
 		OwnerActor: c.OwnerActor, OwnerTeam: c.OwnerTeam}
 	for _, l := range d.Lines {
 		i := slices.IndexFunc(doc.Lines, func(x draft.DocLine) bool { return x.OrderLineID == l.OrderLineID })
-		if i < 0 || l.OrderLineID == "" {
+		q := slices.IndexFunc(current, func(x commitment.LineQuantity) bool { return x.OrderLineID == l.OrderLineID })
+		if i < 0 || q < 0 || l.OrderLineID == "" {
 			return Commitment{}, bad
 		}
 		x := doc.Lines[i]
 		out.Lines = append(out.Lines, CommitmentLine{OrderLineID: l.OrderLineID, SkuID: x.Sku.SkuID, SpecRevision: x.Sku.SpecRevision,
-			UnitID: x.UnitRef.ID, UnitRevision: x.UnitRef.Revision, Purchased: l.Quantity.Add(l.Overbuy)})
+			UnitID: x.UnitRef.ID, UnitRevision: x.UnitRef.Revision, Purchased: current[q].Purchased()})
 	}
 	slices.SortFunc(out.Lines, func(a, b CommitmentLine) int { return strings.Compare(a.OrderLineID, b.OrderLineID) })
 	return out, nil

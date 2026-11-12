@@ -30,7 +30,26 @@ func purCommands(c PUR) *commandSet {
 			// Supplier deliveries (S5-15); they name their object delivery_id.
 			purapi.CommandRecordSupplierDelivery: reflected("", "", receiptOf[purapi.Receipt](c.RecordSupplierDelivery)),
 			purapi.CommandVerifySupplierDelivery: reflected("", "", receiptOf[purapi.Receipt](c.VerifySupplierDelivery)),
+			// Commitment changes and cancellation (S5-19); a change names its object change_id.
+			purapi.CommandPrepareCommitmentChange: reflected("", "", receiptOf[purapi.Receipt](c.PrepareCommitmentChange)),
+			purapi.CommandDecideCommitmentChange:  reflected("", "", receiptOf[purapi.Receipt](c.DecideCommitmentChange)),
+			purapi.CommandApplyCommitmentChange:   reflected("", "", receiptOf[purapi.Receipt](c.ApplyCommitmentChange)),
+			purapi.CommandCancelCommitment:        reflected("", "", receiptOf[purapi.Receipt](c.CancelCommitment)),
 		}}
+}
+
+// commitmentChanges answers GET /api/brant/v1/pur/purchase_commitments/<id>/changes: the changes of
+// the commitment the caller sees, by change ID.
+func (s *server) commitmentChanges(w http.ResponseWriter, r *http.Request) {
+	v, err := s.cfg.PUR.GetCommitmentChanges(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if v == nil {
+		v = []purapi.ChangeView{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "commitment_id": r.PathValue("id"), "changes": wire(v)})
 }
 
 // orderCommitments answers GET /api/brant/v1/pur/orders/<id>/commitments: the purchase commitments

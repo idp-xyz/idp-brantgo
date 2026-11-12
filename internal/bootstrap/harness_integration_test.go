@@ -55,6 +55,7 @@ var allPermissions = []string{
 	"purchase.draft.prepare", "purchase.draft.void", "pur.read", "pur.audit",
 	"purchase.commitment.request", "purchase.commitment.decide", "purchase.commitment.revoke", "purchase.commitment.issue",
 	"purchase.supplier_confirmation.record", "supplier_delivery.record", "supplier_delivery.verify",
+	"purchase.commitment.change.prepare", "purchase.commitment.change.decide", "purchase.commitment.change.apply", "purchase.commitment.cancel",
 }
 
 type world struct {

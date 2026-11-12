@@ -725,6 +725,9 @@ func (h *confirmCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	if c == nil || !d.Sees(c.OwnerActor, c.OwnerTeam) {
 		return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/commitment_id", "")
 	}
+	if h.cmd.Revision != 0 && h.cmd.Revision != c.Revision && c.Status == commitment.StatusIssued {
+		return action.Outcome{}, rejectAs(api.CodeReferenceStale, "/args/revision", "The commitment is at revision "+itoa(c.Revision))
+	}
 	now := kernel.Instant(h.s.Clock.Now())
 	received, _ := kernel.ParseTimestamp(h.cmd.ReceivedAt)
 	conf := commitment.Confirmation{Act: commitment.Act{By: d.Actor, Epoch: d.Epoch, At: now}, Result: h.cmd.Result, ReceivedAt: received,
@@ -739,7 +742,7 @@ func (h *confirmCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 		return action.Outcome{}, err
 	}
 	return h.s.commitmentOutcome(c, commitmentEvent(c, api.EventSupplierConfirmationRecorded, map[string]any{"po_number": c.Issue.Number,
-		"result": h.cmd.Result, "received_at": kernel.FormatTimestamp(received), "commitment_status": c.Status})), nil
+		"result": h.cmd.Result, "received_at": kernel.FormatTimestamp(received), "commitment_status": c.Status, "revision": c.Revision})), nil
 }
 
 // RecordSupplierConfirmation records the supplier's answer to an issued commitment
@@ -770,6 +773,7 @@ func (s Service) commitmentReceipt(ctx context.Context, res api.Receipt) (api.Co
 		if c.Issue != nil {
 			out.PONumber = c.Issue.Number
 		}
+		out.Revision = c.Revision
 		return nil
 	})
 	return out, err

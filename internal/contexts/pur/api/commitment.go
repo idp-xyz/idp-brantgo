@@ -170,6 +170,7 @@ type RecordSupplierConfirmation struct {
 	IdempotencyKey    string
 	CommitmentID      string
 	ExpectedVersion   int64
+	Revision          int64 // optional: the commitment revision the supplier confirms (S5-19); 0 for the one in force
 	Result            string
 	ReceivedAt        string
 	Evidence          []Evidence
@@ -353,6 +354,8 @@ func (c RecordSupplierConfirmation) Validate() error {
 		return schema("/args/commitment_id")
 	case !version(c.ExpectedVersion):
 		return schema("/args/expected_version")
+	case c.Revision != 0 && !version(c.Revision):
+		return schema("/args/revision")
 	case c.Result != ConfirmationAsIssued && c.Result != ConfirmationWithDeviations:
 		return schema("/args/result")
 	case !timestamp(c.ReceivedAt):
@@ -381,6 +384,7 @@ type CommitmentReceipt struct {
 	Currency      string
 	ValidUntil    time.Time
 	PONumber      string
+	Revision      int64 // the commitment revision in force (S5-19)
 }
 
 // AcknowledgementView is an acknowledged deviation.
@@ -393,15 +397,16 @@ type AcknowledgementView struct {
 // ConfirmationView is a supplier confirmation: the commitment version it was recorded at, its result,
 // when it was received, the deviation, the supplier's reference, the evidence and who recorded it.
 type ConfirmationView struct {
-	CommitmentVersion int64
-	Result            string
-	ReceivedAt        time.Time
-	Deviation         string
-	SupplierReference string
-	Evidence          []Evidence
-	RecordedBy        kernel.ActorRef
-	RecordedAt        time.Time
-	AuthorityEpoch    int64
+	CommitmentVersion  int64
+	CommitmentRevision int64
+	Result             string
+	ReceivedAt         time.Time
+	Deviation          string
+	SupplierReference  string
+	Evidence           []Evidence
+	RecordedBy         kernel.ActorRef
+	RecordedAt         time.Time
+	AuthorityEpoch     int64
 }
 
 // CommitmentView is a commitment as the reads show it: what it binds, its status and its state now
@@ -446,7 +451,19 @@ type CommitmentView struct {
 	IssueFileID      string
 	IssueFileSHA256  string
 	Confirmations    []ConfirmationView
-	CheckedAt        time.Time
+	// S5-19: the revision in force, what the commitment buys of each line at it with the verified
+	// deliveries, whether every line is verified delivered in full (fulfilled, as after a short
+	// receipt), the revisions after the first and the cancellation.
+	Revision       int64
+	Lines          []CommitmentLineView
+	Fulfilled      bool
+	Revisions      []RevisionView
+	CancelledBy    kernel.ActorRef
+	CancelledAt    time.Time
+	CancelEpoch    int64
+	CancelReason   string
+	CancelEvidence []Evidence
+	CheckedAt      time.Time
 }
 
 // CommitmentCommands is PUR's command entry point for purchase commitments. Errors are
@@ -474,9 +491,9 @@ type CommitmentQueries interface {
 // 采购草稿、承诺与需求分配; risk 有未处置承诺仍取消订单). TRD reads what is open against an order in PUR
 // with its own executor inside its own transaction, after it locked the order row FOR UPDATE, without
 // taking a lock in PUR (S5 decision D-1): every PUR command that adds to the answer — a draft's
-// preparation, a commitment's request, approval and issue — holds that order row FOR SHARE through
+// preparation, a commitment's request, approval and issue, a change's application — holds that order row FOR SHARE through
 // OrderGuard v1 until it commits, so it either committed before TRD's lock and is read, or waits and
-// then finds the order changed. Commands that only remove from it (void, reject, revoke) take no
+// then finds the order changed. Commands that only remove from it (void, reject, revoke, cancel) take no
 // order lock: TRD reading them as still open refuses conservatively.
 //
 // The function is SECURITY DEFINER in PUR's schema with a fixed search_path
@@ -490,13 +507,18 @@ type CommitmentQueries interface {
 // app.company_id), ordered by kind and object, and no row when nothing is open:
 //
 //	kind purchase_commitment  object_id the commitment, draft_id its draft, state requested or approved
-//	                          (its draft not voided), issued or confirmed;
+//	                          (its draft not voided), issued or confirmed, or fulfilled — issued or
+//	                          confirmed and every line verified delivered in full at the revision in
+//	                          force (a short receipt, S5-19); a cancelled commitment is not listed;
 //	kind purchase_draft       object_id and draft_id the draft, prepared and without an issued
-//	                          commitment, state prepared;
+//	                          commitment (nor a cancelled one), state prepared;
 //	kind demand_allocation    object_id and order_line_id the order line, quantity the effective
-//	                          allocated quantity in the line's unit (QuantityFormat), state allocated.
+//	                          allocated quantity in the line's unit (QuantityFormat) — after a change
+//	                          the revision's, after a cancellation what was verified delivered —,
+//	                          state allocated.
 //
-// order_revision is the order revision the object binds; disposition is the approved disposition of
+// order_revision is the order revision the object binds (a commitment's: that of its revision in
+// force, which a change prepared on an amended order moves); disposition is the approved disposition of
 // the object, empty until an order-change review records one (S5-09). The function applies no data
 // scope. A caller:
 //
