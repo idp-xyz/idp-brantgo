@@ -310,6 +310,7 @@ func TestUnapplyAndDocumentReleaseInBothCommitOrders(t *testing.T) {
 	w.granted("shipment.1")
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
+	w.issuedBillOfLading(w.ful, "shipment.1") // S5-08: documents are released on the issued B/L record
 	docs := w.grantedOn(w.ful, "shipment.1", fulapi.ScopeDocuments)
 	stage := w.snapshots(w.author, w.order.ObjectID)[w.order.ObjectID].Stages[0].StageID
 	app, fund := "app."+w.order.ObjectID+"."+stage, "fund."+w.order.ObjectID+"."+stage

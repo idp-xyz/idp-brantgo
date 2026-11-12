@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/release"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
+	docs "go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipmentdocumentset"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -186,13 +187,16 @@ func (s Service) GrantReleaseException(ctx context.Context, cmd api.GrantRelease
 }
 
 // documentReleaseCommand runs document_release.record (human only): with the same locks as an
-// evaluation (scope documents) it needs a confirmed shipment, re-runs every guard (D-11), needs the
-// documents release granted and consumes it with how the documents were released.
+// evaluation (scope documents) and then the shipment's document set FOR SHARE it needs a confirmed
+// shipment, re-runs every guard (D-11), needs the documents release granted and the set's issued
+// bill of lading record (S5-08), and consumes the release with how the documents were released and
+// on which B/L record.
 type documentReleaseCommand struct {
 	s       Service
 	cmd     api.RecordDocumentRelease
 	sources map[string]bool
 	releaseRootsOf
+	set *docs.Set // the shipment's document set, FOR SHARE (S5-08, release_documents.go)
 }
 
 func (h *documentReleaseCommand) Prepare(ctx context.Context) error {
@@ -202,7 +206,13 @@ func (h *documentReleaseCommand) Prepare(ctx context.Context) error {
 }
 
 func (h *documentReleaseCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
-	return h.lock(ctx, exec, h.cmd.ShipmentID, release.ScopeDocuments)
+	h.set = nil
+	if err := h.lock(ctx, exec, h.cmd.ShipmentID, release.ScopeDocuments); err != nil || h.existing == nil {
+		return err
+	}
+	var err error
+	h.set, err = lockDocumentSetOf(ctx, exec, h.existing.ID)
+	return err
 }
 
 func (h *documentReleaseCommand) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
@@ -231,11 +241,16 @@ func (h *documentReleaseCommand) Apply(ctx context.Context, exec bentopg.Executo
 	if err = rel.Consumable(release.ScopeDocuments, "/args/shipment_id"); err != nil {
 		return action.Outcome{}, err
 	}
-	entries := append(j.entries, rel.Entry(j.exception))
+	bl, blEntry, err := billOfLadingOf(h.set)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	entries := append(j.entries, rel.Entry(j.exception), blEntry)
 	from := rel.RowVersion
 	if err = rel.Consume(h.cmd.ReleaseKind, slices.Clone(h.cmd.EvidenceIDs), entries, shipment.Act{By: d.Actor, Epoch: d.Epoch, At: now}); err != nil {
 		return action.Outcome{}, err
 	}
+	rel.Consumption.BillOfLading = bl
 	if err = postgres.ConsumeRelease(ctx, exec, scope(ctx), rel, from); err != nil {
 		return action.Outcome{}, conflict(err)
 	}
@@ -243,7 +258,8 @@ func (h *documentReleaseCommand) Apply(ctx context.Context, exec bentopg.Executo
 	event := action.Event{Type: api.EventDocumentsReleased, AggregateType: "CommercialRelease", AggregateID: rel.ID, AggregateVersion: rel.RowVersion,
 		Fields: map[string]any{"release_id": rel.ID, "shipment_id": s.ID, "order_id": s.Order.OrderID, "order_revision": s.Order.OrderRevision,
 			"order_hash": s.Order.OrderHash, "release_kind": c.ReleaseKind, "evidence_ids": c.Evidence, "guards_sha256": c.EntriesSHA256,
-			"released_at": kernel.FormatTimestamp(c.Consumed.At)}}
+			"released_at": kernel.FormatTimestamp(c.Consumed.At), "document_set_id": bl.DocumentSetID, "bill_of_lading_version": bl.Version,
+			"bill_of_lading_number": bl.Number}}
 	return action.Outcome{ObjectID: rel.ID, RowVersion: rel.RowVersion, Status: rel.Status, Events: []action.Event{event}}, nil
 }
 

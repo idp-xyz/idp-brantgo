@@ -49,6 +49,12 @@ const (
 	// CodeDependencyNotSupported: the stock route (STK, S6-01) or a unit conversion between an order
 	// line and its release or delivery.
 	CodeDependencyNotSupported = "DEPENDENCY_NOT_SUPPORTED"
+	// CodeShipmentDocumentsUnreconciled (409): a difference of the document set is neither resolved
+	// nor acknowledged, or the set lacks a required document (FUL-INV-004, BT12; S5-08).
+	CodeShipmentDocumentsUnreconciled = "SHIPMENT_DOCUMENTS_UNRECONCILED"
+	// CodeDocumentIntegrityFailure: a stored document's bytes are not the ones bound (the catalog
+	// row lists TRD; FUL reads its renditions the same way).
+	CodeDocumentIntegrityFailure = "DOCUMENT_INTEGRITY_FAILURE"
 )
 
 var codes = map[string]kernel.Category{
@@ -67,6 +73,9 @@ var codes = map[string]kernel.Category{
 	CodeReferenceStale:               kernel.CategoryConflict,
 	CodeBusinessKeyConflict:          kernel.CategoryConflict,
 	CodeDependencyNotSupported:       kernel.CategoryInvalid,
+	// S5-08
+	CodeShipmentDocumentsUnreconciled: kernel.CategoryConflict,
+	CodeDocumentIntegrityFailure:      kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code FUL declares.

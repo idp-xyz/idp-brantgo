@@ -394,3 +394,15 @@ GRANT SELECT, INSERT ON brant_ful.commercial_release, brant_ful.commercial_relea
     TO brant_app;
 GRANT UPDATE (status, row_version, evaluations, exceptions, consumed_command, consumed_by_kind, consumed_by_id, consume_epoch, consumed_at,
               consume_evidence_ids, consume_entries, consume_entries_sha256, document_release_kind) ON brant_ful.commercial_release TO brant_app;
+
+-- FUL bookings and shipment documents (S5-08): booking versions are only inserted; a document set
+-- moves only its version and counts (trigger; the column grant also lets the document commands lock
+-- it FOR UPDATE); a document version moves only draft -> issued or superseded and issued ->
+-- superseded (trigger); renditions, issues and signed copies are only inserted; nothing is deleted.
+-- The document commands call POL's ConfigGuard v1, granted above. document_release.record writes the
+-- issued B/L record it was recorded on with the release's consumption.
+GRANT SELECT, INSERT ON brant_ful.shipment_booking, brant_ful.shipment_document_set, brant_ful.shipment_document,
+    brant_ful.shipment_document_rendition, brant_ful.shipment_document_issue, brant_ful.shipment_document_signature TO brant_app;
+GRANT UPDATE (row_version, document_count, issue_count) ON brant_ful.shipment_document_set TO brant_app;
+GRANT UPDATE (status, issue_seq, issued_at, superseded_at) ON brant_ful.shipment_document TO brant_app;
+GRANT UPDATE (consumed_document_set_id, consumed_bl_version, consumed_bl_number, consumed_bl_sha256) ON brant_ful.commercial_release TO brant_app;

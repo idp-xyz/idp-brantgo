@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // FUL is what the transport needs from the fulfilment context.
@@ -18,6 +20,11 @@ type FUL interface {
 	fulapi.MilestoneQueries
 	fulapi.ExportLotCommands
 	fulapi.ExportLotQueries
+	// S5-08: bookings and the shipment document set.
+	fulapi.BookingCommands
+	fulapi.BookingQueries
+	fulapi.DocumentCommands
+	fulapi.DocumentQueries
 }
 
 func fulCommands(c FUL) *commandSet {
@@ -36,6 +43,11 @@ func fulCommands(c FUL) *commandSet {
 			fulapi.CommandEvaluateRelease:       reflected("", "", receiptOf[fulapi.Receipt](c.EvaluateRelease)),
 			fulapi.CommandGrantReleaseException: reflected("", "", receiptOf[fulapi.Receipt](c.GrantReleaseException)),
 			fulapi.CommandRecordDocumentRelease: reflected("", "", receiptOf[fulapi.Receipt](c.RecordDocumentRelease)),
+			// S5-08
+			fulapi.CommandRecordBooking:                reflected("", "", c.RecordBooking),
+			fulapi.CommandPrepareShipmentDocument:      reflected("", "", receiptOf[fulapi.Receipt](c.PrepareShipmentDocument)),
+			fulapi.CommandIssueShipmentDocuments:       reflected("", "", receiptOf[fulapi.Receipt](c.IssueShipmentDocuments)),
+			fulapi.CommandRecordSignedShipmentDocument: reflected("", "", c.RecordSignedShipmentDocument),
 		}}
 }
 
@@ -53,6 +65,12 @@ var fulReads = []readRoute{
 		"A commercial release of a shipment and scope (shipment or documents): its state, every evaluation with its outcome, the first unmet guard and code when blocked, each guard's answer, its SHA-256 and what each guard bound (trade compliance check, licence allocation, screenings, supplier delivery lines, quality releases, payment condition, order), the payment-condition exceptions, and what consumed it", []string{"id"}, false},
 	{"/api/brant/v1/ful/shipments/{id}/commercial_releases", "ful.commercial_release.list", "ful",
 		"The commercial releases of a shipment, shipment scope first", []string{"id"}, false},
+	{"/api/brant/v1/ful/shipments/{id}/bookings", "ful.booking.get", "ful",
+		"A shipment's booking: the current version and every version with the forwarder's or carrier's service role, booking number, vessel and voyage, ETD, cut-off, containers, ports, evidence and the reason of a correction", []string{"id"}, false},
+	{"/api/brant/v1/ful/document_sets/{id}", "ful.shipment_document_set.get", "ful",
+		"A shipment document set: every version of its commercial invoice, packing list, bill of lading and certificate of origin records with state, number, POL revisions, sources, renditions, commit evidence and signed copies, its issues with the differences they accepted, and the item-by-item reconciliation now (differences with their paths)", []string{"id"}, false},
+	{"/api/brant/v1/ful/document_sets/{id}/documents/{kind}/versions/{version}/{language}", "ful.shipment_document.get", "ful",
+		"One language of a rendered commercial invoice or packing list version with its bytes in Base64, verified against the stored SHA-256 on every read", []string{"id", "kind", "version", "language"}, false},
 }
 
 // fulRoutes registers FUL's reads.
@@ -64,4 +82,23 @@ func (s *server) fulRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/ful/commercial_releases/{id}", s.authenticated(read(s, s.cfg.FUL.GetRelease, okView[fulapi.ReleaseView])))
 	mux.Handle("GET /api/brant/v1/ful/shipments/{id}/commercial_releases", s.authenticated(read(s, s.cfg.FUL.ShipmentReleases,
 		okView[fulapi.ShipmentReleases])))
+	mux.Handle("GET /api/brant/v1/ful/shipments/{id}/bookings", s.authenticated(read(s, s.cfg.FUL.GetBookings, okView[fulapi.ShipmentBookingsView])))
+	mux.Handle("GET /api/brant/v1/ful/document_sets/{id}", s.authenticated(read(s, s.cfg.FUL.GetDocumentSet, okView[fulapi.DocumentSetView])))
+	mux.Handle("GET /api/brant/v1/ful/document_sets/{id}/documents/{kind}/versions/{version}/{language}", s.authenticated(s.shipmentDocument))
+}
+
+// shipmentDocument answers GET /api/brant/v1/ful/document_sets/<id>/documents/<kind>/versions/<version>/<language>:
+// one language of a rendered version with its bytes (Base64), verified on every read.
+func (s *server) shipmentDocument(w http.ResponseWriter, r *http.Request) {
+	version, err := strconv.ParseInt(r.PathValue("version"), 10, 64)
+	if err != nil || version < 1 {
+		s.fail(w, r, kernel.Reject(kernel.CodeSchemaInvalid, "/version", "positive integer"))
+		return
+	}
+	v, err := s.cfg.FUL.GetShipmentDocument(r.Context(), r.PathValue("id"), r.PathValue("kind"), version, r.PathValue("language"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, okView(v))
 }

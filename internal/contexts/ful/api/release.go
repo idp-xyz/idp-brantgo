@@ -35,7 +35,10 @@ import (
 //	document_release.record           human only (documentation): records the release of the original
 //	                                  bill of lading or a telex release of a confirmed shipment, with
 //	                                  evidence. It needs a granted documents release and re-runs every
-//	                                  guard in its own transaction; it consumes the release.
+//	                                  guard in its own transaction; it consumes the release. Since S5-08
+//	                                  it is recorded on the issued bill of lading record of the
+//	                                  shipment's document set (SHIPMENT_DOCUMENTS_UNRECONCILED without
+//	                                  one), which the consumption names (ConsumptionView.BillOfLading).
 //
 // shipment.confirm needs a granted shipment release, re-runs every guard and consumes it. A refused
 // confirmation or document release leaves the release as it was.
@@ -316,6 +319,7 @@ type ExceptionView struct {
 type ConsumptionView struct {
 	Command        string
 	ReleaseKind    string
+	BillOfLading   *BillOfLadingRef // the issued B/L record a documents release was recorded on (S5-08)
 	EvidenceIDs    []string
 	Guards         []GuardEvidence
 	GuardsSHA256   string

@@ -1,0 +1,42 @@
+装箱单
+
+卖方：SYNTHETIC Exporter Co., Ltd.
+Synthetic Road 1
+Shanghai
+注册号：SYNTHETIC-NOT-REAL | 国家：CN
+
+买方：Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+
+收货人：Synthetic Logistics KG
+Synthetic warehouse
+Hamburg port
+
+编号：PL-2026-00001
+版本：1
+单证套：docs.1 | 出运：shipment.1
+订单：order.1 r1
+订单 SHA-256：aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+日期：2026-11-12T08:30:00.123456Z
+
+订舱号：SHA2611001 | 船名：SYNTHETIC STAR | 航次：026E | 预计开航：2026-12-20
+装运港：CNSHA | 目的港：DEHAM
+
+包装（每箱）：
+1-5 | 5 箱 | S1 sku.1 红色棉质衬衫 10 PCS | 净重 9.5 kg | 毛重 10.5 kg | 0.06 立方米
+6-7 | 2 箱 | S2 sku.2 礼品套装 12 SET | 净重 7.25 kg | 毛重 8 kg | 0.05 立方米
+
+箱数：7
+数量：50 PCS; 24 SET
+净重：62 kg | 毛重：68.5 kg | 体积：0.4 立方米
+
+唛头：
+SYNTHETIC BUYER
+HAMBURG
+C/NO. 1-7
+
+签署（本生成件未经签署；签署或盖章件作为证据另行登记）：
+卖方：SYNTHETIC Exporter Co., Ltd.
+
+Synthetic data. Not an actual trade. 合成数据。

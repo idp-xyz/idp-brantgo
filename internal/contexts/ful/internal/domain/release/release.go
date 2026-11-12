@@ -222,11 +222,12 @@ func (e Exception) Covers(p PaymentVerdict, now time.Time) bool {
 }
 
 // Consumption is what consumed a release: the command, how the documents were released
-// (document_release.record), the evidence cited and the guard evidence of the consuming
-// transaction.
+// (document_release.record) and on which issued bill of lading record (S5-08), the evidence cited
+// and the guard evidence of the consuming transaction.
 type Consumption struct {
 	Command       string
 	ReleaseKind   string
+	BillOfLading  *BillOfLadingRef
 	Evidence      []string
 	Entries       []Entry
 	EntriesJSON   string

@@ -59,7 +59,7 @@ var (
 // is its name (role templates merchandiser, documentation, and credit_manager, which holds
 // commercial_release.grant_exception exclusively). Reads need ful.read, the audit trail ful.audit.
 func Rules() []authorization.Rule {
-	return []authorization.Rule{
+	return append([]authorization.Rule{
 		{Command: api.CommandPrepareShipment, Permission: api.CommandPrepareShipment, ActorKinds: humanOrAgent},
 		{Command: api.CommandPlanPacking, Permission: api.CommandPlanPacking, ActorKinds: humanOrAgent},
 		{Command: api.CommandRecordPacking, Permission: api.CommandRecordPacking, ActorKinds: humanOrAgent},
@@ -81,7 +81,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandRegisterExportLot, Permission: api.CommandRegisterExportLot, ActorKinds: humanOrAgent},
 		{Command: api.CommandGetMilestonePlan, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetExportLot, Permission: api.PermissionRead, ActorKinds: anyActor},
-	}
+	}, documentRules()...) // S5-08: bookings and shipment documents (documents.go)
 }
 
 // Upstream are the contexts FUL reads, through its ports.
@@ -93,6 +93,8 @@ type Upstream struct {
 	Sources    evdapi.Queries // EVD SourceRef v1 (R74)
 	Compliance Compliance     // CNX TradeComplianceGuard v1 and ExportLicenseGuard v1 (R56)
 	Payments   Payments       // STL PaymentConditionGuard v1 (R45)
+	// Documents are the upstreams of bookings and shipment documents (S5-08, document_ports.go).
+	Documents DocumentUpstream
 }
 
 // Complete reports whether every upstream is wired.
@@ -116,6 +118,9 @@ func scope(ctx context.Context) kernel.Scope {
 // Visible reports whether d's actor sees the object a stored result of command names: a milestone
 // plan, an export lot, a shipment, or the shipment of the release a release command's result names.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
+	if ok, handled, err := documentVisible(ctx, exec, d, command, id); handled {
+		return ok, err
+	}
 	switch command {
 	case api.CommandPlanMilestones, api.CommandRecordMilestoneActual:
 		p, err := postgres.LoadPlan(ctx, exec, scope(ctx), id, postgres.NoLock)
@@ -191,7 +196,7 @@ func request(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandRegisterExportLot, key, c
 	}
-	return "", "", nil
+	return documentRequest(cmd)
 }
 
 // requestHash is the hash the ledger records for cmd; a taken shipment ID is answered from the

@@ -16,7 +16,8 @@ import (
 
 const releaseColumns = `release_id, shipment_id, scope, status, row_version, order_id, order_revision, order_hash, opened_by_kind, opened_by_id,
 	opened_at, consumed_command, consumed_by_kind, consumed_by_id, consume_epoch, consumed_at, consume_evidence_ids, consume_entries,
-	consume_entries_sha256, coalesce(document_release_kind, '')`
+	consume_entries_sha256, coalesce(document_release_kind, ''), consumed_document_set_id, consumed_bl_version, consumed_bl_number,
+	consumed_bl_sha256`
 
 func entries(doc string) ([]shipment.Entry, error) {
 	var out []shipment.Entry
@@ -37,8 +38,11 @@ func scanRelease(row pgx.Row) (*release.Release, error) {
 	var at *time.Time
 	var evidence []string
 	var kind string
+	var blSet, blNumber, blSHA *string
+	var blVersion *int64
 	if err := row.Scan(&r.ID, &r.ShipmentID, &r.Scope, &r.Status, &r.RowVersion, &r.Order.OrderID, &r.Order.OrderRevision, &r.Order.OrderHash,
-		&opened, &r.Opened.By.ID, &r.Opened.At, &cmd, &cKind, &cID, &epoch, &at, &evidence, &doc, &sum, &kind); err != nil {
+		&opened, &r.Opened.By.ID, &r.Opened.At, &cmd, &cKind, &cID, &epoch, &at, &evidence, &doc, &sum, &kind, &blSet, &blVersion, &blNumber,
+		&blSHA); err != nil {
 		return nil, err
 	}
 	r.Opened.By.Kind, r.Opened.At = kernel.ActorKind(opened), kernel.Instant(r.Opened.At)
@@ -50,6 +54,9 @@ func scanRelease(row pgx.Row) (*release.Release, error) {
 		r.Consumption = &release.Consumption{Command: *cmd, ReleaseKind: kind, Evidence: strs(evidence), Entries: e, EntriesJSON: *doc,
 			EntriesSHA256: *sum, Consumed: shipment.Act{By: kernel.ActorRef{Kind: kernel.ActorKind(*cKind), ID: *cID}, Epoch: *epoch,
 				At: kernel.Instant(*at)}}
+		if blSet != nil && blVersion != nil && blNumber != nil && blSHA != nil {
+			r.Consumption.BillOfLading = &release.BillOfLadingRef{DocumentSetID: *blSet, Version: *blVersion, Number: *blNumber, ContentSHA256: *blSHA}
+		}
 	}
 	return &r, nil
 }
@@ -215,11 +222,17 @@ func SaveException(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 func ConsumeRelease(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *release.Release, from int64) error {
 	t, c := scope2(scope)
 	x := r.Consumption
+	var blSet, blNumber, blSHA *string
+	var blVersion *int64
+	if b := x.BillOfLading; b != nil {
+		blSet, blVersion, blNumber, blSHA = &b.DocumentSetID, &b.Version, &b.Number, &b.ContentSHA256
+	}
 	tag, err := exec.Exec(ctx, `UPDATE brant_ful.commercial_release SET status = $4, row_version = $5, consumed_command = $6, consumed_by_kind = $7,
 		consumed_by_id = $8, consume_epoch = $9, consumed_at = $10, consume_evidence_ids = $11, consume_entries = $12, consume_entries_sha256 = $13,
-		document_release_kind = $14 WHERE tenant_id = $1 AND company_id = $2 AND release_id = $3 AND row_version = $15`,
+		document_release_kind = $14, consumed_document_set_id = $16, consumed_bl_version = $17, consumed_bl_number = $18, consumed_bl_sha256 = $19
+		WHERE tenant_id = $1 AND company_id = $2 AND release_id = $3 AND row_version = $15`,
 		t, c, r.ID, r.Status, r.RowVersion, x.Command, string(x.Consumed.By.Kind), x.Consumed.By.ID, x.Consumed.Epoch, x.Consumed.At, strs(x.Evidence),
-		x.EntriesJSON, x.EntriesSHA256, nullable(x.ReleaseKind), from)
+		x.EntriesJSON, x.EntriesSHA256, nullable(x.ReleaseKind), from, blSet, blVersion, blNumber, blSHA)
 	if err == nil && tag.RowsAffected() != 1 {
 		err = ErrConflict
 	}

@@ -1,0 +1,53 @@
+商业发票
+
+卖方：SYNTHETIC Exporter Co., Ltd.
+Synthetic Road 1
+Shanghai
+注册号：SYNTHETIC-NOT-REAL | 国家：CN
+
+买方：Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+
+收货人：Synthetic Logistics KG
+Synthetic warehouse
+Hamburg port
+
+通知方：Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+
+编号：CI-2026-00001
+版本：1
+单证套：docs.1 | 出运：shipment.1
+订单：order.1 r1
+订单 SHA-256：aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+日期：2026-11-12T08:30:00.123456Z
+
+订舱号：SHA2611001 | 船名：SYNTHETIC STAR | 航次：026E | 预计开航：2026-12-20
+装运港：CNSHA | 目的港：DEHAM
+
+明细（金额币种 USD）：
+S1 | sku.1 r1 | 红色棉质衬衫 | 50 PCS | 单价 8 | 净额 400.00 | 税额 0.00 | 合计 400.00
+S2 | sku.2 r3 | 礼品套装 | 24 SET | 单价 12.5 | 净额 300.00 | 税额 39.00 | 合计 339.00
+
+币种：USD
+数量：50 PCS; 24 SET
+净额：700.00 | 税额：39.00 | 合计：739.00
+
+贸易术语：FCA Incoterms 2020 | 指定地点：DEHAM
+付款：P1 | 30% | 订单确认 | 0 个日历日
+付款：P2 | 70% | 出运后 | 30 个日历日
+
+唛头：
+SYNTHETIC BUYER
+HAMBURG
+C/NO. 1-7
+
+条款：
+1. 兹证明货物原产于中国。
+
+签署（本生成件未经签署；签署或盖章件作为证据另行登记）：
+卖方：SYNTHETIC Exporter Co., Ltd.
+
+Synthetic data. Not an actual trade. 合成数据。
