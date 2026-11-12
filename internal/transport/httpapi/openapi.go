@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ func OpenAPI() ([]byte, error) {
 		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{}),
 		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{}),
 		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{})}
+	sets = append(sets, cnxCommands(struct{ CNX }{}))
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -79,7 +81,7 @@ func OpenAPI() ([]byte, error) {
 			}
 		}
 	}
-	for _, r := range reads {
+	for _, r := range slices.Concat(reads, cnxReads) {
 		get := map[string]any{"operationId": r.id, "tags": []string{r.tag}, "summary": r.summary, "responses": readResponses()}
 		var params []any
 		for _, p := range r.params {

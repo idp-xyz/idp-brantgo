@@ -43,7 +43,7 @@ func (f *fakeProgrammes) GetProgrammeListVersion(_ context.Context, code, versio
 // absent scope.
 func TestCountryProgrammeImportAndRead(t *testing.T) {
 	ref := &fakeProgrammes{}
-	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: ref, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{},
+	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: ref, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{}, CNX: struct{ CNX }{},
 		Verifier: tokens{"Bearer good": alice}, Clock: application.Clock(fixedClock{})})
 	if err != nil {
 		t.Fatal(err)

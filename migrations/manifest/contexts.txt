@@ -22,3 +22,7 @@ sup
 cst
 trd
 pur
+# cnx follows pur (S5 fixed order after pur: qlt, stl, cnx, ful): TRD's order activation and FUL's
+# release call CNX's trade compliance guard at run time only, and CNX's own transactions call POL's
+# guard function.
+cnx

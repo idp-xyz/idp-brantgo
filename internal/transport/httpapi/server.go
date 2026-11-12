@@ -90,6 +90,7 @@ type Config struct {
 	CST      CST
 	TRD      TRD
 	PUR      PUR
+	CNX      CNX
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -112,6 +113,9 @@ func New(cfg Config) (http.Handler, error) {
 		cfg.Clock == nil {
 		return nil, errors.New("httpapi: contexts, verifier and clock are required")
 	}
+	if cfg.CNX == nil {
+		return nil, errors.New("httpapi: the CNX context is required")
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -123,6 +127,7 @@ func New(cfg Config) (http.Handler, error) {
 		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD), purCommands(cfg.PUR)} {
 		s.contexts[set.bc] = set
 	}
+	s.contexts["cnx"] = cnxCommands(cfg.CNX)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/", "no such route"))
@@ -186,6 +191,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}", s.authenticated(read(s, cfg.REF.GetProgrammeList, okView[refapi.ProgrammeListView])))
 	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", s.authenticated(s.programmeListVersion))
+	s.cnxRoutes(mux)
 	return s.correlated(mux), nil
 }
 

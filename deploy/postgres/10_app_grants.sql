@@ -226,3 +226,16 @@ GRANT UPDATE (status, row_version, voided_by_kind, voided_by_id, void_epoch, voi
     ON brant_pur.purchase_draft TO brant_app;
 GRANT UPDATE (order_revision, demand, allocated, row_version, updated_at) ON brant_pur.demand_allocation TO brant_app;
 GRANT UPDATE (released_version, released_at) ON brant_pur.allocation_entry TO brant_app;
+
+-- CNX: a trade compliance check moves its state, current evaluation and decision and its version
+-- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
+-- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on
+-- checks needs the column grant. The evaluation and decision call POL's guard function and
+-- reference data's programme list guard, granted above; CNX's reads derive a check's state with its
+-- state function, and CNX publishes TradeComplianceGuard v1 for TRD and FUL.
+GRANT USAGE ON SCHEMA brant_cnx TO brant_app;
+GRANT SELECT, INSERT ON brant_cnx.trade_compliance_check, brant_cnx.trade_compliance_evaluation, brant_cnx.trade_compliance_list_used,
+    brant_cnx.trade_compliance_decision, brant_cnx.trade_compliance_reopening, brant_cnx.action_result, brant_cnx.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, current_evaluation_id, current_decision_id, updated_at) ON brant_cnx.trade_compliance_check TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.trade_compliance_state(text, bigint, text, timestamptz, boolean) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.guard_trade_compliance_v1(text, bigint, text, timestamptz) TO brant_app;
