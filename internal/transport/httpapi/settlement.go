@@ -17,6 +17,8 @@ type STL interface {
 	stlapi.ReviewQueries
 	stlapi.SettlementCommands
 	stlapi.SettlementQueries
+	stlapi.CreditNoteCommands
+	stlapi.CreditNoteQueries
 	stlapi.Reconciler
 	stlapi.Auditor
 }
@@ -40,6 +42,9 @@ func stlCommands(c STL) *commandSet {
 			stlapi.CommandOpenReview:        reflected("", "", receiptOf[stlapi.Receipt](c.OpenPaymentPlanReview)),
 			stlapi.CommandSettleReview:      reflected("", "", receiptOf[stlapi.Receipt](c.SettlePaymentPlanReview)),
 			stlapi.CommandConfirmSettlement: reflected("", "", receiptOf[stlapi.Receipt](c.ConfirmSettlement)),
+			stlapi.CommandRequestCreditNote: reflected("", "", receiptOf[stlapi.Receipt](c.RequestCreditNote)),
+			stlapi.CommandConfirmCredit:     reflected("", "", receiptOf[stlapi.Receipt](c.ConfirmCredit)),
+			stlapi.CommandReverseSettlement: reflected("", "", receiptOf[stlapi.Receipt](c.ReverseSettlement)),
 		}}
 }
 
@@ -58,6 +63,7 @@ func (s *server) stlRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/stl/payables/{id}", s.authenticated(read(s, s.cfg.STL.GetPayable, okView[stlapi.BalanceView])))
 	mux.Handle("GET /api/brant/v1/stl/orders/{id}/settlement", s.authenticated(read(s, s.cfg.STL.GetOrderSettlement,
 		okView[stlapi.OrderSettlementView])))
+	mux.Handle("GET /api/brant/v1/stl/credit_notes/{id}", s.authenticated(read(s, s.cfg.STL.GetCreditNote, okView[stlapi.CreditNoteView])))
 }
 
 // stlReads are STL's reads in the OpenAPI document.
@@ -83,5 +89,7 @@ var stlReads = []readRoute{
 	{"/api/brant/v1/stl/payables/{id}", "stl.payable.get", "stl",
 		"The business payable of a purchase statement: amount, applied and open, its installment and the payments applied to it", []string{"id"}, false},
 	{"/api/brant/v1/stl/orders/{id}/settlement", "stl.order_settlement.get", "stl",
-		"An order's settlement position: each payment stage of the order account's revision with what stands prepaid, settled and paid on it, the order's receivables (settled, applied, open, overdue) and the purchase statement lines of the order with their payables", []string{"id"}, false},
+		"An order's settlement position: each payment stage of the order account's revision with what stands prepaid, settled and paid on it, the order's receivables (settled, applied, open, overdue; a reversed statement counts nothing), net sales less effective credit notes, the purchase statement lines of the order with their payables, and its cross-currency applications with their business settlement FX differences", []string{"id"}, false},
+	{"/api/brant/v1/stl/credit_notes/{id}", "stl.credit_note.get", "stl",
+		"A credit note (CreditNoteRef v1) of a sales statement's receivable: kind (price allowance, return, claim), state (requested, confirmed, rejected), amount, what stands applied from it and its rest, whether it counts against the statement's sales, basis, evidence, requester and decider; it changes no shipped quantity, refunds nothing and adjusts no tax-refund material", []string{"id"}, false},
 }

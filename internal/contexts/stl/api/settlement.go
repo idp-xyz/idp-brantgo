@@ -233,6 +233,9 @@ type StatementView struct {
 	Lines          []StatementLineView
 	Installments   []InstallmentView
 	Applications   []AllocationView
+	CreditNotes    []CreditNoteRef // C8: its credit notes the caller sees
+	CreditedMinor  string          // C8: Σ its effective credit notes
+	Reversal       *ReversalView   // C8: when reversed
 	ConfirmedBy    kernel.ActorRef
 	ConfirmedAt    time.Time
 	CheckedAt      time.Time
@@ -272,6 +275,11 @@ type PurchasePositionView struct {
 // currency: the account's revision and stages, what stands prepaid, what is settled on sales
 // statements, applied and open on their receivables and overdue now, each receivable, and the
 // purchase statement lines of the order with the payables that hold them.
+//
+// C8: settled, applied, open and overdue count statements that stand (a reversed one is listed with open 0);
+// NetSalesMinor is the net of the standing sales statements less their effective credit notes
+// (CreditedMinor; baseline 4.5 confirmed net sales); FXDifferences are the order's cross-currency
+// applications with their business settlement FX differences (STL-INV-007).
 type OrderSettlementView struct {
 	OrderID       string
 	OrderRevision int64
@@ -281,10 +289,13 @@ type OrderSettlementView struct {
 	AppliedMinor  string
 	OpenMinor     string
 	OverdueMinor  string
+	CreditedMinor string
+	NetSalesMinor string
 	Stages        []StagePositionView
 	Receivables   []BalanceView
 	PurchaseLines []PurchasePositionView
 	Payables      []BalanceView
+	FXDifferences []FXDifferenceView
 	CheckedAt     time.Time
 }
 

@@ -159,14 +159,18 @@ type ApplicationTarget struct {
 	StatementID string
 }
 
-// Apply allocates Amount (in the fund's currency) of fund record FundRecordID to Target as
-// application ApplicationID. Human only.
+// Apply allocates Amount (in the fund's currency) of fund record FundRecordID — or of confirmed credit
+// note CreditNoteID (creditnotes.go) — to Target as application ApplicationID. A fund in another currency
+// than the target's names FXRate, a POL fx_rate of purpose settlement (STL-INV-007). Human only. The
+// members C8 added are left out of the request hash while empty, so earlier requests replay unchanged.
 type Apply struct {
 	IdempotencyKey string
 	ApplicationID  string
 	FundRecordID   string
+	CreditNoteID   string `json:",omitempty"`
 	Target         ApplicationTarget
 	Amount         string
+	FXRate         *ConfigRef `json:",omitempty"`
 }
 
 // Unapply undoes application ApplicationID at ExpectedVersion for Reason. Human only.
@@ -297,8 +301,6 @@ func (c Apply) Validate() error {
 		return schema("/idempotency_key")
 	case !kernel.ValidIdentifier(c.ApplicationID):
 		return schema("/args/application_id")
-	case !kernel.ValidIdentifier(c.FundRecordID):
-		return schema("/args/fund_record_id")
 	case c.Target.Kind != TargetOrderStage && c.Target.Kind != TargetReceivable && c.Target.Kind != TargetPayable:
 		return schema("/args/target/kind")
 	case c.Target.Kind == TargetOrderStage && (!kernel.ValidIdentifier(c.Target.OrderID) || c.Target.StatementID != ""):
@@ -313,7 +315,7 @@ func (c Apply) Validate() error {
 	case !amount(c.Amount):
 		return schema("/args/amount")
 	}
-	return nil
+	return c.validateSource()
 }
 
 // Validate checks the closed contract.
@@ -362,6 +364,7 @@ type OrderAccountReceipt struct {
 type ApplicationReceipt struct {
 	Receipt
 	FundRecordID       string
+	CreditNoteID       string
 	TargetKind         string
 	OrderID            string
 	OrderRevision      int64
@@ -373,6 +376,7 @@ type ApplicationReceipt struct {
 	FundAvailableMinor string
 	StageOpenMinor     string
 	StatementOpenMinor string
+	Conversion         *ConversionView
 }
 
 // ResolutionView is one resolved part of a receipt's difference.
@@ -400,6 +404,7 @@ type FXView struct {
 type AllocationView struct {
 	ApplicationID  string
 	FundRecordID   string
+	CreditNoteID   string
 	TargetKind     string
 	OrderID        string
 	OrderRevision  int64
@@ -409,6 +414,7 @@ type AllocationView struct {
 	MovedFrom      string
 	AmountMinor    string
 	Status         string
+	Conversion     *ConversionView
 }
 
 // DrawView is a refund, returned remittance or conversion drawn on a fund record, in its currency
@@ -513,6 +519,7 @@ type OrderAccountView struct {
 type ApplicationView struct {
 	ApplicationID  string
 	FundRecordID   string
+	CreditNoteID   string
 	TargetKind     string
 	OrderID        string
 	OrderRevision  int64
@@ -522,6 +529,7 @@ type ApplicationView struct {
 	MovedFrom      string
 	Currency       string
 	AmountMinor    string
+	Conversion     *ConversionView
 	Status         string
 	Version        int64
 	AppliedBy      kernel.ActorRef

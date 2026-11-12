@@ -41,6 +41,9 @@ func orderOf(f trdapi.OrderSnapshotFact) application.Order {
 		OrderHash: f.Binding.OrderHash}, Status: f.Status, Code: f.Code, CustomerID: f.CustomerRef.PartyID,
 		Currency: application.CurrencyRef{ID: f.CurrencyRef.ID, Revision: f.CurrencyRef.Revision}, CreditPortionMinor: f.CreditPortionMinor}
 	o.Stages = stagesOf(f.Stages)
+	if a := f.AnalysisFX; a.OrderCurrency != "" {
+		o.Analysis = &application.OrderAnalysis{OrderCurrency: a.OrderCurrency, Currency: a.ComparisonCurrencyRef.ID, Rate: a.Rate}
+	}
 	for _, p := range f.Proposed {
 		if p.Code != "" {
 			continue

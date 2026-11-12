@@ -76,6 +76,13 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGetReceivable, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetPayable, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetOrderSettlement, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Credit notes and reversal (C8): credit_note.request is the sales clerk's, by a person or AI (S5 plan
+		// S5-18 "销售经办; human|ai"); credit.confirm and settlement.reverse are humanOnlyCommands (credit
+		// manager).
+		{Command: api.CommandRequestCreditNote, Permission: api.CommandRequestCreditNote, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandConfirmCredit, api.CommandConfirmCredit),
+		authorization.HumanOnly(api.CommandReverseSettlement, api.CommandReverseSettlement),
+		{Command: api.CommandGetCreditNote, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -113,9 +120,13 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	if visible, handled, err := visibleFund(ctx, exec, d, command, id); handled {
 		return visible, err
 	}
-	if command == api.CommandConfirmSettlement {
+	switch command {
+	case api.CommandConfirmSettlement, api.CommandReverseSettlement:
 		st, err := postgres.LoadStatement(ctx, exec, scope(ctx), id, false)
 		return err == nil && st != nil && d.Sees(st.OwnerActor, st.OwnerTeam), err
+	case api.CommandRequestCreditNote, api.CommandConfirmCredit:
+		n, err := postgres.LoadCreditNote(ctx, exec, scope(ctx), id)
+		return err == nil && n != nil && d.Sees(n.OwnerActor, n.OwnerTeam), err
 	}
 	sc := scope(ctx)
 	var subjects []string
@@ -258,6 +269,15 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.ConfirmSettlement:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandConfirmSettlement, key, c
+	case api.RequestCreditNote:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRequestCreditNote, key, c
+	case api.ConfirmCredit:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandConfirmCredit, key, c
+	case api.ReverseSettlement:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReverseSettlement, key, c
 	}
 	return "", "", nil
 }

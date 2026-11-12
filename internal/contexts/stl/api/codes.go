@@ -31,6 +31,9 @@ const (
 
 	// Settlement statements (B2b).
 	CodeSettlementSourceDuplicate = "SETTLEMENT_SOURCE_DUPLICATE" // 409: the source line is settled by a standing statement
+
+	// Credit notes and settlement reversal (C8).
+	CodeSettlementHasApplications = "SETTLEMENT_HAS_APPLICATIONS" // 409: something stands applied on the statement (unapply first)
 )
 
 var codes = map[string]kernel.Category{
@@ -50,6 +53,7 @@ var codes = map[string]kernel.Category{
 	CodeBusinessKeyConflict:         kernel.CategoryConflict,
 	CodeCommercialReleaseBlocked:    kernel.CategoryConflict,
 	CodeSettlementSourceDuplicate:   kernel.CategoryConflict,
+	CodeSettlementHasApplications:   kernel.CategoryConflict,
 }
 
 // Category returns the category of a code STL declares.

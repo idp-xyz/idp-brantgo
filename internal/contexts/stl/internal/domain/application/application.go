@@ -40,8 +40,10 @@ type Application struct {
 	StageID        string
 	StatementID    string // a receivable or payable: its statement and installment
 	InstallmentSeq int
-	MovedFrom      string // a replacement or remainder: the moved application it comes from
-	Amount         kernel.Money
+	MovedFrom      string       // a replacement or remainder: the moved application it comes from
+	CreditNoteID   string       // the source is a confirmed credit note instead of a fund record (C8, source.go)
+	Amount         kernel.Money // what the target receives, in the target's currency
+	Conversion     *Conversion  // a fund in another currency: what it gives and at which rate (STL-INV-007)
 	Status         string
 	Version        int64
 	OwnerActor     string
@@ -64,6 +66,7 @@ type ApplyInput struct {
 	StageID      string
 	StageApplied kernel.Money
 	Amount       kernel.Money
+	FX           *FXInput // the settlement rate for a receipt in another currency than the order's (nil: none)
 	By           fundrecord.Act
 	Team         string
 }
@@ -75,8 +78,8 @@ func Apply(in ApplyInput) (*Application, error) {
 	case !f.Applicable():
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/fund_record_id",
 			"A "+f.Kind+" is not applied to orders: only receipts are (non-goods money waits for verification)")
-	case f.Currency() != acc.Currency():
-		return nil, fundrecord.Reject(fundrecord.CodeFXScopeMismatch, "/args/fund_record_id",
+	case f.Currency() != acc.Currency() && in.FX == nil:
+		return nil, fundrecord.Reject(fundrecord.CodeFXScopeMismatch, "/args/fx_rate",
 			"The receipt is in "+f.Currency().Code()+", the order in "+acc.Currency().Code()+": cross-currency write-off needs a settlement rate")
 	case f.CounterpartyID != acc.PartyID:
 		return nil, fundrecord.Reject(fundrecord.CodePartyEntityMismatch, "/args/fund_record_id",
@@ -89,21 +92,20 @@ func Apply(in ApplyInput) (*Application, error) {
 	if in.Amount.Currency() != f.Currency() || in.Amount.Sign() <= 0 {
 		return nil, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/amount", "The amount is above zero")
 	}
-	available := f.Available(in.FundEntries)
-	if c, _ := in.Amount.Cmp(available); c > 0 {
-		covered, err := available.Add(f.Unexplained())
-		if c2, _ := in.Amount.Cmp(covered); err == nil && c2 <= 0 {
-			return nil, fundrecord.Reject(fundrecord.CodeFundDifferenceUnexplained, "/args/amount",
-				"Only "+available.String()+" is available: "+f.Unexplained().String()+" of the difference is unexplained")
-		}
-		return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsAvailable, "/args/amount", "Only "+available.String()+" is available")
+	amount, conv, err := convert(in.Amount, acc.Currency(), in.FX)
+	if err != nil {
+		return nil, err
+	}
+	if err = withinAvailable(in.Amount, f, in.FundEntries); err != nil {
+		return nil, err
 	}
 	open := orderaccount.OpenOf(*stage, in.StageApplied)
-	if c, _ := in.Amount.Cmp(open); c > 0 {
+	if c, _ := amount.Cmp(open); c > 0 {
 		return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsOpen, "/args/amount", "Only "+open.String()+" of stage "+stage.StageID+" is open")
 	}
 	return &Application{ID: in.ID, FundRecordID: f.ID, TargetKind: TargetOrderStage, OrderID: acc.OrderID, OrderRevision: acc.OrderRevision,
-		StageID: stage.StageID, Amount: in.Amount, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team, Applied: in.By}, nil
+		StageID: stage.StageID, Amount: amount, Conversion: conv, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team,
+		Applied: in.By}, nil
 }
 
 // Unapply undoes a standing application (SM-STL-APPLICATION: authorised person and reason). A moved

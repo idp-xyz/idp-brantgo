@@ -74,6 +74,15 @@ type Order struct {
 	Stages             []OrderStage
 	CreditPortionMinor string
 	Proposed           []ProposedRevision
+	Analysis           *OrderAnalysis // TRD AnalysisFX (C8: the basis of a cross-currency application's FX difference)
+}
+
+// OrderAnalysis is the order's analysis rate (TRD AnalysisFX, baseline 4.5): one unit of OrderCurrency is Rate
+// units of Currency, the pricing policy's comparison currency ("" Rate: the same currency, exactly 1).
+type OrderAnalysis struct {
+	OrderCurrency string
+	Currency      string
+	Rate          string
 }
 
 // ProposedRevision is a revision an amendment of the order proposes: the order at the revision
