@@ -3,6 +3,7 @@ package orderrev
 import (
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
@@ -71,19 +72,54 @@ func Transition(from Status, command string) (Status, error) {
 	return "", kernel.Reject(kernel.CodeInvalidState, "/command", "SM-TRD-ORDER has no command "+command)
 }
 
-// NotWired is the Source of an answer a caller could not ask for because the owner's context is
-// not built yet (FUL's shipments, PUR's commitments and STL's reservations in S3). The rules judge
-// such an answer as given — there is nothing to find where nothing can exist yet — and the caller's
-// commit evidence names it, so it is never mistaken for a checked one.
+// NotWired is the Source of an answer a caller could not ask for because it was assembled without
+// the owner's contract (a TRD built for a unit test). The rules judge such an answer as given and
+// the caller's commit evidence names it, so it is never mistaken for a checked one.
 const NotWired = "not_wired"
 
-// Fulfilment is what FUL confirmed of an order (FUL ShipmentConfirmation, ActiveOrderRef v1 R27):
-// the shipped quantity of each order line in the line's unit, cumulated over the order's
-// revisions, and the contract that answered (Source; NotWired until FUL is built). A line that is
-// absent shipped nothing.
+// NotRequired is the Source of an answer a rule does not ask for (order.close reads no downstream
+// commitments: its guard names only the shipments).
+const NotRequired = "not_required"
+
+// Fulfilment is what FUL confirmed of an order (ShipmentFacts v1, Context Map R70): the shipped
+// quantity of each order line in the line's unit, cumulated over the order's revisions, and the
+// contract that answered (Source). A line that is absent shipped nothing.
 type Fulfilment struct {
 	Source  string
 	Shipped map[string]kernel.Decimal
+}
+
+// Shipped is one answer of ShipmentFacts v1: what the confirmed shipments of an order line shipped,
+// in the unit named (QuantityFormat), from how many confirmed shipments.
+type Shipped struct {
+	LineID    string
+	Unit      string
+	Quantity  string
+	Shipments int64
+}
+
+// FulfilmentOf is what source answered of revision r's order: the shipped quantity of each line,
+// summed over the answers of that line. An answer for a line r does not have, in another unit than
+// the line's (a line keeps its unit), unreadable or negative is REFERENCE_INVALID at
+// /fulfilment/shipped/<line>: TRD cannot compare it with the line.
+func FulfilmentOf(source string, r *Revision, answers []Shipped) (Fulfilment, error) {
+	f := Fulfilment{Source: source, Shipped: map[string]kernel.Decimal{}}
+	for _, a := range answers {
+		at := "/fulfilment/shipped/" + a.LineID
+		l := r.Line(a.LineID)
+		if l == nil {
+			return Fulfilment{}, kernel.Reject(kernel.CodeReferenceInvalid, at, "Line "+a.LineID+" is not a line of revision "+strconv.FormatInt(r.Number, 10))
+		}
+		if a.Unit != l.Unit.ID {
+			return Fulfilment{}, kernel.Reject(kernel.CodeReferenceInvalid, at, "Line "+a.LineID+" shipped in "+a.Unit+", not in its unit "+l.Unit.ID)
+		}
+		q, err := kernel.ParseDecimal(a.Quantity, kernel.QuantityFormat)
+		if err != nil || q.Sign() < 0 {
+			return Fulfilment{}, kernel.Reject(kernel.CodeReferenceInvalid, at, "Line "+a.LineID+" has no readable shipped quantity")
+		}
+		f.Shipped[a.LineID] = f.Shipped[a.LineID].Add(q)
+	}
+	return f, nil
 }
 
 // check refuses shipments of a line r never had or a negative quantity (REFERENCE_INVALID at
@@ -107,34 +143,75 @@ func (f Fulfilment) Any() bool {
 	return false
 }
 
-// Commitment is a downstream obligation made against the order that its end would leave without a
-// cause: a purchase commitment or demand allocation (PUR), a stock reservation (STK) or a credit
-// reservation (STL), and the approved disposition that settles it ("" when none: cancel the
-// commitment, release the reservation, or have its disposition approved first).
+// The kinds of PUR's objects DownstreamCommitments v1 (Context Map R71) lists against an order, and
+// the state of a commitment every line of which was verified delivered in full.
+const (
+	KindPurchaseCommitment = "purchase_commitment"
+	KindPurchaseDraft      = "purchase_draft"
+	KindDemandAllocation   = "demand_allocation"
+	StateFulfilled         = "fulfilled"
+)
+
+// Commitment is a downstream object made against the order that its end would leave without a
+// cause, as its owner lists it (R71: PUR's prepared drafts, commitments and demand allocations): its
+// context, kind, ID, state, the order line and quantity of an allocation (in the line's unit), and
+// the approved disposition that settles it ("" when none).
 type Commitment struct {
 	Context     string
 	Kind        string
 	ID          string
+	State       string
+	LineID      string
+	Quantity    string
 	Disposition string
 }
 
-// Downstream is what the downstream contexts say is still open against the order, and the
-// contract that answered (Source; NotWired until they are built).
+// Downstream is what the downstream contexts list against the order, and the contract that
+// answered (Source).
 type Downstream struct {
 	Source string
 	Open   []Commitment
 }
 
-// unsettled refuses the first open commitment without an approved disposition
-// (DOWNSTREAM_COMMITMENT_OPEN).
-func (d Downstream) unsettled() error {
+// unsettled refuses the commitments that are still open against the order after the shipments f,
+// naming each (DOWNSTREAM_COMMITMENT_OPEN; TRD-INV-019 下游采购承诺与占用已解除或已有获批处置). Not open are: one with an
+// approved disposition; a purchase commitment that is fulfilled (the supplier delivered every line
+// in full and owes nothing more; what it delivered is the allocation's); a demand allocation that
+// does not exceed what the order line shipped (the goods it holds left with the order). Everything
+// else the owner lists is open: a draft not voided, a commitment requested, approved, issued or
+// confirmed, goods allocated to the order and not shipped by it.
+func (d Downstream) unsettled(f Fulfilment) error {
+	var open []string
 	for _, c := range d.Open {
-		if strings.TrimSpace(c.Disposition) == "" {
-			return fail(CodeDownstreamCommitmentOpen, "/args/order_id", c.Context+" "+c.Kind+" "+c.ID+
-				" is open against the order without an approved disposition")
+		if ok, why := c.open(f); ok {
+			open = append(open, c.Context+" "+c.Kind+" "+c.ID+" "+why)
 		}
 	}
-	return nil
+	if len(open) == 0 {
+		return nil
+	}
+	return fail(CodeDownstreamCommitmentOpen, "/args/order_id", strings.Join(open, "; ")+" without an approved disposition")
+}
+
+// open reports whether c is still open after the shipments f, and how it stands.
+func (c Commitment) open(f Fulfilment) (bool, string) {
+	switch {
+	case strings.TrimSpace(c.Disposition) != "":
+		return false, ""
+	case c.Kind == KindPurchaseCommitment && c.State == StateFulfilled:
+		return false, ""
+	case c.Kind == KindDemandAllocation:
+		q, err := kernel.ParseDecimal(c.Quantity, wide)
+		if err != nil {
+			return true, "allocates an unreadable quantity of line " + c.LineID
+		}
+		shipped := f.Shipped[c.LineID]
+		if q.Cmp(shipped) <= 0 {
+			return false, ""
+		}
+		return true, "allocates " + q.String() + " of line " + c.LineID + ", which shipped " + shipped.String()
+	}
+	return true, "is " + c.State
 }
 
 // Tolerance is the approved under- and over-delivery of one order line, as ratios of its ordered
@@ -180,7 +257,7 @@ func Cancel(from Status, r *Revision, f Fulfilment, d Downstream, act quote.Act)
 	if f.Any() {
 		return nil, fail(CodeOrderHasShipments, "/args/order_id", "The order has confirmed shipments; close the remainder instead")
 	}
-	if err := d.unsettled(); err != nil {
+	if err := d.unsettled(f); err != nil {
 		return nil, err
 	}
 	return ending(CommandCancel, Cancelled, r, f, d, act), nil
@@ -205,7 +282,7 @@ func CloseRemainder(from Status, r *Revision, f Fulfilment, d Downstream, act qu
 	if !slices.ContainsFunc(e.Lines, func(l LineEnd) bool { return l.Remainder != "0" }) {
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/order_id", "Everything is shipped; close the order instead")
 	}
-	if err := d.unsettled(); err != nil {
+	if err := d.unsettled(f); err != nil {
 		return nil, err
 	}
 	return e, nil
@@ -214,7 +291,9 @@ func CloseRemainder(from Status, r *Revision, f Fulfilment, d Downstream, act qu
 // Close decides order.close of an active order at its current revision r (SM-TRD-ORDER active →
 // closed; TRD-INV-019): every line shipped its quantity, within the line's approved tolerance
 // (ORDER_NOT_FULFILLED below it, INVALID_STATE above it: amend the order to what was shipped). One
-// line's excess never makes up another's shortfall. act needs no reason.
+// line's excess never makes up another's shortfall; without tolerances (S5 D-19: none) a line ships
+// exactly its quantity. act needs no reason. The guard names no downstream commitment: the ending
+// records the downstream answer as NotRequired.
 func Close(from Status, r *Revision, f Fulfilment, tolerances map[string]Tolerance, act quote.Act) (*Ending, error) {
 	if from != Active {
 		return nil, fail(CodeOrderNotActive, "/args/order_id", "The order is "+string(from))
@@ -241,7 +320,7 @@ func Close(from Status, r *Revision, f Fulfilment, tolerances map[string]Toleran
 				" beyond its "+l.Quantity+" "+l.Unit.ID+" and approved tolerance; amend the order first")
 		}
 	}
-	return ending(CommandClose, Closed, r, f, Downstream{Source: NotWired}, act), nil
+	return ending(CommandClose, Closed, r, f, Downstream{Source: NotRequired}, act), nil
 }
 
 // ended checks what every end needs: shipments of the order's lines, and a human act at an instant

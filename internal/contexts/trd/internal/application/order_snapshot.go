@@ -38,6 +38,7 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 	}
 	out := map[string]api.OrderSnapshotFact{}
 	orders := map[string]*order.Order{}
+	shipped := map[string]fulfilmentRead{}
 	err := s.lookupAcceptances(ctx, func(ctx context.Context, exec bentopg.Executor, sees func(quoteID string) (bool, error)) error {
 		for _, id := range ids {
 			o, err := postgres.LoadOrder(ctx, exec, scope(ctx), id, postgres.NoLock)
@@ -53,6 +54,9 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 			}
 			if ok {
 				out[id], orders[id] = orderSnapshotFact(o, scope(ctx)), o
+				if shipped[id], err = s.readFulfilment(ctx, exec, o); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -63,7 +67,27 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 	if err = s.stateSnapshotTrade(ctx, out); err != nil {
 		return nil, err
 	}
-	return out, s.stateProposed(ctx, orders, out)
+	return out, s.stateProposed(ctx, orders, shipped, out)
+}
+
+// fulfilmentRead is what FUL confirmed of an order, or the rejection that says TRD cannot compare
+// FUL's answer with the order's revision.
+type fulfilmentRead struct {
+	f       orderrev.Fulfilment
+	refusal error
+}
+
+// readFulfilment reads in TRD's read transaction what FUL confirmed of order o (ShipmentFacts v1),
+// for the revisions its open amendments propose.
+func (s Service) readFulfilment(ctx context.Context, exec bentopg.Executor, o *order.Order) (fulfilmentRead, error) {
+	if o.Status != order.Active {
+		return fulfilmentRead{}, nil
+	}
+	f, err := s.activeFulfilment(ctx, exec, o)
+	if _, ok := kernel.AsRejection(err); ok {
+		return fulfilmentRead{refusal: err}, nil
+	}
+	return fulfilmentRead{f: f}, err
 }
 
 // GetOrderSnapshot returns what ResolveOrderSnapshots says of order id, audited as
@@ -71,6 +95,7 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnapshotFact, error) {
 	var f api.OrderSnapshotFact
 	var loaded *order.Order
+	var shipped fulfilmentRead
 	err := s.Ledger.Read(ctx, CommandGetOrderSnapshot, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		o, err := postgres.LoadOrder(ctx, exec, scope(ctx), id, postgres.NoLock)
 		loaded = o
@@ -88,7 +113,8 @@ func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnap
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		f = orderSnapshotFact(o, scope(ctx))
-		return nil
+		shipped, err = s.readFulfilment(ctx, exec, o)
+		return err
 	})
 	if err != nil {
 		return api.OrderSnapshotFact{}, err
@@ -97,7 +123,7 @@ func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnap
 	if err = s.stateSnapshotTrade(ctx, facts); err != nil {
 		return api.OrderSnapshotFact{}, err
 	}
-	if err = s.stateProposed(ctx, map[string]*order.Order{id: loaded}, facts); err != nil {
+	if err = s.stateProposed(ctx, map[string]*order.Order{id: loaded}, map[string]fulfilmentRead{id: shipped}, facts); err != nil {
 		return api.OrderSnapshotFact{}, err
 	}
 	return facts[id], nil
@@ -107,9 +133,10 @@ func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnap
 // intact active fact propose (api.ProposedRevision; S5 D-9, A6 gap 8): for each amendment pending
 // approval or approved on the order's current revision, in the order's amendment order, the
 // revision orderrev.Next derives from it with the facts POL gives now (amendmentInputs, what
-// order.amendment.apply reads), with no shipment confirmed (FUL is not wired). An amendment whose
-// revision cannot be derived now carries the refusal's code.
-func (s Service) stateProposed(ctx context.Context, orders map[string]*order.Order, facts map[string]api.OrderSnapshotFact) error {
+// order.amendment.apply reads) and the shipments FUL confirmed as TRD's read transaction saw them
+// (shipped). An amendment whose revision cannot be derived now carries the refusal's code.
+func (s Service) stateProposed(ctx context.Context, orders map[string]*order.Order, shipped map[string]fulfilmentRead,
+	facts map[string]api.OrderSnapshotFact) error {
 	for _, id := range slices.Sorted(maps.Keys(orders)) {
 		o, f := orders[id], facts[id]
 		if o == nil || f.Code != "" || o.Status != order.Active {
@@ -122,9 +149,12 @@ func (s Service) stateProposed(ctx context.Context, orders map[string]*order.Ord
 			}
 			p := api.ProposedRevision{AmendmentID: a.ID, AmendmentHash: a.Hash, AmendmentStatus: string(a.Status)}
 			in, err := s.amendmentInputs(ctx, id, a.Content.Proposal, "/proposal", s.Clock.Now())
+			if err == nil {
+				err = shipped[id].refusal
+			}
 			var next *orderrev.Revision
 			if err == nil {
-				next, err = a.Preview(st, shipments(), in.facts)
+				next, err = a.Preview(st, shipped[id].f, in.facts)
 			}
 			if err != nil {
 				rej, ok := kernel.AsRejection(err)

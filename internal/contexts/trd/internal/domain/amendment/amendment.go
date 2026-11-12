@@ -127,6 +127,26 @@ type Assessment struct {
 	Evidence []quote.Evidence `json:"evidence"`
 }
 
+// Prefill completes impact assessment impact with what the downstream contexts say of the order
+// (WF-06 step 1, ES-09 step 2: 读取采购承诺、出运与占用形成影响评估): every area of notes the preparer left
+// unassessed is added as open, with its note — open, because a person still assesses it; only a
+// person states an area unaffected or affected. An area the preparer assessed, or one that is not an
+// area, is left alone; a note longer than an assessment's is cut at its limit.
+func Prefill(impact []Assessment, notes map[string]string) []Assessment {
+	out := slices.Clone(impact)
+	for _, area := range areas {
+		note := strings.TrimSpace(notes[area])
+		if note == "" || slices.ContainsFunc(impact, func(x Assessment) bool { return x.Area == area }) {
+			continue
+		}
+		if r := []rune(note); len(r) > maxNote {
+			note = string(r[:maxNote-1]) + "…"
+		}
+		out = append(out, Assessment{Area: area, Status: Open, Note: note, Evidence: []quote.Evidence{}})
+	}
+	return out
+}
+
 // Limits of an amendment's content.
 const (
 	MaxEvidence = 200

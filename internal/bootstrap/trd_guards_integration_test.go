@@ -441,7 +441,8 @@ func TestAmendmentApplyAsksCreditForTheRevisionItProduces(t *testing.T) {
 		amended = append(amended, ev.Payload)
 	}
 	if len(amended) != 2 || amended[0]["credit_guard"] != trdapi.GuardNotIncreased || amended[1]["credit_guard"] != stlapi.CreditCovered ||
-		amended[1]["credit_reservation_id"] != c.reserved[third.Binding].ReservationID || amended[1]["unchecked_guards"] != trdapi.GuardFULShipments {
+		amended[1]["credit_reservation_id"] != c.reserved[third.Binding].ReservationID || amended[1]["unchecked_guards"] != "" ||
+		amended[1]["fulfilment_source"] != trdapi.GuardFULShipments {
 		t.Fatalf("OrderAmended %v", amended)
 	}
 }

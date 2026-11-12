@@ -247,9 +247,9 @@ func facts() Facts {
 
 var amendment1 = AmendmentRef{ID: "amendment.1", Hash: hashOf("amendment.1")}
 
-// shipped is a Fulfilment of FUL's ShipmentConfirmation v1 with the shipped quantities given.
+// shipped is a Fulfilment of FUL's ShipmentFacts v1 with the shipped quantities given.
 func shipped(lines ...string) Fulfilment {
-	f := Fulfilment{Source: "ful.shipment_confirmation.v1", Shipped: map[string]kernel.Decimal{}}
+	f := Fulfilment{Source: "ful.shipment_facts.v1", Shipped: map[string]kernel.Decimal{}}
 	for i := 0; i+1 < len(lines); i += 2 {
 		f.Shipped[lines[i]] = kernel.MustDecimal(lines[i+1])
 	}

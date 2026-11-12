@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/calc"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
@@ -504,6 +505,40 @@ func TestDecideApplyWithdrawRefusals(t *testing.T) {
 	}
 	if err := d.Withdraw(1, quote.Act{By: clerk, At: at(1), Reason: "重复"}); err != nil || d.Status != Withdrawn {
 		t.Fatalf("withdraw draft: %v", err)
+	}
+}
+
+// WF-06 step 1 and ES-09 step 2: the facts TRD read fill the areas the preparer left unassessed, as
+// open items a person still assesses; what the preparer assessed stays as stated. Submitting then
+// lists the pre-filled areas among the open items, and the two areas no context speaks for
+// (materials, operations) still have to be assessed by a person (DRAFT_NOT_READY).
+func TestPrefillLeavesTheAssessmentToAPerson(t *testing.T) {
+	r1 := revisionOne()
+	stated := []Assessment{{Area: AreaPurchasing, Status: Affected, Note: "采购草稿减量", Evidence: []quote.Evidence{}},
+		{Area: AreaMaterials, Status: Unaffected, Evidence: []quote.Evidence{}}}
+	notes := map[string]string{AreaPurchasing: "pur.downstream_commitments.v1: purchase_draft pd.4 prepared",
+		AreaQuality: "ful.shipment_facts.v1: L4 shipped 40 PCS", AreaPacking: "ful.shipment_facts.v1: L4 shipped 40 PCS",
+		AreaBooking: "ful.shipment_facts.v1: 1 confirmed shipment", AreaPaymentPlan: strings.Repeat("付", maxNote+5), "unknown": "x",
+		AreaOperations: " "}
+	got := Prefill(stated, notes)
+	var areasGot []string
+	for _, x := range got {
+		areasGot = append(areasGot, x.Area+"="+x.Status)
+	}
+	if !slices.Equal(areasGot, []string{"purchasing=affected", "materials=unaffected", "quality=open", "packing=open", "booking=open",
+		"payment_plan=open"}) || got[0].Note != "采购草稿减量" || got[2].Note != notes[AreaQuality] ||
+		utf8.RuneCountInString(got[5].Note) != maxNote || len(stated) != 2 {
+		t.Fatalf("prefilled: %q %+v", areasGot, got)
+	}
+	a, _, _, err := Prepare(nil, toFortyFour(r1, got), activeAt(r1), orderrev.Fulfilment{}, facts(), clerk, 1, at(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(a.OpenItems(), []string{AreaQuality, AreaPacking, AreaBooking, AreaPaymentPlan}) {
+		t.Fatalf("open items %q", a.OpenItems())
+	}
+	if err := a.Submit(1, activeAt(r1), clerk, 1, at(1)); code(err) != "DRAFT_NOT_READY at /impact/operations" {
+		t.Fatalf("operations still needs a person: %s", code(err))
 	}
 }
 
