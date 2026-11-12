@@ -14,7 +14,7 @@
   {
    "code": "sales_clerk",
    "name": "销售经办",
-   "duties": "客户询价、报价编制与提交、客户回复登记、订单准备与生效、订单变更编制、客户主体与联系人草稿",
+   "duties": "客户询价、报价编制与提交、客户回复登记、订单准备与生效、订单变更编制、客户主体与联系人草稿；为订单在额度内申请信用占用，超额生成信用决定由信用人员裁决（S5 D-7，负责人决定 2026-11-12）",
    "permissions": [
     "acceptance.mark_disputed",
     "action.reconcile",
@@ -30,7 +30,9 @@
     "cnx.read",
     "contact.revise",
     "contact.save_draft",
+    "credit.reserve",
     "credit_limit.request",
+    "credit_note.request",
     "crm.read",
     "cst.read",
     "evd.read",
@@ -109,7 +111,7 @@
   {
    "code": "merchandiser",
    "name": "跟单",
-   "duties": "订单履约跟进：里程碑、装箱、订舱、出运确认、供应交付登记、生产进度、订单关闭",
+   "duties": "订单履约跟进：里程碑、装箱、订舱、出运确认、供应交付登记、生产进度、订单关闭；出运准备与取消、实际装箱、订单变更的出运复核",
    "permissions": [
     "action.reconcile",
     "action.record_attempt",
@@ -147,6 +149,7 @@
     "order.close_unfulfilled",
     "order.document.generate",
     "packing.plan",
+    "packing.record_actual",
     "pol.read",
     "pty.read",
     "pur.read",
@@ -156,7 +159,11 @@
     "reservation.release",
     "return.register",
     "rfq.save_draft",
+    "shipment.cancel",
     "shipment.confirm",
+    "shipment.prepare",
+    "shipment_review.open",
+    "shipment_review.settle",
     "source.register",
     "source.use",
     "stk.read",
@@ -184,13 +191,15 @@
   {
    "code": "purchaser",
    "name": "采购",
-   "duties": "供应商询价与报价核实、采购条款、采购草稿与承诺申请、供应商确认与交付、供应商主体与 SKU 草稿",
+   "duties": "供应商询价与报价核实、采购条款、采购草稿与承诺申请、供应商确认与交付、供应商主体与 SKU 草稿；承诺变更编制与应用、承诺取消、订单变更的分配复核",
    "permissions": [
     "action.reconcile",
     "action.record_attempt",
     "ai.delegation.grant",
     "ai.delegation.revoke",
     "ai.read",
+    "allocation_review.open",
+    "allocation_review.settle",
     "cat.read",
     "clm.read",
     "cnx.read",
@@ -215,6 +224,9 @@
     "pol.read",
     "pty.read",
     "pur.read",
+    "purchase.commitment.cancel",
+    "purchase.commitment.change.apply",
+    "purchase.commitment.change.prepare",
     "purchase.commitment.issue",
     "purchase.commitment.request",
     "purchase.draft.prepare",
@@ -359,7 +371,7 @@
   {
    "code": "order_reviewer",
    "name": "订单审核人",
-   "duties": "订单与订单变更审核、撤销批准、合同成立的否认处理；采购承诺审批（A47 设计待定）",
+   "duties": "订单与订单变更审核、撤销批准、合同成立的否认处理；采购承诺审批与承诺变更裁决（A47）",
    "permissions": [
     "acceptance.invalidate",
     "cat.read",
@@ -378,6 +390,7 @@
     "pol.read",
     "pty.read",
     "pur.read",
+    "purchase.commitment.change.decide",
     "purchase.commitment.decide",
     "purchase.commitment.revoke",
     "qlt.read",
@@ -420,14 +433,17 @@
   {
    "code": "credit_officer",
    "name": "信用专员",
-   "duties": "信用占用与释放、费用分摊；不作信用决定",
+   "duties": "信用占用与释放、费用登记与分摊；在 credit_policy 信用专员层级内裁决信用例外（S5 D-6，负责人决定 2026-11-12）",
    "permissions": [
     "cat.read",
     "charge.allocate",
+    "charge.record",
     "clm.read",
     "cnx.read",
+    "credit.consume",
     "credit.release",
     "credit.reserve",
+    "credit_exception.decide",
     "crm.read",
     "cst.read",
     "evd.read",
@@ -449,7 +465,7 @@
   {
    "code": "credit_manager",
    "name": "信用经理",
-   "duties": "信用额度发布、信用确认与例外、商业放行例外",
+   "duties": "信用额度发布、信用例外（最高层级）、贷项确认、结算冲销与资金差额批准、商业放行例外",
    "permissions": [
     "cat.read",
     "clm.read",
@@ -462,6 +478,7 @@
     "cst.read",
     "evd.read",
     "ful.read",
+    "fund.resolve_difference",
     "inq.read",
     "mfg.read",
     "pol.read",
@@ -469,6 +486,7 @@
     "pur.read",
     "qlt.read",
     "ref.read",
+    "settlement.reverse",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -513,16 +531,19 @@
   {
    "code": "documentation",
    "name": "单证",
-   "duties": "出运单证、单证放行、商业放行评估、报关案件与资料包、出口许可、商品申报档案",
+   "duties": "出运单证、单证放行、商业放行评估、报关案件与资料包、出口许可、商品申报档案；出运单证编制与签发、保险单记录、报关资料确认与人工提交、外部回执登记、官方证书登记",
    "permissions": [
     "cat.read",
+    "certificate.register",
     "clm.read",
     "cnx.read",
     "commercial_release.evaluate",
     "crm.read",
     "cst.read",
+    "declaration_case.confirm",
     "declaration_case.prepare",
     "declaration_case.record_receipt",
+    "declaration_case.record_submission",
     "declaration_profile.save_draft",
     "declaration_profile.verify",
     "document_bundle.check",
@@ -534,6 +555,7 @@
     "file.register",
     "ful.read",
     "inq.read",
+    "insurance.record",
     "mfg.read",
     "order.document.generate",
     "pol.read",
@@ -542,6 +564,8 @@
     "qlt.read",
     "ref.read",
     "shipment_document.issue",
+    "shipment_document.prepare",
+    "shipment_document.record_signed",
     "source.register",
     "source.use",
     "stk.read",
@@ -554,11 +578,12 @@
   {
    "code": "treasury",
    "name": "资金",
-   "duties": "收付款登记与核销、结算确认、订单结果关闭",
+   "duties": "收付款登记与核销、结算确认、期初余额、费用确认、付款计划复核、订单经营结果复核、关闭与重新打开",
    "permissions": [
     "application.apply",
     "application.unapply",
     "cat.read",
+    "charge.confirm",
     "clm.read",
     "cnx.read",
     "crm.read",
@@ -568,7 +593,12 @@
     "fund.record",
     "inq.read",
     "mfg.read",
+    "opening_balance.record",
     "order_result.close",
+    "order_result.reopen",
+    "order_result.review",
+    "payment_plan_review.open",
+    "payment_plan_review.settle",
     "pol.read",
     "pol.read_sensitive",
     "pty.read",
@@ -597,6 +627,7 @@
     "cnx.audit",
     "cnx.read",
     "costing.attest_source",
+    "country_programme.import",
     "crm.audit",
     "crm.read",
     "cst.audit",
@@ -631,6 +662,7 @@
     "sup.read",
     "trade_compliance.decide",
     "trade_compliance.evaluate",
+    "trade_compliance.reopen",
     "trd.audit",
     "trd.read",
     "tsk.audit",
@@ -640,7 +672,7 @@
   {
    "code": "tax_specialist",
    "name": "税务专员",
-   "duties": "进项票、退税分配、外部对账；税务配置草稿",
+   "duties": "进项票、退税分配、外部对账；税务配置草稿；购进发票核验、退税结果与期初资料登记",
    "permissions": [
     "cat.read",
     "clm.read",
@@ -657,12 +689,15 @@
     "pty.read",
     "pur.read",
     "purchase_invoice.import",
+    "purchase_invoice.verify",
     "qlt.read",
     "ref.read",
     "stk.read",
     "stl.read",
     "sup.read",
     "tax_refund_case.allocate",
+    "tax_refund_case.record_opening",
+    "tax_refund_case.record_result",
     "trd.read",
     "tsk.read"
    ]
@@ -941,6 +976,10 @@
   {
    "permission": "ai.audit",
    "meaning": "查阅 internal/ai 的审计记录"
+  },
+  {
+   "permission": "country_programme.import",
+   "meaning": "参考数据命令：导入一个国别禁运与制裁项目版本（来源、发布日期、文件 SHA-256、国家与项目数；人工专属；ADR-BR-017），供 CNX 贸易合规核查生成候选"
   }
  ],
  "forbiddenCombinations": [
@@ -1011,11 +1050,6 @@
    "rule": "合规结论只由合规岗位确定"
   },
   {
-   "permission": "credit_exception.decide",
-   "template": "credit_manager",
-   "rule": "销售不能放行信用决定"
-  },
-  {
    "permission": "credit.confirm",
    "template": "credit_manager",
    "rule": "销售不能放行信用决定"
@@ -1034,6 +1068,11 @@
    "permission": "screening_list.import",
    "template": "compliance",
    "rule": "名单来源由合规负责人确认（S1-09）"
+  },
+  {
+   "permission": "country_programme.import",
+   "template": "compliance",
+   "rule": "国别项目与制裁名单来源由合规负责人确认（ADR-BR-017）"
   }
  ],
  "independence": [
@@ -1102,6 +1141,48 @@
    "independentOf": "该修订草稿的全部编辑人",
    "context": "CST",
    "state": "IMPLEMENTED"
+  },
+  {
+   "command": "purchase.commitment.change.decide",
+   "independentOf": "变更的编制人与申请人",
+   "context": "PUR",
+   "state": "SPEC"
+  },
+  {
+   "command": "supplier_delivery.verify",
+   "independentOf": "交付的登记人",
+   "context": "PUR",
+   "state": "SPEC"
+  },
+  {
+   "command": "credit_limit.publish",
+   "independentOf": "额度申请人",
+   "context": "STL",
+   "state": "SPEC"
+  },
+  {
+   "command": "credit.confirm",
+   "independentOf": "贷项申请人",
+   "context": "STL",
+   "state": "SPEC"
+  },
+  {
+   "command": "fund.resolve_difference",
+   "independentOf": "资金登记人",
+   "context": "STL",
+   "state": "SPEC"
+  },
+  {
+   "command": "settlement.reverse",
+   "independentOf": "结算单确认人",
+   "context": "STL",
+   "state": "SPEC"
+  },
+  {
+   "command": "declaration_profile.verify",
+   "independentOf": "该修订的最后编辑人",
+   "context": "CAT",
+   "state": "SPEC"
   }
  ]
 }

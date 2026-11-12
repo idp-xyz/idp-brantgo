@@ -15,12 +15,12 @@
     "历史事实可读与当前可用分开：后续变化登记风险或撤销事件，不倒写已提交的合法事实。",
     "合同成立与内部生效分开：客户承诺在报价有效期内到达即合同成立；订单准备、审批与生效是对已成立合同的内部执行授权，报价随后到期不否定合同，上游变化作为风险由审批逐项确认（ADR-BR-013）。",
     "人工核实、审批与正式化命令只接受人工身份；humanOnlyCommands 是这份清单的唯一来源，命令目录与 M0 门禁页由它生成。AI 产生候选并走同一命令路径。",
-    "一个事务只修改一个既有聚合实例；同上下文内允许同时创建由本命令派生的新聚合，限于登记的例外：order.prepare 占用名额并创建订单草稿；quote.response.verify 创建 Acceptance；cost_snapshot.freeze 冻结场景并创建快照；purchase.draft.prepare 更新需求分配余额并创建草稿。",
+    "一个事务只修改一个既有聚合实例；同上下文内允许同时创建由本命令派生的新聚合，限于登记的例外：order.prepare 占用名额并创建订单草稿；quote.response.verify 创建 Acceptance；cost_snapshot.freeze 冻结场景并创建快照；purchase.draft.prepare 更新需求分配余额并创建草稿。需要串行化的余额（资金可用额、订单累计出运、许可证用量、凭证用途余额）锁定所属根 FOR UPDATE 并由不可变分录派生，不另改第二个聚合（S5 D-3）。",
     "不在本上下文事务内写入其他上下文：正式文档字节、哈希与编号绑定封存在 TRD 自身 schema；编号由 POL 在下游事务之前分配（回滚留号段空缺），EVD 经事件登记文件引用。",
     "一次成功写入原子提交业务变化、动作结果、提交证据、审计与 Outbox；失败不留下半份事实。"
   ],
   "lockOrder": [
-    "本上下文聚合根行 FOR UPDATE；多根按 ID 排序（TRD 为报价根及其 ObjectControl，PUR 为订单行需求分配）",
+    "本上下文聚合根行 FOR UPDATE；多根按 ID 排序（TRD 为报价根及其 ObjectControl，PUR 为采购承诺根与订单行需求分配，FUL 为出运根与订单履约根，STL 为资金记录根与订单账户或结算单根，CNX 为许可证根或退税案件根）",
     "同根下级行 FOR UPDATE，固定顺序：QuoteRevision 与 RevisionEffectivity → AcceptanceEffectivity → SalesOrder 与 OrderAmendment → ApprovalEffectivity（报价批准与订单审批）",
     "上游守卫行 FOR SHARE：经上游发布的守卫函数调用，按上下文代码字母序；公司授权守卫（authority_epoch）属于上游守卫",
     "ActionResult／CommitEvidence／审计／Outbox 追加",
@@ -44,7 +44,8 @@
           "valueObjects": [
             "PartyRef",
             "LegalName",
-            "MasterVerification"
+            "MasterVerification",
+            "AddressCountry"
           ],
           "identity": "(tenant, party_id)",
           "concurrency": "row_version CAS",
@@ -66,7 +67,7 @@
           ],
           "goPackage": "internal/contexts/pty/internal/domain/party",
           "pythonSource": "service.py master.*；BC_T01_reference.sql master／master_evidence",
-          "notes": "Python 以 master.kind 区分 customer／supplier；Go 以角色集合表达，同一主体可同时是客户和供应商。"
+          "notes": "Python 以 master.kind 区分 customer／supplier；Go 以角色集合表达，同一主体可同时是客户和供应商。 地址增加 ISO 3166-1 国家代码，供 CNX 贸易合规核查（R77，S5 D-8，负责人决定 2026-11-12）。"
         },
         {
           "id": "PTY-AGG-TradingProfile",
@@ -297,7 +298,7 @@
           ],
           "goPackage": "internal/contexts/cat/internal/domain/declaration",
           "pythonSource": "—（Python 未实现）",
-          "notes": "基线第 22.1 节 CNProductDeclarationProfile；商品编码、出口管制分类与原产地证据分别保存。"
+          "notes": "基线第 22.1 节 CNProductDeclarationProfile；商品编码、出口管制分类与原产地证据分别保存。 按 SKU 规格修订与编码表版本保存；核实独立于最后编辑人（S5 D-22，负责人决定 2026-11-12）。"
         }
       ],
       "policies": [
@@ -351,7 +352,7 @@
           ],
           "goPackage": "internal/contexts/pol/internal/domain/config",
           "pythonSource": "foundation.py save／publish／retire；t03_config.py",
-          "notes": "kind 封闭枚举：company_profile、currency、unit、unit_conversion、fx_rate、calendar、trade_terms、payment_terms、tax_profile、tax_application、fee_category、pricing_policy、bank_account、number_sequence、document_template、quote_document_template、screening_regulation（启用的筛查名单与合规法规、复筛频率）、credit_policy（默认额度、额度来源、审批层级与金额阈值、逾期容忍天数）、legal_terms（适用法律、CISG 适用或排除、合同成立规则、争议解决；公司档案可指定租户默认；WBS S3-17，F-02）、order_document_template（外销合同／形式发票版式；WBS S3-15）。"
+          "notes": "kind 封闭枚举：company_profile、currency、unit、unit_conversion、fx_rate、calendar、trade_terms、payment_terms、tax_profile、tax_application、fee_category、pricing_policy、bank_account、number_sequence、document_template、quote_document_template、screening_regulation（启用的筛查名单与合规法规、复筛频率）、credit_policy（默认额度、额度来源、审批层级与金额阈值、逾期容忍天数）、legal_terms（适用法律、CISG 适用或排除、合同成立规则、争议解决；公司档案可指定租户默认；WBS S3-17，F-02）、order_document_template（外销合同／形式发票版式；WBS S3-15）。 S5（负责人决定 2026-11-12）：fx_rate 用途增加 credit 与 settlement；payment_terms 阶段增加 release_control（documents：凭单证控制付款）；credit_policy 增加 documents_secured、占用与决定有效天数及最高层级以上两人审批；新增 shipment_document_template 与 export_tax_policy；编号单据类型增加 packing_list。"
         },
         {
           "id": "POL-AGG-FoundationSnapshot",
@@ -1059,7 +1060,7 @@
           ],
           "goPackage": "internal/contexts/trd/internal/domain/order",
           "pythonSource": "t03_storage.py prepare_order／activate_order；t04_order_review.py；t03_order_qualification.py；t03_order_snapshot.py",
-          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。"
+          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。 S5（负责人决定 2026-11-12）：order.activate 在 CNX 与 STL 扩展点调用 TradeComplianceGuard v1 与 CreditGuard v1；取消、关闭与变更应用在锁定订单后事务内无锁读取 FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1（R70、R71）；STK 未启用记为 not_enabled。"
         }
       ],
       "policies": [
@@ -1119,7 +1120,7 @@
           ],
           "goPackage": "internal/contexts/pur/internal/domain/draft",
           "pythonSource": "t04_purchase.py；t04_purchase_draft／t04_purchase_draft_line",
-          "notes": "同一订单行可多来源分配；错误草稿经 purchase.draft.void 作废并释放分配余额，原记录保留。"
+          "notes": "同一订单行可多来源分配；错误草稿经 purchase.draft.void 作废并释放分配余额，原记录保留。 超采量与理由在草稿中标记，由独立的采购承诺裁决批准（S5 D-14，负责人决定 2026-11-12，取代编制时的 purchase.overbuy.approve 能力）。"
         },
         {
           "id": "PUR-AGG-PurchaseCommitment",
@@ -1129,31 +1130,47 @@
           "entities": [
             "CommitmentApproval",
             "ApprovalRevocation",
-            "SupplierConfirmation"
+            "SupplierConfirmation",
+            "CommitmentChange",
+            "CommitmentRevision"
           ],
           "valueObjects": [
             "DraftHash",
             "OrderHash",
-            "DeviationAcknowledgement"
+            "DeviationAcknowledgement",
+            "OverbuyAcknowledgement",
+            "PurchaseOrderNumber",
+            "IssueEvidence"
           ],
           "identity": "(tenant, company, commitment_id)",
-          "concurrency": "row_version CAS",
-          "invariants": [],
+          "concurrency": "承诺根 FOR UPDATE，再锁需求分配根，再锁上游守卫 FOR SHARE；row_version CAS",
+          "invariants": [
+            "PUR-INV-009",
+            "PUR-INV-010",
+            "PUR-INV-011"
+          ],
           "commands": [
             "purchase.commitment.request",
             "purchase.commitment.decide",
             "purchase.commitment.revoke",
             "purchase.commitment.issue",
-            "purchase.supplier_confirmation.record"
+            "purchase.supplier_confirmation.record",
+            "purchase.commitment.change.prepare",
+            "purchase.commitment.change.decide",
+            "purchase.commitment.change.apply",
+            "purchase.commitment.cancel"
           ],
           "events": [
             "PurchaseCommitmentApproved",
             "PurchaseCommitmentIssued",
-            "SupplierConfirmationRecorded"
+            "SupplierConfirmationRecorded",
+            "PurchaseCommitmentRevoked",
+            "PurchaseCommitmentChanged",
+            "PurchaseCommitmentCancelled"
           ],
           "goPackage": "internal/contexts/pur/internal/domain/commitment",
           "pythonSource": "A47 设计（未实现）",
-          "notes": "裁决时按当前数据重算并逐字段一致，否则草稿失效。"
+          "notes": "裁决时按当前数据重算并逐字段一致，否则草稿失效（A47 第 3 点）。发出取得 POL 采购单编号并登记发出证据；供应商确认是独立事实。发出后的交期、数量、价格变更经变更编制、独立裁决与应用形成承诺新修订，取消须供应商证据并释放分配（A47 第 7 点，S5 全深度）。"
         },
         {
           "id": "PUR-AGG-DemandAllocation",
@@ -1161,7 +1178,8 @@
           "cn": "需求分配",
           "root": "DemandAllocation",
           "entities": [
-            "AllocationEntry"
+            "AllocationEntry",
+            "AllocationReview"
           ],
           "valueObjects": [
             "AllocatableQuantity",
@@ -1175,12 +1193,14 @@
           ],
           "commands": [
             "purchase.draft.prepare",
-            "purchase.draft.void"
+            "purchase.draft.void",
+            "allocation_review.open",
+            "allocation_review.settle"
           ],
           "events": [],
           "goPackage": "internal/contexts/pur/internal/domain/allocation",
           "pythonSource": "—（Python 以唯一约束实现一行一草稿）",
-          "notes": "订单行至草稿与承诺的数量分配台账；订单变更后按 OrderAmended 复核。"
+          "notes": "订单行至草稿与承诺的数量分配台账；OrderAmended 由系统消费方按（订单、订单修订）开启复核，列出超出新数量的分配、可作废草稿与受影响承诺，由授权人工处置（WF-06）。"
         },
         {
           "id": "PUR-AGG-SupplierDelivery",
@@ -1197,7 +1217,7 @@
             "CommitmentLineRef"
           ],
           "identity": "(tenant, company, delivery_id)",
-          "concurrency": "只追加；核实后不可变，更正形成新版本",
+          "concurrency": "交付根 FOR UPDATE；按承诺行的累计核实量由已核实交付行派生；核实后不可变，更正形成新版本",
           "invariants": [
             "PUR-INV-008"
           ],
@@ -1219,9 +1239,9 @@
         "核价对照只供审核，不自动阻断草稿。"
       ],
       "crossBoundary": [
-        "消费 TRD、SUP、CST、PTY；向 STL、CNX、QLT 发布采购事实；向 FUL 发布 SupplierDeliveryGuard（直发交付）。"
+        "消费 TRD、SUP、CST、PTY、POL（含 NumberIssue）、CAT、EVD；向 STL、CNX、QLT 发布采购事实；向 FUL 发布 SupplierDeliveryGuard（直发交付）；向 TRD 发布 DownstreamCommitments v1（R71，TRD 事务内无锁读取）。"
       ],
-      "consistency": "草稿单事务；跨上下文供应条件重查取决于 ADR-BR-004。",
+      "consistency": "草稿、承诺与交付各自单事务；承诺裁决与发出按锁序重查上游守卫（ADR-BR-004 方案 B）。",
       "risks": [
         "草稿被误认为已下单；不同供应商混在一个草稿。"
       ]
@@ -1397,7 +1417,7 @@
     },
     {
       "id": "QLT",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "出运所需的质量放行是否有效且范围明确？",
       "aggregates": [
         {
@@ -1406,15 +1426,21 @@
           "cn": "检验",
           "root": "Inspection",
           "entities": [
-            "Disposition"
+            "Disposition",
+            "InspectionReport"
           ],
           "valueObjects": [
             "StandardVersion",
-            "SamplingPlan"
+            "SamplingPlan",
+            "InspectionSubjectRef",
+            "InspectorRef",
+            "ConformingQuantity"
           ],
           "identity": "(tenant, company, inspection_id)",
-          "concurrency": "row_version CAS",
-          "invariants": [],
+          "concurrency": "检验根 CAS；复检形成新记录并取代原结果",
+          "invariants": [
+            "QLT-INV-001"
+          ],
           "commands": [
             "inspection.record",
             "disposition.decide"
@@ -1424,8 +1450,8 @@
             "DispositionDecided"
           ],
           "goPackage": "internal/contexts/qlt/internal/domain/inspection",
-          "pythonSource": "无",
-          "notes": ""
+          "pythonSource": "—（Python 未实现）",
+          "notes": "受检对象为 PUR 承诺行或已核实交付行（InspectionSubject v1，R24）；检验人可为我方人员或外部检验机构（PTY service role inspection，R73），报告为 EVD 文件（R72，F-06）。"
         },
         {
           "id": "QLT-AGG-QualityRelease",
@@ -1440,8 +1466,11 @@
             "ValidityInterval"
           ],
           "identity": "(tenant, company, release_id)",
-          "concurrency": "effectivity_version CAS",
-          "invariants": [],
+          "concurrency": "放行根 FOR UPDATE（撤回）；FUL 以 QualityReleaseGuard v1 FOR SHARE 读取并自行记录消耗量",
+          "invariants": [
+            "QLT-INV-001",
+            "QLT-INV-002"
+          ],
           "commands": [
             "quality_release.grant",
             "quality_release.revoke"
@@ -1451,15 +1480,18 @@
             "QualityReleaseRevoked"
           ],
           "goPackage": "internal/contexts/qlt/internal/domain/release",
-          "pythonSource": "无",
-          "notes": ""
+          "pythonSource": "—（Python 未实现）",
+          "notes": "放行明确受检对象、规格、数量与有效期；有效期届满为派生判断；撤回冻结未出运部分，已出运部分保留（BT21）。"
         }
       ],
-      "policies": [],
-      "crossBoundary": [
-        "向 FUL 发布 QualityReleaseRef v1。"
+      "policies": [
+        "外部检验报告只是证据；放行由我方授权质检人员决定（F-06）。",
+        "复检取代原结果，不累加合格量（BT08）。"
       ],
-      "consistency": "待详细设计。",
+      "crossBoundary": [
+        "消费 PUR（InspectionSubject v1）、PTY（外部检验机构）、EVD（报告与标准来源）；向 FUL 发布 QualityReleaseRef v1 与 QualityReleaseGuard v1。"
+      ],
+      "consistency": "单聚合事务；放行消耗量由 FUL 记录。",
       "risks": [
         "供应商自报合格直接放行。"
       ]
@@ -1549,7 +1581,7 @@
     },
     {
       "id": "FUL",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "实际出运是否有质量放行、库存或直发证据并不超发？",
       "aggregates": [
         {
@@ -1561,14 +1593,17 @@
             "ShipmentLine",
             "ActualPackage",
             "BookingRecord",
-            "PackingPlan"
+            "PackingPlan",
+            "ShipmentReviewItem"
           ],
           "valueObjects": [
             "QualityReleaseRef",
-            "OrderLineRef"
+            "OrderLineRef",
+            "SupplierDeliveryLineRef",
+            "ShipmentRoute"
           ],
           "identity": "(tenant, company, shipment_id)",
-          "concurrency": "row_version CAS",
+          "concurrency": "出运根 FOR UPDATE，再锁订单履约根，再按上下文代码序 FOR SHARE 调用 CNX、PTY、PUR、QLT、STL、TRD 守卫",
           "invariants": [
             "FUL-INV-001",
             "FUL-INV-002",
@@ -1577,14 +1612,17 @@
           "commands": [
             "shipment.confirm",
             "booking.record",
-            "packing.plan"
+            "packing.plan",
+            "shipment.prepare",
+            "shipment.cancel",
+            "packing.record_actual"
           ],
           "events": [
             "ShipmentConfirmed"
           ],
           "goPackage": "internal/contexts/ful/internal/domain/shipment",
-          "pythonSource": "无",
-          "notes": "订舱委托与确认作为出运的业务事实；出运确认须有效商业条件放行。"
+          "pythonSource": "—（Python 未实现）",
+          "notes": "出运准备绑定一张生效订单的修订与哈希及其行、直发交付行与质量放行；确认须本范围的有效商业条件放行并在本事务重查全部守卫（S5 D-11）；只支持供应商直发路线（D-10）。"
         },
         {
           "id": "FUL-AGG-MilestonePlan",
@@ -1608,8 +1646,8 @@
             "MilestoneActualRecorded"
           ],
           "goPackage": "internal/contexts/ful/internal/domain/milestone",
-          "pythonSource": "无",
-          "notes": ""
+          "pythonSource": "—（Python 未实现）",
+          "notes": "节点类型区分供应商自报、内部核实与已验收；海关放行、实际离境、送达与客户验收是不同节点（CN-R07）。"
         },
         {
           "id": "FUL-AGG-ExportLot",
@@ -1619,7 +1657,7 @@
           "entities": [],
           "valueObjects": [],
           "identity": "(tenant, company, export_lot_id)",
-          "concurrency": "待详细设计",
+          "concurrency": "只追加；批次行引用出运行，确认数量与批次不一致时标记复核",
           "invariants": [],
           "commands": [
             "export_lot.register"
@@ -1629,7 +1667,7 @@
           ],
           "goPackage": "internal/contexts/ful/internal/domain/exportlot",
           "pythonSource": "—（Python 未实现）",
-          "notes": "销售／交付至本次出口明细的数量金额，供报关、退税与收汇资料引用。轮廓聚合，待详细设计。"
+          "notes": "销售／交付至本次出口明细的数量金额，供报关、退税与收汇资料引用（ExportLotRef v1，R36）；不复制第二份库存。"
         },
         {
           "id": "FUL-AGG-CommercialRelease",
@@ -1648,7 +1686,7 @@
             "LicenseAllocationRef"
           ],
           "identity": "(tenant, company, release_id)；(company, shipment_id, scope) 唯一",
-          "concurrency": "根 CAS；守卫 FOR SHARE",
+          "concurrency": "放行根 CAS；(company, shipment_id, scope) 唯一；守卫 FOR SHARE",
           "invariants": [
             "FUL-INV-002"
           ],
@@ -1663,7 +1701,7 @@
           ],
           "goPackage": "internal/contexts/ful/internal/domain/release",
           "pythonSource": "—（Python 未实现）",
-          "notes": "F29／BT13：出运与正本提单、电放等单证放行的统一闸门；读取 QLT、STL、PTY、CNX 守卫。"
+          "notes": "F29／BT13：出运（scope shipment）与正本提单、电放（scope documents）的统一闸门；评估按锁序读取 CNX、PTY、PUR、QLT、STL、TRD 守卫并记录各守卫版本；例外只覆盖付款条件，由授权人工批准并绑定订单、出运、阶段与金额；质量、筛查、合规与许可证不能被例外覆盖。"
         },
         {
           "id": "FUL-AGG-ShipmentDocumentSet",
@@ -1674,38 +1712,79 @@
             "CommercialInvoice",
             "PackingList",
             "BillOfLadingRecord",
-            "OriginCertificateRef"
+            "OriginCertificateRef",
+            "InsurancePolicyRecord",
+            "DocumentReconciliation",
+            "SignedCopy"
           ],
-          "valueObjects": [],
+          "valueObjects": [
+            "DocumentVersion",
+            "DocumentNumber",
+            "InsuredAmount"
+          ],
           "identity": "(tenant, company, shipment_document_set_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
+          "concurrency": "单证套根 CAS；版本只追加，签发后不可变",
+          "invariants": [
+            "FUL-INV-004",
+            "FUL-INV-005"
+          ],
           "commands": [
-            "shipment_document.issue"
+            "shipment_document.issue",
+            "shipment_document.prepare",
+            "insurance.record",
+            "shipment_document.record_signed"
           ],
           "events": [
             "ShipmentDocumentIssued"
           ],
           "goPackage": "internal/contexts/ful/internal/domain/shipmentdocumentset",
           "pythonSource": "—（Python 未实现）",
-          "notes": "商业发票、装箱单、提单记录与原产地证引用逐版本保存并与订单行、出运行、包装行核对（BT12）。轮廓聚合，待详细设计。"
+          "notes": "商业发票与装箱单按 POL shipment_document_template 以 shipment-text/0.1.0 渲染并取号；提单、原产地证与保险单是外部单证记录（EVD 文件）；与订单行、出运行、包装行逐项核对，差异逐项解决或确认后才能签发（BT12）。CIF／CIP 须保险单记录（F-03）。 签署或盖章件以 EVD 文件登记为已签发版本的证据，生成的未签署文件不能作为签署件（CN-AT17，同 TRD order.document.record_signed）。"
+        },
+        {
+          "id": "FUL-AGG-OrderFulfilment",
+          "name": "OrderFulfilment",
+          "cn": "订单履约",
+          "root": "OrderFulfilment",
+          "entities": [
+            "ShippedLine",
+            "ShipmentReview"
+          ],
+          "valueObjects": [
+            "OrderBinding",
+            "ShippedQuantity"
+          ],
+          "identity": "(tenant, company, order_id)",
+          "concurrency": "订单履约根 FOR UPDATE；累计出运量由已确认出运行派生",
+          "invariants": [
+            "FUL-INV-001"
+          ],
+          "commands": [
+            "shipment_review.open",
+            "shipment_review.settle"
+          ],
+          "events": [],
+          "goPackage": "internal/contexts/ful/internal/domain/fulfilment",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "每订单一个履约根：串行化同一订单的出运确认（FUL-INV-001），保存 OrderAmended 的出运复核（WF-06）；向 TRD 发布 ShipmentFacts v1（R70）。"
         }
       ],
       "policies": [
-        "质量放行、付款条件与主体筛查任一不满足即进入等待；例外须授权人工批准。",
-        "商业发票、装箱单与提单草稿逐版本核对；未核对不能签发。"
+        "质量放行、付款条件、主体筛查、贸易合规与许可证、直发交付任一不满足即进入等待；例外只覆盖付款条件并须授权人工批准。",
+        "商业发票、装箱单与提单草稿逐版本核对；未核对不能签发。",
+        "S5 只支持供应商直发路线；本仓发货待 STK（S6-01）。"
       ],
       "crossBoundary": [
-        "消费 TRD、QLT、STK、PUR（直发交付守卫）、STL（付款条件守卫）、PTY（主体筛查守卫）、CNX（贸易合规与许可证守卫）；向 STL、CLM、CNX 发布出运、放行与单证事实。"
+        "消费 TRD（ActiveOrderRef v1）、QLT、PUR（直发交付守卫）、STL（付款条件守卫）、PTY（主体筛查守卫）、CNX（贸易合规、许可证与证书）、POL（单证模板与编号）、CST（保险费组件）、EVD；向 STL、CLM、CNX 发布出运、放行与单证事实；向 TRD 发布 ShipmentFacts v1（R70，TRD 事务内无锁读取）。"
       ],
-      "consistency": "出运确认与单证放行在 FUL 单事务内裁决，按锁序以 FOR SHARE 调用 QLT、STL、PTY、CNX、PUR 守卫。",
+      "consistency": "出运确认、放行与单证签发在 FUL 单事务内裁决：本出运根与订单履约根 FOR UPDATE，再按上下文代码序以 FOR SHARE 调用 CNX、PTY、PUR、QLT、STL、TRD 守卫。",
       "risks": [
         "本地出库被当作海关出口确认。"
       ]
     },
     {
       "id": "STL",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "业务应收应付与核销是否守恒、可解释且不重复？",
       "aggregates": [
         {
@@ -1714,28 +1793,40 @@
           "cn": "结算单",
           "root": "SettlementStatement",
           "entities": [
-            "SettlementLine"
+            "SettlementLine",
+            "CreditNote",
+            "SettlementReversal",
+            "OpeningBalance"
           ],
           "valueObjects": [
             "ShipmentLineRef",
-            "Money"
+            "Money",
+            "PurchaseSettlementSourceRef",
+            "Cutoff"
           ],
           "identity": "(tenant, company, statement_id)",
           "concurrency": "row_version CAS；来源明细唯一",
           "invariants": [
-            "STL-INV-001"
+            "STL-INV-001",
+            "STL-INV-008",
+            "STL-INV-009",
+            "STL-INV-012"
           ],
           "commands": [
             "settlement.confirm",
-            "credit.confirm"
+            "settlement.reverse",
+            "credit_note.request",
+            "credit.confirm",
+            "opening_balance.record"
           ],
           "events": [
             "SettlementConfirmed",
-            "CreditConfirmed"
+            "CreditConfirmed",
+            "SettlementReversed"
           ],
           "goPackage": "internal/contexts/stl/internal/domain/settlement",
-          "pythonSource": "无",
-          "notes": ""
+          "pythonSource": "—（Python 未实现）",
+          "notes": "销售结算单来源为 FUL 已确认出运行（R30），采购结算单来源为 PUR 已核实交付（R31）；贷项、冲销与期初余额分别记录，不改写原单。"
         },
         {
           "id": "STL-AGG-Application",
@@ -1749,10 +1840,11 @@
             "Money"
           ],
           "identity": "(tenant, company, application_id)",
-          "concurrency": "余额条件更新",
+          "concurrency": "资金记录根与目标根（订单账户或结算单）按 ID 排序 FOR UPDATE；余额由不可变核销分录派生",
           "invariants": [
             "STL-INV-002",
-            "STL-INV-003"
+            "STL-INV-003",
+            "STL-INV-007"
           ],
           "commands": [
             "application.apply",
@@ -1763,49 +1855,72 @@
             "Unapplied"
           ],
           "goPackage": "internal/contexts/stl/internal/domain/application",
-          "pythonSource": "无",
-          "notes": ""
+          "pythonSource": "—（Python 未实现）",
+          "notes": "核销来源为资金记录或已确认贷项，目标为订单付款阶段（预收）或结算单应收应付；撤销核销形成新记录；跨币种按 STL-INV-007。"
         },
         {
           "id": "STL-AGG-FundRecord",
           "name": "FundRecord",
           "cn": "资金记录",
           "root": "FundRecord",
-          "entities": [],
-          "valueObjects": [],
+          "entities": [
+            "FundDifference",
+            "FxConversion"
+          ],
+          "valueObjects": [
+            "RemittedAmount",
+            "ReceivedAmount",
+            "BankCharge",
+            "PayerRef"
+          ],
           "identity": "(tenant, company, fund_record_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
+          "concurrency": "资金根 CAS；差额处理只追加",
+          "invariants": [
+            "STL-INV-006"
+          ],
           "commands": [
-            "fund.record"
+            "fund.record",
+            "fund.resolve_difference"
           ],
           "events": [
-            "FundRecorded"
+            "FundRecorded",
+            "FundDifferenceResolved"
           ],
           "goPackage": "internal/contexts/stl/internal/domain/fundrecord",
           "pythonSource": "—（Python 未实现）",
-          "notes": "银行原始流水、到账与结汇；银行核实与本地登记分别留证。轮廓聚合，待详细设计。"
+          "notes": "银行原币入账、客户汇出额与银行费用分别记录；未解释差额待处理，经独立批准登记为我方承担的费用或折让；结汇是资金转换，不新增客户收款（CN-R10、CN-AT09）。"
         },
         {
           "id": "STL-AGG-OrderResult",
           "name": "OrderResult",
           "cn": "订单经营结果",
           "root": "OrderResult",
-          "entities": [],
-          "valueObjects": [],
+          "entities": [
+            "ResultSnapshot"
+          ],
+          "valueObjects": [
+            "ForecastResult",
+            "ExecutingResult",
+            "ConfirmedResult",
+            "FxSettlementDifference"
+          ],
           "identity": "(tenant, company, order_result_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
+          "concurrency": "经营结果根 CAS；关闭快照只追加",
+          "invariants": [
+            "STL-INV-011"
+          ],
           "commands": [
+            "order_result.review",
             "order_result.close",
-            "charge.allocate"
+            "order_result.reopen"
           ],
           "events": [
-            "OrderResultClosed"
+            "OrderResultClosed",
+            "OrderResultReopened"
           ],
           "goPackage": "internal/contexts/stl/internal/domain/orderresult",
           "pythonSource": "—（Python 未实现）",
-          "notes": "预计／执行中／已确认经营结果与成本结算状态。轮廓聚合，待详细设计。"
+          "notes": "预计、执行中与已确认经营结果与业务结算汇率差额（基线 4.5）；settled 须履约完成或短交关闭、账款结清或获批处置、成本与直接费用已确认、无未决案件并经授权人员关闭；关闭后补录费用重新打开并留痕（BT18、BT24）。"
         },
         {
           "id": "STL-AGG-CustomerCredit",
@@ -1837,7 +1952,8 @@
             "credit_limit.publish",
             "credit.reserve",
             "credit.release",
-            "credit_exception.decide"
+            "credit_exception.decide",
+            "credit.consume"
           ],
           "events": [
             "CreditLimitPublished",
@@ -1845,20 +1961,82 @@
             "CreditReservationReleased",
             "CreditExceptionDecided",
             "CreditLimitRequested",
-            "CreditDecisionOpened"
+            "CreditDecisionOpened",
+            "CreditReservationConsumed"
           ],
           "goPackage": "internal/contexts/stl/internal/domain/customercredit",
           "pythonSource": "—（Python 未实现）",
-          "notes": "先占用、后生效。超额或逾期超限时 credit.reserve 不直接失败，而是生成信用决定（CreditDecision，参照 SAP 的 documented credit decision），由具备相应金额权限的信用人员放行或拒绝；额度调整经额度申请按金额分级审批。额度来源记为内部评估或中信保买方信用限额（启用信保时取二者较低）。新客户默认额度为 0；信用政策可把单证控制下的出运后付款（如见提单副本付款、电放前收款）视为有担保。"
+          "notes": "先占用、后生效。超额或逾期超限时 credit.reserve 不直接失败，而是生成信用决定（CreditDecision，参照 SAP 的 documented credit decision），由具备相应金额权限的信用人员放行或拒绝；额度调整经额度申请按金额分级审批。额度来源记为内部评估或中信保买方信用限额（启用信保时取二者较低）。新客户默认额度为 0；信用政策可把单证控制下的出运后付款（如见提单副本付款、电放前收款）视为有担保。 占用金额：出运后到期且不受单证控制的付款阶段（单证控制的出运后付款在 credit_policy.documents_secured 时视为有担保，S5 D-5）；风险敞口＝未结应收＋各订单 max(0，有效或已使用占用－该订单已形成应收)（S5 D-4）；审批层级取审批人所持岗位模板对应的 credit_policy 层级（S5 D-6）。"
+        },
+        {
+          "id": "STL-AGG-OrderAccount",
+          "name": "OrderAccount",
+          "cn": "订单账户",
+          "root": "OrderAccount",
+          "entities": [
+            "PaymentStage",
+            "PaymentPlanReview"
+          ],
+          "valueObjects": [
+            "OrderBinding",
+            "StageDue",
+            "StageApplied"
+          ],
+          "identity": "(tenant, company, order_id)",
+          "concurrency": "订单账户根 FOR UPDATE（核销与撤销核销）；PaymentConditionGuard v1 FOR SHARE",
+          "invariants": [
+            "STL-INV-003"
+          ],
+          "commands": [
+            "payment_plan_review.open",
+            "payment_plan_review.settle"
+          ],
+          "events": [],
+          "goPackage": "internal/contexts/stl/internal/domain/orderaccount",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "订单当前修订的付款阶段（OrderCommercialSnapshot v1，R32）与核销到各阶段的金额；付款条件满足由此派生并以守卫发布（R45）；OrderAmended 开启付款计划复核并采用新修订的阶段（WF-06）。"
+        },
+        {
+          "id": "STL-AGG-Charge",
+          "name": "Charge",
+          "cn": "费用",
+          "root": "Charge",
+          "entities": [
+            "ChargeAllocation"
+          ],
+          "valueObjects": [
+            "FeeCategoryRef",
+            "AllocationBasis",
+            "Money"
+          ],
+          "identity": "(tenant, company, charge_id)",
+          "concurrency": "费用根 CAS；分配只追加",
+          "invariants": [
+            "STL-INV-010"
+          ],
+          "commands": [
+            "charge.record",
+            "charge.confirm",
+            "charge.allocate"
+          ],
+          "events": [
+            "ChargeAllocated"
+          ],
+          "goPackage": "internal/contexts/stl/internal/domain/charge",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "估算、待确认与已确认费用分别记录；按金额、数量或重量分配给订单或出运，按最小币值最大余数法（基线 4.5）。"
         }
       ],
-      "policies": [],
-      "crossBoundary": [
-        "消费 FUL、PUR、TRD、POL、CLM、CNX；向 FUL 发布 PaymentConditionGuard，向 TRD 发布 CreditGuard；向 CNX 发布资金事实。"
+      "policies": [
+        "同币种直接核销；跨币种须 settlement 用途显式汇率，差额单列（STL-INV-007）。",
+        "业务台账不是法定总账；系统内核销不是行政意义的出口收汇核销（CN-R11）。"
       ],
-      "consistency": "待详细设计。",
+      "crossBoundary": [
+        "消费 FUL（ShipmentLineRef v1）、PUR（PurchaseSettlementSource v1）、TRD（OrderCommercialSnapshot v1 与订单事件）、POL（ConfigGuard：credit_policy、汇率 credit／settlement 用途）、PTY、EVD、CNX；向 FUL 发布 PaymentConditionGuard v1，向 TRD 发布 CreditGuard v1，向 CNX 发布 FundRecordRef v1。"
+      ],
+      "consistency": "每命令只修改一个聚合：核销在资金记录根与目标根（按 ID 排序）FOR UPDATE 下写入新核销，余额由不可变分录派生；信用占用在信用根 FOR UPDATE 下串行。",
       "risks": [
-        "跨币种核销未经评审启用。"
+        "跨币种核销须显式 settlement 用途汇率（STL-INV-007），汇率差额不得混入客户收款或订单收入。"
       ]
     },
     {
@@ -1929,7 +2107,7 @@
     },
     {
       "id": "CNX",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "中国出口资料链是否分用途匹配、外部结果可追溯且不冒充专业办理？",
       "aggregates": [
         {
@@ -1939,24 +2117,34 @@
           "root": "DeclarationCase",
           "entities": [
             "DeclarationVersion",
-            "DeclarationReceipt"
+            "DeclarationReceipt",
+            "DeclarationItemMapping",
+            "DeclarationSubmission"
           ],
           "valueObjects": [
-            "ExternalStatusMapping"
+            "ExternalStatusMapping",
+            "OriginalReceiptText",
+            "MappingVersion",
+            "ExternalSequence"
           ],
           "identity": "(tenant, company, declaration_id)",
           "concurrency": "row_version CAS",
-          "invariants": [],
+          "invariants": [
+            "CNX-INV-003",
+            "CNX-INV-006"
+          ],
           "commands": [
             "declaration_case.prepare",
+            "declaration_case.confirm",
+            "declaration_case.record_submission",
             "declaration_case.record_receipt"
           ],
           "events": [
             "DeclarationReceiptRecorded"
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/declaration",
-          "pythonSource": "无",
-          "notes": ""
+          "pythonSource": "—（Python 未实现）",
+          "notes": "按出口批次准备；票据、成交与法定单位及品名的映射须专业依据后确认；人工提交声明、外部收到、受理、放行、退回、改单、撤销与 unknown 分别记录，回执保存原文、映射版本与外部顺序（CN-R05、CN-R07）。"
         },
         {
           "id": "CNX-AGG-TaxRefundCase",
@@ -1967,51 +2155,78 @@
             "TaxEvidenceAllocation"
           ],
           "valueObjects": [
-            "PolicyVersion"
+            "PolicyVersion",
+            "RefundStage",
+            "OpeningPosition"
           ],
           "identity": "(tenant, company, tax_case_id)",
           "concurrency": "用途余额条件更新",
-          "invariants": [],
+          "invariants": [
+            "CNX-INV-004"
+          ],
           "commands": [
-            "tax_refund_case.allocate"
+            "tax_refund_case.allocate",
+            "tax_refund_case.record_result",
+            "tax_refund_case.record_opening"
           ],
           "events": [
-            "TaxEvidenceAllocated"
+            "TaxEvidenceAllocated",
+            "TaxRefundResultRecorded"
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/taxrefund",
-          "pythonSource": "无",
-          "notes": ""
+          "pythonSource": "—（Python 未实现）",
+          "notes": "预计、拟申报、已提交、核准与到账分别记录，政策版本按出口日期的 POL export_tax_policy 修订绑定（CN-AT12）；用途分配不超余额，只按外部结果释放（CN-R04、CN-R08、CN-R09）。"
         },
         {
           "id": "CNX-AGG-PurchaseInvoice",
           "name": "PurchaseInvoice",
           "cn": "购进发票",
           "root": "PurchaseInvoice",
-          "entities": [],
-          "valueObjects": [],
+          "entities": [
+            "InvoiceLine",
+            "InvoiceMatch"
+          ],
+          "valueObjects": [
+            "InvoiceKind",
+            "InvoiceNumber",
+            "RedBlueLink",
+            "BuyerEntity"
+          ],
           "identity": "(tenant, company, purchase_invoice_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
+          "concurrency": "发票根 CAS；（票种、唯一标识）唯一",
+          "invariants": [
+            "CNX-INV-005"
+          ],
           "commands": [
-            "purchase_invoice.import"
+            "purchase_invoice.import",
+            "purchase_invoice.verify"
           ],
           "events": [
             "PurchaseInvoiceVerified"
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/purchaseinvoice",
           "pythonSource": "—（Python 未实现）",
-          "notes": "票据原件、解析候选、核验状态与红蓝关系分别记录。轮廓聚合，待详细设计。"
+          "notes": "原件、解析候选（人工或 AI）与人工核验分别记录；红冲、作废与替代使相关匹配待复核；受票主体与本公司不一致时待获准模式复核（CN-R06、CN-AT05、CN-AT15、CN-AT18）。"
         },
         {
           "id": "CNX-AGG-DocumentBundle",
           "name": "DocumentBundle",
           "cn": "资料包",
           "root": "DocumentBundle",
-          "entities": [],
-          "valueObjects": [],
+          "entities": [
+            "RequirementCheck",
+            "ExternalReconciliation"
+          ],
+          "valueObjects": [
+            "RequirementKind",
+            "DueDate",
+            "ResponsibleRole"
+          ],
           "identity": "(tenant, company, document_bundle_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
+          "concurrency": "资料包根 CAS；核对记录只追加",
+          "invariants": [
+            "CNX-INV-008"
+          ],
           "commands": [
             "document_bundle.check",
             "external_reconciliation.resolve"
@@ -2021,7 +2236,7 @@
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/documentbundle",
           "pythonSource": "—（Python 未实现）",
-          "notes": "业务证据目录、缺件与专业核实；含原产地证、许可证、检验证书等官方证书结果，以及目的市场供应链合规证据（如对美服装的棉花来源追溯）。轮廓聚合，待详细设计。"
+          "notes": "按出口批次列出资料要求、版本、缺件、责任人与期限；附件存在不等于已核实；外部对账记录外部结果、内部关联、差异、责任与批准调整。"
         },
         {
           "id": "CNX-AGG-TradeComplianceCheck",
@@ -2046,14 +2261,16 @@
           ],
           "commands": [
             "trade_compliance.evaluate",
-            "trade_compliance.decide"
+            "trade_compliance.decide",
+            "trade_compliance.reopen"
           ],
           "events": [
-            "TradeComplianceDecided"
+            "TradeComplianceDecided",
+            "TradeComplianceReopened"
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/tradecompliancecheck",
           "pythonSource": "—（Python 未实现）",
-          "notes": "按目的国、买方与收货方所在国、商品与最终用途核查国别禁运、制裁项目与出口管制；AI 与名单服务只产生候选，结论由授权合规人工确定；所用法规与禁运项目来自 POL screening_regulation 启用的来源，版本随核查结论保存。"
+          "notes": "按目的国、买方与收货方所在国、商品与最终用途核查国别禁运、制裁项目与出口管制；AI 与名单服务只产生候选，结论由授权合规人工确定；所用法规与禁运项目来自 POL screening_regulation 启用的来源，版本随核查结论保存。 国家代码取自 PTY 地址（R77），商品管制分类取自 CAT 申报档案（R39）；新的 screening_regulation 修订或新的订单修订由系统 trade_compliance.reopen 开启待核查（PL-14）。"
         },
         {
           "id": "CNX-AGG-ExportLicense",
@@ -2088,15 +2305,44 @@
           "goPackage": "internal/contexts/cnx/internal/domain/exportlicense",
           "pythonSource": "—（Python 未实现）",
           "notes": "许可证的数量、金额、有效期、目的国与最终用户；按出运或出口批次分配用量。"
+        },
+        {
+          "id": "CNX-AGG-CertificateResult",
+          "name": "CertificateResult",
+          "cn": "官方证书结果",
+          "root": "CertificateResult",
+          "entities": [],
+          "valueObjects": [
+            "CertificateKind",
+            "Issuer",
+            "ApplicableObject",
+            "Market",
+            "ValidityInterval"
+          ],
+          "identity": "(tenant, company, certificate_id)",
+          "concurrency": "只追加；更正形成新版本",
+          "invariants": [
+            "CNX-INV-007"
+          ],
+          "commands": [
+            "certificate.register"
+          ],
+          "events": [
+            "CertificateRegistered"
+          ],
+          "goPackage": "internal/contexts/cnx/internal/domain/certificate",
+          "pythonSource": "—（Python 未实现）",
+          "notes": "原产地证、许可证副本、检验证书等官方结果：签发机构、适用对象（SKU 规格、出口批次或出运）、目的市场、有效期与核实人；向 FUL 发布 CertificateResultRef v1（R56）。"
         }
       ],
       "policies": [
-        "CN-R01–CN-R15 在启用前落实为详细规格。"
+        "S5 只交付人工路径：外部结果由授权人员按原文与映射版本登记；unknown 先查证，不盲目重申报（CN-R05）。",
+        "CN-R01–CN-R15 由 CNX-INV-003—008 落实；税额与外汇结果不由 Brant 推定（CN-E01）。"
       ],
       "crossBoundary": [
-        "消费 FUL、PUR、STL、CAT、TRD；向 TRD、FUL 发布 TradeComplianceGuard，向 FUL 发布 ExportLicenseGuard 与证书结果引用；向 STL 发布退税核准与到账对账引用。"
+        "消费 FUL（ExportLotRef v1）、PUR（PurchaseLineRef v1）、STL（FundRecordRef v1）、CAT（DeclarationProfileRef v1）、TRD（SalesOrderRef v1）、PTY（所在国）、POL、EVD；向 TRD、FUL 发布 TradeComplianceGuard，向 FUL 发布 ExportLicenseGuard 与证书结果引用；向 STL 发布退税核准与到账对账引用。"
       ],
-      "consistency": "待详细设计。",
+      "consistency": "单聚合事务；许可证与退税用途按根 FOR UPDATE 串行；贸易合规结论按（订单、订单修订）唯一。",
       "risks": [
         "导出文件冒充专业系统成功。"
       ]
@@ -3789,9 +4035,9 @@
       "transitions": [
         {
           "from": "reserved",
-          "command": "（OrderActivated 事件）",
+          "command": "credit.consume",
           "to": "consumed",
-          "guard": "占用未过期；订单与金额一致",
+          "guard": "系统消费方处理 OrderActivated（PL-12）；占用未过期，订单、修订与金额一致；按事件 ID 去重",
           "actor": "system"
         },
         {
@@ -3803,9 +4049,9 @@
         },
         {
           "from": "consumed",
-          "command": "（订单取消、关闭或结清事件）",
+          "command": "credit.release",
           "to": "released",
-          "guard": "按事件 ID 去重",
+          "guard": "系统消费方处理 OrderCancelled、OrderRemainderClosed 或 OrderClosed（PL-13）；按事件 ID 去重",
           "actor": "system"
         }
       ],
@@ -3853,9 +4099,9 @@
         },
         {
           "from": "clear",
-          "command": "（订单变更或法规版本更新）",
+          "command": "trade_compliance.reopen",
           "to": "pending",
-          "guard": "目的国、交易方、商品或法规版本变化",
+          "guard": "新的 screening_regulation 修订发布；结论按订单修订绑定，新订单修订另开待核查（PL-14）",
           "actor": "system"
         },
         {
@@ -3943,6 +4189,1250 @@
         "expired": [
           2,
           0
+        ]
+      }
+    },
+    {
+      "id": "SM-PUR-COMMITMENT",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "object": "PurchaseCommitment",
+      "states": [
+        "requested",
+        "approved",
+        "rejected",
+        "revoked",
+        "issued",
+        "confirmed",
+        "cancelled"
+      ],
+      "initial": "requested",
+      "terminal": [
+        "rejected",
+        "revoked",
+        "cancelled"
+      ],
+      "transitions": [
+        {
+          "from": "requested",
+          "command": "purchase.commitment.decide",
+          "to": "approved",
+          "guard": "独立人工；重算逐字段一致；有效期不晚于供应有效截止；偏差与超采确认（PUR-INV-009）",
+          "actor": "human"
+        },
+        {
+          "from": "requested",
+          "command": "purchase.commitment.decide",
+          "to": "rejected",
+          "guard": "理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "approved",
+          "command": "purchase.commitment.revoke",
+          "to": "revoked",
+          "guard": "发出前；授权人工与理由",
+          "actor": "human"
+        },
+        {
+          "from": "approved",
+          "command": "purchase.commitment.issue",
+          "to": "issued",
+          "guard": "审批有效、未撤销、未过期；POL 编号与发出证据（PUR-INV-010）",
+          "actor": "human"
+        },
+        {
+          "from": "issued",
+          "command": "purchase.supplier_confirmation.record",
+          "to": "confirmed",
+          "guard": "供应商确认的来源证据与时间",
+          "actor": "human|ai"
+        },
+        {
+          "from": "confirmed",
+          "command": "purchase.commitment.change.apply",
+          "to": "issued",
+          "guard": "获批变更形成承诺新修订，待供应商重新确认（PUR-INV-011）",
+          "actor": "human"
+        },
+        {
+          "from": "issued",
+          "command": "purchase.commitment.change.apply",
+          "to": "issued",
+          "guard": "获批变更形成承诺新修订",
+          "actor": "human"
+        },
+        {
+          "from": "issued",
+          "command": "purchase.commitment.cancel",
+          "to": "cancelled",
+          "guard": "授权人工、理由与供应商证据；释放分配",
+          "actor": "human"
+        },
+        {
+          "from": "confirmed",
+          "command": "purchase.commitment.cancel",
+          "to": "cancelled",
+          "guard": "同上；已核实交付量保留",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "requested": [
+          0,
+          0
+        ],
+        "approved": [
+          0,
+          1
+        ],
+        "rejected": [
+          0,
+          2
+        ],
+        "revoked": [
+          1,
+          0
+        ],
+        "issued": [
+          1,
+          1
+        ],
+        "confirmed": [
+          1,
+          2
+        ],
+        "cancelled": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-PUR-COMMITMENT-CHANGE",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "object": "CommitmentChange",
+      "states": [
+        "draft",
+        "approved",
+        "rejected",
+        "applied"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "rejected",
+        "applied"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "purchase.commitment.change.decide",
+          "to": "approved",
+          "guard": "独立于变更编制人与申请人；重算与偏差确认",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "purchase.commitment.change.decide",
+          "to": "rejected",
+          "guard": "理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "approved",
+          "command": "purchase.commitment.change.apply",
+          "to": "applied",
+          "guard": "承诺修订未变化（PURCHASE_COMMITMENT_CHANGE_STALE）",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "approved": [
+          0,
+          1
+        ],
+        "rejected": [
+          0,
+          2
+        ],
+        "applied": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-PUR-SUPPLIER-DELIVERY",
+      "context": "PUR",
+      "aggregate": "SupplierDelivery",
+      "object": "SupplierDelivery",
+      "states": [
+        "recorded",
+        "verified",
+        "rejected",
+        "superseded"
+      ],
+      "initial": "recorded",
+      "terminal": [
+        "rejected",
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "recorded",
+          "command": "supplier_delivery.verify",
+          "to": "verified",
+          "guard": "授权人工核实；累计不超承诺量与获批容差（PUR-INV-008）",
+          "actor": "human"
+        },
+        {
+          "from": "recorded",
+          "command": "supplier_delivery.verify",
+          "to": "rejected",
+          "guard": "证据不足；理由必填",
+          "actor": "human"
+        },
+        {
+          "from": "verified",
+          "command": "supplier_delivery.verify",
+          "to": "superseded",
+          "guard": "核实更正版本时原版本被取代",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "recorded": [
+          0,
+          0
+        ],
+        "verified": [
+          0,
+          1
+        ],
+        "rejected": [
+          0,
+          2
+        ],
+        "superseded": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-PUR-ALLOCATION-REVIEW",
+      "context": "PUR",
+      "aggregate": "DemandAllocation",
+      "object": "AllocationReview",
+      "states": [
+        "open",
+        "settled",
+        "superseded"
+      ],
+      "initial": "open",
+      "terminal": [
+        "settled",
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "allocation_review.settle",
+          "to": "settled",
+          "guard": "每项有处置（作废草稿、取消或变更承诺、确认无需处理）与理由",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "allocation_review.open",
+          "to": "superseded",
+          "guard": "更晚的订单修订开启新复核",
+          "actor": "system"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0
+        ],
+        "settled": [
+          0,
+          1
+        ],
+        "superseded": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-QLT-INSPECTION",
+      "context": "QLT",
+      "aggregate": "Inspection",
+      "object": "Inspection",
+      "states": [
+        "recorded",
+        "disposed",
+        "superseded"
+      ],
+      "initial": "recorded",
+      "terminal": [
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "recorded",
+          "command": "disposition.decide",
+          "to": "disposed",
+          "guard": "不合格量的处置：返工、让步、退回或报废",
+          "actor": "human"
+        },
+        {
+          "from": "recorded",
+          "command": "inspection.record",
+          "to": "superseded",
+          "guard": "复检取代原结果，不累加合格量（BT08）",
+          "actor": "human|ai"
+        },
+        {
+          "from": "disposed",
+          "command": "inspection.record",
+          "to": "superseded",
+          "guard": "返工后复检",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "recorded": [
+          0,
+          0
+        ],
+        "disposed": [
+          0,
+          1
+        ],
+        "superseded": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-QLT-RELEASE",
+      "context": "QLT",
+      "aggregate": "QualityRelease",
+      "object": "QualityRelease",
+      "states": [
+        "granted",
+        "revoked"
+      ],
+      "initial": "granted",
+      "terminal": [
+        "revoked"
+      ],
+      "transitions": [
+        {
+          "from": "granted",
+          "command": "quality_release.revoke",
+          "to": "revoked",
+          "guard": "授权人工与理由；冻结未出运部分；重复撤回无变化（QLT-INV-002）",
+          "actor": "human"
+        },
+        {
+          "from": "granted",
+          "command": "（有效期届满）",
+          "to": "granted",
+          "guard": "派生判断：过期放行不再服务新出运",
+          "actor": "system"
+        }
+      ],
+      "layout": {
+        "granted": [
+          0,
+          0
+        ],
+        "revoked": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-FUL-SHIPMENT",
+      "context": "FUL",
+      "aggregate": "Shipment",
+      "object": "Shipment",
+      "states": [
+        "prepared",
+        "confirmed",
+        "cancelled"
+      ],
+      "initial": "prepared",
+      "terminal": [
+        "confirmed",
+        "cancelled"
+      ],
+      "transitions": [
+        {
+          "from": "prepared",
+          "command": "shipment.confirm",
+          "to": "confirmed",
+          "guard": "本范围放行已授予且本事务重查全部守卫；累计不超订单行数量（FUL-INV-001、002、003）",
+          "actor": "human"
+        },
+        {
+          "from": "prepared",
+          "command": "shipment.cancel",
+          "to": "cancelled",
+          "guard": "未确认；理由必填",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "prepared": [
+          0,
+          0
+        ],
+        "confirmed": [
+          0,
+          1
+        ],
+        "cancelled": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-FUL-RELEASE",
+      "context": "FUL",
+      "aggregate": "CommercialRelease",
+      "object": "CommercialRelease",
+      "states": [
+        "blocked",
+        "granted",
+        "consumed"
+      ],
+      "initial": "blocked",
+      "terminal": [
+        "consumed"
+      ],
+      "transitions": [
+        {
+          "from": "blocked",
+          "command": "commercial_release.evaluate",
+          "to": "granted",
+          "guard": "CNX、PTY、PUR、QLT、STL、TRD 守卫均满足",
+          "actor": "human|ai|system"
+        },
+        {
+          "from": "granted",
+          "command": "commercial_release.evaluate",
+          "to": "blocked",
+          "guard": "重新评估时任一守卫不满足",
+          "actor": "human|ai|system"
+        },
+        {
+          "from": "blocked",
+          "command": "commercial_release.grant_exception",
+          "to": "granted",
+          "guard": "只覆盖付款条件；授权人工绑定订单、出运、阶段与金额",
+          "actor": "human"
+        },
+        {
+          "from": "granted",
+          "command": "shipment.confirm",
+          "to": "consumed",
+          "guard": "scope shipment；本事务重查守卫",
+          "actor": "human"
+        },
+        {
+          "from": "granted",
+          "command": "document_release.record",
+          "to": "consumed",
+          "guard": "scope documents；正本提单或电放；本事务重查守卫",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "blocked": [
+          0,
+          0
+        ],
+        "granted": [
+          0,
+          1
+        ],
+        "consumed": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-FUL-DOCUMENT",
+      "context": "FUL",
+      "aggregate": "ShipmentDocumentSet",
+      "object": "ShipmentDocument",
+      "states": [
+        "draft",
+        "issued",
+        "superseded"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "shipment_document.issue",
+          "to": "issued",
+          "guard": "差异逐项解决或确认；模板与编号经 ConfigGuard 重查（FUL-INV-004、005）",
+          "actor": "human"
+        },
+        {
+          "from": "issued",
+          "command": "shipment_document.issue",
+          "to": "superseded",
+          "guard": "签发新版本时取代旧版本",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "shipment_document.prepare",
+          "to": "superseded",
+          "guard": "新草稿版本取代",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "issued": [
+          0,
+          1
+        ],
+        "superseded": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-FUL-SHIPMENT-REVIEW",
+      "context": "FUL",
+      "aggregate": "OrderFulfilment",
+      "object": "ShipmentReview",
+      "states": [
+        "open",
+        "settled",
+        "superseded"
+      ],
+      "initial": "open",
+      "terminal": [
+        "settled",
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "shipment_review.settle",
+          "to": "settled",
+          "guard": "装箱、订舱与未签发单证逐项处置；已确认出运保留",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "shipment_review.open",
+          "to": "superseded",
+          "guard": "更晚的订单修订开启新复核",
+          "actor": "system"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0
+        ],
+        "settled": [
+          0,
+          1
+        ],
+        "superseded": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-SETTLEMENT",
+      "context": "STL",
+      "aggregate": "SettlementStatement",
+      "object": "SettlementStatement",
+      "states": [
+        "confirmed",
+        "reversed"
+      ],
+      "initial": "confirmed",
+      "terminal": [
+        "reversed"
+      ],
+      "transitions": [
+        {
+          "from": "confirmed",
+          "command": "settlement.reverse",
+          "to": "reversed",
+          "guard": "无有效核销；独立于确认人；恢复来源明细（STL-INV-009）",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "confirmed": [
+          0,
+          0
+        ],
+        "reversed": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-CREDIT-NOTE",
+      "context": "STL",
+      "aggregate": "SettlementStatement",
+      "object": "CreditNote",
+      "states": [
+        "requested",
+        "confirmed",
+        "rejected"
+      ],
+      "initial": "requested",
+      "terminal": [
+        "confirmed",
+        "rejected"
+      ],
+      "transitions": [
+        {
+          "from": "requested",
+          "command": "credit.confirm",
+          "to": "confirmed",
+          "guard": "独立于申请人；绑定订单、结算单、类型、金额与依据（STL-INV-008）",
+          "actor": "human"
+        },
+        {
+          "from": "requested",
+          "command": "credit.confirm",
+          "to": "rejected",
+          "guard": "理由必填",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "requested": [
+          0,
+          0
+        ],
+        "confirmed": [
+          0,
+          1
+        ],
+        "rejected": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-FUND",
+      "context": "STL",
+      "aggregate": "FundRecord",
+      "object": "FundRecord",
+      "states": [
+        "recorded",
+        "difference_resolved"
+      ],
+      "initial": "recorded",
+      "terminal": [],
+      "transitions": [
+        {
+          "from": "recorded",
+          "command": "fund.resolve_difference",
+          "to": "difference_resolved",
+          "guard": "独立于资金登记人；我方承担的银行费用或折让及依据（STL-INV-006）",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "recorded": [
+          0,
+          0
+        ],
+        "difference_resolved": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-APPLICATION",
+      "context": "STL",
+      "aggregate": "Application",
+      "object": "Application",
+      "states": [
+        "applied",
+        "unapplied"
+      ],
+      "initial": "applied",
+      "terminal": [
+        "unapplied"
+      ],
+      "transitions": [
+        {
+          "from": "applied",
+          "command": "application.unapply",
+          "to": "unapplied",
+          "guard": "授权人工与理由；形成新记录，资金事实保留",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "applied": [
+          0,
+          0
+        ],
+        "unapplied": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-CREDIT-LIMIT",
+      "context": "STL",
+      "aggregate": "CustomerCredit",
+      "object": "CreditLimitRequest",
+      "states": [
+        "requested",
+        "published",
+        "rejected"
+      ],
+      "initial": "requested",
+      "terminal": [
+        "published",
+        "rejected"
+      ],
+      "transitions": [
+        {
+          "from": "requested",
+          "command": "credit_limit.publish",
+          "to": "published",
+          "guard": "审批人层级覆盖申请额度且独立于申请人；额度来源与有效期",
+          "actor": "human"
+        },
+        {
+          "from": "requested",
+          "command": "credit_limit.publish",
+          "to": "rejected",
+          "guard": "理由必填",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "requested": [
+          0,
+          0
+        ],
+        "published": [
+          0,
+          1
+        ],
+        "rejected": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-CHARGE",
+      "context": "STL",
+      "aggregate": "Charge",
+      "object": "Charge",
+      "states": [
+        "estimated",
+        "pending",
+        "confirmed"
+      ],
+      "initial": "estimated",
+      "terminal": [],
+      "transitions": [
+        {
+          "from": "estimated",
+          "command": "charge.record",
+          "to": "pending",
+          "guard": "收到供应商账单或费用依据",
+          "actor": "human|ai"
+        },
+        {
+          "from": "pending",
+          "command": "charge.confirm",
+          "to": "confirmed",
+          "guard": "授权人工核对账单与依据",
+          "actor": "human"
+        },
+        {
+          "from": "estimated",
+          "command": "charge.confirm",
+          "to": "confirmed",
+          "guard": "同上",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "estimated": [
+          0,
+          0
+        ],
+        "pending": [
+          0,
+          1
+        ],
+        "confirmed": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-ORDER-RESULT",
+      "context": "STL",
+      "aggregate": "OrderResult",
+      "object": "OrderResult",
+      "states": [
+        "open",
+        "reviewed",
+        "settled"
+      ],
+      "initial": "open",
+      "terminal": [],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "order_result.review",
+          "to": "reviewed",
+          "guard": "汇总履约、账款、费用与案件状态",
+          "actor": "human|ai"
+        },
+        {
+          "from": "reviewed",
+          "command": "order_result.close",
+          "to": "settled",
+          "guard": "关闭条件全部满足；授权人员（STL-INV-011）",
+          "actor": "human"
+        },
+        {
+          "from": "settled",
+          "command": "order_result.reopen",
+          "to": "open",
+          "guard": "关闭后补录费用或调整；理由与留痕（BT24）",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0
+        ],
+        "reviewed": [
+          0,
+          1
+        ],
+        "settled": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-STL-PAYMENT-PLAN-REVIEW",
+      "context": "STL",
+      "aggregate": "OrderAccount",
+      "object": "PaymentPlanReview",
+      "states": [
+        "open",
+        "settled",
+        "superseded"
+      ],
+      "initial": "open",
+      "terminal": [
+        "settled",
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "payment_plan_review.settle",
+          "to": "settled",
+          "guard": "付款阶段与信用部分的变化逐项处置",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "payment_plan_review.open",
+          "to": "superseded",
+          "guard": "更晚的订单修订开启新复核",
+          "actor": "system"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0
+        ],
+        "settled": [
+          0,
+          1
+        ],
+        "superseded": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-CNX-DECLARATION",
+      "context": "CNX",
+      "aggregate": "DeclarationCase",
+      "object": "DeclarationCase",
+      "states": [
+        "draft",
+        "confirmed",
+        "submitted",
+        "unknown",
+        "received",
+        "accepted",
+        "released",
+        "rejected",
+        "amended",
+        "withdrawn"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "rejected",
+        "withdrawn"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "declaration_case.confirm",
+          "to": "confirmed",
+          "guard": "申报档案已核实，映射有专业依据（CNX-INV-006）",
+          "actor": "human"
+        },
+        {
+          "from": "confirmed",
+          "command": "declaration_case.record_submission",
+          "to": "submitted",
+          "guard": "人工提交声明与操作引用",
+          "actor": "human"
+        },
+        {
+          "from": "submitted",
+          "command": "declaration_case.record_receipt",
+          "to": "unknown",
+          "guard": "超时或结果不明；先查证（CNX-INV-003）",
+          "actor": "human"
+        },
+        {
+          "from": "submitted",
+          "command": "declaration_case.record_receipt",
+          "to": "received",
+          "guard": "外部收到回执原文与映射版本",
+          "actor": "human"
+        },
+        {
+          "from": "unknown",
+          "command": "declaration_case.record_receipt",
+          "to": "received",
+          "guard": "查证后的外部结果",
+          "actor": "human"
+        },
+        {
+          "from": "received",
+          "command": "declaration_case.record_receipt",
+          "to": "accepted",
+          "guard": "受理回执",
+          "actor": "human"
+        },
+        {
+          "from": "accepted",
+          "command": "declaration_case.record_receipt",
+          "to": "released",
+          "guard": "放行回执；不等于实际离境",
+          "actor": "human"
+        },
+        {
+          "from": "received",
+          "command": "declaration_case.record_receipt",
+          "to": "rejected",
+          "guard": "退回回执",
+          "actor": "human"
+        },
+        {
+          "from": "accepted",
+          "command": "declaration_case.record_receipt",
+          "to": "rejected",
+          "guard": "退回回执",
+          "actor": "human"
+        },
+        {
+          "from": "released",
+          "command": "declaration_case.record_receipt",
+          "to": "amended",
+          "guard": "改单回执；引用原项与数量（CN-R07）",
+          "actor": "human"
+        },
+        {
+          "from": "released",
+          "command": "declaration_case.record_receipt",
+          "to": "withdrawn",
+          "guard": "撤销回执",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "confirmed": [
+          0,
+          1
+        ],
+        "submitted": [
+          0,
+          2
+        ],
+        "unknown": [
+          1,
+          0
+        ],
+        "received": [
+          1,
+          1
+        ],
+        "accepted": [
+          1,
+          2
+        ],
+        "released": [
+          2,
+          0
+        ],
+        "rejected": [
+          2,
+          1
+        ],
+        "amended": [
+          2,
+          2
+        ],
+        "withdrawn": [
+          3,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-CNX-INVOICE",
+      "context": "CNX",
+      "aggregate": "PurchaseInvoice",
+      "object": "PurchaseInvoice",
+      "states": [
+        "imported",
+        "verified",
+        "rejected",
+        "reversed"
+      ],
+      "initial": "imported",
+      "terminal": [
+        "rejected",
+        "reversed"
+      ],
+      "transitions": [
+        {
+          "from": "imported",
+          "command": "purchase_invoice.verify",
+          "to": "verified",
+          "guard": "人工核验原件与候选（CNX-INV-005）",
+          "actor": "human"
+        },
+        {
+          "from": "imported",
+          "command": "purchase_invoice.verify",
+          "to": "rejected",
+          "guard": "重复、无效或主体不符",
+          "actor": "human"
+        },
+        {
+          "from": "verified",
+          "command": "purchase_invoice.verify",
+          "to": "reversed",
+          "guard": "核验红字发票时原票被冲红，相关匹配待复核",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "imported": [
+          0,
+          0
+        ],
+        "verified": [
+          0,
+          1
+        ],
+        "rejected": [
+          0,
+          2
+        ],
+        "reversed": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-CNX-TAXCASE",
+      "context": "CNX",
+      "aggregate": "TaxRefundCase",
+      "object": "TaxRefundCase",
+      "states": [
+        "expected",
+        "planned",
+        "submitted",
+        "approved",
+        "received",
+        "rejected"
+      ],
+      "initial": "expected",
+      "terminal": [
+        "received",
+        "rejected"
+      ],
+      "transitions": [
+        {
+          "from": "expected",
+          "command": "tax_refund_case.record_result",
+          "to": "planned",
+          "guard": "拟申报；政策版本与专业复核人",
+          "actor": "human"
+        },
+        {
+          "from": "planned",
+          "command": "tax_refund_case.record_result",
+          "to": "submitted",
+          "guard": "外部提交引用",
+          "actor": "human"
+        },
+        {
+          "from": "submitted",
+          "command": "tax_refund_case.record_result",
+          "to": "approved",
+          "guard": "核准结果原文；金额可与预计不同（CN-AT10）",
+          "actor": "human"
+        },
+        {
+          "from": "approved",
+          "command": "tax_refund_case.record_result",
+          "to": "received",
+          "guard": "到账（引用 STL 资金记录）",
+          "actor": "human"
+        },
+        {
+          "from": "submitted",
+          "command": "tax_refund_case.record_result",
+          "to": "rejected",
+          "guard": "外部不予核准",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "expected": [
+          0,
+          0
+        ],
+        "planned": [
+          0,
+          1
+        ],
+        "submitted": [
+          0,
+          2
+        ],
+        "approved": [
+          1,
+          0
+        ],
+        "received": [
+          1,
+          1
+        ],
+        "rejected": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "id": "SM-CAT-DECLARATION",
+      "context": "CAT",
+      "aggregate": "DeclarationProfile",
+      "object": "DeclarationProfileRevision",
+      "states": [
+        "draft",
+        "verified",
+        "superseded"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "superseded"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "declaration_profile.verify",
+          "to": "verified",
+          "guard": "授权专业人工，独立于最后编辑人（CAT-INV-002）",
+          "actor": "human"
+        },
+        {
+          "from": "verified",
+          "command": "declaration_profile.verify",
+          "to": "superseded",
+          "guard": "核实更新修订时取代，历史申报快照不变",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "verified": [
+          0,
+          1
+        ],
+        "superseded": [
+          0,
+          2
         ]
       }
     }
@@ -4512,10 +6002,10 @@
       "id": "PUR-INV-005",
       "context": "PUR",
       "aggregate": "PurchaseDraft",
-      "rule": "条件行规格版本与订单行完全一致、单位一致；采购量按分配量计算，因 MOQ、订购倍数或损耗超出分配量时须显式标记超采量、理由与批准，超出部分不计入已售商品成本；MOQ、倍数与阶梯复用核价规则。",
+      "rule": "条件行规格版本与订单行完全一致、单位一致；采购量按分配量计算，因 MOQ、订购倍数或损耗超出分配量时须显式标记超采量与理由，并由独立的采购承诺裁决批准（S5 D-14）；超出部分不计入已售商品成本；MOQ、倍数与阶梯复用核价规则。",
       "enforcement": "领域守卫（复用 CST 纯函数规则）",
       "positive": "两行 MOQ 合计与组价分摊",
-      "negative": "规格不一致返回 SPECIFICATION_MISMATCH；MOQ 不足且未标记超采返回 MOQ_NOT_MET；超采未获批返回 OVERBUY_NOT_APPROVED",
+      "negative": "规格不一致返回 SPECIFICATION_MISMATCH；MOQ 不足且未标记超采返回 MOQ_NOT_MET；超采未在承诺裁决中批准时发出返回 OVERBUY_NOT_APPROVED",
       "concurrency": "—",
       "errors": "SPECIFICATION_MISMATCH、MOQ_NOT_MET、ORDER_MULTIPLE_INVALID、OVERBUY_NOT_APPROVED、REFERENCE_STALE",
       "pythonEvidence": "tests/test_t04_a46_purchase_draft.py（Go 有意背离：Python 要求采购量等于订单量）",
@@ -4583,12 +6073,12 @@
       "context": "FUL",
       "aggregate": "Shipment",
       "rule": "订单数量不得低于已确认出运数量；默认不超发。",
-      "enforcement": "待详细设计",
-      "positive": "",
-      "negative": "",
-      "concurrency": "",
-      "errors": "",
-      "pythonEvidence": "无",
+      "enforcement": "订单履约根 FOR UPDATE＋由已确认出运行派生累计＋TRD OrderGuard FOR SHARE",
+      "positive": "120 件订单分 76＋44 两次出运",
+      "negative": "累计超过订单行数量返回 SHIPMENT_QUANTITY_EXCEEDED；变更减量低于已出运量返回 QUANTITY_BELOW_SHIPPED",
+      "concurrency": "两次出运并发争用最后数量只有一个成功；订单变更应用与出运确认以订单行锁裁决",
+      "errors": "SHIPMENT_QUANTITY_EXCEEDED、QUANTITY_BELOW_SHIPPED",
+      "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-21",
       "status": "ACCEPTED（模拟评审）"
     },
@@ -4597,12 +6087,12 @@
       "context": "STL",
       "aggregate": "SettlementStatement",
       "rule": "同一出运或收货明细的已结算数量不重复结算。",
-      "enforcement": "待详细设计",
-      "positive": "",
-      "negative": "",
-      "concurrency": "",
-      "errors": "",
-      "pythonEvidence": "无",
+      "enforcement": "来源明细唯一约束（未冲销的结算行）",
+      "positive": "出运行 76 件结算一次",
+      "negative": "同一出运行再结算返回 SETTLEMENT_SOURCE_DUPLICATE",
+      "concurrency": "两张结算单并发引用同一出运行只有一个成功",
+      "errors": "SETTLEMENT_SOURCE_DUPLICATE",
+      "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-23",
       "status": "ACCEPTED（模拟评审）"
     },
@@ -4610,13 +6100,13 @@
       "id": "STL-INV-002",
       "context": "STL",
       "aggregate": "Application",
-      "rule": "核销不超过来源可用余额与目标未结余额；首期同币种。",
-      "enforcement": "待详细设计",
-      "positive": "",
-      "negative": "",
-      "concurrency": "",
-      "errors": "",
-      "pythonEvidence": "无",
+      "rule": "核销不超过来源可用余额与目标未结余额；同币种直接核销，跨币种按 STL-INV-007；撤销核销形成新记录，不抹除资金事实。",
+      "enforcement": "资金记录根与目标根按 ID 排序 FOR UPDATE＋由不可变核销分录派生余额",
+      "positive": "预收 200 核销 600 应收后余 400；收 800 分别核销 400＋400（基线 4.6 S-A）",
+      "negative": "超过来源可用余额返回 APPLICATION_EXCEEDS_AVAILABLE；超过目标未结返回 APPLICATION_EXCEEDS_OPEN",
+      "concurrency": "两笔核销并发争用同一资金余额只有一个成功",
+      "errors": "APPLICATION_EXCEEDS_AVAILABLE、APPLICATION_EXCEEDS_OPEN",
+      "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-22",
       "status": "ACCEPTED（模拟评审）"
     },
@@ -4695,7 +6185,7 @@
       "context": "TRD",
       "aggregate": "SalesOrder",
       "rule": "生效订单取消须无已确认出运且下游采购承诺与占用已解除或已有获批处置；短交关闭须已有出运、理由与授权；关闭须已确认出运量等于订单量（含获批容差）；三者均保留转换名额与历史。",
-      "enforcement": "领域守卫",
+      "enforcement": "领域守卫＋FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1 在锁定订单后事务内无锁读取（R70、R71）",
       "positive": "未出运、无承诺的订单取消",
       "negative": "已出运订单取消返回 ORDER_HAS_SHIPMENTS；有未解除承诺返回 DOWNSTREAM_COMMITMENT_OPEN；未出完关闭返回 ORDER_NOT_FULFILLED",
       "concurrency": "取消与出运确认并发：出运先提交则取消拒绝",
@@ -4778,7 +6268,7 @@
       "id": "STL-INV-003",
       "context": "STL",
       "aggregate": "Application",
-      "rule": "付款条件满足为派生判断：按订单付款阶段与已核销到账金额（原币，未解释差额不计）判定；撤销核销、退款或退汇后重新判定；以守卫函数 PaymentConditionGuard 向 FUL 发布。",
+      "rule": "付款条件满足为派生判断：按订单付款阶段与已核销到账金额（原币，未解释差额不计）判定；撤销核销、退款或退汇后重新判定；以守卫函数 PaymentConditionGuard 向 FUL 发布。 付款阶段取订单当前修订（OrderCommercialSnapshot v1）；scope shipment 要求订单确认时与出运前到期的阶段满足，scope documents 另要求单证控制的出运后阶段满足（S5 D-5）。",
       "enforcement": "派生查询＋守卫函数",
       "positive": "出运前 70% 尾款 672.00 已到账并核销",
       "negative": "到账 670.00 且差额未解释：不满足",
@@ -4983,6 +6473,286 @@
       "pythonEvidence": "Q01 V0.1 tests/test_execution.py：test_quote_only_cannot_complete_order_goal（未移植）",
       "ulRef": "UL-INV-19",
       "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "PUR-INV-009",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "rule": "采购承诺裁决须为独立人工（非草稿编制人与申请人），在承诺根与需求分配根锁定后重查订单、供应条件、主体、规格与配置守卫，按当前数据重算草稿并逐字段一致；审批有效期带时区、晚于裁决且不晚于草稿供应有效截止；与核价来源不同、成本差额为正、币种不可比或含超采时须偏差确认理由。",
+      "enforcement": "领域守卫＋上游守卫（ADR-BR-004 方案 B）",
+      "positive": "独立审核人重算一致并批准 600.00 草稿",
+      "negative": "自审返回 INDEPENDENT_REVIEW_REQUIRED；AI 返回 PERMISSION_DENIED；重算不一致返回 PURCHASE_DRAFT_STALE；偏差无理由返回 PURCHASE_DEVIATION_UNACKNOWLEDGED；供应条件被替代返回 SUPPLY_CONDITION_NOT_CURRENT；订单审批撤销返回 ORDER_APPROVAL_REVOKED",
+      "concurrency": "裁决、撤销与发出竞争只有一个结果生效",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED、PERMISSION_DENIED、PURCHASE_DRAFT_STALE、PURCHASE_DEVIATION_UNACKNOWLEDGED、SUPPLY_CONDITION_NOT_CURRENT、SUPPLY_CONDITION_EXPIRED、ORDER_APPROVAL_REVOKED",
+      "pythonEvidence": "v050/docs/T04_A46_PURCHASE_DRAFT_REPORT_V0.1.md A47 设计（未实现）",
+      "ulRef": "UL-INV-20",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "PUR-INV-010",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "rule": "承诺只凭有效、未撤销、未过期的审批发出一次，取得 POL 采购单编号并登记发出证据；撤销只在发出前；已形成承诺的草稿不能作废；供应商确认是独立事实，带来源证据与时间。",
+      "enforcement": "领域守卫＋承诺根 FOR UPDATE",
+      "positive": "批准后发出 PO-2026-00001 并登记供应商确认",
+      "negative": "无有效审批发出返回 PURCHASE_COMMITMENT_NOT_APPROVED；审批过期返回 APPROVAL_EXPIRED；已承诺草稿作废返回 PURCHASE_DRAFT_COMMITTED",
+      "concurrency": "撤销与发出并发只有一个成功",
+      "errors": "PURCHASE_COMMITMENT_NOT_APPROVED、APPROVAL_EXPIRED、PURCHASE_DRAFT_COMMITTED、OVERBUY_NOT_APPROVED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-20",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "PUR-INV-011",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "rule": "发出后的交期、数量或价格变更经变更编制、独立裁决（重算与偏差确认同 PUR-INV-009）与应用形成承诺新修订，须供应商重新确认；增量受需求分配余额约束；取消须授权人工、理由与供应商证据并释放分配；已核实交付量不被变更或取消抹去。",
+      "enforcement": "领域守卫＋承诺根与需求分配根 FOR UPDATE",
+      "positive": "供应商确认交期延后 5 天的变更被独立裁决并应用",
+      "negative": "绑定旧承诺修订的变更应用返回 PURCHASE_COMMITMENT_CHANGE_STALE；增量超过分配余额返回 PURCHASE_ALLOCATION_EXCEEDED；减至低于已核实交付量返回 SUPPLIER_DELIVERY_EXCEEDED",
+      "concurrency": "两个变更同时应用只有一个成功",
+      "errors": "PURCHASE_COMMITMENT_CHANGE_STALE、PURCHASE_ALLOCATION_EXCEEDED、SUPPLIER_DELIVERY_EXCEEDED、INDEPENDENT_REVIEW_REQUIRED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-20",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "QLT-INV-001",
+      "context": "QLT",
+      "aggregate": "QualityRelease",
+      "rule": "质量放行由我方授权质检人员决定，数量不超过受检对象有效检验的合格量减已放行量；外部检验报告只是证据；复检取代原结果，不累加合格量；放行绑定受检对象、规格版本与有效期。",
+      "enforcement": "领域守卫",
+      "positive": "外部机构报告 120 件合格后由我方质检放行 120 件",
+      "negative": "放行超过合格量返回 QUALITY_RELEASE_EXCEEDS_CONFORMING；AI 或 system 放行返回 PERMISSION_DENIED",
+      "concurrency": "—",
+      "errors": "QUALITY_RELEASE_EXCEEDS_CONFORMING、PERMISSION_DENIED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "QLT-INV-002",
+      "context": "QLT",
+      "aggregate": "QualityRelease",
+      "rule": "撤回放行冻结未出运部分，已出运部分保留并另行处置；重复撤回不重复扣量；撤回只锁放行行 FOR UPDATE，FUL 以守卫读取。",
+      "enforcement": "领域守卫＋放行根 FOR UPDATE",
+      "positive": "放行 200、出运 100 后撤回，剩余 100 冻结（BT21）",
+      "negative": "撤回后出运返回 QUALITY_RELEASE_REQUIRED",
+      "concurrency": "撤回与出运确认并发按锁序裁决",
+      "errors": "QUALITY_RELEASE_REQUIRED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "FUL-INV-004",
+      "context": "FUL",
+      "aggregate": "ShipmentDocumentSet",
+      "rule": "商业发票、装箱单、提单记录与原产地证引用逐版本保存，并与订单行、出运行与包装行逐项核对（SKU、数量、单位、单价、金额、箱数、重量、收货人、通知方、唛头、港口）；差异逐项解决或确认后才能签发；签发版本不可变，变更形成新版本。",
+      "enforcement": "领域守卫＋POL ConfigGuard 与 NumberIssue（R49）",
+      "positive": "四行 120 件商业发票与装箱单一致后签发",
+      "negative": "装箱单箱数合计与发票数量不一致未确认返回 SHIPMENT_DOCUMENTS_UNRECONCILED",
+      "concurrency": "—",
+      "errors": "SHIPMENT_DOCUMENTS_UNRECONCILED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "FUL-INV-005",
+      "context": "FUL",
+      "aggregate": "ShipmentDocumentSet",
+      "rule": "CIF／CIP 出运须有保险单记录：保险服务方、保单号、险别、币种、投保金额不低于合同比例（默认 110%）乘发票金额（HALF_UP）；保险费与核价保险费组件的差异显示但不阻断。",
+      "enforcement": "领域守卫",
+      "positive": "CIF 汉堡 7,820.00 投保 8,602.00",
+      "negative": "投保金额不足或缺少保险单返回 INSURANCE_COVERAGE_INSUFFICIENT",
+      "concurrency": "—",
+      "errors": "INSURANCE_COVERAGE_INSUFFICIENT",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "STL-INV-006",
+      "context": "STL",
+      "aggregate": "FundRecord",
+      "rule": "资金记录分别保存客户汇出额、银行原币入账、银行费用与付款方，须银行凭据；未解释差额不计入付款条件与核销，经独立批准登记为我方承担的费用或折让；结汇是资金转换，不新增客户收款；付款方不符、退汇与非货款先待核实。",
+      "enforcement": "领域守卫",
+      "positive": "到账 670.00、差额 2.00 经批准为我方银行费用后，阶段满足 672.00",
+      "negative": "未解释差额按足额核销返回 FUND_DIFFERENCE_UNEXPLAINED；付款方与客户不一致返回 PARTY_ENTITY_MISMATCH",
+      "concurrency": "—",
+      "errors": "FUND_DIFFERENCE_UNEXPLAINED、PARTY_ENTITY_MISMATCH",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-22",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "STL-INV-007",
+      "context": "STL",
+      "aggregate": "Application",
+      "rule": "跨币种核销须有在效的 POL settlement 用途汇率（来源币种至目标币种，方向明确，不反推、不交叉），同时记录来源与目标币种金额（目标币种按最小币值 HALF_UP）以及相对订单分析汇率的业务结算汇率差额；差额不计入客户收款或订单收入。",
+      "enforcement": "领域守卫＋POL ConfigGuard（R33）",
+      "positive": "CNY 到账按 settlement 汇率核销 USD 应收并单列汇率差额",
+      "negative": "缺少 settlement 用途汇率返回 FX_SCOPE_MISMATCH",
+      "concurrency": "—",
+      "errors": "FX_SCOPE_MISMATCH",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-22",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "STL-INV-008",
+      "context": "STL",
+      "aggregate": "SettlementStatement",
+      "rule": "贷项由申请与独立确认形成，绑定订单、结算单、类型（价格折让、退货、索赔）、金额与依据；确认后的贷项作为核销来源冲减应收；贷项不改写出运数量，不自动退款，不自动调整退税资料。",
+      "enforcement": "领域守卫＋独立性",
+      "positive": "折让 100.00 经信用经理确认后冲减应收",
+      "negative": "申请人自行确认返回 INDEPENDENT_REVIEW_REQUIRED；贷项超过应收未结返回 APPLICATION_EXCEEDS_OPEN",
+      "concurrency": "—",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED、APPLICATION_EXCEEDS_OPEN",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "STL-INV-009",
+      "context": "STL",
+      "aggregate": "SettlementStatement",
+      "rule": "结算单冲销须无有效核销并经授权人工，独立于确认人；冲销恢复来源明细的可结算状态，原单与冲销记录均保留。",
+      "enforcement": "领域守卫",
+      "positive": "错误结算单冲销后按正确价格重新结算",
+      "negative": "已有核销的结算单冲销返回 SETTLEMENT_HAS_APPLICATIONS",
+      "concurrency": "冲销与核销并发按结算单根锁裁决",
+      "errors": "SETTLEMENT_HAS_APPLICATIONS、INDEPENDENT_REVIEW_REQUIRED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-23",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "STL-INV-010",
+      "context": "STL",
+      "aggregate": "Charge",
+      "rule": "费用标明来源、受益订单或出运、费用类别、币种、换算依据与状态（估算、待确认、已确认）；分配权重有数据依据、全部非负且合计大于零，按最小币值最大余数法分配，余数相同按稳定行 ID；负向调整先按绝对值分配再恢复符号；同一费用只归集一次。",
+      "enforcement": "领域守卫",
+      "positive": "实际运费 650 按 60／40 数量分配为 390＋260（基线 4.6）",
+      "negative": "权重合计为零返回 ALLOCATION_INVALID",
+      "concurrency": "—",
+      "errors": "ALLOCATION_INVALID",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "STL-INV-011",
+      "context": "STL",
+      "aggregate": "OrderResult",
+      "rule": "订单经营结果 settled 须履约完成或批准短交关闭、业务应收应付结清或有批准处置、相关直接费用与采购成本已确认、无未决退货索赔，并由授权人员关闭；关闭快照不被覆盖，后续补录须重新打开并留痕。",
+      "enforcement": "领域守卫",
+      "positive": "出运结清、费用确认后关闭；次月运费补录后重新打开再关闭",
+      "negative": "条件不满足关闭返回 ORDER_RESULT_NOT_SETTLED",
+      "concurrency": "—",
+      "errors": "ORDER_RESULT_NOT_SETTLED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "STL-INV-012",
+      "context": "STL",
+      "aggregate": "SettlementStatement",
+      "rule": "期初应收、应付与未核销预收预付按截止时点与来源登记，标识历史起点；同一截止与来源只登记一次，上线后不重复生成同一账款或现金。",
+      "enforcement": "唯一约束（截止时点、来源）",
+      "positive": "截止日导入未结应收 7,000",
+      "negative": "重复导入返回 OPENING_BALANCE_DUPLICATE",
+      "concurrency": "—",
+      "errors": "OPENING_BALANCE_DUPLICATE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "CNX-INV-003",
+      "context": "CNX",
+      "aggregate": "DeclarationCase",
+      "rule": "报关结果按人工路径登记：本地草稿、资料确认、人工提交声明、外部收到、受理、放行、退回、改单、撤销与 unknown 分别记录；回执保存原文、映射版本与外部版本或业务顺序，旧回执不覆盖新结果；unknown 先查证再决定是否重新提交；海关放行、实际离境、送达与客户验收不互相代替。",
+      "enforcement": "领域守卫",
+      "positive": "人工提交后登记放行回执原文与映射 v1",
+      "negative": "早于已登记结果的回执返回 DECLARATION_RECEIPT_STALE；unknown 未查证即重新提交返回 EXTERNAL_RESULT_UNKNOWN",
+      "concurrency": "两份回执并发登记按案件根锁裁决",
+      "errors": "DECLARATION_RECEIPT_STALE、EXTERNAL_RESULT_UNKNOWN",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "CNX-INV-004",
+      "context": "CNX",
+      "aggregate": "TaxRefundCase",
+      "rule": "退税用途分配在用途、明细、主体、版本与单位范围内不超过凭证剩余额度；预计、拟申报、已提交、核准与到账分别记录，政策版本按出口日期绑定；申报撤回、冲减与重新使用只按外部处理结果，不凭本地取消恢复。",
+      "enforcement": "领域守卫＋案件根 FOR UPDATE",
+      "positive": "同一购进凭证 1,000 件分两批出口分配 600＋400",
+      "negative": "再分配超过剩余返回 TAX_EVIDENCE_EXCEEDED",
+      "concurrency": "两笔分配并发合计超额只有一笔成功",
+      "errors": "TAX_EVIDENCE_EXCEEDED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "CNX-INV-005",
+      "context": "CNX",
+      "aggregate": "PurchaseInvoice",
+      "rule": "购进发票按（票种、唯一标识）唯一；原件、解析候选与人工核验分别记录；红冲、作废与替代保留原票并使相关匹配待复核；受票主体与本公司不一致时不自动接受，待获准模式复核。",
+      "enforcement": "唯一约束＋领域守卫",
+      "positive": "专票核验后匹配 120 件交付行",
+      "negative": "重复导入返回 INVOICE_DUPLICATE；受票主体不符返回 PARTY_ENTITY_MISMATCH",
+      "concurrency": "—",
+      "errors": "INVOICE_DUPLICATE、PARTY_ENTITY_MISMATCH",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "CNX-INV-006",
+      "context": "CNX",
+      "aggregate": "DeclarationCase",
+      "rule": "票据品名与单位、成交单位与申报法定单位及品名的映射与换算须有专业依据（申报档案、换算依据）；未证实的映射不能确认申报资料；一个商业 SKU 可对应不同申报归类，不同编码或申报要素不得合并。",
+      "enforcement": "领域守卫＋CAT DeclarationProfileRef v1",
+      "positive": "件与千克的换算依据核实后确认资料",
+      "negative": "映射未证实返回 DECLARATION_MAPPING_UNVERIFIED；申报档案未核实返回 DECLARATION_PROFILE_UNVERIFIED",
+      "concurrency": "—",
+      "errors": "DECLARATION_MAPPING_UNVERIFIED、DECLARATION_PROFILE_UNVERIFIED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "CNX-INV-007",
+      "context": "CNX",
+      "aggregate": "CertificateResult",
+      "rule": "官方证书结果登记签发机构、适用对象（SKU 规格、出口批次或出运）、目的市场、有效期与核实人；另一规格、市场或已过期的证书不能复用。",
+      "enforcement": "领域守卫",
+      "positive": "原产地证适用于该出口批次与目的国",
+      "negative": "不适用的证书被引用返回 CERTIFICATE_NOT_APPLICABLE",
+      "concurrency": "—",
+      "errors": "CERTIFICATE_NOT_APPLICABLE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "CNX-INV-008",
+      "context": "CNX",
+      "aggregate": "DocumentBundle",
+      "rule": "资料包按出口批次列出要求、版本、缺件、责任人与期限；附件存在不等于真实性或法定效力已核实；导出文件或任务完成不冒充专业办理成功；期限按政策配置，不从上传日期推算。",
+      "enforcement": "领域守卫",
+      "positive": "缺少装箱单时列出缺件、责任人与期限",
+      "negative": "未核实的附件被计为满足返回 DOCUMENT_REQUIREMENT_UNVERIFIED",
+      "concurrency": "—",
+      "errors": "DOCUMENT_REQUIREMENT_UNVERIFIED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
     }
   ],
   "crossContextOrchestrations": [
@@ -5042,13 +6812,14 @@
     {
       "id": "WF-05",
       "name": "中国出口资料链（B0 候选）",
-      "owner": "CNX",
+      "owner": "CNX（S5 人工路径，负责人决定 2026-11-12）",
       "sequence": [
         "FUL ExportLotRegistered",
-        "CNX declaration_case.prepare",
-        "CNX purchase_invoice 匹配",
+        "CNX declaration_case.prepare → declaration_case.confirm → declaration_case.record_submission（人工路径）→ declaration_case.record_receipt",
+        "CNX purchase_invoice.import → purchase_invoice.verify 并匹配",
         "STL FundRecorded",
-        "CNX document_bundle.check"
+        "CNX tax_refund_case.allocate → tax_refund_case.record_result",
+        "CNX document_bundle.check → external_reconciliation.resolve"
       ],
       "failureMode": "外部结果 unknown 不盲目重申报；红冲使匹配待复核。",
       "idempotency": "外部版本与业务顺序核对旧回执。"
@@ -5058,15 +6829,16 @@
       "name": "订单变更传播",
       "owner": "TRD（变更决定）；PUR、FUL、STL（各自复核）",
       "sequence": [
-        "TRD order.amendment.prepare（读取 PUR 承诺、FUL 出运与 STK 占用形成影响评估）",
+        "TRD order.amendment.prepare（读取 PUR DownstreamCommitments v1 与 FUL ShipmentFacts v1 预填影响评估；STK 未启用）",
         "TRD order.amendment.submit → order.amendment.decide",
-        "TRD order.amendment.apply → OrderAmended",
-        "PUR 复核受影响分配与承诺（作废草稿、撤销或新建承诺）",
-        "FUL 复核装箱、订舱与单证",
-        "STL 复核付款计划与结算来源"
+        "TRD order.amendment.apply（锁定订单后事务内无锁读取 FUL 已出运量：QUANTITY_BELOW_SHIPPED）→ OrderAmended",
+        "PUR allocation_review.open（系统）→ 作废草稿、purchase.commitment.change.* 或 purchase.commitment.cancel → allocation_review.settle",
+        "FUL shipment_review.open（系统）→ 复核装箱、订舱与未签发单证 → shipment_review.settle",
+        "STL payment_plan_review.open（系统，采用新修订付款阶段）→ payment_plan_review.settle；信用部分增加时须新的占用",
+        "CNX trade_compliance.reopen（系统，为新订单修订开启待核查，PL-14）"
       ],
       "failureMode": "下游已发生事实不回滚；无法自动确认影响时进入待处理并指定责任人。",
-      "idempotency": "事件 ID 去重；各下游按订单修订号只处理一次。"
+      "idempotency": "事件 ID 去重；各下游按（订单、订单修订）只开启一次复核；更晚修订的复核取代未处置的旧复核。"
     },
     {
       "id": "WF-07",
@@ -5094,7 +6866,7 @@
         "STL credit.reserve（付款条件含出运后到期部分时）→ CreditReserved",
         "CNX trade_compliance.evaluate → trade_compliance.decide → TradeComplianceDecided",
         "TRD order.review.decide → order.activate（读取 STL CreditGuard 与 CNX TradeComplianceGuard）",
-        "STL 消费 OrderActivated，占用转为已使用"
+        "STL credit.consume（系统消费 OrderActivated，PL-12）；订单取消或关闭后 credit.release（PL-13）"
       ],
       "failureMode": "信用不足须信用例外或改付款条件；合规 blocked 不能放行；占用到期后须重新占用。",
       "idempotency": "占用按 (company, order_id, order_revision) 唯一；事件 ID 去重。"
@@ -5171,6 +6943,24 @@
       "approver": "首席架构师＋研发负责人＋TRD／CST Owner",
       "evidence": "方案对比与竞争实测",
       "status": "OPEN"
+    },
+    {
+      "component": "信用政策：审批层级、金额阈值与额度来源",
+      "approver": "财务＋信用经理",
+      "evidence": "TD-AT11、TD-AT16 PG16 测试；S5 使用合成值（USD，信用专员 1,000、信用经理 5,000，超过须两人，逾期容忍 30 天）",
+      "status": "PENDING"
+    },
+    {
+      "component": "贸易合规：国别项目、制裁名单与出口管制来源",
+      "approver": "法务＋合规负责人",
+      "evidence": "ADR-BR-017 裁决；S5 使用合成 CN 与 UN 项目",
+      "status": "PENDING"
+    },
+    {
+      "component": "中国出口人工路径与外部结果映射",
+      "approver": "报关、税务与资金专业角色",
+      "evidence": "CN-AT01—CN-AT18 证据（合成资料、人工路径）；IG-13",
+      "status": "PENDING"
     }
   ],
   "testCatalog": [
@@ -6031,6 +7821,336 @@
       "class_": "Security",
       "source": "基线 19.2",
       "status": "SPEC"
+    },
+    {
+      "id": "A47-01",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "command": "purchase.commitment.decide／revoke／issue",
+      "given": "编制人或申请人自审、AI 身份、缺少权限；供应条件被替代、过期或撤回；订单审批撤销；重算不一致；偏差无理由；审批过期、撤销与发出竞争",
+      "assertion": "均拒绝（INDEPENDENT_REVIEW_REQUIRED、PERMISSION_DENIED、SUPPLY_CONDITION_NOT_CURRENT、SUPPLY_CONDITION_EXPIRED、ORDER_APPROVAL_REVOKED、PURCHASE_DRAFT_STALE、PURCHASE_DEVIATION_UNACKNOWLEDGED）；竞争只有一个结果；失败回滚，重启后重放一致",
+      "class_": "Concurrency-PG16",
+      "source": "A46 报告（A47 最低验收）",
+      "status": "SPEC"
+    },
+    {
+      "id": "SC-08",
+      "context": "FUL／STL",
+      "aggregate": "CommercialRelease",
+      "command": "commercial_release.evaluate",
+      "given": "见 Context Map SC-08",
+      "assertion": "差额处理前 COMMERCIAL_RELEASE_BLOCKED；处理后放行并绑定质量、付款条件与筛查版本",
+      "class_": "Integration",
+      "source": "Context Map",
+      "status": "SPEC"
+    },
+    {
+      "id": "SC-09",
+      "context": "STL／CNX／TRD",
+      "aggregate": "CustomerCredit／TradeComplianceCheck",
+      "command": "credit.reserve／order.activate",
+      "given": "见 Context Map SC-09",
+      "assertion": "例外前 CREDIT_LIMIT_EXCEEDED；禁运订单 TRADE_COMPLIANCE_NOT_CLEAR 且普通审批不能覆盖；第一张订单生效并记录占用与例外",
+      "class_": "Integration",
+      "source": "Context Map",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT08",
+      "context": "QLT",
+      "aggregate": "Inspection／QualityRelease",
+      "command": "inspection.record／quality_release.grant",
+      "given": "20 件隔离、返工并复检",
+      "assertion": "放行量按有效结果更新；重复复检不重复增加可用量；权限与标准版本可查",
+      "class_": "Domain",
+      "source": "基线 9.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT10",
+      "context": "TRD／PUR／FUL／STL",
+      "aggregate": "SalesOrder／DemandAllocation／OrderFulfilment／OrderAccount",
+      "command": "order.amendment.apply",
+      "given": "部分已出运后减量或改色",
+      "assertion": "展示采购、装箱与付款计划影响并逐项复核；已发生部分保留；处置可追溯",
+      "class_": "Integration",
+      "source": "基线 9.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT11",
+      "context": "FUL",
+      "aggregate": "Shipment",
+      "command": "shipment.confirm",
+      "given": "按 200／800 两批装箱出运，重做一次相同提交",
+      "assertion": "箱至订单数量一致；累计不超可发量；重试不重复出运",
+      "class_": "Integration",
+      "source": "基线 9.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT12",
+      "context": "FUL",
+      "aggregate": "ShipmentDocumentSet",
+      "command": "shipment_document.issue",
+      "given": "商业发票、装箱单或提单草稿含版本或数量差异",
+      "assertion": "逐项显示差异与修订；版本与来源可追溯；缺必需核对不能签发（SHIPMENT_DOCUMENTS_UNRECONCILED）",
+      "class_": "Domain",
+      "source": "基线 9.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT13",
+      "context": "FUL／STL／QLT",
+      "aggregate": "CommercialRelease",
+      "command": "commercial_release.evaluate",
+      "given": "合同要求的预付款、信用或质检条件未满足",
+      "assertion": "按政策等待或拒绝；例外绑定规则与对象，不以普通备注放行",
+      "class_": "Integration",
+      "source": "基线 9.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT17",
+      "context": "STL／CNX",
+      "aggregate": "SettlementStatement／TaxRefundCase",
+      "command": "opening_balance.record／tax_refund_case.record_opening",
+      "given": "导入未结应收应付、未核销预收与未退税资料",
+      "assertion": "截止时点可对账；上线后不重建同一账款或用途（OPENING_BALANCE_DUPLICATE）",
+      "class_": "Domain",
+      "source": "基线 9.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT18",
+      "context": "STL",
+      "aggregate": "OrderResult",
+      "command": "order_result.close",
+      "given": "发货完成但有未结费用或未决事项",
+      "assertion": "显示各维度状态与待办；不因发货完成宣告结清（ORDER_RESULT_NOT_SETTLED）",
+      "class_": "Domain",
+      "source": "基线 9.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT21",
+      "context": "QLT／FUL",
+      "aggregate": "QualityRelease",
+      "command": "quality_release.revoke",
+      "given": "放行 200 件后 100 件已出运，再撤回放行并重放事件",
+      "assertion": "未发部分冻结；已发部分保留；重复撤回无重复扣量",
+      "class_": "Concurrency-PG16",
+      "source": "基线 9.4",
+      "status": "SPEC"
+    },
+    {
+      "id": "BT24",
+      "context": "STL",
+      "aggregate": "OrderResult／Charge",
+      "command": "order_result.reopen",
+      "given": "订单关闭后补入次月运费，并尝试改写上期快照",
+      "assertion": "记录发生、录入与分析日期及重新打开；历史快照不被覆盖",
+      "class_": "Domain",
+      "source": "基线 9.4",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT01",
+      "context": "CNX／PUR／FUL／STL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "单主体、自营一般贸易的普通出口",
+      "assertion": "采购、交付、购进票、两批出运、报关结果、收汇与退税资料贯通；无虚构外部成功",
+      "class_": "E2E",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT02",
+      "context": "FUL／CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "一单分批出口、同次出口包含多销售行",
+      "assertion": "销售、出运与报关项映射可核对，累计不超有效业务范围",
+      "class_": "Integration",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT03",
+      "context": "CNX／CAT",
+      "aggregate": "—",
+      "command": "—",
+      "given": "票据品名或单位与报关资料不同",
+      "assertion": "须受控映射或换算及专业依据；无法证实时阻断申报资料确认（DECLARATION_MAPPING_UNVERIFIED）",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT04",
+      "context": "CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "同一购进凭证部分用于多批业务",
+      "assertion": "按用途核对剩余；并发与重试不重复占用（TAX_EVIDENCE_EXCEEDED）",
+      "class_": "Concurrency-PG16",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT05",
+      "context": "CNX／STL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "先出运后到票，原票随后红冲",
+      "assertion": "交付事实保留；应付与退税资料分别处理影响，匹配待复核",
+      "class_": "Integration",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT06",
+      "context": "CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "改单或撤销后重复、乱序回执",
+      "assertion": "保留版本链，旧结果不覆盖新状态（DECLARATION_RECEIPT_STALE），不重复恢复凭证用途",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT07",
+      "context": "STL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "客户合并付款，银行有扣费",
+      "assertion": "原币资金与多单核销守恒，费用另有依据，未解释差额待处理",
+      "class_": "Integration",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT08",
+      "context": "STL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "付款方不同，或发生退汇／退款",
+      "assertion": "核实付款依据与责任；实际资金与商业调整分别记录（PARTY_ENTITY_MISMATCH 待复核）",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT09",
+      "context": "STL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "外币结汇，再导入人民币入账",
+      "assertion": "只形成一次资金转换；不新增销售收入或第二次客户回款",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT10",
+      "context": "CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "预计退税、核准与到账金额不同",
+      "assertion": "三者分开记录；差异按冻结政策解释",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT11",
+      "context": "STL／CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "出口后折让或退运",
+      "assertion": "销售、报关与税务影响分别形成受控记录；贷项不自动完成退税调整",
+      "class_": "Integration",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT12",
+      "context": "CNX／POL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "企业适用政策变化且有历史未结业务",
+      "assertion": "按有效期与专业核实结果处理，旧业务不被新配置覆盖",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT13",
+      "context": "CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "提交超时，随后收到专业结果",
+      "assertion": "先核实再重试，原业务操作唯一；无回执时不宣称办理成功（EXTERNAL_RESULT_UNKNOWN）",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT14",
+      "context": "CNX／FUL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "单证缺件或证书不适用",
+      "assertion": "列缺件、适用对象、责任人与期限；已上传文件不直接满足要求（CERTIFICATE_NOT_APPLICABLE）",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT15",
+      "context": "CNX／STL",
+      "aggregate": "—",
+      "command": "—",
+      "given": "出口主体、受票或收款主体不一致",
+      "assertion": "发现差异并转获准模式复核；不能通过外部主体字段绕过公司隔离",
+      "class_": "Security",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT16",
+      "context": "STL／CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "业务期初、未退税资料及未达账款导入",
+      "assertion": "截止、来源余额与已办状态可核对；上线不重复生成现金、应付或用途占用",
+      "class_": "Domain",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT17",
+      "context": "FUL／CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "中文操作、双语单证与盖章件修订",
+      "assertion": "币种、金额、品名与条款对应；保存签署版本，草稿不能冒充已签署",
+      "class_": "Integration",
+      "source": "基线 24.3",
+      "status": "SPEC"
+    },
+    {
+      "id": "CN-AT18",
+      "context": "CNX",
+      "aggregate": "—",
+      "command": "—",
+      "given": "AI 读取票据或报关资料后误匹配",
+      "assertion": "显示来源与差异；候选须人工核实后进入同一业务命令，AI 身份不能核验或过账（PERMISSION_DENIED）",
+      "class_": "Security",
+      "source": "基线 24.3",
+      "status": "SPEC"
     }
   ],
   "humanOnlyCommands": [
@@ -6123,6 +8243,27 @@
     "ai.delegation.grant",
     "ai.delegation.revoke",
     "ai.approval_grant.issue",
-    "ai.approval_grant.revoke"
+    "ai.approval_grant.revoke",
+    "purchase.commitment.change.decide",
+    "purchase.commitment.change.apply",
+    "purchase.commitment.cancel",
+    "allocation_review.settle",
+    "shipment_document.issue",
+    "shipment_review.settle",
+    "settlement.reverse",
+    "fund.record",
+    "fund.resolve_difference",
+    "charge.confirm",
+    "order_result.reopen",
+    "opening_balance.record",
+    "payment_plan_review.settle",
+    "declaration_case.confirm",
+    "declaration_case.record_submission",
+    "declaration_case.record_receipt",
+    "purchase_invoice.verify",
+    "tax_refund_case.record_result",
+    "tax_refund_case.record_opening",
+    "certificate.register",
+    "shipment_document.record_signed"
   ]
 }
