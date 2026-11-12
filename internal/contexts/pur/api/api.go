@@ -1,8 +1,9 @@
 // Package api is PUR's published contract (procurement and supply allocation): purchase drafts and
 // the demand allocation of active order lines (WBS S3-10, S3-16; tactical model PUR-AGG-PurchaseDraft
-// and PUR-AGG-DemandAllocation, SM-PUR-DRAFT, PUR-INV-001 to 007; Python t04_purchase, T04 A46), and
-// purchase commitments with supplier confirmations (WBS S5-01, commitment.go; PUR-INV-009, 010).
-// Supplier deliveries and commitment changes are later S5 units.
+// and PUR-AGG-DemandAllocation, SM-PUR-DRAFT, PUR-INV-001 to 007; Python t04_purchase, T04 A46),
+// purchase commitments with supplier confirmations (WBS S5-01, commitment.go; PUR-INV-009, 010) and
+// supplier deliveries on the direct delivery route (WBS S5-15, delivery.go; PUR-INV-008).
+// Commitment changes are a later S5 unit.
 //
 //	purchase.draft.prepare  human only: binds lines of an active order, whose activating order
 //	                        approval is not revoked, each with an explicitly allocated quantity, to
@@ -133,7 +134,8 @@ type VoidDraft struct {
 	Reason          string
 }
 
-// Command is one of PUR's commands: PrepareDraft, VoidDraft and the commitment commands.
+// Command is one of PUR's commands: PrepareDraft, VoidDraft, the commitment commands and the
+// supplier delivery commands.
 type Command interface{ purCommand() }
 
 func (PrepareDraft) purCommand() {}
@@ -347,6 +349,7 @@ type Commands interface {
 	PrepareDraft(ctx context.Context, cmd PrepareDraft) (DraftReceipt, error)
 	VoidDraft(ctx context.Context, cmd VoidDraft) (DraftReceipt, error)
 	CommitmentCommands
+	DeliveryCommands
 }
 
 // Queries is PUR's audited read side.
@@ -361,6 +364,7 @@ type Queries interface {
 	// Audit returns PUR's audit trail (pur.audit).
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 	CommitmentQueries
+	DeliveryQueries
 }
 
 // Auditor records a request an inbound adapter refused before it became a command.

@@ -43,6 +43,11 @@ const (
 	CodePurchaseCommitmentNotApproved   = "PURCHASE_COMMITMENT_NOT_APPROVED"  // 409: no live, unrevoked approval of a qualified decider
 	CodeApprovalExpired                 = "APPROVAL_EXPIRED"                  // the approval's validity has ended
 	CodeSupplyConditionExpired          = "SUPPLY_CONDITION_EXPIRED"          // the draft's supply validity has ended
+
+	// Supplier deliveries (S5-15; PUR-INV-008). INDEPENDENT_REVIEW_REQUIRED and REFERENCE_STALE above
+	// are theirs too: the verifier recorded the claim; a version a correction superseded.
+	CodeSupplierDeliveryExceeded   = "SUPPLIER_DELIVERY_EXCEEDED"   // 409: the verified deliveries of a commitment line would exceed what it buys
+	CodeSupplierDeliveryUnverified = "SUPPLIER_DELIVERY_UNVERIFIED" // 409: a delivery no human verified; a claim never counts
 )
 
 var codes = map[string]kernel.Category{
@@ -77,6 +82,8 @@ var codes = map[string]kernel.Category{
 	CodePurchaseCommitmentNotApproved:   kernel.CategoryConflict,
 	CodeApprovalExpired:                 kernel.CategoryInvalid,
 	CodeSupplyConditionExpired:          kernel.CategoryInvalid,
+	CodeSupplierDeliveryExceeded:        kernel.CategoryConflict,
+	CodeSupplierDeliveryUnverified:      kernel.CategoryConflict,
 }
 
 // Category returns the category of a code PUR declares.

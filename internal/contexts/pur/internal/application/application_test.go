@@ -8,6 +8,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/allocation"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/commitment"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/draft"
+	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/supplierdelivery"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -17,11 +18,13 @@ import (
 func TestAPICodesAreTheRulesCodes(t *testing.T) {
 	rules := maps.Clone(draft.Codes)
 	maps.Copy(rules, allocation.Codes)
-	for code, category := range commitment.Codes {
-		if c, ok := rules[code]; ok && c != category {
-			t.Fatalf("%s is %s and %s", code, c, category)
+	for _, codes := range []map[string]kernel.Category{commitment.Codes, supplierdelivery.Codes} {
+		for code, category := range codes {
+			if c, ok := rules[code]; ok && c != category {
+				t.Fatalf("%s is %s and %s", code, c, category)
+			}
+			rules[code] = category
 		}
-		rules[code] = category
 	}
 	if !maps.Equal(rules, api.Codes()) {
 		t.Fatalf("rules %v\napi %v", rules, api.Codes())
@@ -29,28 +32,30 @@ func TestAPICodesAreTheRulesCodes(t *testing.T) {
 }
 
 // The tactical model's humanOnlyCommands name purchase.draft.prepare, purchase.draft.void,
-// purchase.commitment.decide, purchase.commitment.revoke and purchase.commitment.issue (A47 #2:
-// AI is PERMISSION_DENIED); the command catalog and SM-PUR-COMMITMENT let a human or an AI request
-// a commitment and record a supplier confirmation, never a system actor.
+// purchase.commitment.decide, purchase.commitment.revoke, purchase.commitment.issue (A47 #2:
+// AI is PERMISSION_DENIED) and supplier_delivery.verify (PUR-INV-008: 经授权人工核实); the command
+// catalog, SM-PUR-COMMITMENT and ES-12 let a human or an AI request a commitment, record a supplier
+// confirmation and record a supplier delivery, never a system actor.
 func TestHumanOnlyCommands(t *testing.T) {
 	policy, err := authorization.NewPolicy(Rules()...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range []string{api.CommandPrepareDraft, api.CommandVoidDraft, api.CommandDecideCommitment, api.CommandRevokeCommitment,
-		api.CommandIssueCommitment} {
+		api.CommandIssueCommitment, api.CommandVerifySupplierDelivery} {
 		r, err := policy.Rule(c)
 		if err != nil || len(r.ActorKinds) != 1 || r.ActorKinds[0] != kernel.ActorHuman || r.Permission != c {
 			t.Errorf("%s: %+v, %v", c, r, err)
 		}
 	}
-	for _, c := range []string{api.CommandRequestCommitment, api.CommandRecordSupplierConfirmation} {
+	for _, c := range []string{api.CommandRequestCommitment, api.CommandRecordSupplierConfirmation, api.CommandRecordSupplierDelivery} {
 		r, err := policy.Rule(c)
 		if err != nil || !r.Admits(kernel.ActorHuman) || !r.Admits(kernel.ActorAI) || r.Admits(kernel.ActorSystem) || r.Permission != c {
 			t.Errorf("%s: %+v, %v", c, r, err)
 		}
 	}
-	for _, c := range []string{api.CommandGetDraft, api.CommandGetAllocations, api.CommandGetCommitment, api.CommandGetOrderCommitments} {
+	for _, c := range []string{api.CommandGetDraft, api.CommandGetAllocations, api.CommandGetCommitment, api.CommandGetOrderCommitments,
+		api.CommandGetDelivery, api.CommandGetCommitmentDeliveries} {
 		if r, err := policy.Rule(c); err != nil || r.Permission != api.PermissionRead {
 			t.Errorf("%s: %+v, %v", c, r, err)
 		}
@@ -73,6 +78,10 @@ func TestRequestHashIgnoresKeyAndVersion(t *testing.T) {
 		{api.RevokeCommitment{IdempotencyKey: "k1", ExpectedVersion: 1}, api.RevokeCommitment{IdempotencyKey: "k2", ExpectedVersion: 2}},
 		{api.IssueCommitment{IdempotencyKey: "k1", ExpectedVersion: 1, SentAt: "s"}, api.IssueCommitment{IdempotencyKey: "k2", ExpectedVersion: 3, SentAt: "s"}},
 		{api.RecordSupplierConfirmation{IdempotencyKey: "k1", ExpectedVersion: 1}, api.RecordSupplierConfirmation{IdempotencyKey: "k2", ExpectedVersion: 4}},
+		{api.RecordSupplierDelivery{IdempotencyKey: "k1", DeliveryID: "d", HandoverPlace: "CNNGB"},
+			api.RecordSupplierDelivery{IdempotencyKey: "k2", DeliveryID: "d", ExpectedVersion: 2, HandoverPlace: "CNNGB"}},
+		{api.VerifySupplierDelivery{IdempotencyKey: "k1", ExpectedVersion: 1, Decision: "verify"},
+			api.VerifySupplierDelivery{IdempotencyKey: "k2", ExpectedVersion: 3, Decision: "verify"}},
 	} {
 		na, ka, x := request(c.a)
 		nb, kb, y := request(c.b)
