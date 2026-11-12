@@ -291,7 +291,9 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		// FUL last of S5: its commercial release and confirmation call CNX's and STL's guards (C1).
 		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.PURDeliveries(c.PUR),
 			Screening: ful.PTYScreening(), Sources: c.EVD, Compliance: ful.CNXCompliance(), Payments: ful.STLPayments(),
-			Documents: ful.DocumentPorts(c.POL, c.PTY, c.TRD)}) // S5-08: bookings and shipment documents
+			Documents: ful.DocumentPorts(c.POL, c.PTY, c.TRD), // S5-08: bookings and shipment documents
+			Costs:     c.CST,                                  // S5-16: the costing's insurance component (R78)
+		})
 	}
 	if err != nil {
 		return nil, err

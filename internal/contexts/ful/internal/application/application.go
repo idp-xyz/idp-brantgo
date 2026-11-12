@@ -95,6 +95,8 @@ type Upstream struct {
 	Payments   Payments       // STL PaymentConditionGuard v1 (R45)
 	// Documents are the upstreams of bookings and shipment documents (S5-08, document_ports.go).
 	Documents DocumentUpstream
+	// Costs is CST's cost snapshot by category (R78): the insurance component (S5-16, insurance.go).
+	Costs Costs
 }
 
 // Complete reports whether every upstream is wired.

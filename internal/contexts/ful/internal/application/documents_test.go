@@ -71,3 +71,60 @@ func TestDocumentRequests(t *testing.T) {
 		t.Fatal("an empty document upstream is incomplete")
 	}
 }
+
+// S5-16: insurance.record is human or AI under its own permission (role template documentation;
+// not in humanOnlyCommands); insurance.get needs ful.read; the request hash covers the business
+// arguments only; the coverage code is FUL's declared one.
+func TestInsuranceRules(t *testing.T) {
+	policy, err := authorization.NewPolicy(Rules()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := kernel.Scope{Tenant: "tenant.1", Company: "company.A"}
+	for kind, want := range map[kernel.ActorKind]bool{kernel.ActorHuman: true, kernel.ActorAI: true, kernel.ActorSystem: false} {
+		_, err := policy.Admit(identity.Principal{Actor: kernel.ActorRef{Kind: kind, ID: "actor.1"}, Scope: scope}, api.CommandRecordInsurance)
+		if (err == nil) != want {
+			t.Errorf("%s: %v", kind, err)
+		}
+	}
+	if r, err := policy.Rule(api.CommandRecordInsurance); err != nil || r.Permission != api.CommandRecordInsurance {
+		t.Fatalf("%+v %v", r, err)
+	}
+	if r, err := policy.Rule(api.CommandGetInsurance); err != nil || r.Permission != api.PermissionRead {
+		t.Fatalf("%+v %v", r, err)
+	}
+	a := api.RecordInsurance{IdempotencyKey: "k1", DocumentSetID: "docs.1", ExpectedVersion: 2, InsuredAmount: "8602.00"}
+	b := a
+	b.IdempotencyKey, b.ExpectedVersion = "k2", 5
+	if name, _, _ := request(a); name != api.CommandRecordInsurance || requestHash(a) != requestHash(b) {
+		t.Fatal("neither the key nor the expected version is part of the request")
+	}
+	b.InsuredAmount = "8601.99"
+	if requestHash(a) == requestHash(b) {
+		t.Fatal("the insured amount is")
+	}
+	if c, ok := api.Category(docs.CodeInsuranceCoverageInsufficient); !ok || c != kernel.CategoryInvalid ||
+		docs.Codes[docs.CodeInsuranceCoverageInsufficient] != c {
+		t.Fatal("INSURANCE_COVERAGE_INSUFFICIENT is 422 in both")
+	}
+	if docs.KindInsurancePolicy != api.DocumentInsurancePolicy || docs.ServiceInsurer != api.ServiceInsurer ||
+		docs.DefaultCoveragePercent != api.DefaultCoveragePercent || docs.PremiumEqual != api.PremiumEqual ||
+		docs.PremiumDifferent != api.PremiumDifferent || docs.PremiumNotComparable != api.PremiumNotComparable ||
+		docs.PremiumNoComponent != api.PremiumNoComponent || docs.PremiumUnavailable != api.PremiumUnavailable {
+		t.Fatal("the domain and the contract name the same kinds and outcomes")
+	}
+}
+
+// The views print amounts in their currency's decimals; what is not an amount stays as it is.
+func TestInsuranceAmounts(t *testing.T) {
+	if amount("USD", 2, "860200") != "8602.00" || amount("JPY", 0, "1106") != "1106" || amount("USD", 2, "-150") != "-1.50" ||
+		amount("usd", 2, "1") != "1" || amount("USD", 2, "x") != "x" {
+		t.Fatal("amounts")
+	}
+	v := policyComparisonView(&docs.InsurancePolicy{Currency: docs.CurrencyContent{Code: "USD", MinorUnits: 2}, Costing: docs.PremiumComparison{
+		Status: docs.PremiumDifferent, Currency: "USD", MinorUnits: 2, ComponentMinor: "1200", Components: []string{"fee.2"}, PremiumCurrency: "USD",
+		PremiumMinor: "1500", DifferenceMinor: "300"}})
+	if v.Premium != "15.00" || v.ComponentAmount != "12.00" || v.Difference != "3.00" || v.Status != api.PremiumDifferent {
+		t.Fatalf("%+v", v)
+	}
+}

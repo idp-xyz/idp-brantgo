@@ -44,9 +44,10 @@ const (
 	MaxDocumentBytes = 1 << 20
 )
 
-// Kinds returns the document kinds in their order.
+// Kinds returns the document kinds in their order (S5-16 adds the insurance policy record,
+// insurance.go).
 func Kinds() []string {
-	return []string{KindCommercialInvoice, KindPackingList, KindBillOfLading, KindCertificateOfOrigin}
+	return []string{KindCommercialInvoice, KindPackingList, KindBillOfLading, KindCertificateOfOrigin, KindInsurancePolicy}
 }
 
 // Rendered reports whether FUL renders documents of kind.

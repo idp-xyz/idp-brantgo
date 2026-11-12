@@ -55,6 +55,10 @@ const (
 	// CodeDocumentIntegrityFailure: a stored document's bytes are not the ones bound (the catalog
 	// row lists TRD; FUL reads its renditions the same way).
 	CodeDocumentIntegrityFailure = "DOCUMENT_INTEGRITY_FAILURE"
+	// CodeInsuranceCoverageInsufficient (422): the insured amount of a CIF or CIP policy is below the
+	// contract percentage (default 110 %) of the commercial invoice's value, or in another currency
+	// (FUL-INV-005; S5-16).
+	CodeInsuranceCoverageInsufficient = "INSURANCE_COVERAGE_INSUFFICIENT"
 )
 
 var codes = map[string]kernel.Category{
@@ -76,6 +80,8 @@ var codes = map[string]kernel.Category{
 	// S5-08
 	CodeShipmentDocumentsUnreconciled: kernel.CategoryConflict,
 	CodeDocumentIntegrityFailure:      kernel.CategoryInvalid,
+	// S5-16
+	CodeInsuranceCoverageInsufficient: kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code FUL declares.
