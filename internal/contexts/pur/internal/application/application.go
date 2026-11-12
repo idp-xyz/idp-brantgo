@@ -40,14 +40,16 @@ var (
 	anyActor   = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}
 	humanOrAI  = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}
 	commitCmds = []string{api.CommandRequestCommitment, api.CommandDecideCommitment, api.CommandRevokeCommitment, api.CommandIssueCommitment,
-		api.CommandRecordSupplierConfirmation}
+		api.CommandRecordSupplierConfirmation, api.CommandCancelCommitment}
 )
 
 // Rules is PUR's authorization policy. The tactical model's humanOnlyCommands name
 // purchase.draft.prepare, purchase.draft.void, purchase.commitment.decide, purchase.commitment.revoke,
-// purchase.commitment.issue and supplier_delivery.verify; purchase.commitment.request,
-// purchase.supplier_confirmation.record and supplier_delivery.record are human or AI (command
-// catalog, SM-PUR-COMMITMENT, ES-12). Each command needs the permission of its name; reads need
+// purchase.commitment.issue, supplier_delivery.verify, purchase.commitment.change.decide,
+// purchase.commitment.change.apply and purchase.commitment.cancel; purchase.commitment.request,
+// purchase.supplier_confirmation.record, supplier_delivery.record and
+// purchase.commitment.change.prepare are human or AI (command catalog, SM-PUR-COMMITMENT,
+// SM-PUR-COMMITMENT-CHANGE, ES-12). Each command needs the permission of its name; reads need
 // pur.read, the audit trail pur.audit.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
@@ -60,12 +62,18 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandRecordSupplierConfirmation, Permission: api.CommandRecordSupplierConfirmation, ActorKinds: humanOrAI},
 		{Command: api.CommandRecordSupplierDelivery, Permission: api.CommandRecordSupplierDelivery, ActorKinds: humanOrAI},
 		authorization.HumanOnly(api.CommandVerifySupplierDelivery, api.CommandVerifySupplierDelivery),
+		{Command: api.CommandPrepareCommitmentChange, Permission: api.CommandPrepareCommitmentChange, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandDecideCommitmentChange, api.CommandDecideCommitmentChange),
+		authorization.HumanOnly(api.CommandApplyCommitmentChange, api.CommandApplyCommitmentChange),
+		authorization.HumanOnly(api.CommandCancelCommitment, api.CommandCancelCommitment),
 		{Command: api.CommandGetDraft, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetAllocations, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetCommitment, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetOrderCommitments, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetDelivery, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetCommitmentDeliveries, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetCommitmentChange, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetCommitmentChanges, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
 	}
 }
@@ -112,6 +120,14 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	if slices.Contains(deliveryCmds, command) {
 		dl, err := postgres.LoadDelivery(ctx, exec, sc, id, postgres.NoLock)
 		return err == nil && dl != nil && d.Sees(dl.OwnerActor, dl.OwnerTeam), err
+	}
+	if slices.Contains(changeCmds, command) {
+		cid, err := postgres.ChangeCommitment(ctx, exec, sc, id)
+		if err != nil || cid == "" {
+			return false, err
+		}
+		c, err := postgres.LoadCommitment(ctx, exec, sc, cid, postgres.NoLock)
+		return err == nil && c != nil && d.Sees(c.OwnerActor, c.OwnerTeam), err
 	}
 	dr, err := postgres.LoadDraft(ctx, exec, sc, id, postgres.NoLock)
 	if err != nil || dr == nil || !d.Sees(dr.OwnerActor, dr.OwnerTeam) {
@@ -170,6 +186,18 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.VerifySupplierDelivery:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandVerifySupplierDelivery, key, c
+	case api.PrepareCommitmentChange:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandPrepareCommitmentChange, key, c
+	case api.DecideCommitmentChange:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandDecideCommitmentChange, key, c
+	case api.ApplyCommitmentChange:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandApplyCommitmentChange, key, c
+	case api.CancelCommitment:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandCancelCommitment, key, c
 	}
 	return "", "", nil
 }

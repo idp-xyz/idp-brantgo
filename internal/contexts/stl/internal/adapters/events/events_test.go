@@ -20,10 +20,22 @@ import (
 // Unit B6 (WBS S5-12c): the Inbox consumer stl.order_credit (event storming PL-12, PL-13; WF-08 step
 // 5; Context Map R32). Python V0.50 has no STL; the tests cite design IDs.
 
-// credit records what the consumer asks of the application and answers err.
+// credit records what the consumers ask of the application and answers err.
 type credit struct {
 	consumed, released []application.OrderEvent
-	err                error
+	prepared, opened   []application.OrderEvent
+	bases              []application.AccountBasis
+	err, prepareErr    error
+}
+
+func (c *credit) PrepareAccount(_ context.Context, e application.OrderEvent) (application.AccountBasis, error) {
+	c.prepared = append(c.prepared, e)
+	return application.AccountBasis{Order: &application.Order{Binding: application.OrderBinding{OrderID: e.OrderID}}}, c.prepareErr
+}
+
+func (c *credit) OpenOnActivation(_ context.Context, _ bentopg.Executor, e application.OrderEvent, b application.AccountBasis) (string, error) {
+	c.opened, c.bases = append(c.opened, e), append(c.bases, b)
+	return application.EffectAccountOpened, c.err
 }
 
 func (c *credit) ConsumeOnActivation(_ context.Context, _ bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error) {
@@ -78,10 +90,13 @@ func activated(fields map[string]any) messaging.Event {
 // STL declares one consumer, stl.order_credit, on TRD's source: OrderActivated (PL-12) and the four
 // ends of an order (PL-13; OrderClosedUnfulfilled ends a draft, whose reservation is still
 // reserved), not OrderAmended (PL-09). Its system actor is system:inbox.stl.order_credit with
-// credit.consume, credit.release and stl.read.
+// credit.consume, credit.release and stl.read. The second consumer, stl.order_account (D-4, D-18,
+// unit B6b), takes OrderActivated alone, reads TRD and POL in its Prepare step, and its actor
+// system:inbox.stl.order_account holds payment_plan_review.open (order_account.open's permission)
+// and stl.read.
 func TestOrderCreditSubscription(t *testing.T) {
 	subs := Subscriptions(nil, &credit{})
-	if len(subs) != 1 {
+	if len(subs) != 2 {
 		t.Fatalf("%d subscriptions", len(subs))
 	}
 	s := subs[0]
@@ -91,9 +106,16 @@ func TestOrderCreditSubscription(t *testing.T) {
 		slices.Contains(s.EventTypes, eventing.EventType(trdapi.EventOrderAmended)) {
 		t.Fatalf("subscription %+v", s)
 	}
+	a := subs[1]
+	if a.Consumer != "stl.order_account" || a.Source != trdapi.Source || !slices.Equal(a.EventTypes, []eventing.EventType{trdapi.EventOrderActivated}) ||
+		a.Prepare == nil || a.Handler == nil {
+		t.Fatalf("account subscription %+v", a)
+	}
 	grants, err := messaging.InboxGrants(subs)
-	if err != nil || len(grants) != 1 || grants[0].Actor != (kernel.ActorRef{Kind: kernel.ActorSystem, ID: "inbox.stl.order_credit"}) ||
-		!slices.Equal(grants[0].Permissions, []string{"credit.consume", "credit.release", "stl.read"}) {
+	if err != nil || len(grants) != 2 || grants[0].Actor != (kernel.ActorRef{Kind: kernel.ActorSystem, ID: "inbox.stl.order_credit"}) ||
+		!slices.Equal(grants[0].Permissions, []string{"credit.consume", "credit.release", "stl.read"}) ||
+		grants[1].Actor != (kernel.ActorRef{Kind: kernel.ActorSystem, ID: "inbox.stl.order_account"}) ||
+		!slices.Equal(grants[1].Permissions, []string{"payment_plan_review.open", "stl.read"}) {
 		t.Fatalf("grants %+v %v", grants, err)
 	}
 	// The declared types are not the handler's own slices: a caller cannot change what it routes.
@@ -161,6 +183,53 @@ func TestMalformedOrderEventsAreRejected(t *testing.T) {
 	}
 	if err := h(context.Background(), orderEnvelope(trdapi.EventOrderCancelled, nil)); err != nil || len(c.released) != 1 {
 		t.Fatalf("an end without activated_at: %v", err)
+	}
+}
+
+// stl.order_account: Prepare reads the activation's order binding for the application before the
+// transaction; the handler hands the application the event and what Prepare read. A malformed
+// payload is refused for good in either step, an account STL cannot open for good refuses the event
+// under its code, and every other failure is retried.
+func TestOrderAccountConsumer(t *testing.T) {
+	c := &credit{}
+	sub := Subscriptions(nil, c)[1]
+	e := activated(nil)
+	basis, err := sub.Prepare(context.Background(), e.Envelope)
+	if err != nil || len(c.prepared) != 1 || c.prepared[0].OrderRevision != 1 || c.prepared[0].OrderHash != orderHashA ||
+		c.prepared[0].ActivatedAt.IsZero() {
+		t.Fatalf("prepare %+v, %v", c.prepared, err)
+	}
+	e.Prepared = basis
+	if err = sub.Handler(context.Background(), e); err != nil || len(c.opened) != 1 || c.opened[0] != c.prepared[0] ||
+		c.bases[0].Order == nil || c.bases[0].Order.Binding.OrderID != "order.1" || len(c.consumed) != 0 {
+		t.Fatalf("handler %+v, %v", c.opened, err)
+	}
+	if err = sub.Handler(context.Background(), activated(nil)); err == nil || errors.Is(err, messaging.ErrEventRejected) {
+		t.Fatalf("without the prepared basis: %v; want a retry", err)
+	}
+
+	bad := activated(map[string]any{"order_hash": "abc"})
+	if _, err = sub.Prepare(context.Background(), bad.Envelope); !errors.Is(err, messaging.ErrEventRejected) {
+		t.Fatalf("prepare of a malformed payload: %v", err)
+	}
+	if err = sub.Handler(context.Background(), bad); !errors.Is(err, messaging.ErrEventRejected) || len(c.opened) != 1 {
+		t.Fatalf("handler of a malformed payload: %v", err)
+	}
+	failing := &credit{prepareErr: errors.New("TRD unavailable")}
+	if _, err = Subscriptions(nil, failing)[1].Prepare(context.Background(), e.Envelope); err == nil || errors.Is(err, messaging.ErrEventRejected) {
+		t.Fatalf("a failed read: %v; want a retry", err)
+	}
+
+	refused := &credit{err: &application.AccountMismatch{Code: application.FailureAccountNotOpenable, Detail: "order.1"}}
+	err = Subscriptions(nil, refused)[1].Handler(context.Background(), e)
+	if !errors.Is(err, messaging.ErrEventRejected) || !strings.Contains(err.Error(), "("+application.FailureAccountNotOpenable+")") {
+		t.Fatalf("account not openable: %v", err)
+	}
+	for _, cause := range []error{kernel.Reject(kernel.CodePermissionDenied, "/", ""), errors.New("connection reset")} {
+		err = Subscriptions(nil, &credit{err: cause})[1].Handler(context.Background(), e)
+		if !errors.Is(err, cause) || errors.Is(err, messaging.ErrEventRejected) {
+			t.Errorf("%v: %v", cause, err)
+		}
 	}
 }
 

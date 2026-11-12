@@ -42,20 +42,22 @@ func TestHumanOnlyCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range []string{api.CommandPrepareDraft, api.CommandVoidDraft, api.CommandDecideCommitment, api.CommandRevokeCommitment,
-		api.CommandIssueCommitment, api.CommandVerifySupplierDelivery} {
+		api.CommandIssueCommitment, api.CommandVerifySupplierDelivery, api.CommandDecideCommitmentChange, api.CommandApplyCommitmentChange,
+		api.CommandCancelCommitment} {
 		r, err := policy.Rule(c)
 		if err != nil || len(r.ActorKinds) != 1 || r.ActorKinds[0] != kernel.ActorHuman || r.Permission != c {
 			t.Errorf("%s: %+v, %v", c, r, err)
 		}
 	}
-	for _, c := range []string{api.CommandRequestCommitment, api.CommandRecordSupplierConfirmation, api.CommandRecordSupplierDelivery} {
+	for _, c := range []string{api.CommandRequestCommitment, api.CommandRecordSupplierConfirmation, api.CommandRecordSupplierDelivery,
+		api.CommandPrepareCommitmentChange} {
 		r, err := policy.Rule(c)
 		if err != nil || !r.Admits(kernel.ActorHuman) || !r.Admits(kernel.ActorAI) || r.Admits(kernel.ActorSystem) || r.Permission != c {
 			t.Errorf("%s: %+v, %v", c, r, err)
 		}
 	}
 	for _, c := range []string{api.CommandGetDraft, api.CommandGetAllocations, api.CommandGetCommitment, api.CommandGetOrderCommitments,
-		api.CommandGetDelivery, api.CommandGetCommitmentDeliveries} {
+		api.CommandGetDelivery, api.CommandGetCommitmentDeliveries, api.CommandGetCommitmentChange, api.CommandGetCommitmentChanges} {
 		if r, err := policy.Rule(c); err != nil || r.Permission != api.PermissionRead {
 			t.Errorf("%s: %+v, %v", c, r, err)
 		}
@@ -82,6 +84,11 @@ func TestRequestHashIgnoresKeyAndVersion(t *testing.T) {
 			api.RecordSupplierDelivery{IdempotencyKey: "k2", DeliveryID: "d", ExpectedVersion: 2, HandoverPlace: "CNNGB"}},
 		{api.VerifySupplierDelivery{IdempotencyKey: "k1", ExpectedVersion: 1, Decision: "verify"},
 			api.VerifySupplierDelivery{IdempotencyKey: "k2", ExpectedVersion: 3, Decision: "verify"}},
+		{api.PrepareCommitmentChange{IdempotencyKey: "k1", ChangeID: "x", Revision: 1}, api.PrepareCommitmentChange{IdempotencyKey: "k2", ChangeID: "x", Revision: 1}},
+		{api.DecideCommitmentChange{IdempotencyKey: "k1", ExpectedVersion: 1, Decision: "approve"},
+			api.DecideCommitmentChange{IdempotencyKey: "k2", ExpectedVersion: 2, Decision: "approve"}},
+		{api.ApplyCommitmentChange{IdempotencyKey: "k1", ChangeID: "x", ExpectedVersion: 2}, api.ApplyCommitmentChange{IdempotencyKey: "k2", ChangeID: "x", ExpectedVersion: 3}},
+		{api.CancelCommitment{IdempotencyKey: "k1", CommitmentID: "c", ExpectedVersion: 3}, api.CancelCommitment{IdempotencyKey: "k2", CommitmentID: "c", ExpectedVersion: 4}},
 	} {
 		na, ka, x := request(c.a)
 		nb, kb, y := request(c.b)
@@ -93,6 +100,24 @@ func TestRequestHashIgnoresKeyAndVersion(t *testing.T) {
 	}
 	if name, _, _ := request(nil); name != "" {
 		t.Fatal("unknown command")
+	}
+}
+
+// A refusal of the draft's preparation of a change's proposal points at the change: request line k at
+// the change's line index[k], the order at the commitment (preparation) or at the change's order.
+func TestProposedPaths(t *testing.T) {
+	for _, c := range []struct{ path, prefix, want string }{
+		{"/args/lines/0/quantity", "/args/", "/args/lines/2/quantity"},
+		{"/args/lines/1/source", "/change/", "/change/lines/3/source"},
+		{"/args/lines/1", "/change/", "/change/lines/3"},
+		{"/args/order_id", "/args/", "/args/commitment_id"},
+		{"/args/order_id", "/change/", "/change/order_id"},
+		{"/draft/x", "/change/", "/draft/x"},
+	} {
+		err := proposed(kernel.Reject(kernel.CodeInvalidKnownValue, c.path, ""), []int{2, 3}, c.prefix)
+		if r, _ := kernel.AsRejection(err); r == nil || r.Fields[0].Path != c.want {
+			t.Errorf("%s under %s: %v", c.path, c.prefix, err)
+		}
 	}
 }
 

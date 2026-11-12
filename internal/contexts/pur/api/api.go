@@ -2,8 +2,8 @@
 // the demand allocation of active order lines (WBS S3-10, S3-16; tactical model PUR-AGG-PurchaseDraft
 // and PUR-AGG-DemandAllocation, SM-PUR-DRAFT, PUR-INV-001 to 007; Python t04_purchase, T04 A46),
 // purchase commitments with supplier confirmations (WBS S5-01, commitment.go; PUR-INV-009, 010) and
-// supplier deliveries on the direct delivery route (WBS S5-15, delivery.go; PUR-INV-008).
-// Commitment changes are a later S5 unit.
+// supplier deliveries on the direct delivery route (WBS S5-15, delivery.go; PUR-INV-008) and
+// commitment changes and cancellation (WBS S5-19, change.go; PUR-INV-011).
 //
 //	purchase.draft.prepare  human only: binds lines of an active order, whose activating order
 //	                        approval is not revoked, each with an explicitly allocated quantity, to
@@ -350,6 +350,7 @@ type Commands interface {
 	VoidDraft(ctx context.Context, cmd VoidDraft) (DraftReceipt, error)
 	CommitmentCommands
 	DeliveryCommands
+	ChangeCommands
 }
 
 // Queries is PUR's audited read side.
@@ -365,6 +366,7 @@ type Queries interface {
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 	CommitmentQueries
 	DeliveryQueries
+	ChangeQueries
 }
 
 // Auditor records a request an inbound adapter refused before it became a command.

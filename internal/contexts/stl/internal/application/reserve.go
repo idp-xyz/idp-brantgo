@@ -18,6 +18,9 @@ import (
 // the credit rate (POL LookupFX). Inside it, it locks the customer's credit root FOR UPDATE
 // (creating it), re-checks the policy and the rate with ConfigGuard, and decides on the customer's
 // limit versions, reservations, receivables and the order's decisions, all read under that lock.
+// The order revision reserved is TRD's current revision or, for an active order, a revision one of
+// its amendments proposes (S5 D-9: order.amendment.apply asks CreditGuard v1 for that revision when
+// it asks more credit); the stages and credit portion are that revision's.
 type reserveCredit struct {
 	s         Service
 	cmd       api.ReserveCredit
@@ -90,14 +93,18 @@ func (h *reserveCredit) Lock(ctx context.Context, exec bentopg.Executor) error {
 func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 	sc, c, now := scope(ctx), h.cmd, kernel.Instant(h.s.Clock.Now())
 	o := h.order
-	switch {
-	case o == nil:
+	if o == nil {
 		return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/order_id", "")
+	}
+	b := cc.Binding{OrderID: c.OrderID, OrderRevision: c.OrderRevision, OrderHash: c.OrderHash}
+	orderStages, portion, known := o.revision(OrderBinding(b))
+	switch {
 	case o.Code != "":
 		return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's order revision is not intact")
-	case o.Binding.OrderRevision != c.OrderRevision:
-		return action.Outcome{}, api.Reject(api.CodeReferenceStale, "/args/order_revision", "TRD's order is at another revision")
-	case o.Binding.OrderHash != c.OrderHash:
+	case !known && !o.numbers(c.OrderRevision):
+		return action.Outcome{}, api.Reject(api.CodeReferenceStale, "/args/order_revision",
+			"TRD's order is at another revision, and no amendment of it proposes this one")
+	case !known:
 		return action.Outcome{}, api.Reject(api.CodeReferenceStale, "/args/order_hash", "TRD's order revision has another hash")
 	case o.Status != OrderDraft && o.Status != OrderActive:
 		return action.Outcome{}, api.Reject(api.CodeOrderNotActive, "/args/order_id", "The order is "+o.Status)
@@ -126,8 +133,8 @@ func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	stages := make([]cc.Stage, 0, len(o.Stages))
-	for _, s := range o.Stages {
+	stages := make([]cc.Stage, 0, len(orderStages))
+	for _, s := range orderStages {
 		m, err := kernel.ParseMinor(h.orderCur, s.AmountMinor)
 		if err != nil {
 			return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's payment stage "+s.StageID+" has no amount")
@@ -150,7 +157,6 @@ func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	b := cc.Binding{OrderID: c.OrderID, OrderRevision: c.OrderRevision, OrderHash: c.OrderHash}
 	h.out, err = cc.Reserve(cc.ReserveInput{ID: c.ReservationID, PartyID: h.root.PartyID, Binding: b, OrderCurrency: h.orderCur, Stages: stages,
 		Convert: convert, FX: fx, Policy: policy, Versions: versions, Reservations: reservations, Decisions: decisions, Receivables: receivables,
 		By: cc.Act{By: d.Actor, Epoch: d.Epoch, At: now}, Team: d.Team, NewDecisionID: action.NewID("cdec", now)})
@@ -158,9 +164,9 @@ func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 		return action.Outcome{}, err
 	}
 	out := h.out
-	if out.Existing == nil && policy.DocumentsSecured && o.CreditPortionMinor != "" && o.CreditPortionMinor != out.Portion.MinorString() {
+	if out.Existing == nil && policy.DocumentsSecured && portion != "" && portion != out.Portion.MinorString() {
 		return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id",
-			"TRD's credit portion "+o.CreditPortionMinor+" is not its stages' "+out.Portion.MinorString())
+			"TRD's credit portion "+portion+" is not its stages' "+out.Portion.MinorString())
 	}
 	switch {
 	case out.Existing != nil:

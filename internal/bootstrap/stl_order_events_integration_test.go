@@ -574,7 +574,8 @@ func TestDeadLetteredOrderEventsReplayWithoutLateEffects(t *testing.T) {
 // world's order, activated through the shared helpers, pays before shipment, so STL never reserved
 // for it — its OrderActivated is settled and STL records nothing. Amended to 30 % on confirmation and
 // 70 % 30 days after shipment (revision 2, 672.00 on credit, as TestCreditOverHTTPWithTRDOrders), it
-// holds the sales clerk's reservation of revision 2; TRD's OrderCancelled has the consumer release
+// holds the sales clerk's reservation of revision 2, made for the revision the approved amendment
+// proposed before it was applied (S5 D-9); TRD's OrderCancelled has the consumer release
 // it. Every TRD event, quotes and amendments included, is settled by the dispatcher of every composed
 // context.
 func TestTRDOrderEventsReachSTLThroughTheRelay(t *testing.T) {
@@ -620,11 +621,11 @@ func TestTRDOrderEventsReachSTLThroughTheRelay(t *testing.T) {
 		AmendmentID: "amendment.pay", ExpectedVersion: s.RowVersion, AmendmentHash: s.AmendmentHash, Decision: trdapi.DecisionApprove,
 		Reason: "客户书面确认新付款条件"})
 	q.must(err)
-	_, err = q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(o.ObjectID, "amendment.pay", dec.RowVersion))
-	q.must(err)
-	snap := q.snapshots(q.author, o.ObjectID)[o.ObjectID]
-	if snap.Binding.OrderRevision != 2 || snap.CreditPortionMinor != "67200" {
-		t.Fatalf("TRD's snapshot %+v", snap)
+	// The approved amendment grows the credit need: STL reserves the revision it proposes before
+	// order.amendment.apply asks CreditGuard v1 for it (S5 D-9, unit B4).
+	proposed := q.proposed(o.ObjectID, "amendment.pay")
+	if proposed.Binding.OrderRevision != 2 || proposed.CreditPortionMinor != "67200" {
+		t.Fatalf("TRD's proposed revision %+v", proposed)
 	}
 
 	_, err = q.c.STL.RequestCreditLimit(sales, stlapi.RequestCreditLimit{IdempotencyKey: q.key(), RequestID: "limit.1", PartyID: "customer.1",
@@ -638,9 +639,14 @@ func TestTRDOrderEventsReachSTLThroughTheRelay(t *testing.T) {
 		q.must(err)
 	}
 	r, err := q.c.STL.ReserveCredit(sales, stlapi.ReserveCredit{IdempotencyKey: q.key(), ReservationID: "res.credit", OrderID: o.ObjectID,
-		OrderRevision: 2, OrderHash: snap.Binding.OrderHash, CreditPolicy: stlRef(policy)})
+		OrderRevision: 2, OrderHash: proposed.Binding.OrderHash, CreditPolicy: stlRef(policy)})
 	if err != nil || r.Status != stlapi.ReservationReserved {
 		t.Fatalf("reserve revision 2: %+v %v", r, err)
+	}
+	_, err = q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(o.ObjectID, "amendment.pay", dec.RowVersion))
+	q.must(err)
+	if snap := q.snapshots(q.author, o.ObjectID)[o.ObjectID]; snap.Binding != proposed.Binding || snap.CreditPortionMinor != "67200" {
+		t.Fatalf("TRD's snapshot %+v", snap)
 	}
 
 	_, err = q.c.TRD.CancelOrder(q.author, trdapi.CancelOrder{IdempotencyKey: q.key(), OrderID: o.ObjectID, ExpectedVersion: q.orderVersion(o.ObjectID),

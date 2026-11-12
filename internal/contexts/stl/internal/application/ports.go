@@ -19,7 +19,9 @@ import (
 //     orders — at its current revision: the binding, its state, the customer, the POL currency
 //     revision its amounts are in, the payment stages of its sealed calculation with their amounts
 //     and release control (D-5), and CreditPortionMinor, the stages due after shipment or invoice
-//     without document control. Orders outside the caller's company or data scope are absent.
+//     without document control; for an active order also the revisions its amendments pending
+//     approval or approved propose, with theirs (S5 D-9: credit.reserve may reserve one before
+//     the amendment is applied). Orders outside the caller's company or data scope are absent.
 //
 // adapters/orders implements the port on trdapi (OrderSnapshotLookups.ResolveOrderSnapshots); tests
 // implement it to steer TRD's answers.
@@ -61,7 +63,8 @@ type CurrencyRef struct {
 }
 
 // Order is what TRD says of an order now (OrderCommercialSnapshot v1). Code is "" when its sealed
-// revision is intact, REFERENCE_INVALID otherwise.
+// revision is intact, REFERENCE_INVALID otherwise. Proposed are the revisions the open amendments
+// of an active order propose, which TRD derives (S5 D-9).
 type Order struct {
 	Binding            OrderBinding
 	Status             string
@@ -70,6 +73,49 @@ type Order struct {
 	Currency           CurrencyRef
 	Stages             []OrderStage
 	CreditPortionMinor string
+	Proposed           []ProposedRevision
+}
+
+// ProposedRevision is a revision an amendment of the order proposes: the order at the revision
+// number and hash order.amendment.apply would produce, with that revision's payment stages and
+// credit portion in the order currency (TRD ProposedRevision, those TRD derives now only).
+type ProposedRevision struct {
+	AmendmentID        string
+	Binding            OrderBinding
+	Stages             []OrderStage
+	CreditPortionMinor string
+}
+
+// revision returns the stages and credit portion of the order revision b binds: the current
+// revision, or a revision an amendment proposes (only of an active order). ok is false for any
+// other binding.
+func (o Order) revision(b OrderBinding) (stages []OrderStage, portion string, ok bool) {
+	if b == o.Binding {
+		return o.Stages, o.CreditPortionMinor, true
+	}
+	if o.Status != OrderActive {
+		return nil, "", false
+	}
+	for _, p := range o.Proposed {
+		if p.Binding == b {
+			return p.Stages, p.CreditPortionMinor, true
+		}
+	}
+	return nil, "", false
+}
+
+// numbers reports whether revision is the order's current revision number or one an amendment of
+// it proposes.
+func (o Order) numbers(revision int64) bool {
+	if revision == o.Binding.OrderRevision {
+		return true
+	}
+	for _, p := range o.Proposed {
+		if o.Status == OrderActive && p.Binding.OrderRevision == revision {
+			return true
+		}
+	}
+	return false
 }
 
 func polRef(r api.ConfigRef) polapi.ConfigRef {
