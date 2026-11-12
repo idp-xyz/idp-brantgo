@@ -61,9 +61,28 @@ import (
 // change since the contract formed — what CAT, CST, INQ, POL and PTY now say of what the revision
 // binds, and the sales exchange rate's age — is a Risk the approval acknowledged
 // (ORDER_RISK_UNACKNOWLEDGED; ADR-BR-004: a change of cost, configuration or exchange rate is
-// acknowledged, not refused). STL's CreditGuard v1 (R57, TRD-INV-022) and CNX's
-// TradeComplianceGuard v1 (R58, TRD-INV-023) are not wired (the owner's decision of 2026-11-10): the
-// commit evidence and OrderActivated name them as unchecked, never as passed.
+// acknowledged, not refused).
+//
+// Two more upstream guards decide the activation since S5 (unit B4; WF-08, ES-11), in context code
+// order among the others and each locking its row FOR SHARE until the order commits. Neither is a
+// risk: no order approval overrides a refusal.
+//
+//   - CNX's TradeComplianceGuard v1 (R58, TRD-INV-023), after CAT: a clear, valid trade compliance
+//     conclusion covers the order at its revision and hash, else TRADE_COMPLIANCE_NOT_CLEAR. The
+//     commit evidence records GuardCNXTradeCompliance (status/reason/check/decision/licence, as CNX
+//     names it), the screening regulation revision the conclusion binds and its validity.
+//   - STL's CreditGuard v1 (R57, TRD-INV-022), after PTY: when the order's sealed payment plan has a
+//     stage due after shipment or after the invoice, a live reservation of the order revision covers
+//     the plan's credit portion — the stages among them without documents control; 0 when documents
+//     control them all, which STL answers documents_secured (D-5) — else
+//     CREDIT_RESERVATION_REQUIRED. The commit evidence records GuardSTLCredit (covered,
+//     documents_secured or GuardNotRequired for a plan paid before shipment), the portion and
+//     currency asked, and the reservation: its ID, amount, secured amount, basis and, when it was
+//     reserved under a credit decision, that decision.
+//
+// A guard that is not wired (a TRD assembled without it) is named in the commit evidence as
+// NotWired and in OrderActivated's unchecked_guards, never as passed; the composed process wires
+// both.
 //
 // Request members in snake_case: order.prepare {order_id, quote_id, business_revision,
 // business_hash, acceptance_id}; order.review.request {order_id, expected_version, review_id};
@@ -107,9 +126,38 @@ const (
 	// OrderSnapshotContract names an order's commercial snapshot.
 	OrderSnapshotContract = "brant.order-commercial-snapshot/0.1.0"
 
-	// The extension points order.activate names as unchecked while their contexts are not wired.
+	// The guards of STL and CNX in the commit evidence of order.activate and order.amendment.apply
+	// (and, for a TRD assembled without one, in unchecked_guards).
 	GuardSTLCredit          = "stl.credit_guard.v1"
 	GuardCNXTradeCompliance = "cnx.trade_compliance_guard.v1"
+
+	// What the commit evidence says under a guard's name when the guard was not asked, each for its
+	// own reason, never as a pass of the guard:
+	//
+	// GuardNotRequired: the payment plan has no stage due after shipment or after the invoice, so
+	// TRD-INV-022 asks for no reservation.
+	// GuardNotIncreased (order.amendment.apply): the amended revision asks no more credit than the
+	// revision it amends; it stands on what the order holds (D-9).
+	// GuardNotCheckedAtApply (order.amendment.apply): trade compliance is not checked when an
+	// amendment is applied — the new order revision has no conclusion yet, CNX opens a pending
+	// check for it (PL-14) and FUL's release gate blocks shipment until it is clear (D-9).
+	GuardNotRequired       = "not_required"
+	GuardNotIncreased      = "not_increased"
+	GuardNotCheckedAtApply = "not_checked_at_apply"
+
+	// Commit evidence entries of the two guards beside the entry under the guard's name.
+	EvidenceComplianceRegulation  = "trade_compliance_regulation"         // the screening_regulation revision the conclusion binds, "<id>@<revision>"
+	EvidenceComplianceValidUntil  = "trade_compliance_valid_until"        // the conclusion's validity
+	EvidenceCreditPostShipment    = "credit_post_shipment_minor"          // what the plan has due after shipment or invoice, minor units
+	EvidenceCreditPortion         = "credit_portion_minor"                // the credit portion asked of the guard, minor units
+	EvidenceCreditCurrency        = "credit_currency"                     // the order currency of the amounts
+	EvidenceCreditReservation     = "credit_reservation_id"               // the reservation that covers the portion
+	EvidenceCreditReserved        = "credit_reserved_minor"               // its amount
+	EvidenceCreditSecured         = "credit_secured_minor"                // its documents-secured amount
+	EvidenceCreditBasis           = "credit_basis"                        // within_limit, credit_decision or documents_secured
+	EvidenceCreditDecision        = "credit_decision_id"                  // the credit decision (the exception) it was reserved under, "" for none
+	EvidenceCreditPreviousPost    = "credit_previous_post_shipment_minor" // order.amendment.apply: the amended revision's
+	EvidenceCreditPreviousPortion = "credit_previous_portion_minor"       // order.amendment.apply: the amended revision's
 
 	maxRiskAcknowledgements = 200
 	maxRiskText             = 500
@@ -517,7 +565,7 @@ type OrderCheck struct {
 	ReviewID       string
 	Risks          []Risk
 	Unacknowledged []Risk
-	Unchecked      []string // extension points not wired (GuardSTLCredit, GuardCNXTradeCompliance)
+	Unchecked      []string // guards this TRD was assembled without (GuardSTLCredit, GuardCNXTradeCompliance); none in the composed process
 	Activatable    bool
 	Code           string
 	Path           string

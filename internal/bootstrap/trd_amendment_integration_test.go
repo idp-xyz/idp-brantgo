@@ -19,7 +19,10 @@ import (
 // TRD-INV-016, 018, 019; TD-AT01, TD-AT02, ES-09, SIM-02 step 7; Context Map R19) on the order
 // world: "editor" (the author) prepares and submits amendments, "reviewer" decides and applies them;
 // both are humans with every permission. Python has none of this. FUL's shipments and PUR's
-// commitments are not wired in S3 (recorded as not_wired): nothing can have shipped.
+// commitments are not wired in S3 (recorded as not_wired): nothing can have shipped. Since S5 B4
+// apply asks STL's CreditGuard for the revision it produces when that asks more credit (the order
+// world's plan is paid before shipment: not_required) and records trade compliance as not checked
+// at apply (D-9).
 
 // amendImpact is a complete impact assessment: purchasing affected, booking open, the rest
 // unaffected.
@@ -163,7 +166,8 @@ func TestOrderAmendmentLifecycle(t *testing.T) {
 	}
 	e := v2.AmendmentCommits[0].Entries
 	if e["command"] != trdapi.CommandApplyAmendment || e["from_order_hash"] != v1.OrderHash || e["to_order_hash"] != r.OrderHash ||
-		e["fulfilment_source"] != trdapi.NotWired || e[trdapi.GuardSTLCredit] != trdapi.NotWired || e[trdapi.GuardCNXTradeCompliance] != trdapi.NotWired ||
+		e["fulfilment_source"] != trdapi.NotWired || e[trdapi.GuardSTLCredit] != trdapi.GuardNotRequired ||
+		e[trdapi.GuardCNXTradeCompliance] != trdapi.GuardNotCheckedAtApply ||
 		e["decided_by"] != "human:reviewer" || e["prepared_by"] != "ai:agent.1,human:editor" || e["open_items"] != "booking" ||
 		e["idempotency_key"] != apply.IdempotencyKey {
 		t.Fatalf("the commit evidence %v", e)
@@ -200,7 +204,8 @@ func TestOrderAmendmentLifecycle(t *testing.T) {
 		t.Fatalf("events %v", types)
 	}
 	if amended["order_revision"] != float64(2) || amended["order_hash"] != r.OrderHash || amended["from_order_hash"] != v1.OrderHash ||
-		amended["aggregate_type"] != "SalesOrder" || amended["fulfilment_source"] != trdapi.NotWired || amended["changed_terms"] != "" {
+		amended["aggregate_type"] != "SalesOrder" || amended["fulfilment_source"] != trdapi.NotWired || amended["changed_terms"] != "" ||
+		amended["unchecked_guards"] != trdapi.GuardFULShipments || amended["credit_guard"] != trdapi.GuardNotRequired {
 		t.Fatalf("OrderAmended %v", amended)
 	}
 	lines, _ := amended["changed_lines"].([]any)

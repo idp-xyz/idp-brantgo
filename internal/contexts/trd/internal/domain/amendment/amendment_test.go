@@ -296,6 +296,72 @@ func TestTwoAmendmentsOfOneRevisionHaveOneWinner(t *testing.T) {
 	}
 }
 
+// S5 D-9 (unit B4): an amendment pending approval or approved on the order's current revision
+// proposes the revision Preview derives, which is the revision Apply produces from the same
+// facts; a draft, a stale or an ended amendment proposes none. Apply hands that revision to the
+// guard once orderrev.Next derived it — never when an earlier check refused — appends the guard's
+// evidence after the upstream entries, and refuses with the guard's refusal, leaving the amendment
+// approved.
+func TestApplyAsksTheGuardForTheRevisionItProduces(t *testing.T) {
+	r1 := revisionOne()
+	a, _, _, err := Prepare(nil, toFortyFour(r1, impact()), activeAt(r1), orderrev.Fulfilment{}, facts(), clerk, 1, at(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Proposes(activeAt(r1)) {
+		t.Fatal("a draft proposes a revision")
+	}
+	if err = a.Submit(1, activeAt(r1), clerk, 1, at(1)); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Proposes(activeAt(r1)) || a.Proposes(Order{Status: orderrev.Closed, Current: r1}) {
+		t.Fatal("a pending amendment of the current revision proposes one, of a closed order none")
+	}
+	if err = a.Decide(2, Decision{Hash: a.Hash, Approve: true}, activeAt(r1), reviewer, 1, at(2)); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := a.Preview(activeAt(r1), orderrev.Fulfilment{}, facts())
+	if err != nil || !a.Proposes(activeAt(r1)) || preview.Number != 2 || preview.Amendment.Hash != a.Hash {
+		t.Fatalf("preview %+v %v", preview, err)
+	}
+	refused := errors.New("CREDIT_RESERVATION_REQUIRED")
+	var asked []*orderrev.Revision
+	guard := func(err error) func(*orderrev.Revision) ([]quote.Entry, error) {
+		return func(next *orderrev.Revision) ([]quote.Entry, error) {
+			asked = append(asked, next)
+			return []quote.Entry{{Name: "stl.credit_guard.v1", Value: "covered"}}, err
+		}
+	}
+	upstream := []quote.Entry{{Name: "cnx.trade_compliance_guard.v1", Value: "not_checked_at_apply"}}
+	if _, _, _, err := a.Apply(Applying{ExpectedVersion: 1, Facts: facts(), Guard: guard(nil)}, activeAt(r1), qualified, applier, 1, at(3)); code(err) !=
+		"VERSION_CONFLICT at /args/expected_version" || len(asked) != 0 {
+		t.Fatalf("an earlier refusal asked the guard: %s, %d", code(err), len(asked))
+	}
+	if _, _, _, err := a.Apply(Applying{ExpectedVersion: 3, Facts: facts(), Upstream: upstream, Guard: guard(refused)}, activeAt(r1), qualified,
+		applier, 1, at(3)); !errors.Is(err, refused) || a.Status != Approved || a.Version != 3 || len(asked) != 1 || asked[0].Hash != preview.Hash {
+		t.Fatalf("the guard's refusal: %v, %+v", err, a)
+	}
+	r2, _, commit, err := a.Apply(Applying{ExpectedVersion: 3, Facts: facts(), Upstream: upstream, Guard: guard(nil)}, activeAt(r1), qualified,
+		applier, 1, at(4))
+	if err != nil || r2.Hash != preview.Hash || len(asked) != 2 {
+		t.Fatalf("applied %v", err)
+	}
+	var names []string
+	for _, e := range commit.Entries {
+		names = append(names, e.Name)
+	}
+	if i := slices.Index(names, "cnx.trade_compliance_guard.v1"); i < 0 || i+1 >= len(names) || names[i+1] != "stl.credit_guard.v1" ||
+		names[i+2] != "authority_epoch" || len(upstream) != 1 {
+		t.Fatalf("entries %q", names)
+	}
+	if a.Proposes(activeAt(r2)) || a.Proposes(activeAt(r1)) {
+		t.Fatal("an applied amendment proposes a revision")
+	}
+	if _, err := a.Preview(activeAt(r2), orderrev.Fulfilment{}, facts()); code(err) != "ORDER_AMENDMENT_STALE at /args/amendment_id" {
+		t.Fatalf("preview on another revision: %s", code(err))
+	}
+}
+
 // What prepare refuses.
 func TestPrepareRefusals(t *testing.T) {
 	r1 := revisionOne()

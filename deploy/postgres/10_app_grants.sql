@@ -205,6 +205,8 @@ GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, 
               acknowledged_risks, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
     ON brant_trd.sales_order_review TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_order_active_v1(text, bigint, text) TO brant_app;
+-- TRD publishes the lock-free order-state read STL's credit.release calls inside its transaction (S5 B4).
+GRANT EXECUTE ON FUNCTION brant_trd.order_state_v1(text) TO brant_app;
 -- Active orders' amendments, revisions and ends (S3-15): an order moves to its next revision only
 -- with the revision row and the amendment's commit evidence (trigger), which, like the end of an
 -- active order, are only inserted; an amendment changes along SM-TRD-ORDER-AMENDMENT (trigger).

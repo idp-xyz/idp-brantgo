@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	cstapi "go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
@@ -82,8 +83,18 @@ func (q *trdWorld) activateOrderCmd(order string, expected int64, review string)
 }
 
 // reviewed has the author request review of order o and the reviewer approve it acknowledging
-// risks; it returns the decision's receipt.
+// risks, and readies the order for STL's and CNX's guards (readyToActivate, S5 D-20); it returns
+// the decision's receipt. Everything order.activate needs but the activation itself is then done.
 func (q *trdWorld) reviewed(o trdapi.OrderReceipt, review string, risks ...trdapi.RiskAcknowledgement) trdapi.OrderReceipt {
+	q.t.Helper()
+	d := q.approvedReview(o, review, risks...)
+	q.readyToActivate(o.ObjectID)
+	return d
+}
+
+// approvedReview has the author request review of order o and the reviewer approve it
+// acknowledging risks, and nothing else; it returns the decision's receipt.
+func (q *trdWorld) approvedReview(o trdapi.OrderReceipt, review string, risks ...trdapi.RiskAcknowledgement) trdapi.OrderReceipt {
 	q.t.Helper()
 	r, err := q.c.TRD.RequestOrderReview(q.author, q.requestCmd(o.ObjectID, q.orderVersion(o.ObjectID), review))
 	q.must(err)
@@ -93,7 +104,7 @@ func (q *trdWorld) reviewed(o trdapi.OrderReceipt, review string, risks ...trdap
 }
 
 // activeOrder prepares order "order.<id>" of an accepted quote id, has it reviewed as
-// "review.<id>" and activated.
+// "review.<id>" (which readies it for STL's and CNX's guards) and activated.
 func (q *trdWorld) activeOrder(id string) trdapi.OrderReceipt {
 	q.t.Helper()
 	_, o := q.prepared(id)
@@ -158,11 +169,12 @@ func (q *trdWorld) orderRows() (orders, reviews, commits int) {
 // SM-TRD-ORDER: an AI agent prepares the order of the accepted
 // revision (人工或 AI), taking the quote's conversion slot; the snapshot copies the sealed commercial
 // document whole, with the acceptance it binds, and hashes to the order hash; an AI agent requests
-// the review, the reviewer approves it, the author activates: the order is active with its commit
-// evidence (the acceptance's arrival, the quote's expires_at as bound, the review, the risks
-// acknowledged, the formalization approval, CST's verdict, the screening, the STL and CNX extension
-// points not wired) and the events in order; every key replays; the reads and the lookup tell PUR
-// what it binds.
+// the review, the reviewer approves it; until compliance concludes clear order.check answers
+// TRADE_COMPLIANCE_NOT_CLEAR (S5 B4, TRD-INV-023); then the author activates: the order is active
+// with its commit evidence (the acceptance's arrival, the quote's expires_at as bound, the review,
+// the risks acknowledged, the formalization approval, CST's verdict, the screening, CNX's clear
+// conclusion and STL's not_required for a plan paid before shipment, TRD-INV-022) and the events in
+// order; every key replays; the reads and the lookup tell PUR what it binds.
 func TestOrderPrepareReviewAndActivate(t *testing.T) {
 	q := newOrderWorld(t)
 	agent := q.actorOf(kernel.ActorAI, "agent.1")
@@ -231,8 +243,13 @@ func TestOrderPrepareReviewAndActivate(t *testing.T) {
 	if again, err := q.c.TRD.DecideOrderReview(q.reviewer, decide); err != nil || !again.Replayed || again.ActionID != d.ActionID {
 		t.Fatalf("the same key %+v %v", again, err)
 	}
+	if c, err := q.c.TRD.CheckOrder(q.reviewer, "order.1", "review.1"); err != nil || c.Activatable || c.Code != cnxapi.CodeTradeComplianceNotClear ||
+		c.Path != "/args/order_id" || len(c.Unchecked) != 0 {
+		t.Fatalf("checked before compliance concluded %+v %v", c, err)
+	}
+	cleared := q.compliance().cleared("order.1")
 	if c, err := q.c.TRD.CheckOrder(q.reviewer, "order.1", "review.1"); err != nil || !c.Activatable || len(c.Risks) != 0 || c.Code != "" ||
-		!slices.Equal(c.Unchecked, []string{trdapi.GuardCNXTradeCompliance, trdapi.GuardSTLCredit}) {
+		len(c.Unchecked) != 0 {
 		t.Fatalf("checked %+v %v", c, err)
 	}
 	activate := q.activateOrderCmd("order.1", 3, "review.1")
@@ -254,8 +271,10 @@ func TestOrderPrepareReviewAndActivate(t *testing.T) {
 		"order_hash": o.OrderHash, "business_hash": a.BusinessHash, "acceptance_id": a.ObjectID, "arrival_at": kernel.FormatTimestamp(a.ArrivalAt),
 		"arrival_basis": trdapi.ArrivalChannelServer, "quote_expires_at": kernel.FormatTimestamp(a.ExpiresAt), "contract_formed": "true",
 		"review_id": "review.1", "reviewer": "human:reviewer", "formalization_approval_id": "approval.quote.1", "risks_found": "[]",
-		"risks_acknowledged": "0", "cost_snapshot_adoptability": cstapi.AdoptionAdoptable, trdapi.GuardSTLCredit: "not_wired",
-		trdapi.GuardCNXTradeCompliance: "not_wired", "committed_by": "human:editor", "row_version": "4"} {
+		"risks_acknowledged": "0", "cost_snapshot_adoptability": cstapi.AdoptionAdoptable, trdapi.GuardSTLCredit: trdapi.GuardNotRequired,
+		trdapi.EvidenceCreditPostShipment: "0", trdapi.EvidenceCreditPortion: "0", trdapi.EvidenceCreditCurrency: "USD",
+		trdapi.GuardCNXTradeCompliance:      "clear/cleared/" + cleared.CheckID + "/" + cleared.DecisionID + "/false",
+		trdapi.EvidenceComplianceValidUntil: kernel.FormatTimestamp(cleared.ValidUntil), "committed_by": "human:editor", "row_version": "4"} {
 		if e[name] != want {
 			t.Errorf("commit evidence %s = %q, want %q", name, e[name], want)
 		}
@@ -273,7 +292,8 @@ func TestOrderPrepareReviewAndActivate(t *testing.T) {
 		t.Fatalf("events %v", kinds)
 	}
 	activated := q.eventsOf(trdapi.EventOrderActivated)[0].Payload
-	if activated["unchecked_guards"] != trdapi.GuardCNXTradeCompliance+","+trdapi.GuardSTLCredit || activated["review_id"] != "review.1" ||
+	if activated["unchecked_guards"] != "" || activated["credit_guard"] != trdapi.GuardNotRequired || activated["credit_reservation_id"] != "" ||
+		activated["review_id"] != "review.1" ||
 		activated["arrival_at"] != kernel.FormatTimestamp(a.ArrivalAt) {
 		t.Fatalf("OrderActivated %v", activated)
 	}

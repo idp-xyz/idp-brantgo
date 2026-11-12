@@ -171,6 +171,7 @@ func TestOrderActivationGate(t *testing.T) {
 	orderReviewer := q.regrant("order.reviewer", "company", allPermissions)
 	d2, err := q.c.TRD.DecideOrderReview(orderReviewer, q.decideCmd(id, r2.RowVersion, "review.2", o.OrderHash))
 	q.must(err)
+	q.readyToActivate(id)
 	activate := q.activateOrderCmd(id, d2.RowVersion, "review.2")
 	for name, grant := range map[string]func(){
 		"without order.review.decide (PYT-0492)": func() { q.regrant("order.reviewer", "company", without(allPermissions, "order.review.decide")) },
