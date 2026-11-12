@@ -1,8 +1,8 @@
 // Package cnx assembles the CNX bounded context (China export professional collaboration, CN-M01).
 // S5 A7 delivers its first aggregate, the trade compliance check of a sales order revision, and
 // TradeComplianceGuard v1; S5 B5 the export licence with its usage ledger and ExportLicenseGuard
-// v1; S5 C3b purchase invoices and tax refund cases; declarations, document bundles and
-// certificates follow in later S5 units. Code outside CNX uses it through
+// v1; S5 C3b purchase invoices and tax refund cases; S5 C3a customs declarations, document bundles
+// and external reconciliation, and CNX's reading of FUL; certificates follow in a later S5 unit. Code outside CNX uses it through
 // package api; everything under internal/ is private to CNX.
 package cnx
 
@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/upstream"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/application"
+	dcl "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/declaration"
 	tcc "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/tradecompliancecheck"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
@@ -39,8 +40,13 @@ var (
 	_ api.InvoiceQueries  = (*Module)(nil)
 	_ api.TaxCaseCommands = (*Module)(nil)
 	_ api.TaxCaseQueries  = (*Module)(nil)
-	_ api.Auditor         = (*Module)(nil)
-	_ api.Reconciler      = (*Module)(nil)
+	// Declarations, document bundles and external reconciliation (S5 C3a).
+	_ api.DeclarationCommands = (*Module)(nil)
+	_ api.DeclarationQueries  = (*Module)(nil)
+	_ api.BundleCommands      = (*Module)(nil)
+	_ api.BundleQueries       = (*Module)(nil)
+	_ api.Auditor             = (*Module)(nil)
+	_ api.Reconciler          = (*Module)(nil)
 )
 
 // Upstream are the contracts of CNX's upstreams: TRD's orders (R46), PTY's address countries
@@ -75,6 +81,13 @@ type (
 	PurchaseLine    = application.PurchaseLine
 	Funds           = application.Funds
 	FundRecord      = application.FundRecord
+	// What CAT's declaration profiles say for a declaration (S5 C3a): the verified revision and its
+	// content, through the port Profiles.
+	DeclarationProfiles = application.DeclarationProfiles
+	DeclarationProfile  = dcl.Profile
+	DeclarationElement  = dcl.Element
+	LegalUnit           = dcl.LegalUnit
+	OrderDocument       = application.OrderDocument
 )
 
 // FUL's states an export licence allocation needs, and the one a tax refund allocation refuses.
@@ -92,9 +105,16 @@ func PURLines(lines purapi.DeliveryLookups) PurchaseLines { return upstream.PUR{
 // records a received tax refund rests on.
 func STLFunds(funds stlapi.FundRecordLookups) Funds { return upstream.STL{Funds: funds} }
 
-// ExportsNotWired is CNX's port to FUL's shipments and export lots (R36) until FUL is merged:
-// export_license.allocate answers DEPENDENCY_NOT_SUPPORTED.
-func ExportsNotWired() Exports { return upstream.FULNotWired{} }
+// FULLookups is what CNX's port to FUL reads: FUL's export lot and shipment line lookups
+// (ExportLotRef v1, R36) and its shipment read; *ful.Module implements it.
+type FULLookups = upstream.FULLookups
+
+// FULExports is CNX's port to FUL's shipments and export lots (R36) on FUL's lookups, with the
+// order currency's minor units from POL (R50) and the consignee's country from PTY (countries,
+// R77). FUL is constructed after CNX, so ful is called when a lookup runs (S5 D-2).
+func FULExports(ful func() FULLookups, configs upstream.Currencies, countries Countries) Exports {
+	return upstream.FUL{FUL: ful, Currencies: configs, Countries: countries, Clock: bento.SystemClock{}.Now}
+}
 
 // TRD's order states CNX evaluates, and the classifications of the profiles CAT answers.
 const (

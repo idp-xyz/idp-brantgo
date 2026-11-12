@@ -48,6 +48,8 @@ const (
 	Amended   = "amended"
 	Withdrawn = "withdrawn"
 	Stated    = "stated"
+	// DeclarationReceipt: the result is a declaration receipt CNX recorded (S5 C3a).
+	DeclarationReceipt = "declaration_receipt"
 
 	Registered = "registered"
 
@@ -316,6 +318,7 @@ type Release struct {
 	AllocationID      string
 	Kind              string
 	Source            string
+	ReceiptID         string
 	DeclarationNumber string
 	ReceiptText       string
 	ReceivedAt        time.Time
@@ -332,6 +335,7 @@ type Release struct {
 type ReleaseInput struct {
 	ID                string
 	Kind              string
+	ReceiptID         string // the declaration receipt recorded in CNX; "" for a stated result
 	DeclarationNumber string
 	ReceiptText       string
 	ReceivedAt        time.Time
@@ -347,8 +351,8 @@ type ReleaseInput struct {
 // ReleaseAllocation releases what the external result in says of a (CNX-INV-002 "报关改单或撤销按外部
 // 结果释放用量"): withdrawn releases everything outstanding, amended the quantity and value it
 // names, never more than is outstanding (INVALID_STATE); an allocation with nothing outstanding is
-// not released again (INVALID_STATE). The result is the human's statement of the receipt with its
-// evidence until CNX records declaration receipts (S5 C3a).
+// not released again (INVALID_STATE). The result is a declaration receipt CNX recorded, or the
+// human's statement of a receipt with its evidence where no declaration in CNX covers the target.
 func ReleaseAllocation(a *Allocation, in ReleaseInput) (*Release, error) {
 	q, v, err := a.Outstanding()
 	if err != nil {
@@ -357,8 +361,13 @@ func ReleaseAllocation(a *Allocation, in ReleaseInput) (*Release, error) {
 	if q.Sign() <= 0 {
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/allocation_id", "Nothing of the allocation is outstanding")
 	}
-	r := &Release{ID: in.ID, LicenseID: a.LicenseID, AllocationID: a.ID, Kind: in.Kind, Source: Stated, DeclarationNumber: in.DeclarationNumber,
-		ReceiptText: in.ReceiptText, ReceivedAt: kernel.Instant(in.ReceivedAt), Evidence: in.Evidence, Quantity: q, Value: v, Reason: in.Reason,
+	source := Stated
+	if in.ReceiptID != "" {
+		source = DeclarationReceipt
+	}
+	r := &Release{ID: in.ID, LicenseID: a.LicenseID, AllocationID: a.ID, Kind: in.Kind, Source: source, ReceiptID: in.ReceiptID,
+		DeclarationNumber: in.DeclarationNumber,
+		ReceiptText:       in.ReceiptText, ReceivedAt: kernel.Instant(in.ReceivedAt), Evidence: in.Evidence, Quantity: q, Value: v, Reason: in.Reason,
 		By: in.By, Epoch: in.Epoch, At: kernel.Instant(in.At)}
 	if in.Kind == Withdrawn {
 		return r, nil

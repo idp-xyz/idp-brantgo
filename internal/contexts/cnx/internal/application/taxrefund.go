@@ -74,10 +74,13 @@ func (s Service) policyAt(ctx context.Context, policyID string, exportedAt time.
 }
 
 // tax_refund_case.allocate (human or AI; tax specialist). Before CNX's transaction: the export lot
-// and its lines (FUL, port Exports) and the export_tax_policy revision in force at the lot's export
-// date (POL, policyAt). In the transaction, after the lot's case FOR UPDATE and the invoices FOR
-// UPDATE in ID order, the refusals in this order: a lot FUL does not resolve or whose record is not
-// intact (REFERENCE_INVALID), a cancelled lot or one not exported yet (INVALID_STATE), an
+// and its lines (FUL, port Exports), the lot's export date — the 出口日期 customs states on its
+// declaration, which CNX records itself (S5 C3a; not FUL's departure milestone, CN-R07) — and the
+// export_tax_policy revision in force at it (POL, policyAt). In the transaction, after the lot's
+// case FOR UPDATE, the invoices FOR UPDATE in ID order and the lot's declaration case FOR SHARE, the
+// refusals in this order: a lot FUL does not resolve or whose record is not intact
+// (REFERENCE_INVALID), a cancelled lot or one without a declared export date (INVALID_STATE), an
+// export date that changed since it was read (REFERENCE_STALE: send again), an
 // allocation ID taken (BUSINESS_KEY_CONFLICT), the case's policy other than policy_id
 // (REFERENCE_STALE), for a new case the policy binding (REFERENCE_INVALID, CONFIG_NOT_ACTIVE,
 // CONFIG_EXPIRED), then the domain's (INVALID_STATE, REFERENCE_INVALID, INVALID_KNOWN_VALUE,
@@ -87,6 +90,8 @@ type allocateTaxEvidence struct {
 	s         Service
 	cmd       api.AllocateTaxEvidence
 	lot       *Export
+	exported  lotExport // as read before the transaction, for the policy binding
+	export    lotExport // as read in the transaction, under the declaration's FOR SHARE lock
 	policy    *polapi.ResolvedConfig
 	policyErr error
 	taxCase   *tr.Case
@@ -100,14 +105,21 @@ func (h *allocateTaxEvidence) Prepare(ctx context.Context) error {
 		return err
 	}
 	x, ok := exports[ref]
-	if !ok || x.Code != "" || x.ExportedAt.IsZero() {
+	if !ok || x.Code != "" {
 		if ok {
 			h.lot = &x
 		}
 		return nil
 	}
 	h.lot = &x
-	h.policy, err = h.s.policyAt(ctx, h.cmd.PolicyID, kernel.Instant(x.ExportedAt))
+	if err = h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		var err error
+		h.exported, err = exportOfLot(ctx, exec, scope(ctx), h.cmd.ExportLotID, postgres.NoLock)
+		return err
+	}); err != nil || h.exported.ExportedAt.IsZero() {
+		return err
+	}
+	h.policy, err = h.s.policyAt(ctx, h.cmd.PolicyID, kernel.Instant(h.exported.ExportedAt))
 	if _, ok := kernel.AsRejection(err); ok {
 		h.policyErr, err = err, nil
 	}
@@ -131,7 +143,13 @@ func (h *allocateTaxEvidence) Lock(ctx context.Context, exec bentopg.Executor) e
 	if h.taxCase, err = postgres.CaseOfLot(ctx, exec, sc, h.cmd.ExportLotID, postgres.ForUpdate); err != nil {
 		return err
 	}
-	return postgres.LockInvoices(ctx, exec, sc, h.invoiceIDs())
+	if err = postgres.LockInvoices(ctx, exec, sc, h.invoiceIDs()); err != nil {
+		return err
+	}
+	// The export date is the declaration's (S5 C3a): its case root is held FOR SHARE so no receipt
+	// changes it before this allocation commits.
+	h.export, err = exportOfLot(ctx, exec, sc, h.cmd.ExportLotID, postgres.ForShare)
+	return err
 }
 
 func (h *allocateTaxEvidence) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
@@ -145,8 +163,10 @@ func (h *allocateTaxEvidence) Apply(ctx context.Context, exec bentopg.Executor, 
 		return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, lotPath, "FUL's record of the export lot is not intact")
 	case lot.Status == ExportLotCancelled:
 		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, lotPath, "The export lot is cancelled")
-	case lot.ExportedAt.IsZero() || kernel.Instant(lot.ExportedAt).After(now):
-		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, lotPath, "The export lot has no export date yet")
+	case h.export.ExportedAt.IsZero() || kernel.Instant(h.export.ExportedAt).After(now):
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, lotPath, "No declaration of the export lot states customs' export date yet")
+	case h.export != h.exported:
+		return action.Outcome{}, api.Reject(api.CodeReferenceStale, lotPath, "The declaration's export date changed: send the allocation again")
 	}
 	for i, a := range cmd.Allocations {
 		taken, err := postgres.TaxAllocationExists(ctx, exec, sc, a.AllocationID)
@@ -172,7 +192,7 @@ func (h *allocateTaxEvidence) Apply(ctx context.Context, exec bentopg.Executor, 
 		}
 		p := h.policy
 		c = &tr.Case{ID: action.NewID("trc", now), ExportLotID: cmd.ExportLotID, Attempt: attempt, OrderID: lot.OrderID,
-			ExportedAt: kernel.Instant(lot.ExportedAt), Policy: tr.Binding{PolicyID: p.Ref.ConfigID, Revision: p.Ref.Revision, ContentHash: p.ContentHash,
+			ExportedAt: kernel.Instant(h.export.ExportedAt), Policy: tr.Binding{PolicyID: p.Ref.ConfigID, Revision: p.Ref.Revision, ContentHash: p.ContentHash,
 				RefundMethod: p.Data.ExportTaxPolicy.RefundMethod, ValidFrom: kernel.Instant(p.ValidFrom), ValidUntil: p.ValidUntil},
 			Status: tr.Expected, RowVersion: 1, OpenedBy: d.Actor, Epoch: d.Epoch, OpenedAt: now}
 	}

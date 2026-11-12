@@ -74,9 +74,13 @@ const (
 	ExternalWithdrawn = "withdrawn"
 )
 
-// Sources of an external result: until CNX records declaration receipts (S5 C3a), a human states
-// the receipt with the EVD sources it rests on.
-const ResultStated = "stated"
+// Sources of an external result: a human states the receipt with the EVD sources it rests on, for
+// a target no declaration in CNX covers; or the declaration receipt CNX recorded (S5 C3a), named by
+// receipt_id, which is required once a declaration in CNX covers the target.
+const (
+	ResultStated             = "stated"
+	ResultDeclarationReceipt = "declaration_receipt"
+)
 
 // A licence's state at an instant, as the reads derive it from its validity.
 const (
@@ -281,6 +285,7 @@ func (c AllocateLicense) Validate() error {
 // the EVD sources it rests on (1 to MaxEvidence).
 type ExternalResult struct {
 	Kind              string
+	ReceiptID         string
 	DeclarationNumber string
 	ReceiptText       string
 	ReceivedAt        string
@@ -323,15 +328,21 @@ func (c ReleaseLicense) Validate() error {
 	switch {
 	case r.Kind != ExternalAmended && r.Kind != ExternalWithdrawn:
 		return schema("/args/external_result/kind")
-	case !Text(r.DeclarationNumber, MaxDeclarationRef):
+	case r.ReceiptID != "" && !kernel.ValidIdentifier(r.ReceiptID):
+		return schema("/args/external_result/receipt_id")
+	case r.ReceiptID != "" && r.DeclarationNumber != "":
 		return schema("/args/external_result/declaration_number")
-	case !Text(r.ReceiptText, MaxReceiptText):
+	case r.ReceiptID != "" && r.ReceiptText != "":
 		return schema("/args/external_result/receipt_text")
-	case !timestamp(r.ReceivedAt):
+	case r.ReceiptID != "" && r.ReceivedAt != "":
 		return schema("/args/external_result/received_at")
+	case r.ReceiptID != "" && len(r.EvidenceIDs) > 0:
+		return schema("/args/external_result/evidence_ids")
 	}
-	if err := evidence(r.EvidenceIDs, "/args/external_result/evidence_ids", 1); err != nil {
-		return err
+	if r.ReceiptID == "" {
+		if err := r.stated(); err != nil {
+			return err
+		}
 	}
 	amended := r.Kind == ExternalAmended
 	switch {
@@ -343,6 +354,20 @@ func (c ReleaseLicense) Validate() error {
 		return schema("/args/reason")
 	}
 	return nil
+}
+
+// stated checks a result the human states: the declaration number, the receipt's original text,
+// when it was received and at least one EVD source.
+func (r *ExternalResult) stated() error {
+	switch {
+	case !Text(r.DeclarationNumber, MaxDeclarationRef):
+		return schema("/args/external_result/declaration_number")
+	case !Text(r.ReceiptText, MaxReceiptText):
+		return schema("/args/external_result/receipt_text")
+	case !timestamp(r.ReceivedAt):
+		return schema("/args/external_result/received_at")
+	}
+	return evidence(r.EvidenceIDs, "/args/external_result/evidence_ids", 1)
 }
 
 func (RegisterLicense) cnxCommand() {}
@@ -407,6 +432,7 @@ type ReleaseView struct {
 	ReleaseID         string
 	Kind              string
 	Source            string
+	ReceiptID         string
 	DeclarationNumber string
 	ReceiptText       string
 	ReceivedAt        time.Time

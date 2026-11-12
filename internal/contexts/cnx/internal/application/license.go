@@ -224,8 +224,14 @@ func (h *allocateLicense) Apply(ctx context.Context, exec bentopg.Executor, d au
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	destination := x.Destination
+	if destination == "" {
+		if destination, err = evaluatedDestination(ctx, exec, sc, x.OrderID, x.OrderRevision); err != nil {
+			return action.Outcome{}, err
+		}
+	}
 	t := el.Target{Kind: cmd.Target.Kind, ID: cmd.Target.ID, Version: x.Version, OrderID: x.OrderID, OrderRevision: x.OrderRevision,
-		Destination: x.Destination, EndUserPartyID: x.EndUserPartyID, Value: x.Value}
+		Destination: destination, EndUserPartyID: x.EndUserPartyID, Value: x.Value}
 	for _, line := range x.Lines {
 		ln := el.Line{LineID: line.LineID, SkuID: line.SkuID, SpecRevision: line.SpecRevision, Quantity: line.Quantity, Unit: line.Unit}
 		if l.Goods.ByClassification() {
@@ -322,6 +328,9 @@ func (h *releaseLicense) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	now := kernel.Instant(h.s.Clock.Now())
 	in := el.ReleaseInput{ID: cmd.ReleaseID, Kind: r.Kind, DeclarationNumber: r.DeclarationNumber, ReceiptText: r.ReceiptText,
 		ReceivedAt: received, Evidence: evidence, Reason: cmd.Reason, By: d.Actor, Epoch: d.Epoch, At: now}
+	if err = declarationResult(ctx, exec, sc, allocations[0], r, &in); err != nil {
+		return action.Outcome{}, err
+	}
 	if r.Kind == el.Amended {
 		in.Quantity, _ = kernel.ParseDecimal(cmd.Quantity, kernel.QuantityFormat)
 		if in.Value, err = kernel.ParseAmount(l.Value.Currency(), cmd.Value); err != nil {

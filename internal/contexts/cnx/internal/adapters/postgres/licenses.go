@@ -252,7 +252,7 @@ func Releases(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, l 
 	if err != nil {
 		return nil, err
 	}
-	rows, err := exec.Query(ctx, `SELECT release_id, allocation_id, kind, result_source, declaration_number, receipt_text, received_at, evidence,
+	rows, err := exec.Query(ctx, `SELECT release_id, allocation_id, kind, result_source, coalesce(receipt_id, ''), declaration_number, receipt_text, received_at, evidence,
 		trim_scale(quantity)::text, value_minor::text, reason, released_by_kind, released_by_id, authority_epoch, released_at
 		FROM brant_cnx.export_license_release WHERE tenant_id = $1 AND company_id = $2 AND license_id = $3 ORDER BY released_at, release_id`,
 		scoped(scope, l.ID)...)
@@ -264,7 +264,7 @@ func Releases(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, l 
 	for rows.Next() {
 		r := el.Release{LicenseID: l.ID}
 		var evidence, quantity, value, kind string
-		if err := rows.Scan(&r.ID, &r.AllocationID, &r.Kind, &r.Source, &r.DeclarationNumber, &r.ReceiptText, &r.ReceivedAt, &evidence,
+		if err := rows.Scan(&r.ID, &r.AllocationID, &r.Kind, &r.Source, &r.ReceiptID, &r.DeclarationNumber, &r.ReceiptText, &r.ReceivedAt, &evidence,
 			&quantity, &value, &r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At); err != nil {
 			return nil, err
 		}
@@ -299,9 +299,11 @@ func InsertRelease(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.export_license_release (tenant_id, company_id, release_id, license_id, allocation_id, kind,
 		result_source, declaration_number, receipt_text, received_at, evidence, quantity, value_minor, reason, released_by_kind, released_by_id,
-		authority_epoch, released_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13::numeric, $14, $15, $16, $17, $18)`,
+		authority_epoch, released_at, receipt_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13::numeric, $14, $15, $16, $17, $18, nullif($19, ''))`,
 		scoped(scope, r.ID, r.LicenseID, r.AllocationID, r.Kind, r.Source, r.DeclarationNumber, r.ReceiptText, kernel.Instant(r.ReceivedAt),
-			string(evidence), r.Quantity.String(), r.Value.MinorString(), r.Reason, string(r.By.Kind), r.By.ID, r.Epoch, kernel.Instant(r.At))...)
+			string(evidence), r.Quantity.String(), r.Value.MinorString(), r.Reason, string(r.By.Kind), r.By.ID, r.Epoch, kernel.Instant(r.At),
+			r.ReceiptID)...)
 	return err
 }
 

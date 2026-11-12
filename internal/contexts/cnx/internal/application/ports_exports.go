@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"time"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -13,11 +12,11 @@ import (
 // FUL resolves for the caller (data scope applied: one the caller does not see is absent); Code is
 // REFERENCE_INVALID when FUL's record of it is not intact.
 //
-// FUL is not in S5 B5's tree (B1a builds shipments, B1b export lots): bootstrap wires ExportsNotWired,
-// which answers DEPENDENCY_NOT_SUPPORTED, and tests implement the port. Once FUL is merged an adapter
-// on fulapi fills Export from the shipment (B1a: status, row version, order binding, consignee
-// address country as Destination, the end user party, its lines with SKU specification revision,
-// quantity and unit, and its value) or the export lot (B1b: the same from the lot and its lines).
+// The adapter on fulapi (adapters/upstream FUL, S5 C3a) fills Export from the shipment or the export
+// lot: state, row version, order binding, lines with SKU specification revision, quantity, unit and
+// amount, value, and the end user and destination from the parties the shipment binds. FUL records
+// no export date: a lot's export date is the one customs states on its declaration, CNX's own
+// fact (exportOfLot).
 //
 // R36 carries no guard: an allocation binds what it read (the target's version and the hash of its
 // lines). A change of the shipment's lines afterwards shows at FUL's release, where
@@ -40,21 +39,19 @@ const (
 	ExportLotCancelled  = "cancelled"
 )
 
-// Export is what FUL says of a shipment or export lot: its state and version, the order revision it
-// ships, its destination country, the end user party, its lines and its value, and for an export
-// lot its export date (zero while the goods have not left; S5 C3b: the date a tax refund case binds
-// the export_tax_policy revision at, CN-AT12).
+// Export is what FUL says of a shipment or export lot: its state and version, the order revision
+// (and hash) it ships, its destination country, the end user party, its lines and its value.
 type Export struct {
 	Ref            ExportRef
 	Status         string
 	Version        int64
 	OrderID        string
 	OrderRevision  int64
+	OrderHash      string
 	Destination    string
 	EndUserPartyID string
 	Lines          []ExportLine
 	Value          kernel.Money
-	ExportedAt     time.Time
 	Code           string
 }
 

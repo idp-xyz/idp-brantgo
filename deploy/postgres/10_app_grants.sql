@@ -352,6 +352,18 @@ GRANT UPDATE (status, row_version, invoice_kind, invoice_number, colour, verifie
 GRANT UPDATE (status, row_version, updated_at) ON brant_cnx.tax_refund_case TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.tax_evidence_counts(text, text, text, text) TO brant_app;
 
+-- CNX declarations, document bundles and external reconciliation (S5-05a): a declaration case keeps
+-- its binding and follows SM-CNX-DECLARATION, a bundle keeps its binding and moves with each check
+-- and reconciliation (triggers; the column grants are also what the commands' FOR UPDATE locks and
+-- the entry triggers' locks need); versions, confirmations, submissions, receipts, checks and
+-- reconciliations are only inserted; nothing is deleted.
+GRANT SELECT, INSERT ON brant_cnx.declaration_case, brant_cnx.declaration_version, brant_cnx.declaration_confirmation,
+    brant_cnx.declaration_submission, brant_cnx.declaration_receipt, brant_cnx.document_bundle, brant_cnx.document_bundle_check,
+    brant_cnx.external_reconciliation TO brant_app;
+GRANT UPDATE (status, current_version, mapping, declaration_number, exported_at, last_sequence, submissions, receipts, row_version,
+    updated_at) ON brant_cnx.declaration_case TO brant_app;
+GRANT UPDATE (status, checks, reconciliations, row_version, updated_at) ON brant_cnx.document_bundle TO brant_app;
+
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
 -- every update. A shipment is inserted prepared with its lines and parties and then changes only by
