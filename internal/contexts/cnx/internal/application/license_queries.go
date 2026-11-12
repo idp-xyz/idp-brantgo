@@ -93,7 +93,7 @@ func allocationView(a *el.Allocation, releases []*el.Release) api.AllocationView
 		if r.AllocationID != a.ID {
 			continue
 		}
-		rv := api.ReleaseView{ReleaseID: r.ID, Kind: r.Kind, Source: r.Source, DeclarationNumber: r.DeclarationNumber, ReceiptText: r.ReceiptText,
+		rv := api.ReleaseView{ReleaseID: r.ID, Kind: r.Kind, Source: r.Source, ReceiptID: r.ReceiptID, DeclarationNumber: r.DeclarationNumber, ReceiptText: r.ReceiptText,
 			ReceivedAt: r.ReceivedAt, Evidence: []api.EvidenceView{}, Quantity: r.Quantity.String(), ValueMinor: r.Value.MinorString(),
 			Reason: r.Reason, ReleasedBy: r.By, ReleasedAt: r.At, AuthorityEpoch: r.Epoch}
 		for _, e := range r.Evidence {

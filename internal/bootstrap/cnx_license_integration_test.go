@@ -357,10 +357,13 @@ func TestTDAT13ExportLicenseRegisterAllocateAndGuard(t *testing.T) {
 		t.Fatalf("company.B sees %d allocations", n)
 	}
 
-	// The composed process has no FUL yet: an allocation is DEPENDENCY_NOT_SUPPORTED.
+	// The composed process reads FUL (S5 C3a): FUL has no shipment ship.1, so the target is
+	// REFERENCE_INVALID.
 	_, err = w.c.CNX.AllocateLicense(w.doc1, cnxapi.AllocateLicense{IdempotencyKey: w.key(), LicenseID: reg.LicenseID, AllocationID: "alloc.9",
 		Target: cnxapi.ExportTarget{Kind: cnxapi.TargetShipment, ID: "ship.1"}})
-	w.want(err, cnxapi.CodeDependencyNotSupported)
+	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/target/id" {
+		t.Fatalf("composed allocation of a shipment FUL does not have: %s %s", code(err), path(err))
+	}
 }
 
 // TD-AT13 "另一许可证已过期" and the catalog's EXPORT_LICENSE_EXPIRED ("许可证已过期或目的国、最终用户不一致"):
@@ -701,8 +704,9 @@ func TestExportLicenseRecordsAreAppendOnly(t *testing.T) {
 
 // The composed process over HTTP with OIDC access tokens: a documentation clerk registers a
 // licence through CNX's command route, reads it, the company's licences and a shipment's verdict,
-// is refused an allocation (FUL is not wired: DEPENDENCY_NOT_SUPPORTED) and a release without an
-// external result (SCHEMA_INVALID), and reconciles a command never sent.
+// is refused an allocation of a shipment FUL does not have (REFERENCE_INVALID: the composed process
+// reads FUL, S5 C3a) and a release without an external result (SCHEMA_INVALID), and reconciles a
+// command never sent.
 func TestExportLicensesOverHTTP(t *testing.T) {
 	w := newLicenseWorld(t)
 	is := newIssuer(t)
@@ -738,7 +742,7 @@ func TestExportLicensesOverHTTP(t *testing.T) {
 	}
 	status, out := clerk.try("cnx", cnxapi.Contract, cnxapi.CommandAllocateLicense, map[string]any{"license_id": id, "allocation_id": "alloc.1",
 		"target": map[string]any{"kind": "shipment", "id": "ship.1"}})
-	if status != 422 || out["code"] != cnxapi.CodeDependencyNotSupported {
+	if status != 422 || out["code"] != kernel.CodeReferenceInvalid || errPath(out) != "/args/target/id" {
 		t.Fatalf("allocate %d %v", status, out)
 	}
 	status, out = clerk.try("cnx", cnxapi.Contract, cnxapi.CommandReleaseLicense, map[string]any{"license_id": id, "expected_version": 1,

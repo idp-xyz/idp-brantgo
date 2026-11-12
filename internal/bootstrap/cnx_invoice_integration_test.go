@@ -33,10 +33,10 @@ import (
 // The world is PUR's delivery world (commitment.1 issued: 120 PCS of line L1 of order.1 from
 // supplier.1), with a delivery of 120 verified, the company's profile and CNY in POL, the
 // export_tax_policy export.tax (revision 1, exempt_refund) published on its professional review,
-// and STL's fund records. FUL's export lots are not in this tree (S5 B1b): the suite's CNX is
-// wired to the real POL, EVD, PUR (PurchaseLineRef v1) and STL (FundRecordRef v1) and to an
-// in-memory FUL port (fakeExports); the composed process's CNX answers DEPENDENCY_NOT_SUPPORTED for
-// an allocation (shown over HTTP).
+// and STL's fund records. The suite's CNX is wired to the real POL, EVD, PUR (PurchaseLineRef v1)
+// and STL (FundRecordRef v1), to an in-memory FUL port (fakeExports), to the PUR world's in-memory
+// order (fixedOrders) and to a fixed CAT port; a lot's export date is the one its declaration's
+// release receipt states (S5 C3a, declarer); the composed process's CNX reads FUL (shown over HTTP).
 
 type invoiceWorld struct {
 	*deliveryWorld
@@ -49,6 +49,7 @@ type invoiceWorld struct {
 	company                     polapi.CompanyProfile
 	original, receipt, review   string
 	files                       int
+	declare                     declarer // S5 C3a: a lot's export date is its declaration's
 }
 
 func newInvoiceWorld(t *testing.T) *invoiceWorld { return newInvoiceWorldDelivered(t, "120") }
@@ -93,10 +94,12 @@ func newInvoiceWorldDelivered(t *testing.T, delivered string) *invoiceWorld {
 	w.pool = pgtest.AppPool(t)
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
-	w.cnx, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(w.c.TRD), Countries: cnx.PTYCountries(w.c.PTY), Profiles: fixedProfiles{},
+	w.cnx, err = cnx.New(db, cnx.Upstream{Orders: fixedOrders{}, Countries: cnx.PTYCountries(w.c.PTY), Profiles: fixedProfiles{},
 		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: w.ful, Purchases: cnx.PURLines(w.pur),
 		Funds: cnx.STLFunds(w.c.STL)})
 	w.must(err)
+	doc := w.assign("doc.c3a", "documentation")
+	w.declare = declarer{t: t, cnx: w.cnx, doc: doc, key: w.key, evidence: w.source(doc, "customs.receipt.c3a", "合成报关单放行回执（测试数据）")}
 	return w
 }
 
@@ -164,16 +167,22 @@ func l1(quantity string) cnxapi.InvoiceMatch {
 	return cnxapi.InvoiceMatch{LineNo: 1, CommitmentID: "commitment.1", OrderLineID: "L1", Quantity: quantity}
 }
 
-// lot puts into FUL an export lot of order.1 exported at with one line id of quantity PCS of
-// sku.1 from ship.1.
+// lot puts into FUL an export lot of order.1 with one line id of quantity PCS of sku.1 from ship.1
+// and, unless at is zero, has its declaration released by customs with export date at (S5 C3a: the
+// export date is the one customs states on the declaration, recorded by CNX, never FUL's).
 func (w *invoiceWorld) lot(id string, at time.Time, lines ...string) {
 	x := cnx.Export{Ref: cnx.ExportRef{Kind: cnxapi.TargetExportLot, ID: id}, Status: cnx.ExportLotRegistered, Version: 1, OrderID: "order.1",
-		OrderRevision: 1, Destination: "DE", EndUserPartyID: "customer.1", ExportedAt: at}
+		OrderRevision: 1, Destination: "DE", EndUserPartyID: "customer.1"}
+	var ids []string
 	for i := 0; i+1 < len(lines); i += 2 {
 		x.Lines = append(x.Lines, cnx.ExportLine{LineID: lines[i], SkuID: "sku.1", SpecRevision: w.spec, Quantity: kernel.MustDecimal(lines[i+1]),
 			Unit: "PCS", ShipmentID: "ship.1", OrderLineID: "L1"})
+		ids = append(ids, lines[i])
 	}
 	w.ful.put(x)
+	if !at.IsZero() {
+		w.declare.released(id, at, ids...)
+	}
 }
 
 func alloc(id, line, invoice, purpose, quantity string) cnxapi.EvidenceAllocation {
@@ -960,8 +969,9 @@ func TestInvoiceAndTaxCaseRecordsAreAppendOnly(t *testing.T) {
 
 // The composed process over HTTP with OIDC access tokens: the purchaser imports an invoice through
 // CNX's command route, the tax specialist verifies it, reads it and the company's invoices and
-// cases, and reconciles the verification; an allocation is refused (FUL is not wired:
-// DEPENDENCY_NOT_SUPPORTED), the AI path to verification is 403.
+// cases, and reconciles the verification; an allocation to an export lot FUL does not have is
+// refused (REFERENCE_INVALID: the composed process reads FUL, S5 C3a), the AI path to verification
+// is 403.
 func TestPurchaseInvoicesOverHTTP(t *testing.T) {
 	w := newInvoiceWorld(t)
 	is := newIssuer(t)
@@ -1014,7 +1024,7 @@ func TestPurchaseInvoicesOverHTTP(t *testing.T) {
 	status, out = tax.try("cnx", cnxapi.Contract, cnxapi.CommandAllocateTaxEvidence, map[string]any{"export_lot_id": "lot.1", "policy_id": "export.tax",
 		"allocations": []any{map[string]any{"allocation_id": "t1", "export_line_id": "x1", "purchase_invoice_id": id, "line_no": 1,
 			"purpose": "export_refund", "quantity": "120"}}})
-	if status != 422 || out["code"] != cnxapi.CodeDependencyNotSupported {
+	if status != 422 || out["code"] != kernel.CodeReferenceInvalid || errPath(out) != "/args/export_lot_id" {
 		t.Fatalf("allocate %d %v", status, out)
 	}
 	status, out = tax.do("GET", "/api/brant/v1/cnx/tax_refund_cases/trc-none", nil)

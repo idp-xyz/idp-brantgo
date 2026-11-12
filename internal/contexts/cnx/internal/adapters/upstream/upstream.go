@@ -12,9 +12,11 @@ import (
 
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/application"
+	dcl "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/declaration"
 	tcc "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/tradecompliancecheck"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/kernel"
 	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
@@ -44,6 +46,10 @@ func (t TRD) ResolveOrders(ctx context.Context, ids []string) (map[string]applic
 		}
 		for _, l := range f.Lines {
 			o.Lines = append(o.Lines, application.OrderLine{LineID: l.LineID, SkuID: l.Sku.SkuID, SpecRevision: l.Sku.SpecRevision})
+		}
+		for _, d := range f.DocumentRefs {
+			o.Documents = append(o.Documents, application.OrderDocument{Kind: d.DocumentKind, Number: d.Number, OrderRevision: d.OrderRevision,
+				DocumentSHA256: d.DocumentSHA256, Current: d.Current, Signatures: len(d.Signatures)})
 		}
 		out[id] = o
 	}
@@ -165,6 +171,46 @@ func (c CAT) ResolveProfiles(ctx context.Context, refs []application.ProfileRef)
 					CommodityCode: r.Profile.Commodity.Code, ExportControl: x.Status, ListReference: x.ListReference, ContentHash: r.ContentHash}
 			case r.ProfileID != "":
 				out[key] = tcc.Profile{ProfileID: r.ProfileID, Revision: r.DraftRevision, CodeTableVersion: ref.CodeTableVersion}
+			}
+		}
+	}
+	return out, nil
+}
+
+// ResolveDeclarationProfiles asks CAT, before CNX's transaction, for the revision verified now of
+// each key with its content (application.DeclarationProfiles); a profile with only a draft is
+// answered unverified without content, a key without a profile is absent.
+func (c CAT) ResolveDeclarationProfiles(ctx context.Context, refs []application.ProfileRef) (map[application.ProfileRef]dcl.Profile, error) {
+	out := map[application.ProfileRef]dcl.Profile{}
+	for start := 0; start < len(refs); start += catapi.MaxLookup {
+		chunk := refs[start:min(start+catapi.MaxLookup, len(refs))]
+		asked := make([]catapi.DeclarationProfileRef, len(chunk))
+		for i, r := range chunk {
+			asked[i] = catapi.DeclarationProfileRef{SkuID: r.SkuID, SpecRevision: r.SpecRevision, CodeTableVersion: r.CodeTableVersion}
+		}
+		got, err := c.Profiles.ResolveDeclarationProfiles(ctx, asked)
+		if err != nil {
+			return nil, err
+		}
+		for ref, r := range got {
+			key := application.ProfileRef{SkuID: ref.SkuID, SpecRevision: ref.SpecRevision, CodeTableVersion: ref.CodeTableVersion}
+			switch {
+			case r.Verified:
+				p := dcl.Profile{ProfileID: r.ProfileID, Revision: r.Revision, ContentHash: r.ContentHash, Verified: true,
+					CommodityCode: r.Profile.Commodity.Code, DeclarationName: r.Profile.DeclarationName}
+				for _, e := range r.Profile.Elements {
+					p.Elements = append(p.Elements, dcl.Element{Name: e.Name, Value: e.Value})
+				}
+				for _, u := range r.Profile.LegalUnits {
+					factor, err := kernel.ParseDecimal(u.PerBaseUnit, kernel.FactorFormat)
+					if err != nil {
+						return nil, err
+					}
+					p.LegalUnits = append(p.LegalUnits, dcl.LegalUnit{Unit: u.Unit, PerBaseUnit: factor, Basis: u.Basis})
+				}
+				out[key] = p
+			case r.ProfileID != "":
+				out[key] = dcl.Profile{ProfileID: r.ProfileID, Revision: r.DraftRevision}
 			}
 		}
 	}

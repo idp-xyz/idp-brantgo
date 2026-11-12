@@ -18,6 +18,10 @@ type CNX interface {
 	cnxapi.InvoiceQueries
 	cnxapi.TaxCaseCommands
 	cnxapi.TaxCaseQueries
+	cnxapi.DeclarationCommands
+	cnxapi.DeclarationQueries
+	cnxapi.BundleCommands
+	cnxapi.BundleQueries
 	cnxapi.Reconciler
 	cnxapi.Auditor
 }
@@ -38,6 +42,13 @@ func cnxCommands(c CNX) *commandSet {
 			cnxapi.CommandVerifyInvoice:       reflected("", "", receiptOf[cnxapi.Receipt](c.VerifyInvoice)),
 			cnxapi.CommandAllocateTaxEvidence: reflected("", "", receiptOf[cnxapi.Receipt](c.AllocateTaxEvidence)),
 			cnxapi.CommandRecordTaxResult:     reflected("", "", receiptOf[cnxapi.Receipt](c.RecordTaxResult)),
+			// Declarations and document bundles name declaration_id, export_lot_id, bundle_id.
+			cnxapi.CommandPrepareDeclaration:    reflected("", "", receiptOf[cnxapi.Receipt](c.PrepareDeclaration)),
+			cnxapi.CommandConfirmDeclaration:    reflected("", "", receiptOf[cnxapi.Receipt](c.ConfirmDeclaration)),
+			cnxapi.CommandRecordSubmission:      reflected("", "", receiptOf[cnxapi.Receipt](c.RecordSubmission)),
+			cnxapi.CommandRecordReceipt:         reflected("", "", receiptOf[cnxapi.Receipt](c.RecordReceipt)),
+			cnxapi.CommandCheckBundle:           reflected("", "", receiptOf[cnxapi.Receipt](c.CheckBundle)),
+			cnxapi.CommandResolveReconciliation: reflected("", "", receiptOf[cnxapi.Receipt](c.ResolveReconciliation)),
 		}}
 }
 
@@ -65,6 +76,14 @@ var cnxReads = []readRoute{
 		"The company's tax refund cases, newest first, each with its export lot, state and the export tax policy revision it binds", nil, false},
 	{"/api/brant/v1/cnx/tax_refund_cases/{id}", "cnx.tax_refund_case.get", "cnx",
 		"A tax refund case: the export lot, the export tax policy revision in force at its export date, every evidence allocation with its state, every recorded stage and the expected, planned, approved and received amounts side by side", []string{"id"}, false},
+	{"/api/brant/v1/cnx/declaration_cases", "cnx.declaration_case.list", "cnx",
+		"The company's customs declaration cases, newest first, each with its export lot, attempt, state, current version and mapping, declaration number and export date", nil, false},
+	{"/api/brant/v1/cnx/declaration_cases/{id}", "cnx.declaration_case.get", "cnx",
+		"A customs declaration case of an export lot: every version of the declared items with their profiles, conversions, legal quantities and mapping, every confirmation, manual submission and external result with its original text, mapping version and external sequence; customs release is not departure or delivery", []string{"id"}, false},
+	{"/api/brant/v1/cnx/document_bundles", "cnx.document_bundle.list", "cnx",
+		"The company's document bundles, newest first, each with its export lot and state", nil, false},
+	{"/api/brant/v1/cnx/document_bundles/{id}", "cnx.document_bundle.get", "cnx",
+		"A document bundle of an export lot: the current requirement checklist (kind, version, missing, present or verified, owner, due date, attachments, linked declaration and fund records as commercial allocations), every check and every external reconciliation", []string{"id"}, false},
 }
 
 // cnxRoutes registers CNX's reads.
@@ -81,6 +100,7 @@ func (s *server) cnxRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/cnx/purchase_invoices/{id}", s.authenticated(read(s, s.cfg.CNX.GetInvoice, okView[cnxapi.InvoiceView])))
 	mux.Handle("GET /api/brant/v1/cnx/tax_refund_cases", s.authenticated(s.taxRefundCases))
 	mux.Handle("GET /api/brant/v1/cnx/tax_refund_cases/{id}", s.authenticated(read(s, s.cfg.CNX.GetTaxCase, okView[cnxapi.TaxCaseView])))
+	s.cnxDeclarationRoutes(mux)
 }
 
 // purchaseInvoices answers GET /api/brant/v1/cnx/purchase_invoices.

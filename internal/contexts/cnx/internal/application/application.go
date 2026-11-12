@@ -46,7 +46,7 @@ var anyActor = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.Acto
 // (ES-12 step 3, 单证员) admits humans and AI agents on the same command path, no system actor (no
 // consumer allocates). The documentation template holds the three permissions.
 func Rules() []authorization.Rule {
-	return []authorization.Rule{
+	return append([]authorization.Rule{
 		{Command: api.CommandEvaluate, Permission: api.CommandEvaluate, ActorKinds: anyActor},
 		authorization.HumanOnly(api.CommandDecide, api.CommandDecide),
 		{Command: api.CommandReopen, Permission: api.CommandReopen, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
@@ -72,7 +72,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandInvoices, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetTaxCase, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandTaxCases, Permission: api.PermissionRead, ActorKinds: anyActor},
-	}
+	}, append(declarationRules(), bundleRules()...)...)
 }
 
 // Upstream are the contracts CNX reads.
@@ -116,6 +116,9 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	if strings.HasPrefix(command, "purchase_invoice.") {
 		i, err := postgres.LoadInvoice(ctx, exec, scope(ctx), id, postgres.NoLock)
 		return i != nil, err
+	}
+	if ok, visible, err := visibleDeclaration(ctx, exec, command, id); ok {
+		return visible, err
 	}
 	if strings.HasPrefix(command, "tax_refund_case.") {
 		c, err := postgres.LoadCase(ctx, exec, scope(ctx), id, postgres.NoLock)
@@ -219,7 +222,7 @@ func request(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandRecordTaxResult, key, c
 	}
-	return "", "", nil
+	return declarationRequest(cmd)
 }
 
 // Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing

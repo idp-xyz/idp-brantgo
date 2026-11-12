@@ -37,6 +37,7 @@ type Order struct {
 	CustomerID string
 	Addresses  []OrderAddress
 	Lines      []OrderLine
+	Documents  []OrderDocument // the S/C and PI of every revision (SalesContractDocumentRef v1)
 }
 
 // OrderAddress is an address role of the order's parties as the order binds it: the party revision
@@ -88,6 +89,7 @@ type AddressCountry struct {
 // and content hash. A later evaluation reads the newer one; superseding a profile reopens nothing.
 type Profiles interface {
 	ResolveProfiles(ctx context.Context, refs []ProfileRef) (map[ProfileRef]tcc.Profile, error)
+	DeclarationProfiles
 }
 
 // ProfileRef is the key CAT keeps a declaration profile for (catapi DeclarationProfileKey): a SKU
