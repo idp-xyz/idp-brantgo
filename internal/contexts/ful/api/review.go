@@ -25,8 +25,11 @@ import (
 //	                        be confirmed (after an amendment: bound to an earlier order revision; after
 //	                        an end: any), its current packing plan and actual packing, its current
 //	                        booking and the draft versions of its document set, and every granted,
-//	                        unconsumed commercial release of such a shipment or of a confirmed shipment
-//	                        bound to an earlier revision (or of an ended order). Open reviews of the
+//	                        unconsumed commercial release of such a shipment; and the granted documents
+//	                        release of a confirmed shipment whose payment condition was judged on an
+//	                        earlier order revision than the change's, or of a cancelled order (S5 C1b:
+//	                        the documents release of a confirmed shipment judges the order's current
+//	                        revision, and an order closed short still releases it). Open reviews of the
 //	                        order from an earlier order version are superseded. Not routed.
 //	shipment_review.settle  human only (merchandiser, the review's responsible role): every item of an
 //	                        open review with its disposition and a reason, each of which must have
@@ -38,8 +41,11 @@ import (
 //	                        booking.record, the booking correction —, a version of the same document kind
 //	                        — shipment_document.prepare —, a release of the same scope —
 //	                        commercial_release.evaluate); reevaluated (a release evaluated again since the
-//	                        review opened); no_action (a release of a confirmed shipment only, which stays
-//	                        as it is).
+//	                        review opened, or — a confirmed shipment's documents release —
+//	                        document_release.record since then, which judges it the same way, on the
+//	                        order's current revision). no_action, which left a confirmed shipment's
+//	                        release as it was, is no longer accepted since S5 C1b (INVALID_KNOWN_VALUE);
+//	                        reviews settled before keep it.
 //
 // Request members in snake_case: shipment_review.settle {review_id, expected_version, items
 // [{item_no, disposition, shipment_id, reason}], reason (required when the review has no items)}.
@@ -70,7 +76,7 @@ const (
 	ReviewItemPacking  = "packing"  // its current packing plan or actual packing
 	ReviewItemBooking  = "booking"  // its current booking
 	ReviewItemDocument = "document" // a draft version of its document set
-	ReviewItemRelease  = "release"  // a granted commercial release that can no longer be consumed
+	ReviewItemRelease  = "release"  // a granted commercial release judged on what no longer holds
 
 	// Why an item is stale.
 	ImpactRevisionChanged = "revision_changed" // the shipment binds an earlier order revision than the amended one
@@ -87,7 +93,7 @@ const (
 	DispositionShipmentCancelled = "shipment_cancelled"
 	DispositionReplaced          = "replaced"
 	DispositionReevaluated       = "reevaluated"
-	DispositionNoAction          = "no_action"
+	DispositionNoAction          = "no_action" // no longer accepted (S5 C1b); stored dispositions keep it
 
 	// MaxReviewItems bounds the items of one review.
 	MaxReviewItems = 1000

@@ -23,6 +23,13 @@
 // shipment.cancel lock the shipment alone: they change nothing an order's other shipments are
 // judged on.
 //
+// S5 C1b (owner decision 2026-11-12): the documents release of a confirmed shipment (evaluate and
+// grant_exception of scope documents, document_release.record) takes the same FUL locks — for
+// document_release.record then the document set FOR SHARE — and reads the shipment release its
+// confirmation consumed without a lock (it never changes); after the authority guard it reads TRD's
+// order state (brant_trd.order_state_v1, no lock), then holds STL's order account and TRD's order
+// FOR SHARE, in that order (judgeDocuments). It asks CNX, PTY, PUR and QLT nothing.
+//
 // S5-03b: milestone.plan and milestone.record_actual lock the plan FOR UPDATE, then the authority
 // guard; they call no upstream guard (an order subject is read from TRD before the transaction).
 // export_lot.register reads its lot ID, locks the shipment FOR SHARE — it changes nothing of it, and

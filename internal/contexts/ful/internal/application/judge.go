@@ -15,12 +15,13 @@ import (
 )
 
 // judgement is what every guard answered in one FUL transaction for a shipment and a release
-// scope: the evidence entries and bindings, STL's payment verdict, the first unmet guard with its
-// refusal, the first unmet guard other than the payment condition, and the exception that covered
-// the payment condition.
+// scope: the evidence entries and bindings, the order binding the payment condition was judged on,
+// STL's payment verdict, the first unmet guard with its refusal, the first unmet guard other than
+// the payment condition, and the exception that covered the payment condition.
 type judgement struct {
 	entries   []shipment.Entry
 	bindings  release.Bindings
+	order     shipment.OrderBinding
 	payment   release.PaymentVerdict
 	failure   *kernel.Rejection
 	guard     string
@@ -69,6 +70,18 @@ func licenseLines(s *shipment.Shipment) []cnxapi.ShipmentLine {
 	return out
 }
 
+// judgeRelease judges the release of scope of the shipment r locked: the documents release of a
+// confirmed shipment whose confirmation consumed a shipment release by judgeDocuments (owner
+// decision 2026-11-12, S5 C1b), every other release by judge.
+func (s Service) judgeRelease(ctx context.Context, exec bentopg.Executor, r *releaseRootsOf, releaseScope string, now time.Time) (*judgement, error) {
+	if releaseScope == release.ScopeDocuments && r.existing.Status == shipment.StatusConfirmed {
+		if goods, entry, ok := r.confirmation.Confirmation(); ok {
+			return s.judgeDocuments(ctx, exec, r.existing, goods, entry, r.release, now)
+		}
+	}
+	return s.judge(ctx, exec, r.existing, r.consumed, releaseScope, r.release, now)
+}
+
 func paymentVerdict(v stlapi.PaymentVerdict) release.PaymentVerdict {
 	return release.PaymentVerdict{Scope: v.Query.Scope, Satisfied: v.Satisfied(), Status: v.Status, Reason: v.Reason, OrderRevision: v.OrderRevision,
 		OrderHash: v.OrderHash, Currency: v.Currency, RequiredMinor: v.RequiredMinor, AppliedMinor: v.AppliedMinor, StageID: v.StageID,
@@ -85,13 +98,14 @@ func paymentVerdict(v stlapi.PaymentVerdict) release.PaymentVerdict {
 // PaymentConditionGuard v1 for the scope (R45), which a live exception of rel may cover; TRD
 // OrderGuard v1 (R27); then FUL-INV-001. The quantities are judged on what FUL's confirmed shipments
 // consumed besides this one. Every guard runs; the first refusal in this order decides. rel may be
-// nil.
+// nil. The documents release of a confirmed shipment is judged by judgeDocuments instead
+// (judgeRelease).
 func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.Shipment, consumed shipment.Consumed, scope string,
 	rel *release.Release, now time.Time) (*judgement, error) {
 	const at = "/args/shipment_id"
 	j := &judgement{entries: []shipment.Entry{{Name: "guards_checked_at", Value: kernel.FormatTimestamp(now)}},
 		bindings: release.Bindings{Screenings: []release.ScreeningBinding{}, Deliveries: []release.DeliveryBinding{},
-			QualityReleases: []release.QualityBinding{}}}
+			QualityReleases: []release.QualityBinding{}}, order: sh.Order}
 	b := cnxapi.OrderBinding{OrderID: sh.Order.OrderID, OrderRevision: sh.Order.OrderRevision, OrderHash: sh.Order.OrderHash}
 	cv, err := s.Upstream.Compliance.GuardTradeCompliance(ctx, exec, b, now)
 	if err != nil {
@@ -158,26 +172,14 @@ func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.
 			return nil, err
 		}
 	}
-	q := stlapi.PaymentQuery{OrderID: sh.Order.OrderID, OrderRevision: sh.Order.OrderRevision, Scope: scope, At: now}
-	pv, err := s.Upstream.Payments.GuardPaymentCondition(ctx, exec, q)
-	if err != nil {
-		return nil, err
-	}
-	j.payment = paymentVerdict(pv)
-	e, exception, refused := rel.CheckPayment(j.payment, now, at)
-	j.entries, j.exception = append(j.entries, e), exception
-	p := j.payment
-	j.bindings.Payment = &release.PaymentBinding{Scope: scope, Status: p.Status, Reason: p.Reason, OrderRevision: p.OrderRevision,
-		OrderHash: p.OrderHash, Currency: p.Currency, RequiredMinor: p.RequiredMinor, AppliedMinor: p.AppliedMinor, StageID: p.StageID,
-		ShortfallMinor: p.ShortfallMinor, ExceptionSeq: exception}
-	if err = j.note(shipment.GuardPaymentCondition, refused); err != nil {
+	if err = s.judgePayment(ctx, exec, j, scope, rel, now); err != nil {
 		return nil, err
 	}
 	ov, err := s.Upstream.Orders.GuardOrder(ctx, exec, binding(sh.Order))
 	if err != nil {
 		return nil, err
 	}
-	e, refused = shipment.CheckOrder(sh.Order, orderVerdict(ov), at)
+	e, refused := shipment.CheckOrder(sh.Order, orderVerdict(ov), at)
 	j.entries = append(j.entries, e)
 	j.bindings.Order = &release.OrderBindingSeen{OrderID: sh.Order.OrderID, OrderRevision: ov.OrderRevision, OrderHash: sh.Order.OrderHash,
 		Status: ov.Status}
@@ -185,6 +187,60 @@ func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.
 		return nil, err
 	}
 	if err = j.note(release.GuardFulfilment, sh.CheckOrderLines(before.OrderLines)); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+// judgePayment asks STL's PaymentConditionGuard v1 (R45) for scope on the order binding j judges
+// (j.order), with FUL's executor, and records its answer: satisfied, covered by a live exception of
+// rel, or COMMERCIAL_RELEASE_BLOCKED.
+func (s Service) judgePayment(ctx context.Context, exec bentopg.Executor, j *judgement, scope string, rel *release.Release, now time.Time) error {
+	q := stlapi.PaymentQuery{OrderID: j.order.OrderID, OrderRevision: j.order.OrderRevision, Scope: scope, At: now}
+	pv, err := s.Upstream.Payments.GuardPaymentCondition(ctx, exec, q)
+	if err != nil {
+		return err
+	}
+	j.payment = paymentVerdict(pv)
+	e, exception, refused := rel.CheckPayment(j.payment, now, "/args/shipment_id")
+	j.entries, j.exception = append(j.entries, e), exception
+	p := j.payment
+	j.bindings.Payment = &release.PaymentBinding{Scope: scope, Status: p.Status, Reason: p.Reason, OrderRevision: p.OrderRevision,
+		OrderHash: p.OrderHash, Currency: p.Currency, RequiredMinor: p.RequiredMinor, AppliedMinor: p.AppliedMinor, StageID: p.StageID,
+		ShortfallMinor: p.ShortfallMinor, ExceptionSeq: exception}
+	return j.note(shipment.GuardPaymentCondition, refused)
+}
+
+// judgeDocuments judges, with FUL's executor in the caller's transaction (which holds the shipment,
+// the order's fulfilment root, the documents release and — for document_release.record — the
+// document set), the documents release of confirmed shipment sh by the owner's rule of 2026-11-12
+// (S5 C1b; release/confirmed.go): the goods' guards are not asked again — goods and entry are what
+// the shipment's confirmation bound (release.Confirmation) —; TRD's order state read, which takes no
+// lock, gives the order's current revision and hash (R27); STL's PaymentConditionGuard v1 for the
+// documents scope runs on that revision, which a live exception of rel may cover (R45, D-5); then
+// TRD's OrderGuard v1 on that binding (R27), each keeping its row FOR SHARE until the transaction
+// ends — context code order, STL before TRD. rel may be nil.
+func (s Service) judgeDocuments(ctx context.Context, exec bentopg.Executor, sh *shipment.Shipment, goods release.Bindings, entry shipment.Entry,
+	rel *release.Release, now time.Time) (*judgement, error) {
+	const at = "/args/shipment_id"
+	j := &judgement{entries: []shipment.Entry{{Name: "guards_checked_at", Value: kernel.FormatTimestamp(now)}, entry}, bindings: goods}
+	st, err := s.Upstream.Orders.OrderState(ctx, exec, sh.Order.OrderID)
+	if err != nil {
+		return nil, err
+	}
+	j.order = release.Current(sh.Order, st.Known, st.OrderRevision, st.OrderHash)
+	if err = s.judgePayment(ctx, exec, j, release.ScopeDocuments, rel, now); err != nil {
+		return nil, err
+	}
+	ov, err := s.Upstream.Orders.GuardOrder(ctx, exec, binding(j.order))
+	if err != nil {
+		return nil, err
+	}
+	e, refused := release.CheckDocumentsOrder(j.order, orderVerdict(ov), at)
+	j.entries = append(j.entries, e)
+	j.bindings.Order = &release.OrderBindingSeen{OrderID: j.order.OrderID, OrderRevision: j.order.OrderRevision, OrderHash: j.order.OrderHash,
+		Status: ov.Status}
+	if err = j.note(shipment.GuardOrder, refused); err != nil {
 		return nil, err
 	}
 	return j, nil

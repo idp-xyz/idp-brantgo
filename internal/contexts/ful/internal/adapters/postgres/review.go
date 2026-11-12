@@ -126,11 +126,21 @@ func OrderHoldings(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 		}); err != nil {
 		return h, err
 	}
-	if err = each(`SELECT shipment_id, release_id, scope, status, row_version, evaluations FROM brant_ful.commercial_release
-		WHERE tenant_id = $1 AND company_id = $2 AND shipment_id = ANY ($3) ORDER BY shipment_id, scope DESC`, func(r pgx.Rows) error {
+	// The revision a release's payment condition was last judged on: the order revision of the latest
+	// evaluation that judged the documents release of a confirmed shipment (S5 C1b: its bindings name
+	// the confirmation and the order's current binding) or the exception granted on it, else the
+	// revision the release binds. Revisions only grow, so the greatest is the latest.
+	if err = each(`SELECT r.shipment_id, r.release_id, r.scope, r.status, r.row_version, r.evaluations,
+			greatest(r.order_revision,
+				(SELECT max((e.bindings->'order'->>'order_revision')::bigint) FROM brant_ful.commercial_release_evaluation e
+					WHERE e.tenant_id = r.tenant_id AND e.company_id = r.company_id AND e.release_id = r.release_id AND e.bindings ? 'confirmation'),
+				(SELECT max(x.order_revision) FROM brant_ful.commercial_release_exception x
+					WHERE x.tenant_id = r.tenant_id AND x.company_id = r.company_id AND x.release_id = r.release_id))
+		FROM brant_ful.commercial_release r
+		WHERE r.tenant_id = $1 AND r.company_id = $2 AND r.shipment_id = ANY ($3) ORDER BY r.shipment_id, r.scope DESC`, func(r pgx.Rows) error {
 		var id string
 		var x fulfilment.HeldRelease
-		if err := r.Scan(&id, &x.ID, &x.Scope, &x.Status, &x.RowVersion, &x.Evaluations); err != nil {
+		if err := r.Scan(&id, &x.ID, &x.Scope, &x.Status, &x.RowVersion, &x.Evaluations, &x.Judged); err != nil {
 			return err
 		}
 		at[id].Releases = append(at[id].Releases, x)
@@ -246,16 +256,19 @@ func ReviewNow(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, i
 	}
 	err = each(`SELECT r.shipment_id, r.scope, r.release_id, r.status, r.evaluations, (SELECT max(e.evaluated_at)
 			FROM brant_ful.commercial_release_evaluation e WHERE e.tenant_id = r.tenant_id AND e.company_id = r.company_id
-			AND e.release_id = r.release_id)
+			AND e.release_id = r.release_id), r.consumed_at
 		FROM brant_ful.commercial_release r WHERE r.tenant_id = $1 AND r.company_id = $2 AND r.shipment_id = ANY ($3)`, func(r pgx.Rows) error {
 		var id, scope string
 		var x fulfilment.ReleaseNow
-		var at *time.Time
-		if err := r.Scan(&id, &scope, &x.ID, &x.Status, &x.Evaluations, &at); err != nil {
+		var at, consumed *time.Time
+		if err := r.Scan(&id, &scope, &x.ID, &x.Status, &x.Evaluations, &at, &consumed); err != nil {
 			return err
 		}
 		if at != nil {
 			x.EvaluatedAt = kernel.Instant(*at)
+		}
+		if consumed != nil {
+			x.ConsumedAt = kernel.Instant(*consumed)
 		}
 		now.Shipments[id].Releases[scope] = x
 		return nil

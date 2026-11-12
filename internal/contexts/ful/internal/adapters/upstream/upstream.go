@@ -32,6 +32,12 @@ func (TRD) GuardOrder(ctx context.Context, exec bentopg.Executor, b trdapi.Order
 	return trdapi.ScanOrderGuard(b, exec.QueryRow(ctx, trdapi.OrderGuardSQL, trdapi.OrderGuardArgs(b)...).Scan)
 }
 
+// OrderState runs TRD's order state read (brant_trd.order_state_v1), which takes no lock: what the
+// order is now, as the last TRD command that committed left it.
+func (TRD) OrderState(ctx context.Context, exec bentopg.Executor, orderID string) (trdapi.OrderState, error) {
+	return trdapi.ScanOrderState(orderID, exec.QueryRow(ctx, trdapi.OrderStateSQL, trdapi.OrderStateArgs(orderID)...).Scan)
+}
+
 // QLT is FUL's port to QLT's quality releases (R26): QualityReleaseRef v1 and QualityReleaseGuard v1.
 type QLT struct {
 	Releases qltapi.ReleaseLookups

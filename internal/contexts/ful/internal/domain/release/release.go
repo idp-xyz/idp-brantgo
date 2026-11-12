@@ -53,8 +53,9 @@ type Entry = shipment.Entry
 // Reject returns a rejection with a code of FUL's rules or a shared kernel code.
 func Reject(code, path, reason string) *kernel.Rejection { return shipment.Reject(code, path, reason) }
 
-// PaymentVerdict is STL's PaymentConditionGuard v1 on the order revision the shipment binds for the
-// release's scope. Amounts are integer minor units of Currency.
+// PaymentVerdict is STL's PaymentConditionGuard v1 for the release's scope on the order revision the
+// shipment binds — or, for the documents release of a confirmed shipment, on the order's current
+// revision (confirmed.go). Amounts are integer minor units of Currency.
 type PaymentVerdict struct {
 	Scope             string
 	Satisfied         bool
@@ -174,6 +175,10 @@ type (
 		QualityReleases []QualityBinding   `json:"quality_releases"`
 		Payment         *PaymentBinding    `json:"payment_condition,omitempty"`
 		Order           *OrderBindingSeen  `json:"order,omitempty"`
+		// Confirmation is set when the evaluation judged the documents release of a confirmed
+		// shipment (confirmed.go): the goods' bindings above are the confirmation's, and Payment and
+		// Order were judged on Order's revision, the order's current one.
+		Confirmation *ConfirmationBinding `json:"confirmation,omitempty"`
 	}
 )
 
@@ -195,8 +200,10 @@ type Evaluation struct {
 	Evaluated      Act
 }
 
-// Exception is a payment-condition exception: one unpaid stage of the order revision the shipment
-// binds, short ShortfallMinor of Currency in the release's scope, until ValidUntil.
+// Exception is a payment-condition exception: one unpaid stage of the order revision the payment
+// condition was judged on (Order: the revision the shipment binds, or the order's current revision
+// for the documents release of a confirmed shipment), short ShortfallMinor of Currency in the
+// release's scope, until ValidUntil.
 type Exception struct {
 	Seq            int64
 	ReleaseVersion int64
@@ -337,8 +344,10 @@ func (r *Release) Latest() *Evaluation {
 	return &r.Evaluations[len(r.Evaluations)-1]
 }
 
-// ExceptionRequest is what a credit manager states for an exception.
+// ExceptionRequest is what a credit manager states for an exception, with the order binding the
+// payment condition was judged on (Order; zero: the release's).
 type ExceptionRequest struct {
+	Order           shipment.OrderBinding
 	ExpectedVersion int64
 	StageID         string
 	Currency        string
@@ -369,7 +378,7 @@ func (r *Release) Exceptable(expected int64) error {
 // pending payment plan review — or more than one unpaid stage (COMMERCIAL_RELEASE_BLOCKED); and a
 // request that is not what STL says now: another stage, currency or shortfall, or a validity that
 // ended or exceeds MaxExceptionValidity (INVALID_KNOWN_VALUE). It grants the release by the new
-// exception. The caller has run Exceptable.
+// exception, bound to req.Order (the release's order when zero). The caller has run Exceptable.
 func (r *Release) GrantException(req ExceptionRequest, other *kernel.Rejection, p PaymentVerdict, entries []Entry, act Act) (*Exception, error) {
 	if !act.By.IsHuman() {
 		return nil, Reject(kernel.CodePermissionDenied, "/", "")
@@ -396,8 +405,12 @@ func (r *Release) GrantException(req ExceptionRequest, other *kernel.Rejection, 
 	if !until.After(act.At) || until.Sub(act.At) > MaxExceptionValidity {
 		return nil, Reject(kernel.CodeInvalidKnownValue, "/args/valid_until", "An exception is valid from now for at most 90 days")
 	}
+	order := r.Order
+	if req.Order.OrderID != "" {
+		order = req.Order
+	}
 	doc, sum := shipment.Seal(entries)
-	x := Exception{Seq: int64(len(r.Exceptions)) + 1, ReleaseVersion: r.RowVersion + 1, Order: r.Order, StageID: p.StageID, Currency: p.Currency,
+	x := Exception{Seq: int64(len(r.Exceptions)) + 1, ReleaseVersion: r.RowVersion + 1, Order: order, StageID: p.StageID, Currency: p.Currency,
 		ShortfallMinor: p.ShortfallMinor, ValidUntil: until, Reason: req.Reason, Evidence: req.Evidence, Entries: entries, EntriesJSON: doc,
 		EntriesSHA256: sum, Granted: act}
 	if x.Evidence == nil {

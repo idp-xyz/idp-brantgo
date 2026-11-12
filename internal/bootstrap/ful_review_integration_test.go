@@ -149,9 +149,10 @@ func (r *fulReview) cancelled(id string, expected int64) {
 // disposition that did not happen is refused, as is an AI agent settling. The merchandiser cancels
 // shipment.2 and re-plans the 70 on revision 2 as shipment.3 — packing plan, booking correction,
 // a new commercial invoice, its release evaluated — and the documentation clerk evaluates
-// shipment.1's documents release again; the review is settled by reference to all of it, each
-// disposition traceable. A settled review is settled once and a redelivered amendment reopens
-// nothing.
+// shipment.1's documents release again, which since S5 C1b judges revision 2's payment condition and
+// the confirmation's goods and is granted (no_action no longer settles it); the review is settled by
+// reference to all of it, each disposition traceable. A settled review is settled once and a
+// redelivered amendment reopens nothing.
 func TestShipmentReviewFollowsAReducedOrderBT10(t *testing.T) {
 	w := newFulDocWorld(t)
 	r := fulReviewOn(t, w.fulWorld, nil)
@@ -204,26 +205,36 @@ func TestShipmentReviewFollowsAReducedOrderBT10(t *testing.T) {
 		t.Fatalf("items %+v", it)
 	}
 
-	// Nothing is done yet: the dispositions cannot be claimed.
+	// Nothing is done yet: the dispositions cannot be claimed. all states first, then every other item
+	// (the release evaluated again, the rest cancelled), so a refusal of first is at /args/items/0.
 	all := func(first fulapi.ReviewItemDisposition) []fulapi.ReviewItemDisposition {
-		out := []fulapi.ReviewItemDisposition{disposal(1, fulapi.DispositionNoAction, "", "x")}
-		for no := 2; no <= 7; no++ {
-			out = append(out, disposal(no, fulapi.DispositionShipmentCancelled, "", "x"))
+		out := []fulapi.ReviewItemDisposition{first}
+		for no := 1; no <= 7; no++ {
+			switch no {
+			case first.ItemNo:
+			case 1:
+				out = append(out, disposal(no, fulapi.DispositionReevaluated, "", "x"))
+			default:
+				out = append(out, disposal(no, fulapi.DispositionShipmentCancelled, "", "x"))
+			}
 		}
-		out[first.ItemNo-1] = first
 		return out
 	}
 	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(2, fulapi.DispositionShipmentCancelled, "", "x"))...)
-	refusedAt(t, "a shipment not cancelled", err, kernel.CodeInvalidState, "/args/items/1/disposition")
+	refusedAt(t, "a shipment not cancelled", err, kernel.CodeInvalidState, "/args/items/0/disposition")
 	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(2, fulapi.DispositionNoAction, "", "x"))...)
-	refusedAt(t, "no_action on a prepared shipment", err, kernel.CodeInvalidKnownValue, "/args/items/1/disposition")
+	refusedAt(t, "no_action on a prepared shipment", err, kernel.CodeInvalidKnownValue, "/args/items/0/disposition")
 	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(1, fulapi.DispositionShipmentCancelled, "", "x"))...)
 	refusedAt(t, "a confirmed shipment cancelled", err, kernel.CodeInvalidKnownValue, "/args/items/0/disposition")
 	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(1, fulapi.DispositionReevaluated, "", "x"))...)
 	refusedAt(t, "a release not evaluated again", err, kernel.CodeInvalidState, "/args/items/0/disposition")
-	_, err = r.settle(w.merch, rv.ReviewID, 1, disposal(1, fulapi.DispositionNoAction, "", "x"))
+	// S5 C1b: a confirmed shipment's documents release is judged on the order's current revision now;
+	// it is evaluated again, never left as it was granted.
+	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(1, fulapi.DispositionNoAction, "", "x"))...)
+	refusedAt(t, "no_action on the confirmed shipment's documents release", err, kernel.CodeInvalidKnownValue, "/args/items/0/disposition")
+	_, err = r.settle(w.merch, rv.ReviewID, 1, disposal(1, fulapi.DispositionReevaluated, "", "x"))
 	refusedAt(t, "items left out", err, kernel.CodeInvalidKnownValue, "/args/items")
-	_, err = r.settle(w.agent, rv.ReviewID, 1, all(disposal(1, fulapi.DispositionNoAction, "", "x"))...)
+	_, err = r.settle(w.agent, rv.ReviewID, 1, all(disposal(1, fulapi.DispositionReevaluated, "", "x"))...)
 	if code(err) != kernel.CodePermissionDenied {
 		t.Fatalf("an AI agent settling: %s", code(err))
 	}
@@ -235,11 +246,11 @@ func TestShipmentReviewFollowsAReducedOrderBT10(t *testing.T) {
 	_, err = w.prepare(w.merch, "shipment.3", "70", d, rel)
 	w.must(err)
 	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(3, fulapi.DispositionReplaced, "shipment.3", "x"))...)
-	refusedAt(t, "a replacement without a packing plan", err, kernel.CodeInvalidState, "/args/items/2/shipment_id")
+	refusedAt(t, "a replacement without a packing plan", err, kernel.CodeInvalidState, "/args/items/0/shipment_id")
 	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(2, fulapi.DispositionReplaced, "shipment.1", "x"))...)
-	refusedAt(t, "a replacement of revision 1", err, kernel.CodeInvalidState, "/args/items/1/shipment_id")
+	refusedAt(t, "a replacement of revision 1", err, kernel.CodeInvalidState, "/args/items/0/shipment_id")
 	_, err = r.settle(w.merch, rv.ReviewID, 1, all(disposal(2, fulapi.DispositionReplaced, "shipment.none", "x"))...)
-	refusedAt(t, "a replacement that does not exist", err, kernel.CodeReferenceInvalid, "/args/items/1/shipment_id")
+	refusedAt(t, "a replacement that does not exist", err, kernel.CodeReferenceInvalid, "/args/items/0/shipment_id")
 	r.planned("shipment.3", 1, 7)
 	_, err = w.ful.RecordBooking(w.merch, w.bookingCmd("shipment.3", 0, w.forwarder, "DEHAM"))
 	w.must(err)
@@ -247,7 +258,9 @@ func TestShipmentReviewFollowsAReducedOrderBT10(t *testing.T) {
 	w.must(err)
 	granted := w.granted("shipment.3")
 	again, err := w.evaluateRelease(w.ful, "shipment.1", fulapi.ScopeDocuments)
-	w.must(err)
+	if err != nil || again.Status != fulapi.ReleaseGranted {
+		t.Fatalf("shipment.1's documents release on revision 2 (S5 C1b) %+v %v", again, err)
+	}
 	cmd := fulapi.SettleShipmentReview{IdempotencyKey: w.key(), ReviewID: rv.ReviewID, ExpectedVersion: 1, Reason: "合成：减量后按修订 2 重排",
 		Items: []fulapi.ReviewItemDisposition{
 			disposal(1, fulapi.DispositionReevaluated, "", "已出运部分的放单按新修订重新评估"),

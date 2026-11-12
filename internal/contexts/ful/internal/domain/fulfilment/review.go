@@ -9,13 +9,20 @@
 // leaves stale: a prepared shipment that can no longer be confirmed — bound to an earlier order
 // revision than the amended one, or of an order that ended —, its current packing plan and actual
 // packing, its current booking, the draft versions of its document set, and every granted commercial
-// release such a shipment, or a confirmed shipment bound to an earlier revision, can no longer
-// consume. Confirmed shipments stay facts. One review is kept per (order, order revision, cause); a
+// release of such a shipment; and the granted documents release of a confirmed shipment whose
+// payment condition was judged on an earlier order revision than the change's (or of a cancelled
+// order). Confirmed shipments stay facts. One review is kept per (order, order revision, cause); a
 // review opened for a later order version supersedes the open ones of earlier versions. The
 // merchandiser settles a review by stating, for every item, what was done with FUL's commands — the
 // shipment cancelled, replaced by a shipment of the new revision that holds the item's counterpart,
-// the release evaluated again — or no_action for a release of a confirmed shipment, each with a
-// reason; the review does none of it itself.
+// the release evaluated again (or, for a confirmed shipment's documents release, its documents
+// released, which judges the same way) —, each with a reason; the review does none of it itself.
+//
+// Since S5 C1b (owner decision 2026-11-12) the documents release of a confirmed shipment judges the
+// payment condition on the order's current revision and reuses the confirmation's verdicts on the
+// goods, and an order ended by order.close or order.close_remainder still releases them: such a
+// release is stale only by the revision its payment condition was judged on, its disposition is to
+// evaluate it again on the current revision (reevaluated), and no_action is no longer accepted.
 //
 //	open ──shipment_review.settle (human)──▶ settled
 //	  └───shipment_review.open (system, a later order version)──▶ superseded
@@ -59,7 +66,9 @@ const (
 	DispositionShipmentCancelled = "shipment_cancelled"
 	DispositionReplaced          = "replaced"
 	DispositionReevaluated       = "reevaluated"
-	DispositionNoAction          = "no_action"
+	// DispositionNoAction settled a confirmed shipment's release before S5 C1b; it is no longer
+	// accepted (stored dispositions keep it).
+	DispositionNoAction = "no_action"
 
 	// ResponsibleRole is the role template that settles reviews (role templates: 跟单 holds
 	// shipment_review.settle).
@@ -70,6 +79,7 @@ const (
 	ShipmentConfirmed = "confirmed"
 	ShipmentCancelled = "cancelled"
 	ReleaseGranted    = "granted"
+	ReleaseConsumed   = "consumed"
 	ScopeShipment     = "shipment"
 	ScopeDocuments    = "documents"
 	PackingPlan       = "plan"
@@ -144,14 +154,17 @@ type HeldDocument struct {
 	Number  string
 }
 
-// HeldRelease is a commercial release of a shipment: its scope, state, row version and the number of
-// its evaluations.
+// HeldRelease is a commercial release of a shipment: its scope, state, row version, the number of
+// its evaluations and the order revision its payment condition was last judged on (Judged: the
+// revision the shipment binds, or for the documents release of a confirmed shipment the order's
+// revision at that evaluation or exception, S5 C1b).
 type HeldRelease struct {
 	ID          string
 	Scope       string
 	Status      string
 	RowVersion  int64
 	Evaluations int64
+	Judged      int64
 }
 
 // HeldShipment is a shipment of the order that is not cancelled, with the order revision it binds and
@@ -290,11 +303,20 @@ func exact(d kernel.Decimal) string {
 	return s
 }
 
-// Stale reports whether change c leaves shipment s, which is not cancelled, unable to be confirmed
-// or released on its binding: after an amendment, a shipment bound to an earlier order revision
-// (TRD's OrderGuard answers REFERENCE_STALE to it); after an end, every shipment (ORDER_NOT_ACTIVE).
+// Stale reports whether change c leaves prepared shipment s unable to be confirmed or released on
+// its binding: after an amendment, a shipment bound to an earlier order revision (TRD's OrderGuard
+// answers REFERENCE_STALE to it); after an end, every shipment (ORDER_NOT_ACTIVE).
 func (c Change) Stale(s HeldShipment) bool {
 	return c.Cause != CauseOrderAmended || s.Revision < c.Revision
+}
+
+// StaleRelease reports whether change c leaves the granted documents release r of a confirmed
+// shipment judged on what no longer holds (S5 C1b): its payment condition was judged on an earlier
+// order revision than the change's, or the order was cancelled (which no command reaches while the
+// order has a confirmed shipment). An order ended by order.close_remainder at the revision it was
+// judged on still releases it.
+func (c Change) StaleRelease(r HeldRelease) bool {
+	return c.Cause == CauseOrderCancelled || r.Judged < c.Revision
 }
 
 func (c Change) impact() string {
@@ -345,17 +367,18 @@ func (c Change) lines(s HeldShipment, shipped map[LineUnit]kernel.Decimal) []Fac
 var packingOrder = map[string]int{PackingPlan: 0, PackingActual: 1}
 
 // Assess lists the items change c leaves stale of what FUL holds of the order (h), numbered from 1:
-// per stale shipment by shipment ID — a prepared one with its lines, then its current packing plan
+// per shipment by shipment ID — a stale prepared one with its lines, then its current packing plan
 // and actual packing, its current booking, the drafts of its document set by kind and version, and
-// its granted releases (shipment scope first); a confirmed one with its granted releases only (its
-// shipment release was consumed by the confirmation; the confirmed shipment stays).
+// its granted releases (shipment scope first); a confirmed one with its granted releases c leaves
+// stale (StaleRelease; its shipment release was consumed by the confirmation; the confirmed shipment
+// stays).
 func Assess(c Change, h Holdings) []Item {
 	var items []Item
 	add := func(f Facts) { items = append(items, Item{No: len(items) + 1, Facts: f}) }
 	shipments := slices.Clone(h.Shipments)
 	slices.SortFunc(shipments, func(a, b HeldShipment) int { return cmp.Compare(a.ID, b.ID) })
 	for _, s := range shipments {
-		if !c.Stale(s) || (s.Status != ShipmentPrepared && s.Status != ShipmentConfirmed) {
+		if (s.Status != ShipmentPrepared || !c.Stale(s)) && s.Status != ShipmentConfirmed {
 			continue
 		}
 		base := Facts{ShipmentID: s.ID, ShipmentStatus: s.Status, ShipmentVersion: s.RowVersion, ShipmentRevision: s.Revision, Impact: c.impact()}
@@ -388,7 +411,7 @@ func Assess(c Change, h Holdings) []Item {
 		releases := slices.Clone(s.Releases)
 		slices.SortFunc(releases, func(a, b HeldRelease) int { return cmp.Compare(scopeOrder(a.Scope), scopeOrder(b.Scope)) })
 		for _, r := range releases {
-			if r.Status != ReleaseGranted {
+			if r.Status != ReleaseGranted || (s.Status == ShipmentConfirmed && !c.StaleRelease(r)) {
 				continue
 			}
 			f := base
@@ -462,12 +485,14 @@ func (r *Review) Supersede(by string, at time.Time) {
 	r.Status, r.RowVersion, r.SupersededBy, r.SupersededAt = ReviewSuperseded, r.RowVersion+1, by, kernel.Instant(at)
 }
 
-// ReleaseNow is a commercial release as FUL shows it now.
+// ReleaseNow is a commercial release as FUL shows it now: its state, evaluations, when it was last
+// evaluated and when it was consumed (zero: not consumed).
 type ReleaseNow struct {
 	ID          string
 	Status      string
 	Evaluations int64
 	EvaluatedAt time.Time
+	ConsumedAt  time.Time
 }
 
 // ShipmentNow is a shipment as FUL shows it now: its order, state, bound order revision and
@@ -508,7 +533,8 @@ func itemPath(i int, member string) string { return "/args/items/" + strconv.Ito
 // /args/items), then per stated item a disposition that does not fit it (INVALID_KNOWN_VALUE), a
 // replacement that is not a shipment of the order (REFERENCE_INVALID), and a disposition that has not
 // happened — the shipment is not cancelled, the replacement binds an earlier revision, is cancelled
-// or lacks the item's counterpart, the release was not evaluated again (INVALID_STATE).
+// or lacks the item's counterpart, the release was neither evaluated again nor consumed since the
+// review opened (INVALID_STATE).
 func (r *Review) Settle(expected int64, ss []Settlement, now Now, act Act) error {
 	switch {
 	case r.RowVersion != expected:
@@ -559,18 +585,23 @@ func (r *Review) judge(it Item, i int, s Settlement, now Now) (*Disposition, err
 	}
 	switch s.Kind {
 	case DispositionNoAction:
-		if f.Kind != ItemRelease || prepared {
-			return nil, mismatch("no_action settles only a release of a confirmed shipment, which stays as it is")
-		}
+		// S5 C1b: a confirmed shipment's documents release, the only item no_action settled, is judged
+		// on the order's current revision now; it no longer stays as it was granted.
+		return nil, mismatch("no_action is no longer accepted: evaluate the release again on the order's current revision")
 	case DispositionReevaluated:
 		if f.Kind != ItemRelease {
 			return nil, mismatch("only a release is evaluated again")
 		}
 		rel, ok := now.Shipments[f.ShipmentID].Releases[f.ReleaseScope]
-		if !ok || rel.ID != f.ReleaseID || rel.Evaluations <= f.ReleaseEvaluations {
-			return nil, state("/disposition", "Release "+f.ReleaseID+" was not evaluated again since the review opened")
+		switch {
+		case ok && rel.ID == f.ReleaseID && rel.Evaluations > f.ReleaseEvaluations:
+			d.Ref, d.Status, d.At = rel.ID, rel.Status, rel.EvaluatedAt
+		case ok && rel.ID == f.ReleaseID && rel.Status == ReleaseConsumed && !rel.ConsumedAt.Before(r.Opened.At):
+			// document_release.record judged it in its own transaction as an evaluation would.
+			d.Ref, d.Status, d.At = rel.ID, rel.Status, rel.ConsumedAt
+		default:
+			return nil, state("/disposition", "Release "+f.ReleaseID+" was neither evaluated again nor consumed since the review opened")
 		}
-		d.Ref, d.Status, d.At = rel.ID, rel.Status, rel.EvaluatedAt
 	case DispositionShipmentCancelled:
 		if !prepared {
 			return nil, mismatch("a confirmed shipment stays")

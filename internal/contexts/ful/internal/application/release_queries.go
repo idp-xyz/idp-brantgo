@@ -40,7 +40,8 @@ func releaseView(r *release.Release) api.ReleaseView {
 			Bindings: bindingsView(e.Bindings), EvaluatedBy: e.Evaluated.By, EvaluatedAt: e.Evaluated.At, AuthorityEpoch: e.Evaluated.Epoch})
 	}
 	for _, x := range r.Exceptions {
-		v.Exceptions = append(v.Exceptions, api.ExceptionView{Seq: x.Seq, ReleaseVersion: x.ReleaseVersion, Order: v.Order, StageID: x.StageID,
+		v.Exceptions = append(v.Exceptions, api.ExceptionView{Seq: x.Seq, ReleaseVersion: x.ReleaseVersion,
+			Order: api.OrderBinding{OrderID: x.Order.OrderID, OrderRevision: x.Order.OrderRevision, OrderHash: x.Order.OrderHash}, StageID: x.StageID,
 			Currency: x.Currency, ShortfallMinor: x.ShortfallMinor, ValidUntil: x.ValidUntil, Reason: x.Reason, EvidenceIDs: slices.Clone(x.Evidence),
 			Guards: guardViews(x.Entries), GuardsSHA256: x.EntriesSHA256, GrantedBy: x.Granted.By, GrantedAt: x.Granted.At,
 			AuthorityEpoch: x.Granted.Epoch})
