@@ -277,18 +277,17 @@ type Costing struct {
 // (lookups) and re-checked inside it by the owners' guards; Allocations are the order lines'
 // DemandAllocation roots, locked FOR UPDATE inside it (new roots open there).
 type Inputs struct {
-	Scope           kernel.Scope
-	Now             time.Time
-	Preparer        kernel.ActorRef
-	Epoch           int64
-	OverbuyApproved bool // the preparer holds the overbuy approval permission now
-	Order           *Order
-	Supply          map[Ref]Supply
-	Parties         map[string]Party
-	Specs           map[Spec]func(path string) error
-	Configs         map[ConfigKey]Config
-	Costing         *Costing
-	Allocations     map[allocation.Key]*allocation.Allocation
+	Scope       kernel.Scope
+	Now         time.Time
+	Preparer    kernel.ActorRef
+	Epoch       int64
+	Order       *Order
+	Supply      map[Ref]Supply
+	Parties     map[string]Party
+	Specs       map[Spec]func(path string) error
+	Configs     map[ConfigKey]Config
+	Costing     *Costing
+	Allocations map[allocation.Key]*allocation.Allocation
 }
 
 func index(path string, i int) string { return fmt.Sprintf("%s/%d", path, i) }

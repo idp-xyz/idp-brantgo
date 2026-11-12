@@ -222,7 +222,7 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		c.PUR, err = pur.New(db, pur.Upstream{Orders: pur.TRDOrders(c.TRD), Supply: c.SUP, Snapshots: c.CST, Parties: c.PTY, Configs: c.POL,
-			Skus: c.CAT})
+			Numbers: c.POL, Skus: c.CAT, Sources: c.EVD})
 	}
 	if err != nil {
 		return nil, err

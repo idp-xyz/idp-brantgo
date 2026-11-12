@@ -13,8 +13,9 @@ import (
 // POL does not have.
 const DocumentContract = "brant.purchase-draft/0.2.0"
 
-// CommitmentNotCommitted is every draft's commitment state in S3: a draft is never an order to the
-// supplier (UL-INV-20).
+// CommitmentNotCommitted is the commitment state every draft is prepared and stored in: a draft is
+// never an order to the supplier (UL-INV-20). Whether a purchase commitment issued on it since made it
+// committed is the commitment's fact (domain/commitment), derived when read.
 const CommitmentNotCommitted = "not_committed"
 
 // Document is the immutable body of a purchase draft: what was bound, decided and calculated, at
@@ -178,12 +179,15 @@ type DocSku struct {
 	SpecRevision int64  `json:"spec_revision"`
 }
 
-// DocOverbuy is a line's approved overbuy.
+// DocOverbuy is a line's overbuy, marked with its quantity and reason. It is approved by the purchase
+// commitment decision (S5 decision D-14, PUR-INV-005), not in the draft: a draft prepared in S3,
+// when the preparer approved it with purchase.overbuy.approve, also names that preparer and epoch
+// (ApprovedBy, AuthorityEpoch); a later draft omits both.
 type DocOverbuy struct {
-	Quantity       string   `json:"quantity"`
-	Reason         string   `json:"reason"`
-	ApprovedBy     DocActor `json:"approved_by"`
-	AuthorityEpoch int64    `json:"authority_epoch"`
+	Quantity       string    `json:"quantity"`
+	Reason         string    `json:"reason"`
+	ApprovedBy     *DocActor `json:"approved_by,omitempty"`
+	AuthorityEpoch int64     `json:"authority_epoch,omitempty"`
 }
 
 // DocMOQ is the condition line's MOQ as applied.

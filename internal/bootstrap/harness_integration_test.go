@@ -52,7 +52,9 @@ var allPermissions = []string{
 	"order.prepare", "order.review.request", "order.review.decide", "order.activate", "order.approval.revoke", "order.cancel",
 	"order.close_unfulfilled", "order.amendment.prepare", "order.amendment.submit", "order.amendment.decide", "order.amendment.apply",
 	"order.amendment.withdraw", "order.close_remainder", "order.close", "order.document.generate", "order.document.record_signed",
-	"purchase.draft.prepare", "purchase.draft.void", "purchase.overbuy.approve", "pur.read", "pur.audit",
+	"purchase.draft.prepare", "purchase.draft.void", "pur.read", "pur.audit",
+	"purchase.commitment.request", "purchase.commitment.decide", "purchase.commitment.revoke", "purchase.commitment.issue",
+	"purchase.supplier_confirmation.record",
 }
 
 type world struct {

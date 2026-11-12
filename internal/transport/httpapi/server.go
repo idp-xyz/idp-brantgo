@@ -180,6 +180,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/acceptances/{id}", s.authenticated(read(s, cfg.TRD.GetAcceptance, okView[trdapi.AcceptanceView])))
 	mux.Handle("GET /api/brant/v1/pur/purchase_drafts/{id}", s.authenticated(read(s, cfg.PUR.GetDraft, okView[purapi.DraftView])))
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocations", s.authenticated(s.allocations))
+	mux.Handle("GET /api/brant/v1/pur/purchase_commitments/{id}", s.authenticated(read(s, cfg.PUR.GetCommitment, okView[purapi.CommitmentView])))
+	mux.Handle("GET /api/brant/v1/pur/orders/{id}/commitments", s.authenticated(s.orderCommitments))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
 	return s.correlated(mux), nil

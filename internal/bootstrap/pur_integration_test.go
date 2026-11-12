@@ -163,7 +163,8 @@ func newPurWorld(t *testing.T) *purWorld {
 func (w *purWorld) module() *pur.Module {
 	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
 	w.must(err)
-	m, err := pur.New(db, pur.Upstream{Orders: w.orders, Supply: w.c.SUP, Snapshots: w.hook, Parties: w.c.PTY, Configs: w.c.POL, Skus: w.c.CAT})
+	m, err := pur.New(db, pur.Upstream{Orders: w.orders, Supply: w.c.SUP, Snapshots: w.hook, Parties: w.c.PTY, Configs: w.c.POL, Numbers: w.c.POL,
+		Skus: w.c.CAT, Sources: w.c.EVD})
 	w.must(err)
 	return m
 }
@@ -847,28 +848,30 @@ func TestVoidReleasesAllocationAndKeepsTheRecord(t *testing.T) {
 	w.must(err)
 }
 
-// PUR-INV-005: an overbuy needs its reason and the preparer's purchase.overbuy.approve; an approved
-// one buys 150 for an allocation of 120 and keeps the 30's cost out of the cost of goods sold.
+// PUR-INV-005 as S5 decision D-14 amends it (S3-D111 closed): an overbuy needs its reason; marked,
+// it buys 150 for an allocation of 120 and keeps the 30's cost out of the cost of goods sold. The
+// preparer approves nothing: the purchase commitment decision does (TestOverbuyIsApprovedByTheDecision).
 func TestOverbuyIsMarkedAndApproved(t *testing.T) {
 	w := newPurWorld(t)
 	moq := w.variant(func(l *supapi.ConditionLine) { l.MOQ.Quantity = "150" })
 	_, err := w.prepare(w.author, "draft.moq", "120", moq)
 	w.want(err, purapi.CodeMOQNotMet)
-	buyer := w.provision(bootstrapGrant(w.supWorld, "a46.buyer", "company",
-		slices.DeleteFunc(slices.Clone(allPermissions), func(p string) bool { return p == purapi.PermissionApproveOverbuy })...))
 	line := purLine("120", purSource(moq))
 	line.Overbuy = &purapi.Overbuy{Quantity: "30"}
 	_, err = w.pur.PrepareDraft(w.author, w.cmd("draft.moq", line))
 	w.want(err, purapi.CodeOverbuyNotApproved)
 	line.Overbuy.Reason = "MOQ 150; the remainder goes to stock"
-	_, err = w.pur.PrepareDraft(buyer, w.cmd("draft.moq", line))
-	w.want(err, purapi.CodeOverbuyNotApproved)
-	r, err := w.pur.PrepareDraft(w.author, w.cmd("draft.moq", line))
+	buyer := w.provision(bootstrapGrant(w.supWorld, "a46.buyer", "company", allPermissions...))
+	r, err := w.pur.PrepareDraft(buyer, w.cmd("draft.moq", line))
 	w.must(err)
-	l := w.draft(w.author, r.ObjectID).Lines[0]
+	v := w.draft(w.author, r.ObjectID)
+	l := v.Lines[0]
 	if r.NetMinor != "75000" || l.PurchaseQuantity != "150" || l.OverbuyQuantity != "30" || l.SoldCostMinor != "60000" || l.CostVarianceMinor != "0" ||
 		l.OverbuyReason != line.Overbuy.Reason || w.allocation().Allocated != "120" {
 		t.Fatalf("draft %+v line %+v", r, l)
+	}
+	if ob := purDocument(t, v)["lines"].([]any)[0].(map[string]any)["overbuy"].(map[string]any); ob["approved_by"] != nil || len(ob) != 2 {
+		t.Fatalf("the draft approves no overbuy: %v", ob)
 	}
 }
 

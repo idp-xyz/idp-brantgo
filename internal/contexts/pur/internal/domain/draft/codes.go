@@ -32,6 +32,7 @@ const (
 	CodePurchaseDraftImmutable     = "PURCHASE_DRAFT_IMMUTABLE"     // the draft ID holds another request or another preparer's draft
 	CodePurchaseDraftCommitted     = "PURCHASE_DRAFT_COMMITTED"     // 409: a committed draft is not voided
 	CodePurchaseAllocationExceeded = "PURCHASE_ALLOCATION_EXCEEDED" // 409: see package allocation
+	CodePurchaseDraftStale         = "PURCHASE_DRAFT_STALE"         // 409: recomputed now, the draft differs (A47 #3)
 )
 
 // Codes maps this package's codes to their categories.
@@ -61,6 +62,7 @@ var Codes = map[string]kernel.Category{
 	CodePurchaseDraftImmutable:     kernel.CategoryInvalid,
 	CodePurchaseDraftCommitted:     kernel.CategoryConflict,
 	CodePurchaseAllocationExceeded: kernel.CategoryConflict,
+	CodePurchaseDraftStale:         kernel.CategoryConflict,
 }
 
 // fail returns a rejection with a code of this package or a shared kernel code.

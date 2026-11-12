@@ -59,7 +59,8 @@ func newPurOrderWorld(t *testing.T) *purOrderWorld {
 		hook: &purHook{SnapshotLookups: q.c.CST}}
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
-	w.pur, err = pur.New(db, pur.Upstream{Orders: w.port, Supply: q.c.SUP, Snapshots: w.hook, Parties: q.c.PTY, Configs: q.c.POL, Skus: q.c.CAT})
+	w.pur, err = pur.New(db, pur.Upstream{Orders: w.port, Supply: q.c.SUP, Snapshots: w.hook, Parties: q.c.PTY, Configs: q.c.POL, Numbers: q.c.POL,
+		Skus: q.c.CAT, Sources: q.c.EVD})
 	w.must(err)
 	return w
 }

@@ -21,7 +21,27 @@ func purCommands(c PUR) *commandSet {
 		commands: map[string]commandFunc{
 			purapi.CommandPrepareDraft: reflected("", "", receiptOf[purapi.Receipt](c.PrepareDraft)),
 			purapi.CommandVoidDraft:    reflected("", "", receiptOf[purapi.Receipt](c.VoidDraft)),
+			// Purchase commitments (S5-01); they name their object commitment_id.
+			purapi.CommandRequestCommitment:          reflected("", "", receiptOf[purapi.Receipt](c.RequestCommitment)),
+			purapi.CommandDecideCommitment:           reflected("", "", receiptOf[purapi.Receipt](c.DecideCommitment)),
+			purapi.CommandRevokeCommitment:           reflected("", "", receiptOf[purapi.Receipt](c.RevokeCommitment)),
+			purapi.CommandIssueCommitment:            reflected("", "", receiptOf[purapi.Receipt](c.IssueCommitment)),
+			purapi.CommandRecordSupplierConfirmation: reflected("", "", receiptOf[purapi.Receipt](c.RecordSupplierConfirmation)),
 		}}
+}
+
+// orderCommitments answers GET /api/brant/v1/pur/orders/<id>/commitments: the purchase commitments
+// of the order the caller sees, by commitment ID.
+func (s *server) orderCommitments(w http.ResponseWriter, r *http.Request) {
+	v, err := s.cfg.PUR.GetOrderCommitments(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if v == nil {
+		v = []purapi.CommitmentView{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "order_id": r.PathValue("id"), "commitments": wire(v)})
 }
 
 // allocations answers GET /api/brant/v1/pur/orders/<id>/allocations: the demand allocation of every

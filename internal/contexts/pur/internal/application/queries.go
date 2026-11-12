@@ -8,6 +8,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/commitment"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/draft"
 	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -51,7 +52,8 @@ func (s Service) upstreamReadable(ctx context.Context, dr *draft.Draft) (bool, e
 // GetDraft returns a draft the caller sees, audited as purchase.draft.get (pur.read; Python
 // t04_purchase_get_draft): NOT_FOUND otherwise; REFERENCE_INVALID when its record is not intact or
 // the caller no longer reads its order or a supply condition it binds. Its state is decided now:
-// supply_expired once its supply's validity ended, history unchanged.
+// supply_expired once its supply's validity ended, history unchanged; its commitment state committed
+// once a purchase commitment of it was issued.
 func (s Service) GetDraft(ctx context.Context, id string) (api.DraftView, error) {
 	if !kernel.ValidIdentifier(id) {
 		err := kernel.Reject(kernel.CodeSchemaInvalid, "/id", "")
@@ -91,13 +93,28 @@ func (s Service) GetDraft(ctx context.Context, id string) (api.DraftView, error)
 		if !readable || stored == nil || stored.Hash != dr.Hash {
 			return kernel.Reject(kernel.CodeReferenceInvalid, "/id", "The caller no longer reads the order or a supply condition the draft binds")
 		}
-		v, err = view(dr, s.Clock.Now())
-		return err
+		owners, err := postgres.CommitmentsOfDraft(ctx, exec, sc, id)
+		if err != nil {
+			return err
+		}
+		if v, err = view(dr, s.Clock.Now()); err != nil {
+			return err
+		}
+		v.CommitmentIDs = []string{}
+		for _, o := range owners {
+			if commitment.IsCommitted(o.Status) {
+				v.CommitmentState = api.CommitmentCommitted
+			}
+			if d.Sees(o.Actor, o.Team) {
+				v.CommitmentIDs = append(v.CommitmentIDs, o.ID)
+			}
+		}
+		return nil
 	})
 	return v, err
 }
 
-// view is a stored, verified draft as the reads show it at instant now.
+// view is a stored, verified draft as the reads show it at instant now, not committed.
 func view(dr *draft.Draft, now time.Time) (api.DraftView, error) {
 	doc, err := dr.Decode()
 	if err != nil {
