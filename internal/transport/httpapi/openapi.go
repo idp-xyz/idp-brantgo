@@ -197,6 +197,10 @@ var reads = []readRoute{
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},
+	{"/api/brant/v1/ref/country_programme_lists/{id}", "ref.country_programme_list.get", "ref",
+		"A country programme list and the versions the company imported", []string{"id"}, false},
+	{"/api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", "ref.country_programme_list_version.get", "ref",
+		"One imported version of a country programme list with its programmes", []string{"id", "version"}, false},
 	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
 		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)", []string{"source", "event_id"}, true},
 }

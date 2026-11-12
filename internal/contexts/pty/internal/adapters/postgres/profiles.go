@@ -36,7 +36,7 @@ func RevisionAddresses(ctx context.Context, exec bentopg.Executor, scope kernel.
 	for i, k := range keys {
 		parties[i], revisions[i], ids[i] = k.PartyID, k.Revision, k.AddressID
 	}
-	rows, err := exec.Query(ctx, `SELECT party_id, revision, address_id, role, address FROM brant_pty.party_revision_address
+	rows, err := exec.Query(ctx, `SELECT party_id, revision, address_id, role, address, coalesce(country, '') FROM brant_pty.party_revision_address
 		WHERE tenant_id = $1 AND company_id = $2
 		AND (party_id, revision, address_id) IN (SELECT * FROM unnest($3::text[], $4::bigint[], $5::text[]))`,
 		scoped(scope, parties, revisions, ids)...)
@@ -48,7 +48,7 @@ func RevisionAddresses(ctx context.Context, exec bentopg.Executor, scope kernel.
 		var k AddressKey
 		var a party.Address
 		var role string
-		err := row.Scan(&k.PartyID, &k.Revision, &a.ID, &role, &a.Text)
+		err := row.Scan(&k.PartyID, &k.Revision, &a.ID, &role, &a.Text, &a.Country)
 		k.AddressID, a.Role = a.ID, party.AddressRole(role)
 		out[k] = a
 		return struct{}{}, err

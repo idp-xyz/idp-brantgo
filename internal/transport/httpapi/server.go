@@ -66,6 +66,7 @@ type (
 	REF interface {
 		refapi.Commands
 		refapi.Auditor
+		REFProgrammes
 		GetList(ctx context.Context, listCode string) (refapi.ListView, error)
 		GetListVersion(ctx context.Context, listCode, version string) (refapi.ListVersionView, error)
 		Audit(ctx context.Context) ([]kernel.AuditEntry, error)
@@ -182,6 +183,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocations", s.authenticated(s.allocations))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
+	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}", s.authenticated(read(s, cfg.REF.GetProgrammeList, okView[refapi.ProgrammeListView])))
+	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", s.authenticated(s.programmeListVersion))
 	return s.correlated(mux), nil
 }
 

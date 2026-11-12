@@ -370,7 +370,7 @@ func profileRevisionView(r *profile.Revision) api.TradingProfileRevisionView {
 func addressViews(addresses []party.Address) []api.Address {
 	out := make([]api.Address, len(addresses))
 	for i, a := range addresses {
-		out[i] = api.Address{AddressID: a.ID, Role: string(a.Role), Address: a.Text}
+		out[i] = api.Address{AddressID: a.ID, Role: string(a.Role), Address: a.Text, Country: a.Country}
 	}
 	return out
 }
@@ -428,7 +428,8 @@ func (s Service) ResolveAddressRoles(ctx context.Context, refs []api.AddressRole
 			case p.Revision != ref.PartyRevision:
 				reason = api.StalePartyRevised
 			}
-			r := api.ResolvedAddressRole{Ref: ref, Role: string(a.Role), Address: a.Text, PartyStatus: string(p.Status), CurrentRevision: p.Revision}
+			r := api.ResolvedAddressRole{Ref: ref, Role: string(a.Role), Address: a.Text, Country: a.Country, PartyStatus: string(p.Status),
+				CurrentRevision: p.Revision}
 			r.Code, r.Stale = stale(reason)
 			out[ref] = r
 		}

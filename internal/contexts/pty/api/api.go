@@ -67,10 +67,18 @@ func AddressRoleKnown(role string) bool { return slices.Contains(addressRoles, r
 
 // Address is an address of a party with its trade role (AddressRole). AddressID is unique within the
 // party and names the address across the party's revisions.
+//
+// Country is the ISO 3166-1 alpha-2 code of the country the address is in (an officially assigned
+// code, kernel.ValidCountryCode), stated by whoever saves the draft and confirmed with it; CNX's
+// trade compliance check reads it through AddressRoleRef v1 (Context Map R77, S5 D-8). It is
+// optional: empty is unknown, never derived from the address text. Addresses confirmed before
+// countries existed have none, and their confirmed revisions never gain one; a country arrives with
+// the next confirmed revision.
 type Address struct {
 	AddressID string
 	Role      string
 	Address   string
+	Country   string
 }
 
 // SaveParty creates a draft party at ExpectedVersion 0 or replaces the whole draft at its current
@@ -174,6 +182,8 @@ func addresses(list []Address) error {
 			return schema(path + "/role")
 		case !NonBlank(a.Address, MaxAddressCharacters):
 			return schema(path + "/address")
+		case a.Country != "" && !kernel.ValidCountryCode(a.Country):
+			return schema(path + "/country")
 		}
 		if slices.IndexFunc(list, func(b Address) bool { return b.AddressID == a.AddressID }) != i {
 			return kernel.Reject(kernel.CodeInvalidKnownValue, path+"/address_id", "Address IDs are unique within a party")

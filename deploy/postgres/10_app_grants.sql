@@ -34,6 +34,11 @@ GRANT SELECT, INSERT ON brant_ref.screening_list, brant_ref.screening_list_versi
     brant_ref.screening_entry_name, brant_ref.action_result, brant_ref.audit_event TO brant_app;
 GRANT UPDATE (current_version, row_version, updated_at) ON brant_ref.screening_list TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_ref.screening_list_current_v1(text, boolean) TO brant_app;
+-- REF country programmes (S5 E-3): as the screening lists. The list guard function is executed by
+-- CNX's trade compliance transactions.
+GRANT SELECT, INSERT ON brant_ref.country_programme_list, brant_ref.country_programme_list_version, brant_ref.country_programme TO brant_app;
+GRANT UPDATE (current_version, row_version, updated_at) ON brant_ref.country_programme_list TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_ref.country_programme_list_current_v1(text, boolean) TO brant_app;
 
 -- PTY: parties and contacts change through their lifecycle; confirmed revisions and the ledger only grow.
 GRANT USAGE ON SCHEMA brant_pty TO brant_app;
