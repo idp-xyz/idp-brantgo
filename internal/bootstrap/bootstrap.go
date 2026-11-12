@@ -267,8 +267,9 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		// CNX after PUR (S5: QLT, STL, CNX, FUL).
 		c.CNX, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(c.TRD), Countries: cnx.PTYCountries(c.PTY), Profiles: cnx.CATProfiles(c.CAT),
 			Programmes: cnx.REFProgrammes(c.REF), Configs: c.POL, Sources: c.EVD,
-			// FUL is not merged yet: export licence allocations answer DEPENDENCY_NOT_SUPPORTED (S5 B5).
-			Exports: cnx.ExportsNotWired()})
+			// FUL is not merged yet: export licence and tax evidence allocations answer
+			// DEPENDENCY_NOT_SUPPORTED (S5 B5, C3b).
+			Exports: cnx.ExportsNotWired(), Purchases: cnx.PURLines(c.PUR), Funds: cnx.STLFunds(c.STL)})
 	}
 	if err == nil {
 		db, err = p.newDB()

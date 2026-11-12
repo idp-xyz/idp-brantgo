@@ -1,0 +1,448 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"math/big"
+	"slices"
+	"sort"
+	"strconv"
+	"time"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/postgres"
+	tr "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/taxrefund"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
+	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
+	"go.idp.xyz/idp-brant/internal/kernel"
+)
+
+// Tax refund cases (WBS S5-05b; CNX-AGG-TaxRefundCase, SM-CNX-TAXCASE, CNX-INV-004; CN-R04, CN-R08,
+// CN-R09, CN-E01, CN-AT04, CN-AT10, CN-AT12). Upstreams, all read before CNX's transaction: FUL (R36,
+// the export lot and its lines through the port Exports), POL (R50, the export_tax_policy revisions
+// and the currency revision of an amount), EVD (R54, the sources of a result) and STL (R38,
+// FundRecordRef v1 of a received refund, through the port Funds). Inside the transaction the case
+// root is locked FOR UPDATE, then the invoice roots of the allocations FOR UPDATE in ID order, then
+// the ledger's authority guard FOR SHARE. No upstream row is locked: R36 and R38 carry no guard,
+// and the policy binding needs none (see policyAt).
+
+// policyAt finds the export_tax_policy revision of policyID in force at instant at, the export
+// date (CN-AT12, CN-R08 "适用方法变化不追溯覆盖历史"): POL lists the configuration's revisions (GetConfig,
+// which needs pol.read), the revision published at or before at, not superseded or retired by it
+// and valid at it is the candidate, and POL's ResolveConfigs at that instant decides it. Nil with a
+// rejection when POL has no such configuration (REFERENCE_INVALID) or none was in force then
+// (CONFIG_NOT_ACTIVE or POL's verdict).
+//
+// ConfigGuard v1 decides the current state of a revision, so it would refuse the revision of a past
+// export once a newer one superseded it. The binding needs no guard: a published revision never
+// changes, and whether it was in force at an instant already past (the export date is never in
+// the future, allocate checks it) cannot change either.
+func (s Service) policyAt(ctx context.Context, policyID string, exportedAt time.Time) (*polapi.ResolvedConfig, error) {
+	const path = "/args/policy_id"
+	view, err := s.Upstream.Configs.GetConfig(ctx, polapi.KindExportTaxPolicy, policyID)
+	if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodeNotFound {
+		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "POL has no such export tax policy")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var revisions []tr.Revision
+	for _, r := range view.Revisions {
+		revisions = append(revisions, tr.Revision{Revision: r.Revision, Status: r.Status, PublishedAt: r.PublishedAt, EndedAt: r.EndedAt,
+			ValidFrom: r.ValidFrom, ValidUntil: r.ValidUntil})
+	}
+	revision := tr.InForceAt(revisions, exportedAt)
+	if revision == 0 {
+		return nil, polapi.Reject(polapi.CodeConfigNotActive, path)
+	}
+	ref := polapi.ConfigRef{Kind: polapi.KindExportTaxPolicy, ConfigID: policyID, Revision: revision}
+	resolved, err := s.Upstream.Configs.ResolveConfigs(ctx, []polapi.ConfigRef{ref}, exportedAt)
+	if err != nil {
+		return nil, err
+	}
+	r, ok := resolved[ref]
+	if !ok || r.Data.ExportTaxPolicy == nil {
+		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "")
+	}
+	if err = r.Check(path); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// tax_refund_case.allocate (human or AI; tax specialist). Before CNX's transaction: the export lot
+// and its lines (FUL, port Exports) and the export_tax_policy revision in force at the lot's export
+// date (POL, policyAt). In the transaction, after the lot's case FOR UPDATE and the invoices FOR
+// UPDATE in ID order, the refusals in this order: a lot FUL does not resolve or whose record is not
+// intact (REFERENCE_INVALID), a cancelled lot or one not exported yet (INVALID_STATE), an
+// allocation ID taken (BUSINESS_KEY_CONFLICT), the case's policy other than policy_id
+// (REFERENCE_STALE), for a new case the policy binding (REFERENCE_INVALID, CONFIG_NOT_ACTIVE,
+// CONFIG_EXPIRED), then the domain's (INVALID_STATE, REFERENCE_INVALID, INVALID_KNOWN_VALUE,
+// TAX_EVIDENCE_EXCEEDED). The lot's first allocation, or the first after its case was rejected,
+// opens the case. TaxEvidenceAllocated is published.
+type allocateTaxEvidence struct {
+	s         Service
+	cmd       api.AllocateTaxEvidence
+	lot       *Export
+	policy    *polapi.ResolvedConfig
+	policyErr error
+	taxCase   *tr.Case
+}
+
+func (h *allocateTaxEvidence) Prepare(ctx context.Context) error {
+	h.lot, h.policy, h.policyErr = nil, nil, nil
+	ref := ExportRef{Kind: api.TargetExportLot, ID: h.cmd.ExportLotID}
+	exports, err := h.s.Upstream.Exports.ResolveExports(ctx, []ExportRef{ref})
+	if err != nil {
+		return err
+	}
+	x, ok := exports[ref]
+	if !ok || x.Code != "" || x.ExportedAt.IsZero() {
+		if ok {
+			h.lot = &x
+		}
+		return nil
+	}
+	h.lot = &x
+	h.policy, err = h.s.policyAt(ctx, h.cmd.PolicyID, kernel.Instant(x.ExportedAt))
+	if _, ok := kernel.AsRejection(err); ok {
+		h.policyErr, err = err, nil
+	}
+	return err
+}
+
+func (h *allocateTaxEvidence) invoiceIDs() []string {
+	var ids []string
+	for _, a := range h.cmd.Allocations {
+		if !slices.Contains(ids, a.PurchaseInvoiceID) {
+			ids = append(ids, a.PurchaseInvoiceID)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (h *allocateTaxEvidence) Lock(ctx context.Context, exec bentopg.Executor) error {
+	var err error
+	sc := scope(ctx)
+	if h.taxCase, err = postgres.CaseOfLot(ctx, exec, sc, h.cmd.ExportLotID, postgres.ForUpdate); err != nil {
+		return err
+	}
+	return postgres.LockInvoices(ctx, exec, sc, h.invoiceIDs())
+}
+
+func (h *allocateTaxEvidence) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+	sc, cmd, lot := scope(ctx), h.cmd, h.lot
+	const lotPath = "/args/export_lot_id"
+	now := kernel.Instant(h.s.Clock.Now())
+	switch {
+	case lot == nil:
+		return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, lotPath, "FUL resolves no such export lot")
+	case lot.Code != "":
+		return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, lotPath, "FUL's record of the export lot is not intact")
+	case lot.Status == ExportLotCancelled:
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, lotPath, "The export lot is cancelled")
+	case lot.ExportedAt.IsZero() || kernel.Instant(lot.ExportedAt).After(now):
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, lotPath, "The export lot has no export date yet")
+	}
+	for i, a := range cmd.Allocations {
+		taken, err := postgres.TaxAllocationExists(ctx, exec, sc, a.AllocationID)
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		if taken {
+			return action.Outcome{}, api.Reject(api.CodeBusinessKeyConflict, "/args/allocations/"+strconv.Itoa(i)+"/allocation_id", "The allocation ID is taken")
+		}
+	}
+	c := h.taxCase
+	opened := c == nil || c.Status == tr.Rejected
+	if !opened && c.Policy.PolicyID != cmd.PolicyID {
+		return action.Outcome{}, api.Reject(api.CodeReferenceStale, "/args/policy_id", "The case binds export tax policy "+c.Policy.PolicyID)
+	}
+	if opened {
+		if h.policyErr != nil {
+			return action.Outcome{}, h.policyErr
+		}
+		attempt := 1
+		if c != nil {
+			attempt = c.Attempt + 1
+		}
+		p := h.policy
+		c = &tr.Case{ID: action.NewID("trc", now), ExportLotID: cmd.ExportLotID, Attempt: attempt, OrderID: lot.OrderID,
+			ExportedAt: kernel.Instant(lot.ExportedAt), Policy: tr.Binding{PolicyID: p.Ref.ConfigID, Revision: p.Ref.Revision, ContentHash: p.ContentHash,
+				RefundMethod: p.Data.ExportTaxPolicy.RefundMethod, ValidFrom: kernel.Instant(p.ValidFrom), ValidUntil: p.ValidUntil},
+			Status: tr.Expected, RowVersion: 1, OpenedBy: d.Actor, Epoch: d.Epoch, OpenedAt: now}
+	}
+	var existing []*tr.Allocation
+	var err error
+	if !opened {
+		if existing, err = postgres.CaseAllocations(ctx, exec, sc, c); err != nil {
+			return action.Outcome{}, err
+		}
+	}
+	var refs []tr.InvoiceLineRef
+	var keys []tr.LineKey
+	var in []tr.AllocateInput
+	for _, a := range cmd.Allocations {
+		q, _ := kernel.ParseDecimal(a.Quantity, kernel.QuantityFormat)
+		in = append(in, tr.AllocateInput{ID: a.AllocationID, ExportLineID: a.ExportLineID, InvoiceID: a.PurchaseInvoiceID, LineNo: a.LineNo,
+			Purpose: a.Purpose, Quantity: q, Replaces: a.Replaces})
+		refs = append(refs, tr.InvoiceLineRef{InvoiceID: a.PurchaseInvoiceID, LineNo: a.LineNo})
+		keys = append(keys, tr.LineKey{InvoiceID: a.PurchaseInvoiceID, LineNo: a.LineNo, Purpose: a.Purpose})
+	}
+	lines, err := postgres.InvoiceLines(ctx, exec, sc, refs)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	used, err := postgres.UsedEvidence(ctx, exec, sc, keys)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	exportLines := map[string]tr.ExportLine{}
+	for _, l := range lot.Lines {
+		exportLines[l.LineID] = tr.ExportLine{LineID: l.LineID, ShipmentID: l.ShipmentID, OrderLineID: l.OrderLineID, SkuID: l.SkuID,
+			SpecRevision: l.SpecRevision, Quantity: l.Quantity, Unit: l.Unit}
+	}
+	allocations, err := tr.Allocate(tr.Context{Case: c, Allocations: existing, ExportLines: exportLines, InvoiceLines: lines, Used: used,
+		By: d.Actor, Epoch: d.Epoch, At: now}, in)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	if opened {
+		err = postgres.InsertCase(ctx, exec, sc, c)
+	} else {
+		from := c.RowVersion
+		c.RowVersion++
+		err = postgres.TouchCase(ctx, exec, sc, c, from, now)
+	}
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	ids, invoices := []string{}, []string{}
+	for _, a := range allocations {
+		if err = postgres.InsertTaxAllocation(ctx, exec, sc, a); err != nil {
+			return action.Outcome{}, err
+		}
+		ids = append(ids, a.ID)
+		if !slices.Contains(invoices, a.InvoiceID) {
+			invoices = append(invoices, a.InvoiceID)
+		}
+	}
+	sort.Strings(invoices)
+	return action.Outcome{ObjectID: c.ID, RowVersion: c.RowVersion, Status: c.Status, Events: []action.Event{{
+		Type: api.EventTaxEvidenceAllocated, AggregateType: "TaxRefundCase", AggregateID: c.ID, AggregateVersion: c.RowVersion,
+		Fields: map[string]any{"case_id": c.ID, "export_lot_id": c.ExportLotID, "attempt": c.Attempt, "order_id": c.OrderID,
+			"policy_id": c.Policy.PolicyID, "policy_revision": c.Policy.Revision, "refund_method": c.Policy.RefundMethod, "allocation_ids": ids,
+			"purchase_invoice_ids": invoices}}}}, nil
+}
+
+// AllocateTaxEvidence allocates purchase invoice lines to export lines (tax_refund_case.allocate).
+func (s Service) AllocateTaxEvidence(ctx context.Context, cmd api.AllocateTaxEvidence) (api.TaxCaseReceipt, error) {
+	h := &allocateTaxEvidence{s: s, cmd: cmd}
+	var ids []string
+	for _, a := range cmd.Allocations {
+		ids = append(ids, a.AllocationID)
+	}
+	return s.runTaxCase(ctx, action.Command{Name: api.CommandAllocateTaxEvidence, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ExportLotID},
+		cmd, cmd.Validate(), h, ids, nil)
+}
+
+// tax_refund_case.record_result (human only; tax specialist). Before CNX's transaction: the
+// currency revision of the amount (POL), the evidence sources (EVD) and, for a received refund, the
+// fund record (STL, port Funds). In the transaction, after the case FOR UPDATE: NOT_FOUND,
+// VERSION_CONFLICT, the currency (REFERENCE_INVALID, POL's verdict), the domain's INVALID_STATE (the
+// stage does not follow; a plan without standing evidence or with evidence under review) and
+// INVALID_KNOWN_VALUE (another currency than the case's), the amounts' digits (INVALID_KNOWN_VALUE),
+// the evidence (REFERENCE_INVALID), the fund record (REFERENCE_INVALID; not money in, in another
+// currency or less than the amount: INVALID_KNOWN_VALUE). A rejection, the external result, returns
+// the case's evidence to the invoice lines' balances. TaxRefundResultRecorded is published.
+type recordTaxResult struct {
+	s        Service
+	cmd      api.RecordTaxResult
+	currency *polapi.ResolvedConfig
+	sources  map[string]evdapi.SourceRef
+	funds    map[string]FundRecord
+	taxCase  *tr.Case
+	resultID string
+}
+
+func (h *recordTaxResult) Prepare(ctx context.Context) error {
+	var err error
+	h.currency, h.funds = nil, nil
+	if c := h.cmd.Currency; c != nil {
+		if h.currency, err = h.s.resolveCurrency(ctx, *c); err != nil {
+			return err
+		}
+	}
+	ids := slices.Clone(h.cmd.EvidenceIDs)
+	if r := h.cmd.Review; r != nil {
+		ids = append(ids, r.EvidenceIDs...)
+	}
+	if h.sources, err = h.s.sources(ctx, ids); err != nil {
+		return err
+	}
+	if h.cmd.FundRecordID != "" {
+		h.funds, err = h.s.Upstream.Funds.ResolveFundRecords(ctx, []string{h.cmd.FundRecordID})
+	}
+	return err
+}
+
+func (h *recordTaxResult) Lock(ctx context.Context, exec bentopg.Executor) error {
+	var err error
+	h.taxCase, err = postgres.LoadCase(ctx, exec, scope(ctx), h.cmd.CaseID, postgres.ForUpdate)
+	return err
+}
+
+func (h *recordTaxResult) evidence(ids []string, path string) ([]tr.Evidence, error) {
+	out := []tr.Evidence{}
+	for i, id := range ids {
+		src, ok := h.sources[id]
+		if !ok {
+			return nil, kernel.Reject(kernel.CodeReferenceInvalid, path+"/"+strconv.Itoa(i), "No such source")
+		}
+		out = append(out, tr.Evidence{SourceID: src.SourceID, ContentSHA256: src.ContentSHA256})
+	}
+	return out, nil
+}
+
+func (h *recordTaxResult) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+	sc, cmd, c := scope(ctx), h.cmd, h.taxCase
+	if c == nil {
+		return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/case_id", "")
+	}
+	if err := tr.CheckVersion(c, cmd.ExpectedVersion); err != nil {
+		return action.Outcome{}, err
+	}
+	now := kernel.Instant(h.s.Clock.Now())
+	r := &tr.Result{ID: action.NewID("trr", now), CaseID: c.ID, Stage: cmd.Stage, From: c.Status, TaxPeriod: cmd.TaxPeriod,
+		ExternalReference: cmd.ExternalReference, ResultText: cmd.ResultText, FundRecordID: cmd.FundRecordID, Reason: cmd.Reason, By: d.Actor,
+		Epoch: d.Epoch, At: now}
+	var kc kernel.Currency
+	if cmd.Currency != nil {
+		cur, err := currencyOf(h.currency, "/args/currency")
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		r.Currency = &tr.Currency{ConfigID: cur.ConfigID, Revision: cur.Revision, Code: cur.Code, MinorUnits: cur.MinorUnits}
+		if kc, err = cur.Kernel(); err != nil {
+			return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/currency", "")
+		}
+	}
+	results, err := postgres.TaxResults(ctx, exec, sc, c.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	allocations, err := postgres.CaseAllocations(ctx, exec, sc, c)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	status, err := tr.Record(c, results, allocations, r)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	for _, x := range []struct {
+		s, path string
+		to      **kernel.Money
+	}{{cmd.Amount, "/args/amount", &r.Amount}, {cmd.OffsetAmount, "/args/offset_amount", &r.Offset}} {
+		if x.s == "" {
+			continue
+		}
+		m, err := kernel.ParseAmount(kc, x.s)
+		if err != nil {
+			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, x.path, "More digits than "+kc.Code()+" has minor units")
+		}
+		*x.to = &m
+	}
+	if r.Evidence, err = h.evidence(cmd.EvidenceIDs, "/args/evidence_ids"); err != nil {
+		return action.Outcome{}, err
+	}
+	if rv := cmd.Review; rv != nil {
+		r.Reviewer = rv.Reviewer
+		if r.ReviewEvidence, err = h.evidence(rv.EvidenceIDs, "/args/review/evidence_ids"); err != nil {
+			return action.Outcome{}, err
+		}
+	}
+	if cmd.FundRecordID != "" {
+		const fPath = "/args/fund_record_id"
+		f, ok := h.funds[cmd.FundRecordID]
+		received, _ := new(big.Int).SetString(f.ReceivedMinor, 10)
+		switch {
+		case !ok:
+			return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, fPath, "STL resolves no such fund record")
+		case f.Direction != FundIn:
+			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, fPath, "The fund record brings no money in")
+		case f.Currency != r.Currency.Code:
+			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/currency", "The fund record is in "+f.Currency)
+		case received == nil || r.Amount.Minor().Cmp(received) > 0:
+			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/amount", "More than the fund record received")
+		}
+	}
+	from := c.RowVersion
+	c.RowVersion++
+	c.Status = status
+	if err = postgres.InsertTaxResult(ctx, exec, sc, r); err == nil {
+		err = postgres.TouchCase(ctx, exec, sc, c, from, now)
+	}
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	h.resultID = r.ID
+	fields := map[string]any{"case_id": c.ID, "result_id": r.ID, "export_lot_id": c.ExportLotID, "stage": r.Stage, "from": r.From,
+		"policy_id": c.Policy.PolicyID, "policy_revision": c.Policy.Revision}
+	if r.FundRecordID != "" {
+		fields["fund_record_id"] = r.FundRecordID
+	}
+	return action.Outcome{ObjectID: c.ID, RowVersion: c.RowVersion, Status: c.Status, Events: []action.Event{{
+		Type: api.EventTaxRefundResultRecord, AggregateType: "TaxRefundCase", AggregateID: c.ID, AggregateVersion: c.RowVersion,
+		Fields: fields}}}, nil
+}
+
+// RecordTaxResult records a stage of a case's refund declaration (tax_refund_case.record_result).
+func (s Service) RecordTaxResult(ctx context.Context, cmd api.RecordTaxResult) (api.TaxCaseReceipt, error) {
+	h := &recordTaxResult{s: s, cmd: cmd}
+	return s.runTaxCase(ctx, action.Command{Name: api.CommandRecordTaxResult, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.CaseID,
+		Reason: cmd.Reason}, cmd, cmd.Validate(), h, nil, h)
+}
+
+func (s Service) runTaxCase(ctx context.Context, cmd action.Command, req api.Command, validation error, h action.Handler, allocations []string,
+	result *recordTaxResult) (api.TaxCaseReceipt, error) {
+	if validation != nil {
+		if rej, ok := kernel.AsRejection(validation); ok {
+			if err := s.Ledger.AuditRejected(ctx, cmd.Name, cmd.ObjectID, rej.Code); err != nil {
+				return api.TaxCaseReceipt{}, errors.Join(validation, err)
+			}
+		}
+		return api.TaxCaseReceipt{}, validation
+	}
+	_, _, args := request(req)
+	hash, err := action.RequestHash(args)
+	if err != nil {
+		return api.TaxCaseReceipt{}, err
+	}
+	cmd.RequestHash = hash
+	res, err := s.Ledger.Execute(ctx, cmd, h)
+	if err != nil {
+		return api.TaxCaseReceipt{}, err
+	}
+	out := api.TaxCaseReceipt{Receipt: api.Receipt(res), CaseID: res.ObjectID, AllocationIDs: allocations}
+	if result != nil {
+		out.ResultID = result.resultID
+	}
+	err = s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		c, err := postgres.LoadCase(ctx, exec, scope(ctx), res.ObjectID, postgres.NoLock)
+		if err != nil || c == nil {
+			return err
+		}
+		out.ExportLotID, out.Attempt, out.Policy = c.ExportLotID, c.Attempt, policyView(c.Policy)
+		return nil
+	})
+	return out, err
+}
+
+func policyView(b tr.Binding) api.PolicyBindingView {
+	return api.PolicyBindingView{PolicyID: b.PolicyID, Revision: b.Revision, ContentHash: b.ContentHash, RefundMethod: b.RefundMethod,
+		ValidFrom: b.ValidFrom, ValidUntil: b.ValidUntil}
+}

@@ -59,6 +59,17 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGetLicense, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandLicenses, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandShipmentLicense, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Purchase invoices and tax refund cases (S5-05b): humanOnlyCommands name
+		// purchase_invoice.verify and tax_refund_case.record_result; an import and an allocation are
+		// candidates' paths for humans and AI agents alike (CN-AT18), no system actor.
+		{Command: api.CommandImportInvoice, Permission: api.CommandImportInvoice, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
+		authorization.HumanOnly(api.CommandVerifyInvoice, api.CommandVerifyInvoice),
+		{Command: api.CommandAllocateTaxEvidence, Permission: api.CommandAllocateTaxEvidence, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
+		authorization.HumanOnly(api.CommandRecordTaxResult, api.CommandRecordTaxResult),
+		{Command: api.CommandGetInvoice, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandInvoices, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetTaxCase, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandTaxCases, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -71,12 +82,14 @@ type Upstream struct {
 	Configs    polapi.Queries // POL ConfigRef v1 (R50)
 	Sources    evdapi.Queries // EVD SourceRef v1 and the licence files (R54)
 	Exports    Exports        // FUL shipments and export lots (R36), CNX's port
+	Purchases  PurchaseLines  // PUR PurchaseLineRef v1 (R37), CNX's port
+	Funds      Funds          // STL FundRecordRef v1 (R38), CNX's port
 }
 
 // Complete reports whether every upstream is wired.
 func (u Upstream) Complete() bool {
 	return u.Orders != nil && u.Countries != nil && u.Profiles != nil && u.Programmes != nil && u.Configs != nil && u.Sources != nil &&
-		u.Exports != nil
+		u.Exports != nil && u.Purchases != nil && u.Funds != nil
 }
 
 // Service runs CNX's use cases.
@@ -97,6 +110,14 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	if strings.HasPrefix(command, "export_license.") {
 		l, err := postgres.LoadLicense(ctx, exec, scope(ctx), id, postgres.NoLock)
 		return l != nil, err
+	}
+	if strings.HasPrefix(command, "purchase_invoice.") {
+		i, err := postgres.LoadInvoice(ctx, exec, scope(ctx), id, postgres.NoLock)
+		return i != nil, err
+	}
+	if strings.HasPrefix(command, "tax_refund_case.") {
+		c, err := postgres.LoadCase(ctx, exec, scope(ctx), id, postgres.NoLock)
+		return c != nil, err
 	}
 	c, err := postgres.LoadCheck(ctx, exec, scope(ctx), id, postgres.NoLock)
 	if err != nil || c == nil {
@@ -183,6 +204,18 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.ReleaseLicense:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandReleaseLicense, key, c
+	case api.ImportInvoice:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandImportInvoice, key, c
+	case api.VerifyInvoice:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandVerifyInvoice, key, c
+	case api.AllocateTaxEvidence:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandAllocateTaxEvidence, key, c
+	case api.RecordTaxResult:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRecordTaxResult, key, c
 	}
 	return "", "", nil
 }

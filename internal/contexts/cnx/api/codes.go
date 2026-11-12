@@ -3,7 +3,8 @@ package api
 import "go.idp.xyz/idp-brant/internal/kernel"
 
 // Codes CNX declares (error catalog V0.1, the rows whose contexts include CNX that the trade
-// compliance check and the export licences give, with the catalog's categories: 409 conflict, 422
+// compliance check, the export licences, the purchase invoices and the tax refund cases give, with
+// the catalog's categories: 409 conflict, 422
 // invalid). CNX also answers with the shared kernel codes (SCHEMA_INVALID, INVALID_KNOWN_VALUE,
 // REFERENCE_INVALID, INVALID_STATE, VERSION_CONFLICT, NOT_FOUND, PERMISSION_DENIED and the rest) and
 // passes on POL's CONFIG_NOT_ACTIVE and CONFIG_EXPIRED for the regulation and currency revisions.
@@ -27,6 +28,12 @@ const (
 	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT"
 	// A dependency path not delivered yet: FUL's shipments and export lots until they are wired.
 	CodeDependencyNotSupported = "DEPENDENCY_NOT_SUPPORTED"
+	// A purchase invoice of the same kind and number is imported and not rejected (CNX-INV-005).
+	CodeInvoiceDuplicate = "INVOICE_DUPLICATE"
+	// An allocation would take the evidence of a purpose above its remaining balance (CNX-INV-004).
+	CodeTaxEvidenceExceeded = "TAX_EVIDENCE_EXCEEDED"
+	// The invoice's buyer is not the company's entity, or its supplier not the commitment's.
+	CodePartyEntityMismatch = "PARTY_ENTITY_MISMATCH"
 )
 
 var codes = map[string]kernel.Category{
@@ -39,6 +46,9 @@ var codes = map[string]kernel.Category{
 	CodeExportLicenseExpired:         kernel.CategoryConflict,
 	CodeBusinessKeyConflict:          kernel.CategoryConflict,
 	CodeDependencyNotSupported:       kernel.CategoryInvalid,
+	CodeInvoiceDuplicate:             kernel.CategoryConflict,
+	CodeTaxEvidenceExceeded:          kernel.CategoryConflict,
+	CodePartyEntityMismatch:          kernel.CategoryConflict,
 }
 
 // Category returns the category of a code CNX declares.
