@@ -26,6 +26,7 @@ var Codes = map[string]kernel.Category{
 	CodeReferenceStale:                kernel.CategoryConflict,
 	CodeDependencyNotSupported:        kernel.CategoryInvalid,
 	CodeBusinessKeyConflict:           kernel.CategoryConflict,
+	CodeCertificateNotApplicable:      kernel.CategoryConflict, // S5 C5, certificate.go
 }
 
 // Reject returns a rejection with a code of the set's rules or a shared kernel code, at path.

@@ -143,7 +143,7 @@ func TestCodes(t *testing.T) {
 		CodeReferenceStale: kernel.CategoryConflict, CodeBusinessKeyConflict: kernel.CategoryConflict, CodeDependencyNotSupported: kernel.CategoryInvalid,
 		CodeCommercialReleaseBlocked: kernel.CategoryConflict, CodeTradeComplianceNotClear: kernel.CategoryConflict,
 		CodeExportLicenseRequired: kernel.CategoryConflict, CodeShipmentDocumentsUnreconciled: kernel.CategoryConflict,
-		CodeDocumentIntegrityFailure: kernel.CategoryInvalid}
+		CodeDocumentIntegrityFailure: kernel.CategoryInvalid, CodeCertificateNotApplicable: kernel.CategoryConflict}
 	got := Codes()
 	if len(got) != len(want) {
 		t.Fatal(got)

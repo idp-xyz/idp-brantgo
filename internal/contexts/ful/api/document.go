@@ -197,8 +197,12 @@ type BillOfLading struct {
 	ContainerNumbers []string
 }
 
-// CertificateRef names a certificate result in CNX (CertificateResultRef v1). S5 unit C5 checks it;
-// until then it is recorded as stated.
+// CertificateRef names a certificate result in CNX at a revision (CertificateResultRef v1, R56). The
+// prepare is refused unless CNX holds that revision as current and it applies to the shipment now:
+// REFERENCE_INVALID (no such certificate), REFERENCE_STALE (a correction superseded the revision),
+// CERTIFICATE_NOT_APPLICABLE (another kind, market or specification, or outside its validity), and
+// INVALID_KNOWN_VALUE at /args/certificate/number when the record's number is not the certificate's
+// (S5 C5).
 type CertificateRef struct {
 	CertificateID string
 	Version       int64

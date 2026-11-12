@@ -180,7 +180,7 @@ func newFulWorld(t *testing.T) *fulWorld {
 	w.ful, err = ful.New(db, ful.Upstream{Orders: heldOrders{Orders: ful.TRDOrders(q.c.TRD), hold: w.hold},
 		Releases: heldReleases{Releases: ful.QLTReleases(w.qlt), hold: w.hold}, Deliveries: w.deliveries, Screening: ful.PTYScreening(),
 		Sources: q.c.EVD, Compliance: ful.CNXCompliance(), Payments: heldPayments{Payments: ful.STLPayments(), hold: w.hold},
-		Documents: ful.DocumentPorts(q.c.POL, q.c.PTY, q.c.TRD)})
+		Documents: ful.DocumentPorts(q.c.POL, q.c.PTY, q.c.TRD).WithCertificates(q.c.CNX)})
 	w.must(err)
 	w.qc, w.merch, w.merch2 = q.assign("qc.1", "quality_inspector"), q.assign("merch.1", "merchandiser"), q.assign("merch.2", "merchandiser")
 	w.agent = q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: actorRef("ai", "agent.ful"), DataScope: "company",

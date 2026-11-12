@@ -26,7 +26,9 @@ import (
 //
 //  1. reads the set and the shipment in a FUL transaction of its own, so a set or shipment the
 //     actor does not see, or a shipment that has another set, costs no number;
-//  2. asks EVD which cited sources the actor reads and, for a B/L or CO, the file;
+//  2. asks EVD which cited sources the actor reads and, for a B/L or CO, the file; for a CO that names
+//     a certificate result, asks CNX whether it applies to the shipment (CertificateResultRef v1, R56,
+//     S5 C5);
 //  3. for a CI or PL reads from POL the templates, the number sequence, the seller's company profile
 //     (in force now) and the order currency (whatever its state), from TRD the order's current
 //     revision with its terms and address roles (OrderCommercialSnapshot v1), from PTY the names of
@@ -198,7 +200,8 @@ func (h *prepareDocumentCommand) Prepare(ctx context.Context) error {
 	return h.rendered(ctx, ship, prices)
 }
 
-// file reads the EVD file of a B/L or CO record.
+// file reads the EVD file of a B/L or CO record, and asks CNX about the certificate result a CO
+// record names.
 func (h *prepareDocumentCommand) file(ctx context.Context) error {
 	f, err := h.s.Upstream.Sources.GetFile(ctx, h.req.FileID)
 	if rej, ok := kernel.AsRejection(err); ok && (rej.Code == kernel.CodeNotFound || rej.Code == kernel.CodePermissionDenied) {
@@ -208,7 +211,7 @@ func (h *prepareDocumentCommand) file(ctx context.Context) error {
 		return err
 	}
 	h.up.File = &docs.File{ID: f.FileID, SHA256: f.ContentSHA256, MimeType: f.MimeType}
-	return nil
+	return h.certificate(ctx) // a CO's certificate result (CNX CertificateResultRef v1, S5 C5)
 }
 
 // rendered reads what a CI or PL needs from POL, TRD and PTY and has POL issue the number.

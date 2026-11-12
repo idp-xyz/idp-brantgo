@@ -18,6 +18,7 @@ package application
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,7 +73,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandInvoices, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetTaxCase, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandTaxCases, Permission: api.PermissionRead, ActorKinds: anyActor},
-	}, append(declarationRules(), bundleRules()...)...)
+	}, slices.Concat(declarationRules(), bundleRules(), certificateRules())...)
 }
 
 // Upstream are the contracts CNX reads.
@@ -107,7 +108,8 @@ func scope(ctx context.Context) kernel.Scope {
 }
 
 // Visible reports whether d's actor sees the object a stored result names: a check by its opener
-// or by data scope; a licence of the company always (licences are company-wide).
+// or by data scope; a licence, declaration, bundle or certificate of the company always (they are
+// company-wide).
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command string, id string) (bool, error) {
 	if strings.HasPrefix(command, "export_license.") {
 		l, err := postgres.LoadLicense(ctx, exec, scope(ctx), id, postgres.NoLock)
@@ -118,6 +120,9 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 		return i != nil, err
 	}
 	if ok, visible, err := visibleDeclaration(ctx, exec, command, id); ok {
+		return visible, err
+	}
+	if ok, visible, err := visibleCertificate(ctx, exec, command, id); ok {
 		return visible, err
 	}
 	if strings.HasPrefix(command, "tax_refund_case.") {

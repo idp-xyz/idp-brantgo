@@ -144,7 +144,7 @@ func TestCodesFollowTheCatalog(t *testing.T) {
 		"INVOICE_DUPLICATE": kernel.CategoryConflict, "TAX_EVIDENCE_EXCEEDED": kernel.CategoryConflict,
 		"PARTY_ENTITY_MISMATCH": kernel.CategoryConflict, "DECLARATION_RECEIPT_STALE": kernel.CategoryConflict,
 		"DECLARATION_MAPPING_UNVERIFIED": kernel.CategoryInvalid, "EXTERNAL_RESULT_UNKNOWN": kernel.CategoryConflict,
-		"DOCUMENT_REQUIREMENT_UNVERIFIED": kernel.CategoryConflict,
+		"DOCUMENT_REQUIREMENT_UNVERIFIED": kernel.CategoryConflict, "CERTIFICATE_NOT_APPLICABLE": kernel.CategoryConflict,
 	}
 	got := Codes()
 	if len(got) != len(want) {

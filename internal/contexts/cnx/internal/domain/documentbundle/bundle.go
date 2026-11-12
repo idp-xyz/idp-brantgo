@@ -121,25 +121,28 @@ type FundRef struct {
 
 // Requirement is one entry of a checklist as a check states it.
 type Requirement struct {
-	RequirementID string          `json:"requirement_id"`
-	Kind          string          `json:"kind"`
-	Version       string          `json:"version"`
-	Status        string          `json:"status"`
-	Owner         Owner           `json:"owner"`
-	DueOn         string          `json:"due_on"`
-	Evidence      []Evidence      `json:"evidence"`
-	Declaration   *DeclarationRef `json:"declaration"`
-	FundRecords   []FundRef       `json:"fund_records"`
-	Basis         string          `json:"basis"`
-	Note          string          `json:"note"`
+	RequirementID string           `json:"requirement_id"`
+	Kind          string           `json:"kind"`
+	Version       string           `json:"version"`
+	Status        string           `json:"status"`
+	Owner         Owner            `json:"owner"`
+	DueOn         string           `json:"due_on"`
+	Evidence      []Evidence       `json:"evidence"`
+	Declaration   *DeclarationRef  `json:"declaration"`
+	FundRecords   []FundRef        `json:"fund_records"`
+	Basis         string           `json:"basis"`
+	Note          string           `json:"note"`
+	Certificates  []CertificateRef `json:"certificates,omitempty"` // S5 C5: certificate results named (certificate.go)
 }
 
 // CheckInput is a check of a bundle: the requirements as stated, whether the checker states the
-// bundle complete, and whether the checker is a human.
+// bundle complete, whether the checker is a human, and the lot's line IDs (S5 C5: what certificates
+// must cover).
 type CheckInput struct {
 	Requirements   []Requirement
 	ExpectComplete bool
 	Human          bool
+	Lines          []string
 }
 
 // Counts are a checklist's requirements by status.
@@ -150,7 +153,9 @@ type Counts struct {
 
 // Check decides a checklist (CNX-INV-008, CN-AT14), in this order for each requirement: a verified
 // one stated by an AI agent (PERMISSION_DENIED: only a human verifies); a customs declaration stated
-// verified whose declaration customs has not released (DOCUMENT_REQUIREMENT_UNVERIFIED); then, when
+// verified whose declaration customs has not released (DOCUMENT_REQUIREMENT_UNVERIFIED); a verified
+// certificate requirement without certificate results or not covering every lot line
+// (checkCertificates, S5 C5); then, when
 // the checker states the bundle complete, the first requirement that is only present or missing
 // (DOCUMENT_REQUIREMENT_UNVERIFIED: an attachment is not a verification). It returns the counts.
 func Check(in CheckInput) (Counts, error) {
@@ -162,6 +167,9 @@ func Check(in CheckInput) (Counts, error) {
 		}
 		if r.Status == Verified && r.Kind == KindCustomsDeclaration && (r.Declaration == nil || !r.Declaration.Exported) {
 			return n, reject(CodeDocumentRequirementUnverified, path, "Customs has not released the declaration")
+		}
+		if err := checkCertificates(r, i, in.Lines); err != nil {
+			return n, err
 		}
 		switch r.Status {
 		case Missing:

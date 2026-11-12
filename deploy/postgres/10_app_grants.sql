@@ -388,6 +388,12 @@ GRANT UPDATE (status, current_version, mapping, declaration_number, exported_at,
     updated_at) ON brant_cnx.declaration_case TO brant_app;
 GRANT UPDATE (status, checks, reconciliations, row_version, updated_at) ON brant_cnx.document_bundle TO brant_app;
 
+-- CNX certificate results (S5-10 CNX half): a certificate keeps its identity and kind and moves by one
+-- revision per registration (trigger; the column grant is also what a correction's FOR UPDATE lock and
+-- the revision trigger's lock need); revisions are only inserted; nothing is deleted.
+GRANT SELECT, INSERT ON brant_cnx.certificate_result, brant_cnx.certificate_revision TO brant_app;
+GRANT UPDATE (issuer, number, current_revision, row_version, updated_at) ON brant_cnx.certificate_result TO brant_app;
+
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
 -- every update. A shipment is inserted prepared with its lines and parties and then changes only by

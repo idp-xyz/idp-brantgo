@@ -47,7 +47,7 @@ func bundleRequest(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandResolveReconciliation, key, c
 	}
-	return "", "", nil
+	return certificateRequest(cmd)
 }
 
 // visibleDeclaration is Visible's part for declarations and bundles, which are company-wide like
@@ -81,8 +81,11 @@ func bundleEvidence(sources map[string]evdapi.SourceRef, ids []string, path stri
 // FOR UPDATE: the bundle's row version (VERSION_CONFLICT; 0 for a lot without one), a lot FUL does
 // not resolve or whose record is not intact (REFERENCE_INVALID), a cancelled lot (INVALID_STATE), an
 // attachment (REFERENCE_INVALID), a declaration that is not one of the lot's (REFERENCE_INVALID), a
-// fund record STL does not resolve (REFERENCE_INVALID), then db.Check (PERMISSION_DENIED for a
-// verification by an AI agent, DOCUMENT_REQUIREMENT_UNVERIFIED). DocumentBundleChecked is published.
+// fund record STL does not resolve (REFERENCE_INVALID), a certificate result CNX lacks
+// (REFERENCE_INVALID) or that does not apply to the lot (CERTIFICATE_NOT_APPLICABLE; S5 C5,
+// requirementCertificates), then db.Check (PERMISSION_DENIED for a verification by an AI agent,
+// DOCUMENT_REQUIREMENT_UNVERIFIED, CERTIFICATE_NOT_APPLICABLE for a verified requirement its
+// certificates do not cover). DocumentBundleChecked is published.
 type checkBundle struct {
 	s       Service
 	cmd     api.CheckBundle
@@ -145,6 +148,7 @@ func (h *checkBundle) Apply(ctx context.Context, exec bentopg.Executor, d author
 		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, lotPath, "The export lot's shipment is cancelled")
 	}
 	var requirements []db.Requirement
+	now, destinations := kernel.Instant(h.s.Clock.Now()), map[ExportRef]string{}
 	for i, r := range cmd.Requirements {
 		p := "/args/requirements/" + strconv.Itoa(i)
 		req := db.Requirement{RequirementID: r.RequirementID, Kind: r.Kind, Version: r.Version, Status: r.Status,
@@ -167,6 +171,9 @@ func (h *checkBundle) Apply(ctx context.Context, exec bentopg.Executor, d author
 				req.Declaration.ExportedAt = kernel.FormatTimestamp(c.ExportedAt)
 			}
 		}
+		if req.Certificates, err = requirementCertificates(ctx, exec, sc, r, x, now, destinations, p+"/certificate_ids"); err != nil {
+			return action.Outcome{}, err
+		}
 		for j, id := range r.FundRecordIDs {
 			f, ok := h.funds[id]
 			if !ok {
@@ -177,11 +184,11 @@ func (h *checkBundle) Apply(ctx context.Context, exec bentopg.Executor, d author
 		}
 		requirements = append(requirements, req)
 	}
-	counts, err := db.Check(db.CheckInput{Requirements: requirements, ExpectComplete: cmd.ExpectComplete, Human: d.Actor.Kind == kernel.ActorHuman})
+	counts, err := db.Check(db.CheckInput{Requirements: requirements, ExpectComplete: cmd.ExpectComplete, Human: d.Actor.Kind == kernel.ActorHuman,
+		Lines: lotLineIDs(x)})
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	now := kernel.Instant(h.s.Clock.Now())
 	if b == nil {
 		b = &db.Bundle{ID: action.NewID("dbn", now), ExportLotID: cmd.ExportLotID, OrderID: x.OrderID, Status: counts.Status(), Checks: 1,
 			RowVersion: 1, OpenedBy: d.Actor, Epoch: d.Epoch, OpenedAt: now}

@@ -97,9 +97,13 @@ func STLPayments() Payments { return upstream.STL{} }
 // DocumentUpstream are the upstreams of bookings and shipment documents (S5-08).
 type DocumentUpstream = application.DocumentUpstream
 
+// Certificates is the port to CNX's CertificateResultRef v1 (R56; S5 C5); *cnx.Module implements it.
+type Certificates = application.Certificates
+
 // DocumentPorts are the ports of bookings and shipment documents: POL's ConfigRef v1, ConfigGuard v1
 // and NumberIssue v1 (R49), PTY's parties and ServiceRoleRef v1 (R44), TRD's
-// OrderCommercialSnapshot v1 (R27).
+// OrderCommercialSnapshot v1 (R27). CNX's certificate results (CertificateResultRef v1, R56; S5 C5)
+// are added with DocumentUpstream.WithCertificates.
 func DocumentPorts(pol interface {
 	polapi.Queries
 	polapi.Commands
@@ -117,7 +121,7 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 		return nil, errors.New("ful: module needs TRD's orders, QLT's releases, PUR's deliveries, PTY's screening, CNX's compliance, STL's payments and EVD's sources")
 	}
 	if !up.Documents.Complete() {
-		return nil, errors.New("ful: module needs POL's configuration and numbers, PTY's parties and TRD's order snapshots for documents")
+		return nil, errors.New("ful: module needs POL's configuration and numbers, PTY's parties, TRD's order snapshots and CNX's certificate results for documents")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {

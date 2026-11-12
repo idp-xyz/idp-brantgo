@@ -44,6 +44,9 @@ const (
 	// A document requirement has only an attachment, not a verification, and cannot count as met
 	// (CNX-INV-008, CN-AT14).
 	CodeDocumentRequirementUnverified = "DOCUMENT_REQUIREMENT_UNVERIFIED"
+	// An official certificate's object, market or validity is not the use's: another SKU
+	// specification, shipment or lot, another market, or expired (CNX-INV-007, CN-AT14).
+	CodeCertificateNotApplicable = "CERTIFICATE_NOT_APPLICABLE"
 )
 
 var codes = map[string]kernel.Category{
@@ -62,6 +65,7 @@ var codes = map[string]kernel.Category{
 	CodeDeclarationMappingUnverified:  kernel.CategoryInvalid,
 	CodeExternalResultUnknown:         kernel.CategoryConflict,
 	CodeDocumentRequirementUnverified: kernel.CategoryConflict,
+	CodeCertificateNotApplicable:      kernel.CategoryConflict,
 }
 
 // Category returns the category of a code CNX declares.

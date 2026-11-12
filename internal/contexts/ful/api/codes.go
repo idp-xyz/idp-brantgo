@@ -55,6 +55,10 @@ const (
 	// CodeDocumentIntegrityFailure: a stored document's bytes are not the ones bound (the catalog
 	// row lists TRD; FUL reads its renditions the same way).
 	CodeDocumentIntegrityFailure = "DOCUMENT_INTEGRITY_FAILURE"
+	// CodeCertificateNotApplicable (409): the certificate result a certificate of origin record names
+	// does not apply to the shipment — another kind, market or specification, or outside its validity
+	// (CNX's CertificateResultRef v1; CNX-INV-007; S5 C5).
+	CodeCertificateNotApplicable = "CERTIFICATE_NOT_APPLICABLE"
 )
 
 var codes = map[string]kernel.Category{
@@ -76,6 +80,8 @@ var codes = map[string]kernel.Category{
 	// S5-08
 	CodeShipmentDocumentsUnreconciled: kernel.CategoryConflict,
 	CodeDocumentIntegrityFailure:      kernel.CategoryInvalid,
+	// S5 C5
+	CodeCertificateNotApplicable: kernel.CategoryConflict,
 }
 
 // Category returns the category of a code FUL declares.
