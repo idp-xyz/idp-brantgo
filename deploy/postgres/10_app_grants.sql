@@ -301,3 +301,20 @@ GRANT SELECT, INSERT ON brant_cnx.trade_compliance_check, brant_cnx.trade_compli
 GRANT UPDATE (status, row_version, current_evaluation_id, current_decision_id, updated_at) ON brant_cnx.trade_compliance_check TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.trade_compliance_state(text, bigint, text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_trade_compliance_v1(text, bigint, text, timestamptz) TO brant_app;
+
+-- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
+-- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
+-- every update. A shipment is inserted prepared with its lines and parties and then changes only by
+-- a packing record, its confirmation or its cancellation, once (trigger); lines, parties, packing
+-- records, packages and their contents are only inserted; nothing is deleted; the ledger only
+-- grows. The shipment commands call PTY's, QLT's and TRD's guard functions, granted above; TRD
+-- executes ShipmentFacts v1 (R70) inside its own transactions.
+GRANT USAGE ON SCHEMA brant_ful TO brant_app;
+GRANT SELECT, INSERT ON brant_ful.order_fulfilment, brant_ful.shipment, brant_ful.shipment_line, brant_ful.shipment_party,
+    brant_ful.shipment_packing, brant_ful.shipment_package, brant_ful.shipment_package_content, brant_ful.action_result,
+    brant_ful.audit_event TO brant_app;
+GRANT UPDATE (order_id) ON brant_ful.order_fulfilment TO brant_app;
+GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at, confirm_evidence_ids,
+              guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at,
+              cancel_reason) ON brant_ful.shipment TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;
