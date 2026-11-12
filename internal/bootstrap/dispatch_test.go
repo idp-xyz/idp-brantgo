@@ -124,7 +124,7 @@ var policyConsumers = []struct {
 		[]eventing.EventType{trdapi.EventOrderCancelled, trdapi.EventOrderClosedUnfulfilled, trdapi.EventOrderClosed,
 			trdapi.EventOrderRemainderClosed}, ""},
 	{"PL-09 OrderAmended → PUR reviews allocations and commitments", "pur", trdapi.Source,
-		[]eventing.EventType{trdapi.EventOrderAmended}, "S5-09b, unit C4b"},
+		[]eventing.EventType{trdapi.EventOrderAmended, trdapi.EventOrderCancelled, trdapi.EventOrderRemainderClosed}, ""},
 	{"PL-09 OrderAmended → FUL reviews packing, booking and documents", "ful", trdapi.Source,
 		[]eventing.EventType{trdapi.EventOrderAmended}, "FUL is not built yet (S5-09b, unit C4b)"},
 	{"PL-09 OrderAmended → STL reviews the payment plan", "stl", trdapi.Source,
