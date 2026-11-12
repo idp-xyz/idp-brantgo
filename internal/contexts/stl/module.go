@@ -35,6 +35,9 @@ var (
 	_ api.FundCommands      = (*Module)(nil)
 	_ api.FundQueries       = (*Module)(nil)
 	_ api.FundRecordLookups = (*Module)(nil)
+
+	_ api.ReviewCommands = (*Module)(nil)
+	_ api.ReviewQueries  = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),
@@ -82,8 +85,9 @@ func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 
 // Subscriptions are STL's Inbox consumers on its own transaction owner (repository structure §07):
 // stl.order_credit, which has TRD's order events consume and release the order's credit reservations
-// (Context Map R32; PL-12, PL-13), and stl.order_account, which opens an activated order's account
-// (D-4, D-18).
+// (Context Map R32; PL-12, PL-13) and moves them to an amended revision, and stl.order_account, which
+// opens an activated order's account and opens the payment plan review of an amended one (D-4, D-18,
+// PL-09).
 func (m *Module) Subscriptions() []messaging.Subscription {
 	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

@@ -136,7 +136,7 @@ var policyConsumers = []struct {
 	{"PL-09 OrderAmended → FUL reviews packing, booking and documents", "ful", trdapi.Source,
 		[]eventing.EventType{trdapi.EventOrderAmended}, "FUL is not built yet (S5-09b, unit C4b)"},
 	{"PL-09 OrderAmended → STL reviews the payment plan", "stl", trdapi.Source,
-		[]eventing.EventType{trdapi.EventOrderAmended}, "S5-09b, unit C4b"},
+		[]eventing.EventType{trdapi.EventOrderAmended}, ""},
 	{"PL-14 OrderAmended → CNX re-checks trade compliance", "cnx", trdapi.Source,
 		[]eventing.EventType{trdapi.EventOrderAmended}, ""},
 	{"D-18 screening_regulation published → CNX reopens the clear conclusions of earlier revisions", "cnx", polapi.Source,

@@ -37,6 +37,12 @@ type OrderEvent struct {
 	OrderHash     string
 	OrderVersion  int64     // the order's row version after the command that published the event
 	ActivatedAt   time.Time // OrderActivated only: the instant TRD activated the order
+	// OrderAmended only: the instant TRD applied the amendment, what its CreditGuard call recorded for
+	// the new revision (covered, documents_secured, not_increased, not_required) and the reservation
+	// that covered it ("" when none was asked).
+	AppliedAt           time.Time
+	CreditGuard         string
+	CreditReservationID string
 }
 
 // What an order event did to the order's reservations.
@@ -57,10 +63,12 @@ const (
 	EffectNothingHeld = "nothing_held"
 )
 
-// CreditEffect is the outcome of one order event and the reservations it changed.
+// CreditEffect is the outcome of one order event and the reservations it changed; Released are the
+// earlier revisions' reservations an OrderAmended released.
 type CreditEffect struct {
 	Outcome        string
 	ReservationIDs []string
+	Released       []string
 }
 
 // Failure codes of an activation STL cannot honour, as the Inbox and the dead letter record them.

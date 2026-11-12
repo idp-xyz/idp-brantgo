@@ -25,7 +25,25 @@ type credit struct {
 	consumed, released []application.OrderEvent
 	prepared, opened   []application.OrderEvent
 	bases              []application.AccountBasis
+	amended            []application.OrderEvent // ConsumeOnAmendment
+	reviewPrepared     []application.OrderEvent // PrepareReview
+	reviewed           []application.OrderEvent // OpenReviewOnAmendment
 	err, prepareErr    error
+}
+
+func (c *credit) ConsumeOnAmendment(_ context.Context, _ bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error) {
+	c.amended = append(c.amended, e)
+	return application.CreditEffect{Outcome: application.EffectConsumed}, c.err
+}
+
+func (c *credit) PrepareReview(_ context.Context, e application.OrderEvent) (application.AccountBasis, error) {
+	c.reviewPrepared = append(c.reviewPrepared, e)
+	return application.AccountBasis{Order: &application.Order{Binding: application.OrderBinding{OrderID: e.OrderID, OrderRevision: 9}}}, c.prepareErr
+}
+
+func (c *credit) OpenReviewOnAmendment(_ context.Context, _ bentopg.Executor, e application.OrderEvent, b application.AccountBasis) (string, error) {
+	c.reviewed, c.bases = append(c.reviewed, e), append(c.bases, b)
+	return application.EffectReviewOpened, c.err
 }
 
 func (c *credit) PrepareAccount(_ context.Context, e application.OrderEvent) (application.AccountBasis, error) {
@@ -87,13 +105,14 @@ func activated(fields map[string]any) messaging.Event {
 	return orderEnvelope(trdapi.EventOrderActivated, f)
 }
 
-// STL declares one consumer, stl.order_credit, on TRD's source: OrderActivated (PL-12) and the four
+// STL declares one consumer, stl.order_credit, on TRD's source: OrderActivated (PL-12), the four
 // ends of an order (PL-13; OrderClosedUnfulfilled ends a draft, whose reservation is still
-// reserved), not OrderAmended (PL-09). Its system actor is system:inbox.stl.order_credit with
-// credit.consume, credit.release and stl.read. The second consumer, stl.order_account (D-4, D-18,
-// unit B6b), takes OrderActivated alone, reads TRD and POL in its Prepare step, and its actor
-// system:inbox.stl.order_account holds payment_plan_review.open (order_account.open's permission)
-// and stl.read.
+// reserved) and OrderAmended (D-9: the new revision's reservation; unit C4b). Its system actor is
+// system:inbox.stl.order_credit with credit.consume, credit.release and stl.read. The second
+// consumer, stl.order_account (D-4, D-18, units B6b and C4b), takes OrderActivated and OrderAmended
+// (PL-09, the payment plan review), reads TRD and POL in its Prepare step, and its actor
+// system:inbox.stl.order_account holds payment_plan_review.open (also order_account.open's
+// permission) and stl.read.
 func TestOrderCreditSubscription(t *testing.T) {
 	subs := Subscriptions(nil, &credit{})
 	if len(subs) != 2 {
@@ -101,14 +120,13 @@ func TestOrderCreditSubscription(t *testing.T) {
 	}
 	s := subs[0]
 	want := []eventing.EventType{trdapi.EventOrderActivated, trdapi.EventOrderCancelled, trdapi.EventOrderClosedUnfulfilled,
-		trdapi.EventOrderRemainderClosed, trdapi.EventOrderClosed}
-	if s.Consumer != "stl.order_credit" || s.Source != trdapi.Source || !slices.Equal(s.EventTypes, want) || s.Prepare != nil || s.Handler == nil ||
-		slices.Contains(s.EventTypes, eventing.EventType(trdapi.EventOrderAmended)) {
+		trdapi.EventOrderRemainderClosed, trdapi.EventOrderClosed, trdapi.EventOrderAmended}
+	if s.Consumer != "stl.order_credit" || s.Source != trdapi.Source || !slices.Equal(s.EventTypes, want) || s.Prepare != nil || s.Handler == nil {
 		t.Fatalf("subscription %+v", s)
 	}
 	a := subs[1]
-	if a.Consumer != "stl.order_account" || a.Source != trdapi.Source || !slices.Equal(a.EventTypes, []eventing.EventType{trdapi.EventOrderActivated}) ||
-		a.Prepare == nil || a.Handler == nil {
+	if a.Consumer != "stl.order_account" || a.Source != trdapi.Source ||
+		!slices.Equal(a.EventTypes, []eventing.EventType{trdapi.EventOrderActivated, trdapi.EventOrderAmended}) || a.Prepare == nil || a.Handler == nil {
 		t.Fatalf("account subscription %+v", a)
 	}
 	grants, err := messaging.InboxGrants(subs)
@@ -119,7 +137,7 @@ func TestOrderCreditSubscription(t *testing.T) {
 		t.Fatalf("grants %+v %v", grants, err)
 	}
 	// The declared types are not the handler's own slices: a caller cannot change what it routes.
-	s.EventTypes[0] = trdapi.EventOrderAmended
+	s.EventTypes[0] = trdapi.EventOrderReviewDecided
 	if Subscriptions(nil, &credit{})[0].EventTypes[0] != trdapi.EventOrderActivated {
 		t.Fatal("the subscription shares the handler's event types")
 	}
@@ -167,7 +185,7 @@ func TestMalformedOrderEventsAreRejected(t *testing.T) {
 		"no activation instant":    activated(map[string]any{"activated_at": nil}),
 		"local activation instant": activated(map[string]any{"activated_at": "2026-11-12T07:59:59+08:00"}),
 		"revision as text":         activated(map[string]any{"order_revision": "1"}),
-		"another event":            orderEnvelope(trdapi.EventOrderAmended, nil),
+		"another event":            orderEnvelope(trdapi.EventOrderReviewDecided, nil),
 	}
 	notJSON := activated(nil)
 	notJSON.Envelope.Payload = json.RawMessage(`[1]`)
