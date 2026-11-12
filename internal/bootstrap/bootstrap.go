@@ -272,10 +272,9 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		// FUL last of S5. PUR publishes no supplier deliveries yet (S5 unit B3): FUL's port to them
-		// answers DEPENDENCY_NOT_SUPPORTED. The CNX and STL guards and FUL's commercial release are
-		// extension points until S5 unit C1, recorded as not wired.
-		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.DeliveriesNotWired(),
+		// FUL last of S5. The CNX and STL guards and FUL's commercial release are extension points
+		// until S5 unit C1, recorded as not wired.
+		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.PURDeliveries(c.PUR),
 			Screening: ful.PTYScreening(), Sources: c.EVD})
 	}
 	if err != nil {

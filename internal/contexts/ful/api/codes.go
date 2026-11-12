@@ -38,8 +38,8 @@ const (
 	CodeReferenceStale = "REFERENCE_STALE"
 	// CodeBusinessKeyConflict (409): the shipment ID holds another request.
 	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT"
-	// CodeDependencyNotSupported: the stock route (STK, S6-01), a unit conversion between an order
-	// line and its release or delivery, or PUR's SupplierDeliveryGuard v1 while it is not wired.
+	// CodeDependencyNotSupported: the stock route (STK, S6-01) or a unit conversion between an order
+	// line and its release or delivery.
 	CodeDependencyNotSupported = "DEPENDENCY_NOT_SUPPORTED"
 )
 
