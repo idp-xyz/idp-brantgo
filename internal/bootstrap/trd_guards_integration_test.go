@@ -777,8 +777,9 @@ func TestOrderStateReadIsLockFree(t *testing.T) {
 // PL-12 and PL-13 end to end on TRD's real order (S5 B6's consumer under B4's wiring): an order on
 // 30/70 terms activates on its 672.00 reservation (CreditGuard v1 in TRD's transaction); TRD's own
 // OrderActivated, relayed from TRD's Outbox through the dispatcher, has the consumer
-// stl.order_credit consume that reservation for the activation's binding and instant; TRD's
-// OrderCancelled then has it release the consumed reservation. Every event is settled.
+// stl.order_credit consume that reservation for the activation's binding and instant, and the
+// consumer stl.order_account (S5 B6b) open the order account at the activated revision; TRD's
+// OrderCancelled then has stl.order_credit release the consumed reservation. Every event is settled.
 func TestActivatedOrderCreditIsConsumedAndReleasedThroughTheRelay(t *testing.T) {
 	q := newCreditOrderWorld(t, "")
 	ctx := context.Background()
@@ -803,6 +804,12 @@ func TestActivatedOrderCreditIsConsumedAndReleasedThroughTheRelay(t *testing.T) 
 	if v.Status != stlapi.ReservationConsumed || v.Version != 2 || v.ConsumedBy != consumerActor || !v.ActivatedAt.Equal(activatedAt) ||
 		v.OrderRevision != 1 || v.OrderHash != b.OrderHash || q.stlEvents(stlapi.EventCreditReservationConsumed, res.ReservationID) != 1 {
 		t.Fatalf("after TRD's OrderActivated: %+v (activated at %v)", v, activatedAt)
+	}
+	acc, err := q.c.STL.GetOrderAccount(q.credit.officer, o.ObjectID)
+	q.must(err)
+	if acc.Status != "open" || acc.Version != 1 || acc.OpenedBy != accountActor || acc.OrderRevision != 1 || acc.OrderHash != b.OrderHash ||
+		len(acc.Stages) != 2 {
+		t.Fatalf("the order account stl.order_account opened: %+v", acc)
 	}
 
 	_, err = q.c.TRD.CancelOrder(q.author, trdapi.CancelOrder{IdempotencyKey: q.key(), OrderID: o.ObjectID, ExpectedVersion: q.orderVersion(o.ObjectID),
