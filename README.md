@@ -69,7 +69,10 @@ internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding
                                   for QLT; supplier direct deliveries (S5-15): claims recorded by a human or an AI against
                                   issued commitment lines, verified by an independent human, corrections that supersede,
                                   never above what a line buys; SupplierDeliveryGuard v1 for FUL, PurchaseSettlementSource v1
-                                  for STL, PurchaseLineRef v1 for CNX
+                                  for STL, PurchaseLineRef v1 for CNX; commitment changes and cancellation (S5-19): the next
+                                  revision prepared, decided independently (recomputed, deviations acknowledged) and applied
+                                  while its binding holds, increases within the allocation, never below verified deliveries
+                                  (short receipt = fulfilled), cancellation keeping what was verified delivered
 internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only

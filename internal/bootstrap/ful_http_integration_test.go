@@ -9,14 +9,16 @@ import (
 
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // S5-03a over HTTP with OIDC access tokens, on the composed process (bootstrap's Contexts wires FUL
-// with PUR's supplier deliveries not wired, S5 unit B3): a shipment prepared and confirmed on the
-// FUL world reads back in its wire form; the merchandiser plans its sibling's packing and cancels
-// it over HTTP, and the plan reconciles; shipment.prepare and shipment.confirm answer 422
-// DEPENDENCY_NOT_SUPPORTED while the deliveries are not wired; the order's fulfilment and FUL's
-// audit trail read back.
+// to PUR's real supplier deliveries): a shipment prepared and confirmed on the FUL world's in-memory
+// delivery line reads back in its wire form; the merchandiser plans its sibling's packing and
+// cancels it over HTTP, and the plan reconciles; on that in-memory delivery line, which PUR does not
+// have, the composed shipment.prepare is 422 REFERENCE_INVALID and shipment.confirm 409
+// SUPPLIER_DELIVERY_UNVERIFIED (SupplierDeliveryGuard v1's answer); the order's fulfilment and FUL's
+// audit trail read back. TestShipmentOnDeliveryVerifiedOverHTTP runs on a real delivery.
 func TestShipmentsOverHTTP(t *testing.T) {
 	w := newFulWorld(t)
 	rel := w.released("commitment.1", "100")
@@ -55,13 +57,13 @@ func TestShipmentsOverHTTP(t *testing.T) {
 		"order_id": w.order.ObjectID, "route": fulapi.RouteSupplierDirect, "lines": []any{map[string]any{"line_id": "S1", "order_line_id": "L1",
 			"quantity": "10", "supplier_delivery": map[string]any{"delivery_id": d.DeliveryID, "line_id": d.LineID, "version": d.Version},
 			"quality_release_id": rel}}})
-	if status != http.StatusUnprocessableEntity || out["code"] != fulapi.CodeDependencyNotSupported {
-		t.Fatalf("prepare without PUR's deliveries %d %v", status, out)
+	if status != http.StatusUnprocessableEntity || out["code"] != kernel.CodeReferenceInvalid {
+		t.Fatalf("prepare on a delivery line PUR does not have %d %v", status, out)
 	}
 	status, out = merch.try("ful", fulapi.Contract, fulapi.CommandConfirmShipment, map[string]any{"shipment_id": "shipment.3",
 		"expected_version": 1})
-	if status != http.StatusUnprocessableEntity || out["code"] != fulapi.CodeDependencyNotSupported {
-		t.Fatalf("confirm without PUR's deliveries %d %v", status, out)
+	if status != http.StatusConflict || out["code"] != fulapi.CodeSupplierDeliveryUnverified {
+		t.Fatalf("confirm on a delivery line SupplierDeliveryGuard v1 does not know %d %v", status, out)
 	}
 
 	plan := map[string]any{"contract": fulapi.Contract, "command": fulapi.CommandPlanPacking, "idempotency_key": "ful.http.plan",

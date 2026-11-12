@@ -36,8 +36,9 @@ import (
 //
 // TRD computes the portion from the sealed calculation of the order revision (the stages due after
 // shipment or invoice without document control: OrderCommercialSnapshot v1's CreditPortionMinor)
-// and calls it at order.activate's STL extension point, after locking its own roots FOR UPDATE and
-// in context code order (ADR-BR-011), with its own executor:
+// and calls it in order.activate after PTY's guards — and in order.amendment.apply for the revision
+// the amendment produces when that asks more credit (S5 D-9) — after locking its own roots FOR
+// UPDATE and in context code order (ADR-BR-011), with its own executor:
 //
 //	q := stlapi.CreditQuery{OrderID: id, OrderRevision: rev, OrderHash: hash, PortionMinor: "67200", Currency: "USD", At: now}
 //	row := exec.QueryRow(ctx, stlapi.CreditGuardSQL, stlapi.CreditGuardArgs(q)...)

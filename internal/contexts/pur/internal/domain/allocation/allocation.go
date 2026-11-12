@@ -52,10 +52,13 @@ type Unit struct {
 	Revision int64
 }
 
-// Entry is one draft's share of the line: Quantity, taken at root version Taken; Released is the
-// root version that released it (0: effective).
+// Entry is one draft's share of the line: Quantity, taken at root version Taken for the draft's
+// commitment revision Revision (1: the draft as prepared; a later one: what a change or the
+// cancellation of its purchase commitment made it allocate, S5-19); Released is the root version that
+// released it (0: effective). A draft holds at most one effective entry of a line.
 type Entry struct {
 	DraftID  string
+	Revision int64
 	Quantity kernel.Decimal
 	Taken    int64
 	Released int64
@@ -98,8 +101,14 @@ func reject(code, path, reason string) *kernel.Rejection {
 // root's is REFERENCE_STALE; a newer one rebinds the root's demand to it (an amended order, S3-15;
 // OrderAmended is reviewed in S5). A unit other than the root's is REFERENCE_STALE too. The
 // effective allocation plus q must not exceed the demand (PURCHASE_ALLOCATION_EXCEEDED at path). A
-// draft takes a line once.
+// draft takes a line once, at its commitment revision 1.
 func (a *Allocation) Take(draftID string, q kernel.Decimal, revision int64, unit Unit, demand kernel.Decimal, path string) error {
+	return a.TakeAt(draftID, 1, q, revision, unit, demand, path)
+}
+
+// TakeAt is Take for the draft's commitment revision commitmentRevision: a draft that holds an
+// effective entry of the line, or an entry of that revision, takes nothing (INVALID_STATE).
+func (a *Allocation) TakeAt(draftID string, commitmentRevision int64, q kernel.Decimal, revision int64, unit Unit, demand kernel.Decimal, path string) error {
 	switch {
 	case revision < a.OrderRevision:
 		return reject(CodeReferenceStale, path, "The order line was allocated at a later order revision")
@@ -107,7 +116,9 @@ func (a *Allocation) Take(draftID string, q kernel.Decimal, revision int64, unit
 		return reject(CodeReferenceStale, path, "The order line's unit is not the one its allocations are in")
 	case q.Sign() <= 0:
 		return kernel.Reject(kernel.CodeInvalidKnownValue, path, "An allocation is positive")
-	case slices.ContainsFunc(a.Entries, func(e Entry) bool { return e.DraftID == draftID }):
+	case slices.ContainsFunc(a.Entries, func(e Entry) bool {
+		return e.DraftID == draftID && (e.Effective() || e.Revision == commitmentRevision)
+	}):
 		return kernel.Reject(kernel.CodeInvalidState, path, "The draft already holds an allocation of this line")
 	}
 	if revision > a.OrderRevision {
@@ -119,8 +130,35 @@ func (a *Allocation) Take(draftID string, q kernel.Decimal, revision int64, unit
 	}
 	a.RowVersion++
 	a.Allocated = a.Allocated.Add(q)
-	a.Entries = append(a.Entries, Entry{DraftID: draftID, Quantity: q, Taken: a.RowVersion, fresh: true})
+	a.Entries = append(a.Entries, Entry{DraftID: draftID, Revision: commitmentRevision, Quantity: q, Taken: a.RowVersion, fresh: true})
 	return nil
+}
+
+// Move moves draft draftID's share of the line to its commitment revision commitmentRevision under
+// one version of the root (S5-19, PUR-INV-011): the effective entry is released at instant at and,
+// when q is positive, an entry of q is taken for that revision, judged as TakeAt judges it against
+// the order line as bound now (revision, unit, demand). A change applied or a cancellation moves it.
+func (a *Allocation) Move(draftID string, commitmentRevision int64, q kernel.Decimal, revision int64, unit Unit, demand kernel.Decimal, at time.Time,
+	path string) error {
+	next := a.RowVersion + 1
+	for i, e := range a.Entries {
+		if e.DraftID == draftID && e.Effective() {
+			a.Entries[i].Released, a.Entries[i].At = next, kernel.Instant(at)
+			a.Allocated = a.Allocated.Sub(e.Quantity)
+		}
+	}
+	if q.Sign() > 0 {
+		if err := a.TakeAt(draftID, commitmentRevision, q, revision, unit, demand, path); err != nil {
+			return err
+		}
+	}
+	a.RowVersion = next
+	return nil
+}
+
+// Holds reports whether draft draftID holds an effective entry of the line.
+func (a *Allocation) Holds(draftID string) bool {
+	return slices.ContainsFunc(a.Entries, func(e Entry) bool { return e.DraftID == draftID && e.Effective() })
 }
 
 // Release gives back the effective entry of draftID at instant at and returns its quantity. A
@@ -137,15 +175,18 @@ func (a *Allocation) Release(draftID string, at time.Time) (kernel.Decimal, erro
 	return e.Quantity, nil
 }
 
-// Without returns a copy of the root as it would be had draft draftID never taken its effective
-// entry: what a purchase commitment decision prepares the draft's request again against (A47 #3).
-// The copy is judged, never stored.
+// Without returns a copy of the root as it would be had draft draftID never taken an entry: what a
+// purchase commitment decision prepares the draft's request again against (A47 #3), and what a
+// commitment change prepares its proposed revision against (PUR-INV-011). The copy is judged, never
+// stored.
 func (a *Allocation) Without(draftID string) *Allocation {
 	out := *a
 	out.Entries = nil
 	for _, e := range a.Entries {
-		if e.DraftID == draftID && e.Effective() {
-			out.Allocated = out.Allocated.Sub(e.Quantity)
+		if e.DraftID == draftID {
+			if e.Effective() {
+				out.Allocated = out.Allocated.Sub(e.Quantity)
+			}
 			continue
 		}
 		e.fresh = false

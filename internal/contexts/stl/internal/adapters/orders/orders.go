@@ -40,9 +40,23 @@ func orderOf(f trdapi.OrderSnapshotFact) application.Order {
 	o := application.Order{Binding: application.OrderBinding{OrderID: f.Binding.OrderID, OrderRevision: f.Binding.OrderRevision,
 		OrderHash: f.Binding.OrderHash}, Status: f.Status, Code: f.Code, CustomerID: f.CustomerRef.PartyID,
 		Currency: application.CurrencyRef{ID: f.CurrencyRef.ID, Revision: f.CurrencyRef.Revision}, CreditPortionMinor: f.CreditPortionMinor}
-	for _, s := range f.Stages {
-		o.Stages = append(o.Stages, application.OrderStage{StageID: s.StageID, Trigger: s.Trigger, Days: s.Days, Percent: s.Percent,
-			AmountMinor: s.AmountMinor, ReleaseControl: s.ReleaseControl, OnCredit: s.OnCredit})
+	o.Stages = stagesOf(f.Stages)
+	for _, p := range f.Proposed {
+		if p.Code != "" {
+			continue
+		}
+		o.Proposed = append(o.Proposed, application.ProposedRevision{AmendmentID: p.AmendmentID, Binding: application.OrderBinding{
+			OrderID: p.Binding.OrderID, OrderRevision: p.Binding.OrderRevision, OrderHash: p.Binding.OrderHash}, Stages: stagesOf(p.Stages),
+			CreditPortionMinor: p.CreditPortionMinor})
 	}
 	return o
+}
+
+func stagesOf(stages []trdapi.PaymentStage) []application.OrderStage {
+	var out []application.OrderStage
+	for _, s := range stages {
+		out = append(out, application.OrderStage{StageID: s.StageID, Trigger: s.Trigger, Days: s.Days, Percent: s.Percent,
+			AmountMinor: s.AmountMinor, ReleaseControl: s.ReleaseControl, OnCredit: s.OnCredit})
+	}
+	return out
 }

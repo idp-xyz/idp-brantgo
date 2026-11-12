@@ -201,11 +201,14 @@ type deliveryFacts struct {
 	deliveries  map[string]*supplierdelivery.Delivery
 }
 
-// commitmentFacts is a commitment the caller sees with its intact draft's document and, once asked
-// for, its deliveries and what they verified for each line.
+// commitmentFacts is a commitment the caller sees with its intact draft's document, what it buys of
+// each line at its revision in force with the document of that revision (S5-19: its last change's,
+// or the draft's) and, once asked for, its deliveries and what they verified for each line.
 type commitmentFacts struct {
 	c          *commitment.Commitment
 	doc        draft.Document
+	current    draft.Document
+	lines      []commitment.LineQuantity
 	deliveries []*supplierdelivery.Delivery
 	sums       map[string]kernel.Decimal
 	summed     bool
@@ -235,17 +238,37 @@ func (f *deliveryFacts) commitment(ctx context.Context, id string) (*commitmentF
 	if err != nil {
 		return nil, nil //nolint:nilerr // a document that does not decode is not shown
 	}
-	f.commitments[id] = &commitmentFacts{c: c, doc: doc}
+	current, err := c.Document(dr)
+	if err != nil {
+		return nil, nil //nolint:nilerr // a revision that does not decode is not shown
+	}
+	lines, err := c.Lines(dr)
+	if err != nil {
+		return nil, nil //nolint:nilerr // as above
+	}
+	f.commitments[id] = &commitmentFacts{c: c, doc: doc, current: current, lines: lines}
 	return f.commitments[id], nil
 }
 
-// line returns line id of the commitment's draft document.
-func (c *commitmentFacts) line(id string) (draft.DocLine, bool) {
+// line returns line id of the commitment's draft document and what the commitment buys of it now.
+func (c *commitmentFacts) line(id string) (draft.DocLine, commitment.LineQuantity, bool) {
 	i := slices.IndexFunc(c.doc.Lines, func(x draft.DocLine) bool { return x.OrderLineID == id })
-	if i < 0 {
-		return draft.DocLine{}, false
+	q := slices.IndexFunc(c.lines, func(x commitment.LineQuantity) bool { return x.OrderLineID == id })
+	if i < 0 || q < 0 {
+		return draft.DocLine{}, commitment.LineQuantity{}, false
 	}
-	return c.doc.Lines[i], true
+	return c.doc.Lines[i], c.lines[q], true
+}
+
+// amounts returns what line id costs at the revision in force: its amounts in the document of the
+// last change, or of the draft ("0" for a line that revision does not buy).
+func (c *commitmentFacts) amounts(id string) (net, tax, gross string) {
+	i := slices.IndexFunc(c.current.Lines, func(x draft.DocLine) bool { return x.OrderLineID == id })
+	if i < 0 {
+		return "0", "0", "0"
+	}
+	l := c.current.Lines[i]
+	return l.NetMinor, l.TaxMinor, l.GrossMinor
 }
 
 // verified loads the commitment's deliveries and what their verified versions add up to by line.
@@ -297,11 +320,11 @@ func (f *deliveryFacts) deliveryLine(ctx context.Context, ref api.DeliveryLineRe
 	if err != nil || c == nil {
 		return api.DeliveryLine{}, nil, nil, false, err
 	}
-	dl, ok := c.line(ref.LineID)
+	dl, q, ok := c.line(ref.LineID)
 	if !ok {
 		return api.DeliveryLine{}, nil, nil, false, nil
 	}
-	out := api.DeliveryLine{Ref: ref, Status: v.Status, VerifiedVersion: d.VerifiedVersion, RowVersion: d.RowVersion, Line: commitmentLine(c.c, dl),
+	out := api.DeliveryLine{Ref: ref, Status: v.Status, VerifiedVersion: d.VerifiedVersion, RowVersion: d.RowVersion, Line: commitmentLine(c.c, dl, q),
 		ClaimedQuantity: text(l.Claimed), VerifiedQuantity: verifiedText(l), HandoverPlace: v.HandoverPlace, HandedOverAt: v.HandedOverAt,
 		Code: supplierdelivery.Code(v.Status)}
 	if dec := v.Decision; dec != nil && dec.Verify {
@@ -337,7 +360,8 @@ func (s Service) ResolveDeliveryLines(ctx context.Context, refs []api.DeliveryLi
 
 // ResolveSettlementSources answers PurchaseSettlementSource v1 (R31) lookups of STL in a PUR
 // transaction of its own: the delivery lines the caller sees, each with what its commitment line
-// buys in money (the sealed draft's amounts for the whole line), what is verified now for the
+// buys in money (the amounts for the whole line in the document of the commitment's revision in
+// force: its last change's, or the sealed draft's), what is verified now for the
 // commitment line over all its deliveries, and the delivery's evidence. A line is a settlement
 // source when its Code is "".
 func (s Service) ResolveSettlementSources(ctx context.Context, refs []api.DeliveryLineRef) (map[api.DeliveryLineRef]api.SettlementSource, error) {
@@ -358,9 +382,9 @@ func (s Service) ResolveSettlementSources(ctx context.Context, refs []api.Delive
 			if err = f.verified(ctx, c); err != nil {
 				return err
 			}
-			dl, _ := c.line(ref.LineID)
-			src := api.SettlementSource{DeliveryLine: line, Currency: c.doc.Currency, MinorUnits: c.doc.MinorUnits, LineNetMinor: dl.NetMinor,
-				LineTaxMinor: dl.TaxMinor, LineGrossMinor: dl.GrossMinor, LineVerifiedQuantity: text(c.sums[ref.LineID]),
+			net, tax, gross := c.amounts(ref.LineID)
+			src := api.SettlementSource{DeliveryLine: line, Currency: c.doc.Currency, MinorUnits: c.doc.MinorUnits, LineNetMinor: net,
+				LineTaxMinor: tax, LineGrossMinor: gross, LineVerifiedQuantity: text(c.sums[ref.LineID]),
 				Evidence: deliveryEvidenceView(v.Evidence), Files: deliveryFilesView(v.Files), VerificationEvidence: []api.Evidence{}}
 			if dec := v.Decision; dec != nil && dec.Verify {
 				src.VerificationEvidence = deliveryEvidenceView(dec.Evidence)
@@ -390,15 +414,16 @@ func (s Service) ResolvePurchaseLines(ctx context.Context, refs []api.Commitment
 			if c == nil {
 				continue
 			}
-			dl, ok := c.line(ref.OrderLineID)
+			dl, q, ok := c.line(ref.OrderLineID)
 			if !ok {
 				continue
 			}
 			if err = f.verified(ctx, c); err != nil {
 				return err
 			}
-			line := api.PurchaseLine{Line: commitmentLine(c.c, dl), Currency: c.doc.Currency, MinorUnits: c.doc.MinorUnits, NetMinor: dl.NetMinor,
-				TaxMinor: dl.TaxMinor, GrossMinor: dl.GrossMinor, VerifiedQuantity: text(c.sums[ref.OrderLineID]),
+			net, tax, gross := c.amounts(ref.OrderLineID)
+			line := api.PurchaseLine{Line: commitmentLine(c.c, dl, q), Currency: c.doc.Currency, MinorUnits: c.doc.MinorUnits, NetMinor: net,
+				TaxMinor: tax, GrossMinor: gross, VerifiedQuantity: text(c.sums[ref.OrderLineID]),
 				Deliveries: []api.PurchaseDelivery{}}
 			for _, x := range c.deliveries {
 				v := x.Current()

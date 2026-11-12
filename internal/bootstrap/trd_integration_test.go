@@ -38,6 +38,9 @@ type trdWorld struct {
 	snap                         cstapi.SnapshotReceipt
 	company, sale, template, seq polapi.ConfigRef
 	proof                        []trdapi.Evidence
+	// What order.activate's guards need, set up once on first use (trd_guards_integration_test.go).
+	cnx    *cnxWorld
+	credit *orderCredit
 }
 
 func newTrdWorld(t *testing.T) *trdWorld {

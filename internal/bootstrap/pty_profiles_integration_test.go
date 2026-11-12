@@ -35,8 +35,11 @@ func (w *world) staffParty(ctx context.Context, id string, roles []string, addre
 func (w *world) settlement(editor, reviewer context.Context) (payment, trade ptyapi.TermsRef) {
 	w.t.Helper()
 	win := newWindow()
-	p := w.configure(editor, reviewer, polapi.KindPaymentTerms, "payment", 0, win.from, time.Time{}, polapi.ConfigData{PaymentTerms: &polapi.PaymentTerms{
-		Name: "100 before shipment", Stages: []polapi.PaymentStage{{StageID: "all", Percent: "100", Trigger: polapi.TriggerBeforeShipment}}}}, true)
+	plan := &polapi.PaymentTerms{Name: "100 before shipment", Stages: []polapi.PaymentStage{{StageID: "all", Percent: "100", Trigger: polapi.TriggerBeforeShipment}}}
+	if p, ok := paymentPlans.Load(w.t); ok {
+		plan = p.(*polapi.PaymentTerms)
+	}
+	p := w.configure(editor, reviewer, polapi.KindPaymentTerms, "payment", 0, win.from, time.Time{}, polapi.ConfigData{PaymentTerms: plan}, true)
 	t := w.configure(editor, reviewer, polapi.KindTradeTerms, "FCA", 0, win.from, time.Time{}, polapi.ConfigData{TradeTerms: &polapi.TradeTerms{
 		Incoterm: "FCA", Edition: polapi.IncotermsEdition2020, NamedPlace: "TEST NAMED PLACE", ResponsibilityNote: "synthetic evidence only",
 		Delivery: polapi.Delivery{Kind: polapi.DeliveryFixedDate, Date: "2027-01-31"}}}, true)

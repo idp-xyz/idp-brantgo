@@ -17,7 +17,8 @@ const commitmentColumns = `commitment_id, status, row_version, draft_id, draft_h
 	currency, supply_valid_until, owner_actor_id, coalesce(owner_team_id, ''), requested_by_kind, requested_by_id, request_epoch,
 	requested_at, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, valid_until, decision_reason, acknowledgements,
 	revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, issued_by_kind, issued_by_id, issue_epoch, issued_at,
-	po_number, sequence_id, sequence_revision, sent_at, issue_evidence, issue_file_id, issue_file_sha256`
+	po_number, sequence_id, sequence_revision, sent_at, issue_evidence, issue_file_id, issue_file_sha256, revision, cancelled_by_kind,
+	cancelled_by_id, cancel_epoch, cancelled_at, cancel_reason, cancel_evidence`
 
 type ackDoc struct {
 	Kind        string `json:"kind"`
@@ -74,11 +75,23 @@ func scanCommitment(r row) (*commitment.Commitment, error) {
 	var iKind, iID, number, seqID, evidence, fileID, fileSHA *string
 	var iEpoch, seqRev *int64
 	var iAt, sentAt *time.Time
+	var cKind, cID, cReason, cEvidence *string
+	var cEpoch *int64
+	var cAt *time.Time
 	if err := r.Scan(&c.ID, &c.Status, &c.RowVersion, &c.DraftID, &c.DraftHash, &c.OrderID, &c.OrderRevision, &c.OrderHash, &c.SupplierID,
 		&c.Currency, &c.SupplyValidUntil, &c.OwnerActor, &c.OwnerTeam, &reqKind, &c.Requested.By.ID, &c.Requested.Epoch, &c.Requested.At,
 		&dKind, &dID, &dEpoch, &dAt, &decision, &validUntil, &dReason, &acks, &rKind, &rID, &rEpoch, &rAt, &rReason,
-		&iKind, &iID, &iEpoch, &iAt, &number, &seqID, &seqRev, &sentAt, &evidence, &fileID, &fileSHA); err != nil {
+		&iKind, &iID, &iEpoch, &iAt, &number, &seqID, &seqRev, &sentAt, &evidence, &fileID, &fileSHA, &c.Revision, &cKind, &cID, &cEpoch, &cAt,
+		&cReason, &cEvidence); err != nil {
 		return nil, err
+	}
+	if cKind != nil && cID != nil && cEpoch != nil && cAt != nil && cReason != nil && cEvidence != nil {
+		es, err := evidenceOf(*cEvidence)
+		if err != nil {
+			return nil, err
+		}
+		c.Cancellation = &commitment.Cancellation{Act: commitment.Act{By: kernel.ActorRef{Kind: kernel.ActorKind(*cKind), ID: *cID}, Epoch: *cEpoch,
+			At: kernel.Instant(*cAt), Reason: *cReason}, Evidence: es}
 	}
 	c.Stored = c.RowVersion
 	c.Requested.By.Kind = kernel.ActorKind(reqKind)
@@ -134,12 +147,105 @@ func LoadCommitment(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	if err != nil {
 		return nil, err
 	}
-	return c, confirmations(ctx, exec, scope, c)
+	if err = confirmations(ctx, exec, scope, c); err != nil {
+		return nil, err
+	}
+	return c, revisions(ctx, exec, scope, c)
+}
+
+// revisions loads c's revisions after the first, in order, with their lines in line order.
+func revisions(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c *commitment.Commitment) error {
+	if c.Revision <= 1 {
+		return nil
+	}
+	rows, err := exec.Query(ctx, `SELECT revision, kind, coalesce(change_id, ''), order_revision, order_hash, coalesce(document, ''),
+		coalesce(document_hash, ''), created_by_kind, created_by_id, created_epoch, created_at FROM brant_pur.purchase_commitment_revision
+		WHERE tenant_id = $1 AND company_id = $2 AND commitment_id = $3 ORDER BY revision`, string(scope.Tenant), string(scope.Company), c.ID)
+	if err != nil {
+		return err
+	}
+	c.Revisions, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (commitment.Revision, error) {
+		var x commitment.Revision
+		var doc, kind string
+		err := r.Scan(&x.Number, &x.Kind, &x.ChangeID, &x.OrderRevision, &x.OrderHash, &doc, &x.DocumentHash, &kind, &x.By.ID, &x.Epoch, &x.At)
+		x.By.Kind, x.At = kernel.ActorKind(kind), kernel.Instant(x.At)
+		if doc != "" {
+			x.Document = []byte(doc)
+		}
+		return x, err
+	})
+	if err != nil {
+		return err
+	}
+	lines, err := exec.Query(ctx, `SELECT l.revision, l.order_line_id, l.allocated_quantity::text, l.overbuy_quantity::text,
+		coalesce(to_char(l.supplier_date, 'YYYY-MM-DD'), '') FROM brant_pur.purchase_commitment_revision_line l
+		JOIN brant_pur.purchase_commitment c ON c.tenant_id = l.tenant_id AND c.company_id = l.company_id AND c.commitment_id = l.commitment_id
+		JOIN brant_pur.purchase_draft_line dl ON dl.tenant_id = c.tenant_id AND dl.company_id = c.company_id AND dl.draft_id = c.draft_id
+			AND dl.order_line_id = l.order_line_id
+		WHERE l.tenant_id = $1 AND l.company_id = $2 AND l.commitment_id = $3 ORDER BY l.revision, dl.line_no`,
+		string(scope.Tenant), string(scope.Company), c.ID)
+	if err != nil {
+		return err
+	}
+	defer lines.Close()
+	for lines.Next() {
+		var n int64
+		var q commitment.LineQuantity
+		var a, o string
+		if err = lines.Scan(&n, &q.OrderLineID, &a, &o, &q.SupplierDate); err != nil {
+			return err
+		}
+		if q.Allocated, err = quantity(a); err != nil {
+			return err
+		}
+		if q.Overbuy, err = quantity(o); err != nil {
+			return err
+		}
+		for i := range c.Revisions {
+			if c.Revisions[i].Number == n {
+				c.Revisions[i].Lines = append(c.Revisions[i].Lines, q)
+			}
+		}
+	}
+	return lines.Err()
+}
+
+func optDate(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// insertRevision stores revision r of commitment c with its lines.
+func insertRevision(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c *commitment.Commitment, r *commitment.Revision) error {
+	var doc *string
+	if r.Document != nil {
+		s := string(r.Document)
+		doc = &s
+	}
+	if _, err := exec.Exec(ctx, `INSERT INTO brant_pur.purchase_commitment_revision (tenant_id, company_id, commitment_id, revision, kind,
+		change_id, order_revision, order_hash, document, document_hash, line_count, created_by_kind, created_by_id, created_epoch, created_at)
+		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), $7, $8, $9, nullif($10, ''), $11, $12, $13, $14, $15)`,
+		string(scope.Tenant), string(scope.Company), c.ID, r.Number, r.Kind, r.ChangeID, r.OrderRevision, r.OrderHash, doc, r.DocumentHash,
+		len(r.Lines), string(r.By.Kind), r.By.ID, r.Epoch, r.At); err != nil {
+		return err
+	}
+	for _, l := range r.Lines {
+		if _, err := exec.Exec(ctx, `INSERT INTO brant_pur.purchase_commitment_revision_line (tenant_id, company_id, commitment_id, revision,
+			order_line_id, allocated_quantity, overbuy_quantity, purchase_quantity, supplier_date)
+			VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::numeric, $8::numeric, $9::date)`,
+			string(scope.Tenant), string(scope.Company), c.ID, r.Number, l.OrderLineID, decimalText(l.Allocated), decimalText(l.Overbuy),
+			decimalText(l.Purchased()), optDate(l.SupplierDate)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func confirmations(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c *commitment.Commitment) error {
-	rows, err := exec.Query(ctx, `SELECT commitment_version, result, received_at, coalesce(deviation, ''), coalesce(supplier_reference, ''),
-		evidence, recorded_by_kind, recorded_by_id, record_epoch, recorded_at FROM brant_pur.supplier_confirmation
+	rows, err := exec.Query(ctx, `SELECT commitment_version, commitment_revision, result, received_at, coalesce(deviation, ''),
+		coalesce(supplier_reference, ''), evidence, recorded_by_kind, recorded_by_id, record_epoch, recorded_at FROM brant_pur.supplier_confirmation
 		WHERE tenant_id = $1 AND company_id = $2 AND commitment_id = $3 ORDER BY commitment_version`,
 		string(scope.Tenant), string(scope.Company), c.ID)
 	if err != nil {
@@ -148,8 +254,8 @@ func confirmations(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	c.Confirmations, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (commitment.Confirmation, error) {
 		var f commitment.Confirmation
 		var evidence, kind string
-		if err := r.Scan(&f.Version, &f.Result, &f.ReceivedAt, &f.Deviation, &f.SupplierReference, &evidence, &kind, &f.By.ID, &f.Epoch,
-			&f.At); err != nil {
+		if err := r.Scan(&f.Version, &f.Revision, &f.Result, &f.ReceivedAt, &f.Deviation, &f.SupplierReference, &evidence, &kind, &f.By.ID,
+			&f.Epoch, &f.At); err != nil {
 			return f, err
 		}
 		f.By.Kind = kernel.ActorKind(kind)
@@ -180,17 +286,30 @@ func optText(s string) *string {
 	return &s
 }
 
-// SaveCommitment writes c's state, decision, revocation and issue if the stored row is still at the
-// version it was loaded at (ErrConflict otherwise), after inserting the confirmation recorded since.
+// SaveCommitment writes c's state, decision, revocation, issue, revision in force and cancellation if
+// the stored row is still at the version it was loaded at (ErrConflict otherwise), after inserting
+// the confirmation recorded since or the revision made since.
 func SaveCommitment(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c *commitment.Commitment, at time.Time) error {
 	if f := c.Fresh(); f != nil {
 		if _, err := exec.Exec(ctx, `INSERT INTO brant_pur.supplier_confirmation (tenant_id, company_id, commitment_id, commitment_version,
-			result, received_at, deviation, supplier_reference, evidence, recorded_by_kind, recorded_by_id, record_epoch, recorded_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-			string(scope.Tenant), string(scope.Company), c.ID, f.Version, f.Result, f.ReceivedAt, optText(f.Deviation), optText(f.SupplierReference),
-			evidenceText(f.Evidence), string(f.By.Kind), f.By.ID, f.Epoch, f.At); err != nil {
+			commitment_revision, result, received_at, deviation, supplier_reference, evidence, recorded_by_kind, recorded_by_id, record_epoch,
+			recorded_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			string(scope.Tenant), string(scope.Company), c.ID, f.Version, f.Revision, f.Result, f.ReceivedAt, optText(f.Deviation),
+			optText(f.SupplierReference), evidenceText(f.Evidence), string(f.By.Kind), f.By.ID, f.Epoch, f.At); err != nil {
 			return err
 		}
+	}
+	if r := c.FreshRevision(); r != nil {
+		if err := insertRevision(ctx, exec, scope, c, r); err != nil {
+			return err
+		}
+	}
+	var cKind, cID, cReason, cEvidence *string
+	var cEpoch *int64
+	var cAt *time.Time
+	if x := c.Cancellation; x != nil {
+		kind, e := string(x.By.Kind), evidenceText(x.Evidence)
+		cKind, cID, cEpoch, cAt, cReason, cEvidence = &kind, &x.By.ID, &x.Epoch, &x.At, &x.Reason, &e
 	}
 	var dKind, dID, decision, dReason, acks *string
 	var dEpoch *int64
@@ -224,10 +343,12 @@ func SaveCommitment(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 		decide_epoch = $8, decided_at = $9, decision = $10, valid_until = $11, decision_reason = $12, acknowledgements = $13,
 		revoked_by_kind = $14, revoked_by_id = $15, revoke_epoch = $16, revoked_at = $17, revoke_reason = $18, issued_by_kind = $19,
 		issued_by_id = $20, issue_epoch = $21, issued_at = $22, po_number = $23, sequence_id = $24, sequence_revision = $25, sent_at = $26,
-		issue_evidence = $27, issue_file_id = $28, issue_file_sha256 = $29, updated_at = $30
+		issue_evidence = $27, issue_file_id = $28, issue_file_sha256 = $29, updated_at = $30, revision = $32, cancelled_by_kind = $33,
+		cancelled_by_id = $34, cancel_epoch = $35, cancelled_at = $36, cancel_reason = $37, cancel_evidence = $38
 		WHERE tenant_id = $1 AND company_id = $2 AND commitment_id = $3 AND row_version = $31`,
 		string(scope.Tenant), string(scope.Company), c.ID, c.Status, c.RowVersion, dKind, dID, dEpoch, dAt, decision, validUntil, dReason, acks,
-		rKind, rID, rEpoch, rAt, rReason, iKind, iID, iEpoch, iAt, number, seqID, seqRev, sentAt, evidence, fileID, fileSHA, at, c.Stored)
+		rKind, rID, rEpoch, rAt, rReason, iKind, iID, iEpoch, iAt, number, seqID, seqRev, sentAt, evidence, fileID, fileSHA, at, c.Stored,
+		c.Revision, cKind, cID, cEpoch, cAt, cReason, cEvidence)
 	if err == nil && tag.RowsAffected() != 1 {
 		err = ErrConflict
 	}

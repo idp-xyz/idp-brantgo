@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
+	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -157,6 +158,8 @@ func TestOrderSnapshotsServeDraftsAndActiveOrders(t *testing.T) {
 // shipment): the active order still states FCA and its one stage paid before shipment. The customer
 // moves to those payment terms by an amendment: revision 2's plan is 288.00 + 672.00, of which
 // 672.00 is on credit; the trade terms stay revision 1's (FCA). ActiveOrderRef v1 states the same.
+// Before it is applied the approved amendment's revision 2 is stated as proposed (S5 D-9, B4), and
+// apply needs a credit reservation of it (CREDIT_RESERVATION_REQUIRED).
 func TestOrderSnapshotsAreWhatTRDSealed(t *testing.T) {
 	q := newOrderWorld(t)
 	o := q.activeOrder("quote.1")
@@ -191,14 +194,29 @@ func TestOrderSnapshotsAreWhatTRDSealed(t *testing.T) {
 		AmendmentID: "amendment.pay", ExpectedVersion: s.RowVersion, AmendmentHash: s.AmendmentHash, Decision: trdapi.DecisionApprove,
 		Reason: "客户书面确认新付款条件"})
 	q.must(err)
+	// S5 D-9 (unit B4): the approved amendment proposes revision 2 with 672.00 on credit; apply
+	// refuses until STL holds a reservation of that revision, and then produces exactly it.
+	want := []trdapi.PaymentStage{
+		{StageID: "P1", Trigger: trdapi.TriggerOrderConfirmed, Percent: "30", AmountMinor: "28800"},
+		{StageID: "P2", Trigger: trdapi.TriggerAfterShipment, Days: 30, Percent: "70", AmountMinor: "67200", OnCredit: true}}
+	proposed := q.proposed(o.ObjectID, "amendment.pay")
+	if proposed.Binding.OrderRevision != 2 || proposed.AmendmentHash != s.AmendmentHash || proposed.AmendmentStatus != trdapi.AmendmentApproved ||
+		!reflect.DeepEqual(proposed.Stages, want) || proposed.CreditPortionMinor != "67200" || proposed.PayableMinor != "96000" {
+		t.Fatalf("the proposed revision %+v", proposed)
+	}
+	_, err = q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(o.ObjectID, "amendment.pay", dec.RowVersion))
+	if code(err) != stlapi.CodeCreditReservationRequired || path(err) != "/args/amendment_id" {
+		t.Fatalf("apply without a reservation: %v", err)
+	}
+	q.reserveCredit(proposed.Binding)
 	_, err = q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(o.ObjectID, "amendment.pay", dec.RowVersion))
 	q.must(err)
 
 	v2 := q.getOrder(o.ObjectID)
 	f := q.snapshots(q.author, o.ObjectID)[o.ObjectID]
-	want := []trdapi.PaymentStage{
-		{StageID: "P1", Trigger: trdapi.TriggerOrderConfirmed, Percent: "30", AmountMinor: "28800"},
-		{StageID: "P2", Trigger: trdapi.TriggerAfterShipment, Days: 30, Percent: "70", AmountMinor: "67200", OnCredit: true}}
+	if f.Binding != proposed.Binding || len(f.Proposed) != 0 {
+		t.Fatalf("revision 2 %+v is not the one proposed %+v", f.Binding, proposed.Binding)
+	}
 	if f.Check("/x") != nil || f.Binding != (trdapi.OrderBinding{OrderID: o.ObjectID, OrderRevision: 2, OrderHash: v2.OrderHash}) ||
 		f.RowVersion != v2.RowVersion || f.PaymentTerms != tref(pay2) || !reflect.DeepEqual(f.Stages, want) || f.CreditPortionMinor != "67200" ||
 		f.TradeTerms != before.TradeTerms || f.PayableMinor != "96000" || !reflect.DeepEqual(f.Addresses, before.Addresses) ||

@@ -1,7 +1,8 @@
 // Package cnx assembles the CNX bounded context (China export professional collaboration, CN-M01).
 // S5 A7 delivers its first aggregate, the trade compliance check of a sales order revision, and
-// TradeComplianceGuard v1; declarations, purchase invoices, tax refund cases, document bundles,
-// export licences and certificates follow in later S5 units. Code outside CNX uses it through
+// TradeComplianceGuard v1; S5 B5 the export licence with its usage ledger and ExportLicenseGuard
+// v1; declarations, purchase invoices, tax refund cases, document bundles and certificates follow
+// in later S5 units. Code outside CNX uses it through
 // package api; everything under internal/ is private to CNX.
 package cnx
 
@@ -28,15 +29,18 @@ type Module struct {
 }
 
 var (
-	_ api.Commands   = (*Module)(nil)
-	_ api.Queries    = (*Module)(nil)
-	_ api.Auditor    = (*Module)(nil)
-	_ api.Reconciler = (*Module)(nil)
+	_ api.Commands        = (*Module)(nil)
+	_ api.Queries         = (*Module)(nil)
+	_ api.LicenseCommands = (*Module)(nil)
+	_ api.LicenseQueries  = (*Module)(nil)
+	_ api.Auditor         = (*Module)(nil)
+	_ api.Reconciler      = (*Module)(nil)
 )
 
 // Upstream are the contracts of CNX's upstreams: TRD's orders (R46), PTY's address countries
-// (R77), CAT's declaration profiles (R39) and reference data's country programmes through CNX's
-// ports, POL's configurations (R50) and EVD's sources (R54).
+// (R77), CAT's declaration profiles (R39), FUL's shipments and export lots (R36) and reference
+// data's country programmes through CNX's ports, POL's configurations (R50) and EVD's sources and
+// files (R54).
 type Upstream = application.Upstream
 
 // CNX's ports and what passes through them.
@@ -56,7 +60,21 @@ type (
 	ProgrammeAnswer = application.ProgrammeAnswer
 	ListVersion     = tcc.ListVersion
 	ProgrammeHit    = tcc.ProgrammeHit
+	Exports         = application.Exports
+	ExportRef       = application.ExportRef
+	Export          = application.Export
+	ExportLine      = application.ExportLine
 )
+
+// FUL's states an export licence allocation needs.
+const (
+	ShipmentPrepared    = application.ShipmentPrepared
+	ExportLotRegistered = application.ExportLotRegistered
+)
+
+// ExportsNotWired is CNX's port to FUL's shipments and export lots (R36) until FUL is merged:
+// export_license.allocate answers DEPENDENCY_NOT_SUPPORTED.
+func ExportsNotWired() Exports { return upstream.FULNotWired{} }
 
 // TRD's order states CNX evaluates, and the classifications of the profiles CAT answers.
 const (
@@ -88,7 +106,7 @@ func CATProfiles(profiles catapi.DeclarationProfileLookups) Profiles {
 // New wires CNX to db, a transaction owner that belongs to CNX alone, and to its upstreams.
 func New(db *bentopg.DB, u Upstream) (*Module, error) {
 	if !u.Complete() {
-		return nil, errors.New("cnx: module needs the ports to TRD, PTY, CAT and reference data and the lookups of POL and EVD")
+		return nil, errors.New("cnx: module needs the ports to TRD, PTY, CAT, FUL and reference data and the lookups of POL and EVD")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {

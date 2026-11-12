@@ -213,6 +213,7 @@ func TestRefusedOrderActivationDoesNotConsumeItsKey(t *testing.T) {
 	orderReviewer := q.regrant("order.reviewer", "company", allPermissions)
 	d, err := q.c.TRD.DecideOrderReview(orderReviewer, q.decideCmd(o.ObjectID, r.RowVersion, "review.1", o.OrderHash))
 	q.must(err)
+	q.readyToActivate(o.ObjectID)
 	activate := q.activateOrderCmd(o.ObjectID, d.RowVersion, "review.1")
 	q.regrant("reviewer", "company", without(allPermissions, "quote.review.decide"))
 	_, err = q.c.TRD.ActivateOrder(q.author, activate)

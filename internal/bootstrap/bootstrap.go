@@ -236,8 +236,10 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
+		// STL's CreditGuard v1 (R57) and CNX's TradeComplianceGuard v1 (R58) are guard functions TRD
+		// runs with its own executor: TRD is composed before STL and CNX, which read its orders.
 		c.TRD, err = trd.New(db, trd.Upstream{Sources: c.EVD, Parties: c.PTY, Profiles: c.PTY, Skus: c.CAT, Configs: c.POL, Numbers: c.POL,
-			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST})
+			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST, Credit: trd.STLCreditGuard(), TradeCompliance: trd.CNXTradeComplianceGuard()})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -266,16 +268,17 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	if err == nil {
 		// CNX after PUR (S5: QLT, STL, CNX, FUL).
 		c.CNX, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(c.TRD), Countries: cnx.PTYCountries(c.PTY), Profiles: cnx.CATProfiles(c.CAT),
-			Programmes: cnx.REFProgrammes(c.REF), Configs: c.POL, Sources: c.EVD})
+			Programmes: cnx.REFProgrammes(c.REF), Configs: c.POL, Sources: c.EVD,
+			// FUL is not merged yet: export licence allocations answer DEPENDENCY_NOT_SUPPORTED (S5 B5).
+			Exports: cnx.ExportsNotWired()})
 	}
 	if err == nil {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		// FUL last of S5. PUR publishes no supplier deliveries yet (S5 unit B3): FUL's port to them
-		// answers DEPENDENCY_NOT_SUPPORTED. The CNX and STL guards and FUL's commercial release are
-		// extension points until S5 unit C1, recorded as not wired.
-		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.DeliveriesNotWired(),
+		// FUL last of S5. The CNX and STL guards and FUL's commercial release are extension points
+		// until S5 unit C1, recorded as not wired.
+		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.PURDeliveries(c.PUR),
 			Screening: ful.PTYScreening(), Sources: c.EVD})
 	}
 	if err != nil {

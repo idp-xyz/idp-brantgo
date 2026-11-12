@@ -2,7 +2,8 @@
 // first CNX unit delivers the trade compliance check of a sales order revision (WBS S5-13; tactical
 // model CNX-AGG-TradeComplianceCheck, SM-CNX-COMPLIANCE, CNX-INV-001; TRD-INV-023; ADR-BR-014,
 // ADR-BR-017; S5 decisions D-8, D-9): country embargoes, sanctions programmes and export control.
-// Declarations, purchase invoices, tax refund cases, document bundles, export licences and
+// S5 B5 adds export licences and their usage ledger with ExportLicenseGuard v1 (license.go,
+// license_guard.go). Declarations, purchase invoices, tax refund cases, document bundles and
 // certificates come with later S5 units. Brant records the check and the conclusion an authorized
 // compliance officer gives; it gives no legal opinion, and AI or list services only produce
 // candidates.

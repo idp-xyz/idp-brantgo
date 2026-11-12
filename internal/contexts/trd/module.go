@@ -9,6 +9,9 @@
 // order an accepted revision converts into, its review and activation (ActiveOrderRef v1 for PUR),
 // its amendments and end, and the S/C and PI of its revisions with their signed copies; and, for
 // STL, CNX and FUL, OrderCommercialSnapshot v1 of drafts and active orders (OrderSnapshotLookups).
+// Since S5 an order activates only on a clear trade compliance conclusion of CNX and, when its
+// payment plan has a stage due after shipment or invoice, a credit reservation of STL; an amendment
+// that asks for more credit applies only on a reservation for the revision it produces.
 // Code outside TRD uses it through package api; everything under internal/ is private to TRD.
 package trd
 
@@ -24,6 +27,7 @@ import (
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/guards"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/application"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -52,7 +56,8 @@ var (
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,
 // TradingProfileRef and AddressRoleRef v1, R13), CAT (SkuRef v1, R14), POL (ConfigRef v1 and
 // NumberIssue v1, R15), INQ (RfqRef v1, R12) and CST (CostSnapshotRef v1 and the costing context it
-// froze, R11).
+// froze, R11); and the guards of STL (CreditGuard v1, R57) and CNX (TradeComplianceGuard v1, R58)
+// that order.activate and order.amendment.apply call inside TRD's transaction.
 type Upstream struct {
 	Sources   evdapi.Queries
 	Parties   ptyapi.Queries
@@ -63,15 +68,44 @@ type Upstream struct {
 	Rfqs      inqapi.RfqLookups
 	Snapshots cstapi.SnapshotLookups
 	Contexts  cstapi.Lookups
+	// Credit is STL's CreditGuard v1 (STLCreditGuard) and TradeCompliance CNX's
+	// TradeComplianceGuard v1 (CNXTradeComplianceGuard). Both are guard functions run with TRD's
+	// own executor, so TRD is composed before STL and CNX exist as modules (S5 decision D-2).
+	Credit          CreditGuard
+	TradeCompliance TradeComplianceGuard
 }
 
-// New wires TRD to db, a transaction owner that belongs to TRD alone, and to the lookups of its
-// upstream contexts. The freeze calls the guard functions of CAT, CST, INQ, POL and PTY itself and
-// computes the quote on the server (application.ServerCalculator, WBS S3-02).
+// The guards of STL and CNX as TRD calls them, and what passes through them. A composition (or a
+// test) may wrap one, as it may any port.
+type (
+	CreditGuard          = application.CreditGuard
+	CreditQuery          = application.CreditQuery
+	CreditAnswer         = application.CreditAnswer
+	TradeComplianceGuard = application.TradeComplianceGuard
+	ComplianceAnswer     = application.ComplianceAnswer
+	OrderRevisionRef     = application.OrderRevisionRef
+)
+
+// STLCreditGuard is STL's CreditGuard v1 (Context Map R57, TRD-INV-022) on STL's published
+// contract: brant_stl.guard_credit_reservation_v1, called with TRD's executor.
+func STLCreditGuard() CreditGuard { return guards.STLCredit }
+
+// CNXTradeComplianceGuard is CNX's TradeComplianceGuard v1 (R58, TRD-INV-023) on CNX's published
+// contract: brant_cnx.guard_trade_compliance_v1, called with TRD's executor.
+func CNXTradeComplianceGuard() TradeComplianceGuard { return guards.CNXTradeCompliance }
+
+// New wires TRD to db, a transaction owner that belongs to TRD alone, to the lookups of its
+// upstream contexts and to the guards of STL and CNX. The freeze calls the guard functions of CAT,
+// CST, INQ, POL and PTY itself and computes the quote on the server (application.ServerCalculator,
+// WBS S3-02). A TRD without the credit or the trade compliance guard is refused: an order would
+// activate with a recorded gap where TRD-INV-022 and TRD-INV-023 ask for a verdict.
 func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	if up.Sources == nil || up.Parties == nil || up.Profiles == nil || up.Skus == nil || up.Configs == nil || up.Numbers == nil ||
 		up.Rfqs == nil || up.Snapshots == nil || up.Contexts == nil {
 		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL, INQ and CST and POL's number.issue")
+	}
+	if up.Credit == nil || up.TradeCompliance == nil {
+		return nil, errors.New("trd: module needs STL's CreditGuard and CNX's TradeComplianceGuard")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {
@@ -83,6 +117,7 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	}
 	clock := bento.SystemClock{}
 	return &Module{application.Service{Clock: clock, Calculator: application.ServerCalculator{},
+		Orders: application.OrderGuards{Credit: up.Credit, TradeCompliance: up.TradeCompliance},
 		Upstream: application.Upstream{Sources: up.Sources, Parties: up.Parties, Profiles: up.Profiles, Skus: up.Skus, Configs: up.Configs,
 			Numbers: up.Numbers, Rfqs: up.Rfqs, Snapshots: up.Snapshots, Contexts: up.Contexts},
 		Ledger: &action.Ledger{

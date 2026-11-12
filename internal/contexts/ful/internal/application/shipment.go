@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -71,9 +70,6 @@ func (h *prepareCommand) Prepare(ctx context.Context) error {
 		h.releases[r.Ref.ReleaseID] = releaseFact(r)
 	}
 	lines, err := h.s.Upstream.Deliveries.ResolveDeliveryLines(ctx, refs)
-	if errors.Is(err, ErrDeliveriesNotWired) {
-		return deliveriesNotWired("/args/lines/0/supplier_delivery")
-	}
 	if err != nil {
 		return err
 	}

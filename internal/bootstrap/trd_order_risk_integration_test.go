@@ -65,6 +65,7 @@ func TestOrderActivatesAfterTheQuoteExpiredOnATimelyContract(t *testing.T) {
 	q.want(err, kernel.CodeReferenceInvalid)
 	d, err := q.c.TRD.DecideOrderReview(q.reviewer, q.decideCmd("order.1", r.RowVersion, "review.1", o.OrderHash, ack(risks[0])))
 	q.must(err)
+	q.readyToActivate("order.1")
 	if c, err := q.c.TRD.CheckOrder(q.author, "order.1", "review.1"); err != nil || !c.Activatable || len(c.Unacknowledged) != 0 {
 		t.Fatalf("checked %+v %v", c, err)
 	}
@@ -192,6 +193,7 @@ func TestUpstreamChangesAfterApprovalAreRisksToAcknowledge(t *testing.T) {
 	}
 	dw, err := w.c.TRD.DecideOrderReview(w.reviewer, w.decideCmd(o.ObjectID, r1.RowVersion, "review.1", o.OrderHash, ack(found[0]), ack(found[1])))
 	w.must(err)
+	w.readyToActivate(o.ObjectID)
 	_, err = w.c.TRD.ActivateOrder(w.author, w.activateOrderCmd(o.ObjectID, dw.RowVersion, "review.1"))
 	w.want(err, ptyapi.CodePartyScreeningNotClear)
 
@@ -233,6 +235,7 @@ func TestUpstreamChangesAfterApprovalAreRisksToAcknowledge(t *testing.T) {
 	y.want(err, trdapi.CodeOrderRiskUnacknowledged)
 	dy, err := y.c.TRD.DecideOrderReview(y.reviewer, y.decideCmd(oy.ObjectID, ry.RowVersion, "review.1", oy.OrderHash, acks...))
 	y.must(err)
+	y.readyToActivate(oy.ObjectID)
 	if _, err = y.c.TRD.ActivateOrder(y.author, y.activateOrderCmd(oy.ObjectID, dy.RowVersion, "review.1")); err != nil {
 		t.Fatalf("activation acknowledging the retired pricing policy %+v: %v", found, err)
 	}
