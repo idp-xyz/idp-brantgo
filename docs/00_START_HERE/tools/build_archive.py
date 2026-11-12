@@ -294,7 +294,8 @@ def sm_actors():
 def command_rows():
     actors = sm_actors()
     rows = []
-    for c in CM["contexts"]:
+    # Context commands, then the commands of non-context owners (Context Map platformCommands, such as internal/ai).
+    for c in CM["contexts"] + CM.get("platformCommands", []):
         for cmd in c["commands"]:
             if "（查询）" in cmd:
                 continue
@@ -1385,7 +1386,7 @@ def validate(pages: list[str]) -> list[dict]:
           [e["permission"] for e in ROLES["exclusivePermissions"] if [t["code"] for t in ROLES["templates"] if e["permission"] in t["permissions"]] != [e["template"]]])
     check("WBS 阶段均已定义", [t["id"] for t in WBS["tasks"] if t["phase"] not in {p["id"] for p in WBS["phases"]}])
     # cross-document semantics
-    cm_cmds = {cmd for c in CM["contexts"] for cmd in c["commands"]}
+    cm_cmds = {cmd for c in CM["contexts"] + CM.get("platformCommands", []) for cmd in c["commands"]}
     td_cmds = {cmd for c in TD["contexts"] for g in c["aggregates"] for cmd in g["commands"]}
     check("人工专属命令均已登记为上下文命令", sorted(HUMAN_ONLY - cm_cmds - td_cmds), f"{len(HUMAN_ONLY)} 条人工专属命令")
     acts = sm_actors()

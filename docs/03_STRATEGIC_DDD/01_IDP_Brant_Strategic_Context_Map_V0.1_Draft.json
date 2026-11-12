@@ -369,7 +369,9 @@
         "order.amendment.apply",
         "order.amendment.withdraw",
         "order.document.generate",
-        "order.document.record_signed"
+        "order.document.record_signed",
+        "object_control.enter_manual",
+        "object_control.handoff"
       ],
       "facts": [
         "QuoteFrozen",
@@ -786,19 +788,29 @@
         "task.handoff",
         "task.resume",
         "task.cancel",
-        "goal.verify"
+        "goal.verify",
+        "task.wait",
+        "task.verify",
+        "task.pause",
+        "task.close_unfulfilled",
+        "task.fail",
+        "task.finish_stop",
+        "task.bind_object",
+        "action.record_attempt",
+        "action.reconcile"
       ],
       "facts": [
         "TaskCreated",
         "TaskControlChanged",
         "TaskCompleted",
-        "TaskClosedUnfulfilled"
+        "TaskClosedUnfulfilled",
+        "ActionReconciled"
       ],
       "invariants": [
         "UL-INV-18",
         "UL-INV-19"
       ],
-      "boundary": "任务状态不替代报价、订单等业务事实；根级对象控制绑定属于 TRD 的 QuoteRoot；AI 能力网关、委托策略与执行回执属于 internal/ai，不在本上下文。",
+      "boundary": "任务状态不替代报价、订单等业务事实；根级对象控制绑定属于 TRD 的 QuoteRoot；AI 能力网关、委托策略与执行回执属于 internal/ai，不在本上下文。任务步骤只经 internal/ai/execution 携带 TSK 签发的控制声明进入 TRD；TRD 的停止、转人工、交回与释放只接受绑定任务的控制声明，因此只经 TSK 执行（S4 D-2、D-4）。",
       "decision": "Brant 基线规定 ai.task 拥有任务语义；Cargo 标准规定 AI 能力层不是限界上下文。本稿把与驱动方式无关的业务任务定为上下文，AI 专属能力仍放 internal/ai。见 ADR-BR-003。",
       "legacy": "Q01 旧包 store.py take_control／verify_and_complete；T03 t03_object_control（bind／stop／unbind）",
       "stage": "S4",
@@ -1078,10 +1090,10 @@
       "frm": "TSK",
       "to": "TRD",
       "pattern": "Partnership（受控命令）",
-      "fact": "对象控制绑定、停止与释放",
-      "contract": "ObjectControl commands v1",
+      "fact": "对象控制绑定、停止、转人工、交回与释放",
+      "contract": "ObjectControl commands v1（控制声明只由 TSK 经 internal/ai/execution 设置；停止、转人工、交回与释放须携带绑定任务的声明）",
       "authority": "TRD（绑定状态）／TSK（任务状态）",
-      "risk": "省略 task_id 绕过服务端绑定",
+      "risk": "省略 task_id 绕过服务端绑定；绕过 TSK 直接释放仍有在途结果的根",
       "contractStatus": "DESIGN",
       "guardLock": false
     },
@@ -1090,8 +1102,8 @@
       "frm": "TRD",
       "to": "TSK",
       "pattern": "OHS / Published Language",
-      "fact": "quote_ready 与 order_active 目标核验查询及事实事件",
-      "contract": "GoalReadiness v1、TRD 集成事件 v1",
+      "fact": "quote_ready 与 order_active 目标核验查询、动作对账及事实事件",
+      "contract": "GoalReadiness v1、ActionReconciliation v1、TRD 集成事件 v1",
       "authority": "TRD",
       "risk": "以模型自述代替权威记录核验",
       "contractStatus": "DESIGN",
@@ -1648,6 +1660,81 @@
       "risk": "核价人无权读取或来源已被否认仍作为核价证据",
       "contractStatus": "DESIGN",
       "guardLock": false
+    },
+    {
+      "id": "R65",
+      "frm": "TRD",
+      "to": "EVD",
+      "pattern": "Published Language（事件）",
+      "fact": "正式报价与订单文档的文件登记（QuoteActivated、QuoteReplaced、OrderDocumentGenerated）",
+      "contract": "TRD 集成事件 v1、FormalDocument 读取",
+      "authority": "TRD（文档字节与绑定）／EVD（文件登记）",
+      "risk": "EVD 登记的文件与 TRD 封存的字节不一致",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R66",
+      "frm": "EVD",
+      "to": "TSK",
+      "pattern": "OHS",
+      "fact": "任务动作的提交结果对账（按命令、幂等键与请求哈希）",
+      "contract": "ActionReconciliation v1",
+      "authority": "EVD（动作账本）",
+      "risk": "以模型记忆或重新执行代替对账",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R67",
+      "frm": "INQ",
+      "to": "TSK",
+      "pattern": "OHS",
+      "fact": "任务动作的提交结果对账（按命令、幂等键与请求哈希）",
+      "contract": "ActionReconciliation v1",
+      "authority": "INQ（动作账本）",
+      "risk": "以模型记忆或重新执行代替对账",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R68",
+      "frm": "SUP",
+      "to": "TSK",
+      "pattern": "OHS",
+      "fact": "任务动作的提交结果对账（按命令、幂等键与请求哈希）",
+      "contract": "ActionReconciliation v1",
+      "authority": "SUP（动作账本）",
+      "risk": "以模型记忆或重新执行代替对账",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R69",
+      "frm": "CST",
+      "to": "TSK",
+      "pattern": "OHS",
+      "fact": "任务动作的提交结果对账（按命令、幂等键与请求哈希）",
+      "contract": "ActionReconciliation v1",
+      "authority": "CST（动作账本）",
+      "risk": "以模型记忆或重新执行代替对账",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    }
+  ],
+  "platformCommands": [
+    {
+      "id": "AI",
+      "package": "internal/ai（policy、approvalgrant）",
+      "schema": "brant_ai",
+      "stage": "S4",
+      "commands": [
+        "ai.delegation.grant",
+        "ai.delegation.revoke",
+        "ai.approval_grant.issue",
+        "ai.approval_grant.revoke"
+      ],
+      "note": "人工专属：任务发起人把能力委托给 AI 执行身份（范围、自治级别、到期），或为一次具体调用签发审批凭证（租户、公司、命令、请求哈希、对象与版本、到期、单次使用）。不是报价批准、订单审批或采购承诺审批。"
     }
   ],
   "externalBoundaries": [
@@ -1659,18 +1746,25 @@
       "boundary": "Brant 维护本地授权投影与 authority_epoch，不宣称与外部 SSO 跨系统原子一致。"
     },
     {
+      "src": "模型服务（ModelProfile 登记；S4 为本机 OpenAI 兼容服务）",
+      "target": "internal/ai",
+      "pattern": "Adapter（ModelPort）",
+      "rule": "模型只经 ModelPort 调用；输出是候选与工具调用请求，经 gateway 严格解码、能力登记与委托校验后才进入 api 命令。",
+      "boundary": "模型不拥有业务事实或权限；模型自述不能宣告完成。"
+    },
+    {
       "src": "EER（AI 执行运行时候选）",
       "target": "internal/ai",
       "pattern": "ACL / Adapter",
       "rule": "模型调用、步骤组织与检查点可由 EER 承担；业务命令仍经 Brant 应用服务。",
-      "boundary": "EER 不拥有报价、订单或账款真值。"
+      "boundary": "EER 不拥有报价、订单或账款真值。S4 在本机 TELOS 平台实测接入（按公开 API 手写客户端，不复制 EER 代码与契约文件）。"
     },
     {
       "src": "BIP（交换与渠道）",
       "target": "internal/ai／EVD",
       "pattern": "ACL",
       "rule": "邮件与外部交换只产生来源与外部结果引用；发送需独立授权与 operation_id。",
-      "boundary": "BIP 承担交换，不能替代核实。"
+      "boundary": "BIP 承担交换，不能替代核实。S4 无可用接口：只交付端口与人工发送节点，unknown 以替身测试。"
     },
     {
       "src": "CMI / MCP / Workspace",
@@ -2510,6 +2604,17 @@
       "invariant": "保存来源、版本、导入时间与哈希；新版本触发复筛",
       "forbidden": "手工编辑名单条目",
       "priority": "P1"
+    },
+    {
+      "id": "MD-48",
+      "fact": "AI 委托、审批凭证与执行证据（模型调用、用量与成本、执行包）",
+      "classification": "应用控制",
+      "fact_authority": "internal/ai",
+      "write_owner": "internal/ai（brant_ai）",
+      "consumers": "TSK",
+      "invariant": "委托与凭证绑定租户、公司、命令、请求哈希、对象版本与到期时间，凭证单次使用；执行证据只保存引用、哈希、用量与成本",
+      "forbidden": "以模型输出或请求中自报的 grant、scope 取得权限",
+      "priority": "P0"
     }
   ],
   "counts": {}

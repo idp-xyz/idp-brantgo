@@ -1,5 +1,5 @@
 {
-  "note": "错误码从 Python V0.50 源码中的字符串常量提取并按类别整理；HTTP 状态只是传输分类，业务处理以错误码为准。未出现在 Python 中的设计码：CONTROL_EPOCH_STALE（业务核心设计第 11 章），以及 05 阶段战术模型新增规则引用的错误码（如 ACCEPTANCE_LATE、ORDER_RISK_UNACKNOWLEDGED、PURCHASE_ALLOCATION_EXCEEDED、COMMERCIAL_RELEASE_BLOCKED）。",
+  "note": "错误码从 Python V0.50 源码中的字符串常量提取并按类别整理；HTTP 状态只是传输分类，业务处理以错误码为准。未出现在 Python 中的设计码：CONTROL_EPOCH_STALE（业务核心设计第 11 章），以及 05 阶段战术模型新增规则引用的错误码（如 ACCEPTANCE_LATE、ORDER_RISK_UNACKNOWLEDGED、PURCHASE_ALLOCATION_EXCEEDED、COMMERCIAL_RELEASE_BLOCKED），以及 S4 负责人决定（2026-11-12）引入的任务与 AI 码（产品基线第 18.2 节与 Q01 V0.1 验证包，如 CONTROL_MODE_MISMATCH、REQUIRED_CHECK_UNSATISFIED、BUDGET_EXHAUSTED）。",
   "columns": ["code", "category", "http", "retryable", "contexts", "note"],
   "codes": [
     ["UNSUPPORTED_CONTRACT", "契约与传输", 400, "否", "ALL", "契约版本或命令未登记"],
@@ -144,6 +144,20 @@
     ["SUPPLIER_DELIVERY_EXCEEDED", "采购", 409, "否", "PUR", "累计核实交付超过承诺量与获批容差"],
     ["SUPPLIER_DELIVERY_INSUFFICIENT", "履约与合规", 409, "否", "FUL", "直发出运量超过已核实的供应商交付量"],
     ["CREDIT_OVERDUE_EXCEEDED", "履约与合规", 409, "否", "STL", "最早逾期应收超过信用政策的容忍天数，须信用决定"],
-    ["CREDIT_DECISION_NOT_AUTHORIZED", "授权", 403, "否", "STL", "审批人金额层级不足，或为该客户的销售经办／申请人"]
+    ["CREDIT_DECISION_NOT_AUTHORIZED", "授权", 403, "否", "STL", "审批人金额层级不足，或为该客户的销售经办／申请人"],
+    ["CONTROL_MODE_MISMATCH", "并发与幂等", 409, "否", "TRD／TSK", "控制模式不接受该执行者：manual 只接受携带当前声明的人工写入（Q01 V0.1 码）"],
+    ["COST_SOURCE_DENIED", "报价", 422, "否", "TRD", "成本快照的来源已被否认：生效修订登记风险暂停（WF-03）"],
+    ["ORDER_MISSING", "订单", 422, "否", "TRD／TSK", "order_active 核验未找到报价根 full_v1 的订单（Q01 V0.1 码）"],
+    ["GOAL_UNSUPPORTED", "任务与 AI", 422, "否", "TSK", "目标代码未登记（P0 只支持 quote_ready、order_active）"],
+    ["REQUIRED_CHECK_UNSATISFIED", "任务与 AI", 422, "否", "TSK／TRD", "必需断言未满足；任务不得 completed，回到等待并记录未满足项"],
+    ["REQUIRED_CHECK_UNKNOWN", "任务与 AI", 422, "待资料后重试", "TSK／TRD", "必需断言资料不足或核验不可用；不得当作通过"],
+    ["EXTERNAL_RESULT_UNKNOWN", "任务与 AI", 409, "对账后重试", "TSK／ai", "有 submitted／unknown 动作未对账；先对账，不把超时当未发生"],
+    ["EXECUTION_BUNDLE_INCOMPATIBLE", "任务与 AI", 409, "否", "TSK／ai", "持久化的执行包与当前应用、契约或配置版本不兼容；暂停或显式迁移"],
+    ["GRANT_INVALID", "任务与 AI", 403, "否", "ai", "审批凭证或委托不存在、已使用或与命令、请求哈希、对象版本不符"],
+    ["GRANT_EXPIRED", "任务与 AI", 403, "否", "ai", "审批凭证或委托已过期"],
+    ["BUDGET_EXHAUSTED", "任务与 AI", 422, "否", "ai／TSK", "调用次数、重试、时间或费用预算耗尽；任务暂停"],
+    ["TOOL_UNAVAILABLE", "任务与 AI", 503, "是", "ai", "模型或工具暂时不可用；按预算重试，持续不可用则暂停并可人工接管"],
+    ["INPUT_PROFILE_UNSUPPORTED", "任务与 AI", 422, "否", "ai／EVD", "输入超出 Q01.upload.v0.1（类型、页数、工作表、行列、大小或字符数）；不截断，转人工"],
+    ["SOURCE_AMBIGUOUS", "任务与 AI", 422, "否", "ai／INQ／TRD", "来源对应多个候选或关联不明；等待确认或更正"]
   ]
 }

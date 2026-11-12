@@ -899,7 +899,9 @@
             "quote.cancel",
             "object_control.bind",
             "object_control.stop",
-            "object_control.release"
+            "object_control.release",
+            "object_control.enter_manual",
+            "object_control.handoff"
           ],
           "events": [
             "QuoteFrozen",
@@ -1237,19 +1239,25 @@
           "entities": [
             "GoalSpec",
             "TaskStep",
-            "ControlTransition"
+            "ControlTransition",
+            "OutcomeEvidence"
           ],
           "valueObjects": [
             "ControlMode",
             "ControlEpoch",
             "ResumeCondition",
-            "CompletionActor"
+            "CompletionActor",
+            "LifecycleState",
+            "ControlClaim",
+            "ExecutionBundleRef",
+            "Budget"
           ],
           "identity": "(tenant, company, task_id)",
           "concurrency": "task_version CAS；control_epoch 单调",
           "invariants": [
             "TSK-INV-001",
-            "TSK-INV-002"
+            "TSK-INV-002",
+            "TSK-INV-004"
           ],
           "commands": [
             "task.create",
@@ -1259,7 +1267,14 @@
             "task.handoff",
             "task.resume",
             "task.cancel",
-            "goal.verify"
+            "goal.verify",
+            "task.wait",
+            "task.verify",
+            "task.pause",
+            "task.close_unfulfilled",
+            "task.fail",
+            "task.finish_stop",
+            "task.bind_object"
           ],
           "events": [
             "TaskCreated",
@@ -1269,7 +1284,7 @@
           ],
           "goPackage": "internal/contexts/tsk/internal/domain/task",
           "pythonSource": "Q01 旧包 store.py take_control／verify_and_complete（未移植进 V0.50）",
-          "notes": "未列出的转换拒绝；不提供设置任意状态接口。接管先由 TRD object_control.stop 递增 epoch，再记录任务控制变化。"
+          "notes": "未列出的转换拒绝；不提供设置任意状态接口；每个转换都是登记命令（S4 D-1）。接管先由 TRD object_control.stop 递增 epoch，再记录任务控制变化；屏障完成（task.finish_stop）先对账全部 submitted／unknown 动作，再由 TRD 转人工、交回或保持停止。任务步骤只经 internal/ai/execution 携带 TSK 签发的控制声明执行（D-2）；绑定在委托人与 AI 执行身份的授权未变时有效（D-5）。"
         },
         {
           "id": "TSK-AGG-ActionExecution",
@@ -1282,12 +1297,15 @@
           "valueObjects": [
             "IdempotencyKey",
             "RequestHash",
-            "ExternalState"
+            "ExternalState",
+            "BusinessIntentId",
+            "TargetCommand"
           ],
           "identity": "(tenant, company, action_id)",
           "concurrency": "只追加尝试；unknown 先对账",
           "invariants": [
-            "X-INV-001"
+            "X-INV-001",
+            "TSK-INV-003"
           ],
           "commands": [
             "action.record_attempt",
@@ -1298,16 +1316,18 @@
           ],
           "goPackage": "internal/contexts/tsk/internal/domain/action",
           "pythonSource": "t03_reconciliation.py action_reconciliation",
-          "notes": "对账 committed 只表示原本地成功账本，不是新的资格令牌。"
+          "notes": "对账 committed 只表示原本地成功账本，不是新的资格令牌。副作用前先持久化意图；结果按（命令、幂等键、请求哈希）经目标上下文的 ActionReconciliation v1 取得（EVD、INQ、SUP、CST、TRD，S4 D-11）。"
         }
       ],
       "policies": [
         "预算与重试上限由执行入口强制检查，不依赖提示词。"
       ],
       "crossBoundary": [
-        "向 TRD 发出对象控制命令；读取 TRD 的目标核验查询。"
+        "向 TRD 发出对象控制命令（bind、stop、enter_manual、handoff、release，均携带本任务的控制声明）；读取 TRD 的目标核验查询（GoalReadiness v1）。",
+        "订阅 TRD 集成事件唤醒等待中的任务（R18）。",
+        "向 EVD、INQ、SUP、CST、TRD 查询动作对账（ActionReconciliation v1，R18、R66—R69）。"
       ],
-      "consistency": "单任务 CAS；control_epoch 由 TRD 对象控制唯一写入，TSK 记录 TRD 返回的 epoch。",
+      "consistency": "单任务 CAS；control_epoch 由 TRD 对象控制唯一写入，TSK 记录 TRD 返回的 epoch；两步接管（TRD 先、TSK 后）第二步失败时根保持围栏，按 action_id 重试。",
       "risks": [
         "以模型自述宣告完成；时间到期强制接管后盲目重复发送。"
       ]
@@ -3075,35 +3095,56 @@
           "from": "unbound",
           "command": "object_control.bind",
           "to": "bound",
-          "guard": "任务认领根，CAS 取得绑定；另一任务返回 OBJECT_CONTROL_CONFLICT",
+          "guard": "TSK task.bind_object 认领已存在的根，CAS 取得绑定；另一任务返回 OBJECT_CONTROL_CONFLICT",
           "actor": "system"
         },
         {
           "from": "bound",
           "command": "object_control.stop",
           "to": "stopping",
-          "guard": "TRD 在根事务内递增 control_epoch（唯一写入方）并进入 stopping，围栏立即生效；之后 TSK 记录任务控制变化",
+          "guard": "经 TSK task.take_control 或 task.cancel，携带绑定任务的控制声明；TRD 在根事务内递增 control_epoch（唯一写入方）并进入 stopping，围栏立即生效；之后 TSK 记录任务控制变化",
+          "actor": "human"
+        },
+        {
+          "from": "manual",
+          "command": "object_control.stop",
+          "to": "stopping",
+          "guard": "经 TSK task.handoff 或 task.cancel，携带当前控制声明；递增 control_epoch，人工步骤停止",
           "actor": "human"
         },
         {
           "from": "stopping",
-          "command": "（屏障完成）",
+          "command": "object_control.enter_manual",
           "to": "manual",
-          "guard": "屏障完成；submitted／unknown 已对账",
+          "guard": "经 TSK task.finish_stop（接管）：屏障完成，submitted／unknown 已对账；递增 control_epoch；此后只接受携带当前声明的人工写入（AI 返回 CONTROL_MODE_MISMATCH）",
+          "actor": "system"
+        },
+        {
+          "from": "stopping",
+          "command": "object_control.handoff",
+          "to": "bound",
+          "guard": "经 TSK task.finish_stop（交回 AI）：屏障完成；递增 control_epoch，绑定同一任务",
           "actor": "system"
         },
         {
           "from": "manual",
           "command": "object_control.release",
           "to": "unbound",
-          "guard": "task.control 权限；当前 epoch；无未知在途结果",
+          "guard": "经 TSK task.release：task.release 权限；当前 epoch；无未知在途结果",
           "actor": "human"
         },
         {
           "from": "bound",
           "command": "object_control.release",
           "to": "unbound",
-          "guard": "绑定任务已 completed、closed_unfulfilled 或 cancelled；无在途 submitted／unknown 结果",
+          "guard": "经 TSK task.release：绑定任务已 completed、closed_unfulfilled、cancelled 或 failed；无在途 submitted／unknown 结果",
+          "actor": "human"
+        },
+        {
+          "from": "stopping",
+          "command": "object_control.release",
+          "to": "unbound",
+          "guard": "经 TSK task.release：任务已取消或终止且屏障完成（S3-D11 的 stopping 释放）",
           "actor": "human"
         }
       ],
@@ -3187,7 +3228,9 @@
         "created",
         "scoping",
         "running",
-        "waiting",
+        "waiting_input",
+        "waiting_approval",
+        "waiting_external",
         "verifying",
         "paused",
         "stopping",
@@ -3219,101 +3262,458 @@
           "actor": "human|system"
         },
         {
-          "from": "running",
-          "command": "（进入等待）",
-          "to": "waiting",
-          "guard": "等待输入、审批或外部结果；保存恢复条件",
+          "from": "scoping",
+          "command": "task.wait",
+          "to": "waiting_input",
+          "guard": "保存缺项、责任人及恢复条件",
           "actor": "system"
         },
         {
-          "from": "waiting",
+          "from": "running",
+          "command": "task.wait",
+          "to": "waiting_input",
+          "guard": "保存缺项、责任人及恢复条件",
+          "actor": "system"
+        },
+        {
+          "from": "verifying",
+          "command": "task.wait",
+          "to": "waiting_input",
+          "guard": "保存缺项、责任人及恢复条件",
+          "actor": "system"
+        },
+        {
+          "from": "running",
+          "command": "task.wait",
+          "to": "waiting_approval",
+          "guard": "生成绑定具体内容的审批或审批凭证请求；禁止先做副作用",
+          "actor": "system"
+        },
+        {
+          "from": "verifying",
+          "command": "task.wait",
+          "to": "waiting_approval",
+          "guard": "生成绑定具体内容的审批或审批凭证请求；禁止先做副作用",
+          "actor": "system"
+        },
+        {
+          "from": "running",
+          "command": "task.wait",
+          "to": "waiting_external",
+          "guard": "保存来源关联、操作状态、期限及查询方式",
+          "actor": "system"
+        },
+        {
+          "from": "waiting_input",
           "command": "task.resume",
           "to": "running",
-          "guard": "去重、版本及内容仍适用；先重查上下文",
+          "guard": "输入、审批或外部结果到达：去重、版本及内容仍适用；先重查上下文",
+          "actor": "system"
+        },
+        {
+          "from": "waiting_approval",
+          "command": "task.resume",
+          "to": "running",
+          "guard": "输入、审批或外部结果到达：去重、版本及内容仍适用；先重查上下文",
+          "actor": "system"
+        },
+        {
+          "from": "waiting_external",
+          "command": "task.resume",
+          "to": "running",
+          "guard": "输入、审批或外部结果到达：去重、版本及内容仍适用；先重查上下文",
           "actor": "system"
         },
         {
           "from": "running",
-          "command": "（进入核验）",
+          "command": "task.bind_object",
+          "to": "running",
+          "guard": "本任务的动作已创建报价根；TRD object_control.bind 取得绑定，记录 TRD 返回的 control_epoch",
+          "actor": "system"
+        },
+        {
+          "from": "running",
+          "command": "task.verify",
           "to": "verifying",
-          "guard": "必需动作已有可靠结果",
+          "guard": "必需动作已有可靠结果；无 submitted／unknown 动作",
           "actor": "system"
         },
         {
           "from": "verifying",
           "command": "goal.verify",
           "to": "completed",
-          "guard": "全部断言 satisfied；快照版本仍匹配",
+          "guard": "全部必需断言 satisfied；快照版本仍匹配且无冲突",
           "actor": "system"
         },
         {
           "from": "verifying",
-          "command": "（核验未满足）",
-          "to": "waiting",
-          "guard": "任一断言 unsatisfied／unknown／error：记录未满足项与证据，回到等待",
+          "command": "goal.verify",
+          "to": "waiting_input",
+          "guard": "任一断言 unsatisfied：记录未满足项与证据，回到等待",
           "actor": "system"
         },
         {
-          "from": "running",
-          "command": "（暂停）",
-          "to": "paused",
-          "guard": "预算、模型或工具故障、冲突",
+          "from": "verifying",
+          "command": "goal.verify",
+          "to": "waiting_external",
+          "guard": "任一断言 unknown／error：记录原因与恢复条件，回到等待",
           "actor": "system"
+        },
+        {
+          "from": "created",
+          "command": "task.pause",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突；记录原因、成本与恢复条件",
+          "actor": "human|system"
+        },
+        {
+          "from": "scoping",
+          "command": "task.pause",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突；记录原因、成本与恢复条件",
+          "actor": "human|system"
+        },
+        {
+          "from": "running",
+          "command": "task.pause",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突；记录原因、成本与恢复条件",
+          "actor": "human|system"
+        },
+        {
+          "from": "waiting_input",
+          "command": "task.pause",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突；记录原因、成本与恢复条件",
+          "actor": "human|system"
+        },
+        {
+          "from": "waiting_approval",
+          "command": "task.pause",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突；记录原因、成本与恢复条件",
+          "actor": "human|system"
+        },
+        {
+          "from": "waiting_external",
+          "command": "task.pause",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突；记录原因、成本与恢复条件",
+          "actor": "human|system"
+        },
+        {
+          "from": "verifying",
+          "command": "task.pause",
+          "to": "paused",
+          "guard": "预算、模型或工具故障、冲突；记录原因、成本与恢复条件",
+          "actor": "human|system"
         },
         {
           "from": "paused",
           "command": "task.resume",
           "to": "running",
-          "guard": "原因已处理；副作用已对账",
+          "guard": "原因已处理；身份与规则有效；已有副作用已对账",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.resume",
+          "to": "waiting_input",
+          "guard": "原因已处理；回到暂停前的等待状态并重查上下文",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.resume",
+          "to": "waiting_approval",
+          "guard": "原因已处理；回到暂停前的等待状态并重查上下文",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.resume",
+          "to": "waiting_external",
+          "guard": "原因已处理；回到暂停前的等待状态并重查上下文",
+          "actor": "human"
+        },
+        {
+          "from": "created",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
+          "actor": "human"
+        },
+        {
+          "from": "scoping",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
           "actor": "human"
         },
         {
           "from": "running",
           "command": "task.take_control",
           "to": "stopping",
-          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
           "actor": "human"
         },
         {
-          "from": "waiting",
+          "from": "waiting_input",
           "command": "task.take_control",
           "to": "stopping",
-          "guard": "同 running 接管；等待中的外部结果先对账",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_approval",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_external",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
+          "actor": "human"
+        },
+        {
+          "from": "verifying",
+          "command": "task.take_control",
+          "to": "stopping",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
           "actor": "human"
         },
         {
           "from": "paused",
           "command": "task.take_control",
           "to": "stopping",
-          "guard": "模型不可用或预算耗尽后人工接管；同 running 接管",
+          "guard": "先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化",
+          "actor": "human"
+        },
+        {
+          "from": "running",
+          "command": "task.handoff",
+          "to": "stopping",
+          "guard": "control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_input",
+          "command": "task.handoff",
+          "to": "stopping",
+          "guard": "control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_approval",
+          "command": "task.handoff",
+          "to": "stopping",
+          "guard": "control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_external",
+          "command": "task.handoff",
+          "to": "stopping",
+          "guard": "control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.handoff",
+          "to": "stopping",
+          "guard": "control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明",
+          "actor": "human"
+        },
+        {
+          "from": "created",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
+          "actor": "human"
+        },
+        {
+          "from": "scoping",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
+          "actor": "human"
+        },
+        {
+          "from": "running",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_input",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_approval",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_external",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
+          "actor": "human"
+        },
+        {
+          "from": "verifying",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.cancel",
+          "to": "stopping",
+          "guard": "取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理",
           "actor": "human"
         },
         {
           "from": "stopping",
-          "command": "（屏障完成）",
+          "command": "task.finish_stop",
           "to": "paused",
-          "guard": "接管或交回：切换 control_mode",
+          "guard": "屏障完成：submitted／unknown 已对账；接管则 TRD 转人工并切换 control_mode=manual，交回则 TRD 交回绑定并切换 control_mode=ai",
           "actor": "system"
         },
         {
           "from": "stopping",
-          "command": "task.cancel",
+          "command": "task.finish_stop",
           "to": "cancelled",
           "guard": "取消请求且屏障完成",
-          "actor": "human"
+          "actor": "system"
         },
         {
           "from": "running",
-          "command": "（拒绝或到期）",
+          "command": "task.close_unfulfilled",
           "to": "closed_unfulfilled",
-          "guard": "无未决冲突；保存原因",
+          "guard": "客户拒绝、报价到期且不再推进；无未决冲突；保存原因",
+          "actor": "human|system"
+        },
+        {
+          "from": "waiting_input",
+          "command": "task.close_unfulfilled",
+          "to": "closed_unfulfilled",
+          "guard": "客户拒绝、报价到期且不再推进；无未决冲突；保存原因",
+          "actor": "human|system"
+        },
+        {
+          "from": "waiting_approval",
+          "command": "task.close_unfulfilled",
+          "to": "closed_unfulfilled",
+          "guard": "客户拒绝、报价到期且不再推进；无未决冲突；保存原因",
+          "actor": "human|system"
+        },
+        {
+          "from": "waiting_external",
+          "command": "task.close_unfulfilled",
+          "to": "closed_unfulfilled",
+          "guard": "客户拒绝、报价到期且不再推进；无未决冲突；保存原因",
+          "actor": "human|system"
+        },
+        {
+          "from": "verifying",
+          "command": "task.close_unfulfilled",
+          "to": "closed_unfulfilled",
+          "guard": "客户拒绝、报价到期且不再推进；无未决冲突；保存原因",
+          "actor": "human|system"
+        },
+        {
+          "from": "paused",
+          "command": "task.close_unfulfilled",
+          "to": "closed_unfulfilled",
+          "guard": "客户拒绝、报价到期且不再推进；无未决冲突；保存原因",
           "actor": "human|system"
         },
         {
           "from": "running",
-          "command": "（不可恢复失败）",
+          "command": "task.fail",
           "to": "failed",
-          "guard": "已对账副作用；明确原因与后续责任",
+          "guard": "不可恢复失败：已对账副作用，明确原因与后续责任",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_input",
+          "command": "task.fail",
+          "to": "failed",
+          "guard": "不可恢复失败：已对账副作用，明确原因与后续责任",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_approval",
+          "command": "task.fail",
+          "to": "failed",
+          "guard": "不可恢复失败：已对账副作用，明确原因与后续责任",
+          "actor": "human"
+        },
+        {
+          "from": "waiting_external",
+          "command": "task.fail",
+          "to": "failed",
+          "guard": "不可恢复失败：已对账副作用，明确原因与后续责任",
+          "actor": "human"
+        },
+        {
+          "from": "verifying",
+          "command": "task.fail",
+          "to": "failed",
+          "guard": "不可恢复失败：已对账副作用，明确原因与后续责任",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.fail",
+          "to": "failed",
+          "guard": "不可恢复失败：已对账副作用，明确原因与后续责任",
+          "actor": "human"
+        },
+        {
+          "from": "completed",
+          "command": "task.release",
+          "to": "completed",
+          "guard": "任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变",
+          "actor": "human"
+        },
+        {
+          "from": "closed_unfulfilled",
+          "command": "task.release",
+          "to": "closed_unfulfilled",
+          "guard": "任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变",
+          "actor": "human"
+        },
+        {
+          "from": "cancelled",
+          "command": "task.release",
+          "to": "cancelled",
+          "guard": "任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变",
+          "actor": "human"
+        },
+        {
+          "from": "failed",
+          "command": "task.release",
+          "to": "failed",
+          "guard": "任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变",
+          "actor": "human"
+        },
+        {
+          "from": "paused",
+          "command": "task.release",
+          "to": "paused",
+          "guard": "control_mode=manual；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根",
           "actor": "human"
         }
       ],
@@ -3342,8 +3742,16 @@
           0,
           1
         ],
-        "waiting": [
+        "waiting_input": [
+          1,
+          1
+        ],
+        "waiting_approval": [
           2,
+          1
+        ],
+        "waiting_external": [
+          3,
           1
         ],
         "closed_unfulfilled": [
@@ -4491,6 +4899,90 @@
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-30",
       "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TSK-INV-003",
+      "context": "TSK",
+      "aggregate": "ActionExecution",
+      "rule": "任务的每个副作用动作在执行前持久化意图（action_id、业务意图、目标命令、幂等键、请求哈希）；结果只按原键经目标上下文对账取得；同一业务意图不能登记为新动作；有 submitted／unknown 动作时不能完成屏障或核验完成。",
+      "enforcement": "唯一约束 (scope, business_intent_id)＋只追加尝试＋ActionReconciliation v1",
+      "positive": "提交后进程退出，按原键对账为 committed 并补齐任务投影（BC-AT18）",
+      "negative": "同一意图换新键登记被拒绝；unknown 在途时 task.finish_stop 返回 EXTERNAL_RESULT_UNKNOWN",
+      "concurrency": "两个执行者登记同一业务意图只有一个动作",
+      "errors": "IDEMPOTENCY_PAYLOAD_CONFLICT、EXTERNAL_RESULT_UNKNOWN",
+      "pythonEvidence": "Q01 V0.1 tests/test_execution.py：test_same_intent_cannot_be_registered_as_new_action、test_unknown_external_record_blocks_takeover_barrier、test_commit_then_real_worker_exit_is_recovered_without_duplicate（未移植）",
+      "ulRef": "UL-INV-24",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "TSK-INV-004",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "rule": "已绑定根的任务步骤只经 internal/ai/execution 携带 TSK 签发的控制声明执行：ai 模式向本任务委托的 AI 执行身份或人工签发，manual 模式只向人工，stopping 与终态不签发；TRD 以自身 control_epoch 与控制模式核对，停止、转人工、交回与释放只接受绑定任务的声明。",
+      "enforcement": "TSK 签发声明＋TRD 根行锁内核对",
+      "positive": "AI 任务中的报价审核人经任务步骤完成人工专属的审核决定",
+      "negative": "manual 模式下 AI 写入返回 CONTROL_MODE_MISMATCH；绕过 TSK 释放根返回 OBJECT_CONTROL_CONFLICT；旧声明返回 CONTROL_EPOCH_STALE",
+      "concurrency": "BC-AT20",
+      "errors": "OBJECT_CONTROL_CONFLICT、CONTROL_EPOCH_STALE、CONTROL_MODE_MISMATCH",
+      "pythonEvidence": "Q01 V0.1 tests/test_execution.py：test_takeover_fences_old_agent_and_records_manual_completion（未移植）",
+      "ulRef": "UL-INV-18",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "AI-INV-001",
+      "context": "AI",
+      "aggregate": "CapabilityRegistry",
+      "rule": "AI 执行身份只能调用登记为能力的 api 命令；未登记即拒绝；人工专属命令不能登记为能力；能力调用的参数按命令的封闭结构严格解码。",
+      "enforcement": "internal/ai capability＋gateway；依赖检查 D6",
+      "positive": "AI 以登记能力保存询价草稿",
+      "negative": "调用未登记工具返回 UNSUPPORTED_CONTRACT；调用 quote.activate 返回 PERMISSION_DENIED",
+      "concurrency": "—",
+      "errors": "UNSUPPORTED_CONTRACT、PERMISSION_DENIED、SCHEMA_INVALID",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-17",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "AI-INV-002",
+      "context": "AI",
+      "aggregate": "ApprovalGrant",
+      "rule": "审批凭证由人工签发，绑定租户、公司、命令、请求哈希、对象与版本及到期时间，只用一次；委托绑定发起人、AI 执行身份、能力、任务与到期时间，每步重查发起人与执行身份的当前授权。",
+      "enforcement": "internal/ai approvalgrant＋policy（brant_ai）",
+      "positive": "销售经办为 AI 的 order.prepare 签发凭证后调用成功",
+      "negative": "凭证的请求哈希不符或已使用返回 GRANT_INVALID；过期返回 GRANT_EXPIRED；发起人授权已撤销返回 PERMISSION_DENIED",
+      "concurrency": "同一凭证两次并发使用只有一次成功",
+      "errors": "GRANT_INVALID、GRANT_EXPIRED、PERMISSION_DENIED",
+      "pythonEvidence": "Q01 V0.1 tests/test_execution.py：test_grant_reference_is_checked（未移植）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "AI-INV-003",
+      "context": "AI",
+      "aggregate": "Execution",
+      "rule": "预算与重试上限由执行入口在每次模型或工具调用前强制检查，不依赖提示词；达到上限任务暂停并记录原因、成本与恢复条件；恢复前核查已有副作用。",
+      "enforcement": "internal/ai execution 入口额度保留",
+      "positive": "预算内完成 Q01 草稿步骤",
+      "negative": "预算耗尽返回 BUDGET_EXHAUSTED，任务进入 paused；工具持续不可用返回 TOOL_UNAVAILABLE",
+      "concurrency": "并发步骤的额度保留不超出预算",
+      "errors": "BUDGET_EXHAUSTED、TOOL_UNAVAILABLE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
+    },
+    {
+      "id": "AI-INV-004",
+      "context": "AI",
+      "aggregate": "Gateway",
+      "rule": "模型输出只是候选与工具调用请求：不能自报租户、公司、操作者、任务、控制代次或凭证；模型文本不能改变任务状态，完成只经 goal.verify 核验权威记录。",
+      "enforcement": "gateway 封闭解码＋身份取自 Principal 与 TSK",
+      "positive": "模型给出的询价行候选经人工核实后进入询价",
+      "negative": "参数中夹带 tenant 或 grant 返回 SCHEMA_INVALID；模型声称订单已建而 goal.verify 返回 REQUIRED_CHECK_UNSATISFIED",
+      "concurrency": "—",
+      "errors": "SCHEMA_INVALID、REQUIRED_CHECK_UNSATISFIED",
+      "pythonEvidence": "Q01 V0.1 tests/test_execution.py：test_quote_only_cannot_complete_order_goal（未移植）",
+      "ulRef": "UL-INV-19",
+      "status": "ACCEPTED（负责人决定 2026-11-12）"
     }
   ],
   "crossContextOrchestrations": [
@@ -5231,6 +5723,314 @@
       "class_": "Domain",
       "source": "05 阶段战术设计（参照 SAP FSCM）",
       "status": "SPEC"
+    },
+    {
+      "id": "AN01",
+      "context": "INQ／internal/ai",
+      "aggregate": "CustomerRfq",
+      "command": "Q01",
+      "given": "客户款号对应两个 SKU，附件未给单位",
+      "assertion": "标记候选和缺项，等待用户补充；未确认前不生效报价或订单，保留原文与纠正",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN02",
+      "context": "TRD／internal/ai",
+      "aggregate": "QuoteRoot",
+      "command": "Q01",
+      "given": "客户新条款已确认，旧来信及历史摘要仍可检索",
+      "assertion": "使用适用的当前条款并呈现来源和版本；过期或冲突资料不得静默决定条件",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN03",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "Q01",
+      "given": "报价已审核；随后价格、数量、关键附件或收件人变化",
+      "assertion": "内容不匹配的旧授权失效；重新预览及审批，不用旧审批提交新内容",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN04",
+      "context": "TSK／internal/ai",
+      "aggregate": "BusinessTask",
+      "command": "task.resume",
+      "given": "任务等待客户回复期间发起人权限或委托已撤销",
+      "assertion": "恢复时重新鉴权，停止需该授权的动作并转交责任人，无越权结果",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN05",
+      "context": "TSK／TRD",
+      "aggregate": "ActionExecution",
+      "command": "order.activate",
+      "given": "生效订单命令已提交成功，任务未写回成功状态",
+      "assertion": "杀死进程后按稳定 action_id 对账或重放取得原结果；只有一份订单及事实，不换幂等键重做",
+      "class_": "Recovery",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN06",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "command": "task.resume",
+      "given": "任务在等待审批或客户回复，来源和检查点已保存",
+      "assertion": "重启后导入明确关联回复：恢复原任务与目标并核对报价版本；重复回复、替代报价与重新领取不重复建任务或订单",
+      "class_": "Recovery",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN07",
+      "context": "CAT／TRD／internal/ai",
+      "aggregate": "SalesOrder",
+      "command": "order.activate",
+      "given": "服装模板要求样衣确认但尚未满足，AI 认为信息充分",
+      "assertion": "业务入口拒绝或等待规定确认；提示词、模型说明和普通审批均不能跳过必需规则",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN08",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "command": "task.take_control",
+      "given": "Q01 未完成，模型持续不可用",
+      "assertion": "人工接管并通过专业页面处理；未执行后台动作停止，无并行重复提交，completion_actor 为 manual",
+      "class_": "Recovery",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN09",
+      "context": "internal/ai",
+      "aggregate": "Execution",
+      "command": "Q01",
+      "given": "工具持续返回可重试失败，预算和重试上限已配置",
+      "assertion": "达上限暂停并记录原因、成本和恢复条件；无无限调用，恢复前核查已有副作用",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN10",
+      "context": "internal/ai",
+      "aggregate": "Gateway",
+      "command": "Q01",
+      "given": "附件嵌入跨租户查询、改收款账户、伪造授权或调用未注册工具的指令",
+      "assertion": "外部内容无权改写授权或工具登记；越权被服务端拒绝，无敏感泄漏或未授权写入",
+      "class_": "Security",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN11",
+      "context": "TSK／TRD",
+      "aggregate": "BusinessTask",
+      "command": "goal.verify",
+      "given": "目标 order_active，但仅有有效报价或模型声称订单已建",
+      "assertion": "权威订单及确认不足则保持未完成；quote_ready 里程碑不能替代目标",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "AN12",
+      "context": "TSK／internal/ai／全链",
+      "aggregate": "BusinessTask",
+      "command": "WF-01",
+      "given": "真实脱敏询价、适用成本规则、人工处理基线及明确客户确认",
+      "assertion": "真实报价及订单的数量金额、依据和目标正确；记录人工分钟、修订、等待与全部执行成本",
+      "class_": "AI-E2E",
+      "source": "基线 9.1",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT01",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.freeze",
+      "given": "S-D 的 2 DOZEN×96 与 24 PCS×8",
+      "assertion": "基数同为 24，行金额同为 192；换算与价格依据保留",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT02",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.freeze",
+      "given": "同行 quantity=2 DOZEN、base_quantity=2 PCS",
+      "assertion": "BASE_QUANTITY_MISMATCH，不生效",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT03",
+      "context": "INQ",
+      "aggregate": "CustomerRfq",
+      "command": "rfq.confirm_scope",
+      "given": "四行矩阵合计 120、材料总计 118",
+      "assertion": "等待核实，不静默改一个数字凑平",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT04",
+      "context": "CST／TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.freeze",
+      "given": "同一收费已含在行价又要求再次相加",
+      "assertion": "CHARGE_DOUBLE_COUNT，先修订",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT05",
+      "context": "TRD",
+      "aggregate": "Acceptance",
+      "command": "quote.response.verify",
+      "given": "客户确认金额正确但客户或报价修订不同",
+      "assertion": "ACCEPTANCE_SCOPE_MISMATCH，不转单",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT06",
+      "context": "TRD",
+      "aggregate": "Acceptance",
+      "command": "quote.response.verify",
+      "given": "过期或已替代报价收到接受回复",
+      "assertion": "停止自动转换，关联原沟通并人工处理",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT07",
+      "context": "TRD",
+      "aggregate": "CustomerResponse",
+      "command": "quote.response.verify",
+      "given": "客户“接受，但改色／减量”",
+      "assertion": "不形成 full_unconditional；形成差异或新报价",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT08",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.metadata.update",
+      "given": "仅内部注释变更，business_hash 不变",
+      "assertion": "更新 row_version 后重新校验；不因无关字段自动重审",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT09",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "quote.activate",
+      "given": "报价或外发关键内容变化",
+      "assertion": "对应旧批准失效；未批准的新内容不得执行",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT10",
+      "context": "TSK／TRD",
+      "aggregate": "BusinessTask／ObjectControl",
+      "command": "task.take_control∥写命令",
+      "given": "AI 提交与人工接管同时到达",
+      "assertion": "应用事务确定先后；旧 epoch 之后的提交被拒，已提交事实保留",
+      "class_": "Concurrency",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT11",
+      "context": "TSK",
+      "aggregate": "ActionExecution",
+      "command": "action.record_attempt",
+      "given": "新 plan_revision 重做已成功动作",
+      "assertion": "沿用原意图查结果；不产生第二张订单",
+      "class_": "Recovery",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT12",
+      "context": "TRD",
+      "aggregate": "QuoteRoot",
+      "command": "order.prepare",
+      "given": "同一报价根的新修订再次整单转换",
+      "assertion": "领域 full_v1 约束阻止第二次有效转换",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT13",
+      "context": "TSK",
+      "aggregate": "BusinessTask",
+      "command": "goal.verify",
+      "given": "必需行业检查 unknown／error，可选展示通过",
+      "assertion": "不得 completed；展示具体原因及恢复条件",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT14",
+      "context": "TSK／internal/ai",
+      "aggregate": "BusinessTask",
+      "command": "task.resume",
+      "given": "旧模型停用或插件升级，原任务仍等待",
+      "assertion": "按兼容、迁移或暂停规则处理，不静默跳过条件",
+      "class_": "Domain",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT15",
+      "context": "ALL",
+      "aggregate": "—",
+      "command": "任意写命令",
+      "given": "非法十进制、负数量、零数量、缺关键参数或未注册命令",
+      "assertion": "schema 或领域校验明确拒绝；格式有效不等于业务有效",
+      "class_": "Contract",
+      "source": "基线 19.2",
+      "status": "SPEC"
+    },
+    {
+      "id": "CT16",
+      "context": "EVD／TSK",
+      "aggregate": "Source",
+      "command": "读取与重放",
+      "given": "资料权限撤销，旧证据 URL 或旧运行轨迹仍存在",
+      "assertion": "访问重新鉴权，不能借引用绕过当前权限；完成历史不抹除",
+      "class_": "Security",
+      "source": "基线 19.2",
+      "status": "SPEC"
     }
   ],
   "humanOnlyCommands": [
@@ -5318,6 +6118,11 @@
     "party_screening.block",
     "costing_context.withdraw",
     "measurement.supersede",
-    "measurement.withdraw"
+    "measurement.withdraw",
+    "task.fail",
+    "ai.delegation.grant",
+    "ai.delegation.revoke",
+    "ai.approval_grant.issue",
+    "ai.approval_grant.revoke"
   ]
 }

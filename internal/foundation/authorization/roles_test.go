@@ -8,7 +8,8 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// BC-D02 (simulated review SR-32): fifteen default templates.
+// BC-D02 (simulated review SR-32): fifteen default templates, and the Q01 AI execution identity the
+// owner added for S4 (decision D-7, 2026-11-12).
 func TestTheDefaultTemplatesAreTheReviewedOnes(t *testing.T) {
 	var names []string
 	for _, tpl := range Templates() {
@@ -19,7 +20,7 @@ func TestTheDefaultTemplatesAreTheReviewedOnes(t *testing.T) {
 			}
 		}
 	}
-	want := []string{"销售经办", "跟单", "采购", "核价", "报价审核人", "订单审核人", "毛利审批人", "信用专员", "信用经理", "质检", "单证", "资金", "合规", "税务专员", "管理员"}
+	want := []string{"销售经办", "跟单", "采购", "核价", "报价审核人", "订单审核人", "毛利审批人", "信用专员", "信用经理", "质检", "单证", "资金", "合规", "税务专员", "管理员", "Q01 AI 执行身份"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("templates %v", names)
 	}
