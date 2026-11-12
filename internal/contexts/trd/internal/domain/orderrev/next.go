@@ -98,15 +98,16 @@ type Measurement struct {
 }
 
 // Stage is one stage of a POL payment terms revision as the payment plan prints it: its ID, its
-// percentage of the payable (0–100, kernel PercentFormat), the trigger and days, and the day basis
-// and calendar when the terms count working days.
+// percentage of the payable (0–100, kernel PercentFormat), the trigger and days, the day basis
+// and calendar when the terms count working days, and its release control ("" or documents, D-5).
 type Stage struct {
-	StageID  string
-	Percent  string
-	Trigger  string
-	Days     int
-	DayBasis string
-	Calendar *quote.Ref
+	StageID        string
+	Percent        string
+	Trigger        string
+	Days           int
+	DayBasis       string
+	Calendar       *quote.Ref
+	ReleaseControl string
 }
 
 // Diff is what the next revision changes of the current one (AmendmentImpact's commercial part,
@@ -256,7 +257,7 @@ func Next(base *Revision, by AmendmentRef, p Proposal, f Fulfilment, facts Facts
 	for i, pay := range plan {
 		s := stages[i]
 		next.Amounts.Payments = append(next.Amounts.Payments, quote.Payment{StageID: s.StageID, Percent: exact(pay.Percent), Trigger: s.Trigger,
-			Days: s.Days, DayBasis: s.DayBasis, Calendar: s.Calendar, AmountMinor: pay.Amount.MinorString()})
+			Days: s.Days, DayBasis: s.DayBasis, Calendar: s.Calendar, AmountMinor: pay.Amount.MinorString(), ReleaseControl: s.ReleaseControl})
 	}
 	sortRevision(next)
 	doc, hash, err := encode(next)
@@ -496,7 +497,8 @@ func stagesOf(base *Revision, terms Terms, facts []Stage, path string) ([]Stage,
 	if terms.PaymentTerms == base.Terms.PaymentTerms {
 		out := make([]Stage, len(base.Amounts.Payments))
 		for i, p := range base.Amounts.Payments {
-			out[i] = Stage{StageID: p.StageID, Percent: p.Percent, Trigger: p.Trigger, Days: p.Days, DayBasis: p.DayBasis, Calendar: p.Calendar}
+			out[i] = Stage{StageID: p.StageID, Percent: p.Percent, Trigger: p.Trigger, Days: p.Days, DayBasis: p.DayBasis, Calendar: p.Calendar,
+				ReleaseControl: p.ReleaseControl}
 		}
 		return out, nil
 	}
