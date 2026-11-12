@@ -18,6 +18,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-bento-go/application"
@@ -40,6 +41,10 @@ var anyActor = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.Acto
 // evaluate to human|ai (the S5 plan lets a system evaluate too: candidates only) and reopen to the
 // system; compliance holds reopen as well, so humans and system actors reopen, AI agents never.
 // Reads need cnx.read, the audit trail cnx.audit.
+//
+// Export licences (S5-14): humanOnlyCommands name export_license.register and .release; allocate
+// (ES-12 step 3, 单证员) admits humans and AI agents on the same command path, no system actor (no
+// consumer allocates). The documentation template holds the three permissions.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandEvaluate, Permission: api.CommandEvaluate, ActorKinds: anyActor},
@@ -48,6 +53,12 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGetCheck, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandOrderChecks, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
+		authorization.HumanOnly(api.CommandRegisterLicense, api.CommandRegisterLicense),
+		{Command: api.CommandAllocateLicense, Permission: api.CommandAllocateLicense, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
+		authorization.HumanOnly(api.CommandReleaseLicense, api.CommandReleaseLicense),
+		{Command: api.CommandGetLicense, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandLicenses, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandShipmentLicense, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -58,12 +69,14 @@ type Upstream struct {
 	Profiles   Profiles       // CAT DeclarationProfileRef v1 (R39), CNX's port
 	Programmes Programmes     // reference data's country programmes, CNX's port
 	Configs    polapi.Queries // POL ConfigRef v1 (R50)
-	Sources    evdapi.Queries // EVD SourceRef v1 (R54)
+	Sources    evdapi.Queries // EVD SourceRef v1 and the licence files (R54)
+	Exports    Exports        // FUL shipments and export lots (R36), CNX's port
 }
 
 // Complete reports whether every upstream is wired.
 func (u Upstream) Complete() bool {
-	return u.Orders != nil && u.Countries != nil && u.Profiles != nil && u.Programmes != nil && u.Configs != nil && u.Sources != nil
+	return u.Orders != nil && u.Countries != nil && u.Profiles != nil && u.Programmes != nil && u.Configs != nil && u.Sources != nil &&
+		u.Exports != nil
 }
 
 // Service runs CNX's use cases.
@@ -78,9 +91,13 @@ func scope(ctx context.Context) kernel.Scope {
 	return s
 }
 
-// Visible reports whether d's actor sees the check a stored result names: its opener, or by data
-// scope.
-func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, _ string, id string) (bool, error) {
+// Visible reports whether d's actor sees the object a stored result names: a check by its opener
+// or by data scope; a licence of the company always (licences are company-wide).
+func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command string, id string) (bool, error) {
+	if strings.HasPrefix(command, "export_license.") {
+		l, err := postgres.LoadLicense(ctx, exec, scope(ctx), id, postgres.NoLock)
+		return l != nil, err
+	}
 	c, err := postgres.LoadCheck(ctx, exec, scope(ctx), id, postgres.NoLock)
 	if err != nil || c == nil {
 		return false, err
@@ -157,6 +174,15 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.Reopen:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandReopen, key, c
+	case api.RegisterLicense:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRegisterLicense, key, c
+	case api.AllocateLicense:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandAllocateLicense, key, c
+	case api.ReleaseLicense:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReleaseLicense, key, c
 	}
 	return "", "", nil
 }
