@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -31,14 +32,18 @@ type ExportRef struct {
 	ID   string
 }
 
-// The FUL states an allocation needs: a prepared shipment, a registered export lot.
+// The FUL states an allocation needs: a prepared shipment, a registered export lot; a tax refund
+// allocation refuses a cancelled export lot.
 const (
 	ShipmentPrepared    = "prepared"
 	ExportLotRegistered = "registered"
+	ExportLotCancelled  = "cancelled"
 )
 
 // Export is what FUL says of a shipment or export lot: its state and version, the order revision it
-// ships, its destination country, the end user party, its lines and its value.
+// ships, its destination country, the end user party, its lines and its value, and for an export
+// lot its export date (zero while the goods have not left; S5 C3b: the date a tax refund case binds
+// the export_tax_policy revision at, CN-AT12).
 type Export struct {
 	Ref            ExportRef
 	Status         string
@@ -49,14 +54,20 @@ type Export struct {
 	EndUserPartyID string
 	Lines          []ExportLine
 	Value          kernel.Money
+	ExportedAt     time.Time
 	Code           string
 }
 
-// ExportLine is a shipment or export lot line: its SKU specification revision, quantity and unit.
+// ExportLine is a shipment or export lot line: its SKU specification revision, quantity and unit,
+// and for an export lot line (S5 C3b, tax refund allocations) the shipment and order line it comes
+// from and its amount in the order currency.
 type ExportLine struct {
 	LineID       string
 	SkuID        string
 	SpecRevision int64
 	Quantity     kernel.Decimal
 	Unit         kernel.UnitCode
+	ShipmentID   string
+	OrderLineID  string
+	Amount       kernel.Money
 }

@@ -22,6 +22,13 @@
 // shipment.prepare calls TRD's OrderGuard only. packing.plan, packing.record_actual and
 // shipment.cancel lock the shipment alone: they change nothing an order's other shipments are
 // judged on.
+//
+// S5-03b: milestone.plan and milestone.record_actual lock the plan FOR UPDATE, then the authority
+// guard; they call no upstream guard (an order subject is read from TRD before the transaction).
+// export_lot.register reads its lot ID, locks the shipment FOR SHARE — it changes nothing of it, and
+// shipment.confirm and shipment.cancel, which lock it FOR UPDATE, commit before or after it — then
+// the authority guard. ShipmentLineRef v1 (R30) and ExportLotRef v1 (R36) are lookups in a FUL
+// transaction of their own, before the caller's.
 package application
 
 import (
@@ -66,6 +73,14 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGetRelease, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandListShipmentReleases, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
+		// S5-03b: milestone.plan, milestone.record_actual and export_lot.register are human or AI
+		// (none is in humanOnlyCommands); an internal verification or an accepted fact is a
+		// person's, which the plan's rules decide.
+		{Command: api.CommandPlanMilestones, Permission: api.CommandPlanMilestones, ActorKinds: humanOrAgent},
+		{Command: api.CommandRecordMilestoneActual, Permission: api.CommandRecordMilestoneActual, ActorKinds: humanOrAgent},
+		{Command: api.CommandRegisterExportLot, Permission: api.CommandRegisterExportLot, ActorKinds: humanOrAgent},
+		{Command: api.CommandGetMilestonePlan, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetExportLot, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -98,10 +113,16 @@ func scope(ctx context.Context) kernel.Scope {
 	return s
 }
 
-// Visible reports whether d's actor sees the shipment a stored result names, or the shipment of the
-// release a release command's result names.
+// Visible reports whether d's actor sees the object a stored result of command names: a milestone
+// plan, an export lot, a shipment, or the shipment of the release a release command's result names.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	switch command {
+	case api.CommandPlanMilestones, api.CommandRecordMilestoneActual:
+		p, err := postgres.LoadPlan(ctx, exec, scope(ctx), id, postgres.NoLock)
+		return err == nil && p != nil && d.Sees(p.OwnerActor, p.OwnerTeam), err
+	case api.CommandRegisterExportLot:
+		l, err := postgres.LoadLot(ctx, exec, scope(ctx), id)
+		return err == nil && l != nil && d.Sees(l.OwnerActor, l.OwnerTeam), err
 	case api.CommandEvaluateRelease, api.CommandGrantReleaseException, api.CommandRecordDocumentRelease:
 		r, err := postgres.LoadReleaseByID(ctx, exec, scope(ctx), id)
 		if err != nil || r == nil {
@@ -160,6 +181,15 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.RecordDocumentRelease:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandRecordDocumentRelease, key, c
+	case api.PlanMilestones:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandPlanMilestones, key, c
+	case api.RecordMilestoneActual:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRecordMilestoneActual, key, c
+	case api.RegisterExportLot:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRegisterExportLot, key, c
 	}
 	return "", "", nil
 }

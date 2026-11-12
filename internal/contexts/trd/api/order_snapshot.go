@@ -64,7 +64,8 @@ const (
 // version, the quote revision and acceptance it came from, the customer and currency, the terms
 // (OrderTerms, embedded: TradeTerms, Addresses, PaymentTerms, Stages, CreditPortionMinor), the
 // delivery requirement, the lines, charges and totals in minor units of the order currency, the
-// S/C and PI of every revision, and the analysis rate. Ended names the command that ended the order
+// S/C and PI of every revision, the analysis rate, and the revisions its open amendments propose
+// (Proposed). Ended names the command that ended the order
 // (order.cancel or order.close_unfulfilled of a draft; order.cancel, order.close_remainder — a short
 // close — or order.close of an active order; "" while it is a draft or active). Code is "" when the
 // order's sealed revision is intact, REFERENCE_INVALID otherwise — then only Binding, Status,
@@ -89,7 +90,44 @@ type OrderSnapshotFact struct {
 	PayableMinor string
 	DocumentRefs []OrderDocumentRef // every S/C and PI of the order, oldest revision first
 	AnalysisFX   AnalysisFX
+	Proposed     []ProposedRevision // what the open amendments of an active order propose; none for a draft or an ended order
 	Code         string
+}
+
+// ProposedRevision is the revision an amendment of an active order proposes (S5 decision D-9: STL
+// reserves credit for it before order.amendment.apply, which calls CreditGuard v1 for it when it
+// asks more credit than the current revision). TRD states one for every amendment pending
+// approval or approved that binds the order's current revision — a draft's content still changes,
+// and an amendment of an older revision can never be applied. Binding is the order at the revision
+// number and order hash order.amendment.apply would produce from the amendment (AmendmentID,
+// AmendmentHash, AmendmentStatus) on the current revision with what POL says now and no shipment
+// confirmed; Stages, CreditPortionMinor and the totals are that revision's, in minor units of the
+// order currency (which no amendment changes). The derivation is the one apply repeats: while the
+// facts it reads stay the same the binding is the one apply produces, and a reservation for it is
+// what apply's guard finds. Code is "" when TRD derives the revision now and otherwise the reason
+// it cannot (then only the amendment's fields are set): such an amendment cannot be applied now
+// either.
+type ProposedRevision struct {
+	AmendmentID        string
+	AmendmentHash      string
+	AmendmentStatus    string // pending_approval or approved
+	Binding            OrderBinding
+	Stages             []PaymentStage
+	CreditPortionMinor string
+	NetMinor           string
+	TaxMinor           string
+	PayableMinor       string
+	Code               string
+}
+
+// ProposedAt returns the proposed revision with binding b, if TRD states one.
+func (f OrderSnapshotFact) ProposedAt(b OrderBinding) (ProposedRevision, bool) {
+	for _, p := range f.Proposed {
+		if p.Code == "" && p.Binding == b {
+			return p, true
+		}
+	}
+	return ProposedRevision{}, false
 }
 
 // Check returns nil when the order's sealed revision is intact and REFERENCE_INVALID at path

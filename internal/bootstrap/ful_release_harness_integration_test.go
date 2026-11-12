@@ -18,14 +18,14 @@ import (
 )
 
 // What the FUL world needs since the commercial release (S5 unit C1, WBS S5-07; D-11, D-20): a
-// clear CNX conclusion of the order revision (cnxOn's recipe, TradeComplianceGuard v1) and STL's
-// order account with the order's payment stages applied (PaymentConditionGuard v1). The order of
-// the world is 960.00 USD, 100 % before shipment (one stage). "treasury.1" holds the treasury role
-// template, "manager.1" credit_manager, doc.1 and doc.2 documentation (cnxOn).
+// clear CNX conclusion of the order revision (TradeComplianceGuard v1; the order world's
+// activeOrder records it through B4's readyToActivate, q.compliance()) and STL's order account with
+// the order's payment stages applied (PaymentConditionGuard v1). The order of the world is 960.00
+// USD, 100 % before shipment (one stage). "treasury.1" holds the treasury role template,
+// "manager.1" credit_manager, doc.1 and doc.2 documentation (cnxOn).
 
 // releaseKit is what the FUL world adds for the commercial release.
 type releaseKit struct {
-	cnx      *cnxWorld
 	treasury context.Context
 	manager  context.Context
 	doc      context.Context
@@ -45,23 +45,25 @@ func (p heldPayments) GuardPaymentCondition(ctx context.Context, exec bentopg.Ex
 	return v, err
 }
 
-// releasable sets up the kit once and makes the world's order releasable: compliance clear, the
-// order account open, 960.00 received and applied to its stage.
+// releasable sets up the kit once and makes the world's order releasable: compliance clear (the
+// order world's activeOrder did that), the order account open, 960.00 received and applied to its
+// stage.
 func (w *fulWorld) releasable() {
 	w.t.Helper()
-	w.cnx = cnxOn(w.trdWorld)
-	w.doc = w.cnx.doc1
+	w.doc = w.compliance().doc1
 	w.treasury, w.manager = w.assign("treasury.1", "treasury"), w.assign("manager.1", "credit_manager")
 	w.bankUSD = w.configure(w.author, w.reviewer, polapi.KindBankAccount, "bank.usd", 0, w.win.from, time.Time{},
 		bank(polapi.OwnerCompany, "company.A", "USD", polapi.AccountBoth), true)
 	w.payable(w.order)
 }
 
-// payable makes order o releasable: a clear conclusion of its current revision, its account opened
-// and every stage paid in full by one receipt of its own.
+// payable makes order o releasable: a clear conclusion of its current revision (cleared unless
+// CNX has a check of it already — activeOrder records one through readyToActivate, and a clear
+// conclusion is not evaluated again), its account opened and every stage paid in full by one
+// receipt of its own.
 func (w *fulWorld) payable(o trdapi.OrderReceipt) {
 	w.t.Helper()
-	w.cnx.cleared(o.ObjectID)
+	w.clearedOnce(o.ObjectID)
 	snap := w.account(o.ObjectID)
 	for _, s := range snap.Stages {
 		amount := minorText(s.AmountMinor)
@@ -69,6 +71,22 @@ func (w *fulWorld) payable(o trdapi.OrderReceipt) {
 		w.receive(fund, amount, amount, "")
 		w.stlApply("app."+o.ObjectID+"."+s.StageID, fund, o.ObjectID, s.StageID, amount)
 	}
+}
+
+// clearedOnce has compliance clear order at its current revision unless CNX has a check of that
+// revision already (as readyToActivate does).
+func (w *fulWorld) clearedOnce(order string) {
+	w.t.Helper()
+	c := w.compliance()
+	rev := w.getOrder(order).OrderRevision
+	checks, err := c.cnx.OrderChecks(c.compliance, order)
+	w.must(err)
+	for _, k := range checks {
+		if k.OrderRevision == rev {
+			return
+		}
+	}
+	c.cleared(order)
 }
 
 // minorText is a USD amount in minor units as a decimal amount (96000 → 960.00).

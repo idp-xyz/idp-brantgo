@@ -130,15 +130,17 @@ func TestReopenContract(t *testing.T) {
 }
 
 // The error catalog's rows for the codes CNX declares: TRADE_COMPLIANCE_NOT_CLEAR, REFERENCE_STALE,
-// EXPORT_LICENSE_REQUIRED, EXPORT_LICENSE_EXCEEDED, EXPORT_LICENSE_EXPIRED, BUSINESS_KEY_CONFLICT
-// 409; ORDER_NOT_ACTIVE, DECLARATION_PROFILE_UNVERIFIED, DEPENDENCY_NOT_SUPPORTED 422.
+// EXPORT_LICENSE_REQUIRED, EXPORT_LICENSE_EXCEEDED, EXPORT_LICENSE_EXPIRED, BUSINESS_KEY_CONFLICT,
+// INVOICE_DUPLICATE, TAX_EVIDENCE_EXCEEDED, PARTY_ENTITY_MISMATCH 409; ORDER_NOT_ACTIVE,
+// DECLARATION_PROFILE_UNVERIFIED, DEPENDENCY_NOT_SUPPORTED 422.
 func TestCodesFollowTheCatalog(t *testing.T) {
 	want := map[string]kernel.Category{
 		"TRADE_COMPLIANCE_NOT_CLEAR": kernel.CategoryConflict, "REFERENCE_STALE": kernel.CategoryConflict,
 		"ORDER_NOT_ACTIVE": kernel.CategoryInvalid, "DECLARATION_PROFILE_UNVERIFIED": kernel.CategoryInvalid,
 		"EXPORT_LICENSE_REQUIRED": kernel.CategoryConflict, "EXPORT_LICENSE_EXCEEDED": kernel.CategoryConflict,
 		"EXPORT_LICENSE_EXPIRED": kernel.CategoryConflict, "BUSINESS_KEY_CONFLICT": kernel.CategoryConflict,
-		"DEPENDENCY_NOT_SUPPORTED": kernel.CategoryInvalid,
+		"DEPENDENCY_NOT_SUPPORTED": kernel.CategoryInvalid, "INVOICE_DUPLICATE": kernel.CategoryConflict,
+		"TAX_EVIDENCE_EXCEEDED": kernel.CategoryConflict, "PARTY_ENTITY_MISMATCH": kernel.CategoryConflict,
 	}
 	got := Codes()
 	if len(got) != len(want) {

@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -51,7 +52,7 @@ type cnxWorld struct {
 	regulation                         polapi.ConfigRef
 }
 
-func newCnxWorld(t *testing.T) *cnxWorld { return cnxOn(newOrderWorld(t)) }
+func newCnxWorld(t *testing.T) *cnxWorld { return newOrderWorld(t).compliance() }
 
 // cnxOn adds to the order world q, once, what a clear trade compliance conclusion of one of its
 // orders needs besides the order (the recipe for every suite that activates or ships an order once
@@ -67,7 +68,8 @@ func newCnxWorld(t *testing.T) *cnxWorld { return cnxOn(newOrderWorld(t)) }
 //     saved by doc.1 and verified by doc.2 (the verifier is never the last editor);
 //   - the screening_regulation "screening" the order world published, at its active revision.
 //
-// cleared then evaluates and decides an order of q.
+// cleared then evaluates and decides an order of q. Call it through q.compliance(), which runs it
+// once per world.
 func cnxOn(q *trdWorld) *cnxWorld {
 	w := &cnxWorld{trdWorld: q, cnx: q.c.CNX}
 	w.compliance = q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "officer"},
@@ -411,14 +413,22 @@ func TestTDAT12EmbargoedDestinationIsBlocked(t *testing.T) {
 // order_amended) linked to revision 1's, once; only a new evaluation and decision clear it.
 func TestOrderAmendmentMakesTheOldConclusionInapplicable(t *testing.T) {
 	w := newCnxWorld(t)
-	o := w.activeOrder("quote.2")
+	o := w.activeOrder("quote.2") // cleared at revision 1 before order.activate (S5 B4)
 	b1 := w.binding(o.ObjectID)
-	c1 := w.cleared(o.ObjectID)
+	checks, err := w.cnx.OrderChecks(w.compliance, o.ObjectID)
+	w.must(err)
+	if len(checks) != 1 || checks[0].OrderRevision != 1 {
+		t.Fatalf("checks of the active order %+v", checks)
+	}
+	c1 := checks[0]
 	w.wantVerdict(b1, cnxapi.StatusClear, cnxapi.ReasonCleared)
 
 	d := w.approvedAmendment(o.ObjectID, "amendment.1", 1, b1.OrderHash, "90")
 	r, err := w.c.TRD.ApplyAmendment(w.reviewer, w.applyCmd(o.ObjectID, "amendment.1", d.RowVersion))
 	w.must(err)
+	if e := w.getOrder(o.ObjectID).AmendmentCommits[0].Entries; e[trdapi.GuardCNXTradeCompliance] != trdapi.GuardNotCheckedAtApply {
+		t.Fatalf("apply's commit evidence of trade compliance: %q", e[trdapi.GuardCNXTradeCompliance])
+	}
 	b2 := cnxapi.OrderBinding{OrderID: o.ObjectID, OrderRevision: r.OrderRevision, OrderHash: r.OrderHash}
 	if b2.OrderRevision != 2 || b2.OrderHash == b1.OrderHash {
 		t.Fatalf("amended %+v", r)
@@ -467,7 +477,7 @@ func TestOrderAmendmentMakesTheOldConclusionInapplicable(t *testing.T) {
 	_, err = w.cnx.Decide(w.compliance, w.decideCmd(e, cnxapi.ConclusionClear, false))
 	w.must(err)
 	w.wantVerdict(b2, cnxapi.StatusClear, cnxapi.ReasonCleared)
-	checks, err := w.cnx.OrderChecks(w.compliance, o.ObjectID)
+	checks, err = w.cnx.OrderChecks(w.compliance, o.ObjectID)
 	if err != nil || len(checks) != 2 || checks[0].OrderRevision != 2 || checks[1].OrderRevision != 1 {
 		t.Fatalf("order checks %+v %v", checks, err)
 	}

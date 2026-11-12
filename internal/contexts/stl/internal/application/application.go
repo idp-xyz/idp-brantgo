@@ -65,6 +65,11 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGetFundRecord, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetOrderAccount, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetApplication, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Payment plan review (C4b-STL): the system opens it (WF-06), and so may a person of
+		// treasury, whose template holds the permission; settle is a humanOnlyCommand.
+		{Command: api.CommandOpenReview, Permission: api.PermissionOpenReview, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
+		authorization.HumanOnly(api.CommandSettleReview, api.PermissionSettleReview),
+		{Command: api.CommandListReviews, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -232,6 +237,12 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.Unapply:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandUnapply, key, c
+	case api.OpenPaymentPlanReview:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandOpenReview, key, c
+	case api.SettlePaymentPlanReview:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandSettleReview, key, c
 	}
 	return "", "", nil
 }

@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/order"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -42,47 +43,21 @@ import (
 //     authority guard (quote.FormalApproval: APPROVAL_REVOKED, INDEPENDENT_REVIEW_REQUIRED,
 //     APPROVAL_STALE);
 //  6. the order gate (order.Admit), the order reviewer's grant read the same way;
-//  7. the upstream guards of the source revision in context code order, each locking its rows FOR
-//     SHARE until the order commits (orderUpstream): CAT SkuGuard; the CNX TradeComplianceGuard
-//     extension point; CST AdoptabilityGuard; INQ RfqGuard; POL ConfigGuard; PTY TradingProfileGuard,
-//     AddressRoleGuard and PartyScreeningGuard; the STL CreditGuard extension point. A lapse of a
-//     bound fact becomes a risk (with the sales exchange rate's age), a party not screened clear a
-//     refusal (PARTY_SCREENING_NOT_CLEAR);
+//  7. the upstream guards in context code order, each locking its rows FOR SHARE until the order
+//     commits (orderUpstream): CAT SkuGuard; CNX TradeComplianceGuard on the order at its revision
+//     and hash (TRD-INV-023); CST AdoptabilityGuard; INQ RfqGuard; POL ConfigGuard; PTY
+//     TradingProfileGuard, AddressRoleGuard and PartyScreeningGuard; STL CreditGuard on the credit
+//     portion of the order's sealed payment plan, when the plan has a stage due after shipment or
+//     invoice (TRD-INV-022; order_guards.go). A lapse of a fact the source revision binds becomes a
+//     risk (with the sales exchange rate's age). Trade compliance that is not clear, a party not
+//     screened clear and a credit portion no reservation covers are refusals, the first in that
+//     order (TRADE_COMPLIANCE_NOT_CLEAR, PARTY_SCREENING_NOT_CLEAR, CREDIT_RESERVATION_REQUIRED):
+//     never risks, so no order approval overrides them;
 //  8. every risk acknowledged by the approval (order.Activate: ORDER_RISK_UNACKNOWLEDGED);
-//  9. the writes: the commit evidence, the order active at its next row version, then the ledger's
-//     action result, audit entry and OrderActivated (TRD-INV-016: all or nothing).
-
-// ActivationGuard is an upstream guard order.activate calls inside its transaction with TRD's
-// executor, at its place in context code order: it returns the evidence entries the commit evidence
-// records and nil when the order may activate, or the owner's refusal.
-type ActivationGuard func(ctx context.Context, exec bentopg.Executor, f ActivationFacts) ([]quote.Entry, error)
-
-// ActivationFacts are what an activation guard judges: the order at its revision and hash, the
-// source revision's commercial document (parties, destination, lines, payment terms and the
-// calculation's payment schedule) and the activation's instant.
-type ActivationFacts struct {
-	OrderID       string
-	OrderRevision int64
-	OrderHash     string
-	Commercial    quote.Commercial
-	At            time.Time
-}
-
-// OrderGuards are the named extension points of order.activate for the guards of contexts that do
-// not exist yet. By the owner's decision of 2026-11-10 neither is wired in S3: a nil guard is a
-// recorded gap — the commit evidence says "not_wired" and OrderActivated lists it in
-// unchecked_guards — never a pass.
-type OrderGuards struct {
-	// Credit is STL's CreditGuard v1 (Context Map R57, TRD-INV-022: a credit reservation covering the
-	// part of the payment terms due after shipment; CREDIT_RESERVATION_REQUIRED), called after PTY.
-	Credit ActivationGuard
-	// TradeCompliance is CNX's TradeComplianceGuard v1 (R58, TRD-INV-023: a clear trade compliance
-	// conclusion covering the order revision; TRADE_COMPLIANCE_NOT_CLEAR), called after CAT.
-	TradeCompliance ActivationGuard
-}
-
-// notWired is the evidence value of an extension point no guard is wired to.
-const notWired = "not_wired"
+//  9. the writes: the commit evidence — with what CNX and STL answered: the check, its decision and
+//     regulation revision; the reservation, its amount and basis — the order active at its next
+//     row version, then the ledger's action result, audit entry and OrderActivated (TRD-INV-016:
+//     all or nothing).
 
 // orderFX reads, before a transaction of order id, the sales exchange rate its source revision was
 // calculated with and the pricing policy's maximum age (the zero value: no sales rate, or a rate POL
@@ -163,44 +138,65 @@ func (s Service) orderSource(ctx context.Context, exec bentopg.Executor, h *orde
 }
 
 // upstreamFound is what orderUpstream found: the risks, CST's verdict on the cost snapshot, the
-// first party not screened clear (activation only), the evidence entries of the guards and the
-// extension points not wired.
+// first refusal of a guard no approval overrides (activation only: trade compliance not clear, a
+// party not screened clear, a credit portion not covered, in the order the guards are called), the
+// evidence entries of the guards and the guards this Service was built without.
 type upstreamFound struct {
 	risks     []order.Risk
 	adoptable cstapi.AdoptabilityVerdict
-	screening error
+	refusal   error
 	entries   []quote.Entry
 	unchecked []string
+}
+
+// record keeps what a guard call left: its evidence entries, its name when it is not wired, and
+// its refusal when it is the first.
+func (f *upstreamFound) record(out guardOutcome, err error) error {
+	if err != nil {
+		return err
+	}
+	f.entries = append(f.entries, out.entries...)
+	if out.unchecked != "" {
+		f.unchecked = append(f.unchecked, out.unchecked)
+	}
+	if out.refusal != nil && f.refusal == nil {
+		f.refusal = out.refusal
+	}
+	return nil
 }
 
 // orderUpstream re-checks what the order's source revision binds upstream, in context code order,
 // recording each lapse as a risk (ADR-BR-004: a change of cost, configuration or exchange rate after
 // the contract formed is acknowledged by the order approval, not refused), and the sales exchange
-// rate's age at now as one. Activating, it also runs PTY's PartyScreeningGuard on every party the
-// revision binds and the extension points of CNX and STL at their places.
+// rate's age at now as one. Activating, it also runs, at their places in that order, CNX's
+// TradeComplianceGuard on the order revision (after CAT), PTY's PartyScreeningGuard on every party
+// the revision binds and STL's CreditGuard on the order's sealed payment plan (after PTY). Every
+// guard is called whatever the ones before it answered, so the locks are taken in one order and
+// the risks are found whole; the first refusal is kept in found.refusal.
 func (s Service) orderUpstream(ctx context.Context, exec bentopg.Executor, h *orderCommand, src source, fx salesFX, activating bool,
 	now time.Time) (upstreamFound, error) {
 	var found upstreamFound
 	var err error
 	g := sealedGuards(src.revision, src.commercial)
-	facts := ActivationFacts{OrderID: h.o.ID, OrderRevision: h.o.OrderRevision, OrderHash: h.o.OrderHash, Commercial: src.commercial, At: now}
-	extension := func(name string, guard ActivationGuard) error {
-		if guard == nil {
-			found.unchecked = append(found.unchecked, name)
-			found.entries = append(found.entries, quote.Entry{Name: name, Value: notWired})
-			return nil
-		}
-		entries, err := guard(ctx, exec, facts)
-		found.entries = append(found.entries, entries...)
-		return err
-	}
 	if activating {
-		g.afterCAT = func() error { return extension(api.GuardCNXTradeCompliance, s.Orders.TradeCompliance) }
+		// The order at its revision and hash, and the payment plan that revision sealed: what CNX
+		// concluded on and what STL reserved for (a draft is at revision 1, its snapshot).
+		rev, err := h.o.Revision()
+		if err != nil {
+			return found, err
+		}
+		need, err := orderrev.NeedOf(rev.Amounts.Payments)
+		if err != nil {
+			return found, err
+		}
+		const path = "/args/order_id"
+		o := OrderRevisionRef{OrderID: h.o.ID, OrderRevision: h.o.OrderRevision, OrderHash: h.o.OrderHash}
+		g.afterCAT = func() error { return found.record(s.compliance(ctx, exec, o, now, path)) }
 		g.afterPTY = func() error {
 			if err := s.screen(ctx, exec, g.data, now, &found); err != nil {
 				return err
 			}
-			return extension(api.GuardSTLCredit, s.Orders.Credit)
+			return found.record(s.credit(ctx, exec, o, need, nil, rev.Currency.ID, now, path))
 		}
 	}
 	found.adoptable, err = s.checkUpstream(ctx, exec, g, now, func(refusal error, detail string) error {
@@ -234,8 +230,9 @@ func (s Service) orderUpstream(ctx context.Context, exec bentopg.Executor, h *or
 
 // screen runs PTY's PartyScreeningGuard v1 at now on every party revision data binds — the customer
 // and the parties of its addresses (buyer, payer, consignee; TRD-INV-021) — in party ID order,
-// keeping the first party not screened clear in found.screening (PARTY_SCREENING_NOT_CLEAR) and the
-// conclusions in its entries. A refusal is never a risk: no order approval overrides it.
+// keeping the first party not screened clear in found.refusal (PARTY_SCREENING_NOT_CLEAR, unless
+// trade compliance refused before it) and the conclusions in its entries. A refusal is never a
+// risk: no order approval overrides it.
 func (s Service) screen(ctx context.Context, exec bentopg.Executor, d quote.Data, now time.Time, found *upstreamFound) error {
 	parties := map[string]string{}
 	if d.Customer != nil {
@@ -252,8 +249,8 @@ func (s Service) screen(ctx context.Context, exec bentopg.Executor, d quote.Data
 			return err
 		}
 		found.entries = append(found.entries, quote.Entry{Name: "screening:" + id, Value: g.Status + "/" + g.Reason + "/" + g.ScreeningID})
-		if err := g.Check(parties[id]); err != nil && found.screening == nil {
-			found.screening = err
+		if err := g.Check(parties[id]); err != nil && found.refusal == nil {
+			found.refusal = err
 		}
 	}
 	return nil
@@ -301,7 +298,7 @@ func (s Service) admitActivation(ctx context.Context, exec bentopg.Executor, h *
 	if in.upstream, err = s.orderUpstream(ctx, exec, h, src, fx, true, now); err != nil {
 		return in, err
 	}
-	return in, in.upstream.screening
+	return in, in.upstream.refusal
 }
 
 // ActivateOrder activates a draft order on its approved review (order.activate).
@@ -329,11 +326,15 @@ func (s Service) ActivateOrder(ctx context.Context, cmd api.ActivateOrder) (api.
 			return action.Outcome{}, err
 		}
 		src, r := h.o.Source, in.review
+		// credit_guard and credit_reservation_id tell STL's consumer (PL-12) whether a reservation
+		// covered the order and which: nothing is consumed for an order paid before shipment.
 		return h.save(ctx, exec, string(h.o.Status), h.event(api.EventOrderActivated, map[string]any{"number": src.Number,
 			"acceptance_id": src.AcceptanceID, "arrival_at": kernel.FormatTimestamp(src.ArrivalAt),
 			"quote_expires_at": kernel.FormatTimestamp(src.ExpiresAt), "review_id": r.ID, "reviewer_id": r.Decided.By.ID,
 			"review_expires_at": kernel.FormatTimestamp(r.ExpiresAt), "formalization_approval_id": in.approval.ID,
-			"risks_acknowledged": len(up.risks), "unchecked_guards": joinGuards(up.unchecked), "activated_at": kernel.FormatTimestamp(c.At)}))
+			"risks_acknowledged": len(up.risks), "unchecked_guards": joinGuards(up.unchecked),
+			"credit_guard": entryValue(up.entries, api.GuardSTLCredit), "credit_reservation_id": entryValue(up.entries, api.EvidenceCreditReservation),
+			"activated_at": kernel.FormatTimestamp(c.At)}))
 	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandActivateOrder, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID},
 		cmd, cmd.Validate(), h)

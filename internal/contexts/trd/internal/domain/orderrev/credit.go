@@ -52,5 +52,70 @@ func CreditPortion(payments []quote.Payment) (string, error) {
 // OnCredit reports whether stage p is part of the credit portion: due after shipment or after the
 // invoice, and not secured by the documents release control.
 func OnCredit(p quote.Payment) bool {
-	return (p.Trigger == TriggerAfterShipment || p.Trigger == TriggerAfterInvoice) && p.ReleaseControl != ReleaseControlDocuments
+	return AfterShipment(p) && p.ReleaseControl != ReleaseControlDocuments
+}
+
+// AfterShipment reports whether stage p falls due only after the goods left: triggered
+// after_shipment or after_invoice, documents-controlled or not.
+func AfterShipment(p quote.Payment) bool {
+	return p.Trigger == TriggerAfterShipment || p.Trigger == TriggerAfterInvoice
+}
+
+// CreditNeed is what a payment plan asks of STL's CreditGuard v1 (TRD-INV-022, Context Map R57): how
+// many of its stages fall due after shipment or after the invoice, their sum (PostShipmentMinor,
+// documents-controlled stages included) and the credit portion among them (PortionMinor, the stages
+// without documents control: CreditPortion), in integer minor units of the order currency.
+//
+// A plan without such a stage needs no reservation (付款全部在出运前到期). A plan with one is put to
+// the guard with its credit portion, also when every such stage is documents-controlled and the
+// portion is 0: whether a documents-controlled payment counts as secured is the credit policy's to
+// say (D-5), so STL answers documents_secured, or covered when its reservation holds the stages.
+type CreditNeed struct {
+	Stages            int
+	PostShipmentMinor string
+	PortionMinor      string
+}
+
+// NeedOf returns what plan payments asks of the credit guard. A stage amount that is not an integer
+// of minor units is REFERENCE_INVALID at /payments/<i>/amount_minor, as for CreditPortion.
+func NeedOf(payments []quote.Payment) (CreditNeed, error) {
+	portion, err := CreditPortion(payments)
+	if err != nil {
+		return CreditNeed{}, err
+	}
+	n := CreditNeed{PortionMinor: portion}
+	post := new(big.Int)
+	for _, p := range payments {
+		if !AfterShipment(p) {
+			continue
+		}
+		n.Stages++
+		amount, _ := new(big.Int).SetString(p.AmountMinor, 10)
+		post.Add(post, amount)
+	}
+	n.PostShipmentMinor = post.String()
+	return n, nil
+}
+
+// Required reports whether the plan is put to the credit guard at all: it has a stage due after
+// shipment or after the invoice.
+func (n CreditNeed) Required() bool { return n.Stages > 0 }
+
+// Grows reports whether a revision with need n asks more credit of STL than the revision it amends
+// (from) did (S5 decision D-9, WF-06 信用部分增加时须新的占用): more falls due after shipment or
+// invoice, or more of it is without documents control (a stage that lost its control adds to the
+// credit portion while the post-shipment sum stays). The amended revision then needs a reservation
+// of its own; one that asks the same or less stands on what the order holds.
+func (n CreditNeed) Grows(from CreditNeed) bool {
+	return n.Required() && (minor(n.PostShipmentMinor).Cmp(minor(from.PostShipmentMinor)) > 0 ||
+		minor(n.PortionMinor).Cmp(minor(from.PortionMinor)) > 0)
+}
+
+// minor reads an amount NeedOf produced; the zero need (no amounts) reads as 0.
+func minor(s string) *big.Int {
+	n, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return new(big.Int)
+	}
+	return n
 }

@@ -205,6 +205,8 @@ GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, 
               acknowledged_risks, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence)
     ON brant_trd.sales_order_review TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_order_active_v1(text, bigint, text) TO brant_app;
+-- TRD publishes the lock-free order-state read STL's credit.release calls inside its transaction (S5 B4).
+GRANT EXECUTE ON FUNCTION brant_trd.order_state_v1(text) TO brant_app;
 -- Active orders' amendments, revisions and ends (S3-15): an order moves to its next revision only
 -- with the revision row and the amendment's commit evidence (trigger), which, like the end of an
 -- active order, are only inserted; an amendment changes along SM-TRD-ORDER-AMENDMENT (trigger).
@@ -315,6 +317,14 @@ GRANT UPDATE (updated_at) ON brant_stl.order_account TO brant_app;
 GRANT UPDATE (status, version, updated_at) ON brant_stl.application TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_stl.guard_payment_condition_v1(text, bigint, text, timestamptz) TO brant_app;
 
+-- STL payment plan review (S5-09b): the order account moves to a later order revision, or by one
+-- version when a review is settled (trigger); a review moves once, open → settled or superseded
+-- (trigger); items and dispositions are only inserted; nothing is deleted.
+GRANT UPDATE (order_revision, order_hash, currency_revision, version) ON brant_stl.order_account TO brant_app;
+GRANT SELECT, INSERT ON brant_stl.payment_plan_review, brant_stl.payment_plan_review_item, brant_stl.payment_plan_review_disposition TO brant_app;
+GRANT UPDATE (status, version, settled_by_kind, settled_by_id, settle_epoch, settled_at, settle_reason, superseded_by_revision, superseded_at,
+              updated_at) ON brant_stl.payment_plan_review TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on
@@ -338,6 +348,18 @@ GRANT EXECUTE ON FUNCTION brant_cnx.export_license_outstanding(text, text, text)
 GRANT EXECUTE ON FUNCTION brant_cnx.export_license_state(text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_export_license_v1(text, timestamptz) TO brant_app;
 
+-- CNX purchase invoices and tax refund cases: an invoice keeps its import and is decided and
+-- reversed once, a case keeps its binding and follows SM-CNX-TAXCASE (triggers; the column grants
+-- are also what the FOR UPDATE locks of the commands and the allocation trigger need); lines,
+-- matches, allocations and results are only inserted. The reads derive whether an allocation
+-- counts with its function.
+GRANT SELECT, INSERT ON brant_cnx.purchase_invoice, brant_cnx.purchase_invoice_line, brant_cnx.purchase_invoice_match,
+    brant_cnx.tax_refund_case, brant_cnx.tax_evidence_allocation, brant_cnx.tax_refund_result TO brant_app;
+GRANT UPDATE (status, row_version, invoice_kind, invoice_number, colour, verified, decision, decision_reason, decided_by_kind, decided_by_id,
+    decide_epoch, decided_at, red_of_invoice_id, reversed_by_invoice_id, updated_at) ON brant_cnx.purchase_invoice TO brant_app;
+GRANT UPDATE (status, row_version, updated_at) ON brant_cnx.tax_refund_case TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.tax_evidence_counts(text, text, text, text) TO brant_app;
+
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
 -- every update. A shipment is inserted prepared with its lines and parties and then changes only by
@@ -354,6 +376,15 @@ GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed
               guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at,
               cancel_reason) ON brant_ful.shipment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;
+
+-- FUL milestones and export lots (S5-03b): a shipment line's price is only inserted with its
+-- shipment; a milestone plan moves only its version, revision, counts and last revision (trigger),
+-- the column grant also lets milestone commands lock it FOR UPDATE; nodes and actuals are only
+-- inserted; export lots and their lines are only inserted and never change; nothing is deleted.
+GRANT SELECT, INSERT ON brant_ful.shipment_line_price, brant_ful.milestone_plan, brant_ful.milestone_node, brant_ful.milestone_actual,
+    brant_ful.export_lot, brant_ful.export_lot_line TO brant_app;
+GRANT UPDATE (row_version, plan_revision, node_count, actual_count, revised_by_kind, revised_by_id, revise_epoch, revised_at,
+              revision_reason) ON brant_ful.milestone_plan TO brant_app;
 
 -- FUL commercial release (S5-07): a release moves only by an evaluation, an exception or its
 -- consumption, once (trigger); evaluations and exceptions are only inserted; nothing is deleted.

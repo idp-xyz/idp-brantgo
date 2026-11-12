@@ -55,7 +55,7 @@ func TestRules(t *testing.T) {
 		}
 	}
 	for command, permission := range map[string]string{api.CommandGetCheck: api.PermissionRead, api.CommandOrderChecks: api.PermissionRead,
-		api.CommandAudit: api.PermissionAudit} {
+		api.CommandChecksByRegulation: api.PermissionRead, api.CommandChecksByList: api.PermissionRead, api.CommandAudit: api.PermissionAudit} {
 		if r, err := policy.Rule(command); err != nil || r.Permission != permission || !r.Admits(kernel.ActorAI) {
 			t.Errorf("%s: %+v %v", command, r, err)
 		}

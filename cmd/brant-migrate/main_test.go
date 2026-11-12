@@ -93,13 +93,13 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000001_cst_costing_contexts", "brant:000002_cst_cost_scenarios", "brant:000003_cst_cost_snapshots",
 		"brant:000001_trd_quote_roots", "brant:000002_trd_quote_reviews", "brant:000003_trd_quote_formalization",
 		"brant:000004_trd_customer_acceptance", "brant:000005_trd_sales_orders", "brant:000006_trd_order_amendments",
-		"brant:000007_trd_order_documents",
+		"brant:000007_trd_order_documents", "brant:000008_trd_order_state",
 		"brant:000001_pur_purchase_drafts", "brant:000002_pur_purchase_commitments", "brant:000003_pur_supplier_deliveries",
 		"brant:000004_pur_commitment_changes",
 		"brant:000001_qlt_quality",
-		"brant:000001_stl_customer_credit", "brant:000002_stl_funds_applications",
-		"brant:000001_cnx_trade_compliance", "brant:000002_cnx_export_licences",
-		"brant:000001_ful_shipments", "brant:000002_ful_commercial_release",
+		"brant:000001_stl_customer_credit", "brant:000002_stl_funds_applications", "brant:000003_stl_payment_plan_review",
+		"brant:000001_cnx_trade_compliance", "brant:000002_cnx_export_licences", "brant:000003_cnx_invoices_tax_refunds",
+		"brant:000001_ful_shipments", "brant:000002_ful_milestones_export_lots", "brant:000003_ful_commercial_release",
 	}
 	if got := strings.Join(ids, " "); got != strings.Join(want, " ") {
 		t.Fatalf("migration order = %s", got)

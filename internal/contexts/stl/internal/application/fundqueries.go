@@ -23,7 +23,7 @@ func visibleFund(ctx context.Context, exec bentopg.Executor, d authorization.Dec
 	case api.CommandRecordFund, api.CommandResolveDifference:
 		f, err := postgres.LoadFund(ctx, exec, sc, id, false)
 		return err == nil && f != nil && d.Sees(f.OwnerActor, f.OwnerTeam), true, err
-	case api.CommandOpenOrderAccount:
+	case api.CommandOpenOrderAccount, api.CommandOpenReview, api.CommandSettleReview:
 		a, err := postgres.LoadAccount(ctx, exec, sc, id, false)
 		return err == nil && a != nil && d.Sees(a.OwnerActor, a.OwnerTeam), true, err
 	case api.CommandApply, api.CommandUnapply:

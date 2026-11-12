@@ -48,6 +48,67 @@ func TestCreditPortionIsWhatFallsDueAfterTheGoodsLeft(t *testing.T) {
 	}
 }
 
+// TRD-INV-022 and S5 decision D-9 (S5 unit B4): what a plan asks of STL's CreditGuard. A plan paid
+// before shipment asks nothing; one with a stage after shipment or invoice is put to the guard with
+// its credit portion, 0 when documents control every such stage (STL answers documents_secured). An
+// amended revision needs a reservation of its own when more falls due after shipment or more of it
+// is uncontrolled than in the revision it amends — WF-06: 信用部分增加时须新的占用 — and none when
+// it asks the same or less.
+func TestCreditNeedOfAPlanAndItsGrowth(t *testing.T) {
+	stage := func(trigger, control, amount string) quote.Payment {
+		return quote.Payment{StageID: trigger + control, Percent: "25", Trigger: trigger, Days: 30, AmountMinor: amount, ReleaseControl: control}
+	}
+	need := func(plan ...quote.Payment) CreditNeed {
+		t.Helper()
+		n, err := NeedOf(plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	prepaid := need(stage(TriggerOrderConfirmed, "", "28800"), stage(TriggerBeforeShipment, "", "67200"))
+	if prepaid.Required() || prepaid != (CreditNeed{PostShipmentMinor: "0", PortionMinor: "0"}) {
+		t.Fatalf("paid before shipment: %+v", prepaid)
+	}
+	brc := need(revisionOne(t).Amounts.Payments...)
+	if !brc.Required() || brc != (CreditNeed{Stages: 1, PostShipmentMinor: "67200", PortionMinor: "67200"}) {
+		t.Fatalf("BRC-001 30/70 after shipment: %+v", brc)
+	}
+	secured := need(stage(TriggerOrderConfirmed, "", "28800"), stage(TriggerAfterShipment, ReleaseControlDocuments, "67200"))
+	if !secured.Required() || secured != (CreditNeed{Stages: 1, PostShipmentMinor: "67200", PortionMinor: "0"}) {
+		t.Fatalf("documents-controlled after shipment: %+v", secured)
+	}
+	mixed := need(stage(TriggerAfterShipment, ReleaseControlDocuments, "38400"), stage(TriggerAfterInvoice, "", "28800"))
+	if mixed != (CreditNeed{Stages: 2, PostShipmentMinor: "67200", PortionMinor: "28800"}) {
+		t.Fatalf("mixed: %+v", mixed)
+	}
+	less := need(stage(TriggerOrderConfirmed, "", "25920"), stage(TriggerAfterShipment, "", "60480"))
+	more := need(stage(TriggerOrderConfirmed, "", "31680"), stage(TriggerAfterShipment, "", "73920"))
+	for name, c := range map[string]struct {
+		from, to CreditNeed
+		grows    bool
+	}{
+		"credit appears":                           {prepaid, brc, true},
+		"a secured stage appears":                  {prepaid, secured, true},
+		"the same plan":                            {brc, brc, false},
+		"a smaller order":                          {brc, less, false},
+		"a larger order":                           {brc, more, true},
+		"credit goes":                              {brc, prepaid, false},
+		"a stage loses its documents control":      {secured, brc, true},
+		"a stage gains documents control":          {brc, secured, false},
+		"less is controlled, the same sum":         {secured, mixed, true},
+		"nothing after shipment before or after":   {prepaid, prepaid, false},
+		"the zero need (no plan read) to a credit": {CreditNeed{}, brc, true},
+	} {
+		if got := c.to.Grows(c.from); got != c.grows {
+			t.Errorf("%s: grows %v, want %v", name, got, c.grows)
+		}
+	}
+	if _, err := NeedOf([]quote.Payment{stage(TriggerAfterShipment, "", "1.5")}); code(err) != "REFERENCE_INVALID at /payments/0/amount_minor" {
+		t.Fatalf("a malformed amount: %s", code(err))
+	}
+}
+
 // D-5 (S5 plan unit A2: the stage's release control is read from the sealed plan, never from POL's
 // current payment terms): a calculation that seals a documents control keeps it in the commercial
 // document, revision 1 reads it from the snapshot, and an amendment that keeps the payment terms

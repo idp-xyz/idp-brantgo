@@ -8,58 +8,45 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
 	cc "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/customercredit"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
-	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // releaseCredit runs credit.release (SM-STL-CREDIT-RESERVATION). A person or an AI agent releases a
-// reserved reservation whose order is not active at its revision (订单未生效即放弃) or that expired;
-// before the transaction it asks TRD whether the order is active. The system (the order-end
-// consumer, PL-13, unit B6) also releases consumed reservations. Inside the transaction it locks
-// the customer's credit root FOR UPDATE and updates the reservation row, which CreditGuard v1
-// locks FOR SHARE: a guard holding it makes the release wait until TRD's transaction ends.
+// reserved reservation whose order is not active at its revision (订单未生效即放弃) or that expired.
+// The system (the order-end consumer, PL-13, unit B6) also releases consumed reservations. Inside
+// the transaction it locks the customer's credit root FOR UPDATE, then the reservation row FOR
+// UPDATE — which CreditGuard v1 holds FOR SHARE while order.activate or order.amendment.apply runs,
+// so the release waits until TRD's transaction ends — and only then reads TRD's order state
+// (brant_trd.order_state_v1, lock-free; A6 gap 1, S5 B4): an activation or amendment that held the
+// guard has committed, and the release sees the order it activated.
 type releaseCredit struct {
 	s           Service
 	cmd         api.ReleaseCredit
-	orderActive bool
 	root        *cc.Root
 	reservation *cc.Reservation
-}
-
-func (h *releaseCredit) Prepare(ctx context.Context) error {
-	if p, err := identity.FromContext(ctx); err != nil || p.Actor.Kind == kernel.ActorSystem {
-		return err
-	}
-	var r *cc.Reservation
-	err := h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
-		var err error
-		r, err = postgres.LoadReservation(ctx, exec, scope(ctx), h.cmd.ReservationID)
-		return err
-	})
-	if err != nil || r == nil || r.Status != cc.ReservationReserved {
-		return err
-	}
-	orders, err := h.s.Upstream.Orders.ResolveOrders(ctx, []string{r.Binding.OrderID})
-	if err != nil {
-		return err
-	}
-	o, ok := orders[r.Binding.OrderID]
-	if !ok {
-		return kernel.Reject(kernel.CodeReferenceInvalid, "/args/reservation_id", "TRD shows no order "+r.Binding.OrderID)
-	}
-	h.orderActive = o.Status == OrderActive && o.Binding.OrderRevision == r.Binding.OrderRevision
-	return nil
+	order       trdapi.OrderState
 }
 
 func (h *releaseCredit) Lock(ctx context.Context, exec bentopg.Executor) error {
-	h.root, h.reservation = nil, nil
+	h.root, h.reservation, h.order = nil, nil, trdapi.OrderState{}
 	var err error
 	if h.root, err = lockSubject(ctx, exec, postgres.SubjectReservation, h.cmd.ReservationID); err != nil || h.root == nil {
 		return err
 	}
-	h.reservation, err = postgres.LoadReservation(ctx, exec, scope(ctx), h.cmd.ReservationID)
+	sc := scope(ctx)
+	tag, err := exec.Exec(ctx, `SELECT 1 FROM brant_stl.credit_reservation WHERE tenant_id = $1 AND company_id = $2 AND reservation_id = $3
+		FOR UPDATE`, string(sc.Tenant), string(sc.Company), h.cmd.ReservationID)
+	if err != nil || tag.RowsAffected() == 0 {
+		return err
+	}
+	if h.reservation, err = postgres.LoadReservation(ctx, exec, sc, h.cmd.ReservationID); err != nil || h.reservation == nil {
+		return err
+	}
+	id := h.reservation.Binding.OrderID
+	h.order, err = trdapi.ScanOrderState(id, exec.QueryRow(ctx, trdapi.OrderStateSQL, trdapi.OrderStateArgs(id)...).Scan)
 	return err
 }
 
@@ -72,10 +59,12 @@ func (h *releaseCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if r.Version != h.cmd.ExpectedVersion {
 		return action.Outcome{}, kernel.Reject(kernel.CodeVersionConflict, "/args/expected_version", "")
 	}
-	if d.Actor.Kind != kernel.ActorSystem && h.orderActive && r.State(now) == cc.ReservationReserved {
+	// An order active at the reservation's revision, or at a later one that stands on it (an
+	// amendment that asked no more credit, D-9), keeps its reservation until the order ends.
+	if d.Actor.Kind != kernel.ActorSystem && h.order.ActiveFrom(r.Binding.OrderRevision) && r.State(now) == cc.ReservationReserved {
 		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, "/args/reservation_id",
 			fmt.Sprintf("Order %s is active at revision %d: its reservation is consumed, and released when the order ends", r.Binding.OrderID,
-				r.Binding.OrderRevision))
+				h.order.OrderRevision))
 	}
 	from := r.Version
 	if err := r.Release(cc.Act{By: d.Actor, Epoch: d.Epoch, At: now, Reason: h.cmd.Reason}); err != nil {

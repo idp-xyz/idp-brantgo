@@ -22,11 +22,12 @@ import (
 // 30 % on order confirmation and 70 % 30 days after shipment, as unit A2's snapshot test does it
 // (revision 2: 288.00 + 672.00, 672.00 on credit; TRD-INV-022; S5 plan §5 steps 2 and 3). The sales
 // clerk requests a limit of 10,000.00 USD on evidence and two credit managers publish it (above the
-// top tier, D-6); the sales clerk reserves revision 2's 672.00 within the limit (D-7); the reads
-// show the reservation and the exposure; the command reconciles; revision 1 is REFERENCE_STALE.
-// CreditGuard v1, called in TRD's own transaction with the portion TRD's snapshot states (as
-// amendment apply will for the next revision, D-9, unit B4), covers it; once the system consumes
-// it (PL-12, unit B6) it still does.
+// top tier, D-6); the sales clerk reserves the 672.00 of revision 2, which the approved amendment
+// proposes, within the limit (D-7, D-9); order.amendment.apply finds the reservation through
+// CreditGuard v1 and records it (unit B4); the reads show the reservation and the exposure; the
+// command reconciles; revision 1 is REFERENCE_STALE. CreditGuard v1, called in TRD's own
+// transaction with the portion TRD's snapshot states, covers it; once the system consumes it
+// (PL-12, unit B6) it still does.
 func TestCreditOverHTTPWithTRDOrders(t *testing.T) {
 	q := newOrderWorld(t)
 	policy := q.configure(q.author, q.reviewer, polapi.KindCreditPolicy, "credit.usd", 0, q.win.from, time.Time{}, e2Policy(), true)
@@ -48,12 +49,10 @@ func TestCreditOverHTTPWithTRDOrders(t *testing.T) {
 		AmendmentID: "amendment.pay", ExpectedVersion: s.RowVersion, AmendmentHash: s.AmendmentHash, Decision: trdapi.DecisionApprove,
 		Reason: "客户书面确认新付款条件"})
 	q.must(err)
-	_, err = q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(o.ObjectID, "amendment.pay", dec.RowVersion))
-	q.must(err)
-	snap := q.snapshots(q.author, o.ObjectID)[o.ObjectID]
-	if snap.Status != trdapi.OrderActive || snap.Binding.OrderRevision != 2 || snap.CreditPortionMinor != "67200" || len(snap.Stages) != 2 ||
-		!snap.Stages[1].OnCredit {
-		t.Fatalf("TRD's snapshot %+v", snap)
+	// The approved amendment proposes revision 2 (S5 D-9, B4): STL reserves it before apply.
+	snap := q.proposed(o.ObjectID, "amendment.pay")
+	if snap.Binding.OrderRevision != 2 || snap.CreditPortionMinor != "67200" || len(snap.Stages) != 2 || !snap.Stages[1].OnCredit {
+		t.Fatalf("TRD's proposed revision %+v", snap)
 	}
 
 	q.assign("sales.1", "sales_clerk")
@@ -93,17 +92,28 @@ func TestCreditOverHTTPWithTRDOrders(t *testing.T) {
 		t.Fatalf("published %v", r)
 	}
 
-	stale := map[string]any{"reservation_id": "res.stale", "order_id": o.ObjectID, "order_revision": 1, "order_hash": v1.OrderHash,
-		"credit_policy": ref(policy)}
-	if status, out := sales.try("stl", stlapi.Contract, stlapi.CommandReserve, stale); status != http.StatusConflict || out["code"] != stlapi.CodeReferenceStale {
-		t.Fatalf("revision 1: %d %v", status, out)
-	}
 	reserve := map[string]any{"contract": stlapi.Contract, "command": stlapi.CommandReserve, "idempotency_key": "stl.http.reserve",
 		"args": map[string]any{"reservation_id": "res.credit", "order_id": o.ObjectID, "order_revision": 2, "order_hash": snap.Binding.OrderHash,
 			"credit_policy": ref(policy)}}
 	status, res := sales.do("POST", "/api/brant/v1/stl/commands/credit.reserve", reserve)
 	if status != http.StatusOK || res["object_id"] != "res.credit" || res["status"] != "reserved" || res["row_version"] != float64(1) {
 		t.Fatalf("reserve %d %v", status, res)
+	}
+	// order.amendment.apply finds it through CreditGuard v1 and records it; revision 1 is then stale.
+	_, err = q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(o.ObjectID, "amendment.pay", dec.RowVersion))
+	q.must(err)
+	if e := q.getOrder(o.ObjectID).AmendmentCommits[0].Entries; e[trdapi.GuardSTLCredit] != stlapi.CreditCovered ||
+		e[trdapi.EvidenceCreditReservation] != "res.credit" || e[trdapi.EvidenceCreditPortion] != "67200" || e[trdapi.EvidenceCreditPreviousPortion] != "0" {
+		t.Fatalf("apply's commit evidence %v", e)
+	}
+	if now := q.snapshots(q.author, o.ObjectID)[o.ObjectID]; now.Status != trdapi.OrderActive || now.Binding != snap.Binding ||
+		now.CreditPortionMinor != "67200" {
+		t.Fatalf("TRD's snapshot %+v", now)
+	}
+	stale := map[string]any{"reservation_id": "res.stale", "order_id": o.ObjectID, "order_revision": 1, "order_hash": v1.OrderHash,
+		"credit_policy": ref(policy)}
+	if status, out := sales.try("stl", stlapi.Contract, stlapi.CommandReserve, stale); status != http.StatusConflict || out["code"] != stlapi.CodeReferenceStale {
+		t.Fatalf("revision 1: %d %v", status, out)
 	}
 	status, v := sales.do("GET", "/api/brant/v1/stl/credit_reservations/res.credit", nil)
 	if status != http.StatusOK || v["ok"] != true || v["portion_minor"] != "67200" || v["currency"] != "USD" || v["basis"] != "within_limit" ||
@@ -128,7 +138,7 @@ func TestCreditOverHTTPWithTRDOrders(t *testing.T) {
 	}
 
 	query := stlapi.CreditQuery{OrderID: o.ObjectID, OrderRevision: snap.Binding.OrderRevision, OrderHash: snap.Binding.OrderHash,
-		PortionMinor: snap.CreditPortionMinor, Currency: snap.CurrencyRef.ID, At: time.Now()}
+		PortionMinor: snap.CreditPortionMinor, Currency: "USD", At: time.Now()}
 	guard := func() stlapi.CreditVerdict {
 		var verdict stlapi.CreditVerdict
 		q.must(q.inTRD(func(ctx context.Context, exec bentopg.Executor) error {

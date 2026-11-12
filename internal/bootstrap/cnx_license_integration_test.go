@@ -107,7 +107,8 @@ func newLicenseWorld(t *testing.T) *licenseWorld {
 	cdb, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
 	w.cnx, err = cnx.New(cdb, cnx.Upstream{Orders: cnx.TRDOrders(w.c.TRD), Countries: cnx.PTYCountries(w.c.PTY), Profiles: fixedProfiles{},
-		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: w.ful})
+		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: w.ful, Purchases: cnx.PURLines(w.c.PUR),
+		Funds: cnx.STLFunds(w.c.STL)})
 	w.must(err)
 	return w
 }

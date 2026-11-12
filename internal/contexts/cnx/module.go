@@ -1,8 +1,8 @@
 // Package cnx assembles the CNX bounded context (China export professional collaboration, CN-M01).
 // S5 A7 delivers its first aggregate, the trade compliance check of a sales order revision, and
 // TradeComplianceGuard v1; S5 B5 the export licence with its usage ledger and ExportLicenseGuard
-// v1; declarations, purchase invoices, tax refund cases, document bundles and certificates follow
-// in later S5 units. Code outside CNX uses it through
+// v1; S5 C3b purchase invoices and tax refund cases; declarations, document bundles and
+// certificates follow in later S5 units. Code outside CNX uses it through
 // package api; everything under internal/ is private to CNX.
 package cnx
 
@@ -13,14 +13,18 @@ import (
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/upstream"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/application"
 	tcc "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/tradecompliancecheck"
+	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
+	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 )
 
 // Module is CNX wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -33,8 +37,13 @@ var (
 	_ api.Queries         = (*Module)(nil)
 	_ api.LicenseCommands = (*Module)(nil)
 	_ api.LicenseQueries  = (*Module)(nil)
+	_ api.InvoiceCommands = (*Module)(nil)
+	_ api.InvoiceQueries  = (*Module)(nil)
+	_ api.TaxCaseCommands = (*Module)(nil)
+	_ api.TaxCaseQueries  = (*Module)(nil)
 	_ api.Auditor         = (*Module)(nil)
 	_ api.Reconciler      = (*Module)(nil)
+	_ api.FollowQueries   = (*Module)(nil)
 )
 
 // Upstream are the contracts of CNX's upstreams: TRD's orders (R46), PTY's address countries
@@ -64,13 +73,27 @@ type (
 	ExportRef       = application.ExportRef
 	Export          = application.Export
 	ExportLine      = application.ExportLine
+	PurchaseLines   = application.PurchaseLines
+	PurchaseLineRef = application.PurchaseLineRef
+	PurchaseLine    = application.PurchaseLine
+	Funds           = application.Funds
+	FundRecord      = application.FundRecord
 )
 
-// FUL's states an export licence allocation needs.
+// FUL's states an export licence allocation needs, and the one a tax refund allocation refuses.
 const (
 	ShipmentPrepared    = application.ShipmentPrepared
 	ExportLotRegistered = application.ExportLotRegistered
+	ExportLotCancelled  = application.ExportLotCancelled
 )
+
+// PURLines is CNX's port to PUR on PUR's DeliveryLookups (PurchaseLineRef v1, R37): the commitment
+// lines purchase invoices are matched to.
+func PURLines(lines purapi.DeliveryLookups) PurchaseLines { return upstream.PUR{Lines: lines} }
+
+// STLFunds is CNX's port to STL on STL's FundRecordLookups (FundRecordRef v1, R38): the fund
+// records a received tax refund rests on.
+func STLFunds(funds stlapi.FundRecordLookups) Funds { return upstream.STL{Funds: funds} }
 
 // ExportsNotWired is CNX's port to FUL's shipments and export lots (R36) until FUL is merged:
 // export_license.allocate answers DEPENDENCY_NOT_SUPPORTED.
@@ -106,7 +129,7 @@ func CATProfiles(profiles catapi.DeclarationProfileLookups) Profiles {
 // New wires CNX to db, a transaction owner that belongs to CNX alone, and to its upstreams.
 func New(db *bentopg.DB, u Upstream) (*Module, error) {
 	if !u.Complete() {
-		return nil, errors.New("cnx: module needs the ports to TRD, PTY, CAT, FUL and reference data and the lookups of POL and EVD")
+		return nil, errors.New("cnx: module needs the ports to TRD, PTY, CAT, FUL, PUR, STL and reference data and the lookups of POL and EVD")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {
@@ -121,4 +144,12 @@ func New(db *bentopg.DB, u Upstream) (*Module, error) {
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetCheck, Visible: application.Visible,
 	}}}, nil
+}
+
+// Subscriptions are CNX's Inbox consumers on its own transaction owner (repository structure §07):
+// cnx.trade_compliance, which opens a pending check for an amended order revision (R46, PL-14) and
+// reopens the clear conclusions a new screening_regulation revision (R50) or a re-imported country
+// programme list makes inapplicable (S5 D-18, MD-47).
+func (m *Module) Subscriptions() []messaging.Subscription {
+	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

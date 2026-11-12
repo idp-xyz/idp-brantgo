@@ -1,6 +1,7 @@
 // Package ful assembles the FUL bounded context (fulfilment and shipment: shipments with their
-// packing records and confirmations, the order fulfilment root, the commercial release of a
-// shipment and its documents, ShipmentFacts v1 for TRD; WBS S5-03a, S5-07). Code outside FUL uses
+// packing records and confirmations, the order fulfilment root, ShipmentFacts v1 for TRD; WBS
+// S5-03a; milestone plans, export lots, ShipmentLineRef v1 for STL and ExportLotRef v1 for CNX; WBS
+// S5-03b; the commercial release of a shipment and its documents; WBS S5-07). Code outside FUL uses
 // it through package api; everything under internal/ is private to FUL.
 package ful
 
@@ -27,13 +28,23 @@ type Module struct {
 }
 
 var (
-	_ api.Commands        = (*Module)(nil)
-	_ api.Queries         = (*Module)(nil)
+	_ api.Commands      = (*Module)(nil)
+	_ api.Queries       = (*Module)(nil)
+	_ api.Auditor       = (*Module)(nil)
+	_ api.Reconciler    = (*Module)(nil)
+	_ api.ShipmentFacts = (*Module)(nil)
+
+	// S5-03b: milestone plans, export lots, ShipmentLineRef v1 (R30) and ExportLotRef v1 (R36).
+	_ api.MilestoneCommands   = (*Module)(nil)
+	_ api.MilestoneQueries    = (*Module)(nil)
+	_ api.ExportLotCommands   = (*Module)(nil)
+	_ api.ExportLotQueries    = (*Module)(nil)
+	_ api.ShipmentLineLookups = (*Module)(nil)
+	_ api.ExportLotLookups    = (*Module)(nil)
+
+	// S5-07: the commercial release of a shipment and its documents.
 	_ api.ReleaseCommands = (*Module)(nil)
 	_ api.ReleaseQueries  = (*Module)(nil)
-	_ api.Auditor         = (*Module)(nil)
-	_ api.Reconciler      = (*Module)(nil)
-	_ api.ShipmentFacts   = (*Module)(nil)
 )
 
 // Upstream are the lookups and guards of FUL's upstream contexts: TRD's orders (R27), QLT's quality

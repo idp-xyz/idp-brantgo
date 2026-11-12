@@ -32,9 +32,17 @@ import (
 // apply re-checks inside its transaction, after the decider's grant (Authorizer.Qualify, FOR SHARE),
 // CAT's SkuGuard for every SKU specification it adopts and POL's ConfigGuard for every POL revision
 // it adopts, with the content hash read before (REFERENCE_STALE when it moved), in context code
-// order. FUL's shipments, which QUANTITY_BELOW_SHIPPED judges, are not wired in S3: the commit
-// evidence and OrderAmended say so (fulfilment_source not_wired), as they name STL's CreditGuard and
-// CNX's TradeComplianceGuard, which an amended revision would need again (TRD-INV-022, 023).
+// order; then, once the revision the proposal yields is derived, STL's CreditGuard for that
+// revision when it asks more credit than the current one (S5 D-9, TRD-INV-022:
+// CREDIT_RESERVATION_REQUIRED; amendedCredit). Trade compliance is not checked at apply: the new
+// revision has no conclusion, CNX opens a pending check for it and FUL's release gate blocks
+// shipment until it is clear (D-9, CNX-INV-001); the commit evidence says so
+// (api.GuardNotCheckedAtApply). Prepare and apply judge QUANTITY_BELOW_SHIPPED on what FUL
+// confirmed, read inside their transaction after the order lock without a lock (ShipmentFacts v1,
+// order_facts.go, S5 D-1); the commit evidence and OrderAmended name it (fulfilment_source) and
+// record STK's reservations as not_enabled (D-10). Prepare also reads, before its transaction, what
+// PUR, FUL and STL say of the order and pre-fills the impact areas the preparer left unassessed as
+// open items (amendment.Prefill; WF-06 step 1).
 
 // adopted is a POL revision a proposal adopts, its content hash as read and where the proposal
 // names it.
@@ -56,13 +64,6 @@ type amendmentInputs struct {
 	configs []adopted
 	specs   []spec
 }
-
-// shipments is FUL's answer for the active order's commands: FUL is not built in S3, so no shipment
-// can have been confirmed, and the answer says it was not asked (orderrev.NotWired).
-func shipments() orderrev.Fulfilment { return orderrev.Fulfilment{Source: orderrev.NotWired} }
-
-// downstream is PUR's, STK's and STL's answer, not wired either.
-func downstream() orderrev.Downstream { return orderrev.Downstream{Source: orderrev.NotWired} }
 
 // proposalOf is the domain proposal of a prepare command.
 func proposalOf(cmd api.PrepareAmendment) orderrev.Proposal {
@@ -383,6 +384,7 @@ func (s Service) PrepareAmendment(ctx context.Context, cmd api.PrepareAmendment)
 	src := amendment.Source{Kind: cmd.Source.Kind, ResponseID: cmd.Source.ResponseID, Evidence: evidence(cmd.Source.Evidence)}
 	impact := impactOf(cmd.Impact)
 	var in amendmentInputs
+	var facts impactFacts
 	var readable map[string]bool
 	h.prepare = func(ctx context.Context) error {
 		ids := evidenceIDs(src.Evidence)
@@ -393,7 +395,10 @@ func (s Service) PrepareAmendment(ctx context.Context, cmd api.PrepareAmendment)
 		if readable, err = s.readEvidence(ctx, ids); err != nil {
 			return err
 		}
-		in, err = s.amendmentInputs(ctx, cmd.OrderID, p, "/args", s.Clock.Now())
+		if in, err = s.amendmentInputs(ctx, cmd.OrderID, p, "/args", s.Clock.Now()); err != nil {
+			return err
+		}
+		facts, err = s.readImpactFacts(ctx, cmd.OrderID, s.Clock.Now())
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
@@ -417,9 +422,14 @@ func (s Service) PrepareAmendment(ctx context.Context, cmd api.PrepareAmendment)
 				return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/source/response_id", "No such response of the order's quote")
 			}
 		}
+		f, err := s.activeFulfilment(ctx, exec, h.o)
+		if err != nil {
+			return action.Outcome{}, err
+		}
 		a, preview, diff, err := h.o.PrepareAmendment(amendment.Preparation{AmendmentID: cmd.AmendmentID, OrderID: cmd.OrderID,
 			ExpectedVersion: cmd.ExpectedVersion, Base: orderrev.Link{Revision: cmd.ExpectedOrderRevision, Hash: cmd.ExpectedOrderHash},
-			Source: src, Proposal: p, Impact: impact}, shipments(), in.facts, d.Actor, d.Epoch, s.Clock.Now())
+			Source: src, Proposal: p, Impact: amendment.Prefill(impact, facts.notes(p.Terms.PaymentTerms))}, f, in.facts, d.Actor, d.Epoch,
+			s.Clock.Now())
 		if err != nil {
 			return action.Outcome{}, err
 		}
@@ -523,20 +533,40 @@ func (s Service) ApplyAmendment(ctx context.Context, cmd api.ApplyAmendment) (ap
 			}
 		}
 		upstream = append([]quote.Entry{{Name: "upstream_checked_at", Value: kernel.FormatTimestamp(now)}}, upstream...)
-		upstream = append(upstream, quote.Entry{Name: api.GuardCNXTradeCompliance, Value: notWired},
-			quote.Entry{Name: api.GuardSTLCredit, Value: notWired})
-		a, next, diff, err := h.o.ApplyAmendment(cmd.AmendmentID, amendment.Applying{ExpectedVersion: cmd.ExpectedVersion,
-			IdempotencyKey: cmd.IdempotencyKey, Fulfilment: shipments(), Facts: in.facts, Upstream: upstream, ControlEpoch: h.q.Control.Epoch},
-			standings, d.Actor, d.Epoch, now)
+		upstream = append(upstream, quote.Entry{Name: api.GuardCNXTradeCompliance, Value: api.GuardNotCheckedAtApply},
+			quote.Entry{Name: api.GuardSTKReservations, Value: api.NotEnabled})
+		var unchecked []string
+		var credit []quote.Entry
+		f, err := s.activeFulfilment(ctx, exec, h.o)
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		if f.Source == orderrev.NotWired {
+			unchecked = append(unchecked, api.GuardFULShipments)
+		}
+		a, _, diff, err := h.o.ApplyAmendment(cmd.AmendmentID, amendment.Applying{ExpectedVersion: cmd.ExpectedVersion,
+			IdempotencyKey: cmd.IdempotencyKey, Fulfilment: f, Facts: in.facts, Upstream: upstream, ControlEpoch: h.q.Control.Epoch,
+			Guard: func(next *orderrev.Revision) ([]quote.Entry, error) {
+				out, err := s.amendedCredit(ctx, exec, h.o, next, now)
+				if err != nil {
+					return nil, err
+				}
+				if out.unchecked != "" {
+					unchecked = append(unchecked, out.unchecked)
+				}
+				credit = out.entries
+				return out.entries, out.refusal
+			}}, standings, d.Actor, d.Epoch, now)
 		if err != nil {
 			return action.Outcome{}, err
 		}
 		fields := diffFields(diff)
 		fields["from_order_revision"], fields["from_order_hash"] = a.Applied.From.Revision, a.Applied.From.Hash
-		fields["fulfilment_source"] = orderrev.NotWired
-		fields["unchecked_guards"] = joinGuards([]string{api.GuardCNXTradeCompliance, api.GuardSTLCredit, api.GuardFULShipments})
+		fields["fulfilment_source"] = f.Source
+		fields["unchecked_guards"] = joinGuards(unchecked)
+		// As in OrderActivated: whether and which reservation covers the new revision (PL-12).
+		fields["credit_guard"], fields["credit_reservation_id"] = entryValue(credit, api.GuardSTLCredit), entryValue(credit, api.EvidenceCreditReservation)
 		fields["applied_at"] = kernel.FormatTimestamp(a.Applied.Act.At)
-		_ = next
 		return h.saveAmendment(ctx, exec, a, h.amendmentEvent(api.EventOrderAmended, a, fields))
 	}
 	return s.runAmendment(ctx, api.CommandApplyAmendment, cmd.IdempotencyKey, cmd.OrderID, "", cmd, cmd.Validate(), h, cmd.AmendmentID)
