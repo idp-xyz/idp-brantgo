@@ -440,3 +440,13 @@ GRANT SELECT, INSERT ON brant_ful.shipment_booking, brant_ful.shipment_document_
 GRANT UPDATE (row_version, document_count, issue_count) ON brant_ful.shipment_document_set TO brant_app;
 GRANT UPDATE (status, issue_seq, issued_at, superseded_at) ON brant_ful.shipment_document TO brant_app;
 GRANT UPDATE (consumed_document_set_id, consumed_bl_version, consumed_bl_number, consumed_bl_sha256) ON brant_ful.commercial_release TO brant_app;
+
+-- FUL shipment reviews (S5-09b): a review is inserted open with its items and changes once, settled or
+-- superseded (trigger); an item changes only by its disposition, once (trigger); nothing is deleted.
+-- FOR UPDATE on reviews needs the column grants.
+GRANT SELECT, INSERT ON brant_ful.shipment_review, brant_ful.shipment_review_item TO brant_app;
+GRANT UPDATE (status, row_version, settled_by_kind, settled_by_id, settle_epoch, settled_at, settle_reason, superseded_by, superseded_at)
+    ON brant_ful.shipment_review TO brant_app;
+GRANT UPDATE (disposition, disposition_shipment_id, disposition_revision, disposition_ref, disposition_status, disposition_at,
+              disposition_reason)
+    ON brant_ful.shipment_review_item TO brant_app;

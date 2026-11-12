@@ -81,7 +81,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandRegisterExportLot, Permission: api.CommandRegisterExportLot, ActorKinds: humanOrAgent},
 		{Command: api.CommandGetMilestonePlan, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetExportLot, Permission: api.PermissionRead, ActorKinds: anyActor},
-	}, documentRules()...) // S5-08: bookings and shipment documents (documents.go)
+	}, append(documentRules(), reviewRules()...)...) // S5-08: bookings and shipment documents (documents.go); S5-09b: shipment reviews (review.go)
 }
 
 // Upstream are the contexts FUL reads, through its ports.
@@ -121,6 +121,9 @@ func scope(ctx context.Context) kernel.Scope {
 // plan, an export lot, a shipment, or the shipment of the release a release command's result names.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	if ok, handled, err := documentVisible(ctx, exec, d, command, id); handled {
+		return ok, err
+	}
+	if ok, handled, err := reviewVisible(ctx, exec, command, id); handled {
 		return ok, err
 	}
 	switch command {
@@ -197,6 +200,9 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.RegisterExportLot:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandRegisterExportLot, key, c
+	}
+	if name, key, args, ok := reviewRequest(cmd); ok {
+		return name, key, args
 	}
 	return documentRequest(cmd)
 }
