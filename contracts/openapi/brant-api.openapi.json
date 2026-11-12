@@ -258,9 +258,15 @@
             "minLength": 1,
             "type": "string"
           },
+          "decision_validity_days": {
+            "type": "integer"
+          },
           "default_limit": {
             "minLength": 1,
             "type": "string"
+          },
+          "documents_secured": {
+            "type": "boolean"
           },
           "limit_sources": {
             "items": {
@@ -275,6 +281,12 @@
           },
           "overdue_tolerance_days": {
             "type": "integer"
+          },
+          "reservation_validity_days": {
+            "type": "integer"
+          },
+          "two_approvers_above_top": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -319,6 +331,28 @@
             "type": "string"
           },
           "template_text": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.export_tax_policy": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "policy_basis": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "professional_review_evidence_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "refund_method": {
             "minLength": 1,
             "type": "string"
           }
@@ -544,6 +578,10 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "release_control": {
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "stage_id": {
                   "minLength": 1,
                   "type": "string"
@@ -663,6 +701,50 @@
           },
           "rescreen_interval_days": {
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "pol.shipment_document_template": {
+        "additionalProperties": false,
+        "properties": {
+          "clauses": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "document_kind": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "footer_note": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "language": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "renderer_version": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
           }
         },
         "type": "object"
@@ -10085,6 +10167,10 @@
                             "title": "document_template"
                           },
                           {
+                            "$ref": "#/components/schemas/pol.export_tax_policy",
+                            "title": "export_tax_policy"
+                          },
+                          {
                             "$ref": "#/components/schemas/pol.fee_category",
                             "title": "fee_category"
                           },
@@ -10119,6 +10205,10 @@
                           {
                             "$ref": "#/components/schemas/pol.screening_regulation",
                             "title": "screening_regulation"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.shipment_document_template",
+                            "title": "shipment_document_template"
                           },
                           {
                             "$ref": "#/components/schemas/pol.tax_application",

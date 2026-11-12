@@ -83,3 +83,52 @@ func TestConfigDataRejectsWithPathsIntoTheData(t *testing.T) {
 		t.Fatalf("%+v %v", d, err)
 	}
 }
+
+// The S5 additions of POL (s5-plan A3a) reach the transport through the reflective mapping alone:
+// a credit policy's S5 members, a payment stage's release control and the two new kinds decode,
+// read back as the same request, and appear in the OpenAPI document.
+func TestS5ConfigDataOverHTTP(t *testing.T) {
+	for kind, in := range map[string]string{
+		"credit_policy": `{"name":"E-2","currency":"USD","default_limit":"0","limit_sources":["internal_assessment"],` +
+			`"approval_tiers":[{"level":"credit_officer","max_amount":"1000.00"},{"level":"credit_manager","max_amount":"5000.00"}],` +
+			`"overdue_tolerance_days":30,"documents_secured":true,"reservation_validity_days":30,"decision_validity_days":7,` +
+			`"two_approvers_above_top":true}`,
+		"payment_terms": `{"name":"30/70 CAD","stages":[{"stage_id":"S1","percent":"30","trigger":"order_confirmed","days":0},` +
+			`{"stage_id":"S2","percent":"70","trigger":"after_shipment","days":0,"release_control":"documents"}]}`,
+		"shipment_document_template": `{"name":"pl","document_kind":"packing_list","language":"en","renderer_version":"shipment-text/0.1.0",` +
+			`"title":"PACKING LIST","sections":["seller","buyer","identity","shipment","packages","totals","marks","notes"],"footer_note":"f"}`,
+		"export_tax_policy": `{"name":"n","refund_method":"exempt_refund","policy_basis":"b","professional_review_evidence_id":"review"}`,
+	} {
+		d, err := configData(kind, json.RawMessage(in))
+		if err != nil {
+			t.Fatal(kind, err)
+		}
+		var a, b any
+		if err = json.Unmarshal(dataJSON(d), &a); err != nil {
+			t.Fatal(err)
+		}
+		if err = json.Unmarshal([]byte(in), &b); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(a, b) {
+			t.Errorf("%s reads back as %s", kind, dataJSON(d))
+		}
+	}
+	doc, err := OpenAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Components struct {
+			Schemas map[string]json.RawMessage `json:"schemas"`
+		} `json:"components"`
+	}
+	if err = json.Unmarshal(doc, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"pol.shipment_document_template", "pol.export_tax_policy"} {
+		if parsed.Components.Schemas[name] == nil {
+			t.Errorf("the OpenAPI document has no %s", name)
+		}
+	}
+}

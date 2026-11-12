@@ -1,8 +1,8 @@
 // Package api is the contract of the POL bounded context (policy and configuration: the company
 // profile, currencies, units and their conversions, exchange rates, calendars, trade and payment
-// terms, taxes, fees, pricing and credit policies, bank accounts, document templates, legal terms
-// and numbering) for transports, the AI layer and the contexts downstream of POL. It exposes no POL
-// domain type.
+// terms, taxes, fees, pricing and credit policies, the export tax policy, bank accounts, document
+// templates, legal terms and numbering) for transports, the AI layer and the contexts downstream of
+// POL. It exposes no POL domain type.
 //
 // A configuration is identified by (tenant, company, kind, config_id). Its content lives in
 // revisions with monotonic numbers: one working revision is saved whole, a human other than its
@@ -55,9 +55,10 @@ const (
 	StatusCaptured   = "captured"
 )
 
-// Kinds of configuration: the closed enumeration of the tactical model (POL-AGG-ConfigurationRoot)
-// and legal_terms, the clause template the simulated G0 walkthrough's decision F-02 adds (WBS
-// S3-17, the condition of ADR-BR-013). Only the kinds KindImplemented reports are accepted.
+// Kinds of configuration: the closed enumeration of the tactical model (POL-AGG-ConfigurationRoot),
+// with legal_terms, the clause template the simulated G0 walkthrough's decision F-02 adds (WBS
+// S3-17, the condition of ADR-BR-013), and the two kinds of S5 (owner decision 2026-11-12). Only
+// the kinds KindImplemented reports are accepted.
 const (
 	KindCompanyProfile        = "company_profile"
 	KindCurrency              = "currency"
@@ -79,9 +80,14 @@ const (
 	KindCreditPolicy          = "credit_policy"
 	KindLegalTerms            = "legal_terms"
 	// KindOrderDocumentTemplate is the layout of an export sales contract or proforma invoice (TRD
-	// order-text renderer; WBS S3-15, TRD-INV-020). The tactical model's closed enumeration lists
-	// eighteen kinds; legal_terms (S3-17) and this one (S3-15) are additions, pending the archive.
+	// order-text renderer; WBS S3-15, TRD-INV-020).
 	KindOrderDocumentTemplate = "order_document_template"
+	// KindShipmentDocumentTemplate is the layout of a commercial invoice or packing list for FUL's
+	// shipment-text renderer (WBS S5-08, S5 D-12; Context Map R49).
+	KindShipmentDocumentTemplate = "shipment_document_template"
+	// KindExportTaxPolicy is the export tax refund method that applies to the company's exports, as
+	// its professional review verified it (CN-F01, CN-D02, CN-R08; CN-AT12; Context Map R50).
+	KindExportTaxPolicy = "export_tax_policy"
 )
 
 // Closed values of configuration data.
@@ -89,8 +95,19 @@ const (
 	RoundingHalfUp = "HALF_UP"
 	ResetAnnual    = "annual"
 
+	// Purposes of an exchange rate (POL-INV-003). A FoundationSnapshot is captured for a calculation,
+	// so only cost_estimate and quotation are snapshot purposes; credit converts an amount into a
+	// credit limit's currency (STL-INV-004) and settlement applies a receipt in one currency to a
+	// receivable in another (STL-INV-007), both read by STL (Context Map R33).
 	PurposeCostEstimate = "cost_estimate"
 	PurposeQuotation    = "quotation"
+	PurposeCredit       = "credit"
+	PurposeSettlement   = "settlement"
+
+	// ReleaseControlDocuments marks a payment stage due after shipment whose shipping documents (the
+	// original bill of lading, or the telex release) FUL holds until it is paid (S5 D-5, G0 F-04;
+	// TRD-INV-022, STL-INV-003). A stage without it carries no release control.
+	ReleaseControlDocuments = "documents"
 
 	DimensionCount  = "count"
 	DimensionMass   = "mass"
@@ -110,6 +127,9 @@ const (
 	// DocumentTypeProformaInvoice numbers proforma invoices apart from commercial invoices (UL
 	// TRD-SalesContractDocument: a PI is not a commercial invoice); an S/C is numbered as an order.
 	DocumentTypeProformaInvoice = "proforma_invoice"
+	// DocumentTypePackingList numbers packing lists apart from commercial invoices, which are
+	// numbered as invoices (WBS S5-08, S5 D-12).
+	DocumentTypePackingList = "packing_list"
 
 	// Jurisdictions of a screening list a screening_regulation enables (ADR-BR-017).
 	JurisdictionCN      = "CN"
@@ -143,20 +163,22 @@ var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
 		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy, KindLegalTerms,
-		KindOrderDocumentTemplate}
-	implemented   = slices.Clone(kinds)
-	purposes      = []string{PurposeCostEstimate, PurposeQuotation}
-	dimensions    = []string{DimensionCount, DimensionMass, DimensionLength, DimensionVolume}
-	triggers      = []string{TriggerOrderConfirmed, TriggerBeforeShipment, TriggerAfterShipment, TriggerAfterInvoice}
-	documentTypes = []string{DocumentTypeRfq, DocumentTypeQuote, DocumentTypeOrder, DocumentTypePurchaseOrder, DocumentTypeInvoice,
-		DocumentTypeProformaInvoice}
+		KindOrderDocumentTemplate, KindShipmentDocumentTemplate, KindExportTaxPolicy}
+	implemented      = slices.Clone(kinds)
+	purposes         = []string{PurposeCostEstimate, PurposeQuotation, PurposeCredit, PurposeSettlement}
+	snapshotPurposes = []string{PurposeCostEstimate, PurposeQuotation}
+	releaseControls  = []string{"", ReleaseControlDocuments}
+	dimensions       = []string{DimensionCount, DimensionMass, DimensionLength, DimensionVolume}
+	triggers         = []string{TriggerOrderConfirmed, TriggerBeforeShipment, TriggerAfterShipment, TriggerAfterInvoice}
+	documentTypes    = []string{DocumentTypeRfq, DocumentTypeQuote, DocumentTypeOrder, DocumentTypePurchaseOrder, DocumentTypeInvoice,
+		DocumentTypeProformaInvoice, DocumentTypePackingList}
 	jurisdictions = []string{JurisdictionCN, JurisdictionUN, JurisdictionForeign}
 )
 
 // PercentFormat is the lexical form of a payment stage's percentage.
 var PercentFormat = kernel.DecimalFormat{IntDigits: 3, Scale: 6}
 
-// KindKnown reports whether kind is one of the twenty configuration kinds.
+// KindKnown reports whether kind is one of the twenty-two configuration kinds.
 func KindKnown(kind string) bool { return slices.Contains(kinds, kind) }
 
 // KindImplemented reports whether POL accepts configurations of kind yet.
@@ -295,7 +317,7 @@ type IssueNumber struct {
 type CaptureSnapshot struct {
 	IdempotencyKey string
 	SnapshotID     string
-	Purpose        string // the use of every exchange rate among Refs
+	Purpose        string // cost_estimate or quotation: the use of every exchange rate among Refs
 	Refs           []ConfigRef
 }
 
@@ -366,7 +388,7 @@ func (c CaptureSnapshot) Validate() error {
 		return schema("/idempotency_key")
 	case !kernel.ValidIdentifier(c.SnapshotID):
 		return schema("/args/id")
-	case !slices.Contains(purposes, c.Purpose):
+	case !slices.Contains(snapshotPurposes, c.Purpose):
 		return schema("/args/purpose")
 	}
 	return refs(c.Refs, 1, "/args/refs")

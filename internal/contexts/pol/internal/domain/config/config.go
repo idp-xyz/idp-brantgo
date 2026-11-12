@@ -86,29 +86,31 @@ const (
 // Content is the whole content of a revision: its kind, its validity interval and the data of its
 // kind, of which exactly the member of Kind is set. Times are kernel.Instant values.
 type Content struct {
-	Kind                  Kind
-	ValidFrom             time.Time
-	ValidUntil            time.Time // zero: open-ended
-	CompanyProfile        *CompanyProfile
-	Currency              *Currency
-	Unit                  *Unit
-	UnitConversion        *UnitConversion
-	FXRate                *FXRate
-	Calendar              *Calendar
-	TradeTerms            *TradeTerms
-	PaymentTerms          *PaymentTerms
-	TaxProfile            *TaxProfile
-	TaxApplication        *TaxApplication
-	FeeCategory           *FeeCategory
-	PricingPolicy         *PricingPolicy
-	BankAccount           *BankAccount
-	NumberSequence        *NumberSequence
-	DocumentTemplate      *DocumentTemplate
-	QuoteDocumentTemplate *QuoteDocumentTemplate
-	CreditPolicy          *CreditPolicy
-	ScreeningRegulation   *ScreeningRegulation
-	LegalTerms            *LegalTerms
-	OrderDocumentTemplate *OrderDocumentTemplate
+	Kind                     Kind
+	ValidFrom                time.Time
+	ValidUntil               time.Time // zero: open-ended
+	CompanyProfile           *CompanyProfile
+	Currency                 *Currency
+	Unit                     *Unit
+	UnitConversion           *UnitConversion
+	FXRate                   *FXRate
+	Calendar                 *Calendar
+	TradeTerms               *TradeTerms
+	PaymentTerms             *PaymentTerms
+	TaxProfile               *TaxProfile
+	TaxApplication           *TaxApplication
+	FeeCategory              *FeeCategory
+	PricingPolicy            *PricingPolicy
+	BankAccount              *BankAccount
+	NumberSequence           *NumberSequence
+	DocumentTemplate         *DocumentTemplate
+	QuoteDocumentTemplate    *QuoteDocumentTemplate
+	CreditPolicy             *CreditPolicy
+	ScreeningRegulation      *ScreeningRegulation
+	LegalTerms               *LegalTerms
+	OrderDocumentTemplate    *OrderDocumentTemplate
+	ShipmentDocumentTemplate *ShipmentDocumentTemplate
+	ExportTaxPolicy          *ExportTaxPolicy
 }
 
 // Validity returns the revision's validity interval.
@@ -167,6 +169,10 @@ func (c Content) Data() any {
 		return present(c.LegalTerms)
 	case KindOrderDocumentTemplate:
 		return present(c.OrderDocumentTemplate)
+	case KindShipmentDocumentTemplate:
+		return present(c.ShipmentDocumentTemplate)
+	case KindExportTaxPolicy:
+		return present(c.ExportTaxPolicy)
 	}
 	return nil
 }
@@ -256,6 +262,10 @@ func (c *Content) DecodeData(raw []byte) error {
 		return decode(raw, &c.LegalTerms)
 	case KindOrderDocumentTemplate:
 		return decode(raw, &c.OrderDocumentTemplate)
+	case KindShipmentDocumentTemplate:
+		return decode(raw, &c.ShipmentDocumentTemplate)
+	case KindExportTaxPolicy:
+		return decode(raw, &c.ExportTaxPolicy)
 	}
 	return fmt.Errorf("pol: no data of kind %q", c.Kind)
 }
@@ -341,9 +351,10 @@ func (r *Root) Save(c Content, by kernel.ActorRef, epoch int64, at time.Time) (*
 // Publish makes working revision number active for the human by, superseding the active revision.
 // Its last editor may not publish it (POL-INV-001); its content must still be valid, its validity
 // must contain at (CONFIG_EXPIRED: an expired or future revision never replaces the active one), its
-// references must be in force, a screening regulation's legal confirmations must be among the
-// evidence, and a currency or unit keeps the definition of its latest publication, retired or not
-// (POL-INV-002). It returns the superseded revision, if any.
+// references must be in force, the sources it rests on (a screening regulation's legal
+// confirmations, an export tax policy's professional review) must be among the evidence, and a
+// currency or unit keeps the definition of its latest publication, retired or not (POL-INV-002). It
+// returns the superseded revision, if any.
 func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, evidence []string, at time.Time) (*Revision, error) {
 	w := r.Working
 	switch {
@@ -363,7 +374,7 @@ func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, e
 	if err := CheckReferences(r.ID, w.Content, f); err != nil {
 		return nil, err
 	}
-	if err := CheckLegalConfirmations(w.Content, evidence); err != nil {
+	if err := CheckCitedEvidence(w.Content, evidence); err != nil {
 		return nil, err
 	}
 	if d := r.Definition; d != nil && !sameDefinition(d.Content, w.Content) {

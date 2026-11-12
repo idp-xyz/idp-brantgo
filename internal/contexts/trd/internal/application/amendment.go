@@ -220,7 +220,7 @@ func (s Service) amendmentInputs(ctx context.Context, id string, p orderrev.Prop
 			}
 			for _, st := range pt.Stages {
 				in.facts.Stages = append(in.facts.Stages, orderrev.Stage{StageID: st.StageID, Percent: st.Percent, Trigger: st.Trigger, Days: st.Days,
-					DayBasis: pt.DayBasis, Calendar: calendar})
+					DayBasis: pt.DayBasis, Calendar: calendar, ReleaseControl: st.ReleaseControl})
 			}
 		}
 	}

@@ -382,7 +382,7 @@ func TestTradeTaxApplicationAndCreditKinds(t *testing.T) {
 		return polapi.ConfigData{CreditPolicy: &polapi.CreditPolicy{Name: "credit", Currency: "CNY", DefaultLimit: "0",
 			LimitSources:         []string{polapi.LimitSourceInternalAssessment, polapi.LimitSourceSinosureBuyerLimit},
 			ApprovalTiers:        []polapi.CreditApprovalTier{{Level: "credit_officer", MaxAmount: "1000"}, {Level: "credit_manager", MaxAmount: maxAmount}},
-			OverdueToleranceDays: 30}}
+			OverdueToleranceDays: 30, ReservationValidityDays: 30, DecisionValidityDays: 7}}
 	}
 	_, err = w.saveConfig(editor, polapi.KindCreditPolicy, "credit", 0, win.from, time.Time{}, credit("10000.001"))
 	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/data/approval_tiers/1/max_amount" {
