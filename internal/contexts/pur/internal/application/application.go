@@ -1,5 +1,6 @@
 // Package application runs PUR's commands and queries on the command ledger. The purchase draft
-// rules live in domain/draft, the demand allocation in domain/allocation; SQL lives in
+// rules live in domain/draft, the demand allocation in domain/allocation, the purchase commitment in
+// domain/commitment and the supplier delivery in domain/supplierdelivery; SQL lives in
 // adapters/postgres.
 //
 // PUR's upstream contexts are TRD (Context Map R19, ActiveOrderRef v1, through PUR's own port
@@ -43,10 +44,11 @@ var (
 )
 
 // Rules is PUR's authorization policy. The tactical model's humanOnlyCommands name
-// purchase.draft.prepare, purchase.draft.void, purchase.commitment.decide, purchase.commitment.revoke
-// and purchase.commitment.issue; purchase.commitment.request and purchase.supplier_confirmation.record
-// are human or AI (command catalog, SM-PUR-COMMITMENT). Each command needs the permission of its
-// name; reads need pur.read, the audit trail pur.audit.
+// purchase.draft.prepare, purchase.draft.void, purchase.commitment.decide, purchase.commitment.revoke,
+// purchase.commitment.issue and supplier_delivery.verify; purchase.commitment.request,
+// purchase.supplier_confirmation.record and supplier_delivery.record are human or AI (command
+// catalog, SM-PUR-COMMITMENT, ES-12). Each command needs the permission of its name; reads need
+// pur.read, the audit trail pur.audit.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		authorization.HumanOnly(api.CommandPrepareDraft, api.CommandPrepareDraft),
@@ -56,10 +58,14 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandRevokeCommitment, api.CommandRevokeCommitment),
 		authorization.HumanOnly(api.CommandIssueCommitment, api.CommandIssueCommitment),
 		{Command: api.CommandRecordSupplierConfirmation, Permission: api.CommandRecordSupplierConfirmation, ActorKinds: humanOrAI},
+		{Command: api.CommandRecordSupplierDelivery, Permission: api.CommandRecordSupplierDelivery, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandVerifySupplierDelivery, api.CommandVerifySupplierDelivery),
 		{Command: api.CommandGetDraft, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetAllocations, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetCommitment, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetOrderCommitments, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetDelivery, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetCommitmentDeliveries, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
 	}
 }
@@ -94,14 +100,18 @@ func scope(ctx context.Context) kernel.Scope {
 	return s
 }
 
-// Visible reports whether d's actor sees the draft or the commitment a stored result names; a
-// draft whose record is not intact is REFERENCE_INVALID, never replayed (Python _load on a write
-// replay).
+// Visible reports whether d's actor sees the draft, the commitment or the supplier delivery a stored
+// result names; a draft whose record is not intact is REFERENCE_INVALID, never replayed (Python
+// _load on a write replay).
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command string, id string) (bool, error) {
 	sc := scope(ctx)
 	if slices.Contains(commitCmds, command) {
 		c, err := postgres.LoadCommitment(ctx, exec, sc, id, postgres.NoLock)
 		return err == nil && c != nil && d.Sees(c.OwnerActor, c.OwnerTeam), err
+	}
+	if slices.Contains(deliveryCmds, command) {
+		dl, err := postgres.LoadDelivery(ctx, exec, sc, id, postgres.NoLock)
+		return err == nil && dl != nil && d.Sees(dl.OwnerActor, dl.OwnerTeam), err
 	}
 	dr, err := postgres.LoadDraft(ctx, exec, sc, id, postgres.NoLock)
 	if err != nil || dr == nil || !d.Sees(dr.OwnerActor, dr.OwnerTeam) {
@@ -154,6 +164,12 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.RecordSupplierConfirmation:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandRecordSupplierConfirmation, key, c
+	case api.RecordSupplierDelivery:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRecordSupplierDelivery, key, c
+	case api.VerifySupplierDelivery:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandVerifySupplierDelivery, key, c
 	}
 	return "", "", nil
 }

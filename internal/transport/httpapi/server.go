@@ -203,6 +203,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocations", s.authenticated(s.allocations))
 	mux.Handle("GET /api/brant/v1/pur/purchase_commitments/{id}", s.authenticated(read(s, cfg.PUR.GetCommitment, okView[purapi.CommitmentView])))
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/commitments", s.authenticated(s.orderCommitments))
+	mux.Handle("GET /api/brant/v1/pur/supplier_deliveries/{id}", s.authenticated(read(s, cfg.PUR.GetDelivery, okView[purapi.DeliveryView])))
+	mux.Handle("GET /api/brant/v1/pur/purchase_commitments/{id}/deliveries", s.authenticated(read(s, cfg.PUR.GetCommitmentDeliveries, okView[purapi.CommitmentDeliveriesView])))
 	if cfg.QLT != nil {
 		mux.Handle("GET /api/brant/v1/qlt/inspections/{id}", s.authenticated(read(s, cfg.QLT.GetInspection, okView[qltapi.InspectionView])))
 		mux.Handle("GET /api/brant/v1/qlt/quality_releases/{id}", s.authenticated(read(s, cfg.QLT.GetRelease, okView[qltapi.ReleaseView])))

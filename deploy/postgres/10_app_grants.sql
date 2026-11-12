@@ -245,6 +245,18 @@ GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch,
               updated_at)
     ON brant_pur.purchase_commitment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_pur.order_commitments_v1(text) TO brant_app;
+-- PUR supplier deliveries (S5-15): a delivery root is inserted with its first version and then only
+-- moves its version counters (trigger); a version is inserted recorded and changes only by its
+-- decision and its supersession, once each (trigger); a line is written with its version and only
+-- takes its verified quantity, once (trigger); nothing is deleted. FOR UPDATE on a delivery root
+-- needs the column grants. FUL's transactions execute SupplierDeliveryGuard v1 (R59).
+GRANT SELECT, INSERT ON brant_pur.supplier_delivery, brant_pur.supplier_delivery_version, brant_pur.supplier_delivery_line TO brant_app;
+GRANT UPDATE (row_version, latest_version, verified_version, updated_at) ON brant_pur.supplier_delivery TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason, decision_evidence,
+              superseded_by_version, superseded_at)
+    ON brant_pur.supplier_delivery_version TO brant_app;
+GRANT UPDATE (verified_quantity) ON brant_pur.supplier_delivery_line TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pur.guard_supplier_delivery_v1(text, text, bigint) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a

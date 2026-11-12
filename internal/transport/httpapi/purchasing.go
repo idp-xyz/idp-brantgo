@@ -27,6 +27,9 @@ func purCommands(c PUR) *commandSet {
 			purapi.CommandRevokeCommitment:           reflected("", "", receiptOf[purapi.Receipt](c.RevokeCommitment)),
 			purapi.CommandIssueCommitment:            reflected("", "", receiptOf[purapi.Receipt](c.IssueCommitment)),
 			purapi.CommandRecordSupplierConfirmation: reflected("", "", receiptOf[purapi.Receipt](c.RecordSupplierConfirmation)),
+			// Supplier deliveries (S5-15); they name their object delivery_id.
+			purapi.CommandRecordSupplierDelivery: reflected("", "", receiptOf[purapi.Receipt](c.RecordSupplierDelivery)),
+			purapi.CommandVerifySupplierDelivery: reflected("", "", receiptOf[purapi.Receipt](c.VerifySupplierDelivery)),
 		}}
 }
 
