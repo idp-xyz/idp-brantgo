@@ -12,12 +12,14 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
 	"go.idp.xyz/idp-brant/internal/bootstrap"
+	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pur"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
-	"go.idp.xyz/idp-brant/internal/contexts/stl"
+	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -48,7 +50,11 @@ type purReview struct {
 // newPurReview provisions every consumer's actor; wrap, when set, replaces pur.allocation_review's
 // subscription in the dispatcher.
 func newPurReview(t *testing.T, wrap func(messaging.Subscription) messaging.Subscription) *purReview {
-	q := newOrderWorld(t)
+	return purReviewOn(t, newOrderWorld(t), wrap)
+}
+
+// purReviewOn is newPurReview on order world q (FUL's world, for one).
+func purReviewOn(t *testing.T, q *trdWorld, wrap func(messaging.Subscription) messaging.Subscription) *purReview {
 	subs := q.c.Subscriptions()
 	routed := slices.Clone(subs)
 	for i, s := range routed {
@@ -290,40 +296,61 @@ func TestAllocationReviewFollowsAReducedOrderBT10(t *testing.T) {
 	}
 }
 
-// ES-09 step 6 / TD-AT02 close_remainder, SIM-02 step 9: the order closes short after 100 of 120
-// shipped. TRD cannot close the remainder in this tree before FUL's shipments are wired into it
-// (unit C4a), so OrderRemainderClosed is built field for field as TRD's ledger writes it and relayed.
-// commitment.es09 delivered its 100 in full; a prepared draft holds 15 more. The review lists L1 (115
-// above the 100 shipped), the draft and the commitment; voiding the draft settles the line, and the
-// fulfilled commitment needs nothing.
+// ES-09 steps 4 to 6 with TD-AT02's close_remainder and SIM-02 step 9, on FUL's real shipment (S5
+// C4a: TRD's end reads FUL's ShipmentFacts v1 and PUR's DownstreamCommitments v1): commitment.es09
+// bought 100 of L1, all delivered and verified; QLT released them and bootstrap's FUL shipped them on
+// PUR's verified delivery (its commercial release granted, S5 C1). A prepared draft holds 15 more (85
+// overbought for the MOQ). The customer reduces L1 to 110 (revision 2): OrderAmended opens the review
+// of L1 (115 above 110), the draft and the fulfilled commitment. The remainder cannot be closed while
+// the draft is prepared (DOWNSTREAM_COMMITMENT_OPEN, TRD-INV-019). The purchaser voids the draft and
+// settles the review by reference to the void, the fulfilled commitment needing nothing (ES-09 step
+// 5); then the remainder of 10 closes short (step 6). TRD's OrderRemainderClosed finds nothing above
+// what shipped and no open review: it opens nothing.
 func TestAllocationReviewOfAnOrderClosedShortES09(t *testing.T) {
-	r := newPurReview(t, nil)
-	order := r.activeOrder("quote.1").ObjectID
+	w := newFulWorld(t)
+	r := purReviewOn(t, w.trdWorld, nil)
+	order := w.order.ObjectID
 	d := r.draft("purchase.es09", order, "100", "")
 	r.ch.x.issued("commitment.es09", d)
 	r.delivered("delivery.100", "commitment.es09", "100")
 	r.draft("purchase.rest", order, "15", "85")
+	ref := qltapi.SubjectRef{Kind: qltapi.SubjectCommitmentLine, ID: "commitment.es09", LineID: "L1"}
+	_, err := w.c.QLT.RecordInspection(w.qc, qltapi.RecordInspection{IdempotencyKey: w.key(), InspectionID: "insp.es09", Subject: ref,
+		InspectedQuantity: "100", ConformingQuantity: "100", NonconformingQuantity: "0", Sampling: qltapi.Sampling{Method: qltapi.SamplingFull},
+		Standard: qltapi.StandardRef{SourceID: "standard"}, Inspector: qltapi.Inspector{Kind: qltapi.InspectorInternal}, ReportFileID: "report",
+		InspectedAt: kernel.FormatTimestamp(time.Now().Add(-time.Hour))})
+	w.must(err)
+	_, err = w.c.QLT.GrantRelease(w.qc, qltapi.GrantRelease{IdempotencyKey: w.key(), ReleaseID: "rel.es09", Subject: ref, Quantity: "100",
+		ValidUntil: kernel.FormatTimestamp(time.Now().Add(30 * 24 * time.Hour))})
+	w.must(err)
+	_, err = w.c.FUL.PrepareShipment(w.merch, w.prepareCmd("shipment.es09", "100", fulapi.DeliveryLineRef{DeliveryID: "delivery.100", LineID: "L1",
+		Version: 1}, "rel.es09"))
+	w.must(err)
+	w.grantedOn(w.c.FUL, "shipment.es09", fulapi.ScopeShipment)
+	_, err = w.c.FUL.ConfirmShipment(w.merch, w.confirmCmd("shipment.es09", 1))
+	w.must(err)
 	r.relayTRD()
 
-	v := r.getOrder(order)
-	closed := salesOrderEvent(r.sc, trdapi.EventOrderRemainderClosed, stl.OrderBinding{OrderID: order, OrderRevision: v.OrderRevision,
-		OrderHash: v.OrderHash}, v.RowVersion+1, "closed", map[string]any{"conversion_slot": "taken", "ended_from": "active",
-		"end_command": trdapi.CommandCloseOrderRemainder, "fulfilment_source": "ful.shipment_facts.v1", "downstream_source": "pur.downstream_commitments.v1",
-		"lines": []any{map[string]any{"line_id": "L1", "unit": r.pcs.ConfigID, "ordered": "120", "shipped": "100", "remainder": "20"}}})
-	r.ev.enqueue(closed)
-	r.ev.drain(r.ev.relay(5))
-	r.ev.published(closed)
+	r.amended(order, "amendment.es09", "110")
+	r.relayTRD()
 	reviews := r.reviews(order)
 	if len(reviews) != 1 {
 		t.Fatalf("%d reviews", len(reviews))
 	}
 	rv := reviews[0]
-	if rv.Cause != purapi.CauseOrderRemainderClosed || rv.OrderVersion != v.RowVersion+1 ||
+	if rv.Cause != purapi.CauseOrderAmended || rv.OrderRevision != 2 ||
 		itemsOf(rv) != "allocation:L1/ draft:purchase.rest/ commitment:purchase.es09/commitment.es09" ||
-		lineOf(rv.Items[0]) != "remainder_closed 100 115 15  " || !rv.Items[2].Fulfilled || lineOf(rv.Items[2]) != "remainder_closed 100 100  100 100" {
+		lineOf(rv.Items[0]) != "reduced 110 115 5  " || !rv.Items[2].Fulfilled || lineOf(rv.Items[2]) != "reduced 110 100  100 100" {
 		t.Fatalf("review %+v: %s", rv, itemsOf(rv))
 	}
-	_, err := r.c.PUR.VoidDraft(r.author, purapi.VoidDraft{IdempotencyKey: r.key(), DraftID: "purchase.rest", ExpectedVersion: 1, Reason: "余量短交关闭"})
+	_, err = r.endShort(order)
+	wantRefused(t, "close the remainder while the draft is prepared", err, trdapi.CodeDownstreamCommitmentOpen, "/args/order_id")
+	if why := reasonOf(err); !strings.Contains(why, "purchase_draft purchase.rest is prepared") ||
+		!strings.Contains(why, "demand_allocation L1 allocates 115 of line L1, which shipped 100") {
+		t.Fatalf("the refusal names the draft and the allocation: %s", why)
+	}
+
+	_, err = r.c.PUR.VoidDraft(r.author, purapi.VoidDraft{IdempotencyKey: r.key(), DraftID: "purchase.rest", ExpectedVersion: 1, Reason: "余量短交关闭"})
 	r.must(err)
 	_, err = r.settle(r.author, rv.ReviewID, 1, disposed(1, purapi.DispositionDraftVoided, "purchase.rest", "余量草稿作废"),
 		disposed(2, purapi.DispositionDraftVoided, "purchase.rest", "余量草稿作废"), disposed(3, purapi.DispositionNoAction, "", "工厂已全部交付，已出运 100"))
@@ -331,13 +358,27 @@ func TestAllocationReviewOfAnOrderClosedShortES09(t *testing.T) {
 	if got := r.reviews(order)[0]; got.Status != purapi.ReviewSettled || got.Items[2].Disposition.Disposition != purapi.DispositionNoAction {
 		t.Fatalf("settled %+v", got)
 	}
+
+	_, err = r.endShort(order)
+	r.must(err)
+	if line, end := r.ended(order); line != "110 100 10" || end.DownstreamSource != trdapi.GuardDownstream {
+		t.Fatalf("closed short %s %+v", line, end)
+	}
+	if closed := eventOf(r.relayTRD(), trdapi.EventOrderRemainderClosed); closed.ID == "" {
+		t.Fatal("no OrderRemainderClosed relayed")
+	}
+	if v := r.reviews(order); len(v) != 1 || v[0].ReviewID != rv.ReviewID || v[0].Status != purapi.ReviewSettled {
+		t.Fatalf("after OrderRemainderClosed %+v", v)
+	}
 }
 
 // WF-06 "更晚修订的复核取代未处置的旧复核" and an order's end (TD-AT02 cancel of an unshipped order): a
-// prepared draft of 100 on L1; the order amended to 90 opens review r2 (L1 and the draft). The
-// customer then cancels: TRD's OrderCancelled opens the cancellation's review, which supersedes the
-// open r2 — settling r2 is REFERENCE_STALE —; it needs nothing of L1. The draft voided, the
-// cancellation's review is settled by reference to the void, for the line and the draft.
+// prepared draft of 100 on L1; the order amended to 90 opens review r2 (L1 and the draft). While the
+// draft is prepared the order cannot be cancelled (DOWNSTREAM_COMMITMENT_OPEN, TRD-INV-019; S5 C4a).
+// The purchaser voids the draft — its allocation released — but leaves r2 open; the order is
+// cancelled. TRD's OrderCancelled finds nothing PUR still holds above what the order needs, but r2 is
+// open: the cancellation's review opens without items and supersedes it (settling r2 is
+// REFERENCE_STALE). A review without items is settled with a reason only.
 func TestAllocationReviewOfACancelledOrderSupersedesTheAmendedOne(t *testing.T) {
 	r := newPurReview(t, nil)
 	order := r.activeOrder("quote.1").ObjectID
@@ -348,8 +389,11 @@ func TestAllocationReviewOfACancelledOrderSupersedesTheAmendedOne(t *testing.T) 
 	if len(first) != 1 || itemsOf(first[0]) != "allocation:L1/ draft:purchase.c/" || lineOf(first[0].Items[0]) != "reduced 90 100 10  " {
 		t.Fatalf("review of revision 2 %+v", first)
 	}
-	_, err := r.c.TRD.CancelOrder(r.author, trdapi.CancelOrder{IdempotencyKey: r.key(), OrderID: order, ExpectedVersion: r.orderVersion(order),
-		Reason: "客户撤单", Evidence: r.proof})
+	_, err := r.endCancel(order)
+	wantRefused(t, "cancel with the draft prepared", err, trdapi.CodeDownstreamCommitmentOpen, "/args/order_id")
+	_, err = r.c.PUR.VoidDraft(r.author, purapi.VoidDraft{IdempotencyKey: r.key(), DraftID: "purchase.c", ExpectedVersion: 1, Reason: "订单将取消"})
+	r.must(err)
+	_, err = r.endCancel(order)
 	r.must(err)
 	cancelled := eventOf(r.relayTRD(), trdapi.EventOrderCancelled)
 	all := r.reviews(order)
@@ -359,19 +403,20 @@ func TestAllocationReviewOfACancelledOrderSupersedesTheAmendedOne(t *testing.T) 
 	old, rv := all[0], all[1]
 	if old.Status != purapi.ReviewSuperseded || old.SupersededBy != rv.ReviewID || old.RowVersion != 2 || old.SupersededAt.IsZero() ||
 		rv.Status != purapi.ReviewOpen || rv.Cause != purapi.CauseOrderCancelled || rv.OrderRevision != 2 || rv.OrderVersion <= old.OrderVersion ||
-		itemsOf(rv) != "allocation:L1/ draft:purchase.c/" || lineOf(rv.Items[0]) != "order_cancelled 0 100 100  " {
+		rv.EventID != string(cancelled.ID) || len(rv.Items) != 0 {
 		t.Fatalf("superseded %+v by %+v", old, rv)
 	}
-	_, err = r.settle(r.author, old.ReviewID, 2, disposed(1, purapi.DispositionNoAction, "", "x"), disposed(2, purapi.DispositionNoAction, "", "x"))
-	refusedAt(t, "a superseded review", err, purapi.CodeReferenceStale, "/args/review_id")
-	_, err = r.settle(r.author, rv.ReviewID, 1, disposed(1, purapi.DispositionNoAction, "", "客户撤单"),
+	_, err = r.settle(r.author, old.ReviewID, 2, disposed(1, purapi.DispositionDraftVoided, "purchase.c", "x"),
 		disposed(2, purapi.DispositionDraftVoided, "purchase.c", "x"))
-	refusedAt(t, "the draft not voided yet", err, kernel.CodeInvalidState, "/args/items/1/draft_id")
-	_, err = r.c.PUR.VoidDraft(r.author, purapi.VoidDraft{IdempotencyKey: r.key(), DraftID: "purchase.c", ExpectedVersion: 1, Reason: "订单已取消"})
+	refusedAt(t, "a superseded review", err, purapi.CodeReferenceStale, "/args/review_id")
+	_, err = r.c.PUR.SettleAllocationReview(r.author, purapi.SettleAllocationReview{IdempotencyKey: r.key(), ReviewID: rv.ReviewID, ExpectedVersion: 1})
+	refusedAt(t, "a review without items settled without a reason", err, kernel.CodeSchemaInvalid, "/args/reason")
+	s, err := r.settle(r.author, rv.ReviewID, 1)
 	r.must(err)
-	_, err = r.settle(r.author, rv.ReviewID, 1, disposed(1, purapi.DispositionDraftVoided, "purchase.c", "分配已释放"),
-		disposed(2, purapi.DispositionDraftVoided, "purchase.c", "草稿已作废"))
-	r.must(err)
+	if got, err := r.c.PUR.GetAllocationReview(r.author, rv.ReviewID); err != nil || s.Status != purapi.ReviewSettled || got.Status != purapi.ReviewSettled ||
+		got.SettleReason == "" {
+		t.Fatalf("settled %+v %+v %v", s, got, err)
+	}
 	if n := r.count("company.A", "brant_pur.allocation_review"); n != 2 {
 		t.Fatalf("%d reviews", n)
 	}
