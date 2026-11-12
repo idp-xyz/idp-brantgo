@@ -5,10 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/application"
+	tcc "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/tradecompliancecheck"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
-	"go.idp.xyz/idp-brant/internal/kernel"
 	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
@@ -113,10 +114,73 @@ func TestREFProgrammes(t *testing.T) {
 	}
 }
 
-// CAT's declaration profiles (S5 A5) are refused as DEPENDENCY_NOT_SUPPORTED, never answered empty.
-func TestProfilesNotWiredRefuses(t *testing.T) {
-	_, err := NotWired{}.ResolveProfiles(context.Background(), nil)
-	if r, ok := kernel.AsRejection(err); !ok || r.Code != "DEPENDENCY_NOT_SUPPORTED" || r.Category != kernel.CategoryInvalid {
-		t.Errorf("%v", err)
+type profiles struct {
+	asked []catapi.DeclarationProfileRef
+	out   map[catapi.DeclarationProfileRef]catapi.ResolvedDeclarationProfile
+}
+
+func (p *profiles) ResolveDeclarationProfiles(_ context.Context, refs []catapi.DeclarationProfileRef) (map[catapi.DeclarationProfileRef]catapi.ResolvedDeclarationProfile, error) {
+	p.asked = append(p.asked, refs...)
+	out := map[catapi.DeclarationProfileRef]catapi.ResolvedDeclarationProfile{}
+	for _, ref := range refs {
+		r, ok := p.out[ref]
+		if !ok {
+			// CAT answers every reference: no profile has the key.
+			r = catapi.ResolvedDeclarationProfile{Ref: ref, Code: catapi.CodeDeclarationProfileUnverified}
+		}
+		out[ref] = r
+	}
+	return out, nil
+}
+
+// R39 (S5 A5, CAT-INV-002): each line's (SKU, specification revision, code table version) is asked
+// with revision 0, the revision verified now. A verified answer is the profile with its commodity
+// code, export control classification and content hash; a profile with only a draft is unverified,
+// without content; a key no profile has is absent. CAT's classifications are the check's.
+func TestCATProfiles(t *testing.T) {
+	if tcc.NotControlled != catapi.ExportNotControlled || tcc.Controlled != catapi.ExportControlled {
+		t.Fatal("CAT's export control classifications are the check's")
+	}
+	key := func(sku string) catapi.DeclarationProfileRef {
+		return catapi.DeclarationProfileRef{SkuID: sku, SpecRevision: 2, CodeTableVersion: "CN-2026"}
+	}
+	hash := strings.Repeat("c", 64)
+	p := &profiles{out: map[catapi.DeclarationProfileRef]catapi.ResolvedDeclarationProfile{
+		key("sku.plain"): {Ref: key("sku.plain"), Verified: true, ProfileID: "decl.plain", Revision: 3, Status: catapi.StatusVerified, CurrentRevision: 3,
+			DraftRevision: 4, ContentHash: hash, Profile: catapi.DeclarationProfile{Commodity: catapi.CommodityClassification{Code: "6109100021"},
+				ExportControl: catapi.ExportControlClassification{Status: catapi.ExportNotControlled}}},
+		key("sku.dual"): {Ref: key("sku.dual"), Verified: true, ProfileID: "decl.dual", Revision: 1, ContentHash: hash,
+			Profile: catapi.DeclarationProfile{Commodity: catapi.CommodityClassification{Code: "8401100000"},
+				ExportControl: catapi.ExportControlClassification{Status: catapi.ExportControlled, ListReference: "合成两用物项 1A001"}}},
+		key("sku.draft"): {Ref: key("sku.draft"), Code: catapi.CodeDeclarationProfileUnverified, ProfileID: "decl.draft", DraftRevision: 1},
+	}}
+	ref := func(sku string) application.ProfileRef {
+		return application.ProfileRef{SkuID: sku, SpecRevision: 2, CodeTableVersion: "CN-2026"}
+	}
+	got, err := CAT{Profiles: p}.ResolveProfiles(context.Background(), []application.ProfileRef{ref("sku.plain"), ref("sku.dual"), ref("sku.draft"),
+		ref("sku.none")})
+	if err != nil || len(got) != 3 || len(p.asked) != 4 {
+		t.Fatalf("%+v %v", got, err)
+	}
+	for _, a := range p.asked {
+		if a.Revision != 0 || a.CodeTableVersion != "CN-2026" {
+			t.Fatalf("asked %+v", a)
+		}
+	}
+	if want := (tcc.Profile{ProfileID: "decl.plain", Revision: 3, CodeTableVersion: "CN-2026", Verified: true, CommodityCode: "6109100021",
+		ExportControl: tcc.NotControlled, ContentHash: hash}); got[ref("sku.plain")] != want {
+		t.Fatalf("verified %+v", got[ref("sku.plain")])
+	}
+	if d := got[ref("sku.dual")]; !d.Verified || d.ExportControl != tcc.Controlled || d.ListReference != "合成两用物项 1A001" {
+		t.Fatalf("controlled %+v", d)
+	}
+	if d := got[ref("sku.draft")]; d.Verified || d.ProfileID != "decl.draft" || d.Revision != 1 || d.CommodityCode != "" || d.ContentHash != "" {
+		t.Fatalf("draft only %+v", d)
+	}
+	if _, ok := got[ref("sku.none")]; ok {
+		t.Fatal("a key without a profile is absent")
+	}
+	if got, err := (CAT{Profiles: p}).ResolveProfiles(context.Background(), nil); err != nil || len(got) != 0 || len(p.asked) != 4 {
+		t.Fatal("no keys, no lookup")
 	}
 }

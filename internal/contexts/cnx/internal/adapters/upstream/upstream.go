@@ -3,16 +3,14 @@
 // each lookup runs before CNX's transaction in the upstream's own.
 //
 // TRD's order snapshots (OrderCommercialSnapshot v1 / SalesOrderRef v1, S5 A2), PTY's address
-// countries (AddressRoleRef v1 with the country, S5 A3b) and reference data's country programme
-// lists (S5 A3b) are wired. CAT's declaration profiles (S5 A5, catapi ResolveDeclarationProfiles)
-// are not in this build: NotWired answers DEPENDENCY_NOT_SUPPORTED for them, never an empty answer
-// that would read as "none".
+// countries (AddressRoleRef v1 with the country, S5 A3b), reference data's country programme lists
+// (S5 A3b) and CAT's declaration profiles (DeclarationProfileRef v1, S5 A5) are wired.
 package upstream
 
 import (
 	"context"
 
-	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/application"
 	tcc "go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/tradecompliancecheck"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
@@ -126,13 +124,49 @@ func (r REF) ResolveProgrammes(ctx context.Context, lists []string, countries []
 	return out, nil
 }
 
-// NotWired answers the port whose upstream contract is not in this build (CAT's declaration
-// profiles, S5 A5) with DEPENDENCY_NOT_SUPPORTED, naming the contract.
-type NotWired struct{}
+// CAT answers application.Profiles from CAT's DeclarationProfileLookups (R39; an active grant;
+// profiles belong to the company). Each key is asked with revision 0: the revision verified now.
+//
+//   - A verified answer is the profile at that revision: its commodity code, export control
+//     classification (not_controlled, or controlled with its list reference) and content hash.
+//   - DECLARATION_PROFILE_UNVERIFIED for a profile that has only a draft is the profile unverified,
+//     at its draft revision and without content (CAT never answers a candidate's content): the line
+//     is "unverified" and a clear conclusion is refused with DECLARATION_PROFILE_UNVERIFIED.
+//   - DECLARATION_PROFILE_UNVERIFIED because no profile has the key is absent: the line is "unknown"
+//     and a clear conclusion is refused the same way.
+//
+// REFERENCE_STALE and REFERENCE_INVALID answer a stated revision only and cannot occur here. R39 has
+// no guard (application.Profiles says what that means for an evaluation).
+type CAT struct {
+	Profiles catapi.DeclarationProfileLookups
+}
 
-var _ application.Profiles = NotWired{}
+var _ application.Profiles = CAT{}
 
-// ResolveProfiles answers that CAT's DeclarationProfileRef v1 is not wired.
-func (NotWired) ResolveProfiles(context.Context, []application.SpecRef) (map[application.SpecRef]tcc.Profile, error) {
-	return nil, api.Reject(api.CodeDependencyNotSupported, "/", "CAT DeclarationProfileRef v1 is not wired in this build")
+// ResolveProfiles asks CAT before CNX's transaction, at most catapi.MaxLookup keys per lookup.
+func (c CAT) ResolveProfiles(ctx context.Context, refs []application.ProfileRef) (map[application.ProfileRef]tcc.Profile, error) {
+	out := map[application.ProfileRef]tcc.Profile{}
+	for start := 0; start < len(refs); start += catapi.MaxLookup {
+		chunk := refs[start:min(start+catapi.MaxLookup, len(refs))]
+		asked := make([]catapi.DeclarationProfileRef, len(chunk))
+		for i, r := range chunk {
+			asked[i] = catapi.DeclarationProfileRef{SkuID: r.SkuID, SpecRevision: r.SpecRevision, CodeTableVersion: r.CodeTableVersion}
+		}
+		got, err := c.Profiles.ResolveDeclarationProfiles(ctx, asked)
+		if err != nil {
+			return nil, err
+		}
+		for ref, r := range got {
+			key := application.ProfileRef{SkuID: ref.SkuID, SpecRevision: ref.SpecRevision, CodeTableVersion: ref.CodeTableVersion}
+			switch {
+			case r.Verified:
+				x := r.Profile.ExportControl
+				out[key] = tcc.Profile{ProfileID: r.ProfileID, Revision: r.Revision, CodeTableVersion: ref.CodeTableVersion, Verified: true,
+					CommodityCode: r.Profile.Commodity.Code, ExportControl: x.Status, ListReference: x.ListReference, ContentHash: r.ContentHash}
+			case r.ProfileID != "":
+				out[key] = tcc.Profile{ProfileID: r.ProfileID, Revision: r.DraftRevision, CodeTableVersion: ref.CodeTableVersion}
+			}
+		}
+	}
+	return out, nil
 }

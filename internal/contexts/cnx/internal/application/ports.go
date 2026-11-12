@@ -9,9 +9,8 @@ import (
 // CNX's ports to the upstream contracts a trade compliance evaluation reads before CNX's
 // transaction. They name what CNX needs, in CNX's terms; adapters implement them on the upstream
 // api packages (adapters/upstream, module.go): TRD's order snapshots (S5 A2), PTY's address
-// countries and reference data's country programmes (S5 A3b). CAT's declaration profiles (S5 A5)
-// are not in this build: their adapter answers DEPENDENCY_NOT_SUPPORTED until A5 merges. Tests
-// implement the ports to steer the upstreams' answers.
+// countries and reference data's country programmes (S5 A3b) and CAT's declaration profiles (S5
+// A5). Tests may implement the ports to steer the upstreams' answers.
 
 // Orders is CNX's port to TRD (Context Map R46 TRD→CNX, "SalesOrderRef v1（订单修订、行、交易方与地址）",
 // no guard lock; risk 报关资料引用旧订单修订). ResolveOrders says what TRD says of each order now:
@@ -78,18 +77,25 @@ type AddressCountry struct {
 }
 
 // Profiles is CNX's port to CAT (R39 CAT→CNX, DeclarationProfileRef v1: the verified profile's
-// commodity code and export control classification; risk AI 商品编码候选被当作合规结论): the
-// declaration profile of each SKU specification revision, verified or not (catapi
-// ResolveDeclarationProfiles, planned by S5 A5, not in this build). A specification without a
-// profile is absent.
+// commodity code and export control classification; risk AI 商品编码候选被当作合规结论; no guard
+// lock): for each SKU specification revision under a customs code table version, the profile
+// revision verified now (catapi DeclarationProfileLookups.ResolveDeclarationProfiles with revision
+// 0), or the profile unverified when it has only a draft. A key no profile is kept for is absent.
+//
+// R39 carries no guard, so nothing holds a profile between the lookup and CNX's commit: when a
+// newer revision is verified in between, the evaluation stays on the revision it read — verified
+// when read and never changed since, superseded for new use — which it records with its revision
+// and content hash. A later evaluation reads the newer one; superseding a profile reopens nothing.
 type Profiles interface {
-	ResolveProfiles(ctx context.Context, specs []SpecRef) (map[SpecRef]tcc.Profile, error)
+	ResolveProfiles(ctx context.Context, refs []ProfileRef) (map[ProfileRef]tcc.Profile, error)
 }
 
-// SpecRef is a SKU specification revision (CAT SkuRef v1).
-type SpecRef struct {
-	SkuID        string
-	SpecRevision int64
+// ProfileRef is the key CAT keeps a declaration profile for (catapi DeclarationProfileKey): a SKU
+// specification revision under a customs commodity code table version.
+type ProfileRef struct {
+	SkuID            string
+	SpecRevision     int64
+	CodeTableVersion string
 }
 
 // Programmes is CNX's port to reference data (country programme lists imported under control,

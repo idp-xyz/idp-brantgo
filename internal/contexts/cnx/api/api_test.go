@@ -21,14 +21,16 @@ func verdict(err error) string {
 func validEvaluate() Evaluate {
 	return Evaluate{IdempotencyKey: "k1", OrderID: "o1", OrderRevision: 1, RegulationID: "screening", RegulationRevision: 1,
 		ProgrammeLists:   []string{"cn.embargo", "un.sc"},
+		CodeTableVersion: "CN-2026",
 		Destination:      &Destination{Country: "DE", Reason: "B/L 显示汉堡卸货", EvidenceIDs: []string{"src.1"}},
 		AddressCountries: []AddressCountry{{PartyID: "p1", AddressID: "hq", Country: "DE", EvidenceIDs: []string{"src.2"}}},
 		EndUse:           &EndUse{Statement: "零售", EvidenceIDs: []string{"src.3"}}}
 }
 
 // The closed contract of trade_compliance.evaluate: identifiers, an order revision, a CAS value
-// (0: no check yet), a screening_regulation revision, ISO 3166-1 alpha-2 countries, and evidence
-// for every entered country and the end use (S5 D-8).
+// (0: no check yet), a screening_regulation revision, the programme lists and the customs code
+// table version the evaluation states (an identifier, as CAT keys declaration profiles), ISO 3166-1
+// alpha-2 countries, and evidence for every entered country and the end use (S5 D-8).
 func TestEvaluateContract(t *testing.T) {
 	for _, c := range []struct {
 		edit func(*Evaluate)
@@ -45,6 +47,8 @@ func TestEvaluateContract(t *testing.T) {
 		{func(c *Evaluate) { c.ProgrammeLists = nil }, "SCHEMA_INVALID /args/programme_lists"},
 		{func(c *Evaluate) { c.ProgrammeLists = []string{"a", "a"} }, "SCHEMA_INVALID /args/programme_lists/1"},
 		{func(c *Evaluate) { c.ProgrammeLists = []string{strings.Repeat("l", 33)} }, "SCHEMA_INVALID /args/programme_lists/0"},
+		{func(c *Evaluate) { c.CodeTableVersion = "" }, "SCHEMA_INVALID /args/code_table_version"},
+		{func(c *Evaluate) { c.CodeTableVersion = "CN 2026" }, "SCHEMA_INVALID /args/code_table_version"},
 		{func(c *Evaluate) { c.Destination.Country = "UK" }, "SCHEMA_INVALID /args/destination/country"},
 		{func(c *Evaluate) { c.Destination.Country = "de" }, "SCHEMA_INVALID /args/destination/country"},
 		{func(c *Evaluate) { c.Destination.Country = "DEU" }, "SCHEMA_INVALID /args/destination/country"},
@@ -126,12 +130,11 @@ func TestReopenContract(t *testing.T) {
 }
 
 // The error catalog's rows for the codes CNX declares: TRADE_COMPLIANCE_NOT_CLEAR, REFERENCE_STALE
-// 409; ORDER_NOT_ACTIVE, DECLARATION_PROFILE_UNVERIFIED, DEPENDENCY_NOT_SUPPORTED 422.
+// 409; ORDER_NOT_ACTIVE, DECLARATION_PROFILE_UNVERIFIED 422.
 func TestCodesFollowTheCatalog(t *testing.T) {
 	want := map[string]kernel.Category{
 		"TRADE_COMPLIANCE_NOT_CLEAR": kernel.CategoryConflict, "REFERENCE_STALE": kernel.CategoryConflict,
 		"ORDER_NOT_ACTIVE": kernel.CategoryInvalid, "DECLARATION_PROFILE_UNVERIFIED": kernel.CategoryInvalid,
-		"DEPENDENCY_NOT_SUPPORTED": kernel.CategoryInvalid,
 	}
 	got := Codes()
 	if len(got) != len(want) {

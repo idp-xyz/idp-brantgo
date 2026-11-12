@@ -119,7 +119,7 @@ func evaluationView(ev *tcc.Evaluation) api.EvaluationView {
 			RescreenIntervalDays: d.Regulation.RescreenDays, ValidUntil: timestampOf(d.Regulation.ValidUntil)},
 		Destination: api.DestinationView{Country: d.Destination.Country, Source: d.Destination.Source, PartyID: d.Destination.PartyID,
 			AddressID: d.Destination.AddressID, Reason: d.Destination.Reason, Evidence: evidenceViews(d.Destination.Evidence)},
-		Parties: []api.PartyView{}, Lines: []api.LineView{}, ProgrammeLists: d.Lists, Programmes: []api.ProgrammeView{}, Findings: []api.FindingView{},
+		Parties: []api.PartyView{}, Lines: []api.LineView{}, CodeTableVersion: d.CodeTableVersion, ProgrammeLists: d.Lists, Programmes: []api.ProgrammeView{}, Findings: []api.FindingView{},
 		Gaps: []api.GapView{}, Outcome: string(d.Outcome), FactsHash: ev.FactsHash,
 		EvaluatedBy: kernel.ActorRef{Kind: kernel.ActorKind(d.EvaluatedBy.Kind), ID: d.EvaluatedBy.ID}, EvaluatedAt: timestampOf(d.EvaluatedAt),
 		ValidUntil: timestampOf(d.ValidUntil), AuthorityEpoch: d.AuthorityEpoch}

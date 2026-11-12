@@ -262,9 +262,8 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		// CNX after PUR (S5: QLT, STL, CNX, FUL). CAT's declaration profiles (S5 A5) are wired when
-		// A5 merges; until then that port answers DEPENDENCY_NOT_SUPPORTED.
-		c.CNX, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(c.TRD), Countries: cnx.PTYCountries(c.PTY), Profiles: cnx.ProfilesNotWired(),
+		// CNX after PUR (S5: QLT, STL, CNX, FUL).
+		c.CNX, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(c.TRD), Countries: cnx.PTYCountries(c.PTY), Profiles: cnx.CATProfiles(c.CAT),
 			Programmes: cnx.REFProgrammes(c.REF), Configs: c.POL, Sources: c.EVD})
 	}
 	if err != nil {

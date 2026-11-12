@@ -81,6 +81,14 @@ func TestRequestHashIgnoresKeyAndVersion(t *testing.T) {
 	if name, _, _ := request(nil); name != "" {
 		t.Fatal("unknown command")
 	}
+	// The code table version is a business argument: another table is another request.
+	_, _, a := request(api.Evaluate{IdempotencyKey: "k1", OrderID: "o", OrderRevision: 1, CodeTableVersion: "CN-2026"})
+	_, _, b := request(api.Evaluate{IdempotencyKey: "k1", OrderID: "o", OrderRevision: 1, CodeTableVersion: "CN-2027"})
+	ha, _ := action.RequestHash(a)
+	hb, _ := action.RequestHash(b)
+	if ha == hb {
+		t.Fatal("the request hash covers code_table_version")
+	}
 }
 
 // A regulation revision is a screening_regulation POL resolved in force.

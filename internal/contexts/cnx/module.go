@@ -10,6 +10,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/upstream"
@@ -49,7 +50,7 @@ type (
 	AddressRef      = application.AddressRef
 	AddressCountry  = application.AddressCountry
 	Profiles        = application.Profiles
-	SpecRef         = application.SpecRef
+	ProfileRef      = application.ProfileRef
 	Profile         = tcc.Profile
 	Programmes      = application.Programmes
 	ProgrammeAnswer = application.ProgrammeAnswer
@@ -78,9 +79,11 @@ func REFProgrammes(programmes upstream.Programmes) Programmes {
 	return upstream.REF{Programmes: programmes}
 }
 
-// ProfilesNotWired answers CNX's port to CAT's declaration profiles (S5 A5, not in this build)
-// with DEPENDENCY_NOT_SUPPORTED.
-func ProfilesNotWired() Profiles { return upstream.NotWired{} }
+// CATProfiles is CNX's port to CAT on CAT's DeclarationProfileLookups (DeclarationProfileRef v1,
+// R39): the revision verified now of each line's profile under the evaluation's code table version.
+func CATProfiles(profiles catapi.DeclarationProfileLookups) Profiles {
+	return upstream.CAT{Profiles: profiles}
+}
 
 // New wires CNX to db, a transaction owner that belongs to CNX alone, and to its upstreams.
 func New(db *bentopg.DB, u Upstream) (*Module, error) {

@@ -21,7 +21,9 @@ import (
 //
 // Before CNX's transaction, Prepare reads the order at its current revision (TRD, R46), the
 // countries of its addresses (PTY, R77), the declaration profiles of its lines' specifications
-// (CAT, R39), the screening_regulation revision (POL, R50), the current versions of the programme
+// under the code table version the command states (CAT, R39: the revision verified now; no guard,
+// so a revision verified anew before CNX commits leaves the evaluation on the one it read, recorded
+// with its revision and content hash), the screening_regulation revision (POL, R50), the current versions of the programme
 // lists named and their programmes naming the countries found or entered (reference data) and the
 // evidence sources (EVD, R54).
 //
@@ -41,7 +43,7 @@ import (
 type evaluateFacts struct {
 	order      *Order
 	countries  map[AddressRef]AddressCountry
-	profiles   map[SpecRef]tcc.Profile
+	profiles   map[ProfileRef]tcc.Profile
 	regulation *polapi.ResolvedConfig
 	programmes ProgrammeAnswer
 	sources    map[string]evdapi.SourceRef
@@ -120,13 +122,13 @@ func (h *evaluateCommand) Prepare(ctx context.Context) error {
 	if h.f.countries, err = u.Countries.ResolveAddressCountries(ctx, refs); err != nil {
 		return err
 	}
-	var specs []SpecRef
+	var keys []ProfileRef
 	for _, l := range o.Lines {
-		if s := (SpecRef{SkuID: l.SkuID, SpecRevision: l.SpecRevision}); !slices.Contains(specs, s) {
-			specs = append(specs, s)
+		if k := (ProfileRef{SkuID: l.SkuID, SpecRevision: l.SpecRevision, CodeTableVersion: h.cmd.CodeTableVersion}); !slices.Contains(keys, k) {
+			keys = append(keys, k)
 		}
 	}
-	if h.f.profiles, err = u.Profiles.ResolveProfiles(ctx, specs); err != nil {
+	if h.f.profiles, err = u.Profiles.ResolveProfiles(ctx, keys); err != nil {
 		return err
 	}
 	ref := polapi.ConfigRef{Kind: polapi.KindScreeningRegulation, ConfigID: h.cmd.RegulationID, Revision: h.cmd.RegulationRevision}
@@ -238,7 +240,8 @@ func (h *evaluateCommand) Apply(ctx context.Context, exec bentopg.Executor, d au
 	}
 	in := tcc.Input{Binding: o.Binding, Regulation: tcc.Regulation{ID: f.regulation.Ref.ConfigID, Revision: f.regulation.Ref.Revision,
 		ContentHash: f.regulation.ContentHash, RescreenDays: reg.RescreenIntervalDays, ValidUntil: f.regulation.ValidUntil},
-		Lists: cmd.ProgrammeLists, Versions: f.programmes.Versions, Hits: f.programmes.Hits, Addresses: f.addresses(), By: d.Actor, Epoch: d.Epoch, At: now}
+		CodeTableVersion: cmd.CodeTableVersion, Lists: cmd.ProgrammeLists, Versions: f.programmes.Versions, Hits: f.programmes.Hits,
+		Addresses: f.addresses(), By: d.Actor, Epoch: d.Epoch, At: now}
 	if dest := cmd.Destination; dest != nil {
 		ev, err := evidenceOf(f.sources, dest.EvidenceIDs, "/args/destination/evidence_ids")
 		if err != nil {
@@ -262,7 +265,7 @@ func (h *evaluateCommand) Apply(ctx context.Context, exec bentopg.Executor, d au
 	}
 	for _, l := range o.Lines {
 		line := tcc.Line{LineID: l.LineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision}
-		if p, ok := f.profiles[SpecRef{SkuID: l.SkuID, SpecRevision: l.SpecRevision}]; ok {
+		if p, ok := f.profiles[ProfileRef{SkuID: l.SkuID, SpecRevision: l.SpecRevision, CodeTableVersion: cmd.CodeTableVersion}]; ok {
 			line.Profile = &p
 		}
 		in.Lines = append(in.Lines, line)

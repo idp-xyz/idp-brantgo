@@ -108,7 +108,9 @@ type Address struct {
 	Country       string
 }
 
-// Profile is a line's declaration profile as CAT states it (DeclarationProfileRef v1).
+// Profile is a line's declaration profile as CAT states it (DeclarationProfileRef v1): the revision
+// verified now, with its commodity code, export control classification and content hash, or
+// (Verified false) a profile that has only a draft, whose content CAT never answers.
 type Profile struct {
 	ProfileID        string
 	Revision         int64
@@ -176,49 +178,52 @@ type EndUse struct {
 	Evidence  []Evidence `json:"evidence"`
 }
 
-// Input is everything one evaluation judges. Lists are the programme lists the evaluation is to
-// use; Versions the version reference data holds of each (a list never imported is absent); Hits
-// the programmes of those versions naming the countries asked about.
+// Input is everything one evaluation judges. CodeTableVersion is the customs code table version
+// the lines' profiles were asked under. Lists are the programme lists the evaluation is to use;
+// Versions the version reference data holds of each (a list never imported is absent); Hits the
+// programmes of those versions naming the countries asked about.
 type Input struct {
-	CheckID      string
-	EvaluationID string
-	Seq          int
-	Binding      Binding
-	Addresses    []Address
-	Lines        []Line
-	Destination  *Entered // nil: the consignee address's country
-	Countries    []Entered
-	EndUse       *EndUse
-	Regulation   Regulation
-	Lists        []string
-	Versions     map[string]ListVersion
-	Hits         []ProgrammeHit
-	By           kernel.ActorRef
-	Epoch        int64
-	At           time.Time
+	CheckID          string
+	EvaluationID     string
+	Seq              int
+	Binding          Binding
+	Addresses        []Address
+	Lines            []Line
+	Destination      *Entered // nil: the consignee address's country
+	Countries        []Entered
+	EndUse           *EndUse
+	Regulation       Regulation
+	CodeTableVersion string
+	Lists            []string
+	Versions         map[string]ListVersion
+	Hits             []ProgrammeHit
+	By               kernel.ActorRef
+	Epoch            int64
+	At               time.Time
 }
 
 // Document is an evaluation as stored: the exact JSON its FactsHash covers.
 type Document struct {
-	Contract       string         `json:"contract"`
-	CheckID        string         `json:"check_id"`
-	EvaluationID   string         `json:"evaluation_id"`
-	Seq            int            `json:"seq"`
-	Order          Binding        `json:"order"`
-	Regulation     DocRegulation  `json:"regulation"`
-	Destination    DocDestination `json:"destination"`
-	Parties        []DocParty     `json:"parties"`
-	Lines          []DocLine      `json:"lines"`
-	EndUse         *EndUse        `json:"end_use"`
-	Lists          []string       `json:"programme_lists"`
-	Programmes     []DocProgramme `json:"programmes"`
-	Findings       []Finding      `json:"findings"`
-	Gaps           []Gap          `json:"gaps"`
-	Outcome        Outcome        `json:"outcome"`
-	EvaluatedBy    DocActor       `json:"evaluated_by"`
-	AuthorityEpoch int64          `json:"authority_epoch"`
-	EvaluatedAt    string         `json:"evaluated_at"`
-	ValidUntil     string         `json:"valid_until"`
+	Contract         string         `json:"contract"`
+	CheckID          string         `json:"check_id"`
+	EvaluationID     string         `json:"evaluation_id"`
+	Seq              int            `json:"seq"`
+	Order            Binding        `json:"order"`
+	Regulation       DocRegulation  `json:"regulation"`
+	Destination      DocDestination `json:"destination"`
+	Parties          []DocParty     `json:"parties"`
+	CodeTableVersion string         `json:"code_table_version"`
+	Lines            []DocLine      `json:"lines"`
+	EndUse           *EndUse        `json:"end_use"`
+	Lists            []string       `json:"programme_lists"`
+	Programmes       []DocProgramme `json:"programmes"`
+	Findings         []Finding      `json:"findings"`
+	Gaps             []Gap          `json:"gaps"`
+	Outcome          Outcome        `json:"outcome"`
+	EvaluatedBy      DocActor       `json:"evaluated_by"`
+	AuthorityEpoch   int64          `json:"authority_epoch"`
+	EvaluatedAt      string         `json:"evaluated_at"`
+	ValidUntil       string         `json:"valid_until"`
 }
 
 // DocRegulation is the regulation revision in the document; ValidUntil "" is open-ended.
@@ -355,7 +360,8 @@ func Evaluate(in Input) (*Evaluation, error) {
 	doc := Document{Contract: DocumentContract, CheckID: in.CheckID, EvaluationID: in.EvaluationID, Seq: in.Seq, Order: in.Binding,
 		Regulation: DocRegulation{ID: in.Regulation.ID, Revision: in.Regulation.Revision, ContentHash: in.Regulation.ContentHash,
 			RescreenDays: in.Regulation.RescreenDays},
-		Parties: []DocParty{}, Lines: []DocLine{}, Programmes: []DocProgramme{}, Findings: []Finding{}, Gaps: []Gap{},
+		CodeTableVersion: in.CodeTableVersion,
+		Parties:          []DocParty{}, Lines: []DocLine{}, Programmes: []DocProgramme{}, Findings: []Finding{}, Gaps: []Gap{},
 		EvaluatedBy: DocActor{Kind: string(in.By.Kind), ID: in.By.ID}, AuthorityEpoch: in.Epoch, EvaluatedAt: kernel.FormatTimestamp(in.At),
 		ValidUntil: kernel.FormatTimestamp(in.validUntil())}
 	if !in.Regulation.ValidUntil.IsZero() {

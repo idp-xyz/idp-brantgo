@@ -40,9 +40,10 @@ func baseInput() Input {
 		},
 		Lines: []Line{{LineID: "L1", SkuID: "sku.shirt", SpecRevision: 1, Profile: &Profile{ProfileID: "dp.1", Revision: 1, CodeTableVersion: "2026",
 			Verified: true, CommodityCode: "6205200099", ExportControl: NotControlled, ContentHash: strings.Repeat("c", 64)}}},
-		EndUse:     &EndUse{Statement: "Retail sale of apparel", Evidence: []Evidence{evidence1}},
-		Regulation: Regulation{ID: "screening", Revision: 1, ContentHash: strings.Repeat("r", 64), RescreenDays: 30},
-		Lists:      []string{"un.sc", "cn.embargo"},
+		EndUse:           &EndUse{Statement: "Retail sale of apparel", Evidence: []Evidence{evidence1}},
+		Regulation:       Regulation{ID: "screening", Revision: 1, ContentHash: strings.Repeat("r", 64), RescreenDays: 30},
+		CodeTableVersion: "2026",
+		Lists:            []string{"un.sc", "cn.embargo"},
 		Versions: map[string]ListVersion{
 			"cn.embargo": {ListCode: "cn.embargo", Jurisdiction: "CN", Version: "v1", ContentHash: strings.Repeat("e", 64)},
 			"un.sc":      {ListCode: "un.sc", Jurisdiction: "UN", Version: "2026-11", ContentHash: strings.Repeat("u", 64)},
@@ -91,7 +92,8 @@ func TestEvaluationOfACleanOrderFindsNothing(t *testing.T) {
 	if len(d.Programmes) != 2 || d.Programmes[0].Code != "cn.embargo" || d.Programmes[1].Code != "un.sc" {
 		t.Fatalf("programmes %+v", d.Programmes)
 	}
-	if d.Order != binding || d.Regulation.ID != "screening" || d.Lines[0].Classification != NotControlled || d.ValidUntil != "2026-12-12T08:00:00.000000Z" {
+	if d.Order != binding || d.Regulation.ID != "screening" || d.Lines[0].Classification != NotControlled || d.ValidUntil != "2026-12-12T08:00:00.000000Z" ||
+		d.CodeTableVersion != "2026" || d.Lines[0].CodeTableVersion != "2026" || d.Lines[0].ProfileRevision != 1 || d.Lines[0].ProfileHash == "" {
 		t.Fatalf("%+v", d)
 	}
 	again, err := Parse(ev.Bytes, ev.FactsHash)
