@@ -338,21 +338,28 @@ func TestShipmentLineAndExportLotLookups(t *testing.T) {
 		}
 	}
 
-	amend := w.amendCmd(w.order.ObjectID, "amendment.price", 0, w.order.OrderRevision, w.order.OrderHash, "120")
-	amend.Lines[0].UnitPrice = "9"
+	// A line with confirmed shipments keeps its SKU, price and tax (S3 rule in orderrev.Next); since
+	// unit C4a TRD sees FUL's real shipments (ShipmentFacts v1), so a price change of L1 is refused.
+	priced := w.amendCmd(w.order.ObjectID, "amendment.price", 0, w.order.OrderRevision, w.order.OrderHash, "120")
+	priced.Lines[0].UnitPrice = "9"
+	_, err = w.c.TRD.PrepareAmendment(w.author, priced)
+	w.want(err, kernel.CodeInvalidState)
+	// A larger quantity at the same price makes revision 2; what FUL confirmed stays bound to revision 1.
+	amend := w.amendCmd(w.order.ObjectID, "amendment.qty", 0, w.order.OrderRevision, w.order.OrderHash, "130")
 	p, err := w.c.TRD.PrepareAmendment(w.author, amend)
 	w.must(err)
-	s, err := w.c.TRD.SubmitAmendment(w.author, trdapi.SubmitAmendment{IdempotencyKey: w.key(), OrderID: w.order.ObjectID, AmendmentID: "amendment.price",
+	s, err := w.c.TRD.SubmitAmendment(w.author, trdapi.SubmitAmendment{IdempotencyKey: w.key(), OrderID: w.order.ObjectID, AmendmentID: "amendment.qty",
 		ExpectedVersion: p.RowVersion})
 	w.must(err)
 	dec, err := w.c.TRD.DecideAmendment(w.reviewer, trdapi.DecideAmendment{IdempotencyKey: w.key(), OrderID: w.order.ObjectID,
-		AmendmentID: "amendment.price", ExpectedVersion: s.RowVersion, AmendmentHash: s.AmendmentHash, Decision: trdapi.DecisionApprove,
-		Reason: "客户书面确认新单价"})
+		AmendmentID: "amendment.qty", ExpectedVersion: s.RowVersion, AmendmentHash: s.AmendmentHash, Decision: trdapi.DecisionApprove,
+		Reason: "客户书面确认追加数量"})
 	w.must(err)
-	applied, err := w.c.TRD.ApplyAmendment(w.reviewer, w.applyCmd(w.order.ObjectID, "amendment.price", dec.RowVersion))
+	applied, err := w.c.TRD.ApplyAmendment(w.reviewer, w.applyCmd(w.order.ObjectID, "amendment.qty", dec.RowVersion))
 	w.must(err)
-	if now := w.orderFact(); applied.OrderRevision != 2 || len(now.Lines) != 1 || sameDecimal(now.Lines[0].UnitPrice, w.line.UnitPrice) {
-		t.Fatalf("revision 2 at another price %+v %+v", applied, now.Lines)
+	if now := w.orderFact(); applied.OrderRevision != 2 || len(now.Lines) != 1 || !sameDecimal(now.Lines[0].Quantity, "130") ||
+		!sameDecimal(now.Lines[0].UnitPrice, w.line.UnitPrice) {
+		t.Fatalf("revision 2 with the larger quantity %+v %+v", applied, now.Lines)
 	}
 	refs, err = w.ful.ResolveShipmentLines(w.merch, []fulapi.ShipmentLineKey{k1})
 	w.must(err)
