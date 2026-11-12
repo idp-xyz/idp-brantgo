@@ -340,6 +340,18 @@ GRANT EXECUTE ON FUNCTION brant_cnx.export_license_outstanding(text, text, text)
 GRANT EXECUTE ON FUNCTION brant_cnx.export_license_state(text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_export_license_v1(text, timestamptz) TO brant_app;
 
+-- CNX purchase invoices and tax refund cases: an invoice keeps its import and is decided and
+-- reversed once, a case keeps its binding and follows SM-CNX-TAXCASE (triggers; the column grants
+-- are also what the FOR UPDATE locks of the commands and the allocation trigger need); lines,
+-- matches, allocations and results are only inserted. The reads derive whether an allocation
+-- counts with its function.
+GRANT SELECT, INSERT ON brant_cnx.purchase_invoice, brant_cnx.purchase_invoice_line, brant_cnx.purchase_invoice_match,
+    brant_cnx.tax_refund_case, brant_cnx.tax_evidence_allocation, brant_cnx.tax_refund_result TO brant_app;
+GRANT UPDATE (status, row_version, invoice_kind, invoice_number, colour, verified, decision, decision_reason, decided_by_kind, decided_by_id,
+    decide_epoch, decided_at, red_of_invoice_id, reversed_by_invoice_id, updated_at) ON brant_cnx.purchase_invoice TO brant_app;
+GRANT UPDATE (status, row_version, updated_at) ON brant_cnx.tax_refund_case TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.tax_evidence_counts(text, text, text, text) TO brant_app;
+
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
 -- every update. A shipment is inserted prepared with its lines and parties and then changes only by
