@@ -23,6 +23,7 @@ func TestMilestonesAndExportLotsOverHTTP(t *testing.T) {
 	d := w.delivered("commitment.1", "100")
 	_, err := w.prepare(w.merch, "shipment.1", "40", d, rel)
 	w.must(err)
+	w.granted("shipment.1")
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
 	is := newIssuer(t)

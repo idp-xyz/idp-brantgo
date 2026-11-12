@@ -4,21 +4,24 @@
 // FUL's upstream contexts are TRD (Context Map R27: ActiveOrderRef v1 before the transaction,
 // OrderGuard v1 inside it), QLT (R26: QualityReleaseRef v1, QualityReleaseGuard v1), PUR (R59:
 // supplier delivery lines and SupplierDeliveryGuard v1, through FUL's port Deliveries), PTY (R44:
-// PartyScreeningGuard v1) and EVD (R74: SourceRef v1 for evidence). A command reads them before its
-// transaction (the ledger's Preparer step); inside it, it calls their guard functions with FUL's own
-// executor, through the ports below. FUL never calls another context's transaction owner. It
+// PartyScreeningGuard v1), CNX (R56: TradeComplianceGuard v1, ExportLicenseGuard v1), STL (R45:
+// PaymentConditionGuard v1) and EVD (R74: SourceRef v1 for evidence). A command reads them before
+// its transaction (the ledger's Preparer step); inside it, it calls their guard functions with FUL's
+// own executor, through the ports below. FUL never calls another context's transaction owner. It
 // publishes ShipmentFacts v1 to TRD (R70).
 //
 // Lock order inside FUL's transactions (ADR-BR-011; tactical lockOrder "FUL 为出运根与订单履约根";
-// S5 decision D-3): the shipment its ID names FOR UPDATE; for shipment.prepare and shipment.confirm
-// then the order's fulfilment root FOR UPDATE (prepare creates it with the order's first shipment);
-// then the company authority guard FOR SHARE (the ledger); then, in shipment.confirm, the upstream
-// guard rows FOR SHARE in context code order — CNX (extension points until S5 unit C1), PTY's
-// screening per party in party ID order, PUR's delivery per delivery line in (delivery, line) order,
-// QLT's release per release in ID order, STL (extension point), TRD's order — and FUL's commercial
-// release extension point. shipment.prepare calls TRD's OrderGuard only. packing.plan,
-// packing.record_actual and shipment.cancel lock the shipment alone: they change nothing an order's
-// other shipments are judged on.
+// S5 decision D-3): the shipment its ID names FOR UPDATE; for shipment.prepare, shipment.confirm and
+// the release commands then the order's fulfilment root FOR UPDATE (prepare creates it with the
+// order's first shipment); for shipment.confirm and the release commands then the shipment's
+// release of the scope FOR UPDATE (FUL's own roots before the authority guard); then the company
+// authority guard FOR SHARE (the ledger); then, in shipment.confirm and the release commands, the
+// upstream guard rows FOR SHARE in context code order (judge.go) — CNX's trade compliance check and
+// export licence, PTY's screening per party in party ID order, PUR's delivery per delivery line in
+// (delivery, line) order, QLT's release per release in ID order, STL's order account, TRD's order.
+// shipment.prepare calls TRD's OrderGuard only. packing.plan, packing.record_actual and
+// shipment.cancel lock the shipment alone: they change nothing an order's other shipments are
+// judged on.
 //
 // S5-03b: milestone.plan and milestone.record_actual lock the plan FOR UPDATE, then the authority
 // guard; they call no upstream guard (an order subject is read from TRD before the transaction).
@@ -49,10 +52,12 @@ var (
 )
 
 // Rules is FUL's authorization policy. The tactical model's humanOnlyCommands name
-// shipment.confirm: an AI or system actor is PERMISSION_DENIED. shipment.prepare, packing.plan,
-// packing.record_actual and shipment.cancel are human or AI (SM-FUL-SHIPMENT: cancel "human|ai").
-// The permission of a command is its name (role template merchandiser). Reads need ful.read, the
-// audit trail ful.audit.
+// shipment.confirm, commercial_release.grant_exception and document_release.record: an AI or system
+// actor is PERMISSION_DENIED. shipment.prepare, packing.plan, packing.record_actual and
+// shipment.cancel are human or AI (SM-FUL-SHIPMENT: cancel "human|ai");
+// commercial_release.evaluate is human, AI or system (SM-FUL-RELEASE). The permission of a command
+// is its name (role templates merchandiser, documentation, and credit_manager, which holds
+// commercial_release.grant_exception exclusively). Reads need ful.read, the audit trail ful.audit.
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandPrepareShipment, Permission: api.CommandPrepareShipment, ActorKinds: humanOrAgent},
@@ -60,8 +65,13 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandRecordPacking, Permission: api.CommandRecordPacking, ActorKinds: humanOrAgent},
 		{Command: api.CommandCancelShipment, Permission: api.CommandCancelShipment, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandConfirmShipment, api.CommandConfirmShipment),
+		{Command: api.CommandEvaluateRelease, Permission: api.CommandEvaluateRelease, ActorKinds: anyActor},
+		authorization.HumanOnly(api.CommandGrantReleaseException, api.CommandGrantReleaseException),
+		authorization.HumanOnly(api.CommandRecordDocumentRelease, api.CommandRecordDocumentRelease),
 		{Command: api.CommandGetShipment, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetFulfilment, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetRelease, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandListShipmentReleases, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
 		// S5-03b: milestone.plan, milestone.record_actual and export_lot.register are human or AI
 		// (none is in humanOnlyCommands); an internal verification or an accepted fact is a
@@ -81,14 +91,14 @@ type Upstream struct {
 	Deliveries Deliveries     // PUR supplier delivery lines and SupplierDeliveryGuard v1 (R59), FUL's port
 	Screening  Screening      // PTY PartyScreeningGuard v1 (R44)
 	Sources    evdapi.Queries // EVD SourceRef v1 (R74)
-	// Extensions are the guards shipment.confirm names before S5 unit C1 wires them; nil ones are
-	// recorded as not wired.
-	Extensions Extensions
+	Compliance Compliance     // CNX TradeComplianceGuard v1 and ExportLicenseGuard v1 (R56)
+	Payments   Payments       // STL PaymentConditionGuard v1 (R45)
 }
 
 // Complete reports whether every upstream is wired.
 func (u Upstream) Complete() bool {
-	return u.Orders != nil && u.Releases != nil && u.Deliveries != nil && u.Screening != nil && u.Sources != nil
+	return u.Orders != nil && u.Releases != nil && u.Deliveries != nil && u.Screening != nil && u.Sources != nil && u.Compliance != nil &&
+		u.Payments != nil
 }
 
 // Service runs FUL's use cases.
@@ -104,7 +114,7 @@ func scope(ctx context.Context) kernel.Scope {
 }
 
 // Visible reports whether d's actor sees the object a stored result of command names: a milestone
-// plan, an export lot or a shipment.
+// plan, an export lot, a shipment, or the shipment of the release a release command's result names.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	switch command {
 	case api.CommandPlanMilestones, api.CommandRecordMilestoneActual:
@@ -113,6 +123,12 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	case api.CommandRegisterExportLot:
 		l, err := postgres.LoadLot(ctx, exec, scope(ctx), id)
 		return err == nil && l != nil && d.Sees(l.OwnerActor, l.OwnerTeam), err
+	case api.CommandEvaluateRelease, api.CommandGrantReleaseException, api.CommandRecordDocumentRelease:
+		r, err := postgres.LoadReleaseByID(ctx, exec, scope(ctx), id)
+		if err != nil || r == nil {
+			return false, err
+		}
+		id = r.ShipmentID
 	}
 	s, err := postgres.LoadShipment(ctx, exec, scope(ctx), id, postgres.NoLock)
 	return err == nil && s != nil && d.Sees(s.OwnerActor, s.OwnerTeam), err
@@ -156,6 +172,15 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.ConfirmShipment:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandConfirmShipment, key, c
+	case api.EvaluateRelease:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandEvaluateRelease, key, c
+	case api.GrantReleaseException:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandGrantReleaseException, key, c
+	case api.RecordDocumentRelease:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRecordDocumentRelease, key, c
 	case api.PlanMilestones:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandPlanMilestones, key, c

@@ -13,6 +13,8 @@ type STL interface {
 	stlapi.FundCommands
 	stlapi.Queries
 	stlapi.FundQueries
+	stlapi.ReviewCommands
+	stlapi.ReviewQueries
 	stlapi.Reconciler
 	stlapi.Auditor
 }
@@ -33,6 +35,8 @@ func stlCommands(c STL) *commandSet {
 			stlapi.CommandOpenOrderAccount:  reflected("", "", receiptOf[stlapi.Receipt](c.OpenOrderAccount)),
 			stlapi.CommandApply:             reflected("", "", receiptOf[stlapi.Receipt](c.Apply)),
 			stlapi.CommandUnapply:           reflected("", "", receiptOf[stlapi.Receipt](c.Unapply)),
+			stlapi.CommandOpenReview:        reflected("", "", receiptOf[stlapi.Receipt](c.OpenPaymentPlanReview)),
+			stlapi.CommandSettleReview:      reflected("", "", receiptOf[stlapi.Receipt](c.SettlePaymentPlanReview)),
 		}}
 }
 
@@ -44,6 +48,8 @@ func (s *server) stlRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/stl/fund_records/{id}", s.authenticated(read(s, s.cfg.STL.GetFundRecord, okView[stlapi.FundRecordView])))
 	mux.Handle("GET /api/brant/v1/stl/order_accounts/{id}", s.authenticated(read(s, s.cfg.STL.GetOrderAccount, okView[stlapi.OrderAccountView])))
 	mux.Handle("GET /api/brant/v1/stl/applications/{id}", s.authenticated(read(s, s.cfg.STL.GetApplication, okView[stlapi.ApplicationView])))
+	mux.Handle("GET /api/brant/v1/stl/order_accounts/{id}/payment_plan_reviews", s.authenticated(read(s, s.cfg.STL.ListPaymentPlanReviews,
+		okView[stlapi.PaymentPlanReviewsView])))
 }
 
 // stlReads are STL's reads in the OpenAPI document.
@@ -60,4 +66,6 @@ var stlReads = []readRoute{
 		"An order's account: the payment stages of the revision it holds with what is applied and open on each, the applications, and the payment condition per scope (shipment, documents) now", []string{"id"}, false},
 	{"/api/brant/v1/stl/applications/{id}", "stl.application.get", "stl",
 		"An application of a receipt to an order payment stage: amount, state (applied or unapplied) and who applied and unapplied it", []string{"id"}, false},
+	{"/api/brant/v1/stl/order_accounts/{id}/payment_plan_reviews", "stl.payment_plan_review.list", "stl",
+		"An order account's payment plan reviews, latest order revision first: the revision each moved the account from and to, its state (open, settled or superseded), responsible role, items (stage removed, stage over-applied, credit portion changed) and their dispositions", []string{"id"}, false},
 }

@@ -127,6 +127,7 @@ func TestExportLotFromPreparedAndConfirmedShipments(t *testing.T) {
 		l.CustomerID != "customer.1" || l.RegisteredBy.ID != "merch.1" || l.Lines[0].OrderLineID != "L1" || l.Lines[0].ShipmentLineQuantity != "50" {
 		t.Fatalf("lot of the prepared shipment %+v", l)
 	}
+	w.granted("shipment.1")
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
 	l = w.exportLot("lot.1")
@@ -135,6 +136,7 @@ func TestExportLotFromPreparedAndConfirmedShipments(t *testing.T) {
 		t.Fatalf("lot after the confirmation %+v", l)
 	}
 
+	w.granted("shipment.2")
 	_, err = w.confirm(w.merch, "shipment.2", 1)
 	w.must(err)
 	if r, err := w.registerLot(w.milestoneAgent(), "lot.2", "shipment.2", lotLine("E1", "S1", "70")); err != nil || r.Status != fulapi.LotRegistered {
@@ -168,6 +170,7 @@ func TestExportLotMarkedForReviewWhenTheConfirmationDiffers(t *testing.T) {
 	}
 	_, err := w.registerLot(w.merch, "lot.a", "shipment.a", lotLine("E1", "S1", "30"))
 	w.must(err)
+	w.granted("shipment.a")
 	_, err = w.confirm(w.merch, "shipment.a", 1)
 	w.must(err)
 	a := w.exportLot("lot.a")
@@ -190,6 +193,7 @@ func TestExportLotMarkedForReviewWhenTheConfirmationDiffers(t *testing.T) {
 		t.Fatalf("a lot of a cancelled shipment: %s at %s", code(err), path(err))
 	}
 
+	w.granted("shipment.c")
 	_, err = w.confirm(w.merch, "shipment.c", 1)
 	w.must(err)
 	_, err = w.registerLot(w.merch, "lot.c", "shipment.c", lotLine("E1", "S1", "5"))
@@ -218,6 +222,7 @@ func TestExportLotsMapSplitShipmentsCNAT02(t *testing.T) {
 				{LineID: "S1", OrderLineID: "L1", Quantity: "30", SupplierDelivery: d1, QualityReleaseID: rel1},
 				{LineID: "S2", OrderLineID: "L1", Quantity: "30", SupplierDelivery: d2, QualityReleaseID: rel2}}})
 		w.must(err)
+		w.granted(id)
 		_, err = w.confirm(w.merch, id, 1)
 		w.must(err)
 	}
@@ -283,6 +288,7 @@ func TestShipmentLineAndExportLotLookups(t *testing.T) {
 	d := w.delivered("commitment.1", "100")
 	_, err := w.prepare(w.merch, "shipment.1", "50", d, rel)
 	w.must(err)
+	w.granted("shipment.1")
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
 	_, err = w.prepare(w.merch2, "shipment.2", "20", d, rel)
@@ -338,21 +344,28 @@ func TestShipmentLineAndExportLotLookups(t *testing.T) {
 		}
 	}
 
-	amend := w.amendCmd(w.order.ObjectID, "amendment.price", 0, w.order.OrderRevision, w.order.OrderHash, "120")
-	amend.Lines[0].UnitPrice = "9"
+	// A line with confirmed shipments keeps its SKU, price and tax (S3 rule in orderrev.Next); since
+	// unit C4a TRD sees FUL's real shipments (ShipmentFacts v1), so a price change of L1 is refused.
+	priced := w.amendCmd(w.order.ObjectID, "amendment.price", 0, w.order.OrderRevision, w.order.OrderHash, "120")
+	priced.Lines[0].UnitPrice = "9"
+	_, err = w.c.TRD.PrepareAmendment(w.author, priced)
+	w.want(err, kernel.CodeInvalidState)
+	// A larger quantity at the same price makes revision 2; what FUL confirmed stays bound to revision 1.
+	amend := w.amendCmd(w.order.ObjectID, "amendment.qty", 0, w.order.OrderRevision, w.order.OrderHash, "130")
 	p, err := w.c.TRD.PrepareAmendment(w.author, amend)
 	w.must(err)
-	s, err := w.c.TRD.SubmitAmendment(w.author, trdapi.SubmitAmendment{IdempotencyKey: w.key(), OrderID: w.order.ObjectID, AmendmentID: "amendment.price",
+	s, err := w.c.TRD.SubmitAmendment(w.author, trdapi.SubmitAmendment{IdempotencyKey: w.key(), OrderID: w.order.ObjectID, AmendmentID: "amendment.qty",
 		ExpectedVersion: p.RowVersion})
 	w.must(err)
 	dec, err := w.c.TRD.DecideAmendment(w.reviewer, trdapi.DecideAmendment{IdempotencyKey: w.key(), OrderID: w.order.ObjectID,
-		AmendmentID: "amendment.price", ExpectedVersion: s.RowVersion, AmendmentHash: s.AmendmentHash, Decision: trdapi.DecisionApprove,
-		Reason: "客户书面确认新单价"})
+		AmendmentID: "amendment.qty", ExpectedVersion: s.RowVersion, AmendmentHash: s.AmendmentHash, Decision: trdapi.DecisionApprove,
+		Reason: "客户书面确认追加数量"})
 	w.must(err)
-	applied, err := w.c.TRD.ApplyAmendment(w.reviewer, w.applyCmd(w.order.ObjectID, "amendment.price", dec.RowVersion))
+	applied, err := w.c.TRD.ApplyAmendment(w.reviewer, w.applyCmd(w.order.ObjectID, "amendment.qty", dec.RowVersion))
 	w.must(err)
-	if now := w.orderFact(); applied.OrderRevision != 2 || len(now.Lines) != 1 || sameDecimal(now.Lines[0].UnitPrice, w.line.UnitPrice) {
-		t.Fatalf("revision 2 at another price %+v %+v", applied, now.Lines)
+	if now := w.orderFact(); applied.OrderRevision != 2 || len(now.Lines) != 1 || !sameDecimal(now.Lines[0].Quantity, "130") ||
+		!sameDecimal(now.Lines[0].UnitPrice, w.line.UnitPrice) {
+		t.Fatalf("revision 2 with the larger quantity %+v %+v", applied, now.Lines)
 	}
 	refs, err = w.ful.ResolveShipmentLines(w.merch, []fulapi.ShipmentLineKey{k1})
 	w.must(err)
@@ -426,6 +439,8 @@ func TestExportLotRegistrationMeetsConfirmationAndCancellation(t *testing.T) {
 		_, err := w.prepare(w.merch, id, "10", d, rel)
 		w.must(err)
 	}
+	w.granted("shipment.a")
+	w.granted("shipment.b")
 	register := func(lot, shipment string) func() error {
 		return func() error {
 			_, err := w.registerLot(w.merch, lot, shipment, lotLine("E1", "S1", "10"))

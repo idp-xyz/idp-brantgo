@@ -6,9 +6,17 @@ import "go.idp.xyz/idp-brant/internal/kernel"
 // passes on that the catalog lists for other contexts), with the catalog's categories (422 invalid,
 // 409 conflict). FUL also answers with the shared kernel codes (SCHEMA_INVALID, INVALID_KNOWN_VALUE,
 // REFERENCE_INVALID, INVALID_STATE, VERSION_CONFLICT, NOT_FOUND, PERMISSION_DENIED and the rest).
-// COMMERCIAL_RELEASE_BLOCKED, TRADE_COMPLIANCE_NOT_CLEAR and EXPORT_LICENSE_REQUIRED come with the
-// commercial release (S5 unit C1).
 const (
+	// CodeCommercialReleaseBlocked (409): the payment condition of the release's scope is not met
+	// (STL's PaymentConditionGuard v1) and no exception covers it, or the command needs a granted
+	// release of its scope and there is none.
+	CodeCommercialReleaseBlocked = "COMMERCIAL_RELEASE_BLOCKED"
+	// CodeTradeComplianceNotClear (409): no valid clear trade compliance conclusion covers the order
+	// revision the shipment binds (CNX's TradeComplianceGuard v1).
+	CodeTradeComplianceNotClear = "TRADE_COMPLIANCE_NOT_CLEAR"
+	// CodeExportLicenseRequired (409): the conclusion says the goods need an export licence and no
+	// allocation covers the shipment's lines (CNX's ExportLicenseGuard v1).
+	CodeExportLicenseRequired = "EXPORT_LICENSE_REQUIRED"
 	// CodeShipmentQuantityExceeded (409): the confirmed shipments of an order line and this one
 	// exceed the line's quantity (FUL-INV-001; zero tolerance in S5).
 	CodeShipmentQuantityExceeded = "SHIPMENT_QUANTITY_EXCEEDED"
@@ -44,6 +52,9 @@ const (
 )
 
 var codes = map[string]kernel.Category{
+	CodeCommercialReleaseBlocked:     kernel.CategoryConflict,
+	CodeTradeComplianceNotClear:      kernel.CategoryConflict,
+	CodeExportLicenseRequired:        kernel.CategoryConflict,
 	CodeShipmentQuantityExceeded:     kernel.CategoryConflict,
 	CodeQualityReleaseRequired:       kernel.CategoryConflict,
 	CodeQualityReleaseInsufficient:   kernel.CategoryConflict,

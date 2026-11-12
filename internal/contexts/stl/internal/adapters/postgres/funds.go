@@ -315,11 +315,13 @@ func LoadAccount(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, or
 	return &a, err
 }
 
-// StageApplied returns what stands applied on each stage of account a.
+// StageApplied returns what stands applied on each stage of account a: the order's standing
+// applications on each stage ID made at a's revision or an earlier one (migrations/stl/000003). Stage
+// IDs a's revision no longer has appear with what still stands on them.
 func StageApplied(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, a *oa.Account) (map[string]kernel.Money, error) {
 	t, c := ts(sc)
 	rows, err := exec.Query(ctx, `SELECT stage_id, sum(amount_minor)::text FROM brant_stl.application WHERE tenant_id = $1 AND company_id = $2
-		AND order_id = $3 AND order_revision = $4 AND status = 'applied' GROUP BY stage_id`, t, c, a.OrderID, a.OrderRevision)
+		AND order_id = $3 AND order_revision <= $4 AND status = 'applied' GROUP BY stage_id`, t, c, a.OrderID, a.OrderRevision)
 	if err != nil {
 		return nil, err
 	}

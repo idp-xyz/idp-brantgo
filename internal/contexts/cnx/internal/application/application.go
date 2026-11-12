@@ -52,6 +52,8 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandReopen, Permission: api.CommandReopen, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
 		{Command: api.CommandGetCheck, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandOrderChecks, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandChecksByRegulation, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandChecksByList, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
 		authorization.HumanOnly(api.CommandRegisterLicense, api.CommandRegisterLicense),
 		{Command: api.CommandAllocateLicense, Permission: api.CommandAllocateLicense, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},

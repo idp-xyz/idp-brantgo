@@ -10,6 +10,8 @@ import (
 type FUL interface {
 	fulapi.Commands
 	fulapi.Queries
+	fulapi.ReleaseCommands
+	fulapi.ReleaseQueries
 	fulapi.Reconciler
 	fulapi.Auditor
 	fulapi.MilestoneCommands
@@ -31,6 +33,9 @@ func fulCommands(c FUL) *commandSet {
 			fulapi.CommandPlanMilestones:        reflected("", "", c.PlanMilestones),
 			fulapi.CommandRecordMilestoneActual: reflected("", "", c.RecordMilestoneActual),
 			fulapi.CommandRegisterExportLot:     reflected("", "", c.RegisterExportLot),
+			fulapi.CommandEvaluateRelease:       reflected("", "", receiptOf[fulapi.Receipt](c.EvaluateRelease)),
+			fulapi.CommandGrantReleaseException: reflected("", "", receiptOf[fulapi.Receipt](c.GrantReleaseException)),
+			fulapi.CommandRecordDocumentRelease: reflected("", "", receiptOf[fulapi.Receipt](c.RecordDocumentRelease)),
 		}}
 }
 
@@ -44,6 +49,10 @@ var fulReads = []readRoute{
 		"A milestone plan: the order or shipment it follows, the nodes of its current revision with the latest supplier claim, internal verification and accepted fact of each and whether it is overdue now, and every actual in the order recorded", []string{"id"}, false},
 	{"/api/brant/v1/ful/export_lots/{id}", "ful.export_lot.get", "ful",
 		"An export lot (ExportLotRef v1): the shipment and order it is of, its lines with quantities and amounts at the order's prices, its totals, and how it stands against its shipment now (awaiting_confirmation, matched or review_required with the differences)", []string{"id"}, false},
+	{"/api/brant/v1/ful/commercial_releases/{id}", "ful.commercial_release.get", "ful",
+		"A commercial release of a shipment and scope (shipment or documents): its state, every evaluation with its outcome, the first unmet guard and code when blocked, each guard's answer, its SHA-256 and what each guard bound (trade compliance check, licence allocation, screenings, supplier delivery lines, quality releases, payment condition, order), the payment-condition exceptions, and what consumed it", []string{"id"}, false},
+	{"/api/brant/v1/ful/shipments/{id}/commercial_releases", "ful.commercial_release.list", "ful",
+		"The commercial releases of a shipment, shipment scope first", []string{"id"}, false},
 }
 
 // fulRoutes registers FUL's reads.
@@ -52,4 +61,7 @@ func (s *server) fulRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/ful/orders/{id}/fulfilment", s.authenticated(read(s, s.cfg.FUL.GetFulfilment, okView[fulapi.FulfilmentView])))
 	mux.Handle("GET /api/brant/v1/ful/milestone_plans/{id}", s.authenticated(read(s, s.cfg.FUL.GetMilestonePlan, okView[fulapi.MilestonePlanView])))
 	mux.Handle("GET /api/brant/v1/ful/export_lots/{id}", s.authenticated(read(s, s.cfg.FUL.GetExportLot, okView[fulapi.ExportLotView])))
+	mux.Handle("GET /api/brant/v1/ful/commercial_releases/{id}", s.authenticated(read(s, s.cfg.FUL.GetRelease, okView[fulapi.ReleaseView])))
+	mux.Handle("GET /api/brant/v1/ful/shipments/{id}/commercial_releases", s.authenticated(read(s, s.cfg.FUL.ShipmentReleases,
+		okView[fulapi.ShipmentReleases])))
 }
