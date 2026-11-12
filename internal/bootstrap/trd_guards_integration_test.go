@@ -773,3 +773,48 @@ func TestOrderStateReadIsLockFree(t *testing.T) {
 		t.Fatalf("security definer %v, config %v, brant_app %v, public %v", definer, config, executable, public)
 	}
 }
+
+// PL-12 and PL-13 end to end on TRD's real order (S5 B6's consumer under B4's wiring): an order on
+// 30/70 terms activates on its 672.00 reservation (CreditGuard v1 in TRD's transaction); TRD's own
+// OrderActivated, relayed from TRD's Outbox through the dispatcher, has the consumer
+// stl.order_credit consume that reservation for the activation's binding and instant; TRD's
+// OrderCancelled then has it release the consumed reservation. Every event is settled.
+func TestActivatedOrderCreditIsConsumedAndReleasedThroughTheRelay(t *testing.T) {
+	q := newCreditOrderWorld(t, "")
+	ctx := context.Background()
+	scope := q.scope("company.A")
+	subs := q.c.Subscriptions()
+	ev := newOrderEvents(t, subs...)
+	if _, err := q.platform.ProvisionInbox(ctx, scope, subs); err != nil {
+		t.Fatal(err)
+	}
+	o := q.activeOrder("quote.1")
+	b := q.orderBinding(o.ObjectID)
+	res := q.credit.reserved[b]
+	if res.ReservationID == "" || res.PortionMinor != "67200" {
+		t.Fatalf("the reservation activeOrder made %+v", res)
+	}
+	activatedAt := q.getOrder(o.ObjectID).Commits[0].CommittedAt
+	first := ev.copyFrom(scope, trdapi.Source)
+	ev.drain(ev.relay(5))
+	ev.published(first...)
+	v, err := q.c.STL.GetReservation(q.credit.officer, res.ReservationID)
+	q.must(err)
+	if v.Status != stlapi.ReservationConsumed || v.Version != 2 || v.ConsumedBy != consumerActor || !v.ActivatedAt.Equal(activatedAt) ||
+		v.OrderRevision != 1 || v.OrderHash != b.OrderHash || q.stlEvents(stlapi.EventCreditReservationConsumed, res.ReservationID) != 1 {
+		t.Fatalf("after TRD's OrderActivated: %+v (activated at %v)", v, activatedAt)
+	}
+
+	_, err = q.c.TRD.CancelOrder(q.author, trdapi.CancelOrder{IdempotencyKey: q.key(), OrderID: o.ObjectID, ExpectedVersion: q.orderVersion(o.ObjectID),
+		Reason: "客户撤单", Evidence: q.proof})
+	q.must(err)
+	later := ev.copyFrom(scope, trdapi.Source)
+	ev.drain(ev.relay(5))
+	ev.published(later...)
+	v, err = q.c.STL.GetReservation(q.credit.officer, res.ReservationID)
+	q.must(err)
+	if v.Status != stlapi.ReservationReleased || v.Version != 3 || v.ReleasedBy != consumerActor ||
+		q.stlEvents(stlapi.EventCreditReservationReleased, res.ReservationID) != 1 {
+		t.Fatalf("after TRD's OrderCancelled: %+v", v)
+	}
+}
