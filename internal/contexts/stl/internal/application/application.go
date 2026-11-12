@@ -70,20 +70,28 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandOpenReview, Permission: api.PermissionOpenReview, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
 		authorization.HumanOnly(api.CommandSettleReview, api.PermissionSettleReview),
 		{Command: api.CommandListReviews, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Settlement statements (B2b): settlement.confirm is a humanOnlyCommand (treasury).
+		authorization.HumanOnly(api.CommandConfirmSettlement, api.CommandConfirmSettlement),
+		{Command: api.CommandGetStatement, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetReceivable, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetPayable, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetOrderSettlement, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
 // Upstream are the contexts STL reads references from.
 type Upstream struct {
-	Orders  Orders         // TRD OrderCommercialSnapshot v1 (R32), STL's port
-	Configs polapi.Queries // POL ConfigRef v1 (R33)
-	Parties ptyapi.Queries // PTY PartyRef v1 (R43)
-	Sources evdapi.Queries // EVD SourceRef v1 (R75)
+	Orders     Orders         // TRD OrderCommercialSnapshot v1 (R32), STL's port
+	Configs    polapi.Queries // POL ConfigRef v1 (R33)
+	Parties    ptyapi.Queries // PTY PartyRef v1 (R43)
+	Sources    evdapi.Queries // EVD SourceRef v1 (R75)
+	Shipments  Shipments      // FUL ShipmentLineRef v1 (R30), STL's port (sources.go)
+	Deliveries Deliveries     // PUR PurchaseSettlementSource v1 (R31), STL's port
 }
 
 // Complete reports whether every upstream is wired.
 func (u Upstream) Complete() bool {
-	return u.Orders != nil && u.Configs != nil && u.Parties != nil && u.Sources != nil
+	return u.Orders != nil && u.Configs != nil && u.Parties != nil && u.Sources != nil && u.Shipments != nil && u.Deliveries != nil
 }
 
 // Service runs STL's use cases.
@@ -104,6 +112,10 @@ func scope(ctx context.Context) kernel.Scope {
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	if visible, handled, err := visibleFund(ctx, exec, d, command, id); handled {
 		return visible, err
+	}
+	if command == api.CommandConfirmSettlement {
+		st, err := postgres.LoadStatement(ctx, exec, scope(ctx), id, false)
+		return err == nil && st != nil && d.Sees(st.OwnerActor, st.OwnerTeam), err
 	}
 	sc := scope(ctx)
 	var subjects []string
@@ -243,6 +255,9 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.SettlePaymentPlanReview:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandSettleReview, key, c
+	case api.ConfirmSettlement:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandConfirmSettlement, key, c
 	}
 	return "", "", nil
 }

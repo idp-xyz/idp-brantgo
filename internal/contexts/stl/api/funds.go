@@ -150,11 +150,13 @@ type OpenOrderAccount struct {
 }
 
 // ApplicationTarget is what an application allocates to: Kind order_stage, the order's account and
-// its payment stage StageID.
+// its payment stage StageID; Kind receivable, sales statement StatementID's installment of StageID
+// ("" the first one still open); Kind payable, purchase statement StatementID (settlement.go).
 type ApplicationTarget struct {
-	Kind    string
-	OrderID string
-	StageID string
+	Kind        string
+	OrderID     string
+	StageID     string
+	StatementID string
 }
 
 // Apply allocates Amount (in the fund's currency) of fund record FundRecordID to Target as
@@ -297,11 +299,16 @@ func (c Apply) Validate() error {
 		return schema("/args/application_id")
 	case !kernel.ValidIdentifier(c.FundRecordID):
 		return schema("/args/fund_record_id")
-	case c.Target.Kind != TargetOrderStage:
+	case c.Target.Kind != TargetOrderStage && c.Target.Kind != TargetReceivable && c.Target.Kind != TargetPayable:
 		return schema("/args/target/kind")
-	case !kernel.ValidIdentifier(c.Target.OrderID):
+	case c.Target.Kind == TargetOrderStage && (!kernel.ValidIdentifier(c.Target.OrderID) || c.Target.StatementID != ""):
 		return schema("/args/target/order_id")
-	case !kernel.ValidIdentifier(c.Target.StageID):
+	case c.Target.Kind == TargetOrderStage && !kernel.ValidIdentifier(c.Target.StageID):
+		return schema("/args/target/stage_id")
+	case c.Target.Kind != TargetOrderStage && (!kernel.ValidIdentifier(c.Target.StatementID) || c.Target.OrderID != ""):
+		return schema("/args/target/statement_id")
+	case c.Target.Kind == TargetReceivable && c.Target.StageID != "" && !kernel.ValidIdentifier(c.Target.StageID),
+		c.Target.Kind == TargetPayable && c.Target.StageID != "":
 		return schema("/args/target/stage_id")
 	case !amount(c.Amount):
 		return schema("/args/amount")
@@ -350,17 +357,22 @@ type OrderAccountReceipt struct {
 
 // ApplicationReceipt is the answer of application.apply and application.unapply: the receipt
 // (ObjectID the application, RowVersion its version, Status applied or unapplied), its target and
-// amount, and what is available on the fund and open on the stage now.
+// amount, and what is available on the fund and open on the stage — or on the receivable or
+// payable — now.
 type ApplicationReceipt struct {
 	Receipt
 	FundRecordID       string
+	TargetKind         string
 	OrderID            string
 	OrderRevision      int64
 	StageID            string
+	StatementID        string
+	InstallmentSeq     int
 	Currency           string
 	AmountMinor        string
 	FundAvailableMinor string
 	StageOpenMinor     string
+	StatementOpenMinor string
 }
 
 // ResolutionView is one resolved part of a receipt's difference.
@@ -382,16 +394,21 @@ type FXView struct {
 	FeeMinor     string
 }
 
-// AllocationView is one application of a fund record: its commercial allocation to an order stage.
+// AllocationView is one application of a fund record: its commercial allocation to an order stage,
+// a receivable's installment (with the stage it is due for) or a payable, and the moved application a
+// replacement or remainder comes from.
 type AllocationView struct {
-	ApplicationID string
-	FundRecordID  string
-	TargetKind    string
-	OrderID       string
-	OrderRevision int64
-	StageID       string
-	AmountMinor   string
-	Status        string
+	ApplicationID  string
+	FundRecordID   string
+	TargetKind     string
+	OrderID        string
+	OrderRevision  int64
+	StageID        string
+	StatementID    string
+	InstallmentSeq int
+	MovedFrom      string
+	AmountMinor    string
+	Status         string
 }
 
 // DrawView is a refund, returned remittance or conversion drawn on a fund record, in its currency
@@ -494,22 +511,25 @@ type OrderAccountView struct {
 
 // ApplicationView is an application as application.get shows it.
 type ApplicationView struct {
-	ApplicationID string
-	FundRecordID  string
-	TargetKind    string
-	OrderID       string
-	OrderRevision int64
-	StageID       string
-	Currency      string
-	AmountMinor   string
-	Status        string
-	Version       int64
-	AppliedBy     kernel.ActorRef
-	AppliedAt     time.Time
-	UnappliedBy   kernel.ActorRef
-	UnappliedAt   time.Time
-	UnapplyReason string
-	CheckedAt     time.Time
+	ApplicationID  string
+	FundRecordID   string
+	TargetKind     string
+	OrderID        string
+	OrderRevision  int64
+	StageID        string
+	StatementID    string
+	InstallmentSeq int
+	MovedFrom      string
+	Currency       string
+	AmountMinor    string
+	Status         string
+	Version        int64
+	AppliedBy      kernel.ActorRef
+	AppliedAt      time.Time
+	UnappliedBy    kernel.ActorRef
+	UnappliedAt    time.Time
+	UnapplyReason  string
+	CheckedAt      time.Time
 }
 
 // FundCommands is STL's command entry point for funds, applications and order accounts; errors as

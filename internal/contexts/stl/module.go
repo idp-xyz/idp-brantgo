@@ -9,11 +9,15 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
+	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/orders"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/sources"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/application"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/settlement"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -38,6 +42,9 @@ var (
 
 	_ api.ReviewCommands = (*Module)(nil)
 	_ api.ReviewQueries  = (*Module)(nil)
+
+	_ api.SettlementCommands = (*Module)(nil)
+	_ api.SettlementQueries  = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),
@@ -63,10 +70,33 @@ const (
 // R32) before STL's transaction.
 func TRDOrders(lookups trdapi.OrderSnapshotLookups) Orders { return orders.TRD{Lookups: lookups} }
 
+// The ports to the sources of settlement statements and what passes through them (S5-04b).
+type (
+	Shipments      = application.Shipments
+	Deliveries     = application.Deliveries
+	ShipmentSource = application.ShipmentSource
+	DeliverySource = application.DeliverySource
+	ShipmentLine   = settlement.ShipmentLine
+	DeliveryLine   = settlement.DeliveryLine
+)
+
+// FULShipmentLines is STL's port to FUL on FUL's api: ShipmentLineLookups (ShipmentLineRef v1, R30)
+// before STL's transaction. FUL is composed after STL, so lookups returns FUL's lookups once FUL
+// exists (S5 decision D-2; nil: FUL shows no line).
+func FULShipmentLines(lookups func() fulapi.ShipmentLineLookups) Shipments {
+	return sources.FUL{Lookups: lookups}
+}
+
+// PURSettlementSources is STL's port to PUR on PUR's api: DeliveryLookups.ResolveSettlementSources
+// (PurchaseSettlementSource v1, R31) before STL's transaction.
+func PURSettlementSources(lookups purapi.DeliveryLookups) Deliveries {
+	return sources.PUR{Lookups: lookups}
+}
+
 // New wires STL to db, a transaction owner that belongs to STL alone, and to its upstreams.
 func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 	if !upstream.Complete() {
-		return nil, errors.New("stl: module needs TRD's orders and the lookups of POL, PTY and EVD")
+		return nil, errors.New("stl: module needs TRD's orders, the lookups of POL, PTY and EVD, and the settlement sources of FUL and PUR")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {

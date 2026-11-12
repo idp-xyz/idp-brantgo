@@ -110,11 +110,11 @@ func Reserve(in ReserveInput) (ReserveOutcome, error) {
 	var held []Held
 	for i := range in.Reservations {
 		if r := &in.Reservations[i]; r.Live(now) && r.Basis != BasisDocumentsSecured {
-			held = append(held, Held{OrderID: r.Binding.OrderID, OrderRevision: r.Binding.OrderRevision, Exposure: r.Exposure})
+			held = append(held, HeldOf(r))
 		}
 	}
 	v, err := Assess(Assessment{Limit: out.Limit, Held: held, Receivables: in.Receivables, OrderID: in.Binding.OrderID, Portion: converted,
-		Now: now, ToleranceDays: in.Policy.OverdueToleranceDays})
+		Now: now, ToleranceDays: in.Policy.OverdueToleranceDays, DocumentsSecured: in.Policy.DocumentsSecured})
 	if err != nil {
 		return out, err
 	}

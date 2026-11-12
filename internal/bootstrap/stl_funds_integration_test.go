@@ -76,7 +76,8 @@ func newFundWorld(t *testing.T) *fundWorld {
 		Permissions: []string{"payment_plan_review.open", "stl.read"}, DataScope: "company"})
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
-	fw.stl, err = stl.New(db, stl.Upstream{Orders: fw.orders, Configs: w.c.POL, Parties: w.c.PTY, Sources: w.c.EVD})
+	fw.stl, err = stl.New(db, stl.Upstream{Orders: fw.orders, Configs: w.c.POL, Parties: w.c.PTY, Sources: w.c.EVD,
+		Shipments: stlShipments(w.c), Deliveries: stlDeliveries(w.c)})
 	w.must(err)
 	return fw
 }

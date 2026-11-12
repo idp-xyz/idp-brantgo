@@ -24,6 +24,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/ful"
+	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
@@ -261,7 +262,15 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.STL, err = stl.New(db, stl.Upstream{Orders: stl.TRDOrders(c.TRD), Configs: c.POL, Parties: c.PTY, Sources: c.EVD})
+		// STL's settlement statements read FUL's shipment lines and PUR's verified deliveries (R30,
+		// R31); FUL is composed after STL, so its port is bound to c.FUL by a function (D-2).
+		c.STL, err = stl.New(db, stl.Upstream{Orders: stl.TRDOrders(c.TRD), Configs: c.POL, Parties: c.PTY, Sources: c.EVD,
+			Shipments: stl.FULShipmentLines(func() fulapi.ShipmentLineLookups {
+				if c.FUL == nil {
+					return nil
+				}
+				return c.FUL
+			}), Deliveries: stl.PURSettlementSources(c.PUR)})
 	}
 	if err == nil {
 		db, err = p.newDB()

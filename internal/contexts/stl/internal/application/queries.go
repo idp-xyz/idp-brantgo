@@ -131,15 +131,29 @@ func (s Service) GetCustomerCredit(ctx context.Context, partyID string) (api.Cus
 		for i := range reservations {
 			r := &reservations[i]
 			if r.Live(now) && r.Basis != cc.BasisDocumentsSecured {
-				held = append(held, cc.Held{OrderID: r.Binding.OrderID, OrderRevision: r.Binding.OrderRevision, Exposure: r.Exposure})
+				held = append(held, cc.HeldOf(r))
 			}
 			if d.Sees(r.OwnerActor, r.OwnerTeam) {
 				v.Reservations = append(v.Reservations, reservationView(r, now))
 			}
 		}
+		// The exposure is in the live reservations' limit currency, else the limit in force's, else that
+		// of the receivables (S5-04b: open receivables count, D-4).
+		var c kernel.Currency
 		if len(held) > 0 {
-			c := held[0].Exposure.Currency()
-			receivables, err := postgres.OpenReceivables(ctx, exec, sc, partyID, c)
+			c = held[0].Exposure.Currency()
+		} else if in := cc.LimitInForce(versions, now); in != nil {
+			c = in.Currency
+		}
+		owed, err := postgres.OwedInstallments(ctx, exec, sc, partyID)
+		if err != nil {
+			return err
+		}
+		if c.IsZero() && len(owed) > 0 {
+			c = owed[0].Amount.Currency()
+		}
+		if !c.IsZero() && (len(held) > 0 || len(owed) > 0) {
+			receivables, err := cc.ReceivablesOf(c, owed, reservations)
 			if err != nil {
 				return err
 			}

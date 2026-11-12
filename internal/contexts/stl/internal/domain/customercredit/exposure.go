@@ -52,35 +52,42 @@ func Portion(c kernel.Currency, stages []Stage, documentsSecured bool) (portion,
 	return portion, secured, nil
 }
 
-// Held is a live reservation of the customer as the exposure counts it: its order revision and its
-// amount in the limit currency.
+// Held is a live reservation of the customer as the exposure counts it: its order revision, its
+// amount in the limit currency, and whether it left document-controlled stages out as secured (D-5:
+// then the receivables of those stages do not replace it).
 type Held struct {
-	OrderID       string
-	OrderRevision int64
-	Exposure      kernel.Money
+	OrderID          string
+	OrderRevision    int64
+	Exposure         kernel.Money
+	DocumentsSecured bool
 }
 
 // Receivables is what the customer owes on business receivables (STL's settlement statements, B2b,
 // and opening balances, C10): the open amount in the limit currency, the receivables each order has
-// formed (whether paid or not; they replace that order's reservation, D-4) and the due date of the
-// earliest overdue one (zero: none overdue).
+// formed on its credit stages (due after shipment or invoice, whether paid or not; they replace that
+// order's reservation, D-4) — FormedDocumentsBy those of document-controlled stages, which replace a
+// reservation only where it did not treat them as secured — and the due date of the earliest open
+// installment (zero: none open; overdue when before now).
 type Receivables struct {
-	Open        kernel.Money
-	FormedBy    map[string]kernel.Money
-	EarliestDue time.Time
+	Open              kernel.Money
+	FormedBy          map[string]kernel.Money
+	FormedDocumentsBy map[string]kernel.Money
+	EarliestDue       time.Time
 }
 
 // Assessment is what credit.reserve judges (STL-INV-004): the limit in force, the customer's live
 // reservations and receivables, the order being reserved and its portion converted into the limit
-// currency, at Now with the policy's overdue tolerance.
+// currency, at Now with the policy's overdue tolerance; DocumentsSecured is the policy's D-5 setting
+// the portion was computed with.
 type Assessment struct {
-	Limit         kernel.Money
-	Held          []Held
-	Receivables   Receivables
-	OrderID       string
-	Portion       kernel.Money
-	Now           time.Time
-	ToleranceDays int
+	Limit            kernel.Money
+	Held             []Held
+	Receivables      Receivables
+	OrderID          string
+	Portion          kernel.Money
+	Now              time.Time
+	ToleranceDays    int
+	DocumentsSecured bool
 }
 
 // Verdict is the assessment's outcome in the limit currency: the exposure before this order, the
@@ -147,12 +154,21 @@ func Assess(a Assessment) (Verdict, error) {
 	if err := check("The portion", a.Portion); err != nil {
 		return Verdict{}, err
 	}
-	formed := func(order string) (kernel.Money, error) {
+	formed := func(order string, secured bool) (kernel.Money, error) {
 		f, ok := a.Receivables.FormedBy[order]
 		if !ok {
-			return zero, nil
+			f = zero
 		}
-		return f, check("The receivables of order "+order, f)
+		if err := check("The receivables of order "+order, f); err != nil {
+			return kernel.Money{}, err
+		}
+		if d, ok := a.Receivables.FormedDocumentsBy[order]; ok && !secured {
+			if err := check("The receivables of order "+order, d); err != nil {
+				return kernel.Money{}, err
+			}
+			f, _ = f.Add(d)
+		}
+		return f, nil
 	}
 	latest := map[string]Held{}
 	for _, h := range a.Held {
@@ -173,14 +189,14 @@ func Assess(a Assessment) (Verdict, error) {
 	}
 	slices.Sort(orders)
 	for _, o := range orders {
-		f, err := formed(o)
+		f, err := formed(o, latest[o].DocumentsSecured)
 		if err != nil {
 			return Verdict{}, err
 		}
 		share, _ := latest[o].Exposure.Sub(f)
 		exposure, _ = exposure.Add(clampZero(share))
 	}
-	f, err := formed(a.OrderID)
+	f, err := formed(a.OrderID, a.DocumentsSecured)
 	if err != nil {
 		return Verdict{}, err
 	}

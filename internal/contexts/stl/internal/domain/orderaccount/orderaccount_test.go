@@ -94,3 +94,23 @@ func TestOpenNeedsKnownStages(t *testing.T) {
 		}
 	}
 }
+
+// C1's finding on PaymentConditionGuard v1 after a payment plan review (C4b-STL): a review can shrink
+// a stage below what stands on it. The over-applied stage counts its due only, so the scope's
+// shortfall is the sum of the stages' shortfalls: with P1 over-applied by 200.00 (500.00 on 300.00)
+// and P2 and P3 short 200.00 each, the scope is short 400.00 — counted in full, the 200.00 excess
+// made it look short 200.00, the first stage's shortfall alone (FUL's "one unpaid stage" test).
+func TestAnOverAppliedStageCountsItsDueOnly(t *testing.T) {
+	a, err := Open("order.1", 2, "hash", "customer.1", 1, []Stage{
+		{StageID: "P1", Trigger: TriggerOrderConfirmed, Amount: money(t, "300.00")},
+		{StageID: "P2", Trigger: TriggerBeforeShipment, Amount: money(t, "300.00")},
+		{StageID: "P3", Trigger: TriggerBeforeShipment, Amount: money(t, "300.00")}}, by, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := Condition(a, 2, ScopeShipment, map[string]kernel.Money{"P1": money(t, "500.00"), "P2": money(t, "100.00"), "P3": money(t, "100.00")}, by.At)
+	if v.Status != Blocked || v.Stage == nil || v.Stage.StageID != "P2" || v.Shortfall.Amount() != "200.00" || v.Required.Amount() != "900.00" ||
+		v.Applied.Amount() != "500.00" {
+		t.Fatalf("%+v", v)
+	}
+}

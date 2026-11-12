@@ -180,7 +180,8 @@ func TestAmendedOrderMovesItsAccountThroughTheRelay(t *testing.T) {
 		acc.Applications[0].OrderRevision != 1 {
 		t.Fatalf("account after revision 2: %+v", acc)
 	}
-	if v := q.reviewGuard(id, 2); !v.Satisfied() || v.OrderHash != r2.OrderHash || v.RequiredMinor != "21600" || v.AppliedMinor != "28800" {
+	// P1 stands 288.00 on 216.00 due: the guard's total counts its due only (stl 000004, C1's finding).
+	if v := q.reviewGuard(id, 2); !v.Satisfied() || v.OrderHash != r2.OrderHash || v.RequiredMinor != "21600" || v.AppliedMinor != "21600" {
 		t.Fatalf("revision 2's guard: %+v", v)
 	}
 	if v := q.reviewGuard(id, 1); v.Reason != stlapi.PaymentRevisionMismatch {

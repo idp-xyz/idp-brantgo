@@ -72,7 +72,7 @@ func TestApplyAndResolveContracts(t *testing.T) {
 	if err := a.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	a.Target.Kind = "receivable"
+	a.Target.Kind = "invoice"
 	if got := pathOf(a.Validate()); got != "/args/target/kind" {
 		t.Errorf("target kind: %q", got)
 	}

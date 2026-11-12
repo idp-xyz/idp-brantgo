@@ -151,9 +151,13 @@ func lockRoots(ctx context.Context, exec bentopg.Executor, fundID, orderID strin
 
 // appEvent is an Outbox event of an Application aggregate at its version.
 func appEvent(typ string, x *fa.Application) action.Event {
-	return action.Event{Type: typ, AggregateType: "Application", AggregateID: x.ID, AggregateVersion: x.Version, Fields: map[string]any{
+	e := action.Event{Type: typ, AggregateType: "Application", AggregateID: x.ID, AggregateVersion: x.Version, Fields: map[string]any{
 		"application_id": x.ID, "application_version": x.Version, "fund_record_id": x.FundRecordID, "target_kind": x.TargetKind,
 		"order_id": x.OrderID, "order_revision": x.OrderRevision, "stage_id": x.StageID}}
+	if x.StatementID != "" {
+		e.Fields["statement_id"], e.Fields["installment_seq"] = x.StatementID, x.InstallmentSeq
+	}
+	return e
 }
 
 // applyFund runs application.apply (STL-INV-002, STL-INV-006; human only): before the transaction it
@@ -215,13 +219,12 @@ func (h *applyFund) Apply(ctx context.Context, exec bentopg.Executor, d authoriz
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	applied, err := postgres.StageApplied(ctx, exec, sc, a)
+	// What a prepayment may still take of the stage: its amount less the stage applications that
+	// stand and what the order's statements settled on it (S5-04b: the settled part is the
+	// receivable's to collect).
+	stageApplied, err := stageUsed(ctx, exec, sc, a, c.Target.StageID)
 	if err != nil {
 		return action.Outcome{}, err
-	}
-	stageApplied, ok := applied[c.Target.StageID]
-	if !ok {
-		stageApplied, _ = kernel.NewMoney(a.Currency(), 0)
 	}
 	x, err := fa.Apply(fa.ApplyInput{ID: c.ApplicationID, Fund: f, FundEntries: entries, Account: a, StageID: c.Target.StageID,
 		StageApplied: stageApplied, Amount: amount, By: fundAct(d, now, ""), Team: d.Team})
@@ -236,7 +239,10 @@ func (h *applyFund) Apply(ctx context.Context, exec bentopg.Executor, d authoriz
 
 // Apply allocates part of a receipt to an order stage (application.apply). Human only.
 func (s Service) Apply(ctx context.Context, cmd api.Apply) (api.ApplicationReceipt, error) {
-	h := &applyFund{s: s, cmd: cmd}
+	var h action.Handler = &applyFund{s: s, cmd: cmd}
+	if cmd.Target.Kind == api.TargetReceivable || cmd.Target.Kind == api.TargetPayable {
+		h = &applyStatement{s: s, cmd: cmd}
+	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandApply, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ApplicationID}, cmd,
 		cmd.Validate(), h)
 	if err != nil {
@@ -262,7 +268,7 @@ func (h *unapplyFund) Lock(ctx context.Context, exec bentopg.Executor) error {
 		h.application = nil
 		return err
 	}
-	if _, _, err = lockRoots(ctx, exec, x.FundRecordID, x.OrderID); err != nil {
+	if err = lockApplicationRoots(ctx, exec, x); err != nil {
 		return err
 	}
 	h.application, err = postgres.LoadApplication(ctx, exec, sc, h.cmd.ApplicationID, true)
@@ -309,6 +315,18 @@ func (s Service) applicationReceipt(ctx context.Context, res api.Receipt) (api.A
 		}
 		out.FundRecordID, out.OrderID, out.OrderRevision, out.StageID = x.FundRecordID, x.OrderID, x.OrderRevision, x.StageID
 		out.Currency, out.AmountMinor = x.Amount.Currency().Code(), x.Amount.MinorString()
+		out.TargetKind, out.StatementID, out.InstallmentSeq = x.TargetKind, x.StatementID, x.InstallmentSeq
+		if x.StatementID != "" {
+			st, err := postgres.LoadStatement(ctx, exec, sc, x.StatementID, false)
+			if err != nil || st == nil {
+				return err
+			}
+			applied, err := postgres.InstallmentApplied(ctx, exec, sc, st)
+			if err != nil {
+				return err
+			}
+			out.StatementOpenMinor = st.Open(applied).MinorString()
+		}
 		f, err := postgres.LoadFund(ctx, exec, sc, x.FundRecordID, false)
 		if err != nil || f == nil {
 			return err
@@ -318,6 +336,9 @@ func (s Service) applicationReceipt(ctx context.Context, res api.Receipt) (api.A
 			return err
 		}
 		out.FundAvailableMinor = f.Available(e).MinorString()
+		if x.OrderID == "" {
+			return nil
+		}
 		a, err := postgres.LoadAccount(ctx, exec, sc, x.OrderID, false)
 		if err != nil || a == nil {
 			return err
@@ -332,4 +353,28 @@ func (s Service) applicationReceipt(ctx context.Context, res api.Receipt) (api.A
 		return nil
 	})
 	return out, err
+}
+
+// stageUsed is what stands on stage stage of account a against a new prepayment: the order's stage
+// applications that stand on it (made at a's revision or an earlier one) and what the order's
+// confirmed sales statements settled on it (S5-04b, D-4: a prepayment pays for goods not yet
+// settled). Without statements it is what stands applied on the stage.
+func stageUsed(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, a *oa.Account, stage string) (kernel.Money, error) {
+	used, _ := kernel.NewMoney(a.Currency(), 0)
+	prepaid, err := postgres.StagePrepaid(ctx, exec, sc, a.OrderID, a.OrderRevision, a.Currency())
+	if err != nil {
+		return used, err
+	}
+	settled, err := postgres.SettledByStage(ctx, exec, sc, a.OrderID, a.Currency())
+	if err != nil {
+		return used, err
+	}
+	for _, m := range []map[string]kernel.Money{prepaid, settled} {
+		if x, ok := m[stage]; ok {
+			if used, err = used.Add(x); err != nil {
+				return used, err
+			}
+		}
+	}
+	return used, nil
 }

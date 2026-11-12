@@ -325,6 +325,13 @@ GRANT SELECT, INSERT ON brant_stl.payment_plan_review, brant_stl.payment_plan_re
 GRANT UPDATE (status, version, settled_by_kind, settled_by_id, settle_epoch, settled_at, settle_reason, superseded_by_revision, superseded_at,
               updated_at) ON brant_stl.payment_plan_review TO brant_app;
 
+-- STL settlement statements (S5-04b): statements, their lines and installments are only inserted
+-- (triggers; settlement.reverse is unit C8's); an application may also move applied → moved when a
+-- sales statement takes over a prepayment (column grant above). FOR UPDATE on a statement needs the
+-- column grant (the statement itself does not change: its trigger refuses).
+GRANT SELECT, INSERT ON brant_stl.settlement_statement, brant_stl.settlement_line, brant_stl.settlement_installment TO brant_app;
+GRANT UPDATE (updated_at) ON brant_stl.settlement_statement TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on

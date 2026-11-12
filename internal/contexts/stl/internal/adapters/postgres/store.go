@@ -608,12 +608,3 @@ func UpdateReservation(ctx context.Context, exec bentopg.Executor, sc kernel.Sco
 	}
 	return err
 }
-
-// OpenReceivables returns what the customer owes on business receivables in the limit currency c
-// (D-4). STL keeps no receivables before settlement statements (B2b) and opening balances (C10), so
-// it answers none; those units replace it with the sum over their own tables, read here under the
-// credit root's lock.
-func OpenReceivables(_ context.Context, _ bentopg.Executor, _ kernel.Scope, _ string, c kernel.Currency) (cc.Receivables, error) {
-	zero, err := kernel.NewMoney(c, 0)
-	return cc.Receivables{Open: zero}, err
-}
