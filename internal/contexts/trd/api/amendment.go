@@ -46,7 +46,10 @@ import (
 // alone, except apply, which moves it; the close commands take the order's. Shipments are FUL's and
 // open commitments PUR's and STL's, contexts S3 does not have: their answers are recorded as
 // not_wired, never as checked (so close is ORDER_NOT_FULFILLED and close_remainder INVALID_STATE
-// until FUL exists, and cancel finds nothing shipped).
+// until FUL exists, and cancel finds nothing shipped). Since S5 (unit B4, D-9) apply asks STL's
+// CreditGuard v1 for the revision it produces when that revision asks more credit than the
+// current one (CREDIT_RESERVATION_REQUIRED at /args/amendment_id; STL reserves it beforehand from
+// OrderSnapshotFact.Proposed), and records trade compliance as GuardNotCheckedAtApply.
 //
 // Request members in snake_case: order.amendment.prepare {order_id, amendment_id, expected_version,
 // expected_order_revision, expected_order_hash, source {kind, response_id, evidence}, lines

@@ -24,13 +24,20 @@
 //	                         Otherwise a credit decision opens and commits (status decision_opened,
 //	                         reasons CREDIT_LIMIT_EXCEEDED, CREDIT_OVERDUE_EXCEEDED), and nothing is
 //	                         reserved; a released decision of the same binding lets the next
-//	                         credit.reserve succeed within its validity.
+//	                         credit.reserve succeed within its validity. The order revision is TRD's
+//	                         current one or, for an active order, one an amendment pending approval
+//	                         or approved proposes (TRD OrderSnapshotFact.Proposed; S5 D-9), with that
+//	                         revision's stages; any other binding is REFERENCE_STALE.
 //	credit_exception.decide  human only (credit officer within its tier, credit manager): releases or
 //	                         rejects an open decision; tiers as for limits, applied to the decision's
 //	                         cover amount (STL-INV-005).
 //	credit.release           human, AI or system: releases a reserved reservation before its order
 //	                         is activated (or once it expired); a consumed one only by the system when
-//	                         its order ends (PL-13).
+//	                         its order ends (PL-13). A person's or agent's release reads TRD's order
+//	                         state inside the transaction, after the reservation row is locked
+//	                         (brant_trd.order_state_v1): an order active at the reservation's revision
+//	                         or a later one keeps it (INVALID_STATE), also when its activation
+//	                         committed while the release waited for the row.
 //	credit.consume           system only: marks a reserved reservation consumed when its order was
 //	                         activated (PL-12), for the order binding it was reserved for.
 //

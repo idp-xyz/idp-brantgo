@@ -722,7 +722,7 @@ func TestCreditGuardDecidesEveryCommitOrder(t *testing.T) {
 // SM-STL-CREDIT-RESERVATION: the system consumes a reservation for the binding the activation
 // bound (PL-12, unit B6) — a person cannot; a consumed reservation still covers its order and does
 // not expire; a person cannot release it, the system does when the order ends (PL-13). A person
-// does not release the reserved reservation of an active order; a cancelled one's they do. The
+// releases a cancelled order's reserved reservation. The
 // order's revision and hash must be TRD's (REFERENCE_STALE), an ended order is ORDER_NOT_ACTIVE,
 // and an order in CNY needs a credit rate into the policy's USD (FX_SCOPE_MISMATCH), with which it
 // reserves the converted amount (STL-INV-004).
@@ -761,12 +761,12 @@ func TestCreditConsumeReleaseAndCurrency(t *testing.T) {
 		t.Fatalf("reservation %+v %v", v, err)
 	}
 
+	// credit.release reads the order's state from TRD itself (brant_trd.order_state_v1, S5 B4), which
+	// knows nothing of the stand-in's orders: an active order's reservation is kept in
+	// TestCreditReleaseWaitsForTheActivation on TRD's real orders.
 	b := cw.onCredit("order.b", "100000")
 	_, err = cw.reserve(cw.sales, "res.b", b)
 	cw.must(err)
-	cw.orders.setStatus("order.b", stl.OrderActive)
-	_, err = cw.release(cw.officer, "res.b", 1)
-	cw.want(err, kernel.CodeInvalidState)
 	cw.orders.setStatus("order.b", "cancelled")
 	if _, err = cw.release(cw.officer, "res.b", 1); err != nil {
 		t.Fatal(err)

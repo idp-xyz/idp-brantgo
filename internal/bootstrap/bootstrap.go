@@ -236,8 +236,10 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
+		// STL's CreditGuard v1 (R57) and CNX's TradeComplianceGuard v1 (R58) are guard functions TRD
+		// runs with its own executor: TRD is composed before STL and CNX, which read its orders.
 		c.TRD, err = trd.New(db, trd.Upstream{Sources: c.EVD, Parties: c.PTY, Profiles: c.PTY, Skus: c.CAT, Configs: c.POL, Numbers: c.POL,
-			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST})
+			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST, Credit: trd.STLCreditGuard(), TradeCompliance: trd.CNXTradeComplianceGuard()})
 	}
 	if err == nil {
 		db, err = p.newDB()

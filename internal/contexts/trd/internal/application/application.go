@@ -149,8 +149,8 @@ type Service struct {
 	// Calculator is the server calculation of WBS S3-02 (ServerCalculator); without one TRD
 	// freezes nothing.
 	Calculator Calculator
-	// Orders are the extension points of order.activate for STL's and CNX's guards, nil (recorded
-	// gaps) until those contexts exist (order_activate.go).
+	// Orders are STL's CreditGuard and CNX's TradeComplianceGuard as order.activate and
+	// order.amendment.apply call them (order_guards.go); a nil guard is a recorded gap, never a pass.
 	Orders OrderGuards
 }
 

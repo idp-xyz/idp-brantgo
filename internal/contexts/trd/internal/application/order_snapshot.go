@@ -3,6 +3,7 @@ package application
 import (
 	"cmp"
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/amendment"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/order"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
@@ -35,6 +37,7 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 		return nil, err
 	}
 	out := map[string]api.OrderSnapshotFact{}
+	orders := map[string]*order.Order{}
 	err := s.lookupAcceptances(ctx, func(ctx context.Context, exec bentopg.Executor, sees func(quoteID string) (bool, error)) error {
 		for _, id := range ids {
 			o, err := postgres.LoadOrder(ctx, exec, scope(ctx), id, postgres.NoLock)
@@ -49,7 +52,7 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 				return err
 			}
 			if ok {
-				out[id] = orderSnapshotFact(o, scope(ctx))
+				out[id], orders[id] = orderSnapshotFact(o, scope(ctx)), o
 			}
 		}
 		return nil
@@ -57,15 +60,20 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 	if err != nil {
 		return nil, err
 	}
-	return out, s.stateSnapshotTrade(ctx, out)
+	if err = s.stateSnapshotTrade(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, s.stateProposed(ctx, orders, out)
 }
 
 // GetOrderSnapshot returns what ResolveOrderSnapshots says of order id, audited as
 // order.snapshot.get (trd.read): NOT_FOUND for an order of a quote the caller does not see.
 func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnapshotFact, error) {
 	var f api.OrderSnapshotFact
+	var loaded *order.Order
 	err := s.Ledger.Read(ctx, CommandGetOrderSnapshot, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		o, err := postgres.LoadOrder(ctx, exec, scope(ctx), id, postgres.NoLock)
+		loaded = o
 		if err != nil {
 			return err
 		}
@@ -89,7 +97,70 @@ func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnap
 	if err = s.stateSnapshotTrade(ctx, facts); err != nil {
 		return api.OrderSnapshotFact{}, err
 	}
+	if err = s.stateProposed(ctx, map[string]*order.Order{id: loaded}, facts); err != nil {
+		return api.OrderSnapshotFact{}, err
+	}
 	return facts[id], nil
+}
+
+// stateProposed states, after TRD's read transaction, the revisions the open amendments of every
+// intact active fact propose (api.ProposedRevision; S5 D-9, A6 gap 8): for each amendment pending
+// approval or approved on the order's current revision, in the order's amendment order, the
+// revision orderrev.Next derives from it with the facts POL gives now (amendmentInputs, what
+// order.amendment.apply reads), with no shipment confirmed (FUL is not wired). An amendment whose
+// revision cannot be derived now carries the refusal's code.
+func (s Service) stateProposed(ctx context.Context, orders map[string]*order.Order, facts map[string]api.OrderSnapshotFact) error {
+	for _, id := range slices.Sorted(maps.Keys(orders)) {
+		o, f := orders[id], facts[id]
+		if o == nil || f.Code != "" || o.Status != order.Active {
+			continue
+		}
+		st := amendment.Order{Status: orderrev.Active, Current: current(o)}
+		for _, a := range o.Amendments {
+			if !a.Proposes(st) {
+				continue
+			}
+			p := api.ProposedRevision{AmendmentID: a.ID, AmendmentHash: a.Hash, AmendmentStatus: string(a.Status)}
+			in, err := s.amendmentInputs(ctx, id, a.Content.Proposal, "/proposal", s.Clock.Now())
+			var next *orderrev.Revision
+			if err == nil {
+				next, err = a.Preview(st, shipments(), in.facts)
+			}
+			if err != nil {
+				rej, ok := kernel.AsRejection(err)
+				if !ok {
+					return err
+				}
+				p.Code = rej.Code
+				f.Proposed = append(f.Proposed, p)
+				continue
+			}
+			p.Binding = api.OrderBinding{OrderID: id, OrderRevision: next.Number, OrderHash: next.Hash}
+			if p.Stages, p.CreditPortionMinor, err = paymentPlan(next); err != nil {
+				p = api.ProposedRevision{AmendmentID: a.ID, AmendmentHash: a.Hash, AmendmentStatus: string(a.Status), Code: kernel.CodeReferenceInvalid}
+			} else {
+				p.NetMinor, p.TaxMinor, p.PayableMinor = next.Amounts.Net, next.Amounts.Tax, next.Amounts.Payable
+			}
+			f.Proposed = append(f.Proposed, p)
+		}
+		facts[id] = f
+	}
+	return nil
+}
+
+// paymentPlan is revision r's payment plan as OrderTerms shows it, with its credit portion.
+func paymentPlan(r *orderrev.Revision) ([]api.PaymentStage, string, error) {
+	portion, err := orderrev.CreditPortion(r.Amounts.Payments)
+	if err != nil {
+		return nil, "", err
+	}
+	var stages []api.PaymentStage
+	for _, p := range r.Amounts.Payments {
+		stages = append(stages, api.PaymentStage{StageID: p.StageID, Trigger: p.Trigger, Days: p.Days, DayBasis: p.DayBasis,
+			CalendarRef: optAPIRef(p.Calendar), Percent: p.Percent, AmountMinor: p.AmountMinor, ReleaseControl: p.ReleaseControl,
+			OnCredit: orderrev.OnCredit(p)})
+	}
+	return stages, portion, nil
 }
 
 // orderSnapshotFact is what OrderCommercialSnapshot v1 says of order o now: its head always, the
@@ -170,20 +241,15 @@ func orderTerms(snap order.Snapshot, r *orderrev.Revision) (api.OrderTerms, erro
 	if err != nil {
 		return api.OrderTerms{}, err
 	}
-	portion, err := orderrev.CreditPortion(r.Amounts.Payments)
+	stages, portion, err := paymentPlan(r)
 	if err != nil {
 		return api.OrderTerms{}, err
 	}
 	t := api.OrderTerms{TradeTerms: api.TradeTerms{Ref: apiRef(r.Terms.TradeTerms), NamedPlace: apiBusiness(r.Terms.NamedPlace)},
-		PaymentTerms: apiRef(r.Terms.PaymentTerms), CreditPortionMinor: portion}
+		PaymentTerms: apiRef(r.Terms.PaymentTerms), Stages: stages, CreditPortionMinor: portion}
 	for _, a := range addresses {
 		t.Addresses = append(t.Addresses, api.OrderAddress{Role: a.Role, PartyID: a.Ref.PartyID, PartyRevision: a.Ref.PartyRevision,
 			AddressID: a.Ref.AddressID, Address: a.Address})
-	}
-	for _, p := range r.Amounts.Payments {
-		t.Stages = append(t.Stages, api.PaymentStage{StageID: p.StageID, Trigger: p.Trigger, Days: p.Days, DayBasis: p.DayBasis,
-			CalendarRef: optAPIRef(p.Calendar), Percent: p.Percent, AmountMinor: p.AmountMinor, ReleaseControl: p.ReleaseControl,
-			OnCredit: orderrev.OnCredit(p)})
 	}
 	return t, nil
 }
