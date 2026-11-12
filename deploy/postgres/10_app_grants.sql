@@ -331,3 +331,12 @@ GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed
               guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at,
               cancel_reason) ON brant_ful.shipment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;
+
+-- FUL milestones and export lots (S5-03b): a shipment line's price is only inserted with its
+-- shipment; a milestone plan moves only its version, revision, counts and last revision (trigger),
+-- the column grant also lets milestone commands lock it FOR UPDATE; nodes and actuals are only
+-- inserted; export lots and their lines are only inserted and never change; nothing is deleted.
+GRANT SELECT, INSERT ON brant_ful.shipment_line_price, brant_ful.milestone_plan, brant_ful.milestone_node, brant_ful.milestone_actual,
+    brant_ful.export_lot, brant_ful.export_lot_line TO brant_app;
+GRANT UPDATE (row_version, plan_revision, node_count, actual_count, revised_by_kind, revised_by_id, revise_epoch, revised_at,
+              revision_reason) ON brant_ful.milestone_plan TO brant_app;

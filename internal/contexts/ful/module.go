@@ -1,6 +1,7 @@
 // Package ful assembles the FUL bounded context (fulfilment and shipment: shipments with their
 // packing records and confirmations, the order fulfilment root, ShipmentFacts v1 for TRD; WBS
-// S5-03a). Code outside FUL uses it through package api; everything under internal/ is private to
+// S5-03a; milestone plans, export lots, ShipmentLineRef v1 for STL and ExportLotRef v1 for CNX; WBS
+// S5-03b). Code outside FUL uses it through package api; everything under internal/ is private to
 // FUL.
 package ful
 
@@ -31,6 +32,14 @@ var (
 	_ api.Auditor       = (*Module)(nil)
 	_ api.Reconciler    = (*Module)(nil)
 	_ api.ShipmentFacts = (*Module)(nil)
+
+	// S5-03b: milestone plans, export lots, ShipmentLineRef v1 (R30) and ExportLotRef v1 (R36).
+	_ api.MilestoneCommands   = (*Module)(nil)
+	_ api.MilestoneQueries    = (*Module)(nil)
+	_ api.ExportLotCommands   = (*Module)(nil)
+	_ api.ExportLotQueries    = (*Module)(nil)
+	_ api.ShipmentLineLookups = (*Module)(nil)
+	_ api.ExportLotLookups    = (*Module)(nil)
 )
 
 // Upstream are the lookups and guards of FUL's upstream contexts: TRD's orders (R27), QLT's quality

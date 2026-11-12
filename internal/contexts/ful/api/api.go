@@ -2,8 +2,9 @@
 // its first aggregates: the Shipment with its lines, packing plan and actual packing, and the
 // OrderFulfilment root of an order (tactical model FUL-AGG-Shipment, FUL-AGG-OrderFulfilment,
 // SM-FUL-SHIPMENT; FUL-INV-001, FUL-INV-003; UL FUL-ShipmentConfirmation, FUL-ActualPackage; S5
-// decisions D-1, D-3, D-10, D-11, D-19). Milestones, export lots, the commercial release, bookings
-// and shipment documents follow (B1b, C1, C2). Python V0.50 has no fulfilment context: every rule
+// decisions D-1, D-3, D-10, D-11, D-19). Unit B1b (S5-03b) adds milestone plans (milestone.go),
+// export lots with ShipmentLineRef v1 and ExportLotRef v1 (exportlot.go); the commercial release,
+// bookings and shipment documents follow (C1, C2). Python V0.50 has no fulfilment context: every rule
 // comes from the design, and the tests cite its IDs.
 //
 //	shipment.prepare       human or AI (merchandiser): prepares a shipment of one active sales order
