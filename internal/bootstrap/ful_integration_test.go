@@ -156,6 +156,7 @@ type fulWorld struct {
 	merch      context.Context
 	merch2     context.Context
 	agent      context.Context
+	releaseKit
 }
 
 func newFulWorld(t *testing.T) *fulWorld {
@@ -178,7 +179,7 @@ func newFulWorld(t *testing.T) *fulWorld {
 	w.must(err)
 	w.ful, err = ful.New(db, ful.Upstream{Orders: heldOrders{Orders: ful.TRDOrders(q.c.TRD), hold: w.hold},
 		Releases: heldReleases{Releases: ful.QLTReleases(w.qlt), hold: w.hold}, Deliveries: w.deliveries, Screening: ful.PTYScreening(),
-		Sources: q.c.EVD})
+		Sources: q.c.EVD, Compliance: ful.CNXCompliance(), Payments: heldPayments{Payments: ful.STLPayments(), hold: w.hold}})
 	w.must(err)
 	w.qc, w.merch, w.merch2 = q.assign("qc.1", "quality_inspector"), q.assign("merch.1", "merchandiser"), q.assign("merch.2", "merchandiser")
 	w.agent = q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: actorRef("ai", "agent.ful"), DataScope: "company",
@@ -186,6 +187,7 @@ func newFulWorld(t *testing.T) *fulWorld {
 	q.source(w.qc, "standard", "合成检验标准：AQL 2.5，一般检验水平 II")
 	_, err = q.file(w.qc, "report", "final-inspection.txt", evdapi.MimeText, "合成验货报告", "")
 	w.must(err)
+	w.releasable()
 	return w
 }
 
@@ -295,15 +297,14 @@ func guardValue(v fulapi.ShipmentView, name string) string {
 	return ""
 }
 
-var fulExtensions = []string{fulapi.GuardTradeCompliance, fulapi.GuardExportLicense, fulapi.GuardPaymentCondition, fulapi.GuardCommercialRelease}
-
 // SM-FUL-SHIPMENT, BT11 and FUL-INV-001 on the 120 PCS order line (BT11's 200 and 800 of 1000 as 50
 // and 70 of 120): an AI agent prepares the first shipment, plans and records its actual packing
 // (cartons accounting for every line, UL FUL-ActualPackage, R74); only a human merchandiser
-// confirms it (humanOnlyCommands); the confirmation re-checks PTY's screening of the order's
-// parties, the delivery line, QLT's release and TRD's order, records each answer with its SHA-256,
-// names the CNX, STL and commercial release extension points not_wired and never passes them, and
-// publishes ShipmentConfirmed. A replayed submission ships nothing more; the second shipment ships
+// confirms it (humanOnlyCommands), and only on a granted shipment release (D-11,
+// COMMERCIAL_RELEASE_BLOCKED before); the confirmation re-checks CNX's trade compliance, PTY's
+// screening of the order's parties, the delivery line, QLT's release, STL's payment condition and
+// TRD's order, records each answer and the release it consumed with its SHA-256, and publishes
+// ShipmentConfirmed. A replayed submission ships nothing more; the second shipment ships
 // the rest; one more piece is SHIPMENT_QUANTITY_EXCEEDED. ShipmentFacts v1 (R70) and the order's
 // fulfilment show what shipped.
 func TestShipmentPreparePackConfirmBT11(t *testing.T) {
@@ -351,10 +352,12 @@ func TestShipmentPreparePackConfirmBT11(t *testing.T) {
 	w.want(err, kernel.CodePermissionDenied)
 	_, err = w.confirm(w.merch, "shipment.1", 2)
 	w.want(err, kernel.CodeVersionConflict)
+	_, err = w.confirm(w.merch, "shipment.1", 3)
+	w.want(err, fulapi.CodeCommercialReleaseBlocked) // no release evaluated yet (D-11)
+	granted := w.granted("shipment.1")
 	confirm := w.confirmCmd("shipment.1", 3)
 	c, err := w.ful.ConfirmShipment(w.merch, confirm)
-	if err != nil || c.Status != fulapi.StatusConfirmed || c.RowVersion != 4 || !slices.Equal(c.UncheckedGuards, []string{fulapi.GuardTradeCompliance,
-		fulapi.GuardExportLicense, fulapi.GuardPaymentCondition, fulapi.GuardCommercialRelease}) {
+	if err != nil || c.Status != fulapi.StatusConfirmed || c.RowVersion != 4 || len(c.UncheckedGuards) != 0 {
 		t.Fatalf("confirmed %+v %v", c, err)
 	}
 	if again, err := w.ful.ConfirmShipment(w.merch, confirm); err != nil || !again.Replayed || again.ActionID != c.ActionID {
@@ -375,10 +378,10 @@ func TestShipmentPreparePackConfirmBT11(t *testing.T) {
 	if len(v.Parties) != 2 || v.Parties[0].Role != "customer" || v.Parties[1].Role != ptyapi.AddressBuyer || v.Parties[1].AddressID != "hq" {
 		t.Fatalf("parties %+v", v.Parties)
 	}
-	for _, name := range fulExtensions {
-		if guardValue(v, name) != fulapi.NotWired {
-			t.Errorf("%s: %q", name, guardValue(v, name))
-		}
+	if !strings.HasPrefix(guardValue(v, fulapi.GuardTradeCompliance), "clear/") || guardValue(v, fulapi.GuardExportLicense) != "" ||
+		guardValue(v, fulapi.GuardPaymentCondition) != "satisfied//r1/USD/applied=96000/required=96000" ||
+		guardValue(v, fulapi.GuardCommercialRelease) != granted.ReleaseID+"/v1/granted" {
+		t.Fatalf("CNX, STL and the release in %+v", cv.Guards)
 	}
 	if !strings.HasPrefix(guardValue(v, "screening:customer.1"), "clear/") || guardValue(v, fulapi.GuardOrder) != "active/r1" ||
 		!strings.HasPrefix(guardValue(v, "quality_release:"+rel1), "granted/released=50/") ||
@@ -387,7 +390,8 @@ func TestShipmentPreparePackConfirmBT11(t *testing.T) {
 	}
 	events := w.fulEvents()
 	if len(events) != 1 || events[0].Payload["shipment_id"] != "shipment.1" || events[0].Payload["guards_sha256"] != cv.GuardsSHA256 ||
-		events[0].Payload["order_hash"] != w.order.OrderHash || len(events[0].Payload["unchecked_guards"].([]any)) != 4 {
+		events[0].Payload["order_hash"] != w.order.OrderHash || len(events[0].Payload["unchecked_guards"].([]any)) != 0 ||
+		events[0].Payload["release_id"] != granted.ReleaseID {
 		t.Fatalf("events %+v", events)
 	}
 
@@ -398,6 +402,7 @@ func TestShipmentPreparePackConfirmBT11(t *testing.T) {
 	}
 	_, err = w.prepare(w.merch2, "shipment.2", "70", d2, rel2)
 	w.must(err)
+	w.granted("shipment.2")
 	if r, err := w.confirm(w.merch2, "shipment.2", 1); err != nil || r.Status != fulapi.StatusConfirmed {
 		t.Fatalf("the second shipment ships the rest without a packing record %+v %v", r, err)
 	}
@@ -504,6 +509,7 @@ func TestPrepareRefusalsAndCancel(t *testing.T) {
 	if v := w.shipment("shipment.a"); v.Status != fulapi.StatusCancelled || v.Cancellation == nil || v.Cancellation.CancelledBy.ID != "agent.ful" {
 		t.Fatalf("cancelled %+v", v)
 	}
+	w.granted("shipment.b")
 	if r, err := w.confirm(w.merch, "shipment.b", 1); err != nil || r.Status != fulapi.StatusConfirmed {
 		t.Fatalf("the cancelled shipment counts for nothing %+v %v", r, err)
 	}
@@ -528,6 +534,8 @@ func TestConfirmationJudgesWhatWasConsumed(t *testing.T) {
 	w.must(err)
 	_, err = w.prepare(w.merch, "shipment.d2", "30", d1, rel1)
 	w.must(err)
+	w.granted("shipment.d1")
+	w.granted("shipment.d2")
 	_, err = w.confirm(w.merch, "shipment.d1", 1)
 	w.must(err)
 	_, err = w.confirm(w.merch, "shipment.d2", 1)
@@ -538,12 +546,17 @@ func TestConfirmationJudgesWhatWasConsumed(t *testing.T) {
 	w.must(err)
 	_, err = w.prepare(w.merch, "shipment.r2", "30", d2, rel2)
 	w.must(err)
+	w.granted("shipment.r1")
+	w.granted("shipment.r2")
 	_, err = w.confirm(w.merch, "shipment.r1", 1)
 	w.must(err)
 	_, err = w.confirm(w.merch, "shipment.r2", 1)
 	w.want(err, fulapi.CodeQualityReleaseInsufficient)
 	if v := w.shipment("shipment.r2"); v.Status != fulapi.StatusPrepared || v.RowVersion != 1 {
 		t.Fatalf("a refused confirmation changes nothing %+v", v)
+	}
+	if r, err := w.ful.ShipmentReleases(w.doc, "shipment.r2"); err != nil || len(r.Releases) != 1 || r.Releases[0].Status != fulapi.ReleaseGranted {
+		t.Fatalf("a refused confirmation does not consume the release %+v %v", r, err)
 	}
 }
 
@@ -651,6 +664,7 @@ func TestShipmentRecordsAreImmutable(t *testing.T) {
 	w.must(err)
 	_, err = w.prepare(w.merch, "shipment.2", "100", d, rel)
 	w.must(err)
+	w.granted("shipment.1")
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
 	for _, sql := range []string{

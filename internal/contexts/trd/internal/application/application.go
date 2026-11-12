@@ -152,6 +152,9 @@ type Service struct {
 	// Orders are STL's CreditGuard and CNX's TradeComplianceGuard as order.activate and
 	// order.amendment.apply call them (order_guards.go); a nil guard is a recorded gap, never a pass.
 	Orders OrderGuards
+	// Facts are FUL's ShipmentFacts v1 and PUR's DownstreamCommitments v1 as the active order's
+	// commands read them (order_facts.go); a nil read is a recorded gap, never a check.
+	Facts OrderFacts
 }
 
 func scope(ctx context.Context) kernel.Scope {

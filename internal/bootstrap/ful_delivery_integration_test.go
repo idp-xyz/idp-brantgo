@@ -125,6 +125,8 @@ func TestShipmentOnVerifiedDeliveriesTDAT14(t *testing.T) {
 	w.must(err)
 	_, err = w.ship(fl, w.merch2, "shipment.b", "60", d1)
 	w.must(err)
+	w.grantedOn(fl, "shipment.a", fulapi.ScopeShipment)
+	w.grantedOn(fl, "shipment.b", fulapi.ScopeShipment)
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	for i, c := range []struct {
@@ -153,6 +155,7 @@ func TestShipmentOnVerifiedDeliveriesTDAT14(t *testing.T) {
 	}
 	_, err = w.ship(fl, w.merch, "shipment.c", "40", d1)
 	w.must(err)
+	w.grantedOn(fl, "shipment.c", fulapi.ScopeShipment)
 	if r, err := fl.ConfirmShipment(w.merch, w.confirmCmd("shipment.c", 1)); err != nil || r.Status != fulapi.StatusConfirmed {
 		t.Fatalf("the last 40 %+v %v", r, err)
 	}
@@ -175,6 +178,7 @@ func TestDeliveryCorrectionFirstRefusesTheConfirmation(t *testing.T) {
 	w.must(err)
 	_, err = w.px.correct(w.merch, "delivery.1", "commitment.1", "40", 2)
 	w.must(err)
+	w.grantedOn(fl, "shipment.1", fulapi.ScopeShipment)
 	if r, err := fl.ConfirmShipment(w.merch, w.confirmCmd("shipment.1", 1)); err != nil || r.Status != fulapi.StatusConfirmed {
 		// A correction awaiting verification changes nothing.
 		t.Fatalf("pending correction %+v %v", r, err)
@@ -194,6 +198,7 @@ func TestDeliveryCorrectionFirstRefusesTheConfirmation(t *testing.T) {
 	w.want(err, fulapi.CodeSupplierDeliveryInsufficient) // 30 shipped on version 1 + 11 > 40
 	_, err = w.ship(fl, w.merch, "shipment.4", "10", d2)
 	w.must(err)
+	w.grantedOn(fl, "shipment.4", fulapi.ScopeShipment)
 	if r, err := fl.ConfirmShipment(w.merch, w.confirmCmd("shipment.4", 1)); err != nil || r.Status != fulapi.StatusConfirmed {
 		t.Fatalf("on the verified correction %+v %v", r, err)
 	}
@@ -208,13 +213,16 @@ func TestDeliveryCorrectionWaitsForTheConfirmation(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
 	fl, err := ful.New(db, ful.Upstream{Orders: ful.TRDOrders(w.c.TRD), Releases: ful.QLTReleases(w.c.QLT),
-		Deliveries: heldDeliveries{Deliveries: ful.PURDeliveries(w.c.PUR), hold: w.hold}, Screening: ful.PTYScreening(), Sources: w.c.EVD})
+		Deliveries: heldDeliveries{Deliveries: ful.PURDeliveries(w.c.PUR), hold: w.hold}, Screening: ful.PTYScreening(), Sources: w.c.EVD,
+		Compliance: ful.CNXCompliance(), Payments: ful.STLPayments()})
 	w.must(err)
 	d1 := w.verified("delivery.1", "50", "50")
 	_, err = w.ship(fl, w.merch, "shipment.1", "30", d1)
 	w.must(err)
 	_, err = w.ship(fl, w.merch, "shipment.2", "10", d1)
 	w.must(err)
+	w.grantedOn(fl, "shipment.1", fulapi.ScopeShipment)
+	w.grantedOn(fl, "shipment.2", fulapi.ScopeShipment)
 	_, err = w.px.correct(w.merch, "delivery.1", "commitment.1", "45", 2)
 	w.must(err)
 	w.hold.set("delivery")
@@ -280,6 +288,11 @@ func TestShipmentOnDeliveryVerifiedOverHTTP(t *testing.T) {
 			"quality_release_id": w.release}}})
 	if p["status"] != fulapi.StatusPrepared || p["row_version"] != float64(1) {
 		t.Fatalf("prepare %v", p)
+	}
+	doc := &client{t: t, base: srv.URL, token: is.token(w.tenant, "company.A", "doc.1", "human"), n: 500}
+	if e := doc.command("ful", fulapi.Contract, fulapi.CommandEvaluateRelease, map[string]any{"shipment_id": "shipment.http",
+		"scope": fulapi.ScopeShipment}); e["status"] != fulapi.ReleaseGranted || e["row_version"] != float64(1) {
+		t.Fatalf("evaluate %v", e)
 	}
 	c := merch.command("ful", fulapi.Contract, fulapi.CommandConfirmShipment, map[string]any{"shipment_id": "shipment.http", "expected_version": 1,
 		"evidence_ids": []any{"evidence"}})

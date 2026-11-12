@@ -1,4 +1,4 @@
-// Package upstream implements FUL's ports over the api packages of TRD, QLT, PUR and PTY: their
+// Package upstream implements FUL's ports over the api packages of TRD, QLT, PUR, PTY, CNX and STL: their
 // lookups before FUL's transaction and their guard functions, executed with FUL's own executor
 // inside it.
 package upstream
@@ -8,11 +8,13 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/application"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
+	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 )
 
@@ -94,6 +96,30 @@ func (PUR) GuardDeliveryLine(ctx context.Context, exec bentopg.Executor, ref ful
 	return application.DeliveryLine{Ref: ref, Known: v.Known, Status: v.Status, VerifiedVersion: v.VerifiedVersion, CommitmentID: v.CommitmentID,
 		SupplierID: v.SupplierID, OrderID: v.OrderID, OrderLineID: v.OrderLineID, SkuID: v.SkuID, SpecRevision: v.SpecRevision, UnitID: v.UnitID,
 		UnitRevision: v.UnitRevision, VerifiedQuantity: v.VerifiedQuantity, Code: v.Code}, nil
+}
+
+// CNX is FUL's port to CNX's guards (R56): TradeComplianceGuard v1 and ExportLicenseGuard v1.
+type CNX struct{}
+
+// GuardTradeCompliance runs TradeComplianceGuard v1 on order revision b at instant at, which locks
+// the revision's check FOR SHARE until FUL's transaction ends.
+func (CNX) GuardTradeCompliance(ctx context.Context, exec bentopg.Executor, b cnxapi.OrderBinding, at time.Time) (cnxapi.TradeComplianceVerdict, error) {
+	return cnxapi.ScanTradeComplianceGuard(b, exec.QueryRow(ctx, cnxapi.TradeComplianceGuardSQL, cnxapi.TradeComplianceGuardArgs(b, at)...).Scan)
+}
+
+// GuardExportLicense runs ExportLicenseGuard v1 on shipment shipmentID at instant at, which locks the
+// shipment's licence and allocation FOR SHARE until FUL's transaction ends.
+func (CNX) GuardExportLicense(ctx context.Context, exec bentopg.Executor, shipmentID string, at time.Time) (cnxapi.ExportLicenseVerdict, error) {
+	return cnxapi.ScanExportLicenseGuard(shipmentID, exec.QueryRow(ctx, cnxapi.ExportLicenseGuardSQL, cnxapi.ExportLicenseGuardArgs(shipmentID, at)...).Scan)
+}
+
+// STL is FUL's port to STL's payment condition (R45): PaymentConditionGuard v1.
+type STL struct{}
+
+// GuardPaymentCondition runs PaymentConditionGuard v1 for q, which locks the order's account FOR
+// SHARE until FUL's transaction ends.
+func (STL) GuardPaymentCondition(ctx context.Context, exec bentopg.Executor, q stlapi.PaymentQuery) (stlapi.PaymentVerdict, error) {
+	return stlapi.ScanPaymentCondition(q, exec.QueryRow(ctx, stlapi.PaymentConditionSQL, stlapi.PaymentConditionArgs(q)...).Scan)
 }
 
 // PTY is FUL's port to PTY's party screening (R44): PartyScreeningGuard v1.

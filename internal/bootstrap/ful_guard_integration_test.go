@@ -26,6 +26,8 @@ func TestTwoConfirmationsNeverExceedTheOrderLine(t *testing.T) {
 	w.must(err)
 	_, err = w.prepare(w.merch2, "shipment.b", "80", d2, rel2)
 	w.must(err)
+	w.granted("shipment.a")
+	w.granted("shipment.b")
 	w.hold.set("order")
 	first := make(chan error, 1)
 	go func() { _, err := w.confirm(w.merch, "shipment.a", 1); first <- err }()
@@ -87,6 +89,7 @@ func newRace(t *testing.T, w *fulWorld, round int) *race {
 	t.Helper()
 	suffix := string(rune('a' + round))
 	order := w.activeOrder("quote.r" + suffix)
+	w.payable(order)
 	saved := w.order
 	w.order = order
 	defer func() { w.order = saved }()
@@ -97,6 +100,7 @@ func newRace(t *testing.T, w *fulWorld, round int) *race {
 		r.ids[i] = "shipment.r" + suffix + string(rune('1'+i))
 		_, err := w.prepare(w.merch, r.ids[i], "70", d, rel)
 		w.must(err)
+		w.granted(r.ids[i])
 	}
 	return r
 }
@@ -122,6 +126,8 @@ func TestQualityRevocationWaitsForTheConfirmation(t *testing.T) {
 	w.must(err)
 	_, err = w.prepare(w.merch, "shipment.2", "40", d, rel)
 	w.must(err)
+	w.granted("shipment.1")
+	w.granted("shipment.2")
 	w.hold.set("release")
 	done := make(chan error, 1)
 	go func() { _, err := w.confirm(w.merch, "shipment.1", 1); done <- err }()
@@ -167,6 +173,8 @@ func TestOrderRevocationWaitsForTheConfirmation(t *testing.T) {
 	w.must(err)
 	_, err = w.prepare(w.merch, "shipment.2", "40", d, rel)
 	w.must(err)
+	w.granted("shipment.1")
+	w.granted("shipment.2")
 	w.hold.set("order")
 	done := make(chan error, 1)
 	go func() { _, err := w.confirm(w.merch, "shipment.1", 1); done <- err }()

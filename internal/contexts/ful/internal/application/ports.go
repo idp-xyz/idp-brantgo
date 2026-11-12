@@ -5,10 +5,12 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
+	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -64,27 +66,19 @@ type Deliveries interface {
 	GuardDeliveryLine(ctx context.Context, exec bentopg.Executor, ref api.DeliveryLineRef) (DeliveryLine, error)
 }
 
-// ExtensionCall is what an extension guard is asked about: the shipment, the order it binds and
-// the confirmation's instant.
-type ExtensionCall struct {
-	ShipmentID string
-	Order      trdapi.OrderBinding
-	At         time.Time
+// Compliance is FUL's port to CNX (R56): TradeComplianceGuard v1 on an order revision, which locks
+// the revision's check FOR SHARE, and ExportLicenseGuard v1 on a shipment, which locks the
+// shipment's licence and allocation FOR SHARE, both with FUL's executor until FUL's transaction
+// ends.
+type Compliance interface {
+	GuardTradeCompliance(ctx context.Context, exec bentopg.Executor, b cnxapi.OrderBinding, at time.Time) (cnxapi.TradeComplianceVerdict, error)
+	GuardExportLicense(ctx context.Context, exec bentopg.Executor, shipmentID string, at time.Time) (cnxapi.ExportLicenseVerdict, error)
 }
 
-// Extension is a guard shipment.confirm calls with FUL's executor in its transaction: it returns
-// the value the confirmation records as evidence, or the refusal.
-type Extension func(ctx context.Context, exec bentopg.Executor, c ExtensionCall) (string, error)
-
-// Extensions are the guards shipment.confirm names before S5 unit C1 wires them (plan S5-03,
-// S5-07; D-11): CNX's TradeComplianceGuard and export licence guard, STL's PaymentConditionGuard
-// and FUL's own commercial release. A nil one is recorded as not_wired and listed as unchecked,
-// never treated as passed.
-type Extensions struct {
-	TradeCompliance   Extension
-	ExportLicense     Extension
-	PaymentCondition  Extension
-	CommercialRelease Extension
+// Payments is FUL's port to STL (R45): PaymentConditionGuard v1 for a release scope, which locks the
+// order's account FOR SHARE with FUL's executor until FUL's transaction ends.
+type Payments interface {
+	GuardPaymentCondition(ctx context.Context, exec bentopg.Executor, q stlapi.PaymentQuery) (stlapi.PaymentVerdict, error)
 }
 
 func decimal(s string) kernel.Decimal {

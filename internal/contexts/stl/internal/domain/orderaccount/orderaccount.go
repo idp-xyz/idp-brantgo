@@ -100,25 +100,33 @@ func validTrigger(t string) bool {
 // with a known trigger and release control, a non-negative amount in the order currency and an ID
 // of its own.
 func Open(orderID string, revision int64, hash, party string, currencyRevision int64, stages []Stage, by fundrecord.Act, team string) (*Account, error) {
+	if err := checkStages(stages); err != nil {
+		return nil, err
+	}
+	return &Account{OrderID: orderID, OrderRevision: revision, OrderHash: hash, PartyID: party, CurrencyRevision: currencyRevision,
+		Status: StatusOpen, Version: 1, Stages: stages, OwnerActor: by.By.ID, OwnerTeam: team, Opened: by}, nil
+}
+
+// checkStages checks an order revision's stages as Open takes them and numbers them in plan order.
+func checkStages(stages []Stage) error {
 	if len(stages) == 0 {
-		return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's order revision has no payment stages")
+		return kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's order revision has no payment stages")
 	}
 	seen := map[string]bool{}
 	c := stages[0].Amount.Currency()
 	for i, s := range stages {
 		switch {
 		case seen[s.StageID] || !kernel.ValidIdentifier(s.StageID):
-			return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's payment stage IDs are not distinct identifiers")
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's payment stage IDs are not distinct identifiers")
 		case !validTrigger(s.Trigger) || (s.ReleaseControl != "" && s.ReleaseControl != ReleaseDocuments) || s.Days < 0:
-			return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's payment stage "+s.StageID+" is not one STL knows")
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's payment stage "+s.StageID+" is not one STL knows")
 		case s.Amount.Currency() != c || s.Amount.Sign() < 0:
-			return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's payment stage "+s.StageID+" has no amount")
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "TRD's payment stage "+s.StageID+" has no amount")
 		}
 		seen[s.StageID] = true
 		stages[i].Seq = i + 1
 	}
-	return &Account{OrderID: orderID, OrderRevision: revision, OrderHash: hash, PartyID: party, CurrencyRevision: currencyRevision,
-		Status: StatusOpen, Version: 1, Stages: stages, OwnerActor: by.By.ID, OwnerTeam: team, Opened: by}, nil
+	return nil
 }
 
 // Required reports whether scope needs stage s paid (STL-INV-003, D-5).

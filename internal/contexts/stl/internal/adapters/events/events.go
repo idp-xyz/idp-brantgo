@@ -7,12 +7,15 @@
 // 与订单事件"; WBS S5-12c): OrderActivated has the order revision's credit reservation consumed (event
 // storming PL-12), and the end of an order — OrderCancelled, OrderClosedUnfulfilled,
 // OrderRemainderClosed, OrderClosed — has every reservation the order still holds released (PL-13;
-// WF-08 step 5; SM-STL-CREDIT-RESERVATION). OrderAmended belongs to the payment plan review (PL-09).
+// WF-08 step 5; SM-STL-CREDIT-RESERVATION). OrderAmended that names the reservation covering the new
+// revision has it consumed and the earlier revisions' reservations released (D-9, WF-06; unit C4b).
 //
 // stl.order_account opens the order account of an activated order at the activated revision (S5
 // plan D-4, D-18; STL-AGG-OrderAccount; unit B6b), so that PaymentConditionGuard v1 (R45) judges every
-// active order by its payment stages. It is a consumer of its own: its transaction modifies the
-// OrderAccount alone (D-3), and an account STL cannot open never holds up the credit reservation.
+// active order by its payment stages; on OrderAmended it opens the payment plan review, which moves
+// the account to the new revision (PL-09, WF-06, SM-STL-PAYMENT-PLAN-REVIEW; unit C4b). It is a
+// consumer of its own: its transaction modifies the OrderAccount alone (D-3), and an account STL
+// cannot open or move never holds up the credit reservation.
 package events
 
 import (
@@ -55,14 +58,15 @@ var (
 	activationEvents = []eventing.EventType{trdapi.EventOrderActivated}
 	endEvents        = []eventing.EventType{trdapi.EventOrderCancelled, trdapi.EventOrderClosedUnfulfilled, trdapi.EventOrderRemainderClosed,
 		trdapi.EventOrderClosed}
+	amendmentEvents = []eventing.EventType{trdapi.EventOrderAmended}
 )
 
 // OrderAccounts is the consumer of TRD's order activations for order accounts. Its handler runs as
 // system:inbox.stl.order_account, which brant-admin inbox grants OrderAccountPermissions.
 const OrderAccounts eventing.InboxConsumer = "stl.order_account"
 
-// OrderAccountPermissions are what order_account.open needs (payment_plan_review.open, the permission
-// STL gives the command), and stl.read for the command ledger's stored-result read.
+// OrderAccountPermissions are what order_account.open and payment_plan_review.open need (both
+// payment_plan_review.open), and stl.read for the command ledger's stored-result read.
 func OrderAccountPermissions() []string {
 	return []string{api.PermissionOpenOrderAccount, api.PermissionRead}
 }
@@ -71,12 +75,15 @@ func OrderAccountPermissions() []string {
 type Credit interface {
 	ConsumeOnActivation(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
 	ReleaseOnOrderEnd(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
+	ConsumeOnAmendment(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
 }
 
 // Accounts is what stl.order_account asks of STL's application; application.Service implements it.
 type Accounts interface {
 	PrepareAccount(ctx context.Context, e application.OrderEvent) (application.AccountBasis, error)
 	OpenOnActivation(ctx context.Context, exec bentopg.Executor, e application.OrderEvent, b application.AccountBasis) (string, error)
+	PrepareReview(ctx context.Context, e application.OrderEvent) (application.AccountBasis, error)
+	OpenReviewOnAmendment(ctx context.Context, exec bentopg.Executor, e application.OrderEvent, b application.AccountBasis) (string, error)
 }
 
 // Application is everything STL's consumers ask of STL's application.
@@ -90,14 +97,14 @@ func Subscriptions(db *bentopg.DB, app Application) []messaging.Subscription {
 	return []messaging.Subscription{{
 		Consumer:    OrderCredit,
 		Source:      trdapi.Source,
-		EventTypes:  slices.Concat(activationEvents, endEvents),
+		EventTypes:  slices.Concat(activationEvents, endEvents, amendmentEvents),
 		DB:          db,
 		Permissions: OrderCreditPermissions(),
 		Handler:     OrderCreditHandler(app),
 	}, {
 		Consumer:    OrderAccounts,
 		Source:      trdapi.Source,
-		EventTypes:  slices.Clone(activationEvents),
+		EventTypes:  slices.Concat(activationEvents, amendmentEvents),
 		DB:          db,
 		Permissions: OrderAccountPermissions(),
 		Prepare:     OrderAccountPrepare(app),
@@ -106,21 +113,27 @@ func Subscriptions(db *bentopg.DB, app Application) []messaging.Subscription {
 }
 
 // OrderAccountPrepare reads, before the consumer's transaction, what an OrderActivated's account
-// needs from TRD and POL (application.PrepareAccount). A payload that is not a SalesOrder event's is
-// refused for good; a failed read is retried.
+// (application.PrepareAccount) or an OrderAmended's payment plan review (application.PrepareReview)
+// needs from TRD and POL. A payload that is not a SalesOrder event's is refused for good; a failed
+// read is retried.
 func OrderAccountPrepare(accounts Accounts) func(ctx context.Context, envelope eventing.Envelope) (any, error) {
 	return func(ctx context.Context, envelope eventing.Envelope) (any, error) {
 		event, err := orderEvent(envelope)
 		if err != nil {
 			return nil, messaging.RejectEvent(FailureOrderEventInvalid, err)
 		}
+		if slices.Contains(amendmentEvents, envelope.Type) {
+			return accounts.PrepareReview(ctx, event)
+		}
 		return accounts.PrepareAccount(ctx, event)
 	}
 }
 
-// OrderAccountHandler opens the activated order's account at the activated revision with what
-// OrderAccountPrepare read (application.OpenOnActivation). An account STL cannot open for good
-// (application.AccountMismatch) refuses the event; every other failure is delivered again.
+// OrderAccountHandler opens the activated order's account at the activated revision
+// (application.OpenOnActivation), or opens the amended order's payment plan review
+// (application.OpenReviewOnAmendment), with what OrderAccountPrepare read. An account STL cannot open
+// or move for good (application.AccountMismatch) refuses the event; every other failure is delivered
+// again.
 func OrderAccountHandler(accounts Accounts) messaging.EventFunc {
 	return func(ctx context.Context, e messaging.Event) error {
 		event, err := orderEvent(e.Envelope)
@@ -131,7 +144,11 @@ func OrderAccountHandler(accounts Accounts) messaging.EventFunc {
 		if !ok {
 			return fmt.Errorf("stl: %s delivered without its prepared account basis", OrderAccounts)
 		}
-		_, err = accounts.OpenOnActivation(ctx, e.Exec, event, basis)
+		if slices.Contains(amendmentEvents, e.Envelope.Type) {
+			_, err = accounts.OpenReviewOnAmendment(ctx, e.Exec, event, basis)
+		} else {
+			_, err = accounts.OpenOnActivation(ctx, e.Exec, event, basis)
+		}
 		var mismatch *application.AccountMismatch
 		if errors.As(err, &mismatch) {
 			return messaging.RejectEvent(eventing.FailureCode(mismatch.Code), mismatch)
@@ -162,6 +179,8 @@ func OrderCreditHandler(credit Credit) messaging.EventFunc {
 			_, err = credit.ConsumeOnActivation(ctx, e.Exec, event)
 		case slices.Contains(endEvents, e.Envelope.Type):
 			_, err = credit.ReleaseOnOrderEnd(ctx, e.Exec, event)
+		case slices.Contains(amendmentEvents, e.Envelope.Type):
+			_, err = credit.ConsumeOnAmendment(ctx, e.Exec, event)
 		default:
 			// The Dispatcher delivers subscribed types only.
 			return messaging.RejectEvent(FailureOrderEventInvalid, fmt.Errorf("stl: %s is not an order event %s handles", e.Envelope.Type, OrderCredit))
@@ -185,6 +204,11 @@ type orderPayload struct {
 	OrderRevision    int64  `json:"order_revision"`
 	OrderHash        string `json:"order_hash"`
 	ActivatedAt      string `json:"activated_at"`
+	// OrderAmended (trdapi: OrderAmended carries credit_guard and credit_reservation_id as
+	// OrderActivated does, and applied_at).
+	AppliedAt           string `json:"applied_at"`
+	CreditGuard         string `json:"credit_guard"`
+	CreditReservationID string `json:"credit_reservation_id"`
 }
 
 var orderHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -218,6 +242,16 @@ func orderEvent(envelope eventing.Envelope) (application.OrderEvent, error) {
 			return fail("activated_at is not a timestamp")
 		}
 		out.ActivatedAt = at
+	}
+	if slices.Contains(amendmentEvents, envelope.Type) {
+		at, err := kernel.ParseTimestamp(p.AppliedAt)
+		if err != nil {
+			return fail("applied_at is not a timestamp")
+		}
+		if p.CreditReservationID != "" && !kernel.ValidIdentifier(p.CreditReservationID) {
+			return fail("credit_reservation_id is not an identifier")
+		}
+		out.AppliedAt, out.CreditGuard, out.CreditReservationID = at, p.CreditGuard, p.CreditReservationID
 	}
 	return out, nil
 }

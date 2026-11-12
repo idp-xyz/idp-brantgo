@@ -2,8 +2,9 @@
 // its first aggregates: the Shipment with its lines, packing plan and actual packing, and the
 // OrderFulfilment root of an order (tactical model FUL-AGG-Shipment, FUL-AGG-OrderFulfilment,
 // SM-FUL-SHIPMENT; FUL-INV-001, FUL-INV-003; UL FUL-ShipmentConfirmation, FUL-ActualPackage; S5
-// decisions D-1, D-3, D-10, D-11, D-19). Milestones, export lots, the commercial release, bookings
-// and shipment documents follow (B1b, C1, C2). Python V0.50 has no fulfilment context: every rule
+// decisions D-1, D-3, D-10, D-11, D-19). Unit B1b (S5-03b) adds milestone plans (milestone.go),
+// export lots with ShipmentLineRef v1 and ExportLotRef v1 (exportlot.go); the commercial release,
+// bookings and shipment documents follow (C1, C2). Python V0.50 has no fulfilment context: every rule
 // comes from the design, and the tests cite its IDs.
 //
 //	shipment.prepare       human or AI (merchandiser): prepares a shipment of one active sales order
@@ -29,11 +30,11 @@
 //	                       judged on what FUL's confirmed shipments consumed before: of each supplier
 //	                       delivery line (FUL-INV-003, SUPPLIER_DELIVERY_INSUFFICIENT), of each
 //	                       quality release (QUALITY_RELEASE_INSUFFICIENT) and of each order line
-//	                       (FUL-INV-001, SHIPMENT_QUANTITY_EXCEEDED, zero tolerance, D-19). The
-//	                       commercial release, CNX's trade compliance and export licence guards and
-//	                       STL's payment condition guard are extension points until S5 unit C1: the
-//	                       confirmation records each as "not_wired" and names it in unchecked_guards,
-//	                       never as passed.
+//	                       (FUL-INV-001, SHIPMENT_QUANTITY_EXCEEDED, zero tolerance, D-19). Since S5
+//	                       unit C1 it also runs CNX's trade compliance and export licence guards and
+//	                       STL's payment condition guard, needs a granted shipment release
+//	                       (COMMERCIAL_RELEASE_BLOCKED) and consumes it (release.go); unchecked_guards
+//	                       stays empty.
 //
 // TRD reads what an order shipped through ShipmentFacts v1 (facts.go, R70).
 //
@@ -93,8 +94,9 @@ const (
 	PackingPlan   = "plan"
 	PackingActual = "actual"
 
-	// The guards shipment.confirm names in its evidence. The first four are extension points until
-	// S5 unit C1; an extension point no guard is wired to has the value NotWired.
+	// The guards shipment.confirm, commercial_release.evaluate and document_release.record name in
+	// their evidence. NotWired is the value confirmations before S5 unit C1 recorded for the guards
+	// that were extension points then.
 	GuardCommercialRelease = "ful.commercial_release.v1"
 	GuardTradeCompliance   = "cnx.trade_compliance_guard.v1"
 	GuardExportLicense     = "cnx.export_license_guard.v1"

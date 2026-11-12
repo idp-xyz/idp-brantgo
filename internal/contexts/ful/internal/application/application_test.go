@@ -34,6 +34,16 @@ func TestRules(t *testing.T) {
 		{api.CommandRecordPacking, kernel.ActorAI, true},
 		{api.CommandPlanPacking, kernel.ActorHuman, true},
 		{api.CommandGetShipment, kernel.ActorSystem, true},
+		{api.CommandEvaluateRelease, kernel.ActorHuman, true},
+		{api.CommandEvaluateRelease, kernel.ActorAI, true},
+		{api.CommandEvaluateRelease, kernel.ActorSystem, true},
+		{api.CommandGrantReleaseException, kernel.ActorHuman, true},
+		{api.CommandGrantReleaseException, kernel.ActorAI, false},
+		{api.CommandGrantReleaseException, kernel.ActorSystem, false},
+		{api.CommandRecordDocumentRelease, kernel.ActorHuman, true},
+		{api.CommandRecordDocumentRelease, kernel.ActorAI, false},
+		{api.CommandGetRelease, kernel.ActorAI, true},
+		{api.CommandListShipmentReleases, kernel.ActorHuman, true},
 	} {
 		p := identity.Principal{Actor: kernel.ActorRef{Kind: c.kind, ID: "actor.1"}, Scope: scope}
 		if _, err := policy.Admit(p, c.command); (err == nil) != c.ok {
@@ -43,6 +53,9 @@ func TestRules(t *testing.T) {
 	for _, c := range []struct{ command, permission string }{
 		{api.CommandPrepareShipment, "shipment.prepare"}, {api.CommandConfirmShipment, "shipment.confirm"},
 		{api.CommandRecordPacking, "packing.record_actual"}, {api.CommandGetFulfilment, api.PermissionRead}, {api.CommandAudit, api.PermissionAudit},
+		{api.CommandEvaluateRelease, "commercial_release.evaluate"}, {api.CommandGrantReleaseException, "commercial_release.grant_exception"},
+		{api.CommandRecordDocumentRelease, "document_release.record"}, {api.CommandGetRelease, api.PermissionRead},
+		{api.CommandListShipmentReleases, api.PermissionRead},
 	} {
 		if r, err := policy.Rule(c.command); err != nil || r.Permission != c.permission {
 			t.Errorf("%s: %+v %v", c.command, r, err)
@@ -72,7 +85,14 @@ func TestRequestHash(t *testing.T) {
 	if requestHash(c1) != requestHash(c2) {
 		t.Fatal("the expected version is not part of the request")
 	}
-	for _, cmd := range []api.Command{api.PlanPacking{}, api.RecordPacking{}, api.CancelShipment{}} {
+	g1 := api.GrantReleaseException{IdempotencyKey: "k1", ShipmentID: "shipment.1", Scope: api.ScopeShipment, ExpectedVersion: 1, StageID: "P2"}
+	g2 := g1
+	g2.IdempotencyKey, g2.ExpectedVersion = "k2", 4
+	if requestHash(g1) != requestHash(g2) {
+		t.Fatal("the expected version is not part of an exception")
+	}
+	for _, cmd := range []api.Command{api.PlanPacking{}, api.RecordPacking{}, api.CancelShipment{}, api.EvaluateRelease{}, api.GrantReleaseException{},
+		api.RecordDocumentRelease{}} {
 		if name, _, _ := request(cmd); name == "" {
 			t.Errorf("%T", cmd)
 		}

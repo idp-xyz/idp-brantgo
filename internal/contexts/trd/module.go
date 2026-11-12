@@ -27,6 +27,7 @@ import (
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/facts"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/guards"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/application"
@@ -73,7 +74,28 @@ type Upstream struct {
 	// own executor, so TRD is composed before STL and CNX exist as modules (S5 decision D-2).
 	Credit          CreditGuard
 	TradeCompliance TradeComplianceGuard
+	// Shipments is FUL's ShipmentFacts v1 (FULShipmentFacts, R70) and Commitments PUR's
+	// DownstreamCommitments v1 (PURDownstreamCommitments, R71): the order end and the amendment
+	// commands read them with TRD's executor inside TRD's transaction, without locks (S5 D-1).
+	Shipments   ShipmentFacts
+	Commitments DownstreamCommitments
 }
+
+// The reads of FUL's and PUR's facts as TRD runs them, and what they answer.
+type (
+	ShipmentFacts         = application.ShipmentFacts
+	ShippedLine           = application.ShippedLine
+	DownstreamCommitments = application.DownstreamCommitments
+	DownstreamItem        = application.DownstreamItem
+)
+
+// FULShipmentFacts is FUL's ShipmentFacts v1 (Context Map R70, TRD-INV-018, TRD-INV-019) on FUL's
+// published contract: brant_ful.order_shipped_v1, read with TRD's executor.
+func FULShipmentFacts() ShipmentFacts { return facts.FULShipments }
+
+// PURDownstreamCommitments is PUR's DownstreamCommitments v1 (R71, TRD-INV-019) on PUR's
+// published contract: brant_pur.order_commitments_v1, read with TRD's executor.
+func PURDownstreamCommitments() DownstreamCommitments { return facts.PURCommitments }
 
 // The guards of STL and CNX as TRD calls them, and what passes through them. A composition (or a
 // test) may wrap one, as it may any port.
@@ -107,6 +129,9 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	if up.Credit == nil || up.TradeCompliance == nil {
 		return nil, errors.New("trd: module needs STL's CreditGuard and CNX's TradeComplianceGuard")
 	}
+	if up.Shipments == nil || up.Commitments == nil {
+		return nil, errors.New("trd: module needs FUL's ShipmentFacts and PUR's DownstreamCommitments")
+	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {
 		return nil, err
@@ -118,6 +143,7 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	clock := bento.SystemClock{}
 	return &Module{application.Service{Clock: clock, Calculator: application.ServerCalculator{},
 		Orders: application.OrderGuards{Credit: up.Credit, TradeCompliance: up.TradeCompliance},
+		Facts:  application.OrderFacts{Shipments: up.Shipments, Commitments: up.Commitments},
 		Upstream: application.Upstream{Sources: up.Sources, Parties: up.Parties, Profiles: up.Profiles, Skus: up.Skus, Configs: up.Configs,
 			Numbers: up.Numbers, Rfqs: up.Rfqs, Snapshots: up.Snapshots, Contexts: up.Contexts},
 		Ledger: &action.Ledger{
