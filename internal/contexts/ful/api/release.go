@@ -43,6 +43,19 @@ import (
 // shipment.confirm needs a granted shipment release, re-runs every guard and consumes it. A refused
 // confirmation or document release leaves the release as it was.
 //
+// The documents release of a confirmed shipment (owner decision 2026-11-12, S5 unit C1b): evaluate,
+// grant_exception and document_release.record judge money on the order's current revision and the
+// goods as confirmed. They ask STL's PaymentConditionGuard (documents scope) on the revision and hash
+// TRD shows now, do not ask CNX, PTY, PUR or QLT again nor FUL-INV-001 but reuse what the shipment
+// release the confirmation consumed bound (ReleaseBindings.Confirmation names it; the guard evidence
+// entry ful.shipment_confirmation pins the confirming transaction's evidence), and ask TRD's
+// OrderGuard on the current binding: an active order or one ended by order.close or
+// order.close_remainder serves; a cancelled one is ORDER_NOT_ACTIVE (not reachable: an order with a
+// confirmed shipment cannot be cancelled); REFERENCE_STALE means TRD moved on during the transaction
+// (evaluate again). An exception of such a release binds the current revision
+// (ExceptionView.Order). The bindings' order and payment_condition, the guard evidence and the
+// events' payment_order_revision say which revision the payment condition was judged on.
+//
 // Request members in snake_case: commercial_release.evaluate {shipment_id, scope};
 // commercial_release.grant_exception {shipment_id, scope, expected_version, stage_id, currency,
 // shortfall_minor, valid_until, reason, evidence_ids}; document_release.record {shipment_id,
@@ -267,16 +280,34 @@ type OrderBindingSeen struct {
 	Status        string `json:"status"`
 }
 
+// ConfirmationBinding names the shipment confirmation whose verdicts a documents release of a
+// confirmed shipment reused (S5 C1b): the shipment release the confirmation consumed, its version,
+// the evaluation whose bindings the goods' guards repeat, the SHA-256 of the confirming transaction's
+// guard evidence, when it was consumed, the order revision the goods left under and the guards
+// reused.
+type ConfirmationBinding struct {
+	ReleaseID      string    `json:"release_id"`
+	ReleaseVersion int64     `json:"release_version"`
+	EvaluationSeq  int64     `json:"evaluation_seq"`
+	GuardsSHA256   string    `json:"guards_sha256"`
+	ConfirmedAt    time.Time `json:"confirmed_at"`
+	OrderRevision  int64     `json:"order_revision"`
+	Reused         []string  `json:"reused"`
+}
+
 // ReleaseBindings is what an evaluation bound of each guard it ran; a guard it did not reach is
-// absent (nil or empty).
+// absent (nil or empty). With Confirmation (the documents release of a confirmed shipment, S5 C1b)
+// the goods' bindings are the ones the confirmation reused, and Order is the order's current binding
+// the payment condition and the order were judged on.
 type ReleaseBindings struct {
-	TradeCompliance *ComplianceBinding `json:"trade_compliance,omitempty"`
-	ExportLicense   *LicenseBinding    `json:"export_license,omitempty"`
-	Screenings      []ScreeningBinding `json:"screenings"`
-	Deliveries      []DeliveryBinding  `json:"supplier_deliveries"`
-	QualityReleases []QualityBinding   `json:"quality_releases"`
-	Payment         *PaymentBinding    `json:"payment_condition,omitempty"`
-	Order           *OrderBindingSeen  `json:"order,omitempty"`
+	TradeCompliance *ComplianceBinding   `json:"trade_compliance,omitempty"`
+	ExportLicense   *LicenseBinding      `json:"export_license,omitempty"`
+	Screenings      []ScreeningBinding   `json:"screenings"`
+	Deliveries      []DeliveryBinding    `json:"supplier_deliveries"`
+	QualityReleases []QualityBinding     `json:"quality_releases"`
+	Payment         *PaymentBinding      `json:"payment_condition,omitempty"`
+	Order           *OrderBindingSeen    `json:"order,omitempty"`
+	Confirmation    *ConfirmationBinding `json:"confirmation,omitempty"`
 }
 
 // EvaluationView is one evaluation of a release.
@@ -296,7 +327,8 @@ type EvaluationView struct {
 	AuthorityEpoch int64
 }
 
-// ExceptionView is a payment-condition exception of a release.
+// ExceptionView is a payment-condition exception of a release; Order is the order revision it is
+// bound to (the order's current revision for the documents release of a confirmed shipment).
 type ExceptionView struct {
 	Seq            int64
 	ReleaseVersion int64

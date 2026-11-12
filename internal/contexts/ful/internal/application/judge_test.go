@@ -29,14 +29,26 @@ type guards struct {
 	quality    qltapi.QualityReleaseVerdict
 	payment    stlapi.PaymentVerdict
 	order      trdapi.OrderVerdict
+	state      trdapi.OrderState
+	// what STL's and TRD's guards were asked
+	paid    []int64
+	guarded []trdapi.OrderBinding
 }
 
 func (g *guards) ResolveActiveOrders(context.Context, []string) (map[string]trdapi.ActiveOrderFact, error) {
 	return nil, nil
 }
-func (g *guards) GuardOrder(context.Context, bentopg.Executor, trdapi.OrderBinding) (trdapi.OrderVerdict, error) {
-	g.calls = append(g.calls, "trd")
-	return g.order, nil
+func (g *guards) GuardOrder(_ context.Context, _ bentopg.Executor, b trdapi.OrderBinding) (trdapi.OrderVerdict, error) {
+	g.calls, g.guarded = append(g.calls, "trd"), append(g.guarded, b)
+	v := g.order
+	v.Ref = b
+	return v, nil
+}
+func (g *guards) OrderState(_ context.Context, _ bentopg.Executor, id string) (trdapi.OrderState, error) {
+	g.calls = append(g.calls, "trd.state")
+	v := g.state
+	v.OrderID = id
+	return v, nil
 }
 func (g *guards) ResolveReleases(context.Context, []string, time.Time) (map[qltapi.QualityReleaseRef]qltapi.ResolvedRelease, error) {
 	return nil, nil
@@ -67,7 +79,7 @@ func (g *guards) GuardExportLicense(context.Context, bentopg.Executor, string, t
 	return g.license, nil
 }
 func (g *guards) GuardPaymentCondition(_ context.Context, _ bentopg.Executor, q stlapi.PaymentQuery) (stlapi.PaymentVerdict, error) {
-	g.calls = append(g.calls, "stl."+q.Scope)
+	g.calls, g.paid = append(g.calls, "stl."+q.Scope), append(g.paid, q.OrderRevision)
 	v := g.payment
 	v.Query = q
 	return v, nil
@@ -225,5 +237,133 @@ func TestJudgeOfAConfirmedShipment(t *testing.T) {
 	j, err := s.judge(context.Background(), nil, sh, consumed, release.ScopeDocuments, nil, time.Now())
 	if err != nil || j.failure != nil {
 		t.Fatalf("%v %v", err, j.failure)
+	}
+}
+
+var hash3 = strings.Repeat("c", 64)
+
+// consumedShipmentRelease is the shipment release shipment.1's confirmation consumed: granted by
+// an evaluation of every guard (clearGuards), then consumed.
+func consumedShipmentRelease(t *testing.T) *release.Release {
+	t.Helper()
+	sh := shipmentOf(shipment.StatusPrepared)
+	j := judged(t, clearGuards(), sh, release.ScopeShipment, nil)
+	r := release.New("rls.s1", sh.ID, release.ScopeShipment, sh.Order, shipment.Act{By: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "doc.1"}, Epoch: 1,
+		At: time.Now()})
+	r.Evaluate(release.Verdict{Entries: j.entries, Bindings: j.bindings}, r.Opened)
+	if err := r.Consume("", []string{"evidence"}, j.entries, shipment.Act{By: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "merch.1"}, Epoch: 1,
+		At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// amendedGuards is clearGuards after the order was amended to revision 3: TRD's order state and
+// OrderGuard v1 on the current binding, STL's documents scope paid on revision 3.
+func amendedGuards() *guards {
+	g := clearGuards()
+	g.state = trdapi.OrderState{Known: true, Status: "active", OrderRevision: 3, OrderHash: hash3}
+	g.order = trdapi.OrderVerdict{Known: true, Status: "active", OrderRevision: 3, OrderHash: hash3}
+	g.payment.OrderRevision, g.payment.OrderHash = 3, hash3
+	return g
+}
+
+func judgedRelease(t *testing.T, g *guards, roots *releaseRootsOf, scope string) *judgement {
+	t.Helper()
+	s := Service{Upstream: Upstream{Orders: g, Releases: g, Deliveries: g, Screening: g, Compliance: g, Payments: g}}
+	j, err := s.judgeRelease(context.Background(), nil, roots, scope, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return j
+}
+
+// Owner decision 2026-11-12 (S5 C1b; WF-07, BT10, D-5, R27, R45): the documents release of a
+// confirmed shipment asks TRD's order state for the current revision, STL's PaymentConditionGuard
+// for the documents scope on it and TRD's OrderGuard on the current binding — in that order, STL
+// before TRD — and asks CNX, PTY, PUR and QLT nothing: it binds what the confirmation's release bound
+// and names the confirmation. A confirmed shipment whose confirmation consumed no shipment release,
+// the shipment scope and a prepared shipment's documents release are judged as before.
+func TestJudgeDocumentsOfAConfirmedShipmentOnTheCurrentRevision(t *testing.T) {
+	conf := consumedShipmentRelease(t)
+	g := amendedGuards()
+	roots := &releaseRootsOf{existing: shipmentOf(shipment.StatusConfirmed), confirmation: conf}
+	j := judgedRelease(t, g, roots, release.ScopeDocuments)
+	if j.failure != nil || !slices.Equal(g.calls, []string{"trd.state", "stl.documents", "trd"}) || !slices.Equal(g.paid, []int64{3}) ||
+		len(g.guarded) != 1 || g.guarded[0] != (trdapi.OrderBinding{OrderID: "order.1", OrderRevision: 3, OrderHash: hash3}) {
+		t.Fatalf("%v %v paid %v guarded %v", j.failure, g.calls, g.paid, g.guarded)
+	}
+	if j.order != (shipment.OrderBinding{OrderID: "order.1", OrderRevision: 3, OrderHash: hash3}) {
+		t.Fatalf("judged %+v", j.order)
+	}
+	var names []string
+	for _, e := range j.entries {
+		names = append(names, e.Name)
+	}
+	if !slices.Equal(names, []string{"guards_checked_at", release.GuardConfirmation, shipment.GuardPaymentCondition, shipment.GuardOrder}) ||
+		j.entries[1].Value != "rls.s1/v2/consumed/"+conf.Consumption.EntriesSHA256+"/r1" || j.entries[3].Value != "active/r3" ||
+		!strings.Contains(j.entries[2].Value, "/r3/") {
+		t.Fatalf("entries %+v", j.entries)
+	}
+	b := j.bindings
+	if b.Confirmation == nil || b.Confirmation.ReleaseID != "rls.s1" || b.TradeCompliance.CheckID != "chk.1" || b.Screenings[0].ScreeningID != "scr.1" ||
+		b.Deliveries[0].Verified != "800" || b.QualityReleases[0].Released != "600" || b.Payment.Scope != release.ScopeDocuments ||
+		b.Payment.OrderRevision != 3 || b.Order.OrderRevision != 3 || b.Order.OrderHash != hash3 || b.Order.Status != "active" {
+		t.Fatalf("bindings %+v", b)
+	}
+
+	// Ended orders, an unpaid stage of the current revision, TRD moving on, an unknown state.
+	unpaid := func(g *guards) {
+		g.payment.Status, g.payment.Reason, g.payment.AppliedMinor, g.payment.StageID, g.payment.ShortfallMinor, g.payment.Code =
+			stlapi.PaymentBlocked, stlapi.PaymentStageUnpaid, "28800", "P2", "61600", stlapi.CodeCommercialReleaseBlocked
+	}
+	for _, c := range []struct {
+		name           string
+		edit           func(*guards)
+		failure, other string
+		paid           int64
+	}{
+		{"closed short", func(g *guards) { g.order.Status, g.order.Code = "closed", trdapi.CodeOrderNotActive }, "OK", "OK", 3},
+		{"cancelled", func(g *guards) { g.order.Status, g.order.Code = "cancelled", trdapi.CodeOrderNotActive }, api.CodeOrderNotActive,
+			api.CodeOrderNotActive, 3},
+		{"the current revision's stage unpaid", unpaid, api.CodeCommercialReleaseBlocked, "OK", 3},
+		{"revoked", func(g *guards) { g.order.ApprovalRevoked, g.order.Code = true, trdapi.CodeOrderApprovalRevoked }, api.CodeOrderApprovalRevoked,
+			api.CodeOrderApprovalRevoked, 3},
+		{"moved on", func(g *guards) { g.order.OrderRevision, g.order.Code = 4, trdapi.CodeReferenceStale }, api.CodeReferenceStale,
+			api.CodeReferenceStale, 3},
+		{"no later revision", func(g *guards) {
+			g.state = trdapi.OrderState{Known: true, Status: "active", OrderRevision: 1, OrderHash: hash}
+			g.order.OrderRevision, g.payment.OrderRevision = 1, 1
+		}, "OK", "OK", 1},
+	} {
+		g := amendedGuards()
+		c.edit(g)
+		j := judgedRelease(t, g, &releaseRootsOf{existing: shipmentOf(shipment.StatusConfirmed), confirmation: conf}, release.ScopeDocuments)
+		if codeOf(j.failure) != c.failure || codeOf(j.other) != c.other || !slices.Equal(g.paid, []int64{c.paid}) || len(g.calls) != 3 {
+			t.Errorf("%s: %s %s paid %v %v", c.name, codeOf(j.failure), codeOf(j.other), g.paid, g.calls)
+		}
+	}
+
+	// Judged as before: no consumed shipment release, the shipment scope, a prepared shipment.
+	for _, c := range []struct {
+		name  string
+		roots *releaseRootsOf
+		scope string
+		stl   string
+	}{
+		{"no confirmation", &releaseRootsOf{existing: shipmentOf(shipment.StatusConfirmed)}, release.ScopeDocuments, "stl.documents"},
+		{"a granted release is no confirmation", &releaseRootsOf{existing: shipmentOf(shipment.StatusConfirmed),
+			confirmation: release.New("rls.x", "shipment.1", release.ScopeShipment, shipmentOf("").Order, shipment.Act{})}, release.ScopeDocuments,
+			"stl.documents"},
+		{"a prepared shipment", &releaseRootsOf{existing: shipmentOf(shipment.StatusPrepared), confirmation: conf}, release.ScopeDocuments,
+			"stl.documents"},
+		{"the shipment scope", &releaseRootsOf{existing: shipmentOf(shipment.StatusPrepared)}, release.ScopeShipment, "stl.shipment"},
+	} {
+		g := clearGuards()
+		j := judgedRelease(t, g, c.roots, c.scope)
+		if !slices.Equal(g.calls, []string{"cnx.compliance", "pty", "pur", "qlt", c.stl, "trd"}) || !slices.Equal(g.paid, []int64{1}) ||
+			j.bindings.Confirmation != nil || j.order.OrderRevision != 1 {
+			t.Errorf("%s: %v paid %v %+v", c.name, g.calls, g.paid, j.bindings.Confirmation)
+		}
 	}
 }

@@ -107,6 +107,11 @@ const (
 	GuardOrder             = "trd.order_guard.v1"
 	NotWired               = "not_wired"
 
+	// GuardConfirmation names, in the evidence of the documents release of a confirmed shipment, the
+	// shipment confirmation whose verdicts it reused (S5 C1b): "<release>/v<version>/consumed/<guard
+	// evidence SHA-256>/r<order revision the goods left under>".
+	GuardConfirmation = "ful.shipment_confirmation"
+
 	MaxLines          = 200
 	MaxPackages       = 500
 	MaxContents       = 50

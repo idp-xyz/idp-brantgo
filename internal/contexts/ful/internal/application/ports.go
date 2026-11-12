@@ -16,10 +16,13 @@ import (
 )
 
 // Orders is FUL's port to TRD (R27): ActiveOrderRef v1 before FUL's transaction, OrderGuard v1
-// with FUL's executor inside it.
+// with FUL's executor inside it, and TRD's order state read (brant_trd.order_state_v1, lock-free,
+// no data scope) inside it after FUL's own locks — what the documents release of a confirmed
+// shipment reads the order's current revision and hash from (S5 C1b).
 type Orders interface {
 	ResolveActiveOrders(ctx context.Context, orderIDs []string) (map[string]trdapi.ActiveOrderFact, error)
 	GuardOrder(ctx context.Context, exec bentopg.Executor, b trdapi.OrderBinding) (trdapi.OrderVerdict, error)
+	OrderState(ctx context.Context, exec bentopg.Executor, orderID string) (trdapi.OrderState, error)
 }
 
 // Releases is FUL's port to QLT (R26): QualityReleaseRef v1 before FUL's transaction,
@@ -136,7 +139,7 @@ func deliveryVerdict(l DeliveryLine) shipment.DeliveryVerdict {
 }
 
 func orderVerdict(v trdapi.OrderVerdict) shipment.OrderVerdict {
-	return shipment.OrderVerdict{Known: v.Known, Status: v.Status, OrderRevision: v.OrderRevision, Code: v.Code}
+	return shipment.OrderVerdict{Known: v.Known, Status: v.Status, OrderRevision: v.OrderRevision, ApprovalRevoked: v.ApprovalRevoked, Code: v.Code}
 }
 
 func binding(b shipment.OrderBinding) trdapi.OrderBinding {

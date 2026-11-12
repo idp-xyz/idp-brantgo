@@ -17,21 +17,30 @@ import (
 
 // releaseRootsOf is the Lock of every release command: the shipment FOR UPDATE, then — for a
 // shipment that is not cancelled — the order's fulfilment root FOR UPDATE, what the order's
-// confirmed shipments consumed, and the shipment's release of scope FOR UPDATE.
+// confirmed shipments consumed, and the shipment's release of scope FOR UPDATE. For the documents
+// scope of a confirmed shipment it also reads, without a lock, the shipment release the
+// confirmation consumed (terminal: it never changes), whose verdicts the documents release reuses
+// (S5 C1b, judgeRelease).
 type releaseRootsOf struct {
-	existing *shipment.Shipment
-	consumed shipment.Consumed
-	release  *release.Release
+	existing     *shipment.Shipment
+	consumed     shipment.Consumed
+	release      *release.Release
+	confirmation *release.Release
 }
 
 func (r *releaseRootsOf) lock(ctx context.Context, exec bentopg.Executor, shipmentID, releaseScope string) error {
-	r.existing, r.consumed, r.release = nil, shipment.Consumed{}, nil
+	r.existing, r.consumed, r.release, r.confirmation = nil, shipment.Consumed{}, nil, nil
 	s, err := postgres.LoadShipment(ctx, exec, scope(ctx), shipmentID, postgres.ForUpdate)
 	r.existing = s
 	if err != nil || s == nil || s.Status == shipment.StatusCancelled {
 		return err
 	}
-	r.consumed, r.release, err = releaseRoots(ctx, exec, s, releaseScope)
+	if r.consumed, r.release, err = releaseRoots(ctx, exec, s, releaseScope); err != nil {
+		return err
+	}
+	if releaseScope == release.ScopeDocuments && s.Status == shipment.StatusConfirmed {
+		r.confirmation, err = postgres.LoadRelease(ctx, exec, scope(ctx), s.ID, release.ScopeShipment, postgres.NoLock)
+	}
 	return err
 }
 
@@ -43,16 +52,20 @@ func (r *releaseRootsOf) visible(d authorization.Decision) error {
 	return nil
 }
 
-func grantedEvent(r *release.Release, evaluation, exception int64, sha string, at string) action.Event {
+// grantedEvent is CommercialReleaseGranted: the release with the order its shipment binds, and the
+// order revision the payment condition was judged on (paid: the order's current revision for the
+// documents release of a confirmed shipment, S5 C1b).
+func grantedEvent(r *release.Release, paid shipment.OrderBinding, evaluation, exception int64, sha string, at string) action.Event {
 	return action.Event{Type: api.EventCommercialReleaseGranted, AggregateType: "CommercialRelease", AggregateID: r.ID, AggregateVersion: r.RowVersion,
 		Fields: map[string]any{"release_id": r.ID, "shipment_id": r.ShipmentID, "scope": r.Scope, "order_id": r.Order.OrderID,
-			"order_revision": r.Order.OrderRevision, "order_hash": r.Order.OrderHash, "evaluation_seq": evaluation, "exception_seq": exception,
-			"guards_sha256": sha, "granted_at": at}}
+			"order_revision": r.Order.OrderRevision, "order_hash": r.Order.OrderHash, "payment_order_revision": paid.OrderRevision,
+			"payment_order_hash": paid.OrderHash, "evaluation_seq": evaluation, "exception_seq": exception, "guards_sha256": sha, "granted_at": at}}
 }
 
 // evaluateCommand runs commercial_release.evaluate (human, AI or system): it locks the shipment, the
-// order's fulfilment root and the release, runs every guard (judge) and records the evaluation —
-// granted, or blocked with the first unmet guard — creating the release with its first evaluation.
+// order's fulfilment root and the release, runs every guard (judgeRelease: judge, or judgeDocuments
+// for the documents release of a confirmed shipment) and records the evaluation — granted, or blocked
+// with the first unmet guard — creating the release with its first evaluation.
 type evaluateCommand struct {
 	s   Service
 	cmd api.EvaluateRelease
@@ -80,7 +93,7 @@ func (h *evaluateCommand) Apply(ctx context.Context, exec bentopg.Executor, d au
 		}
 	}
 	now := kernel.Instant(h.s.Clock.Now())
-	j, err := h.s.judge(ctx, exec, s, h.consumed, h.cmd.Scope, rel, now)
+	j, err := h.s.judgeRelease(ctx, exec, &h.releaseRootsOf, h.cmd.Scope, now)
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -102,7 +115,7 @@ func (h *evaluateCommand) Apply(ctx context.Context, exec bentopg.Executor, d au
 	out := action.Outcome{ObjectID: rel.ID, RowVersion: rel.RowVersion, Status: rel.Status}
 	if granted {
 		e := rel.Latest()
-		out.Events = []action.Event{grantedEvent(rel, e.Seq, e.ExceptionSeq, e.EntriesSHA256, kernel.FormatTimestamp(now))}
+		out.Events = []action.Event{grantedEvent(rel, j.order, e.Seq, e.ExceptionSeq, e.EntriesSHA256, kernel.FormatTimestamp(now))}
 	}
 	return out, nil
 }
@@ -143,7 +156,7 @@ func (h *exceptionCommand) Apply(ctx context.Context, exec bentopg.Executor, d a
 	if err := h.visible(d); err != nil {
 		return action.Outcome{}, err
 	}
-	s, rel := h.existing, h.release
+	rel := h.release
 	if rel == nil {
 		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, "/args/scope", "The shipment has no "+h.cmd.Scope+" release: evaluate it")
 	}
@@ -154,13 +167,13 @@ func (h *exceptionCommand) Apply(ctx context.Context, exec bentopg.Executor, d a
 		return action.Outcome{}, err
 	}
 	now := kernel.Instant(h.s.Clock.Now())
-	j, err := h.s.judge(ctx, exec, s, h.consumed, h.cmd.Scope, rel, now)
+	j, err := h.s.judgeRelease(ctx, exec, &h.releaseRootsOf, h.cmd.Scope, now)
 	if err != nil {
 		return action.Outcome{}, err
 	}
 	until, _ := kernel.ParseTimestamp(h.cmd.ValidUntil)
 	from := rel.RowVersion
-	x, err := rel.GrantException(release.ExceptionRequest{ExpectedVersion: h.cmd.ExpectedVersion, StageID: h.cmd.StageID, Currency: h.cmd.Currency,
+	x, err := rel.GrantException(release.ExceptionRequest{Order: j.order, ExpectedVersion: h.cmd.ExpectedVersion, StageID: h.cmd.StageID, Currency: h.cmd.Currency,
 		ShortfallMinor: h.cmd.ShortfallMinor, ValidUntil: until, Reason: h.cmd.Reason, Evidence: slices.Clone(h.cmd.EvidenceIDs)}, j.other, j.payment,
 		j.entries, shipment.Act{By: d.Actor, Epoch: d.Epoch, At: now})
 	if err != nil {
@@ -170,7 +183,7 @@ func (h *exceptionCommand) Apply(ctx context.Context, exec bentopg.Executor, d a
 		return action.Outcome{}, conflict(err)
 	}
 	return action.Outcome{ObjectID: rel.ID, RowVersion: rel.RowVersion, Status: rel.Status,
-		Events: []action.Event{grantedEvent(rel, 0, x.Seq, x.EntriesSHA256, kernel.FormatTimestamp(now))}}, nil
+		Events: []action.Event{grantedEvent(rel, j.order, 0, x.Seq, x.EntriesSHA256, kernel.FormatTimestamp(now))}}, nil
 }
 
 // GrantReleaseException grants a blocked release by a payment-condition exception
@@ -188,9 +201,12 @@ func (s Service) GrantReleaseException(ctx context.Context, cmd api.GrantRelease
 
 // documentReleaseCommand runs document_release.record (human only): with the same locks as an
 // evaluation (scope documents) and then the shipment's document set FOR SHARE it needs a confirmed
-// shipment, re-runs every guard (D-11), needs the documents release granted and the set's issued
-// bill of lading record (S5-08), and consumes the release with how the documents were released and
-// on which B/L record.
+// shipment, judges the release again in its own transaction (D-11; judgeDocuments since S5 C1b:
+// the payment condition and the order on the order's current revision, the goods as the
+// confirmation judged them), needs the documents release granted and the set's issued bill of
+// lading record (S5-08), and consumes the release with how the documents were released and on which
+// B/L record; its guard evidence names the revision the payment condition was judged on and the
+// confirmation reused.
 type documentReleaseCommand struct {
 	s       Service
 	cmd     api.RecordDocumentRelease
@@ -231,7 +247,7 @@ func (h *documentReleaseCommand) Apply(ctx context.Context, exec bentopg.Executo
 		return action.Outcome{}, err
 	}
 	now := kernel.Instant(h.s.Clock.Now())
-	j, err := h.s.judge(ctx, exec, s, h.consumed, release.ScopeDocuments, rel, now)
+	j, err := h.s.judgeRelease(ctx, exec, &h.releaseRootsOf, release.ScopeDocuments, now)
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -257,7 +273,8 @@ func (h *documentReleaseCommand) Apply(ctx context.Context, exec bentopg.Executo
 	c := rel.Consumption
 	event := action.Event{Type: api.EventDocumentsReleased, AggregateType: "CommercialRelease", AggregateID: rel.ID, AggregateVersion: rel.RowVersion,
 		Fields: map[string]any{"release_id": rel.ID, "shipment_id": s.ID, "order_id": s.Order.OrderID, "order_revision": s.Order.OrderRevision,
-			"order_hash": s.Order.OrderHash, "release_kind": c.ReleaseKind, "evidence_ids": c.Evidence, "guards_sha256": c.EntriesSHA256,
+			"order_hash": s.Order.OrderHash, "payment_order_revision": j.order.OrderRevision, "payment_order_hash": j.order.OrderHash,
+			"release_kind": c.ReleaseKind, "evidence_ids": c.Evidence, "guards_sha256": c.EntriesSHA256,
 			"released_at": kernel.FormatTimestamp(c.Consumed.At), "document_set_id": bl.DocumentSetID, "bill_of_lading_version": bl.Version,
 			"bill_of_lading_number": bl.Number}}
 	return action.Outcome{ObjectID: rel.ID, RowVersion: rel.RowVersion, Status: rel.Status, Events: []action.Event{event}}, nil

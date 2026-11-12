@@ -34,7 +34,7 @@ func line(id, orderLine, quantity string) HeldLine {
 }
 
 // bt10 is BT10's order on L1 of 120: shipment.1 confirmed 40 at revision 1 with its documents release
-// granted; shipment.2 prepared for 80 at revision 1 with its packing plan and actual packing, a
+// granted on revision 1's payment condition; shipment.2 prepared for 80 at revision 1 with its packing plan and actual packing, a
 // booking, two drafts and its shipment release granted (its documents release blocked); shipment.3
 // prepared for 10 at revision 2; shipment.0 cancelled (not held).
 func bt10() Holdings {
@@ -44,11 +44,11 @@ func bt10() Holdings {
 			Packing:       []HeldPacking{{Kind: PackingActual, Seq: 2, Cartons: 8, Packages: 1}, {Kind: PackingPlan, Seq: 1, Cartons: 8, Packages: 1}},
 			Booking:       &HeldBooking{Version: 2, Number: "BK1", Vessel: "V", Voyage: "1E", ETD: "2026-12-20"},
 			DocumentSetID: "docs.2", Drafts: []HeldDocument{{Kind: "packing_list", Version: 1, Number: "PL-1"}, {Kind: "commercial_invoice", Version: 2, Number: "CI-1"}},
-			Releases: []HeldRelease{{ID: "rls.2d", Scope: ScopeDocuments, Status: "blocked", RowVersion: 1, Evaluations: 1},
-				{ID: "rls.2s", Scope: ScopeShipment, Status: ReleaseGranted, RowVersion: 1, Evaluations: 1}}},
+			Releases: []HeldRelease{{ID: "rls.2d", Scope: ScopeDocuments, Status: "blocked", RowVersion: 1, Evaluations: 1, Judged: 1},
+				{ID: "rls.2s", Scope: ScopeShipment, Status: ReleaseGranted, RowVersion: 1, Evaluations: 1, Judged: 1}}},
 		{ID: "shipment.1", Status: ShipmentConfirmed, RowVersion: 2, Revision: 1, Lines: []HeldLine{line("S1", "L1", "40")},
-			Releases: []HeldRelease{{ID: "rls.1s", Scope: ScopeShipment, Status: "consumed", RowVersion: 2, Evaluations: 1},
-				{ID: "rls.1d", Scope: ScopeDocuments, Status: ReleaseGranted, RowVersion: 2, Evaluations: 2}}},
+			Releases: []HeldRelease{{ID: "rls.1s", Scope: ScopeShipment, Status: "consumed", RowVersion: 2, Evaluations: 1, Judged: 1},
+				{ID: "rls.1d", Scope: ScopeDocuments, Status: ReleaseGranted, RowVersion: 2, Evaluations: 2, Judged: 1}}},
 	}}
 }
 
@@ -130,7 +130,8 @@ func TestAssessAColourChangeAndARemovedLine(t *testing.T) {
 }
 
 // After an order's end every prepared shipment is stale, whatever revision it binds, and so is every
-// granted release; nothing is left of any line.
+// granted release of one; nothing is left of any line. shipment.1's documents release was judged on
+// revision 1, before the end's revision 2: an item after either end.
 func TestAssessAnEnd(t *testing.T) {
 	for _, cause := range []string{CauseOrderCancelled, CauseOrderRemainderClosed} {
 		c := Change{OrderID: "order.1", Revision: 2, Hash: hash2, Version: 6, Cause: cause, EventID: "evt.end"}
@@ -140,6 +141,37 @@ func TestAssessAnEnd(t *testing.T) {
 		impact := map[string]string{CauseOrderCancelled: ImpactOrderCancelled, CauseOrderRemainderClosed: ImpactRemainderClosed}[cause]
 		if kinds(items) != want || items[8].Facts.Impact != impact || factLine(items[8].Facts.Lines[0]) != impact+" 10  40 0" {
 			t.Fatalf("%s: %s %+v", cause, kinds(items), items[8].Facts)
+		}
+	}
+}
+
+// S5 C1b (owner decision 2026-11-12): a confirmed shipment's granted documents release is stale when
+// its payment condition was judged on an earlier revision than the change's, or when the order was
+// cancelled; an amendment it was already judged on, or an order closed short at the revision it was
+// judged on, leaves it as it is — the end still releases the documents of what shipped.
+func TestAssessAConfirmedShipmentsDocumentsRelease(t *testing.T) {
+	held := func(judged int64) Holdings {
+		return Holdings{Rooted: true, Shipments: []HeldShipment{{ID: "shipment.1", Status: ShipmentConfirmed, RowVersion: 2, Revision: 1,
+			Releases: []HeldRelease{{ID: "rls.1s", Scope: ScopeShipment, Status: "consumed", RowVersion: 2, Evaluations: 1, Judged: 1},
+				{ID: "rls.1d", Scope: ScopeDocuments, Status: ReleaseGranted, RowVersion: 3, Evaluations: 3, Judged: judged}}}}}
+	}
+	end := func(cause string) Change {
+		return Change{OrderID: "order.1", Revision: 2, Hash: hash2, Version: 6, Cause: cause, EventID: "evt.end"}
+	}
+	for _, c := range []struct {
+		what   string
+		c      Change
+		judged int64
+		want   string
+	}{
+		{"amended after it was judged", amended(2, 5, target("L1", "110")), 1, "release:shipment.1/documents"},
+		{"judged on the amended revision", amended(2, 5, target("L1", "110")), 2, ""},
+		{"closed short at its revision", end(CauseOrderRemainderClosed), 2, ""},
+		{"closed short after an amendment it was not judged on", end(CauseOrderRemainderClosed), 1, "release:shipment.1/documents"},
+		{"cancelled", end(CauseOrderCancelled), 2, "release:shipment.1/documents"},
+	} {
+		if got := kinds(Assess(c.c, held(c.judged))); got != c.want {
+			t.Errorf("%s: %q, want %q", c.what, got, c.want)
 		}
 	}
 }
@@ -280,16 +312,16 @@ func TestSettleByWhatWasDone(t *testing.T) {
 	r1 := notYet.Shipments["shipment.1"]
 	r1.Releases = map[string]ReleaseNow{ScopeDocuments: {ID: "rls.1d", Status: ReleaseGranted, Evaluations: 2}}
 	notYet.Shipments["shipment.1"] = r1
-	cancelledWith := with(1, settle(DispositionShipmentCancelled, ""))
-	cancelledWith[0] = Settlement{ItemNo: 1, Kind: DispositionNoAction, Reason: "x"}
+	// Item 1 (the release, not evaluated again in notYet) is stated last, so the others are judged first.
+	last := func(ss []Settlement) []Settlement { return append(append([]Settlement(nil), ss[1:]...), ss[0]) }
 	for _, x := range []struct {
 		what string
 		ss   []Settlement
 		path string
 	}{
 		{"a release not evaluated again", good, "/args/items/0/disposition"},
-		{"a shipment not cancelled", cancelledWith, "/args/items/1/disposition"},
-		{"a replaced shipment not cancelled", append([]Settlement{{ItemNo: 1, Kind: DispositionNoAction, Reason: "x"}}, good[1:]...), "/args/items/1/disposition"},
+		{"a shipment not cancelled", last(with(1, settle(DispositionShipmentCancelled, ""))), "/args/items/0/disposition"},
+		{"a replaced shipment not cancelled", last(good), "/args/items/0/disposition"},
 	} {
 		err := review().Settle(1, x.ss, notYet, human)
 		if rej, ok := kernel.AsRejection(err); !ok || rej.Code != kernel.CodeInvalidState || rej.Fields[0].Path != x.path {
@@ -310,10 +342,28 @@ func TestSettleByWhatWasDone(t *testing.T) {
 		r.Items[1].Done.At.IsZero() || r.Items[0].Done.At.IsZero() || r.Verify() != nil {
 		t.Fatalf("settled\n%s\nwant\n%s\n%+v", strings.Join(got, " "), want, r)
 	}
-	// A confirmed shipment's release may also be left as it is: it stays, and nothing consumes it.
+	// S5 C1b: a confirmed shipment's documents release is no longer left as it was granted
+	// (no_action); its documents released since the review opened settle it like an evaluation, since
+	// document_release.record judges the current revision too.
 	keep := review()
-	if err := keep.Settle(1, with(0, settle(DispositionNoAction, "")), reviewNow(), human); err != nil || keep.Items[0].Done.Kind != DispositionNoAction {
+	err := keep.Settle(1, with(0, settle(DispositionNoAction, "")), reviewNow(), human)
+	if rej, ok := kernel.AsRejection(err); !ok || rej.Code != kernel.CodeInvalidKnownValue || rej.Fields[0].Path != "/args/items/0/disposition" {
 		t.Fatalf("no_action on the confirmed shipment's release: %v", err)
+	}
+	released := reviewNow()
+	consumedAt := time.Date(2026, 11, 12, 11, 0, 0, 0, time.UTC)
+	released.Shipments["shipment.1"] = ShipmentNow{OrderID: "order.1", Status: ShipmentConfirmed, Revision: 1, Releases: map[string]ReleaseNow{
+		ScopeDocuments: {ID: "rls.1d", Status: ReleaseConsumed, Evaluations: 2, ConsumedAt: consumedAt}}}
+	consumed := review()
+	consumed.Opened.At = consumedAt.Add(-time.Hour)
+	if err := consumed.Settle(1, good, released, human); err != nil || consumed.Items[0].Done.Status != ReleaseConsumed ||
+		!consumed.Items[0].Done.At.Equal(consumedAt) {
+		t.Fatalf("documents released since the review opened: %v %+v", err, consumed.Items[0].Done)
+	}
+	early := review()
+	early.Opened.At = consumedAt.Add(time.Hour)
+	if err := early.Settle(1, good, released, human); err == nil {
+		t.Fatal("documents released before the review opened settle nothing")
 	}
 	// An end's review has no later revision to re-plan on.
 	ended := Change{OrderID: "order.1", Revision: 2, Hash: hash2, Version: 6, Cause: CauseOrderCancelled, EventID: "evt.end"}
@@ -323,7 +373,7 @@ func TestSettleByWhatWasDone(t *testing.T) {
 		ss = append(ss, Settlement{ItemNo: it.No, Kind: DispositionShipmentCancelled, Reason: "x"})
 	}
 	ss[0] = Settlement{ItemNo: 1, Kind: DispositionReplaced, ShipmentID: "shipment.4", Reason: "x"}
-	err := end.Settle(1, ss, reviewNow(), human)
+	err = end.Settle(1, ss, reviewNow(), human)
 	if rej, ok := kernel.AsRejection(err); len(end.Items) != 7 || !ok || rej.Code != kernel.CodeInvalidKnownValue || rej.Fields[0].Path != "/args/items/0/disposition" {
 		t.Fatalf("re-planning on an ended order: %d items, %v", len(end.Items), err)
 	}

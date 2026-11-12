@@ -84,7 +84,8 @@ type (
 	Costs        = application.Costs // CST's cost snapshot by category (R78, S5-16)
 )
 
-// TRDOrders is the port to TRD over its ActiveOrderRef v1 lookup and OrderGuard v1.
+// TRDOrders is the port to TRD over its ActiveOrderRef v1 lookup, OrderGuard v1 and order state
+// read.
 func TRDOrders(orders trdapi.ActiveOrderLookups) Orders { return upstream.TRD{Orders: orders} }
 
 // QLTReleases is the port to QLT over its QualityReleaseRef v1 lookup and QualityReleaseGuard v1.

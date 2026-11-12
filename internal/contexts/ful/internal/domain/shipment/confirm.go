@@ -277,14 +277,15 @@ func (s *Shipment) CheckRelease(u ReleaseUse, v ReleaseVerdict, before kernel.De
 	return e, WithinRelease(before, u.Quantity, v.Quantity, StoredLinePath(u.Line, "quantity"))
 }
 
-// OrderVerdict is TRD's OrderGuard v1 on the order binding of the shipment: Known false for an
-// order TRD does not have; otherwise its state, current revision and Code — "" when it is active
-// at the bound revision and hash with its activating approval in force.
+// OrderVerdict is TRD's OrderGuard v1 on an order binding: Known false for an order TRD does not
+// have; otherwise its state, current revision, whether its activating approval was revoked and Code
+// — "" when it is active at the bound revision and hash with its activating approval in force.
 type OrderVerdict struct {
-	Known         bool
-	Status        string
-	OrderRevision int64
-	Code          string
+	Known           bool
+	Status          string
+	OrderRevision   int64
+	ApprovalRevoked bool
+	Code            string
 }
 
 // CheckOrder judges TRD's verdict on the order at path: an unknown order is REFERENCE_INVALID, and

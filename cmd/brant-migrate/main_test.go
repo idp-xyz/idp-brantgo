@@ -103,6 +103,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000004_cnx_declarations_bundles", "brant:000005_cnx_certificates",
 		"brant:000001_ful_shipments", "brant:000002_ful_milestones_export_lots", "brant:000003_ful_commercial_release",
 		"brant:000004_ful_booking_documents", "brant:000005_ful_insurance", "brant:000006_ful_shipment_reviews",
+		"brant:000007_ful_documents_release_current_revision",
 	}
 	if got := strings.Join(ids, " "); got != strings.Join(want, " ") {
 		t.Fatalf("migration order = %s", got)
