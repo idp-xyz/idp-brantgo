@@ -80,9 +80,12 @@ func Open(ctx context.Context, cfg Config) (*Platform, error) {
 // Close releases the connection pool.
 func (p *Platform) Close() { p.pool.Close() }
 
-// RelayConfig configures the Outbox relay that publishes to an HTTP sink.
+// RelayConfig configures the Outbox relay that publishes to an HTTP sink or to Publisher.
 type RelayConfig struct {
-	SinkURL        string
+	SinkURL string
+	// Publisher receives each event instead of an HTTP sink, such as the Dispatcher of the composed
+	// contexts (brant-worker -dispatch); SinkURL is empty then.
+	Publisher      eventing.Publisher
 	Batch          int
 	LeaseFor       time.Duration
 	PublishTimeout time.Duration
@@ -102,6 +105,10 @@ type RelayConfig struct {
 // Relay assembles the Outbox relay on a transaction owner of its own. The dead letters share it,
 // so an abandonment and its dead letter commit together.
 func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
+	publisher, err := publisherFor(cfg.SinkURL, cfg.Publisher)
+	if err != nil {
+		return messaging.Relay{}, err
+	}
 	db, err := p.newDB()
 	if err != nil {
 		return messaging.Relay{}, err
@@ -112,31 +119,38 @@ func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
 	}
 	return messaging.Relay{
 		Outbox: store, DeadLetters: messaging.DeadLetterStore{DB: db}, Alerter: cfg.Alerter, Critical: cfg.Critical,
-		Publisher: messaging.Webhook{URL: cfg.SinkURL}, Clock: bento.SystemClock{},
+		Publisher: publisher, Clock: bento.SystemClock{},
 		Batch: cfg.Batch, LeaseFor: cfg.LeaseFor, PublishTimeout: cfg.PublishTimeout,
 		MaxAttempts: cfg.MaxAttempts, MaxFailures: cfg.MaxFailures,
 		RetryBase: cfg.RetryBase, RetryMax: cfg.RetryMax, IdleWait: cfg.IdleWait, Logger: cfg.Logger,
 	}, nil
 }
 
-// ReplayConfig configures the replay of dead letters to the relay's HTTP sink.
+// ReplayConfig configures the replay of dead letters to the relay's HTTP sink or to Publisher.
 type ReplayConfig struct {
-	SinkURL        string
+	SinkURL string
+	// Publisher receives replayed events instead of an HTTP sink, such as the Dispatcher of the
+	// composed contexts; SinkURL is empty then.
+	Publisher      eventing.Publisher
 	PublishTimeout time.Duration
 }
 
 // Replayer assembles dead-letter replay on a transaction owner of its own. Its caller puts the
 // verified Principal of the operator in the context of each Replay.
 func (p *Platform) Replayer(cfg ReplayConfig) (messaging.Replayer, error) {
-	if cfg.SinkURL == "" || cfg.PublishTimeout <= 0 {
-		return messaging.Replayer{}, errors.New("bootstrap: replay needs a sink URL and a publish timeout")
+	if cfg.PublishTimeout <= 0 {
+		return messaging.Replayer{}, errors.New("bootstrap: replay needs a publish timeout")
+	}
+	publisher, err := publisherFor(cfg.SinkURL, cfg.Publisher)
+	if err != nil {
+		return messaging.Replayer{}, err
 	}
 	db, err := p.newDB()
 	if err != nil {
 		return messaging.Replayer{}, err
 	}
 	return messaging.Replayer{
-		DB: db, Publisher: messaging.Webhook{URL: cfg.SinkURL}, Clock: bento.SystemClock{}, PublishTimeout: cfg.PublishTimeout,
+		DB: db, Publisher: publisher, Clock: bento.SystemClock{}, PublishTimeout: cfg.PublishTimeout,
 	}, nil
 }
 
@@ -297,7 +311,10 @@ type APIConfig struct {
 	AllowInsecureHTTP bool     // http:// issuer on a loopback host, for local tests only
 	// ReplaySinkURL enables dead-letter replay over the API (ADR-BR-015): the HTTP sink that
 	// receives replayed envelopes, normally the relay's sink. Empty leaves the route out.
-	ReplaySinkURL        string
+	ReplaySinkURL string
+	// ReplayDispatch enables the replay route with in-process dispatch to the subscriptions of the
+	// composed contexts instead of a sink, for deployments whose worker runs -dispatch.
+	ReplayDispatch       bool
 	ReplayPublishTimeout time.Duration
 	Logger               *slog.Logger
 }
@@ -317,8 +334,14 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	}
 	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
-	if cfg.ReplaySinkURL != "" {
-		replayer, err := p.Replayer(ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout})
+	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {
+		rc := ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout}
+		if cfg.ReplayDispatch {
+			if rc.Publisher, err = c.Dispatcher(); err != nil {
+				return nil, err
+			}
+		}
+		replayer, err := p.Replayer(rc)
 		if err != nil {
 			return nil, err
 		}

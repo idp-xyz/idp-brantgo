@@ -17,7 +17,8 @@ cmd/brant-api/                    HTTP API: S1 command routes and audited reads 
 cmd/brant-admin/                  operator-only grants and roles: authority row, permissions, data scope, role definitions and assignments
 cmd/brant-cli/                    local operations and demo: foundation-demo publishes synthetic POL configurations in a fresh company
 cmd/brant-migrate/                operator-only migrations: Bento schema, framework migration, then each manifest directory in order
-cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink, settle; at least once
+cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink or (-dispatch) to the contexts' subscriptions
+                                  in process, settle; at least once
 internal/bootstrap/               composition root: one connection pool, a Bento transaction owner per context and for the relay
 internal/contexts/evd/            EVD: text sources (content, origin, import) and business files, immutable; SourceRef lookup
 internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup;
@@ -76,7 +77,8 @@ internal/foundation/identity/oidc/ OIDC access-token verifier (discovery, JWKS, 
 internal/foundation/authorization/ command rules (human-only commands), authority guard, grants, data scope, role templates
                                   and separation of duties in brant_auth
 internal/foundation/messaging/    Outbox relay, HTTP webhook publisher, dead letters with alerts and human replay (ADR-BR-015);
-                                  Inbox consumer that deduplicates by event ID
+                                  Inbox consumer that deduplicates by event ID; subscriptions the contexts declare and
+                                  the Dispatcher that delivers to them in process, each in its context's own transaction
 internal/foundation/strictjson/   closed-structure request decoding (C7): 1 MiB, 64 levels, 100,000 values; no duplicate keys, null, floats, unknown fields
 migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
@@ -114,7 +116,7 @@ IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-admin grant -tenant t -company c -
 IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-api -oidc-issuer https://issuer.example -oidc-audience brant-api
 ```
 
-`-replay-sink https://...` adds `POST /api/brant/v1/msg/dead_letters/<source>/<event_id>/replay` for humans holding `dead_letter.replay`. Request bodies are limited to 1 MiB, except `file.register` (15 MiB, for a 10 MiB file in Base64).
+`-replay-sink https://...` adds `POST /api/brant/v1/msg/dead_letters/<source>/<event_id>/replay` for humans holding `dead_letter.replay`; `-replay-dispatch` replays to the contexts' own consumers instead, for a worker that runs `-dispatch`. Request bodies are limited to 1 MiB, except `file.register` (15 MiB, for a 10 MiB file in Base64).
 
 `scripts/dev-postgres.sh` pulls PostgreSQL 16.12 by the digest CI pins. Set `BRANT_PG_IMAGE` to pull the same digest from another registry and `BRANT_PG_PORT` for another port.
 
@@ -123,7 +125,7 @@ Against another PostgreSQL 16:
 1. Run `deploy/postgres/00_roles.sql` once as a superuser (it takes the database name and both passwords as psql variables).
 2. `IDP_BRANT_MIGRATOR_DSN=... go run ./cmd/brant-migrate` to inspect the plan; add `-apply` to migrate as `brant_migrator`.
 3. Run `deploy/postgres/10_app_grants.sql` as `brant_migrator` after every migration run.
-4. `IDP_BRANT_POSTGRES_DSN` (as `brant_app`) and `IDP_BRANT_MIGRATOR_DSN` for the integration tests; `IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-worker -sink https://...` to relay events.
+4. `IDP_BRANT_POSTGRES_DSN` (as `brant_app`) and `IDP_BRANT_MIGRATOR_DSN` for the integration tests; `IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-worker -sink https://...` to relay events, or `-dispatch` to deliver them in process to the subscriptions of the contexts (each consumer's system actor `system:inbox.<consumer>` needs `go run ./cmd/brant-admin inbox -tenant t -company c` once per company).
 
 ## Status of evidence
 
@@ -150,6 +152,7 @@ M0, local runs on 2026-11-07 against the dedicated container (PostgreSQL 16.12, 
 - Each context has its own Bento transaction owner. A context reads another context before it opens its transaction, or re-checks a qualification through a guard function the upstream context publishes, called with its own executor (ADR-BR-004 option B, accepted in the simulated review). INQ reads PTY, CAT and EVD before its transaction (no guard lock on R01–R03).
 - Lock order (ADR-BR-011, accepted in the simulated review): a command locks its own aggregate root `FOR UPDATE` first, then upstream guard rows `FOR SHARE`; upstream contexts never lock downstream rows.
 - The relay delivers at least once; consumers deduplicate by event ID (`Idempotency-Key`). Leases compare wall-clock readings, so worker hosts need clocks that are slewed, not stepped: a WSL2 development host stepped its wall clock during one drill and re-delivered 1.45 s into a 3 s lease.
+- A context subscribes only to the events of its upstreams in the Context Map (rule D1; a unit test checks every subscription against the generated allowlist). With `brant-worker -dispatch` each event reaches every subscribed consumer through the Inbox in the consumer context's own transaction, as `system:inbox.<consumer>`; the relay's partitions keep the events of one aggregate in order, a consumer's rejection dead-letters the event, and an event nobody subscribes to is settled as delivered.
 - A delivery the relay gives up on is abandoned and stored as a dead letter in `brant_msg` in one transaction, then alerted; revocation, repudiation and risk event types alert as critical. A human holding `dead_letter.replay` replays it by event ID with the same event ID, so consumers deduplicate the replay like any redelivery.
 - Applied migrations are never edited; every change is a new numbered file.
 
