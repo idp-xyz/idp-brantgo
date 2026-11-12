@@ -575,9 +575,9 @@ func TestDeadLetteredOrderEventsReplayWithoutLateEffects(t *testing.T) {
 // for it — its OrderActivated is settled and STL records nothing. Amended to 30 % on confirmation and
 // 70 % 30 days after shipment (revision 2, 672.00 on credit, as TestCreditOverHTTPWithTRDOrders), it
 // holds the sales clerk's reservation of revision 2, made for the revision the approved amendment
-// proposed before it was applied (S5 D-9); TRD's OrderCancelled has the consumer release
-// it. Every TRD event, quotes and amendments included, is settled by the dispatcher of every composed
-// context.
+// proposed before it was applied (S5 D-9); TRD's OrderAmended, which names it, has the consumer
+// consume it (unit C4b), and TRD's OrderCancelled has the consumer release it. Every TRD event,
+// quotes and amendments included, is settled by the dispatcher of every composed context.
 func TestTRDOrderEventsReachSTLThroughTheRelay(t *testing.T) {
 	q := newOrderWorld(t)
 	ctx := context.Background()
@@ -663,8 +663,9 @@ func TestTRDOrderEventsReachSTLThroughTheRelay(t *testing.T) {
 	}
 	v, err := q.c.STL.GetReservation(sales, "res.credit")
 	q.must(err)
-	if cancelled.ID == "" || v.Status != stlapi.ReservationReleased || v.Version != 2 || v.ReleasedBy != consumerActor ||
-		!strings.Contains(v.ReleaseReason, string(cancelled.ID)) || q.stlEvents(stlapi.EventCreditReservationReleased, "res.credit") != 1 {
+	if cancelled.ID == "" || v.Status != stlapi.ReservationReleased || v.Version != 3 || v.ConsumedBy != consumerActor || v.ReleasedBy != consumerActor ||
+		!strings.Contains(v.ReleaseReason, string(cancelled.ID)) || q.stlEvents(stlapi.EventCreditReservationConsumed, "res.credit") != 1 ||
+		q.stlEvents(stlapi.EventCreditReservationReleased, "res.credit") != 1 {
 		t.Fatalf("after TRD's OrderCancelled %s: %+v", cancelled.ID, v)
 	}
 }
