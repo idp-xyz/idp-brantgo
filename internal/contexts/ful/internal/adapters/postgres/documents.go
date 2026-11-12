@@ -134,7 +134,8 @@ func loadDocuments(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 		file_mime_type, sources, evidence_ids, idempotency_key, prepared_by_kind, prepared_by_id, prepare_epoch, prepared_at, commit_entries,
 		commit_entries_sha256, coalesce(issue_seq, 0), issued_at, superseded_at
 		FROM brant_ful.shipment_document WHERE tenant_id = $1 AND company_id = $2 AND document_set_id = $3
-		ORDER BY array_position(ARRAY['commercial_invoice', 'packing_list', 'bill_of_lading', 'certificate_of_origin'], document_kind), version`,
+		ORDER BY array_position(ARRAY['commercial_invoice', 'packing_list', 'bill_of_lading', 'certificate_of_origin', 'insurance_policy'],
+			document_kind), version`,
 		t, c, id)
 	if err != nil {
 		return nil, err

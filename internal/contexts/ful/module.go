@@ -54,6 +54,10 @@ var (
 	_ api.BookingQueries   = (*Module)(nil)
 	_ api.DocumentCommands = (*Module)(nil)
 	_ api.DocumentQueries  = (*Module)(nil)
+
+	// S5-16: the CIF/CIP insurance policy record.
+	_ api.InsuranceCommands = (*Module)(nil)
+	_ api.InsuranceQueries  = (*Module)(nil)
 )
 
 // Upstream are the lookups and guards of FUL's upstream contexts: TRD's orders (R27), QLT's quality
@@ -71,6 +75,7 @@ type (
 	DeliveryLine = application.DeliveryLine
 	Compliance   = application.Compliance
 	Payments     = application.Payments
+	Costs        = application.Costs // CST's cost snapshot by category (R78, S5-16)
 )
 
 // TRDOrders is the port to TRD over its ActiveOrderRef v1 lookup and OrderGuard v1.
@@ -118,6 +123,9 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	}
 	if !up.Documents.Complete() {
 		return nil, errors.New("ful: module needs POL's configuration and numbers, PTY's parties and TRD's order snapshots for documents")
+	}
+	if up.Costs == nil {
+		return nil, errors.New("ful: module needs CST's cost snapshots by category for insurance (R78)")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {

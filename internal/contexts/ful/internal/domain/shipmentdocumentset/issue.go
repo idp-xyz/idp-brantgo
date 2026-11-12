@@ -112,6 +112,9 @@ func (s *Set) Issue(expected int64, shipmentStatus string, diffs []Difference, a
 			" difference(s) neither resolved nor acknowledged; first: "+d.Item+" of the "+d.Document+" is \""+d.Found+"\", the "+d.Against+
 			" says \""+d.Expected+"\"")
 	}
+	if err := s.CheckCoverage(); err != nil { // S5-16: FUL-INV-005 on the invoice issued
+		return nil, nil, err
+	}
 	act.At = kernel.Instant(act.At)
 	s.RowVersion, s.IssueCount = s.RowVersion+1, s.IssueCount+1
 	iss := &Issue{Seq: s.IssueCount, SetVersion: s.RowVersion, Acknowledged: acknowledged, Issued: act}

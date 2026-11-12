@@ -52,7 +52,7 @@ import (
 // shipment_document.issue and shipment_document.record_signed; role templates: booking.record is
 // the merchandiser's, the document commands the documentation clerk's).
 func documentRules() []authorization.Rule {
-	return []authorization.Rule{
+	return append([]authorization.Rule{
 		{Command: api.CommandRecordBooking, Permission: api.CommandRecordBooking, ActorKinds: humanOrAgent},
 		{Command: api.CommandPrepareShipmentDocument, Permission: api.CommandPrepareShipmentDocument, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandIssueShipmentDocuments, api.CommandIssueShipmentDocuments),
@@ -60,7 +60,7 @@ func documentRules() []authorization.Rule {
 		{Command: api.CommandGetBookings, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetDocumentSet, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetShipmentDocument, Permission: api.PermissionRead, ActorKinds: anyActor},
-	}
+	}, insuranceRules()...) // S5-16 (insurance.go)
 }
 
 // documentRequest returns the name, idempotency key and business arguments of a booking or document
@@ -79,6 +79,9 @@ func documentRequest(cmd api.Command) (name, key string, args any) {
 	case api.RecordSignedShipmentDocument:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandRecordSignedShipmentDocument, key, c
+	case api.RecordInsurance: // S5-16
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRecordInsurance, key, c
 	}
 	return "", "", nil
 }
@@ -87,7 +90,8 @@ func documentRequest(cmd api.Command) (name, key string, args any) {
 // handled is false for other commands.
 func documentVisible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (visible, handled bool, err error) {
 	switch command {
-	case api.CommandPrepareShipmentDocument, api.CommandIssueShipmentDocuments, api.CommandRecordSignedShipmentDocument:
+	case api.CommandPrepareShipmentDocument, api.CommandIssueShipmentDocuments, api.CommandRecordSignedShipmentDocument,
+		api.CommandRecordInsurance:
 		s, err := postgres.LoadSet(ctx, exec, scope(ctx), id, postgres.NoLock)
 		return err == nil && s != nil && d.Sees(s.OwnerActor, s.OwnerTeam), true, err
 	}
