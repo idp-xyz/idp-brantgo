@@ -29,6 +29,10 @@ var (
 	_ api.Queries    = (*Module)(nil)
 	_ api.Auditor    = (*Module)(nil)
 	_ api.Reconciler = (*Module)(nil)
+
+	_ api.FundCommands      = (*Module)(nil)
+	_ api.FundQueries       = (*Module)(nil)
+	_ api.FundRecordLookups = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),

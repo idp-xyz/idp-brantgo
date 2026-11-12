@@ -277,6 +277,19 @@ GRANT UPDATE (status, version, consumed_by_kind, consumed_by_id, consume_epoch, 
               release_epoch, released_at, release_reason) ON brant_stl.credit_reservation TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_stl.guard_credit_reservation_v1(text, bigint, numeric, text, timestamptz) TO brant_app;
 
+-- STL funds and applications (S5-04a, S5-07): a fund record moves only a receipt's state and version
+-- by one per resolution (trigger); resolutions, order accounts, their stages and unapplies are only
+-- inserted; an application moves once, applied → unapplied (trigger); nothing is deleted. FOR UPDATE
+-- on fund records and order accounts needs the column grants (an order account itself does not
+-- change: its trigger refuses). fund.record and order_account.open call POL's ConfigGuard, granted
+-- above; STL publishes PaymentConditionGuard v1 (R45) for FUL.
+GRANT SELECT, INSERT ON brant_stl.fund_record, brant_stl.fund_difference_resolution, brant_stl.order_account, brant_stl.order_account_stage,
+    brant_stl.application, brant_stl.application_unapply TO brant_app;
+GRANT UPDATE (status, version, updated_at) ON brant_stl.fund_record TO brant_app;
+GRANT UPDATE (updated_at) ON brant_stl.order_account TO brant_app;
+GRANT UPDATE (status, version, updated_at) ON brant_stl.application TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_stl.guard_payment_condition_v1(text, bigint, text, timestamptz) TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on
