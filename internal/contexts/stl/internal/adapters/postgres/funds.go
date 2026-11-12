@@ -330,12 +330,13 @@ func StageApplied(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, a
 		out[s.StageID], _ = kernel.NewMoney(a.Currency(), 0)
 	}
 	_, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (struct{}, error) {
-		var id, amount string
-		if err := row.Scan(&id, &amount); err != nil {
+		var id *string // a receivable's installment beyond the payment plan has no stage
+		var amount string
+		if err := row.Scan(&id, &amount); err != nil || id == nil {
 			return struct{}{}, err
 		}
 		m, err := money(a.Currency(), amount)
-		out[id] = m
+		out[*id] = m
 		return struct{}{}, err
 	})
 	return out, err
@@ -345,17 +346,27 @@ func StageApplied(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, a
 func InsertApplication(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, x *fa.Application) error {
 	t, c := ts(sc)
 	kind, id, epoch, at := fact(x.Applied)
+	var revision *int64
+	var installment *int
+	if x.OrderRevision > 0 {
+		revision = &x.OrderRevision
+	}
+	if x.InstallmentSeq > 0 {
+		installment = &x.InstallmentSeq
+	}
 	_, err := exec.Exec(ctx, `INSERT INTO brant_stl.application (tenant_id, company_id, application_id, fund_record_id, target_kind, order_id,
 		order_revision, stage_id, currency, minor_units, amount_minor, status, version, owner_actor_id, owner_team_id, applied_by_kind, applied_by_id,
-		apply_epoch, applied_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::numeric, $12, $13, $14, $15, $16, $17, $18,
-		$19, $19)`, t, c, x.ID, x.FundRecordID, x.TargetKind, x.OrderID, x.OrderRevision, x.StageID, x.Amount.Currency().Code(),
-		int16(x.Amount.Currency().MinorUnits()), x.Amount.MinorString(), x.Status, x.Version, x.OwnerActor, team(x.OwnerTeam), kind, id, epoch, at)
+		apply_epoch, applied_at, updated_at, statement_id, installment_seq, moved_from) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+		$11::text::numeric, $12, $13, $14, $15, $16, $17, $18, $19, $19, $20, $21, $22)`, t, c, x.ID, x.FundRecordID, x.TargetKind, nullable(x.OrderID),
+		revision, nullable(x.StageID), x.Amount.Currency().Code(), int16(x.Amount.Currency().MinorUnits()), x.Amount.MinorString(), x.Status, x.Version,
+		x.OwnerActor, team(x.OwnerTeam), kind, id, epoch, at, nullable(x.StatementID), installment, nullable(x.MovedFrom))
 	return err
 }
 
 const applicationColumns = `a.application_id, a.fund_record_id, a.target_kind, coalesce(a.order_id, ''), coalesce(a.order_revision, 0),
 	coalesce(a.stage_id, ''), a.currency, a.minor_units, a.amount_minor::text, a.status, a.version, a.owner_actor_id, coalesce(a.owner_team_id, ''),
-	a.applied_by_kind, a.applied_by_id, a.apply_epoch, a.applied_at, u.unapplied_by_kind, u.unapplied_by_id, u.unapply_epoch, u.unapplied_at, u.reason`
+	a.applied_by_kind, a.applied_by_id, a.apply_epoch, a.applied_at, u.unapplied_by_kind, u.unapplied_by_id, u.unapply_epoch, u.unapplied_at, u.reason,
+	coalesce(a.statement_id, ''), coalesce(a.installment_seq, 0), coalesce(a.moved_from, '')`
 
 const applicationFrom = ` FROM brant_stl.application a LEFT JOIN brant_stl.application_unapply u ON u.tenant_id = a.tenant_id
 	AND u.company_id = a.company_id AND u.application_id = a.application_id`
@@ -370,7 +381,7 @@ func scanApplication(row pgx.Row) (*fa.Application, error) {
 	var uEpoch *int64
 	var uAt *time.Time
 	err := row.Scan(&x.ID, &x.FundRecordID, &x.TargetKind, &x.OrderID, &x.OrderRevision, &x.StageID, &code, &units, &amount, &x.Status, &x.Version,
-		&x.OwnerActor, &x.OwnerTeam, &kind, &by, &epoch, &at, &uKind, &uBy, &uEpoch, &uAt, &uReason)
+		&x.OwnerActor, &x.OwnerTeam, &kind, &by, &epoch, &at, &uKind, &uBy, &uEpoch, &uAt, &uReason, &x.StatementID, &x.InstallmentSeq, &x.MovedFrom)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

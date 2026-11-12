@@ -3,8 +3,9 @@
 // D-3, D-4; baseline 4.2, 4.3, 4.6 S-A).
 //
 // An application allocates part of a receipt's available balance to a target of the same currency:
-// in S5-04a a payment stage of an order account (a prepayment, before any receivable exists; D-4).
-// B2b adds receivables of confirmed statements and moves stage applications to them. An application
+// a payment stage of an order account (a prepayment, before its goods are settled; D-4), an
+// installment of a business receivable or a payable (statement.go, S5-04b); confirming a sales
+// statement moves the order's stage applications to its receivable (Move). An application
 // never exceeds what the receipt has available (APPLICATION_EXCEEDS_AVAILABLE, or
 // FUND_DIFFERENCE_UNEXPLAINED when only the unexplained difference would cover it) nor what is open
 // on the target (APPLICATION_EXCEEDS_OPEN); the payer must be the order's customer
@@ -22,25 +23,31 @@ import (
 // Target kinds and states (SM-STL-APPLICATION).
 const (
 	TargetOrderStage = "order_stage"
+	TargetReceivable = "receivable"
+	TargetPayable    = "payable"
 	StatusApplied    = "applied"
 	StatusUnapplied  = "unapplied"
+	StatusMoved      = "moved"
 )
 
 // Application is the root of STL-AGG-Application.
 type Application struct {
-	ID            string
-	FundRecordID  string
-	TargetKind    string
-	OrderID       string
-	OrderRevision int64
-	StageID       string
-	Amount        kernel.Money
-	Status        string
-	Version       int64
-	OwnerActor    string
-	OwnerTeam     string
-	Applied       fundrecord.Act
-	Unapplied     *fundrecord.Act
+	ID             string
+	FundRecordID   string
+	TargetKind     string
+	OrderID        string
+	OrderRevision  int64
+	StageID        string
+	StatementID    string // a receivable or payable: its statement and installment
+	InstallmentSeq int
+	MovedFrom      string // a replacement or remainder: the moved application it comes from
+	Amount         kernel.Money
+	Status         string
+	Version        int64
+	OwnerActor     string
+	OwnerTeam      string
+	Applied        fundrecord.Act
+	Unapplied      *fundrecord.Act
 }
 
 // Stands reports whether the application counts.
@@ -99,8 +106,13 @@ func Apply(in ApplyInput) (*Application, error) {
 		StageID: stage.StageID, Amount: in.Amount, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team, Applied: in.By}, nil
 }
 
-// Unapply undoes a standing application (SM-STL-APPLICATION: authorised person and reason).
+// Unapply undoes a standing application (SM-STL-APPLICATION: authorised person and reason). A moved
+// application stands no more: its replacement on the receivable is what may be unapplied.
 func (a *Application) Unapply(by fundrecord.Act) error {
+	if a.Status == StatusMoved {
+		return kernel.Reject(kernel.CodeInvalidState, "/args/application_id",
+			"The application moved to a receivable when its goods were settled: unapply the receivable's application instead")
+	}
 	if a.Status != StatusApplied {
 		return kernel.Reject(kernel.CodeInvalidState, "/args/application_id", "The application is already unapplied")
 	}

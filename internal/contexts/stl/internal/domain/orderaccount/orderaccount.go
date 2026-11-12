@@ -191,7 +191,13 @@ func Condition(a *Account, revision int64, scope string, applied map[string]kern
 			got, _ = kernel.NewMoney(c, 0)
 		}
 		v.Required, _ = v.Required.Add(s.Amount)
-		v.Applied, _ = v.Applied.Add(got)
+		counted := got
+		if c, _ := got.Cmp(s.Amount); c > 0 {
+			// A stage counts at most its due: a payment plan review may shrink a stage below what
+			// stands on it, and the excess must not hide another stage's shortfall (C1's finding).
+			counted = s.Amount
+		}
+		v.Applied, _ = v.Applied.Add(counted)
 		if short := OpenOf(s, got); v.Stage == nil && short.Sign() > 0 {
 			v.Stage, v.StageApplied, v.Shortfall = &a.Stages[i], got, short
 		}

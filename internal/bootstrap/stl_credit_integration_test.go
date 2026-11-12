@@ -106,7 +106,8 @@ func newCreditWorld(t *testing.T) *creditWorld {
 		DataScope:   "company"})
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
-	cw.stl, err = stl.New(db, stl.Upstream{Orders: cw.orders, Configs: w.c.POL, Parties: w.c.PTY, Sources: w.c.EVD})
+	cw.stl, err = stl.New(db, stl.Upstream{Orders: cw.orders, Configs: w.c.POL, Parties: w.c.PTY, Sources: w.c.EVD,
+		Shipments: stlShipments(w.c), Deliveries: stlDeliveries(w.c)})
 	w.must(err)
 	return cw
 }

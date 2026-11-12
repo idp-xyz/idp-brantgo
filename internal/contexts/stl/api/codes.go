@@ -28,6 +28,9 @@ const (
 	CodeIndependentReviewRequired   = "INDEPENDENT_REVIEW_REQUIRED"   // 422: the recorder resolves its own difference
 	CodeBusinessKeyConflict         = "BUSINESS_KEY_CONFLICT"         // 409: the bank reference is recorded on the account
 	CodeCommercialReleaseBlocked    = "COMMERCIAL_RELEASE_BLOCKED"    // 409: the payment condition of the scope is not met
+
+	// Settlement statements (B2b).
+	CodeSettlementSourceDuplicate = "SETTLEMENT_SOURCE_DUPLICATE" // 409: the source line is settled by a standing statement
 )
 
 var codes = map[string]kernel.Category{
@@ -46,6 +49,7 @@ var codes = map[string]kernel.Category{
 	CodeIndependentReviewRequired:   kernel.CategoryInvalid,
 	CodeBusinessKeyConflict:         kernel.CategoryConflict,
 	CodeCommercialReleaseBlocked:    kernel.CategoryConflict,
+	CodeSettlementSourceDuplicate:   kernel.CategoryConflict,
 }
 
 // Category returns the category of a code STL declares.

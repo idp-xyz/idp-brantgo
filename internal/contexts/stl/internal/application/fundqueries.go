@@ -35,7 +35,8 @@ func visibleFund(ctx context.Context, exec bentopg.Executor, d authorization.Dec
 
 func allocationView(x *fa.Application) api.AllocationView {
 	return api.AllocationView{ApplicationID: x.ID, FundRecordID: x.FundRecordID, TargetKind: x.TargetKind, OrderID: x.OrderID,
-		OrderRevision: x.OrderRevision, StageID: x.StageID, AmountMinor: x.Amount.MinorString(), Status: x.Status}
+		OrderRevision: x.OrderRevision, StageID: x.StageID, StatementID: x.StatementID, InstallmentSeq: x.InstallmentSeq, MovedFrom: x.MovedFrom,
+		AmountMinor: x.Amount.MinorString(), Status: x.Status}
 }
 
 // fundRef is fund record f as FundRecordRef v1 states it, with the allocations d sees.
@@ -201,7 +202,8 @@ func (s Service) GetApplication(ctx context.Context, id string) (api.Application
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		v = api.ApplicationView{ApplicationID: x.ID, FundRecordID: x.FundRecordID, TargetKind: x.TargetKind, OrderID: x.OrderID,
-			OrderRevision: x.OrderRevision, StageID: x.StageID, Currency: x.Amount.Currency().Code(), AmountMinor: x.Amount.MinorString(),
+			OrderRevision: x.OrderRevision, StageID: x.StageID, StatementID: x.StatementID, InstallmentSeq: x.InstallmentSeq, MovedFrom: x.MovedFrom,
+			Currency: x.Amount.Currency().Code(), AmountMinor: x.Amount.MinorString(),
 			Status: x.Status, Version: x.Version, AppliedBy: x.Applied.By, AppliedAt: x.Applied.At, CheckedAt: kernel.Instant(s.Clock.Now())}
 		v.UnappliedBy, v.UnappliedAt, v.UnapplyReason = actOf(x.Unapplied)
 		return nil

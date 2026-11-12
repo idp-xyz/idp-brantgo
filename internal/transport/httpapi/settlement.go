@@ -15,6 +15,8 @@ type STL interface {
 	stlapi.FundQueries
 	stlapi.ReviewCommands
 	stlapi.ReviewQueries
+	stlapi.SettlementCommands
+	stlapi.SettlementQueries
 	stlapi.Reconciler
 	stlapi.Auditor
 }
@@ -37,6 +39,7 @@ func stlCommands(c STL) *commandSet {
 			stlapi.CommandUnapply:           reflected("", "", receiptOf[stlapi.Receipt](c.Unapply)),
 			stlapi.CommandOpenReview:        reflected("", "", receiptOf[stlapi.Receipt](c.OpenPaymentPlanReview)),
 			stlapi.CommandSettleReview:      reflected("", "", receiptOf[stlapi.Receipt](c.SettlePaymentPlanReview)),
+			stlapi.CommandConfirmSettlement: reflected("", "", receiptOf[stlapi.Receipt](c.ConfirmSettlement)),
 		}}
 }
 
@@ -50,6 +53,11 @@ func (s *server) stlRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/stl/applications/{id}", s.authenticated(read(s, s.cfg.STL.GetApplication, okView[stlapi.ApplicationView])))
 	mux.Handle("GET /api/brant/v1/stl/order_accounts/{id}/payment_plan_reviews", s.authenticated(read(s, s.cfg.STL.ListPaymentPlanReviews,
 		okView[stlapi.PaymentPlanReviewsView])))
+	mux.Handle("GET /api/brant/v1/stl/settlement_statements/{id}", s.authenticated(read(s, s.cfg.STL.GetStatement, okView[stlapi.StatementView])))
+	mux.Handle("GET /api/brant/v1/stl/receivables/{id}", s.authenticated(read(s, s.cfg.STL.GetReceivable, okView[stlapi.BalanceView])))
+	mux.Handle("GET /api/brant/v1/stl/payables/{id}", s.authenticated(read(s, s.cfg.STL.GetPayable, okView[stlapi.BalanceView])))
+	mux.Handle("GET /api/brant/v1/stl/orders/{id}/settlement", s.authenticated(read(s, s.cfg.STL.GetOrderSettlement,
+		okView[stlapi.OrderSettlementView])))
 }
 
 // stlReads are STL's reads in the OpenAPI document.
@@ -68,4 +76,12 @@ var stlReads = []readRoute{
 		"An application of a receipt to an order payment stage: amount, state (applied or unapplied) and who applied and unapplied it", []string{"id"}, false},
 	{"/api/brant/v1/stl/order_accounts/{id}/payment_plan_reviews", "stl.payment_plan_review.list", "stl",
 		"An order account's payment plan reviews, latest order revision first: the revision each moved the account from and to, its state (open, settled or superseded), responsible role, items (stage removed, stage over-applied, credit portion changed) and their dispositions", []string{"id"}, false},
+	{"/api/brant/v1/stl/settlement_statements/{id}", "stl.settlement_statement.get", "stl",
+		"A settlement statement (sales: confirmed FUL shipment lines of one order; purchase: verified PUR supplier delivery lines of one supplier): its lines with the source each settles, its installments with what is applied and open, and the applications on it", []string{"id"}, false},
+	{"/api/brant/v1/stl/receivables/{id}", "stl.receivable.get", "stl",
+		"The business receivable of a sales statement: amount, applied and open, the installments by payment stage with their due instants and overdue days, and the applications on it (moved prepayments name the stage application they replace)", []string{"id"}, false},
+	{"/api/brant/v1/stl/payables/{id}", "stl.payable.get", "stl",
+		"The business payable of a purchase statement: amount, applied and open, its installment and the payments applied to it", []string{"id"}, false},
+	{"/api/brant/v1/stl/orders/{id}/settlement", "stl.order_settlement.get", "stl",
+		"An order's settlement position: each payment stage of the order account's revision with what stands prepaid, settled and paid on it, the order's receivables (settled, applied, open, overdue) and the purchase statement lines of the order with their payables", []string{"id"}, false},
 }

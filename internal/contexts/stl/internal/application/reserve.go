@@ -153,7 +153,7 @@ func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	receivables, err := postgres.OpenReceivables(ctx, exec, sc, h.root.PartyID, policy.Currency)
+	receivables, err := receivablesOf(ctx, exec, sc, h.root.PartyID, policy.Currency, reservations)
 	if err != nil {
 		return action.Outcome{}, err
 	}

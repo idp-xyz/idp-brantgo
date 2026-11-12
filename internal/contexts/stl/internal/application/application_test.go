@@ -8,6 +8,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	cc "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/customercredit"
 	fr "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/fundrecord"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/settlement"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -15,6 +16,9 @@ import (
 // The api declares exactly the codes the rules give, with the same categories.
 func TestAPICodesAreTheRulesCodes(t *testing.T) {
 	rules := maps.Clone(cc.Codes)
+	for c, cat := range settlement.Codes {
+		rules[c] = cat
+	}
 	for c, cat := range fr.Codes {
 		if have, ok := rules[c]; ok && have != cat {
 			t.Fatalf("%s is %v in customer credit and %v in funds", c, have, cat)
