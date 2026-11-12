@@ -289,3 +289,13 @@ GRANT SELECT, INSERT ON brant_cnx.trade_compliance_check, brant_cnx.trade_compli
 GRANT UPDATE (status, row_version, current_evaluation_id, current_decision_id, updated_at) ON brant_cnx.trade_compliance_check TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.trade_compliance_state(text, bigint, text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_trade_compliance_v1(text, bigint, text, timestamptz) TO brant_app;
+
+-- CNX export licences: a licence's terms never change, only its version moves with each allocation
+-- and release (trigger); allocations and releases are only inserted (triggers, which lock the
+-- licence FOR UPDATE: the column grant); CNX's reads derive the usage and a shipment's verdict with
+-- its functions, and CNX publishes ExportLicenseGuard v1 for FUL.
+GRANT SELECT, INSERT ON brant_cnx.export_license, brant_cnx.export_license_allocation, brant_cnx.export_license_release TO brant_app;
+GRANT UPDATE (row_version, updated_at) ON brant_cnx.export_license TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_license_outstanding(text, text, text) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_license_state(text, timestamptz, boolean) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.guard_export_license_v1(text, timestamptz) TO brant_app;
