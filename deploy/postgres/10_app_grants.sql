@@ -385,3 +385,12 @@ GRANT SELECT, INSERT ON brant_ful.shipment_line_price, brant_ful.milestone_plan,
     brant_ful.export_lot, brant_ful.export_lot_line TO brant_app;
 GRANT UPDATE (row_version, plan_revision, node_count, actual_count, revised_by_kind, revised_by_id, revise_epoch, revised_at,
               revision_reason) ON brant_ful.milestone_plan TO brant_app;
+
+-- FUL commercial release (S5-07): a release moves only by an evaluation, an exception or its
+-- consumption, once (trigger); evaluations and exceptions are only inserted; nothing is deleted.
+-- FOR UPDATE on releases needs the column grants. The release commands and shipment.confirm call
+-- CNX's, PTY's, PUR's, QLT's, STL's and TRD's guard functions, granted above.
+GRANT SELECT, INSERT ON brant_ful.commercial_release, brant_ful.commercial_release_evaluation, brant_ful.commercial_release_exception
+    TO brant_app;
+GRANT UPDATE (status, row_version, evaluations, exceptions, consumed_command, consumed_by_kind, consumed_by_id, consume_epoch, consumed_at,
+              consume_evidence_ids, consume_entries, consume_entries_sha256, document_release_kind) ON brant_ful.commercial_release TO brant_app;

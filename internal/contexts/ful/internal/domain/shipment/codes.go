@@ -5,6 +5,9 @@ import "go.idp.xyz/idp-brant/internal/kernel"
 // Codes the shipment rules give besides the shared kernel codes, with the error catalog's
 // categories. Package api declares the same table; the application's tests keep them equal.
 const (
+	CodeCommercialReleaseBlocked     = "COMMERCIAL_RELEASE_BLOCKED"
+	CodeTradeComplianceNotClear      = "TRADE_COMPLIANCE_NOT_CLEAR"
+	CodeExportLicenseRequired        = "EXPORT_LICENSE_REQUIRED"
 	CodeShipmentQuantityExceeded     = "SHIPMENT_QUANTITY_EXCEEDED"
 	CodeQualityReleaseRequired       = "QUALITY_RELEASE_REQUIRED"
 	CodeQualityReleaseInsufficient   = "QUALITY_RELEASE_INSUFFICIENT"
@@ -21,6 +24,9 @@ const (
 
 // Codes maps every code of the shipment rules to its category.
 var Codes = map[string]kernel.Category{
+	CodeCommercialReleaseBlocked:     kernel.CategoryConflict,
+	CodeTradeComplianceNotClear:      kernel.CategoryConflict,
+	CodeExportLicenseRequired:        kernel.CategoryConflict,
 	CodeShipmentQuantityExceeded:     kernel.CategoryConflict,
 	CodeQualityReleaseRequired:       kernel.CategoryConflict,
 	CodeQualityReleaseInsufficient:   kernel.CategoryConflict,
