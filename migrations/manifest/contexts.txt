@@ -9,7 +9,8 @@
 # pty, cat, pol and evd (R04–R07, R53); cst after inq, sup, cat and pol (R08, R09, R51, R10), whose
 # guard functions its transactions call; trd after cst, inq, pty, cat, pol and evd (R11–R16), whose
 # guard functions its freeze calls; pur after trd, sup, cst, pty, pol and cat (R19–R22, R48, R52), whose
-# guard functions its purchase drafts call.
+# guard functions its purchase drafts call. qlt after pur, whose inspection subjects it reads (R24);
+# FUL's transactions call its guard function (R26).
 auth
 msg
 ref
@@ -22,3 +23,4 @@ sup
 cst
 trd
 pur
+qlt
