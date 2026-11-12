@@ -156,6 +156,7 @@ func requirementViews(rs []db.Requirement) []api.RequirementView {
 		for _, f := range r.FundRecords {
 			v.FundRecords = append(v.FundRecords, api.FundLink(f))
 		}
+		v.Certificates = certificateLinks(r.Certificates)
 		out = append(out, v)
 	}
 	return out

@@ -5,9 +5,9 @@
 // S5 B5 adds export licences and their usage ledger with ExportLicenseGuard v1 (license.go,
 // license_guard.go); S5 C3b purchase invoices and tax refund cases (invoice.go, taxrefund.go); S5
 // C3a customs declarations, document bundles and external reconciliation (declaration.go,
-// bundle.go). Certificates come with a later S5 unit. Brant records the check and the conclusion an authorized
-// compliance officer gives; it gives no legal opinion, and AI or list services only produce
-// candidates.
+// bundle.go); S5 C5 official certificate results and CertificateResultRef v1 (certificate.go). Brant
+// records the check and the conclusion an authorized compliance officer gives; it gives no legal
+// opinion, and AI or list services only produce candidates.
 //
 //	trade_compliance.evaluate  human, AI or system (compliance template): evaluates order_id at
 //	                           order_revision — its current revision in TRD (SalesOrderRef v1, R46),

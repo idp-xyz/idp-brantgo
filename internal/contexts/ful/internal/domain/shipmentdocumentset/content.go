@@ -187,7 +187,8 @@ type BillOfLading struct {
 }
 
 // Certificate is what an external certificate of origin states (OriginCertificateRef). CertificateID
-// and CertificateVersion name CNX's CertificateResultRef v1 when stated; S5 unit C5 checks them.
+// and CertificateVersion name a certificate result in CNX when stated; certificateRef checks them
+// through CertificateResultRef v1 (S5 C5).
 type Certificate struct {
 	Number             string `json:"number"`
 	Issuer             string `json:"issuer"`
@@ -345,16 +346,18 @@ type Facts struct {
 	Booking  *shipment.Booking
 }
 
-// Upstream are what TRD, PTY, POL and EVD said before the transaction: the order (nil: TRD shows
+// Upstream are what TRD, PTY, POL, EVD and CNX said before the transaction: the order (nil: TRD shows
 // none), the PTY parties' names at their revisions, the order currency, the sources and the file the
-// actor reads, and the number POL issued.
+// actor reads, the number POL issued, and what CNX's CertificateResultRef v1 answered for the
+// certificate a certificate of origin record names (S5 C5, certificate.go).
 type Upstream struct {
-	Order    *OrderFacts
-	Names    map[PartyKey]string
-	Currency *Currency
-	Found    map[string]bool
-	File     *File
-	Number   string
+	Order       *OrderFacts
+	Names       map[PartyKey]string
+	Currency    *Currency
+	Found       map[string]bool
+	File        *File
+	Number      string
+	Certificate *CertificateResult
 }
 
 func text(d kernel.Decimal) string {
@@ -443,7 +446,8 @@ func bookingSource(b *shipment.Booking) string {
 	return "v" + strconv.FormatInt(b.Version, 10)
 }
 
-// record decides the version of an external document: its file must be one the actor reads.
+// record decides the version of an external document: its file must be one the actor reads, and a
+// certificate of origin's certificate result must apply to the shipment (certificateRef, S5 C5).
 func record(d *Document, req Request, up Upstream) (*Document, error) {
 	at := "/args/bill_of_lading/file_id"
 	r := &Record{BillOfLading: req.BillOfLading}
@@ -452,6 +456,9 @@ func record(d *Document, req Request, up Upstream) (*Document, error) {
 	}
 	if up.File == nil || up.File.ID != req.FileID {
 		return nil, Reject(kernel.CodeReferenceInvalid, at, "No file the actor reads")
+	}
+	if err := certificateRef(d, r.Certificate, up.Certificate); err != nil {
+		return nil, err
 	}
 	f := *up.File
 	d.File, d.Record = &f, r

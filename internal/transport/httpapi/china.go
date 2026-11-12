@@ -22,6 +22,8 @@ type CNX interface {
 	cnxapi.DeclarationQueries
 	cnxapi.BundleCommands
 	cnxapi.BundleQueries
+	cnxapi.CertificateCommands
+	cnxapi.CertificateQueries
 	cnxapi.Reconciler
 	cnxapi.Auditor
 }
@@ -49,6 +51,8 @@ func cnxCommands(c CNX) *commandSet {
 			cnxapi.CommandRecordReceipt:         reflected("", "", receiptOf[cnxapi.Receipt](c.RecordReceipt)),
 			cnxapi.CommandCheckBundle:           reflected("", "", receiptOf[cnxapi.Receipt](c.CheckBundle)),
 			cnxapi.CommandResolveReconciliation: reflected("", "", receiptOf[cnxapi.Receipt](c.ResolveReconciliation)),
+			// Certificate results name certificate_id (S5 C5).
+			cnxapi.CommandRegisterCertificate: reflected("", "", receiptOf[cnxapi.Receipt](c.RegisterCertificate)),
 		}}
 }
 
@@ -83,7 +87,14 @@ var cnxReads = []readRoute{
 	{"/api/brant/v1/cnx/document_bundles", "cnx.document_bundle.list", "cnx",
 		"The company's document bundles, newest first, each with its export lot and state", nil, false},
 	{"/api/brant/v1/cnx/document_bundles/{id}", "cnx.document_bundle.get", "cnx",
-		"A document bundle of an export lot: the current requirement checklist (kind, version, missing, present or verified, owner, due date, attachments, linked declaration and fund records as commercial allocations), every check and every external reconciliation", []string{"id"}, false},
+		"A document bundle of an export lot: the current requirement checklist (kind, version, missing, present or verified, owner, due date, attachments, linked declaration and fund records as commercial allocations, certificate results with the lot lines they cover), every check and every external reconciliation", []string{"id"}, false},
+	// Certificate results (S5 C5).
+	{"/api/brant/v1/cnx/certificates", "cnx.certificate.list", "cnx",
+		"The company's official certificate results, newest first, each as its current revision states it (kind, number, issuer, market, object, validity) with its state now", nil, false},
+	{"/api/brant/v1/cnx/certificates/{id}", "cnx.certificate.get", "cnx",
+		"An official certificate result: every revision as registered (issuer, number, object with the lines CNX read of it, market, validity, file, verification basis and evidence, verifier, correction reason), its current revision and its state now", []string{"id"}, false},
+	{"/api/brant/v1/cnx/certificates/{id}/applicability", "cnx.certificate.applicability", "cnx",
+		"What CertificateResultRef v1 answers now for the certificate's current revision on the shipment or export lot ?target_kind=shipment|export_lot&target_id=: applicable or the code and reason (kind, market_unknown, market, not_yet_valid, expired, goods), the destination and the lines it covers", []string{"id"}, false},
 }
 
 // cnxRoutes registers CNX's reads.
@@ -101,6 +112,7 @@ func (s *server) cnxRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/cnx/tax_refund_cases", s.authenticated(s.taxRefundCases))
 	mux.Handle("GET /api/brant/v1/cnx/tax_refund_cases/{id}", s.authenticated(read(s, s.cfg.CNX.GetTaxCase, okView[cnxapi.TaxCaseView])))
 	s.cnxDeclarationRoutes(mux)
+	s.cnxCertificateRoutes(mux)
 }
 
 // purchaseInvoices answers GET /api/brant/v1/cnx/purchase_invoices.

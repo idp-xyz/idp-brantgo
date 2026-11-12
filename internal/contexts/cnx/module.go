@@ -2,7 +2,8 @@
 // S5 A7 delivers its first aggregate, the trade compliance check of a sales order revision, and
 // TradeComplianceGuard v1; S5 B5 the export licence with its usage ledger and ExportLicenseGuard
 // v1; S5 C3b purchase invoices and tax refund cases; S5 C3a customs declarations, document bundles
-// and external reconciliation, and CNX's reading of FUL; certificates follow in a later S5 unit. Code outside CNX uses it through
+// and external reconciliation, and CNX's reading of FUL; S5 C5 official certificate results and
+// CertificateResultRef v1 (R56). Code outside CNX uses it through
 // package api; everything under internal/ is private to CNX.
 package cnx
 
@@ -50,6 +51,10 @@ var (
 	_ api.Auditor             = (*Module)(nil)
 	_ api.Reconciler          = (*Module)(nil)
 	_ api.FollowQueries       = (*Module)(nil)
+	// Official certificate results and CertificateResultRef v1 (S5 C5).
+	_ api.CertificateCommands = (*Module)(nil)
+	_ api.CertificateQueries  = (*Module)(nil)
+	_ api.CertificateLookups  = (*Module)(nil)
 )
 
 // Upstream are the contracts of CNX's upstreams: TRD's orders (R46), PTY's address countries

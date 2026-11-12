@@ -31,6 +31,7 @@ var Codes = map[string]kernel.Category{
 	CodeDependencyNotSupported:        kernel.CategoryInvalid,
 	CodeBusinessKeyConflict:           kernel.CategoryConflict,
 	CodeInsuranceCoverageInsufficient: kernel.CategoryInvalid,
+	CodeCertificateNotApplicable:      kernel.CategoryConflict, // S5 C5, certificate.go
 }
 
 // Reject returns a rejection with a code of the set's rules or a shared kernel code, at path.

@@ -37,15 +37,16 @@ type OrderSnapshots interface {
 }
 
 // DocumentUpstream are the upstreams of booking.record and the shipment document commands (WBS
-// S5-08).
+// S5-08), and CNX's certificate results a certificate of origin record names (S5 C5).
 type DocumentUpstream struct {
-	Configs Configs
-	Numbers Numbers
-	Parties Parties
-	Orders  OrderSnapshots
+	Configs      Configs
+	Numbers      Numbers
+	Parties      Parties
+	Orders       OrderSnapshots
+	Certificates Certificates // CNX CertificateResultRef v1 (R56), documents_certificate.go
 }
 
 // Complete reports whether every document upstream is wired.
 func (u DocumentUpstream) Complete() bool {
-	return u.Configs != nil && u.Numbers != nil && u.Parties != nil && u.Orders != nil
+	return u.Configs != nil && u.Numbers != nil && u.Parties != nil && u.Orders != nil && u.Certificates != nil
 }

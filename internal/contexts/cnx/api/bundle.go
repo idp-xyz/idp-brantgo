@@ -27,6 +27,12 @@ import (
 //	                                 is not validity: expect_complete with a requirement that is only
 //	                                 present or missing, or a customs declaration stated verified that
 //	                                 customs has not released, is DOCUMENT_REQUIREMENT_UNVERIFIED.
+//	                                 A certificate_of_origin, inspection_certificate or export_license
+//	                                 requirement may name certificate_ids, certificate results CNX
+//	                                 registered (certificate.go): one that applies to none of the lot's
+//	                                 lines is CERTIFICATE_NOT_APPLICABLE; a certificate_of_origin or
+//	                                 inspection_certificate requirement is verified only on certificates
+//	                                 that together cover every lot line (S5 C5).
 //	external_reconciliation.resolve  human only (tax specialist): records reconciliation_id on bundle_id
 //	                                 at expected_version — the subject {kind export_lot|declaration|
 //	                                 tax_refund_case|fund_record|document, id}, the measure (amount in a
@@ -38,7 +44,7 @@ import (
 //
 // Request members in snake_case: document_bundle.check {export_lot_id, expected_version,
 // requirements [{requirement_id, kind, version, status, owner {kind, id}, due_on, evidence_ids,
-// declaration_id, fund_record_ids, basis, note}], expect_complete}; external_reconciliation.resolve
+// declaration_id, fund_record_ids, basis, note, certificate_ids}], expect_complete}; external_reconciliation.resolve
 // {bundle_id, expected_version, reconciliation_id, subject {kind, id}, measure, currency {id,
 // revision}, unit, external {value, source, evidence_ids}, internal {value, source}, responsibility
 // {kind, party_id, note}, adjustment {kind, note}, reason}.
@@ -130,6 +136,9 @@ type Requirement struct {
 	FundRecordIDs []string
 	Basis         string
 	Note          string
+	// CertificateIDs names certificate results CNX registered for a certificate_of_origin,
+	// inspection_certificate or export_license (licence copies) requirement (S5 C5, certificate.go).
+	CertificateIDs []string
 }
 
 // CheckBundle states the whole checklist of export lot ExportLotID's bundle at ExpectedVersion (0
@@ -194,6 +203,9 @@ func (c CheckBundle) Validate() error {
 		}
 		ids[r.RequirementID] = true
 		if err := evidence(r.EvidenceIDs, p+"/evidence_ids", 0); err != nil {
+			return err
+		}
+		if err := r.certificates(p + "/certificate_ids"); err != nil {
 			return err
 		}
 		seen := map[string]bool{}
@@ -362,6 +374,7 @@ type RequirementView struct {
 	FundRecords   []FundLink
 	Basis         string
 	Note          string
+	Certificates  []CertificateLink // S5 C5
 }
 
 // BundleCheckView is a check: the checklist, its counts and who checked when.
