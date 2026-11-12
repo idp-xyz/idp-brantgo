@@ -20,7 +20,11 @@
 //	           committed and is never voided;
 //	confirmed  by the supplier as issued, a separate fact with its evidence and the time it was
 //	           received; a confirmation with deviations is recorded and leaves the commitment issued,
-//	           open for a change (A47 #7). Changes and cancellation after issue are S5-19.
+//	           open for a change (A47 #7);
+//	changed    by an approved commitment change (change.go, SM-PUR-COMMITMENT-CHANGE, PUR-INV-011): a
+//	           new revision, issued again until the supplier confirms that revision;
+//	cancelled  with a reason and the supplier's evidence (PUR-INV-011): each line keeps what was
+//	           verified delivered of it and the rest of its allocation is released.
 //
 // Concurrency is the commitment root's: every command locks it FOR UPDATE first, the decision and
 // the issue then the DemandAllocation roots of the draft's lines (tactical lockOrder), so a
@@ -48,6 +52,7 @@ const (
 	StatusRevoked   = "revoked"
 	StatusIssued    = "issued"
 	StatusConfirmed = "confirmed"
+	StatusCancelled = "cancelled"
 	StateExpired    = "expired"
 
 	// Committed is the commitment state of a draft whose commitment was issued (derived).
@@ -126,10 +131,11 @@ type Issue struct {
 }
 
 // Confirmation is what the supplier answered to the issued commitment, recorded at commitment
-// version Version.
+// version Version, of commitment revision Revision.
 type Confirmation struct {
 	Act
 	Version           int64
+	Revision          int64
 	Result            string
 	ReceivedAt        time.Time
 	Evidence          []Evidence
@@ -159,6 +165,9 @@ type Commitment struct {
 	Revocation       *Act
 	Issue            *Issue
 	Confirmations    []Confirmation
+	Revision         int64      // the revision in force: 1 as issued, then one more per change applied and for the cancellation
+	Revisions        []Revision // revisions 2 to Revision, in order
+	Cancellation     *Cancellation
 }
 
 // Draft is what a commitment judges of its purchase draft, a stored and verified one (From).
@@ -229,8 +238,14 @@ func IsLive(status string) bool {
 	return status == StatusRequested || status == StatusApproved || status == StatusIssued || status == StatusConfirmed
 }
 
-// IsCommitted reports whether a commitment in status was issued: its draft is committed.
-func IsCommitted(status string) bool { return status == StatusIssued || status == StatusConfirmed }
+// IsCommitted reports whether a commitment in status was issued: its draft is committed, also once
+// the commitment is cancelled (what was verified of it keeps its allocation).
+func IsCommitted(status string) bool {
+	return status == StatusIssued || status == StatusConfirmed || status == StatusCancelled
+}
+
+// IsOpen reports whether a commitment in status binds the supplier now: issued or confirmed.
+func IsOpen(status string) bool { return status == StatusIssued || status == StatusConfirmed }
 
 // Request decides purchase.commitment.request of commitment id for draft d (A47 #1), stated at hash
 // by its requester (human or AI) under epoch at instant now: the draft as stated (REFERENCE_STALE at
@@ -255,7 +270,7 @@ func Request(id string, d Draft, hash string, live []Live, by kernel.ActorRef, e
 			return nil, fail(kernel.CodeInvalidState, "/args/draft_id", "Commitment "+l.ID+" of the draft is "+l.Status)
 		}
 	}
-	return &Commitment{ID: id, Status: StatusRequested, RowVersion: 1, DraftID: d.ID, DraftHash: d.Hash, OrderID: d.OrderID,
+	return &Commitment{ID: id, Status: StatusRequested, RowVersion: 1, Revision: 1, DraftID: d.ID, DraftHash: d.Hash, OrderID: d.OrderID,
 		OrderRevision: d.OrderRevision, OrderHash: d.OrderHash, SupplierID: d.SupplierID, Currency: d.Currency,
 		SupplyValidUntil: d.SupplyValidUntil, OwnerActor: by.ID, OwnerTeam: team, Requested: Act{By: by, Epoch: epoch, At: at}}, nil
 }
@@ -345,20 +360,33 @@ func (c *Commitment) Approve(d Draft, validUntil time.Time, acks []Acknowledgeme
 		return fail(kernel.CodeInvalidKnownValue, "/args/valid_until", "An approval is valid no longer than the draft's supply ("+
 			kernel.FormatTimestamp(c.SupplyValidUntil)+")")
 	}
+	sorted, err := acknowledged(d.Deviations, acks, "The draft")
+	if err != nil {
+		return err
+	}
+	act.At = at
+	c.Status, c.RowVersion = StatusApproved, c.RowVersion+1
+	c.Decision = &Decision{Act: act, Approve: true, ValidUntil: until, Acknowledgements: sorted}
+	return nil
+}
+
+// acknowledged checks acks against the deviations of what is approved (of names it): each
+// acknowledgement is one of them (REFERENCE_INVALID at it) and every deviation is acknowledged with
+// a reason (PURCHASE_DEVIATION_UNACKNOWLEDGED). It returns the acknowledgements sorted by line and kind.
+func acknowledged(deviations []Deviation, acks []Acknowledgement, of string) ([]Acknowledgement, error) {
 	for i, a := range acks {
-		if !slices.Contains(d.Deviations, Deviation{OrderLineID: a.OrderLineID, Kind: a.Kind}) {
-			return fail(kernel.CodeReferenceInvalid, "/args/acknowledgements/"+itoa(int64(i)), "The draft has no such deviation")
+		if !slices.Contains(deviations, Deviation{OrderLineID: a.OrderLineID, Kind: a.Kind}) {
+			return nil, fail(kernel.CodeReferenceInvalid, "/args/acknowledgements/"+itoa(int64(i)), of+" has no such deviation")
 		}
 	}
-	for _, dv := range d.Deviations {
+	for _, dv := range deviations {
 		if !slices.ContainsFunc(acks, func(a Acknowledgement) bool {
 			return a.OrderLineID == dv.OrderLineID && a.Kind == dv.Kind && strings.TrimSpace(a.Reason) != ""
 		}) {
-			return fail(CodePurchaseDeviationUnacknowledged, "/args/acknowledgements", "Line "+dv.OrderLineID+" deviates ("+dv.Kind+
+			return nil, fail(CodePurchaseDeviationUnacknowledged, "/args/acknowledgements", "Line "+dv.OrderLineID+" deviates ("+dv.Kind+
 				") and the approval does not acknowledge it with a reason")
 		}
 	}
-	act.At = at
 	sorted := slices.Clone(acks)
 	slices.SortFunc(sorted, func(a, b Acknowledgement) int {
 		return strings.Compare(a.OrderLineID+"\x00"+a.Kind, b.OrderLineID+"\x00"+b.Kind)
@@ -366,9 +394,7 @@ func (c *Commitment) Approve(d Draft, validUntil time.Time, acks []Acknowledgeme
 	if sorted == nil {
 		sorted = []Acknowledgement{}
 	}
-	c.Status, c.RowVersion = StatusApproved, c.RowVersion+1
-	c.Decision = &Decision{Act: act, Approve: true, ValidUntil: until, Acknowledgements: sorted}
-	return nil
+	return sorted, nil
 }
 
 // Revoke revokes the approval by act, whose reason is required (A47 #6; SM-PUR-COMMITMENT approved →
@@ -455,6 +481,8 @@ func (c *Commitment) Confirm(expected int64, conf Confirmation) error {
 	case StatusIssued:
 	case StatusConfirmed:
 		return fail(kernel.CodeInvalidState, "/args/commitment_id", "The supplier confirmed the commitment as issued already")
+	case StatusCancelled:
+		return fail(kernel.CodeInvalidState, "/args/commitment_id", "The commitment is cancelled")
 	default:
 		return fail(kernel.CodeInvalidState, "/args/commitment_id", "The commitment is "+c.Status+", not issued")
 	}
@@ -467,6 +495,7 @@ func (c *Commitment) Confirm(expected int64, conf Confirmation) error {
 	}
 	c.RowVersion++
 	conf.At, conf.ReceivedAt, conf.Version, conf.Evidence, conf.Fresh = at, received, c.RowVersion, slices.Clone(conf.Evidence), true
+	conf.Revision = c.Revision
 	c.Confirmations = append(c.Confirmations, conf)
 	if conf.Result == ResultAsIssued {
 		c.Status = StatusConfirmed

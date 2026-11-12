@@ -8,6 +8,11 @@
 // storming PL-12), and the end of an order — OrderCancelled, OrderClosedUnfulfilled,
 // OrderRemainderClosed, OrderClosed — has every reservation the order still holds released (PL-13;
 // WF-08 step 5; SM-STL-CREDIT-RESERVATION). OrderAmended belongs to the payment plan review (PL-09).
+//
+// stl.order_account opens the order account of an activated order at the activated revision (S5
+// plan D-4, D-18; STL-AGG-OrderAccount; unit B6b), so that PaymentConditionGuard v1 (R45) judges every
+// active order by its payment stages. It is a consumer of its own: its transaction modifies the
+// OrderAccount alone (D-3), and an account STL cannot open never holds up the credit reservation.
 package events
 
 import (
@@ -52,22 +57,87 @@ var (
 		trdapi.EventOrderClosed}
 )
 
-// Credit is what the consumer asks of STL's application; application.Service implements it.
+// OrderAccounts is the consumer of TRD's order activations for order accounts. Its handler runs as
+// system:inbox.stl.order_account, which brant-admin inbox grants OrderAccountPermissions.
+const OrderAccounts eventing.InboxConsumer = "stl.order_account"
+
+// OrderAccountPermissions are what order_account.open needs (payment_plan_review.open, the permission
+// STL gives the command), and stl.read for the command ledger's stored-result read.
+func OrderAccountPermissions() []string {
+	return []string{api.PermissionOpenOrderAccount, api.PermissionRead}
+}
+
+// Credit is what stl.order_credit asks of STL's application; application.Service implements it.
 type Credit interface {
 	ConsumeOnActivation(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
 	ReleaseOnOrderEnd(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
 }
 
+// Accounts is what stl.order_account asks of STL's application; application.Service implements it.
+type Accounts interface {
+	PrepareAccount(ctx context.Context, e application.OrderEvent) (application.AccountBasis, error)
+	OpenOnActivation(ctx context.Context, exec bentopg.Executor, e application.OrderEvent, b application.AccountBasis) (string, error)
+}
+
+// Application is everything STL's consumers ask of STL's application.
+type Application interface {
+	Credit
+	Accounts
+}
+
 // Subscriptions returns STL's subscriptions on db, STL's own transaction owner.
-func Subscriptions(db *bentopg.DB, credit Credit) []messaging.Subscription {
+func Subscriptions(db *bentopg.DB, app Application) []messaging.Subscription {
 	return []messaging.Subscription{{
 		Consumer:    OrderCredit,
 		Source:      trdapi.Source,
 		EventTypes:  slices.Concat(activationEvents, endEvents),
 		DB:          db,
 		Permissions: OrderCreditPermissions(),
-		Handler:     OrderCreditHandler(credit),
+		Handler:     OrderCreditHandler(app),
+	}, {
+		Consumer:    OrderAccounts,
+		Source:      trdapi.Source,
+		EventTypes:  slices.Clone(activationEvents),
+		DB:          db,
+		Permissions: OrderAccountPermissions(),
+		Prepare:     OrderAccountPrepare(app),
+		Handler:     OrderAccountHandler(app),
 	}}
+}
+
+// OrderAccountPrepare reads, before the consumer's transaction, what an OrderActivated's account
+// needs from TRD and POL (application.PrepareAccount). A payload that is not a SalesOrder event's is
+// refused for good; a failed read is retried.
+func OrderAccountPrepare(accounts Accounts) func(ctx context.Context, envelope eventing.Envelope) (any, error) {
+	return func(ctx context.Context, envelope eventing.Envelope) (any, error) {
+		event, err := orderEvent(envelope)
+		if err != nil {
+			return nil, messaging.RejectEvent(FailureOrderEventInvalid, err)
+		}
+		return accounts.PrepareAccount(ctx, event)
+	}
+}
+
+// OrderAccountHandler opens the activated order's account at the activated revision with what
+// OrderAccountPrepare read (application.OpenOnActivation). An account STL cannot open for good
+// (application.AccountMismatch) refuses the event; every other failure is delivered again.
+func OrderAccountHandler(accounts Accounts) messaging.EventFunc {
+	return func(ctx context.Context, e messaging.Event) error {
+		event, err := orderEvent(e.Envelope)
+		if err != nil {
+			return messaging.RejectEvent(FailureOrderEventInvalid, err)
+		}
+		basis, ok := e.Prepared.(application.AccountBasis)
+		if !ok {
+			return fmt.Errorf("stl: %s delivered without its prepared account basis", OrderAccounts)
+		}
+		_, err = accounts.OpenOnActivation(ctx, e.Exec, event, basis)
+		var mismatch *application.AccountMismatch
+		if errors.As(err, &mismatch) {
+			return messaging.RejectEvent(eventing.FailureCode(mismatch.Code), mismatch)
+		}
+		return err
+	}
 }
 
 // OrderCreditHandler applies one of TRD's order events to the order's credit reservations.

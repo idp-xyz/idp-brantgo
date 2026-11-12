@@ -22,28 +22,44 @@ const CommitmentNotCommitted = "not_committed"
 // checked_at. Its canonical JSON is stored as it was hashed; draft_hash is its SHA-256 (Python
 // t04_purchase _calculate).
 type Document struct {
-	Contract         string      `json:"contract"`
-	Scope            DocScope    `json:"scope"`
-	DraftID          string      `json:"draft_id"`
-	CommitmentState  string      `json:"commitment_state"`
-	Order            DocOrder    `json:"order"`
-	Supplier         DocParty    `json:"supplier"`
-	CurrencyRef      DocRef      `json:"currency_ref"`
-	PaymentTermsRef  DocRef      `json:"payment_terms_ref"`
-	TradeTermsRef    DocRef      `json:"trade_terms_ref"`
-	Currency         string      `json:"currency"`
-	MinorUnits       int         `json:"minor_units"`
-	Rounding         string      `json:"rounding"`
-	Sources          []DocSource `json:"sources"`
-	PriceGroups      []DocGroup  `json:"price_groups"`
-	Lines            []DocLine   `json:"lines"`
-	Totals           DocTotals   `json:"totals"`
-	CostingSnapshot  DocCosting  `json:"costing_snapshot"`
-	SupplyValidUntil string      `json:"supply_valid_until"`
-	SelectionReason  string      `json:"selection_reason"`
-	PreparedBy       DocActor    `json:"prepared_by"`
-	AuthorityEpoch   int64       `json:"authority_epoch"`
-	CheckedAt        string      `json:"checked_at"`
+	Contract         string       `json:"contract"`
+	Scope            DocScope     `json:"scope"`
+	DraftID          string       `json:"draft_id"`
+	CommitmentState  string       `json:"commitment_state"`
+	Order            DocOrder     `json:"order"`
+	Supplier         DocParty     `json:"supplier"`
+	CurrencyRef      DocRef       `json:"currency_ref"`
+	PaymentTermsRef  DocRef       `json:"payment_terms_ref"`
+	TradeTermsRef    DocRef       `json:"trade_terms_ref"`
+	Currency         string       `json:"currency"`
+	MinorUnits       int          `json:"minor_units"`
+	Rounding         string       `json:"rounding"`
+	Sources          []DocSource  `json:"sources"`
+	PriceGroups      []DocGroup   `json:"price_groups"`
+	Lines            []DocLine    `json:"lines"`
+	Totals           DocTotals    `json:"totals"`
+	CostingSnapshot  DocCosting   `json:"costing_snapshot"`
+	SupplyValidUntil string       `json:"supply_valid_until"`
+	SelectionReason  string       `json:"selection_reason"`
+	PreparedBy       DocActor     `json:"prepared_by"`
+	AuthorityEpoch   int64        `json:"authority_epoch"`
+	CheckedAt        string       `json:"checked_at"`
+	Revision         *DocRevision `json:"revision,omitempty"`
+}
+
+// RevisionContract names the body of a purchase commitment revision a commitment change proposes
+// (S5-19): a draft's document prepared again with the change's quantities, sources and supplier
+// dates (Change), contract RevisionContract instead of DocumentContract, and Revision set. A draft's
+// document has no Revision.
+const RevisionContract = "brant.purchase-commitment-revision/0.1.0"
+
+// DocRevision is what a revision's document binds: the commitment, the change that proposes it, the
+// commitment revision the change is bound to and the revision it makes.
+type DocRevision struct {
+	CommitmentID string `json:"commitment_id"`
+	ChangeID     string `json:"change_id"`
+	BaseRevision int64  `json:"base_revision"`
+	Revision     int64  `json:"revision"`
 }
 
 // DocScope is the tenant and company the draft belongs to.
@@ -200,14 +216,17 @@ type DocMOQ struct {
 	Purchased     string   `json:"purchased"`
 }
 
-// DocDelivery is the comparison of the supplier's date with the order's (PUR-INV-006).
+// DocDelivery is the comparison of the supplier's date with the order's (PUR-INV-006). In a
+// commitment revision, ConditionDate is the supply condition's date when the change states another
+// supplier date, and SlackDays is negative for a date after the order's.
 type DocDelivery struct {
-	Milestone    string `json:"milestone"`
-	Place        string `json:"place"`
-	TimeZone     string `json:"time_zone"`
-	SupplierDate string `json:"supplier_date"`
-	RequiredDate string `json:"required_date"`
-	SlackDays    int    `json:"slack_days"`
+	Milestone     string `json:"milestone"`
+	Place         string `json:"place"`
+	TimeZone      string `json:"time_zone"`
+	SupplierDate  string `json:"supplier_date"`
+	RequiredDate  string `json:"required_date"`
+	SlackDays     int    `json:"slack_days"`
+	ConditionDate string `json:"condition_date,omitempty"`
 }
 
 // DocCostingRef compares a line with the cost snapshot (R21: for review only, never blocking): the
@@ -250,6 +269,7 @@ type DocLine struct {
 	OrderMultiple     string        `json:"order_multiple,omitempty"`
 	Delivery          DocDelivery   `json:"delivery"`
 	CostingReference  DocCostingRef `json:"costing_reference"`
+	Waivers           []string      `json:"waivers,omitempty"` // a commitment revision's: WaiverMOQNotMet, WaiverOrderMultipleInvalid
 }
 
 // DocTotals are the draft's totals in minor units of its currency.
@@ -294,6 +314,9 @@ func canonical(v any) ([]byte, error) {
 	}
 	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
 }
+
+// Canonical returns the canonical JSON of v, as documents are hashed.
+func Canonical(v any) ([]byte, error) { return canonical(v) }
 
 // Hash returns the SHA-256 of b in lowercase hex.
 func Hash(b []byte) string {

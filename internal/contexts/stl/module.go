@@ -82,7 +82,8 @@ func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 
 // Subscriptions are STL's Inbox consumers on its own transaction owner (repository structure §07):
 // stl.order_credit, which has TRD's order events consume and release the order's credit reservations
-// (Context Map R32; PL-12, PL-13).
+// (Context Map R32; PL-12, PL-13), and stl.order_account, which opens an activated order's account
+// (D-4, D-18).
 func (m *Module) Subscriptions() []messaging.Subscription {
 	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

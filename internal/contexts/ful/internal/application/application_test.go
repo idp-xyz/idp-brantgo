@@ -1,8 +1,6 @@
 package application
 
 import (
-	"context"
-	"errors"
 	"testing"
 
 	"go.idp.xyz/idp-brant/internal/contexts/ful/api"
@@ -78,20 +76,6 @@ func TestRequestHash(t *testing.T) {
 		if name, _, _ := request(cmd); name == "" {
 			t.Errorf("%T", cmd)
 		}
-	}
-}
-
-// The port to PUR answers ErrDeliveriesNotWired until S5 unit B3 is wired; the confirmation and
-// the preparation turn it into DEPENDENCY_NOT_SUPPORTED.
-func TestDeliveriesNotWired(t *testing.T) {
-	if _, err := (NotWired{}).ResolveDeliveryLines(context.Background(), nil); !errors.Is(err, ErrDeliveriesNotWired) {
-		t.Fatal(err)
-	}
-	if _, err := (NotWired{}).GuardDeliveryLine(context.Background(), nil, api.DeliveryLineRef{}); !errors.Is(err, ErrDeliveriesNotWired) {
-		t.Fatal(err)
-	}
-	if rej, ok := kernel.AsRejection(deliveriesNotWired("/x")); !ok || rej.Code != api.CodeDependencyNotSupported || rej.Category != kernel.CategoryInvalid {
-		t.Fatal(rej)
 	}
 }
 

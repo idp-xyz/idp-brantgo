@@ -18,6 +18,8 @@ const (
 	CodePurchaseDraftCommitted          = "PURCHASE_DRAFT_COMMITTED"          // 409: the draft has an issued commitment
 	CodeReferenceStale                  = "REFERENCE_STALE"                   // 409: a stated hash is not the bound one
 	CodeSupplyConditionExpired          = "SUPPLY_CONDITION_EXPIRED"          // the draft's supply validity has ended
+	CodePurchaseCommitmentChangeStale   = "PURCHASE_COMMITMENT_CHANGE_STALE"  // 409: the commitment revision a change is bound to moved
+	CodeSupplierDeliveryExceeded        = "SUPPLIER_DELIVERY_EXCEEDED"        // 409: a revision would buy less of a line than was verified delivered
 )
 
 // Codes maps this package's codes to their categories.
@@ -30,6 +32,8 @@ var Codes = map[string]kernel.Category{
 	CodePurchaseDraftCommitted:          kernel.CategoryConflict,
 	CodeReferenceStale:                  kernel.CategoryConflict,
 	CodeSupplyConditionExpired:          kernel.CategoryInvalid,
+	CodePurchaseCommitmentChangeStale:   kernel.CategoryConflict,
+	CodeSupplierDeliveryExceeded:        kernel.CategoryConflict,
 }
 
 // fail returns a rejection with a code of this package or a shared kernel code.

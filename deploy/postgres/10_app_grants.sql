@@ -259,6 +259,19 @@ GRANT UPDATE (status, decided_by_kind, decided_by_id, decide_epoch, decided_at, 
     ON brant_pur.supplier_delivery_version TO brant_app;
 GRANT UPDATE (verified_quantity) ON brant_pur.supplier_delivery_line TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_pur.guard_supplier_delivery_v1(text, text, bigint) TO brant_app;
+-- PUR commitment changes and cancellation (S5-19): a change is inserted as a draft with its lines and
+-- then changes only by its decision and its application, once each (trigger); a revision is inserted
+-- with its lines and never changes; a commitment moves to its next revision or is cancelled (trigger);
+-- nothing is deleted. The triggers' deferred checks call PUR's helper functions as the application role.
+GRANT SELECT, INSERT ON brant_pur.purchase_commitment_change, brant_pur.purchase_commitment_change_line,
+    brant_pur.purchase_commitment_revision, brant_pur.purchase_commitment_revision_line TO brant_app;
+GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason, acknowledgements,
+              applied_by_kind, applied_by_id, apply_epoch, applied_at, applied_revision, updated_at)
+    ON brant_pur.purchase_commitment_change TO brant_app;
+GRANT UPDATE (revision, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at, cancel_reason, cancel_evidence)
+    ON brant_pur.purchase_commitment TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pur.commitment_lines(text, text, text), brant_pur.commitment_line_verified(text, text, text, text),
+    brant_pur.draft_claims_whole(text, text, text) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a
@@ -316,6 +329,16 @@ GRANT SELECT, INSERT ON brant_cnx.trade_compliance_check, brant_cnx.trade_compli
 GRANT UPDATE (status, row_version, current_evaluation_id, current_decision_id, updated_at) ON brant_cnx.trade_compliance_check TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.trade_compliance_state(text, bigint, text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_trade_compliance_v1(text, bigint, text, timestamptz) TO brant_app;
+
+-- CNX export licences: a licence's terms never change, only its version moves with each allocation
+-- and release (trigger); allocations and releases are only inserted (triggers, which lock the
+-- licence FOR UPDATE: the column grant); CNX's reads derive the usage and a shipment's verdict with
+-- its functions, and CNX publishes ExportLicenseGuard v1 for FUL.
+GRANT SELECT, INSERT ON brant_cnx.export_license, brant_cnx.export_license_allocation, brant_cnx.export_license_release TO brant_app;
+GRANT UPDATE (row_version, updated_at) ON brant_cnx.export_license TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_license_outstanding(text, text, text) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_license_state(text, timestamptz, boolean) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.guard_export_license_v1(text, timestamptz) TO brant_app;
 
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses

@@ -48,6 +48,12 @@ const (
 	// are theirs too: the verifier recorded the claim; a version a correction superseded.
 	CodeSupplierDeliveryExceeded   = "SUPPLIER_DELIVERY_EXCEEDED"   // 409: the verified deliveries of a commitment line would exceed what it buys
 	CodeSupplierDeliveryUnverified = "SUPPLIER_DELIVERY_UNVERIFIED" // 409: a delivery no human verified; a claim never counts
+
+	// Commitment changes (S5-19; PUR-INV-011). PURCHASE_ALLOCATION_EXCEEDED, SUPPLIER_DELIVERY_EXCEEDED,
+	// INDEPENDENT_REVIEW_REQUIRED and PURCHASE_DRAFT_STALE above are theirs too: an increase beyond
+	// the line's room, a revision below the verified deliveries, a decider who prepared the change or
+	// requested the commitment, a proposed revision that no longer recomputes equal.
+	CodePurchaseCommitmentChangeStale = "PURCHASE_COMMITMENT_CHANGE_STALE" // 409: the commitment revision the change is bound to moved
 )
 
 var codes = map[string]kernel.Category{
@@ -84,6 +90,7 @@ var codes = map[string]kernel.Category{
 	CodeSupplyConditionExpired:          kernel.CategoryInvalid,
 	CodeSupplierDeliveryExceeded:        kernel.CategoryConflict,
 	CodeSupplierDeliveryUnverified:      kernel.CategoryConflict,
+	CodePurchaseCommitmentChangeStale:   kernel.CategoryConflict,
 }
 
 // Category returns the category of a code PUR declares.
