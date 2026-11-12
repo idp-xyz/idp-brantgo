@@ -52,7 +52,7 @@ func (f *fakeCAT) AuditRejected(context.Context, string, string, string) error {
 func TestDeclarationProfileCommandsAndReads(t *testing.T) {
 	cat := &fakeCAT{}
 	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: cat, INQ: &fakeINQ{}, POL: struct{ POL }{}, REF: struct{ REF }{},
-		SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{}, Verifier: tokens{"Bearer good": alice},
+		SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{}, QLT: struct{ QLT }{}, Verifier: tokens{"Bearer good": alice},
 		Clock: application.Clock(fixedClock{})})
 	if err != nil {
 		t.Fatal(err)
