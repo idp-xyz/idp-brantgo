@@ -83,6 +83,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000002_pty_party_screening", "brant:000003_pty_profiles", "brant:000004_pty_profile_guards", "brant:000005_pty_party_guard", "brant:000001_cat_skus",
 		"brant:000002_cat_item_code_mappings", "brant:000003_cat_sku_guard",
 		"brant:000001_pol_configuration", "brant:000002_pol_config_guard", "brant:000003_pol_legal_terms", "brant:000004_pol_order_document_template",
+		"brant:000005_pol_s5_kinds",
 		"brant:000001_inq_customer_rfqs", "brant:000002_inq_rfq_guard", "brant:000001_sup_supply_conditions", "brant:000002_sup_supply_condition_guard",
 		"brant:000001_cst_costing_contexts", "brant:000002_cst_cost_scenarios", "brant:000003_cst_cost_snapshots",
 		"brant:000001_trd_quote_roots", "brant:000002_trd_quote_reviews", "brant:000003_trd_quote_formalization",

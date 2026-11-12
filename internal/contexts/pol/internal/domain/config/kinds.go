@@ -33,6 +33,10 @@ const (
 	KindScreeningRegulation   Kind = "screening_regulation"
 	KindLegalTerms            Kind = "legal_terms"
 	KindOrderDocumentTemplate Kind = "order_document_template"
+	// S5 (owner decision 2026-11-12): the layout of commercial invoices and packing lists (WBS S5-08,
+	// D-12) and the export tax refund method (CN-AT12).
+	KindShipmentDocumentTemplate Kind = "shipment_document_template"
+	KindExportTaxPolicy          Kind = "export_tax_policy"
 )
 
 // Closed values the rules below compare.
@@ -52,6 +56,10 @@ const (
 	CISGApplies      = "applies"
 	FormationArrival = "arrival"
 	GoverningLawCN   = "CN"
+
+	// A payment stage paid against the shipping documents (S5 D-5) is due after shipment.
+	ReleaseControlDocuments = "documents"
+	TriggerAfterShipment    = "after_shipment"
 )
 
 // Ref is a ConfigRef v1 inside configuration data: the exact revision of another configuration.
@@ -150,12 +158,15 @@ type PaymentTerms struct {
 	Calendar *Ref           `json:"calendar,omitempty"`
 }
 
-// PaymentStage is one stage of PaymentTerms.
+// PaymentStage is one stage of PaymentTerms. ReleaseControl documents (S5 D-5) marks an
+// after-shipment stage paid against the shipping documents; it is omitted when empty, so payment
+// terms published before it existed keep their content hash.
 type PaymentStage struct {
-	StageID string `json:"stage_id"`
-	Percent string `json:"percent"`
-	Trigger string `json:"trigger"`
-	Days    int    `json:"days"`
+	StageID        string `json:"stage_id"`
+	Percent        string `json:"percent"`
+	Trigger        string `json:"trigger"`
+	Days           int    `json:"days"`
+	ReleaseControl string `json:"release_control,omitempty"`
 }
 
 // TaxProfile is a tax rate with its price basis and whether the tax is recoverable.
@@ -258,16 +269,37 @@ type OrderDocumentTemplate struct {
 	FooterNote      string   `json:"footer_note"`
 }
 
+// ShipmentDocumentTemplate is the layout of a commercial invoice or a packing list for the fixed
+// shipment-text renderer (WBS S5-08, D-12): its kind, language, title, the order of its sections,
+// its clauses and a footer note.
+type ShipmentDocumentTemplate struct {
+	Name            string   `json:"name"`
+	DocumentKind    string   `json:"document_kind"`
+	Language        string   `json:"language"`
+	RendererVersion string   `json:"renderer_version"`
+	Title           string   `json:"title"`
+	Sections        []string `json:"sections"`
+	Clauses         []string `json:"clauses"`
+	FooterNote      string   `json:"footer_note"`
+}
+
 // CreditPolicy is how customer credit is limited: the default limit of a new customer, the
-// accepted sources of a limit, the approval levels by the largest excess each may approve, and how
-// many days a payment may be overdue. Amounts are in Currency.
+// accepted sources of a limit, the approval levels by the largest excess each may approve, how
+// many days a payment may be overdue and, since S5, whether document-controlled payments are
+// secured, how long reservations and decisions stay valid and whether two top-tier approvers
+// release an excess above the highest tier. Amounts are in Currency. The S5 members are omitted
+// when false or 0, so a policy published before they existed keeps its content hash.
 type CreditPolicy struct {
-	Name                 string               `json:"name"`
-	Currency             string               `json:"currency"`
-	DefaultLimit         string               `json:"default_limit"`
-	LimitSources         []string             `json:"limit_sources"`
-	ApprovalTiers        []CreditApprovalTier `json:"approval_tiers"`
-	OverdueToleranceDays int                  `json:"overdue_tolerance_days"`
+	Name                    string               `json:"name"`
+	Currency                string               `json:"currency"`
+	DefaultLimit            string               `json:"default_limit"`
+	LimitSources            []string             `json:"limit_sources"`
+	ApprovalTiers           []CreditApprovalTier `json:"approval_tiers"`
+	OverdueToleranceDays    int                  `json:"overdue_tolerance_days"`
+	DocumentsSecured        bool                 `json:"documents_secured,omitempty"`
+	ReservationValidityDays int                  `json:"reservation_validity_days,omitempty"`
+	DecisionValidityDays    int                  `json:"decision_validity_days,omitempty"`
+	TwoApproversAboveTop    bool                 `json:"two_approvers_above_top,omitempty"`
 }
 
 // CreditApprovalTier is one approval level and the largest credit excess it may approve.
@@ -328,12 +360,23 @@ type ScreeningList struct {
 	LegalConfirmationEvidenceID string `json:"legal_confirmation_evidence_id,omitempty"`
 }
 
+// ExportTaxPolicy is the export tax refund method that applies to the company's exports, the
+// policy documents it rests on and the EVD source of the professional review that verified it
+// (CN-D02, CN-R08; CN-AT12).
+type ExportTaxPolicy struct {
+	Name                         string `json:"name"`
+	RefundMethod                 string `json:"refund_method"`
+	PolicyBasis                  string `json:"policy_basis"`
+	ProfessionalReviewEvidenceID string `json:"professional_review_evidence_id"`
+}
+
 // Validate judges content the contract admitted (Python foundation.validate): a validity that ends
 // after it starts; a currency or unit whose config_id is its code; an exchange rate between two
 // currencies with a positive rate observed no later than it becomes valid; a conversion between
 // two units with a positive factor; payment stages with distinct IDs and positive percentages
-// summing to 100; time zones that exist; tax rates and margins in [0, 1], no rate where tax does not
-// apply; a template whose placeholders are exactly its fixed fields; credit tiers ascending.
+// summing to 100, held against the shipping documents only when due after shipment; time zones that
+// exist; tax rates and margins in [0, 1], no rate where tax does not apply; a template whose
+// placeholders are exactly its fixed fields; credit tiers ascending.
 func Validate(id string, c Content) error {
 	if c.Data() == nil {
 		return kernel.Reject(kernel.CodeSchemaInvalid, "/args/data", "")
@@ -383,7 +426,10 @@ func Validate(id string, c Content) error {
 			return invalid("/args/data/time_zone")
 		}
 	case KindPaymentTerms:
-		return checkStages(c.PaymentTerms.Stages)
+		if err := checkStages(c.PaymentTerms.Stages); err != nil {
+			return err
+		}
+		return checkReleaseControl(c.PaymentTerms.Stages)
 	case KindTaxProfile:
 		t := c.TaxProfile
 		if !ratio(t.Rate) {
@@ -429,17 +475,35 @@ func checkFormation(l *LegalTerms) error {
 	return nil
 }
 
-// CheckLegalConfirmations requires a screening regulation's publication to cite, among its
-// evidence, the legal confirmation of every list that has one, so the publisher must be able to
-// read it like the rest of the evidence (ADR-BR-017, Context Map R63).
-func CheckLegalConfirmations(c Content, evidence []string) error {
-	if c.Kind != KindScreeningRegulation {
-		return nil
+// CheckCitedEvidence requires a publication to cite, among its evidence, the sources the content
+// rests on, so the publisher must be able to read them like the rest of the evidence (Context Map
+// R63): a screening regulation's legal confirmation of every list that has one (ADR-BR-017), and an
+// export tax policy's professional review (CN-D02).
+func CheckCitedEvidence(c Content, evidence []string) error {
+	switch c.Kind {
+	case KindScreeningRegulation:
+		for _, l := range c.ScreeningRegulation.Lists {
+			if id := l.LegalConfirmationEvidenceID; id != "" && !slices.Contains(evidence, id) {
+				return kernel.Reject(kernel.CodeReferenceInvalid, "/args/evidence_ids",
+					"Cite the legal confirmation of screening list "+l.ListCode)
+			}
+		}
+	case KindExportTaxPolicy:
+		if !slices.Contains(evidence, c.ExportTaxPolicy.ProfessionalReviewEvidenceID) {
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/evidence_ids", "Cite the professional review of the export tax policy")
+		}
 	}
-	for _, l := range c.ScreeningRegulation.Lists {
-		if id := l.LegalConfirmationEvidenceID; id != "" && !slices.Contains(evidence, id) {
-			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/evidence_ids",
-				"Cite the legal confirmation of screening list "+l.ListCode)
+	return nil
+}
+
+// checkReleaseControl allows release control documents only on a stage due after shipment: the
+// shipping documents exist only once the goods have shipped, and a stage due earlier is paid before
+// they do (S5 D-5, STL-INV-003 scope documents).
+func checkReleaseControl(stages []PaymentStage) error {
+	for i, s := range stages {
+		if s.ReleaseControl == ReleaseControlDocuments && s.Trigger != TriggerAfterShipment {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/stages/"+strconv.Itoa(i)+"/release_control",
+				"Only a stage due after shipment is paid against the shipping documents")
 		}
 	}
 	return nil

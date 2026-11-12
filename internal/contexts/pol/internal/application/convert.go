@@ -78,10 +78,21 @@ func content(cmd api.SaveDraft) config.Content {
 			v.Clauses = []string{}
 		}
 		c.OrderDocumentTemplate = &v
+	case d.ShipmentDocumentTemplate != nil:
+		v := config.ShipmentDocumentTemplate(*d.ShipmentDocumentTemplate)
+		v.Sections, v.Clauses = slices.Clone(v.Sections), slices.Clone(v.Clauses)
+		if v.Clauses == nil {
+			v.Clauses = []string{}
+		}
+		c.ShipmentDocumentTemplate = &v
+	case d.ExportTaxPolicy != nil:
+		c.ExportTaxPolicy = ptr(config.ExportTaxPolicy(*d.ExportTaxPolicy))
 	case d.CreditPolicy != nil:
 		p := d.CreditPolicy
 		v := config.CreditPolicy{Name: p.Name, Currency: p.Currency, DefaultLimit: p.DefaultLimit, LimitSources: slices.Clone(p.LimitSources),
-			ApprovalTiers: make([]config.CreditApprovalTier, len(p.ApprovalTiers)), OverdueToleranceDays: p.OverdueToleranceDays}
+			ApprovalTiers: make([]config.CreditApprovalTier, len(p.ApprovalTiers)), OverdueToleranceDays: p.OverdueToleranceDays,
+			DocumentsSecured: p.DocumentsSecured, ReservationValidityDays: p.ReservationValidityDays, DecisionValidityDays: p.DecisionValidityDays,
+			TwoApproversAboveTop: p.TwoApproversAboveTop}
 		for i, t := range p.ApprovalTiers {
 			v.ApprovalTiers[i] = config.CreditApprovalTier(t)
 		}
@@ -182,10 +193,18 @@ func data(c config.Content) api.ConfigData {
 		v := api.OrderDocumentTemplate(*c.OrderDocumentTemplate)
 		v.Sections, v.Clauses = slices.Clone(v.Sections), slices.Clone(v.Clauses)
 		d.OrderDocumentTemplate = &v
+	case c.ShipmentDocumentTemplate != nil:
+		v := api.ShipmentDocumentTemplate(*c.ShipmentDocumentTemplate)
+		v.Sections, v.Clauses = slices.Clone(v.Sections), slices.Clone(v.Clauses)
+		d.ShipmentDocumentTemplate = &v
+	case c.ExportTaxPolicy != nil:
+		d.ExportTaxPolicy = ptr(api.ExportTaxPolicy(*c.ExportTaxPolicy))
 	case c.CreditPolicy != nil:
 		p := c.CreditPolicy
 		v := api.CreditPolicy{Name: p.Name, Currency: p.Currency, DefaultLimit: p.DefaultLimit, LimitSources: slices.Clone(p.LimitSources),
-			ApprovalTiers: make([]api.CreditApprovalTier, len(p.ApprovalTiers)), OverdueToleranceDays: p.OverdueToleranceDays}
+			ApprovalTiers: make([]api.CreditApprovalTier, len(p.ApprovalTiers)), OverdueToleranceDays: p.OverdueToleranceDays,
+			DocumentsSecured: p.DocumentsSecured, ReservationValidityDays: p.ReservationValidityDays, DecisionValidityDays: p.DecisionValidityDays,
+			TwoApproversAboveTop: p.TwoApproversAboveTop}
 		for i, t := range p.ApprovalTiers {
 			v.ApprovalTiers[i] = api.CreditApprovalTier(t)
 		}
