@@ -16,10 +16,6 @@ const (
 	CodeDeclarationProfileUnverified = "DECLARATION_PROFILE_UNVERIFIED"
 	// A bound version no longer applies: the order's revision, the current evaluation.
 	CodeReferenceStale = "REFERENCE_STALE"
-	// An upstream contract CNX reads is not delivered in this build (the catalog lists CST, TRD and
-	// PUR for it; CNX uses it until TRD's order snapshots, CAT's declaration profiles and reference
-	// data's country programmes are wired).
-	CodeDependencyNotSupported = "DEPENDENCY_NOT_SUPPORTED"
 )
 
 var codes = map[string]kernel.Category{
@@ -27,7 +23,6 @@ var codes = map[string]kernel.Category{
 	CodeOrderNotActive:               kernel.CategoryInvalid,
 	CodeDeclarationProfileUnverified: kernel.CategoryInvalid,
 	CodeReferenceStale:               kernel.CategoryConflict,
-	CodeDependencyNotSupported:       kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code CNX declares.

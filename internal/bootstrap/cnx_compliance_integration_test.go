@@ -6,12 +6,12 @@ import (
 	"context"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/bootstrap"
+	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
@@ -29,56 +29,47 @@ import (
 // The world is the order world (draft and active orders of customer.1 r2, whose buyer address hq
 // has no country: it was confirmed before PTY recorded countries) with the synthetic CN and UN
 // country programme lists of S5 A3b imported (E-3: only uninhabited territories are named; AQ is
-// under a synthetic embargo, DE under none). CNX runs on its real adapters to TRD's order
-// snapshots, PTY's address countries and reference data's programme lists; only CAT's declaration
-// profiles (S5 A5, not merged) come from a fake port.
+// under a synthetic embargo, DE under none) and a declaration profile of sku.1's specification
+// under the synthetic code table CN-2026, saved by one documentation clerk and verified by another
+// (CAT-INV-002). CNX is the composed process's: TRD's order snapshots, PTY's address countries,
+// reference data's programme lists and CAT's declaration profiles are all read through their real
+// contracts.
 
 // cnxCompliancePermissions is what the compliance role template holds for the check, with the
 // reads, the evidence registration and the programme import the suite needs.
 var cnxCompliancePermissions = []string{"trade_compliance.evaluate", "trade_compliance.decide", "trade_compliance.reopen", "cnx.read",
 	"cnx.audit", "evd.read", "source.register", "country_programme.import", "ref.read", "trd.read"}
 
-// cnxProfiles stands in for CAT's DeclarationProfileRef v1 (S5 A5): every specification has a
-// verified profile classifying it as not controlled, unless the test says otherwise.
-type cnxProfiles struct {
-	mu         sync.Mutex
-	unverified bool
-	controlled bool
-}
-
-func (p *cnxProfiles) set(unverified, controlled bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.unverified, p.controlled = unverified, controlled
-}
-
-func (p *cnxProfiles) ResolveProfiles(_ context.Context, specs []cnx.SpecRef) (map[cnx.SpecRef]cnx.Profile, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	out := map[cnx.SpecRef]cnx.Profile{}
-	for _, s := range specs {
-		pr := cnx.Profile{ProfileID: "dp." + s.SkuID, Revision: 1, CodeTableVersion: "2026", Verified: !p.unverified, CommodityCode: "6205200099",
-			ExportControl: cnx.NotControlled, ContentHash: strings.Repeat("d", 64)}
-		if p.controlled {
-			pr.ExportControl, pr.ListReference = cnx.Controlled, "合成两用物项 1A001"
-		}
-		out[s] = pr
-	}
-	return out, nil
-}
-
+// cnxWorld is the order world with what a trade compliance conclusion needs. cnx is the composed
+// process's CNX (w.c.CNX).
 type cnxWorld struct {
 	*trdWorld
 	cnx                                *cnx.Module
-	profiles                           *cnxProfiles
 	app                                *bentopg.DB
 	compliance, agent, system, outside context.Context
+	doc1, doc2                         context.Context
 	regulation                         polapi.ConfigRef
 }
 
-func newCnxWorld(t *testing.T) *cnxWorld {
-	q := newOrderWorld(t)
-	w := &cnxWorld{trdWorld: q, profiles: &cnxProfiles{}}
+func newCnxWorld(t *testing.T) *cnxWorld { return cnxOn(newOrderWorld(t)) }
+
+// cnxOn adds to the order world q, once, what a clear trade compliance conclusion of one of its
+// orders needs besides the order (the recipe for every suite that activates or ships an order once
+// TradeComplianceGuard v1 is wired, S5 D-20):
+//
+//   - the compliance officer "officer" (human; trade_compliance.evaluate and .decide, cnx.read,
+//     evd.read, and an active grant with the company data scope so TRD, PTY, CAT and reference data
+//     answer its lookups), and the documentation clerks doc.1 and doc.2 (role template
+//     documentation);
+//   - the synthetic CN and UN country programme lists imported (country_programme.import);
+//   - the evidence source cnx.evidence (EVD);
+//   - the declaration profile decl.sku.1 of sku.1's order specification under code table CN-2026,
+//     saved by doc.1 and verified by doc.2 (the verifier is never the last editor);
+//   - the screening_regulation "screening" the order world published, at its active revision.
+//
+// cleared then evaluates and decides an order of q.
+func cnxOn(q *trdWorld) *cnxWorld {
+	w := &cnxWorld{trdWorld: q, cnx: q.c.CNX}
 	w.compliance = q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "officer"},
 		Permissions: cnxCompliancePermissions, DataScope: "company"})
 	w.agent = q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorAI, ID: "agent.cnx"},
@@ -95,18 +86,39 @@ func newCnxWorld(t *testing.T) *cnxWorld {
 		q.must(err)
 	}
 	q.source(w.compliance, "cnx.evidence", "合成提单与客户 PO：卸货港与最终用途（测试数据）")
+	w.doc1, w.doc2 = q.assign("doc.1", "documentation"), q.assign("doc.2", "documentation")
+	w.verifyProfile("decl.sku.1", w.draftProfile("decl.sku.1", codeTable, catapi.ExportNotControlled, 0), 1)
 	cfg, err := q.c.POL.GetConfig(q.author, polapi.KindScreeningRegulation, "screening")
 	q.must(err)
 	w.regulation = polapi.ConfigRef{Kind: polapi.KindScreeningRegulation, ConfigID: "screening", Revision: cfg.ActiveRevision}
-	db, err := bentopg.NewDB(pgtest.AppPool(t))
+	db, err := bentopg.NewDB(pgtest.AppPool(q.t))
 	q.must(err)
 	w.app = db
-	db, err = bentopg.NewDB(pgtest.AppPool(t))
-	q.must(err)
-	w.cnx, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(q.c.TRD), Countries: cnx.PTYCountries(q.c.PTY), Profiles: w.profiles,
-		Programmes: cnx.REFProgrammes(q.c.REF), Configs: q.c.POL, Sources: q.c.EVD})
-	q.must(err)
 	return w
+}
+
+// draftProfile has doc.1 save, at root version expected (0: a new profile), the draft revision of
+// declaration profile id of sku.1's order specification under code table table, classified status
+// (controlled: on a synthetic control list), and returns the profile's root version.
+func (w *cnxWorld) draftProfile(id, table, status string, expected int64) int64 {
+	w.t.Helper()
+	cmd := declarationProfile(w.key(), id, expected, "sku.1", w.spec, table)
+	cmd.Commodity.SourceIDs = nil
+	if status == catapi.ExportControlled {
+		cmd.ExportControl = catapi.ExportControlClassification{Status: status, ListReference: "合成两用物项清单 1A001", Basis: "合成：列入合成管制清单"}
+	}
+	saved, err := w.c.CAT.SaveDeclarationProfile(w.doc1, cmd)
+	w.must(err)
+	return saved.RowVersion
+}
+
+// verifyProfile has doc.2 verify draft revision revision of profile id at root version expected
+// (never doc.1, its last editor) and returns the profile's root version.
+func (w *cnxWorld) verifyProfile(id string, expected, revision int64) int64 {
+	w.t.Helper()
+	r, err := w.c.CAT.VerifyDeclarationProfile(w.doc2, verifyProfile(w.key(), id, expected, revision, "cnx.evidence"))
+	w.must(err)
+	return r.RowVersion
 }
 
 func (w *cnxWorld) binding(orderID string) cnxapi.OrderBinding {
@@ -114,13 +126,14 @@ func (w *cnxWorld) binding(orderID string) cnxapi.OrderBinding {
 	return cnxapi.OrderBinding{OrderID: orderID, OrderRevision: v.OrderRevision, OrderHash: v.OrderHash}
 }
 
-// evaluateCmd evaluates order at rev under the world's regulation and both synthetic lists, with
-// destination entered (with evidence, D-8), the buyer address hq's country entered (PTY has none)
-// and the end use stated.
+// evaluateCmd evaluates order at rev under the world's regulation, both synthetic lists and the
+// code table CN-2026, with destination entered (with evidence, D-8), the buyer address hq's country
+// entered (PTY has none) and the end use stated.
 func (w *cnxWorld) evaluateCmd(order string, rev, expected int64, destination string) cnxapi.Evaluate {
 	ev := []string{"cnx.evidence"}
 	return cnxapi.Evaluate{IdempotencyKey: w.key(), OrderID: order, OrderRevision: rev, ExpectedVersion: expected,
 		RegulationID: w.regulation.ConfigID, RegulationRevision: w.regulation.Revision, ProgrammeLists: []string{cnProgrammeList, unProgrammeList},
+		CodeTableVersion: codeTable,
 		Destination:      &cnxapi.Destination{Country: destination, Reason: "提单与客户 PO 载明的卸货国（合成）", EvidenceIDs: ev},
 		AddressCountries: []cnxapi.AddressCountry{{PartyID: "customer.1", AddressID: "hq", Country: syntheticClear, EvidenceIDs: ev}},
 		EndUse:           &cnxapi.EndUse{Statement: "服装零售（合成）", EvidenceIDs: ev}}
@@ -135,7 +148,11 @@ func (w *cnxWorld) decideCmd(r cnxapi.CheckReceipt, conclusion string, license b
 	return cmd
 }
 
-// cleared evaluates order at its current revision for destination DE and concludes clear.
+// cleared has the compliance officer evaluate order at its current revision for destination DE
+// (trade_compliance.evaluate with the order's current revision, the check's row version or 0, the
+// regulation, the programme lists, the code table, the destination and the buyer address's country
+// entered with evidence, and the end use) and conclude clear on that evaluation
+// (trade_compliance.decide with license_required false).
 func (w *cnxWorld) cleared(order string) cnxapi.CheckReceipt {
 	w.t.Helper()
 	b := w.binding(order)
@@ -216,7 +233,7 @@ func TestTradeComplianceEvaluateDecideAndGuard(t *testing.T) {
 
 	// The agent evaluates what TRD and PTY say: no consignee address, the buyer's without a country.
 	bare := cnxapi.Evaluate{IdempotencyKey: w.key(), OrderID: o.ObjectID, OrderRevision: 1, RegulationID: "screening",
-		RegulationRevision: w.regulation.Revision, ProgrammeLists: []string{cnProgrammeList, unProgrammeList}}
+		RegulationRevision: w.regulation.Revision, ProgrammeLists: []string{cnProgrammeList, unProgrammeList}, CodeTableVersion: codeTable}
 	first, err := w.cnx.Evaluate(w.agent, bare)
 	w.must(err)
 	if first.Status != cnxapi.StatusPending || first.RowVersion != 1 || first.Outcome != cnxapi.OutcomeIncomplete || first.OrderHash != b.OrderHash ||
@@ -273,8 +290,14 @@ func TestTradeComplianceEvaluateDecideAndGuard(t *testing.T) {
 	}
 	ev := view.Evaluations[1]
 	if ev.Destination.Country != syntheticClear || ev.Destination.Source != "entered" || ev.Parties[0].Source != "entered" || len(ev.Programmes) != 2 ||
-		ev.Programmes[0].Code != cnProgrammeList || ev.Programmes[0].Version != "v1" || len(ev.Gaps) != 0 || ev.Lines[0].Classification != cnx.NotControlled {
+		ev.Programmes[0].Code != cnProgrammeList || ev.Programmes[0].Version != "v1" || len(ev.Gaps) != 0 || ev.CodeTableVersion != codeTable {
 		t.Fatalf("evaluation %+v", ev)
+	}
+	// R39: the line's classification is CAT's verified profile revision, bound with its content hash.
+	profile := w.resolveProfile(w.doc1, catapi.DeclarationProfileRef{SkuID: "sku.1", SpecRevision: w.spec, CodeTableVersion: codeTable})
+	if l := ev.Lines[0]; l.Classification != cnx.NotControlled || l.ProfileID != "decl.sku.1" || l.ProfileRevision != 1 || l.CodeTableVersion != codeTable ||
+		l.CommodityCode != "6109100021" || l.ProfileHash != profile.ContentHash || !profile.Verified || l.SkuID != "sku.1" || l.SpecRevision != w.spec {
+		t.Fatalf("line %+v against CAT's %+v", l, profile)
 	}
 	gaps := []string{}
 	for _, g := range view.Evaluations[0].Gaps {
@@ -456,8 +479,10 @@ func TestOrderAmendmentMakesTheOldConclusionInapplicable(t *testing.T) {
 // regulation_revised (its own revision does not), and a superseded revision supports no new
 // evaluation (POL's CONFIG_NOT_ACTIVE); an unexpired conclusion is not reopened as expired. A list
 // the company never imported is a gap, never a clear one; a foreign list is refused (ADR-BR-017: the
-// regulation's legal confirmation); a line without a verified declaration profile concludes clear
-// never (DECLARATION_PROFILE_UNVERIFIED).
+// regulation's legal confirmation). CAT-INV-002 through R39: under a code table CAT keeps no profile
+// for, and under one whose profile is only a draft, the line is unknown or unverified and no clear
+// conclusion is given (DECLARATION_PROFILE_UNVERIFIED); once another clerk verifies the profile, as
+// controlled goods, the evaluation finds them and compliance states the licence requirement.
 func TestReopeningsAndWhatAClearConclusionNeeds(t *testing.T) {
 	w := newCnxWorld(t)
 	_, o := w.prepared("quote.1")
@@ -534,17 +559,37 @@ func TestReopeningsAndWhatAClearConclusionNeeds(t *testing.T) {
 		t.Fatalf("a foreign list: %s %s", code(err), path(err))
 	}
 
-	w.profiles.set(true, false)
-	e, err = w.cnx.Evaluate(w.compliance, w.evaluateCmd(o.ObjectID, 1, e.RowVersion, syntheticClear))
-	w.must(err)
-	_, err = w.cnx.Decide(w.compliance, w.decideCmd(e, cnxapi.ConclusionClear, false))
-	w.want(err, cnxapi.CodeDeclarationProfileUnverified)
+	// CAT-INV-002 through R39. Under a code table CAT keeps no profile for, the line's classification
+	// is unknown; with only a draft (a candidate, never used) it is unverified: no clear conclusion.
+	under2027 := func(wantGap string) {
+		t.Helper()
+		cmd := w.evaluateCmd(o.ObjectID, 1, e.RowVersion, syntheticClear)
+		cmd.CodeTableVersion = "CN-2027"
+		e, err = w.cnx.Evaluate(w.compliance, cmd)
+		w.must(err)
+		view, err := w.cnx.GetCheck(w.compliance, e.CheckID)
+		w.must(err)
+		last := view.Evaluations[len(view.Evaluations)-1]
+		if wantGap == "" {
+			if len(last.Gaps) != 0 || last.CodeTableVersion != "CN-2027" {
+				t.Fatalf("gaps %+v", last.Gaps)
+			}
+			return
+		}
+		if e.Outcome != cnxapi.OutcomeIncomplete || len(last.Gaps) != 1 || last.Gaps[0].Kind != wantGap || last.Gaps[0].Ref != "L1" {
+			t.Fatalf("want gap %s: %+v %+v", wantGap, e, last.Gaps)
+		}
+		_, err = w.cnx.Decide(w.compliance, w.decideCmd(e, cnxapi.ConclusionClear, false))
+		w.want(err, cnxapi.CodeDeclarationProfileUnverified)
+	}
+	under2027("classification_unknown")
+	profile := w.draftProfile("decl.sku.1.2027", "CN-2027", catapi.ExportControlled, 0)
+	under2027("classification_unverified")
 
-	// Controlled goods: the export-control programme naming the destination applies, and compliance
+	// Verified by another clerk as controlled goods: the evaluation finds them, and compliance
 	// states that a licence is required (ExportLicenseGuard, S5-14).
-	w.profiles.set(false, true)
-	e, err = w.cnx.Evaluate(w.compliance, w.evaluateCmd(o.ObjectID, 1, e.RowVersion, syntheticClear))
-	w.must(err)
+	profile = w.verifyProfile("decl.sku.1.2027", profile, 1)
+	under2027("")
 	if e.Outcome != cnxapi.OutcomeMatch {
 		t.Fatalf("controlled goods: %+v", e)
 	}
@@ -553,6 +598,19 @@ func TestReopeningsAndWhatAClearConclusionNeeds(t *testing.T) {
 	v := w.wantVerdict(b, cnxapi.StatusClear, cnxapi.ReasonCleared)
 	if !v.LicenseRequired || v.RegulationRevision != reg2.Revision || !c.ValidUntil.Before(time.Now().AddDate(0, 0, 15)) {
 		t.Fatalf("licence and validity: %+v %+v", v, c)
+	}
+
+	// R39 carries no guard: verifying the profile's next revision supersedes the one the conclusion's
+	// evaluation read, which stays recorded with its revision and content hash; nothing is reopened,
+	// and the next evaluation would read the new revision.
+	w.verifyProfile("decl.sku.1.2027", w.draftProfile("decl.sku.1.2027", "CN-2027", catapi.ExportNotControlled, profile), 2)
+	w.wantVerdict(b, cnxapi.StatusClear, cnxapi.ReasonCleared)
+	view, err = w.cnx.GetCheck(w.compliance, c.CheckID)
+	w.must(err)
+	now := w.resolveProfile(w.doc1, catapi.DeclarationProfileRef{SkuID: "sku.1", SpecRevision: w.spec, CodeTableVersion: "CN-2027"})
+	if l := view.Evaluations[len(view.Evaluations)-1].Lines[0]; l.ProfileRevision != 1 || l.Classification != cnx.Controlled ||
+		now.Revision != 2 || now.ContentHash == l.ProfileHash || view.State != cnxapi.StatusClear {
+		t.Fatalf("the evaluation keeps the revision it read: %+v, CAT now %+v", l, now)
 	}
 }
 
@@ -641,32 +699,56 @@ func TestTradeComplianceGuardDecidesEveryCommitOrder(t *testing.T) {
 	w.wantVerdict(b, cnxapi.StatusBlocked, cnxapi.ReasonBlocked)
 }
 
-// The real wiring over HTTP with OIDC access tokens: CNX's routes, the closed command contract and
-// the reads; trade_compliance.evaluate answers DEPENDENCY_NOT_SUPPORTED while CAT's declaration
-// profiles (S5 A5) are not wired, never a check without classifications.
+// The composed process over HTTP with OIDC access tokens: the compliance officer evaluates a draft
+// order and concludes clear through CNX's command routes (the closed contract with
+// code_table_version and programme_lists), reads the check and the order's checks, reconciles a
+// command never sent and reads the audit trail.
 func TestTradeComplianceOverHTTP(t *testing.T) {
 	w := newCnxWorld(t)
 	_, o := w.prepared("quote.1")
-	c := w.cleared(o.ObjectID)
 	is := newIssuer(t)
 	handler, err := w.platform.API(bootstrap.APIConfig{Issuer: is.srv.URL, Audience: "brant-api", AllowInsecureHTTP: true})
 	w.must(err)
 	api := httptest.NewServer(handler)
 	t.Cleanup(api.Close)
 	officer := &client{t: t, base: api.URL, token: is.token(w.tenant, "company.A", "officer", "human"), n: 300}
-	status, out := officer.try("cnx", cnxapi.Contract, cnxapi.CommandEvaluate, map[string]any{"order_id": o.ObjectID, "order_revision": 1,
-		"expected_version": 0, "regulation_id": "screening", "regulation_revision": w.regulation.Revision,
-		"programme_lists": []string{cnProgrammeList}})
-	if status != 422 || out["code"] != cnxapi.CodeDependencyNotSupported {
-		t.Fatalf("evaluate without CAT: %d %v", status, out)
+	evidence := []string{"cnx.evidence"}
+	args := map[string]any{"order_id": o.ObjectID, "order_revision": 1, "expected_version": 0, "regulation_id": "screening",
+		"regulation_revision": w.regulation.Revision, "programme_lists": []string{cnProgrammeList, unProgrammeList},
+		"destination":       map[string]any{"country": syntheticClear, "reason": "提单载明的卸货国（合成）", "evidence_ids": evidence},
+		"address_countries": []any{map[string]any{"party_id": "customer.1", "address_id": "hq", "country": syntheticClear, "evidence_ids": evidence}},
+		"end_use":           map[string]any{"statement": "服装零售（合成）", "evidence_ids": evidence}}
+	status, out := officer.try("cnx", cnxapi.Contract, cnxapi.CommandEvaluate, args)
+	if status != 422 || out["code"] != kernel.CodeSchemaInvalid || out["field_errors"].([]any)[0].(map[string]any)["path"] != "/args/code_table_version" {
+		t.Fatalf("no code table: %d %v", status, out)
 	}
-	status, out = officer.try("cnx", cnxapi.Contract, cnxapi.CommandEvaluate, map[string]any{"order_id": o.ObjectID, "order_revision": 1,
-		"expected_version": 0, "regulation_id": "screening", "regulation_revision": w.regulation.Revision, "programme_lists": []string{}})
-	if status != 422 || out["code"] != kernel.CodeSchemaInvalid {
-		t.Fatalf("no list: %d %v", status, out)
+	args["code_table_version"] = codeTable
+	evaluated := officer.command("cnx", cnxapi.Contract, cnxapi.CommandEvaluate, args)
+	checkID, _ := evaluated["object_id"].(string)
+	if evaluated["status"] != "pending" || evaluated["row_version"] != float64(1) || checkID == "" {
+		t.Fatalf("evaluate %v", evaluated)
 	}
-	status, view := officer.do("GET", "/api/brant/v1/cnx/trade_compliance_checks/"+c.CheckID, nil)
-	if status != 200 || view["state"] != "clear" || view["order_id"] != o.ObjectID || len(view["evaluations"].([]any)) != 1 {
+	status, view := officer.do("GET", "/api/brant/v1/cnx/trade_compliance_checks/"+checkID, nil)
+	evaluations, _ := view["evaluations"].([]any)
+	if status != 200 || view["state"] != "pending" || len(evaluations) != 1 {
+		t.Fatalf("check %d %v", status, view)
+	}
+	evaluation := evaluations[0].(map[string]any)
+	line := evaluation["lines"].([]any)[0].(map[string]any)
+	if evaluation["outcome"] != "no_match" || evaluation["code_table_version"] != codeTable || line["classification"] != "not_controlled" ||
+		line["profile_id"] != "decl.sku.1" {
+		t.Fatalf("evaluation %v", evaluation)
+	}
+	evaluationID, _ := evaluation["evaluation_id"].(string)
+	decided := officer.command("cnx", cnxapi.Contract, cnxapi.CommandDecide, map[string]any{"check_id": checkID, "expected_version": 1,
+		"evaluation_id": evaluationID, "conclusion": "clear", "reason": "核查 clear（合成）", "license_required": false, "evidence_ids": evidence})
+	if decided["status"] != "clear" || decided["row_version"] != float64(2) {
+		t.Fatalf("decide %v", decided)
+	}
+	w.wantVerdict(w.binding(o.ObjectID), cnxapi.StatusClear, cnxapi.ReasonCleared)
+	c := cnxapi.CheckReceipt{CheckID: checkID, EvaluationID: evaluationID}
+	status, view = officer.do("GET", "/api/brant/v1/cnx/trade_compliance_checks/"+c.CheckID, nil)
+	if status != 200 || view["state"] != "clear" || view["order_id"] != o.ObjectID || len(view["decisions"].([]any)) != 1 {
 		t.Fatalf("check %d %v", status, view)
 	}
 	status, list := officer.do("GET", "/api/brant/v1/cnx/orders/"+o.ObjectID+"/trade_compliance", nil)

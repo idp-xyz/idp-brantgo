@@ -20,8 +20,12 @@
 //	                           another with a
 //	                           reason and evidence, D-8), the countries of the order's party addresses
 //	                           (PTY, R77; address_countries enters one PTY has none for, with evidence),
-//	                           every line's export-control classification (CAT DeclarationProfileRef
-//	                           v1, R39) and the end use with evidence. It opens the check of the order
+//	                           every line's export-control classification under the customs code table
+//	                           version code_table_version (CAT DeclarationProfileRef v1, R39: the
+//	                           profile revision verified now for the line's SKU specification and that
+//	                           code table; the evaluation states the code table as it states the
+//	                           programme lists — Brant has no reference data of code tables yet and
+//	                           does not guess) and the end use with evidence. It opens the check of the order
 //	                           revision (expected_version 0) or re-evaluates a pending or blocked one;
 //	                           a clear one is reopened first. A missing fact is a gap: the check stays
 //	                           pending and cannot conclude clear.
@@ -44,7 +48,8 @@
 // (guard.go) is how TRD's order.activate (R58) and FUL's release (R56) rely on it.
 //
 // Request members in snake_case: trade_compliance.evaluate {order_id, order_revision,
-// expected_version, regulation_id, regulation_revision, programme_lists, destination {country, reason,
+// expected_version, regulation_id, regulation_revision, programme_lists, code_table_version,
+// destination {country, reason,
 // evidence_ids}, address_countries [{party_id, address_id, country, evidence_ids}], end_use
 // {statement, evidence_ids}}; trade_compliance.decide {check_id, expected_version, evaluation_id,
 // conclusion, reason, license_required, evidence_ids}; trade_compliance.reopen {cause, check_id,
@@ -205,8 +210,9 @@ type EndUse struct {
 
 // Evaluate evaluates order OrderID at OrderRevision under the screening_regulation revision
 // (RegulationID, RegulationRevision) against the current versions of the country programme lists
-// ProgrammeLists (1 to MaxProgrammeLists codes). ExpectedVersion is the check's row version, 0
-// when the order revision has none.
+// ProgrammeLists (1 to MaxProgrammeLists codes), classifying its lines under the customs commodity
+// code table version CodeTableVersion (an identifier such as CN-2026, as CAT keys its declaration
+// profiles). ExpectedVersion is the check's row version, 0 when the order revision has none.
 type Evaluate struct {
 	IdempotencyKey     string
 	OrderID            string
@@ -215,6 +221,7 @@ type Evaluate struct {
 	RegulationID       string
 	RegulationRevision int64
 	ProgrammeLists     []string
+	CodeTableVersion   string
 	Destination        *Destination
 	AddressCountries   []AddressCountry
 	EndUse             *EndUse
@@ -242,6 +249,9 @@ func (c Evaluate) Validate() error {
 		if len(code) > MaxListCodeLength || !kernel.ValidIdentifier(code) || slices.Index(c.ProgrammeLists, code) != i {
 			return schema("/args/programme_lists/" + strconv.Itoa(i))
 		}
+	}
+	if !kernel.ValidIdentifier(c.CodeTableVersion) {
+		return schema("/args/code_table_version")
 	}
 	if d := c.Destination; d != nil {
 		switch {
@@ -460,7 +470,8 @@ type PartyView struct {
 }
 
 // LineView is an order line and its export-control classification: not_controlled or controlled
-// (ListReference) from a verified declaration profile, unverified or unknown.
+// (ListReference) from the verified declaration profile revision read (ProfileID, ProfileRevision,
+// ProfileHash), unverified (a profile with only a draft) or unknown (no profile for the code table).
 type LineView struct {
 	LineID           string
 	SkuID            string
@@ -519,25 +530,26 @@ type GapView struct {
 
 // EvaluationView is one evaluation of a check, as its document records it.
 type EvaluationView struct {
-	EvaluationID   string
-	Seq            int
-	OrderRevision  int64
-	OrderHash      string
-	Regulation     RegulationView
-	Destination    DestinationView
-	Parties        []PartyView
-	Lines          []LineView
-	EndUse         *EndUseView
-	ProgrammeLists []string
-	Programmes     []ProgrammeView
-	Findings       []FindingView
-	Gaps           []GapView
-	Outcome        string
-	FactsHash      string
-	EvaluatedBy    kernel.ActorRef
-	EvaluatedAt    time.Time
-	ValidUntil     time.Time // the latest a conclusion on it may stay valid
-	AuthorityEpoch int64
+	EvaluationID     string
+	Seq              int
+	OrderRevision    int64
+	OrderHash        string
+	Regulation       RegulationView
+	Destination      DestinationView
+	Parties          []PartyView
+	Lines            []LineView
+	EndUse           *EndUseView
+	CodeTableVersion string
+	ProgrammeLists   []string
+	Programmes       []ProgrammeView
+	Findings         []FindingView
+	Gaps             []GapView
+	Outcome          string
+	FactsHash        string
+	EvaluatedBy      kernel.ActorRef
+	EvaluatedAt      time.Time
+	ValidUntil       time.Time // the latest a conclusion on it may stay valid
+	AuthorityEpoch   int64
 }
 
 // DecisionView is a conclusion.

@@ -56,7 +56,7 @@ func TestCNXCommandsDecodeTheirMembers(t *testing.T) {
 		return `{"contract":"` + cnxapi.Contract + `","command":"` + command + `","idempotency_key":"k1","args":` + args + `}`
 	}
 	a := call(t, h, http.MethodPost, "/api/brant/v1/cnx/commands/trade_compliance.evaluate", "Bearer good", envelope("trade_compliance.evaluate",
-		`{"order_id":"o1","order_revision":2,"expected_version":0,"regulation_id":"screening","regulation_revision":1,"programme_lists":["cn.embargo"],`+
+		`{"order_id":"o1","order_revision":2,"expected_version":0,"regulation_id":"screening","regulation_revision":1,"programme_lists":["cn.embargo"],"code_table_version":"CN-2026",`+
 			`"destination":{"country":"DE","reason":"B/L","evidence_ids":["s1"]},`+
 			`"address_countries":[{"party_id":"p1","address_id":"hq","country":"NL","evidence_ids":["s2"]}],`+
 			`"end_use":{"statement":"零售","evidence_ids":["s3"]}}`))
@@ -65,7 +65,7 @@ func TestCNXCommandsDecodeTheirMembers(t *testing.T) {
 	}
 	e := cnx.evaluated[0]
 	if e.OrderRevision != 2 || e.Destination == nil || e.Destination.EvidenceIDs[0] != "s1" || e.AddressCountries[0].Country != "NL" ||
-		e.EndUse.Statement != "零售" || e.IdempotencyKey != "k1" || e.ProgrammeLists[0] != "cn.embargo" {
+		e.EndUse.Statement != "零售" || e.IdempotencyKey != "k1" || e.ProgrammeLists[0] != "cn.embargo" || e.CodeTableVersion != "CN-2026" {
 		t.Fatalf("%+v", e)
 	}
 
