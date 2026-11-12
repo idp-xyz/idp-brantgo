@@ -30,3 +30,7 @@ stl
 # release call CNX's trade compliance guard at run time only, and CNX's own transactions call POL's
 # guard function.
 cnx
+# ful is last of the S5 order after pur (qlt, stl, cnx, ful): its transactions call the guard
+# functions of PTY, PUR, QLT and TRD, and from its commercial release on those of CNX and STL
+# (R26, R27, R44, R45, R56, R59); TRD reads its ShipmentFacts v1 at run time only (R70).
+ful

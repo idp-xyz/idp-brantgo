@@ -1,0 +1,88 @@
+// Package ful assembles the FUL bounded context (fulfilment and shipment: shipments with their
+// packing records and confirmations, the order fulfilment root, ShipmentFacts v1 for TRD; WBS
+// S5-03a). Code outside FUL uses it through package api; everything under internal/ is private to
+// FUL.
+package ful
+
+import (
+	"errors"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/api"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/upstream"
+	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/application"
+	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
+	"go.idp.xyz/idp-brant/internal/foundation/bento"
+)
+
+// Module is FUL wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
+type Module struct {
+	application.Service
+}
+
+var (
+	_ api.Commands      = (*Module)(nil)
+	_ api.Queries       = (*Module)(nil)
+	_ api.Auditor       = (*Module)(nil)
+	_ api.Reconciler    = (*Module)(nil)
+	_ api.ShipmentFacts = (*Module)(nil)
+)
+
+// Upstream are the lookups and guards of FUL's upstream contexts: TRD's orders (R27), QLT's quality
+// releases (R26), PUR's supplier deliveries through FUL's port Deliveries (R59), PTY's party
+// screening (R44), EVD's sources (R74), and the extension points S5 unit C1 wires.
+type Upstream = application.Upstream
+
+// FUL's ports and what passes through them.
+type (
+	Orders        = application.Orders
+	Releases      = application.Releases
+	Screening     = application.Screening
+	Deliveries    = application.Deliveries
+	DeliveryLine  = application.DeliveryLine
+	Extensions    = application.Extensions
+	Extension     = application.Extension
+	ExtensionCall = application.ExtensionCall
+)
+
+// ErrDeliveriesNotWired is what the Deliveries port answers while PUR publishes no supplier
+// deliveries.
+var ErrDeliveriesNotWired = application.ErrDeliveriesNotWired
+
+// TRDOrders is the port to TRD over its ActiveOrderRef v1 lookup and OrderGuard v1.
+func TRDOrders(orders trdapi.ActiveOrderLookups) Orders { return upstream.TRD{Orders: orders} }
+
+// QLTReleases is the port to QLT over its QualityReleaseRef v1 lookup and QualityReleaseGuard v1.
+func QLTReleases(releases qltapi.ReleaseLookups) Releases { return upstream.QLT{Releases: releases} }
+
+// PTYScreening is the port to PTY's PartyScreeningGuard v1.
+func PTYScreening() Screening { return upstream.PTY{} }
+
+// DeliveriesNotWired is the port to PUR while PUR publishes no supplier deliveries (S5 unit B3):
+// shipment.prepare and shipment.confirm answer DEPENDENCY_NOT_SUPPORTED.
+func DeliveriesNotWired() Deliveries { return application.NotWired{} }
+
+// New wires FUL to db, a transaction owner that belongs to FUL alone, and to its upstreams.
+func New(db *bentopg.DB, up Upstream) (*Module, error) {
+	if !up.Complete() {
+		return nil, errors.New("ful: module needs TRD's orders, QLT's releases, PUR's deliveries, PTY's screening and EVD's sources")
+	}
+	policy, err := authorization.NewPolicy(application.Rules()...)
+	if err != nil {
+		return nil, err
+	}
+	outbox, err := bentooutbox.NewStore(db)
+	if err != nil {
+		return nil, err
+	}
+	clock := bento.SystemClock{}
+	return &Module{application.Service{Clock: clock, Upstream: up, Ledger: &action.Ledger{
+		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
+		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetShipment, Visible: application.Visible,
+	}}}, nil
+}
