@@ -717,7 +717,7 @@ func TestCNATSuite07CombinedPaymentWithBankCharges(t *testing.T) {
 	c.salesStatement() // D1 §5 step 19
 	c.phaseOf("a legacy order's opening receivable")
 	cutoff := time.Now().UTC().Add(-10 * time.Minute).Truncate(time.Second)
-	c.source(brcAdmin, "ledger.legacy", "合成旧账截止导出：customer.1 旧订单 SO-LEGACY-0007 发票 INV-LEGACY-0007 未收 328.00 USD。")
+	c.source(brcTreasury, "ledger.legacy", "合成旧账截止导出：customer.1 旧订单 SO-LEGACY-0007 发票 INV-LEGACY-0007 未收 328.00 USD。")
 	ob := c.ok(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordOpening, map[string]any{"opening_id": "ob.legacy.7", "kind": "receivable",
 		"cutoff_at": kernel.FormatTimestamp(cutoff), "source": map[string]any{"document": "INV-LEGACY-0007",
 			"issued_at": kernel.FormatTimestamp(cutoff.AddDate(0, 0, -30)), "amount": "328.00"},
@@ -895,8 +895,8 @@ func TestCNATSuite10ExpectedApprovedAndReceivedRefundDiffer(t *testing.T) {
 	r := c.allocate("lot.1", as...)
 	caseID, rv := brcStr(r["object_id"]), brcNum(r["row_version"])
 	c.party(brcBuyer, "tax.bureau", []string{ptyapi.RoleSupplier}, "evidence")
-	c.source(brcAdmin, "tax.submission", "合成退税申报回执：申报号 SB-CNAT10-0001（测试数据）。")
-	c.source(brcAdmin, "tax.approval", "合成退税核准通知：核准退税 480.00 元，免抵 20.00 元（测试数据）。")
+	c.source(brcTaxOfficer, "tax.submission", "合成退税申报回执：申报号 SB-CNAT10-0001（测试数据）。")
+	c.source(brcTaxOfficer, "tax.approval", "合成退税核准通知：核准退税 480.00 元，免抵 20.00 元（测试数据）。")
 	c.phaseOf("stages recorded apart")
 	result := func(stage string, extra map[string]any) map[string]any {
 		a := map[string]any{"case_id": caseID, "expected_version": rv, "stage": stage}
@@ -944,7 +944,8 @@ func TestCNATSuite10ExpectedApprovedAndReceivedRefundDiffer(t *testing.T) {
 	c.observe("refusals: submitted before planned → %s; received on a USD fund record → %s /args/currency; received on a 470.00 record → %s /args/amount",
 		kernel.CodeInvalidState, kernel.CodeInvalidKnownValue, kernel.CodeInvalidKnownValue)
 	c.skipped("the cost and fund impact of the differences \"按冻结政策解释\": CN-D02/CN-D07 are not frozen; Brant records the stated amounts and their differences and computes nothing (CN-E01)")
-	c.deviate("the tax bureau is a synthetic PTY party of role supplier (PTY has customer and supplier roles only); the submission and approval papers are EVD sources registered by admin (the tax_specialist template holds no source.register: D1's gap)")
+	c.deviate("the tax bureau is a synthetic PTY party of role supplier (PTY has customer and supplier roles only)")
+	c.observe("the submission and approval papers are EVD sources tax.officer registers itself (S5R-D26: the tax_specialist template holds source.register)")
 }
 
 // CN-AT11 出口后折让或退运 — "销售、库存、报关及税务影响分别形成受控案件，不因贷项自动完成退税调整" (C8, C10;
@@ -1042,7 +1043,7 @@ func TestCNATSuite12PolicyChangeWithOpenHistoricalBusiness(t *testing.T) {
 	c.phaseOf("the policy changes")
 	cfg := c.get(brcAdmin, "/api/brant/v1/pol/configs/export_tax_policy/export.tax")
 	// S5R-D14: the method without a refund is exempt (免税); POL refuses not_applicable on a new revision.
-	c.source(brcAdmin, "tax.review.2", "合成专业复核记录（第二次）：自本日起企业适用方法改为“免税（不退税）”，仅供测试。")
+	c.source(brcTaxOfficer, "tax.review.2", "合成专业复核记录（第二次）：自本日起企业适用方法改为“免税（不退税）”，仅供测试。")
 	c.ok(brcAdmin, "pol", polapi.Contract, "config.save_draft", map[string]any{"kind": polapi.KindExportTaxPolicy, "id": "export.tax",
 		"expected_version": cfg["root_version"], "valid_from": now(), "data": map[string]any{"name": "synthetic export tax policy (changed)",
 			"refund_method": polapi.RefundExempt, "policy_basis": "合成政策依据（变更，测试用）", "professional_review_evidence_id": "tax.review.2"}})
@@ -1310,7 +1311,7 @@ func TestCNATSuite16OpeningBalancesAndRefundMaterial(t *testing.T) {
 	c.phaseOf("STL opening balances at the cutoff")
 	cutoff := time.Now().UTC().Add(-10 * time.Minute).Truncate(time.Second)
 	at := kernel.FormatTimestamp(cutoff)
-	c.source(brcAdmin, "ledger.cutover", "合成旧账截止导出：应收、应付与预收余额（截止日，测试数据）。")
+	c.source(brcTreasury, "ledger.cutover", "合成旧账截止导出：应收、应付与预收余额（截止日，测试数据）。")
 	opening := func(id, kind, document, issuedAmount, amount string, extra map[string]any) map[string]any {
 		a := map[string]any{"opening_id": id, "kind": kind, "cutoff_at": at, "source": map[string]any{"document": document,
 			"issued_at": kernel.FormatTimestamp(cutoff.AddDate(0, 0, -40)), "amount": issuedAmount}, "currency": cfgRef("currency", "USD", 1), "amount": amount,
@@ -1370,8 +1371,8 @@ func TestCNATSuite16OpeningBalancesAndRefundMaterial(t *testing.T) {
 	c.observe("不重复生成现金: the receivable and payable openings are statements without fund records (fund record ob.ar.1 404); the prepayment is the only opening cash (2,000.00 available)")
 
 	c.phaseOf("CNX opening refund material")
-	c.source(brcAdmin, "tax.register", "合成退税台账截止导出：进项发票剩余用途余额与在途退税申报（测试数据，非税务结论）。")
-	c.source(brcAdmin, "approval.notice", "合成退税核准通知（截止前，测试数据）：核准退税 390.00 元。")
+	c.source(brcTaxOfficer, "tax.register", "合成退税台账截止导出：进项发票剩余用途余额与在途退税申报（测试数据，非税务结论）。")
+	c.source(brcTaxOfficer, "approval.notice", "合成退税核准通知（截止前，测试数据）：核准退税 390.00 元。")
 	c.cmd(brcAdmin, "pol", polapi.Contract, "config.save_draft", map[string]any{"kind": polapi.KindExportTaxPolicy, "id": "export.tax.hist", "expected_version": 0,
 		"valid_from": kernel.FormatTimestamp(time.Now().AddDate(0, 0, -400)), "data": map[string]any{"name": "synthetic historic export tax policy",
 			"refund_method": polapi.RefundExemptRefund, "policy_basis": "切换前适用的合成政策（测试用）", "professional_review_evidence_id": "tax.review"}})

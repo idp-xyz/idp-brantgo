@@ -67,3 +67,30 @@ func revoke(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, d De
 		kernel.Instant(d.RevokedAt), d.RevokeReason)
 	return err
 }
+
+// OfAgent reads the delegations of agent in scope, active or ended (revoked or expired) after since,
+// ordered by task and delegation: the AI runner's work list (unit C2) — the active ones to act
+// under, the ended ones to hand their running tasks back to people (AN04).
+func OfAgent(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, agentID string, since time.Time) ([]Delegation, error) {
+	rows, err := exec.Query(ctx, `SELECT delegation_id FROM brant_ai.delegation WHERE tenant_id = $1 AND company_id = $2 AND agent_id = $3
+		AND (status = 'active' OR revoked_at > $4 OR expires_at > $4) ORDER BY task_id, delegation_id`,
+		string(scope.Tenant), string(scope.Company), agentID, kernel.Instant(since))
+	if err != nil {
+		return nil, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Delegation, 0, len(ids))
+	for _, id := range ids {
+		d, err := Load(ctx, exec, scope, id, NoLock)
+		if err != nil {
+			return nil, err
+		}
+		if d != nil {
+			out = append(out, *d)
+		}
+	}
+	return out, nil
+}

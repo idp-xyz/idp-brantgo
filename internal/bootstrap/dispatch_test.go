@@ -60,15 +60,13 @@ func readAllowlist(t *testing.T) map[string]bool {
 
 // contextMapViolations reports every subscription whose source is not an upstream of its
 // consumer's context in allow (rule D1: a context subscribes only to the events of its registered
-// upstreams). Reference data is no context of the Context Map: every context uses it through
-// internal/reference/api (dependency rule D1), so any context may consume its events.
+// upstreams). Reference data (source idp-brant.ref) is the Context Map's platform provider REF, no
+// bounded context: only the downstreams of its relationships R80 (PTY) and R81 (CNX) may consume
+// its events, through the allowlist's "<bc> ref" lines (S5R-D34; there is no global pass).
 func contextMapViolations(subs []messaging.Subscription, allow map[string]bool) []string {
 	var out []string
 	for _, s := range subs {
 		down, up := messaging.ConsumerContext(s.Consumer), messaging.SourceContext(s.Source)
-		if down != "" && s.Source == refapi.Source {
-			continue
-		}
 		if down == "" || up == "" || !allow[down+" "+up] {
 			out = append(out, fmt.Sprintf("%s subscribes to %s, which is not an upstream of %q in %s", s.Consumer, s.Source, down, allowlistPath))
 		}
@@ -94,20 +92,22 @@ func TestSubscriptionsFollowTheContextMap(t *testing.T) {
 }
 
 // The check itself refuses what the Context Map does not allow: a source that is no upstream of
-// the consumer (PUR is downstream of TRD, never the reverse), a source outside Brant's naming and
-// a consumer of a context the allowlist does not know.
+// the consumer (PUR is downstream of TRD, never the reverse), a source outside Brant's naming, a
+// consumer of a context the allowlist does not know, and reference data's events for a context
+// that is no downstream of R80 or R81 (S5R-D34: only PTY and CNX).
 func TestContextMapCheckRefusesSubscriptionsAgainstTheMap(t *testing.T) {
 	allow := readAllowlist(t)
 	sub := func(consumer eventing.InboxConsumer, source string) messaging.Subscription {
 		return messaging.Subscription{Consumer: consumer, Source: source}
 	}
 	if v := contextMapViolations([]messaging.Subscription{sub("pur.order_review", trdapi.Source), sub("trd.cost_source_holds", cstapi.Source),
-		sub("cnx.trade_compliance", refapi.Source)}, allow); len(v) != 0 {
+		sub("cnx.trade_compliance", refapi.Source), sub("pty.rescreening", refapi.Source)}, allow); len(v) != 0 {
 		t.Fatalf("allowed subscriptions refused: %v", v)
 	}
 	for _, s := range []messaging.Subscription{
 		sub("inq.quote_events", "idp-brant.trd"), sub("pur.probe", "trd"), sub("zzz.probe", trdapi.Source), sub("probe", trdapi.Source),
-		sub("probe", refapi.Source),
+		sub("probe", refapi.Source), sub("stl.probe", refapi.Source), sub("trd.probe", refapi.Source), sub("ful.probe", refapi.Source),
+		sub("ref.probe", refapi.Source),
 	} {
 		if v := contextMapViolations([]messaging.Subscription{s}, allow); len(v) != 1 {
 			t.Errorf("%s from %s: %v, want one violation", s.Consumer, s.Source, v)

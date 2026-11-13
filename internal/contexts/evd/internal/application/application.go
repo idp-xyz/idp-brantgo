@@ -4,8 +4,14 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
+	"strconv"
+	"time"
+	"unicode/utf8"
 
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -23,6 +29,7 @@ import (
 const (
 	CommandGetFile        = "file.get"
 	CommandGetSource      = "source.get"
+	CommandGetExtract     = "source.extract.get"
 	CommandResolveSources = "source.resolve"
 	CommandAudit          = "evd.audit"
 	PermissionRead        = "evd.read"
@@ -38,6 +45,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandRegisterFile, Permission: api.CommandRegisterFile, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 		{Command: CommandGetSource, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetFile, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetExtract, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandResolveSources, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
@@ -51,13 +59,16 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 		return err == nil && f != nil && d.Sees(f.OwnerActor, f.OwnerTeam), err
 	}
 	o, err := postgres.OriginByID(ctx, exec, scope, id)
-	return err == nil && o != nil && d.Sees(o.OwnerActor, o.OwnerTeam), err
+	return err == nil && o != nil && o.Readable(d.Sees), err
 }
 
 // Service runs EVD's use cases.
 type Service struct {
 	Ledger *action.Ledger
 	Clock  application.Clock
+	// Extractor reads business files for file_extract sources (internal/ai/ingest, wired by
+	// bootstrap); without one, file_extract is UNSUPPORTED_CONTRACT.
+	Extractor api.Extractor
 }
 
 // RegisterSource registers a text source (Python Core._register_source).
@@ -71,8 +82,17 @@ func (s Service) RegisterSource(ctx context.Context, cmd api.RegisterSource) (ap
 	if err != nil {
 		return api.Receipt{}, err
 	}
+	h := &register{clock: s.Clock, reg: reg}
+	var handler action.Handler = h
+	if reg.Kind == source.FileExtract {
+		if s.Extractor == nil {
+			return api.Receipt{}, s.rejectEarly(ctx, api.CommandRegisterSource, cmd.SourceID,
+				kernel.Reject(kernel.CodeUnsupportedContract, "/args/source_kind", "no extractor is configured"))
+		}
+		handler = &registerExtract{register: h, s: s, fileID: cmd.FileID}
+	}
 	res, err := s.Ledger.Execute(ctx, action.Command{Name: r.Command, IdempotencyKey: r.IdempotencyKey, RequestHash: r.RequestHash, ObjectID: cmd.SourceID},
-		&register{clock: s.Clock, reg: reg})
+		handler)
 	return api.Receipt(res), err
 }
 
@@ -89,6 +109,8 @@ func (s Service) rejectEarly(ctx context.Context, command, objectID string, reje
 type register struct {
 	clock application.Clock
 	reg   source.Registration
+	// extract is the file extract a file_extract registration stores (registerExtract).
+	extract *postgres.Extract
 }
 
 // Lock locks nothing: origins, contents and imports are immutable, and concurrent first
@@ -110,10 +132,16 @@ func (h *register) Apply(ctx context.Context, exec bentopg.Executor, d authoriza
 	// A known origin the actor does not see is NOT_FOUND whatever the body: guessing a body never
 	// reveals a private source (Python test_private_source_cannot_be_probed_by_guessing_body).
 	for _, o := range []*source.Origin{byID, byChannel} {
-		if o != nil && !d.Sees(o.OwnerActor, o.OwnerTeam) {
+		if o != nil && !o.Readable(d.Sees) {
 			return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/id", "")
 		}
 	}
+	return h.store(ctx, exec, d, byID, byChannel)
+}
+
+// store records the registration once the known origins were judged visible.
+func (h *register) store(ctx context.Context, exec bentopg.Executor, d authorization.Decision, byID, byChannel *source.Origin) (action.Outcome, error) {
+	scope, _ := bento.ScopeFromContext(ctx)
 	existing, err := source.Match(h.reg, byID, byChannel)
 	if errors.As(err, new(source.Conflict)) {
 		return action.Outcome{}, kernel.RejectAs(api.CodeSourceIdentityConflict, kernel.CategoryConflict, "/args/id", "")
@@ -136,7 +164,13 @@ func (h *register) Apply(ctx context.Context, exec bentopg.Executor, d authoriza
 		}
 		o := source.Origin{ID: h.reg.OriginID, ContentID: contentID, Kind: h.reg.Kind, Channel: h.reg.Channel,
 			OwnerActor: d.Actor.ID, OwnerTeam: d.Team}
-		if err = postgres.InsertOrigin(ctx, exec, scope, o, now); err != nil {
+		extractID := ""
+		if h.extract != nil {
+			if extractID, err = h.storeExtract(ctx, exec, now); err != nil {
+				return action.Outcome{}, err
+			}
+		}
+		if err = postgres.InsertOrigin(ctx, exec, scope, o, extractID, now); err != nil {
 			return action.Outcome{}, err
 		}
 		out.ObjectID = o.ID
@@ -145,6 +179,129 @@ func (h *register) Apply(ctx context.Context, exec bentopg.Executor, d authoriza
 	}
 	err = postgres.InsertImport(ctx, exec, scope, action.NewID("import", now), out.ObjectID, d.Actor, now)
 	return out, err
+}
+
+// storeExtract returns the ID of the stored extract of the registration's file by its extractor
+// under its profile, storing it first if it is new. One file read by one extractor version under
+// one profile gives one extract (deterministic readers, A6-D15): another located form is a broken
+// extractor, not a refusal.
+func (h *register) storeExtract(ctx context.Context, exec bentopg.Executor, now time.Time) (string, error) {
+	scope, _ := bento.ScopeFromContext(ctx)
+	x := *h.extract
+	stored, err := postgres.ExtractByFile(ctx, exec, scope, x.FileID, x.Extractor, x.Profile)
+	if err != nil {
+		return "", err
+	}
+	if stored != nil {
+		if stored.SHA256 != x.SHA256 {
+			return "", fmt.Errorf("evd: extractor %s read file %s into another located form (%s, stored %s)", x.Extractor, x.FileID, x.SHA256, stored.SHA256)
+		}
+		return stored.ID, nil
+	}
+	x.ID, x.CreatedAt = action.NewID("extract", now), now
+	return x.ID, postgres.InsertExtract(ctx, exec, scope, x)
+}
+
+// registerExtract registers a file_extract: before its transaction it reads the file's bytes, if
+// the registrant sees the file, and has the extractor read them; in the transaction it decides in
+// the order: a known origin the registrant does not see (NOT_FOUND /args/id), the file missing or
+// not seen (NOT_FOUND /args/file_id), the file outside the input profile (INPUT_PROFILE_UNSUPPORTED
+// /args/file_id), another origin under the ID (SOURCE_IDENTITY_CONFLICT), then the registration.
+type registerExtract struct {
+	*register
+	s      Service
+	fileID string
+	// set by Prepare
+	file    *postgres.File
+	read    *api.FileExtract
+	refusal error
+}
+
+// Prepare reads the file with EVD's own read and extracts it (Context Map: EVD holds no parsing
+// code; the extractor is the AI layer's). It decides nothing: Apply judges what it found.
+func (h *registerExtract) Prepare(ctx context.Context) error {
+	h.file, h.read, h.refusal = nil, nil, nil
+	err := h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		scope, _ := bento.ScopeFromContext(ctx)
+		f, err := postgres.LoadFile(ctx, exec, scope, h.fileID, true)
+		if err == nil && f != nil && d.Sees(f.OwnerActor, f.OwnerTeam) {
+			h.file = f
+		}
+		return err
+	})
+	if err != nil || h.file == nil {
+		return err
+	}
+	x, err := h.s.Extractor.Extract(h.file.MimeType, h.file.Content)
+	if rej, ok := kernel.AsRejection(err); ok {
+		reason := ""
+		if len(rej.Fields) > 0 {
+			reason = rej.Fields[0].Reason
+		}
+		h.refusal = kernel.RejectAs(rej.Code, rej.Category, "/args/file_id", reason)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err = checkExtract(x, h.file); err != nil {
+		return err
+	}
+	h.read = &x
+	return nil
+}
+
+// checkExtract checks what EVD can check of an extract without parsing it; a failure is a broken
+// extractor (an infrastructure error), except a located form beyond EVD's bound, which the input
+// decides (INPUT_PROFILE_UNSUPPORTED).
+func checkExtract(x api.FileExtract, f *postgres.File) error {
+	bad := func(what string) error { return fmt.Errorf("evd: the extractor's answer for file %s: %s", f.ID, what) }
+	sum := sha256.Sum256([]byte(x.LocatedForm))
+	switch {
+	case x.FileSHA256 != f.SHA256:
+		return bad("read other bytes than the file's")
+	case x.SHA256 != hex.EncodeToString(sum[:]):
+		return bad("the SHA-256 is not that of the located form")
+	case len(x.LocatedForm) > api.MaxLocatedFormBytes:
+		return kernel.RejectAs(api.CodeInputProfileUnsupported, kernel.CategoryInvalid, "/args/file_id",
+			"limit=located_form actual="+strconv.Itoa(len(x.LocatedForm))+" max="+strconv.Itoa(api.MaxLocatedFormBytes))
+	case !utf8.ValidString(x.LocatedForm) || !utf8.ValidString(x.Text):
+		return bad("not UTF-8")
+	case utf8.RuneCountInString(x.Text) != x.Characters || x.Characters < 1 || x.Characters > api.MaxContentCharacters:
+		return bad("the text does not have the extract's characters within the source bound")
+	case x.Kind != "text" && x.Kind != "pdf" && x.Kind != "xlsx", x.Extractor == "", x.Profile == "":
+		return bad("kind, extractor or profile")
+	}
+	return nil
+}
+
+func (h *registerExtract) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+	scope, _ := bento.ScopeFromContext(ctx)
+	byID, err := postgres.OriginByID(ctx, exec, scope, h.reg.OriginID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	if byID != nil && !byID.Readable(d.Sees) {
+		return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/id", "")
+	}
+	// The file as the transaction sees it: still there and seen by the registrant (CT16).
+	f, err := postgres.LoadFile(ctx, exec, scope, h.fileID, false)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	if f == nil || !d.Sees(f.OwnerActor, f.OwnerTeam) || h.file == nil {
+		return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/file_id", "")
+	}
+	if h.refusal != nil {
+		return action.Outcome{}, h.refusal
+	}
+	x := h.read
+	h.reg.Text = x.Text
+	h.reg.Extract = source.ExtractID{FileID: f.ID, SHA256: x.SHA256}
+	ref := x.ExtractRef
+	ref.FileID = f.ID
+	h.extract = &postgres.Extract{ExtractRef: ref, LocatedForm: x.LocatedForm}
+	return h.store(ctx, exec, d, byID, nil)
 }
 
 // GetSource returns a source the caller sees, audited (Python Core.get kind=source).
@@ -156,7 +313,7 @@ func (s Service) GetSource(ctx context.Context, id string) (api.SourceView, erro
 		if err != nil {
 			return err
 		}
-		if st == nil || !d.Sees(st.Origin.OwnerActor, st.Origin.OwnerTeam) {
+		if st == nil || !st.Origin.Readable(d.Sees) {
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		o := st.Origin
@@ -166,6 +323,37 @@ func (s Service) GetSource(ctx context.Context, id string) (api.SourceView, erro
 		for _, i := range st.Imports {
 			view.Imports = append(view.Imports, api.SourceImport{ImportID: i.ID, Actor: i.Actor, ImportedAt: i.ImportedAt})
 		}
+		if o.Kind == source.FileExtract {
+			x, err := postgres.OriginExtract(ctx, exec, scope, id)
+			if err != nil || x == nil {
+				return errors.Join(err, errors.New("evd: a file extract origin without its extract"))
+			}
+			ref := x.ExtractRef
+			view.Extract = &ref
+		}
+		return nil
+	})
+	return view, err
+}
+
+// GetExtract returns the located form of a file_extract source, audited (api.ExtractQueries;
+// CT16: the caller must see the source and its file now).
+func (s Service) GetExtract(ctx context.Context, id string) (api.ExtractView, error) {
+	var view api.ExtractView
+	err := s.Ledger.Read(ctx, CommandGetExtract, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		scope, _ := bento.ScopeFromContext(ctx)
+		o, err := postgres.OriginByID(ctx, exec, scope, id)
+		if err != nil {
+			return err
+		}
+		if o == nil || o.Kind != source.FileExtract || !o.Readable(d.Sees) {
+			return kernel.Reject(kernel.CodeNotFound, "/id", "")
+		}
+		x, err := postgres.OriginExtract(ctx, exec, scope, id)
+		if err != nil || x == nil {
+			return errors.Join(err, errors.New("evd: a file extract origin without its extract"))
+		}
+		view = api.ExtractView{SourceID: id, ExtractRef: x.ExtractRef, LocatedForm: x.LocatedForm, RegisteredAt: x.CreatedAt}
 		return nil
 	})
 	return view, err
@@ -182,7 +370,7 @@ func (s Service) ResolveSources(ctx context.Context, ids []string) (map[string]a
 		scope, _ := bento.ScopeFromContext(ctx)
 		origins, err := postgres.Origins(ctx, exec, scope, ids)
 		for _, o := range origins {
-			if d.Sees(o.OwnerActor, o.OwnerTeam) {
+			if o.Readable(d.Sees) {
 				out[o.ID] = api.SourceRef{SourceID: o.ID, ContentSHA256: o.ContentHash}
 			}
 		}

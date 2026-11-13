@@ -7,6 +7,7 @@
 //	brant-admin role -tenant t -company c -role trade.clerk -name 外贸业务员 -templates sales_clerk,merchandiser
 //	brant-admin assign -tenant t -company c -actor alice -kind human -roles trade.clerk -data-scope team -team east
 //	brant-admin inbox -tenant t -company c
+//	brant-admin agent -tenant t -company c
 //
 // Roles and their templates are BC-D02: templates come from the master archive; a forbidden
 // combination (separation of duties) is refused.
@@ -16,6 +17,11 @@
 // with data scope company. Run it for every company the consumers serve, and again after a release
 // that adds a consumer or changes its permissions. One consumer can also be set by hand with
 // grant -kind system -actor inbox.<consumer>.
+//
+// agent provisions the AI agent runner's system actor system:ai.runner (brant-worker -agent) with
+// exactly the permissions it moves tasks with (task.pause, task.wait, task.resume, task.verify,
+// goal.verify, task.bind_object and the reads they need), data scope company. The AI agents
+// themselves get the role template ai_q01_agent with assign -kind ai.
 package main
 
 import (
@@ -44,8 +50,11 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "inbox" {
 		return inbox(args)
 	}
+	if len(args) > 0 && args[0] == "agent" {
+		return agent(args)
+	}
 	if len(args) == 0 || args[0] != "grant" {
-		return errors.New("usage: brant-admin grant|role|assign|inbox -tenant ... -company ... (see the package comment)")
+		return errors.New("usage: brant-admin grant|role|assign|inbox|agent -tenant ... -company ... (see the package comment)")
 	}
 	fs := flag.NewFlagSet("grant", flag.ContinueOnError)
 	tenant := fs.String("tenant", "", "tenant ID")
@@ -150,6 +159,33 @@ func inbox(args []string) error {
 		fmt.Printf("GRANTED %s/%s %s %d permissions %s\n", *tenant, *company, g.Actor, len(g.Permissions), strings.Join(g.Permissions, ","))
 	}
 	fmt.Printf("DONE inbox %s/%s, %d consumers, authority epoch %d\n", *tenant, *company, len(grants), epoch)
+	return nil
+}
+
+// agent grants the agent runner's system actor what it moves tasks with.
+func agent(args []string) error {
+	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
+	tenant := fs.String("tenant", "", "tenant ID")
+	company := fs.String("company", "", "company ID")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	dsn := os.Getenv("IDP_BRANT_POSTGRES_DSN")
+	if dsn == "" {
+		return errors.New("IDP_BRANT_POSTGRES_DSN is required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	platform, err := bootstrap.Open(ctx, bootstrap.Config{PostgresDSN: dsn})
+	if err != nil {
+		return err
+	}
+	defer platform.Close()
+	epoch, err := platform.ProvisionAgentRunnerFor(ctx, *tenant, *company)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("DONE agent %s/%s, authority epoch %d\n", *tenant, *company, epoch)
 	return nil
 }
 

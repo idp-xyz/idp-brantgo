@@ -35,12 +35,15 @@ const (
 const (
 	CodeReferenceStale               = "REFERENCE_STALE"
 	CodeDeclarationProfileUnverified = "DECLARATION_PROFILE_UNVERIFIED"
+	// A clear conclusion on an evaluation with any other gap (S5R registered it for CNX-INV-001).
+	CodeEvaluationIncomplete = "TRADE_COMPLIANCE_EVALUATION_INCOMPLETE"
 )
 
 // Categories are the categories of the domain's own codes.
 var Categories = map[string]kernel.Category{
 	CodeReferenceStale:               kernel.CategoryConflict,
 	CodeDeclarationProfileUnverified: kernel.CategoryInvalid,
+	CodeEvaluationIncomplete:         kernel.CategoryInvalid,
 }
 
 func reject(code, path, reason string) *kernel.Rejection {

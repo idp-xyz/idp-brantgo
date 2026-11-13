@@ -26,6 +26,10 @@ const (
 	// rows and columns, size, characters or attachments; baseline 14.2). Nothing is truncated: the
 	// file goes to the manual path. internal/ai/ingest returns it.
 	InputProfileUnsupported = "INPUT_PROFILE_UNSUPPORTED"
+	// SourceAmbiguous: a value stands in more than one place of its source and nothing says which
+	// (WBS S4-04b); internal/ai/locate returns it for a lookup, and a candidate line carries the field
+	// as pending ambiguous until the human verifies it (INQ answers SOURCE_AMBIGUOUS then).
+	SourceAmbiguous = "SOURCE_AMBIGUOUS"
 )
 
 // categories maps each rejection code of the AI layer to the category transports answer it with.
@@ -35,6 +39,7 @@ var categories = map[string]kernel.Category{
 	BudgetExhausted:             kernel.CategoryInvalid,
 	ExecutionBundleIncompatible: kernel.CategoryConflict,
 	InputProfileUnsupported:     kernel.CategoryInvalid,
+	SourceAmbiguous:             kernel.CategoryInvalid,
 }
 
 // Category returns the category of a rejection code of the AI layer.

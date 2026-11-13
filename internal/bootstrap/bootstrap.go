@@ -19,6 +19,8 @@ import (
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	"go.idp.xyz/idp-brant/internal/ai"
+	"go.idp.xyz/idp-brant/internal/ai/ingest"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
@@ -186,6 +188,7 @@ type Contexts struct {
 	CNX *cnx.Module
 	FUL *ful.Module
 	TSK *tsk.Module
+	AI  *ai.Layer // internal/ai: not a bounded context (ADR-BR-003)
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -200,7 +203,8 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.EVD, err = evd.New(db)
+		// EVD reads file_extract sources with the AI layer's extractor under Q01.upload.v0.1 (S4 B4).
+		c.EVD, err = evd.New(db, evd.WithExtractor(ingest.EVD{Profile: ingest.Q01Upload}))
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -315,6 +319,14 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		// contexts a task step writes (R18, R66–R69; S4 unit B1).
 		c.TSK, err = tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(c.TRD), Readiness: tsk.TRDReadiness(c.TRD),
 			Reconcilers: tsk.ActionReconciliation(tsk.ActionReconcilers{EVD: c.EVD, INQ: c.INQ, SUP: c.SUP, CST: c.CST, TRD: c.TRD})})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// internal/ai (S4) last: the Q01 capabilities over the contexts' api and the execution entry
+		// of task-bound steps over TSK (unit C2, ai.go).
+		c.AI, err = newAI(db, &c)
 	}
 	if err != nil {
 		return nil, err

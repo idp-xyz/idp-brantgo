@@ -39,7 +39,7 @@ func versionView(v *dcl.Version) api.DeclarationVersionView {
 		OrderHash: d.Order.OrderHash, OrderStatus: d.Order.Status, SalesDocuments: []api.SalesDocumentView{}, LotCurrency: d.ExportLot.Currency,
 		LotValueMinor: d.ExportLot.ValueMinor, Mapping: d.Mapping, Items: []api.DeclarationItemView{}, Amendments: []api.AmendmentView{},
 		ReceiptID: d.ReceiptID, PreparedBy: kernel.ActorRef{Kind: kernel.ActorKind(d.PreparedBy.Kind), ID: d.PreparedBy.ID},
-		AuthorityEpoch: d.AuthorityEpoch, PreparedAt: timestampOf(d.PreparedAt)}
+		AuthorityEpoch: d.AuthorityEpoch, PreparedAt: timestampOf(d.PreparedAt), CustomsOffice: d.CustomsOffice}
 	for _, s := range d.Order.Documents {
 		out.SalesDocuments = append(out.SalesDocuments, api.SalesDocumentView(s))
 	}

@@ -239,6 +239,11 @@ type Preparation struct {
 	Revision     int64
 	BusinessHash string
 	AcceptanceID string
+	// NotifyParty is the notify party the order binds (S5R-D40), nil when none; Seal what POL and
+	// PTY say of what revision 1 seals (S5R-D35; orderrev.SealFacts). The application always
+	// resolves Seal; nil prepares an order without a seal, as before S5R, and refuses a notify party.
+	NotifyParty *quote.AddressRef
+	Seal        *orderrev.SealFacts
 }
 
 // Prepare decides order.prepare on quote root q (locked FOR UPDATE by the caller, its visibility and
@@ -248,7 +253,10 @@ type Preparation struct {
 // the acceptance accepts exactly it (ACCEPTANCE_SCOPE_MISMATCH, also for an unknown one, as Python
 // T03 A20), is valid (ACCEPTANCE_NOT_VALID) and formed the contract (ACCEPTANCE_LATE); the root's
 // conversion slot is free (CONVERSION_SLOT_CONFLICT, BC-AT15), and is taken for the order. The quote's
-// expiry is not judged. The order is a draft at row version 1 with its snapshot (snapshot.go).
+// expiry is not judged. The order is a draft at row version 1 with its snapshot (snapshot.go),
+// which seals the Incoterm of the revision's trade terms, its customer addresses' countries and the
+// notify party p names (orderrev.NewSeal: REFERENCE_INVALID for a fact it lacks, INVALID_KNOWN_VALUE
+// at /args/notify_party_ref for an address that is not of the role notify).
 func Prepare(p Preparation, q *quote.Quote, a *acceptance.Acceptance, scope kernel.Scope, by kernel.ActorRef, epoch int64,
 	now time.Time) (*Order, error) {
 	if err := q.Usable(p.Revision, p.BusinessHash, "/args/business_revision"); err != nil {
@@ -264,7 +272,11 @@ func Prepare(p Preparation, q *quote.Quote, a *acceptance.Acceptance, scope kern
 	src := Source{QuoteID: q.ID, Revision: rev.Number, BusinessHash: rev.Seal.BusinessHash, Number: rev.Formal.Document.Number,
 		DocumentSHA256: rev.Formal.Document.ContentSHA256, AcceptanceID: a.ID, AcceptanceVersion: a.Version, ArrivalAt: a.ArrivalAt,
 		ArrivalBasis: a.ArrivalBasis, ExpiresAt: a.ExpiresAt}
-	snapshot, err := BuildSnapshot(scope, p.OrderID, src, rev.Seal.Commercial, a)
+	sealing, err := sealingOf(p, rev)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := BuildSnapshot(scope, p.OrderID, src, rev.Seal.Commercial, a, sealing)
 	if err != nil {
 		return nil, err
 	}
@@ -617,4 +629,30 @@ func (o *Order) ActivatedAt(v int64) *Commit {
 		}
 	}
 	return nil
+}
+
+// sealingOf is what order.prepare seals with revision 1 of formal revision rev (S5R-D35, D40).
+func sealingOf(p Preparation, rev *quote.Revision) (Sealing, error) {
+	const notifyPath = "/args/notify_party_ref"
+	if p.Seal == nil {
+		if p.NotifyParty != nil {
+			return Sealing{}, kernel.Reject(kernel.CodeReferenceInvalid, notifyPath, "The notify party's address is needed")
+		}
+		return Sealing{}, nil
+	}
+	c, err := quote.ParseCommercial(rev.Seal.Commercial, rev.Seal.BusinessHash)
+	if err != nil {
+		return Sealing{}, err
+	}
+	var notify *quote.AddressRef
+	if p.NotifyParty != nil {
+		n := *p.NotifyParty
+		notify = &n
+	}
+	seal, err := orderrev.NewSeal(orderrev.Terms{TradeTerms: c.Data.TradeTerms, NotifyParty: notify}, c.PartySnapshots.Customer.Addresses, *p.Seal,
+		"/args/business_revision", notifyPath)
+	if err != nil {
+		return Sealing{}, err
+	}
+	return Sealing{NotifyParty: notify, Seal: seal}, nil
 }

@@ -1,8 +1,8 @@
 // Package source holds the four-layer identity of a text source (T01 §18.2): SourceContent is the
 // text, deduplicated by SHA-256 within a scope; SourceOrigin is where the text came from, an email
-// identified by provider, account and message ID; SourceImport records each accepted registration;
-// what a business object does with a source belongs to that object. All four are immutable
-// (EVD-INV-001).
+// identified by provider, account and message ID, or a business file an extractor read (a file
+// extract, WBS S4-04b); SourceImport records each accepted registration; what a business object
+// does with a source belongs to that object. All four are immutable (EVD-INV-001).
 package source
 
 import (
@@ -14,8 +14,9 @@ import (
 type Kind string
 
 const (
-	ManualText Kind = "manual_text"
-	EmailText  Kind = "email_text"
+	ManualText  Kind = "manual_text"
+	EmailText   Kind = "email_text"
+	FileExtract Kind = "file_extract"
 )
 
 // Channel is the identity of an email: the message is the one with ExternalMessageID in Account
@@ -31,8 +32,16 @@ type Channel struct {
 type Registration struct {
 	OriginID string
 	Kind     Kind
-	Channel  Channel // zero for a manual text
+	Channel  Channel // zero for a manual text and a file extract
 	Text     string
+	Extract  ExtractID // a file extract's file and located form; zero for other kinds
+}
+
+// ExtractID is what identifies a file extract: the file it was read from and the SHA-256 of its
+// located form (which names the extractor version and the file's SHA-256).
+type ExtractID struct {
+	FileID string
+	SHA256 string
 }
 
 // ContentHash is the SHA-256 of the text encoded as UTF-8, without normalizing line breaks or
@@ -51,6 +60,26 @@ type Origin struct {
 	Channel     Channel
 	OwnerActor  string
 	OwnerTeam   string
+	// Extract and File describe a file extract: the extract's identity and the owner of the file it
+	// was read from.
+	Extract ExtractID
+	File    Owner
+}
+
+// Owner is who owns a record and the team they owned it from.
+type Owner struct {
+	Actor string
+	Team  string
+}
+
+// Readable reports whether a reader that sees records of the given owners (sees) may read the
+// origin: its own owner's, and for a file extract also the file's (CT16: an extract is never a
+// way around the file's current access).
+func (o Origin) Readable(sees func(ownerActor, ownerTeam string) bool) bool {
+	if !sees(o.OwnerActor, o.OwnerTeam) {
+		return false
+	}
+	return o.Kind != FileExtract || sees(o.File.Actor, o.File.Team)
 }
 
 // Conflict is returned when a registration names a known origin, or a known email, with other
@@ -76,7 +105,8 @@ func Match(r Registration, byID, byChannel *Origin) (*Origin, error) {
 	if existing == nil {
 		return nil, nil
 	}
-	if existing.ContentHash != r.ContentHash() || existing.Kind != r.Kind || existing.Channel != r.Channel {
+	if existing.ContentHash != r.ContentHash() || existing.Kind != r.Kind || existing.Channel != r.Channel ||
+		existing.Extract != r.Extract {
 		return nil, Conflict{}
 	}
 	return existing, nil

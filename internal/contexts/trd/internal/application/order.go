@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/order"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -150,6 +151,16 @@ func (s Service) standings(ctx context.Context, exec bentopg.Executor, q *quote.
 // conversion slot (order.prepare).
 func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.OrderReceipt, error) {
 	h := &orderCommand{s: s, orderID: cmd.OrderID, quoteID: cmd.QuoteID, preparing: true}
+	var notify *quote.AddressRef
+	if n := cmd.NotifyPartyRef; n != nil {
+		notify = &quote.AddressRef{PartyID: n.PartyID, PartyRevision: n.PartyRevision, AddressID: n.AddressID}
+	}
+	var seal *orderrev.SealFacts
+	h.prepare = func(ctx context.Context) error {
+		var err error
+		seal, err = s.prepareSeal(ctx, cmd.QuoteID, cmd.BusinessRevision, cmd.BusinessHash, notify)
+		return err
+	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 		if err := h.admit(ctx, exec, d, "/args/quote_id"); err != nil {
 			return action.Outcome{}, err
@@ -162,9 +173,17 @@ func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.Or
 			return action.Outcome{}, err
 		}
 		o, err := order.Prepare(order.Preparation{OrderID: cmd.OrderID, QuoteID: cmd.QuoteID, Revision: cmd.BusinessRevision,
-			BusinessHash: cmd.BusinessHash, AcceptanceID: cmd.AcceptanceID}, h.q, a, scope(ctx), d.Actor, d.Epoch, s.Clock.Now())
+			BusinessHash: cmd.BusinessHash, AcceptanceID: cmd.AcceptanceID, NotifyParty: notify, Seal: seal}, h.q, a, scope(ctx), d.Actor, d.Epoch,
+			s.Clock.Now())
 		if err != nil {
 			return action.Outcome{}, err
+		}
+		// The notify party (S5R-D40): its address current now, its party row held FOR SHARE until
+		// the order commits (PTY AddressRoleGuard v1, R13).
+		if notify != nil {
+			if err = guardAddress(ctx, exec, ptyRef(*notify), "/args/notify_party_ref"); err != nil {
+				return action.Outcome{}, err
+			}
 		}
 		h.o = o
 		src := o.Source

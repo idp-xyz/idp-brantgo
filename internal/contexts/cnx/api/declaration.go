@@ -136,7 +136,10 @@ type DeclarationItem struct {
 }
 
 // PrepareDeclaration prepares the declaration of export lot ExportLotID (a new case: DeclarationID
-// "" and ExpectedVersion 0) or revises the draft DeclarationID at ExpectedVersion.
+// "" and ExpectedVersion 0) or revises the draft DeclarationID at ExpectedVersion. CustomsOffice is
+// the customs office it is declared at (申报地海关, optional): S5R-D04 (一证一关) refuses one other
+// than the customs office of the export licence covering the lot (INVALID_KNOWN_VALUE), at
+// preparation and at confirmation.
 type PrepareDeclaration struct {
 	IdempotencyKey   string
 	DeclarationID    string
@@ -144,6 +147,7 @@ type PrepareDeclaration struct {
 	ExportLotID      string
 	CodeTableVersion string
 	Items            []DeclarationItem
+	CustomsOffice    string `json:",omitempty"`
 }
 
 // Validate checks the closed contract: items numbered 1, 2, …; each lot line in one item only
@@ -162,6 +166,8 @@ func (c PrepareDeclaration) Validate() error {
 		return schema("/args/code_table_version")
 	case len(c.Items) < 1 || len(c.Items) > MaxDeclarationItems:
 		return schema("/args/items")
+	case c.CustomsOffice != "" && !CustomsOffice(c.CustomsOffice):
+		return schema("/args/customs_office")
 	}
 	seen, n := map[string]bool{}, 0
 	for i, it := range c.Items {
@@ -534,6 +540,7 @@ type DeclarationVersionView struct {
 	PreparedBy     kernel.ActorRef
 	AuthorityEpoch int64
 	PreparedAt     time.Time
+	CustomsOffice  string `json:",omitempty"` // S5R-D04: the customs office declared at, "" when not stated
 }
 
 // ConfirmationEntryView is the confirmation of a version.

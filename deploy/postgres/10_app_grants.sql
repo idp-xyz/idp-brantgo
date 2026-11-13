@@ -25,6 +25,8 @@ GRANT UPDATE (state, replay_attempts, last_replay_at, last_replay_error, replaye
 GRANT USAGE ON SCHEMA brant_evd TO brant_app;
 GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant_evd.source_import,
     brant_evd.business_file, brant_evd.action_result, brant_evd.audit_event TO brant_app;
+-- File extracts (S4 B4) are immutable as well.
+GRANT SELECT, INSERT ON brant_evd.file_extract TO brant_app;
 
 -- REF: screening list reference data. An import moves a list's current version; versions, entries and
 -- name keys are never updated or deleted; the ledger only grows. The list guard function is executed
@@ -115,6 +117,8 @@ GRANT USAGE ON SCHEMA brant_inq TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_inq.customer_rfq TO brant_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON brant_inq.rfq_line, brant_inq.rfq_source TO brant_app;
 GRANT SELECT, INSERT ON brant_inq.action_result, brant_inq.audit_event TO brant_app;
+-- Corrections of lines an AI actor proposed (S4 B4) only grow.
+GRANT SELECT, INSERT ON brant_inq.rfq_correction TO brant_app;
 -- RfqGuard v1: downstream contexts call it in their own transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_inq.guard_rfq_ready_v1(text, bigint, text) TO brant_app;
 
@@ -385,6 +389,12 @@ GRANT UPDATE (status, version, updated_at) ON brant_stl.order_result TO brant_ap
 GRANT SELECT, INSERT ON brant_stl.opening_balance TO brant_app;
 GRANT UPDATE (status, updated_at) ON brant_stl.opening_balance TO brant_app;
 
+-- STL credit and third-party payers (S5R-07; S5R-D08, S5R-D21): the system also inserts a reservation consumed when
+-- it carries an earlier order revision's over, and a release states its cause (trigger); payer verifications are only
+-- inserted, each moving its receipt's version by one (triggers); nothing is deleted.
+GRANT UPDATE (release_cause) ON brant_stl.credit_reservation TO brant_app;
+GRANT SELECT, INSERT ON brant_stl.fund_payer_verification TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on
@@ -407,6 +417,11 @@ GRANT UPDATE (row_version, updated_at) ON brant_cnx.export_license TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.export_license_outstanding(text, text, text) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.export_license_state(text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_export_license_v1(text, timestamptz) TO brant_app;
+-- S5R-D03/D04 (cnx 000008): whether a target or a licence was declared, an allocation's outstanding
+-- quantity (the commands' reads and the allocation and release triggers).
+GRANT EXECUTE ON FUNCTION brant_cnx.export_target_declared(text, text, text, text) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_license_declared(text, text, text) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_allocation_outstanding(text, text, text) TO brant_app;
 
 -- CNX purchase invoices and tax refund cases: an invoice keeps its import and is decided and
 -- reversed once, a case keeps its binding and follows SM-CNX-TAXCASE (triggers; the column grants
@@ -537,3 +552,11 @@ GRANT SELECT, INSERT ON brant_ai.delegation, brant_ai.approval_grant, brant_ai.a
 GRANT UPDATE (status, row_version, revoked_by_id, revoked_epoch, revoked_at, revoke_reason) ON brant_ai.delegation TO brant_app;
 GRANT UPDATE (status, row_version, used_key, used_by_id, used_epoch, used_at, revoked_by_id, revoked_epoch, revoked_at, revoke_reason)
     ON brant_ai.approval_grant TO brant_app;
+-- internal/ai execution evidence (S4 unit C2): bundles and budgets are inserted once; a model or tool
+-- call is reserved, then settled through its outcome columns only; nothing is deleted.
+GRANT SELECT, INSERT ON brant_ai.execution_bundle, brant_ai.task_budget, brant_ai.model_call TO brant_app;
+GRANT UPDATE (state, model_returned, input_sha256, output_sha256, input_tokens, output_tokens, latency_ms, finish_reason,
+    action_id, code, cost_minor, settled_at) ON brant_ai.model_call TO brant_app;
+-- A reservation locks its task's budget row FOR UPDATE, which needs UPDATE on one column; the trigger
+-- refuses every change of a budget.
+GRANT UPDATE (source) ON brant_ai.task_budget TO brant_app;

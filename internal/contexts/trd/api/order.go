@@ -203,6 +203,12 @@ type PrepareOrder struct {
 	BusinessRevision int64
 	BusinessHash     string
 	AcceptanceID     string
+	// NotifyPartyRef is the notify party the order binds (S5R-D40; optional, JSON
+	// notify_party_ref): an address of the role notify of a confirmed PTY party revision the caller
+	// sees, current now (AddressRoleRef v1; REFERENCE_INVALID, REFERENCE_STALE, or
+	// INVALID_KNOWN_VALUE for another role, at /args/notify_party_ref). Omitted from the request
+	// hash when absent, so a command stored before S5R replays.
+	NotifyPartyRef *AddressRoleRef `json:",omitempty"`
 }
 
 // RequestOrderReview opens review ReviewID of draft order OrderID (Python order.review.request).
@@ -297,6 +303,20 @@ func (c PrepareOrder) Validate() error {
 		return schema("/args/business_hash")
 	case !kernel.ValidIdentifier(c.AcceptanceID):
 		return schema("/args/acceptance_id")
+	}
+	return notifyRef(c.NotifyPartyRef, "/args/notify_party_ref")
+}
+
+// notifyRef checks the form of an optional notify party reference (S5R-D40).
+func notifyRef(a *AddressRoleRef, path string) error {
+	if a == nil {
+		return nil
+	}
+	if err := idVersion(a.PartyID, a.PartyRevision, path, "/party_id", "/party_revision"); err != nil {
+		return err
+	}
+	if !kernel.ValidIdentifier(a.AddressID) {
+		return schema(path + "/address_id")
 	}
 	return nil
 }

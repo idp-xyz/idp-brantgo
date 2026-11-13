@@ -27,10 +27,12 @@ import (
 // in between. Clear is true, and code NULL, only for a clear conclusion whose validity contains
 // p_at, on a check that binds exactly the order hash; otherwise code is TRADE_COMPLIANCE_NOT_CLEAR
 // and status and reason say why: pending (not_checked, order_revised — only another revision of the
-// order has a check, "订单变更后旧结论不适用" — not_evaluated, awaiting_decision), blocked (blocked),
-// expired (expired) or the check's own status with order_changed for another order hash. A blocked
-// conclusion is never cleared by a business approval: nothing but compliance's evaluate and decide
-// moves it. license_required is the clear conclusion's statement that the goods need an export
+// order has a check, "订单变更后旧结论不适用" — not_evaluated, awaiting_decision), blocked (blocked, and
+// blocked_under_review: S5R-D10, compliance evaluates a blocked conclusion again and has not decided
+// since; decision_id names the blocked decision), expired (expired) or the check's own status (blocked
+// when under review) with order_changed for another order hash. A blocked conclusion is never
+// cleared by a business approval: nothing but compliance's decide moves it (cnx 000008 made the
+// v1 function body stricter; the signature and columns are unchanged). license_required is the clear conclusion's statement that the goods need an export
 // licence (FUL's ExportLicenseGuard, R56, S5-14), false otherwise.
 //
 // The guard does not apply the caller's data scope and does not re-read POL: a new

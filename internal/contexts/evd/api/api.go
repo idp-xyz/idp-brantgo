@@ -40,23 +40,43 @@ const (
 
 	KindManualText = "manual_text"
 	KindEmailText  = "email_text"
+	// KindFileExtract is the text an extractor of the AI layer read from a business file under an
+	// input profile (WBS S4-04b; ADR-BR-010): EVD keeps it as a source tied to the file, with the
+	// located form its locators point into, its SHA-256 and the extractor version.
+	KindFileExtract = "file_extract"
 
 	// MaxContentCharacters bounds a text source (Python T01: 50,000 characters).
 	MaxContentCharacters = 50000
+	// MaxLocatedFormBytes bounds the located form of one file extract: the profile bounds the
+	// characters, the form adds a locator per segment and escapes (unit B4 decision; A6: about
+	// 2.5 MB at worst).
+	MaxLocatedFormBytes = 8 << 20
+
+	// CodeInputProfileUnsupported: the file of a file_extract source is outside the input profile
+	// the extractor reads under (baseline 14.2: refused, never truncated; the manual path applies).
+	CodeInputProfileUnsupported = "INPUT_PROFILE_UNSUPPORTED"
 )
 
 // RegisterSource registers a text source. The same content in one scope is stored once; an email
 // is identified by provider, account and message ID, and the same message with another body is
 // refused. Every accepted request records an import, except a replay of the same idempotency key.
+//
+// A file_extract names only the business file: EVD reads the file's bytes and has the AI layer's
+// extractor (Extractor) read them, so the text and its locators come from the file, never from the
+// caller (AI-INV-004). The registrant must see the file; a file outside the input profile is
+// INPUT_PROFILE_UNSUPPORTED.
 type RegisterSource struct {
 	IdempotencyKey    string
 	SourceID          string // args.id
-	ContentText       string
-	SourceKind        string // manual_text or email_text
+	ContentText       string // manual_text and email_text; empty for a file_extract
+	SourceKind        string // manual_text, email_text or file_extract
 	Provider          string // email only
 	AccountRef        string // email only
 	ExternalMessageID string // email only
 	AuthorClaim       string // email only: who the message claims to come from, not verified
+	// FileID is the business file a file_extract is read from. Left out of the request hash while
+	// empty, so requests sent before it replay unchanged (X-INV-001).
+	FileID string `json:",omitempty"`
 }
 
 // Validate checks the closed contract (Python BC_T01_commands.schema.json, source.register).
@@ -66,10 +86,25 @@ func (c RegisterSource) Validate() error {
 		return schema("/idempotency_key")
 	case !kernel.ValidIdentifier(c.SourceID):
 		return schema("/args/id")
-	case !text(c.ContentText, MaxContentCharacters):
-		return schema("/args/content_text")
 	}
 	channel := c.Provider != "" || c.AccountRef != "" || c.ExternalMessageID != "" || c.AuthorClaim != ""
+	if c.SourceKind == KindFileExtract {
+		switch {
+		case c.ContentText != "":
+			return schema("/args/content_text") // the text is read from the file
+		case channel:
+			return schema("/args/source_kind") // a file extract has no channel identity
+		case !kernel.ValidIdentifier(c.FileID):
+			return schema("/args/file_id")
+		}
+		return nil
+	}
+	switch {
+	case !text(c.ContentText, MaxContentCharacters):
+		return schema("/args/content_text")
+	case c.FileID != "":
+		return schema("/args/file_id") // only a file extract names a file
+	}
 	switch c.SourceKind {
 	case KindManualText:
 		if channel {
@@ -210,6 +245,61 @@ type SourceView struct {
 	ContentText       string
 	RegisteredAt      time.Time
 	Imports           []SourceImport
+	// Extract describes a file_extract: the file and how its text was read; nil for other kinds.
+	Extract *ExtractRef
+}
+
+// ExtractRef identifies a file extract: the file it was read from and the reader that read it.
+// The extractor version defines the locators (WBS S4-04: text line:col, PDF page:line, XLSX
+// sheet!cell); the SHA-256 is that of the located form. A hash identifies content; it proves no
+// truth (EVD boundary).
+type ExtractRef struct {
+	FileID     string
+	FileSHA256 string
+	Kind       string // text, pdf or xlsx
+	Extractor  string // the reader and its version, such as "brant.ingest.pdf/1"
+	Profile    string // the input profile the file was read under, such as "Q01.upload.v0.1"
+	Characters int    // characters of the extract's text
+	Pages      int    // PDF: pages, blank ones included
+	Sheets     []string
+	SHA256     string // SHA-256 of the located form, lower-case hex
+}
+
+// ExtractView is the located form of a file_extract source, for a reader who sees the source and
+// the file now (CT16). LocatedForm is the extractor's canonical form (internal/ai/ingest
+// brant-extract/1): a header line, then one tab-separated record per field, segment ("segment",
+// locator, text) and note ("note", kind, locator), every value escaped (backslash, tab, line feed,
+// carriage return).
+type ExtractView struct {
+	SourceID string
+	ExtractRef
+	LocatedForm  string
+	RegisteredAt time.Time
+}
+
+// FileExtract is what an Extractor read from a business file: the extract's identity (FileID
+// left empty), its text (the segments joined by line feeds) and its located form. EVD checks what
+// it can without parsing: the hashes, the bounds, and that the form was read from the file's bytes.
+type FileExtract struct {
+	ExtractRef
+	Text        string
+	LocatedForm string
+}
+
+// Extractor reads a business file's bytes under an input profile. It is the AI layer's reader
+// (internal/ai/ingest; ADR-BR-010: parsing is candidate generation), which bootstrap gives EVD:
+// EVD holds no parsing code. A file outside the profile is a *kernel.Rejection
+// INPUT_PROFILE_UNSUPPORTED whose reason names the limit; nothing is truncated.
+type Extractor interface {
+	Extract(mimeType string, content []byte) (FileExtract, error)
+}
+
+// ExtractQueries reads file extracts.
+type ExtractQueries interface {
+	// GetExtract returns the located form of a file_extract source, audited. The caller must hold
+	// evd.read and see both the source and the file it was read from now (CT16: a reference never
+	// bypasses current access); NOT_FOUND otherwise, and for a source of another kind.
+	GetExtract(ctx context.Context, sourceID string) (ExtractView, error)
 }
 
 // FileView is a business file with its bytes, for a reader allowed to see it.
@@ -231,8 +321,9 @@ type Queries interface {
 	// other owners as well as missing ones.
 	GetSource(ctx context.Context, sourceID string) (SourceView, error)
 	// ResolveSources returns, among ids, the sources the caller may read. It needs the EVD read
-	// permission (PERMISSION_DENIED otherwise; Python _source_ref). Ask before opening your own
-	// transaction: EVD answers in a transaction of its own.
+	// permission (PERMISSION_DENIED otherwise; Python _source_ref). A file_extract is readable only
+	// while the caller also sees its file (CT16). Ask before opening your own transaction: EVD
+	// answers in a transaction of its own.
 	ResolveSources(ctx context.Context, ids []string) (map[string]SourceRef, error)
 	// Audit returns EVD's audit trail of the caller's scope.
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)

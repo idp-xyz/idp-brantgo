@@ -150,6 +150,10 @@ func decisionView(d *tcc.Decision, evs []*tcc.Evaluation) api.DecisionView {
 		LicenseRequired: d.LicenseRequired, Regulation: api.RegulationView{ID: d.Regulation.ID, Revision: d.Regulation.Revision,
 			ContentHash: d.Regulation.ContentHash}, ValidUntil: d.ValidUntil, Evidence: evidenceViews(d.Evidence), DecidedBy: d.By,
 		DecidedAt: d.At, AuthorityEpoch: d.Epoch}
+	for _, a := range d.Authorizations {
+		v.Authorizations = append(v.Authorizations, api.AuthorizationView{SourceID: a.SourceID, ContentSHA256: a.ContentSHA256, Kind: a.Kind,
+			ValidUntil: a.ValidUntil})
+	}
 	for _, ev := range evs {
 		if ev.EvaluationID == d.EvaluationID {
 			v.Regulation.RescreenIntervalDays = ev.Regulation.RescreenDays

@@ -263,8 +263,10 @@ func (s *setupRun) foundation(w *world) {
 		"footer_note": "合成测试，不构成要约"})
 	w.seq = s.config(w, "number_sequence", "quote.seq", map[string]any{"document_type": "quote", "prefix": "QT-", "width": 6,
 		"reset": "annual", "time_zone": "Asia/Shanghai"})
+	// S5R-D38: the regulation enables the country programme lists CNX evaluates against.
 	s.config(w, "screening_regulation", "screening", map[string]any{"lists": []any{map[string]any{"list_code": "cn.uel", "jurisdiction": "CN"}},
-		"rescreen_interval_days": 30})
+		"rescreen_interval_days": 30, "programmes": []any{map[string]any{"list_code": cnProgrammes, "jurisdiction": "CN"},
+			map[string]any{"list_code": unProgrammes, "jurisdiction": "UN"}}})
 }
 
 func (s *setupRun) front(w *world) {

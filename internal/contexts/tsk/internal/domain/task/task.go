@@ -721,8 +721,12 @@ func (t *Task) Fail(reason, responsible string, unsettled int, act Act) (Change,
 }
 
 // CheckBind decides whether the task may bind quote root quote before TRD is asked: a running AI
-// task without a bound root, whose target names this root or none.
-func (t *Task) CheckBind(quote string, act Act) error {
+// task without a bound root. The root is the one the task's target names or, when the target names
+// none, one an action of the task created — created reports that a committed action of the task
+// created it (SM-TSK-TASK task.bind_object "本任务的动作已创建报价根"; S4 C1, B1-D09): a task never binds a
+// root that neither the person who set its target nor its own steps brought to it
+// (REFERENCE_INVALID).
+func (t *Task) CheckBind(quote string, created bool, act Act) error {
 	if err := t.admit(CmdBindObject, Running, act); err != nil {
 		return err
 	}
@@ -733,14 +737,17 @@ func (t *Task) CheckBind(quote string, act Act) error {
 		return invalidState("A quote root is bound to the task already")
 	case t.Target.QuoteID != "" && t.Target.QuoteID != quote:
 		return kernel.Reject(kernel.CodeReferenceInvalid, "/args/quote_id", "The task targets another quote root")
+	case t.Target.QuoteID == "" && !created:
+		return kernel.Reject(kernel.CodeReferenceInvalid, "/args/quote_id", "No action of the task created the quote root")
 	}
 	return nil
 }
 
 // BindObject records the binding of quote root quote at epoch, the control epoch TRD's
-// object_control.bind returned (task.bind_object; system; running → running).
-func (t *Task) BindObject(quote string, epoch int64, act Act) (Change, error) {
-	if err := t.CheckBind(quote, act); err != nil {
+// object_control.bind returned (task.bind_object; system; running → running); created as for
+// CheckBind.
+func (t *Task) BindObject(quote string, created bool, epoch int64, act Act) (Change, error) {
+	if err := t.CheckBind(quote, created, act); err != nil {
 		return Change{}, err
 	}
 	if err := t.recordEpoch(epoch); err != nil {

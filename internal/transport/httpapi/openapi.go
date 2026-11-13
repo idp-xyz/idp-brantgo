@@ -154,6 +154,8 @@ var reads = []readRoute{
 	{"/api/brant/v1/{bc}/audit", "audit", "audit", "The audit trail of one context in the caller's scope", []string{"bc"}, false},
 	{"/api/brant/v1/evd/sources/{id}", "evd.source.get", "evd", "A source with its content and imports", []string{"id"}, false},
 	{"/api/brant/v1/evd/files/{id}", "evd.file.get", "evd", "A business file with its bytes in Base64", []string{"id"}, false},
+	{"/api/brant/v1/evd/sources/{id}/extract", "evd.source.extract.get", "evd",
+		"The located form of a file_extract source (brant-extract/1) with the file and the reader that read it; the caller's access to the source and to the file is re-checked (CT16)", []string{"id"}, false},
 	{"/api/brant/v1/pty/parties/{id}", "pty.party.get", "pty", "A party and its confirmed revisions", []string{"id"}, false},
 	{"/api/brant/v1/pty/parties/{id}/screening", "pty.party_screening.get", "pty",
 		"A party's screening: its status now as the guard decides it, every conclusion, positive and negative list entries", []string{"id"}, false},

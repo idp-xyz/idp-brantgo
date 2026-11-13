@@ -79,6 +79,21 @@ func TestCNXLicenseCommandsDecodeTheirMembers(t *testing.T) {
 	if a.status != http.StatusOK || cnx.released[1].ExternalResult != nil {
 		t.Fatalf("absent external_result decodes as absent: %d %v", a.status, a.body)
 	}
+	// S5R-D03 and D04: basis, usage_mode, usage_evidence_ids and customs_office decode by the
+	// reflective mapping.
+	a = call(t, h, http.MethodPost, "/api/brant/v1/cnx/commands/export_license.release", "Bearer good", envelope("export_license.release",
+		`{"license_id":"elc-1","expected_version":2,"allocation_id":"a1","release_id":"r3","basis":"local_cancellation","reason":"出运取消"}`))
+	if a.status != http.StatusOK || cnx.released[2].Basis != cnxapi.BasisLocalCancellation || !cnx.released[2].LocalCancellation() {
+		t.Fatalf("basis: %d %v %+v", a.status, a.body, cnx.released)
+	}
+	a = call(t, h, http.MethodPost, "/api/brant/v1/cnx/commands/export_license.register", "Bearer good", envelope("export_license.register",
+		`{"license_number":"SYN-2","issuer":"合成","holder":"合成","goods":{"sku_specs":[{"sku_id":"sku.1","spec_revision":1}]},`+
+			`"licensed_quantity":"1000","unit":"PCS","currency":{"id":"USD","revision":1},"licensed_value":"10000.00","destination":"DE",`+
+			`"end_user":{"party_id":"customer.1","name":"合成"},"valid_from":"2026-11-01T00:00:00Z","valid_until":"2027-05-01T00:00:00Z","file_id":"f1",`+
+			`"usage_mode":"multi_use","usage_evidence_ids":["face.1"],"customs_office":"2248"}`))
+	if r := cnx.registered[1]; a.status != http.StatusOK || r.UsageMode != cnxapi.UsageMultiUse || r.UsageEvidenceIDs[0] != "face.1" || r.CustomsOffice != "2248" {
+		t.Fatalf("%d %v %+v", a.status, a.body, cnx.registered)
+	}
 
 	a = call(t, h, http.MethodGet, "/api/brant/v1/cnx/export_licenses", "Bearer good", "")
 	if list, ok := a.body["licenses"].([]any); a.status != http.StatusOK || !ok || len(list) != 0 {

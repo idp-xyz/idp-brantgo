@@ -13,8 +13,10 @@
 //   - the HTTP routes (unit C3): GrantDelegation, RevokeDelegation, IssueApprovalGrant,
 //     RevokeApprovalGrant (human-only), GetDelegation, GetApprovalGrant, ApprovalGrantsOf
 //     (ai.read), Audit (ai.audit), AuditRejected;
-//   - bootstrap: New with its own *bentopg.DB and capability.Q01Registry over the composed
-//     contexts.
+//   - bootstrap: New with its own *bentopg.DB, capability.Q01Registry over the composed contexts and
+//     WithTasks (TSK and the owning contexts' request identities); Runner for brant-worker -agent;
+//   - the task-step route (unit C3): RunStep, the execution entry of a person's step on a task;
+//     ModelCalls and ExecutionBundle, the audited reads of the execution evidence (ai.read).
 package ai
 
 import (
@@ -26,6 +28,8 @@ import (
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/ai/approvalgrant"
 	"go.idp.xyz/idp-brant/internal/ai/capability"
+	"go.idp.xyz/idp-brant/internal/ai/execution"
+	"go.idp.xyz/idp-brant/internal/ai/executionevidence"
 	"go.idp.xyz/idp-brant/internal/ai/gateway"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -47,6 +51,7 @@ const (
 // commands of platformCommands AI, the reads (ai.read) and the audit (ai.audit).
 func Rules() []authorization.Rule {
 	rules := append(policy.Rules(), approvalgrant.Rules()...)
+	rules = append(rules, evidenceRules()...)
 	return append(rules, authorization.Rule{Command: CommandAudit, Permission: PermissionAudit,
 		ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}})
 }
@@ -57,7 +62,13 @@ type Layer struct {
 	Delegations policy.Service
 	Grants      approvalgrant.Service
 	Gateway     gateway.Gateway
-	ledger      *action.Ledger
+	// Evidence is the execution evidence in brant_ai: ExecutionBundles, task budgets and the model
+	// and tool call ledger (unit C2).
+	Evidence executionevidence.Ledger
+	// Execution is the execution entry of task-bound steps; WithTasks wires it.
+	Execution execution.Executor
+	ledger    *action.Ledger
+	tasks     execution.RunnerTasks
 }
 
 // Option changes the assembly; the tests use it.
@@ -66,7 +77,7 @@ type Option func(*Layer)
 // WithClock replaces the system clock.
 func WithClock(c application.Clock) Option {
 	return func(l *Layer) {
-		l.ledger.Clock, l.Delegations.Clock, l.Grants.Clock = c, c, c
+		l.ledger.Clock, l.Delegations.Clock, l.Grants.Clock, l.Evidence.Clock = c, c, c, c
 		l.Gateway.Policy, l.Gateway.Grants = l.Delegations, l.Grants
 	}
 }
@@ -95,6 +106,7 @@ func New(db *bentopg.DB, registry *capability.Registry, opts ...Option) (*Layer,
 		Delegations: policy.Service{Ledger: ledger, Clock: clock, Registry: registry},
 		Grants:      approvalgrant.Service{Ledger: ledger, Clock: clock, Registry: registry}}
 	l.Gateway = gateway.Gateway{Registry: registry, Policy: l.Delegations, Grants: l.Grants, Auditor: ledger}
+	l.Evidence = executionevidence.Ledger{DB: db, Clock: clock}
 	for _, o := range opts {
 		o(l)
 	}

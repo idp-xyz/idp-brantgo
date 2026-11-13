@@ -310,6 +310,7 @@ func evdCommands(c EVD) *commandSet {
 		AccountRef        string `json:"account_ref"`
 		ExternalMessageID string `json:"external_message_id"`
 		AuthorClaim       string `json:"author_claim"`
+		FileID            string `json:"file_id"` // file_extract: the business file EVD has the extractor read
 	}
 	type registerFile struct {
 		ID               string `json:"id"`
@@ -324,7 +325,8 @@ func evdCommands(c EVD) *commandSet {
 		commands: map[string]commandFunc{
 			evdapi.CommandRegisterSource: handle(func(key string, a registerSource) (evdapi.RegisterSource, error) {
 				return evdapi.RegisterSource{IdempotencyKey: key, SourceID: a.ID, ContentText: a.ContentText, SourceKind: a.SourceKind,
-					Provider: a.Provider, AccountRef: a.AccountRef, ExternalMessageID: a.ExternalMessageID, AuthorClaim: a.AuthorClaim}, nil
+					Provider: a.Provider, AccountRef: a.AccountRef, ExternalMessageID: a.ExternalMessageID, AuthorClaim: a.AuthorClaim,
+					FileID: a.FileID}, nil
 			}, c.RegisterSource),
 			evdapi.CommandRegisterFile: handle(func(key string, a registerFile) (evdapi.RegisterFile, error) {
 				return evdapi.RegisterFile{IdempotencyKey: key, FileID: a.ID, FileName: a.FileName, MimeType: a.MimeType,
@@ -595,14 +597,41 @@ type saveItemCodeMapping struct {
 }
 
 func inqCommands(c INQ) *commandSet {
+	type fieldLocator struct {
+		Field   string `json:"field"`
+		Locator string `json:"locator"`
+		Quote   string `json:"quote"`
+	}
+	type pendingField struct {
+		Field      string   `json:"field"`
+		Reason     string   `json:"reason"`
+		Candidates []string `json:"candidates"`
+	}
 	type line struct {
-		LineID        string `json:"line_id"`
-		SkuID         string `json:"sku_id"`
-		Quantity      string `json:"quantity"`
-		UOM           string `json:"uom"`
-		RequestedItem string `json:"requested_item"`
-		SourceID      string `json:"source_id"`
-		Locator       string `json:"locator"`
+		LineID        string         `json:"line_id"`
+		SkuID         string         `json:"sku_id"`
+		Quantity      string         `json:"quantity"`
+		UOM           string         `json:"uom"`
+		RequestedItem string         `json:"requested_item"`
+		SourceID      string         `json:"source_id"`
+		Locator       string         `json:"locator"`
+		Locators      []fieldLocator `json:"locators"` // where in a file extract each field stands (S4 B4)
+		Pending       []pendingField `json:"pending"`  // fields the source does not settle
+	}
+	type verifiedField struct {
+		Field   string `json:"field"`
+		Value   string `json:"value"`
+		Locator string `json:"locator"`
+	}
+	type lineVerification struct {
+		LineID string          `json:"line_id"`
+		Fields []verifiedField `json:"fields"`
+	}
+	type confirmRfq struct {
+		ID              string             `json:"id"`
+		ExpectedVersion *int64             `json:"expected_version"`
+		EvidenceIDs     []string           `json:"evidence_ids"`
+		VerifiedLines   []lineVerification `json:"verified_lines"` // the human's line-by-line verification (S4 B4)
 	}
 	type saveRfq struct {
 		ID               string   `json:"id"`
@@ -621,14 +650,29 @@ func inqCommands(c INQ) *commandSet {
 			if a.Lines != nil {
 				cmd.Lines = make([]inqapi.RfqLine, len(a.Lines))
 				for i, l := range a.Lines {
-					cmd.Lines[i] = inqapi.RfqLine(l)
+					cmd.Lines[i] = inqapi.RfqLine{LineID: l.LineID, SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM,
+						RequestedItem: l.RequestedItem, SourceID: l.SourceID, Locator: l.Locator}
+					for _, x := range l.Locators {
+						cmd.Lines[i].Locators = append(cmd.Lines[i].Locators, inqapi.FieldLocator(x))
+					}
+					for _, x := range l.Pending {
+						cmd.Lines[i].Pending = append(cmd.Lines[i].Pending, inqapi.PendingField(x))
+					}
 				}
 			}
 			return cmd, err
 		}, c.SaveRfq),
-		inqapi.CommandConfirmRfq: handle(func(key string, a evidenced) (inqapi.ConfirmRfqScope, error) {
+		inqapi.CommandConfirmRfq: handle(func(key string, a confirmRfq) (inqapi.ConfirmRfqScope, error) {
 			v, err := version(a.ExpectedVersion)
-			return inqapi.ConfirmRfqScope{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, EvidenceIDs: a.EvidenceIDs}, err
+			cmd := inqapi.ConfirmRfqScope{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, EvidenceIDs: a.EvidenceIDs}
+			for _, l := range a.VerifiedLines {
+				lv := inqapi.LineVerification{LineID: l.LineID}
+				for _, f := range l.Fields {
+					lv.Fields = append(lv.Fields, inqapi.VerifiedField(f))
+				}
+				cmd.VerifiedLines = append(cmd.VerifiedLines, lv)
+			}
+			return cmd, err
 		}, c.ConfirmRfqScope),
 		inqapi.CommandCancelRfq: handle(func(key string, a reasoned) (inqapi.CancelRfq, error) {
 			v, err := version(a.ExpectedVersion)

@@ -72,13 +72,16 @@ func (fixedOrders) ResolveOrders(_ context.Context, ids []string) (map[string]cn
 	return out, nil
 }
 
-// declarer runs a declaration through CNX's commands as a documentation clerk.
+// declarer runs a declaration through CNX's commands as a documentation clerk; office is the
+// customs office its declarations name ("" none; S5R-D04: a licence covering the lot requires its
+// own).
 type declarer struct {
 	t        *testing.T
 	cnx      cnxapi.DeclarationCommands
 	doc      context.Context
 	key      func() string
 	evidence string
+	office   string
 }
 
 func (d declarer) must(err error) {
@@ -100,7 +103,8 @@ func items(lines ...string) []cnxapi.DeclarationItem {
 // confirmed prepares lot's declaration of items and confirms it.
 func (d declarer) confirmed(lot string, it []cnxapi.DeclarationItem) cnxapi.DeclarationReceipt {
 	d.t.Helper()
-	p, err := d.cnx.PrepareDeclaration(d.doc, cnxapi.PrepareDeclaration{IdempotencyKey: d.key(), ExportLotID: lot, CodeTableVersion: codeTable, Items: it})
+	p, err := d.cnx.PrepareDeclaration(d.doc, cnxapi.PrepareDeclaration{IdempotencyKey: d.key(), ExportLotID: lot, CodeTableVersion: codeTable, Items: it,
+		CustomsOffice: d.office})
 	d.must(err)
 	c, err := d.cnx.ConfirmDeclaration(d.doc, cnxapi.ConfirmDeclaration{IdempotencyKey: d.key(), DeclarationID: p.DeclarationID,
 		ExpectedVersion: p.RowVersion, Version: p.Version})
@@ -807,8 +811,9 @@ func TestExportLicenceOnAFULShipmentReleasedOnADeclarationReceipt(t *testing.T) 
 		Holder: "合成出口商（测试）", Goods: cnxapi.LicensedGoods{SkuSpecs: []cnxapi.SpecRef{{SkuID: "sku.1", SpecRevision: w.spec}}},
 		LicensedQuantity: "1000", Unit: "PCS", Currency: cnxapi.CurrencyRef{ID: w.usd.ConfigID, Revision: w.usd.Revision}, LicensedValue: "10000.00",
 		Destination: "DE", EndUser: cnxapi.EndUser{PartyID: "customer.1", Name: "合成客户"}, ValidFrom: kernel.FormatTimestamp(now.Add(-time.Hour)),
-		ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: "licence.c3a"})
+		ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: "licence.c3a", CustomsOffice: "2248"})
 	w.must(err)
+	w.d.office = "2248" // S5R-D04: the declaration names the licence's customs office (一证一关)
 	w.shipment("shipment.L", "50", "commitment.1")
 	a, err := w.cnx.AllocateLicense(doc, cnxapi.AllocateLicense{IdempotencyKey: w.key(), LicenseID: reg.LicenseID, AllocationID: "alloc.L",
 		Target: cnxapi.ExportTarget{Kind: cnxapi.TargetShipment, ID: "shipment.L"}})

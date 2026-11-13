@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"go.idp.xyz/idp-brant/internal/ai/ingest"
+	"go.idp.xyz/idp-brant/internal/ai/locate"
 	cstapi "go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
@@ -13,7 +15,10 @@ import (
 // Q01Targets are the api command entry points the Q01 capabilities call. bootstrap passes the
 // composed context modules.
 type Q01Targets struct {
-	EVD           evdapi.Commands
+	EVD evdapi.Commands
+	// Extracts reads sources and file extracts for the source locating of rfq.save_draft (unit
+	// B4); without it, a line that places fields in a source is REFERENCE_INVALID.
+	Extracts      locate.Extracts
 	INQ           inqapi.Commands
 	CST           cstapi.Commands
 	CSTScenarios  cstapi.ScenarioCommands
@@ -40,9 +45,11 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		out = append(out, c)
 		errs = append(errs, err)
 	}
-	add(Define(Spec{Command: evdapi.CommandRegisterSource, Context: "evd", Contract: evdapi.Contract, Version: 1,
+	// Version 2 (unit B4): SourceKind file_extract with FileID has EVD read a registered business file
+	// with the AI layer's extractor; the model never supplies an extract's text.
+	add(Define(Spec{Command: evdapi.CommandRegisterSource, Context: "evd", Contract: evdapi.Contract, Version: 2,
 		SideEffect: Draft, Risk: RiskLow, Approval: ApprovalNone,
-		Summary: "Register a text source (manual text or an email body) as evidence; returns the source ID."},
+		Summary: "Register a text source (manual_text or an email body as email_text) as evidence, or the text of a registered business file (SourceKind file_extract with FileID, no ContentText): EVD reads the file with the platform's extractor; returns the source ID."},
 		func(c evdapi.RegisterSource) ObjectRef { return ObjectRef{Type: "evd.source", ID: c.SourceID} },
 		func(ctx context.Context, c evdapi.RegisterSource) (evdapi.Receipt, error) {
 			if t.EVD == nil {
@@ -60,9 +67,12 @@ func Q01(t Q01Targets) ([]Capability, error) {
 			}
 			return t.EVD.RegisterFile(ctx, c)
 		}))
-	add(Define(Spec{Command: inqapi.CommandSaveRfq, Context: "inq", Contract: inqapi.Contract, Version: 1,
+	// Version 2 (unit B4): lines place their fields in file extracts (Locators: field, locator,
+	// quote) and name pending fields; the preparation verifies every locator against the extract
+	// and completes the pending fields before the call is hashed (internal/ai/locate).
+	saveRfq, err := Define(Spec{Command: inqapi.CommandSaveRfq, Context: "inq", Contract: inqapi.Contract, Version: 2,
 		SideEffect: Draft, Risk: RiskLow, Approval: ApprovalNone,
-		Summary: "Save a customer RFQ draft with its lines, cited sources and unresolved fields; a human confirms its scope."},
+		Summary: "Save a customer RFQ draft with its lines, cited sources and unresolved fields; a human verifies every line and confirms its scope. For a line read from a file_extract source, give Locators: for each field (requested_item, sku_id, quantity, uom) the locator in the extract (text line:col, PDF page:line, XLSX Sheet!B3) and the source's own words there (Quote); name Pending fields (ambiguous, conflict, missing) with Candidates. Locators are verified against the extract."},
 		func(c inqapi.SaveRfq) ObjectRef {
 			return ObjectRef{Type: "inq.rfq", ID: c.RfqID, Version: c.ExpectedVersion}
 		},
@@ -71,7 +81,18 @@ func Q01(t Q01Targets) ([]Capability, error) {
 				return inqapi.Receipt{}, errNoTarget
 			}
 			return t.INQ.SaveRfq(ctx, c)
-		}))
+		})
+	locator := locate.Locator{Extracts: t.Extracts, Profile: ingest.Q01Upload}
+	add(Prepared(saveRfq, err, func(ctx context.Context, c inqapi.SaveRfq) (inqapi.SaveRfq, error) {
+		lines, err := locator.Lines(ctx, c.Lines)
+		if err != nil {
+			return inqapi.SaveRfq{}, err
+		}
+		if c.Lines != nil {
+			c.Lines = lines
+		}
+		return c, nil
+	}))
 	add(Define(Spec{Command: cstapi.CommandSaveContext, Context: "cst", Contract: cstapi.Contract, Version: 1,
 		SideEffect: Draft, Risk: RiskLow, Approval: ApprovalNone,
 		Summary: "Save a costing context draft for an RFQ; a human verifies it."},

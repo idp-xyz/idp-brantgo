@@ -191,9 +191,14 @@ func (f impactFacts) notes(terms quote.Ref) map[string]string {
 	if len(shipped) > 0 {
 		fulNote = f.shipments + ": shipped " + strings.Join(shipped, ", ") + " (kept: a line never holds less than it shipped)"
 	}
-	var open, inspected []string
+	var open, disposed, inspected []string
 	for _, x := range f.commitments {
 		switch x.Kind {
+		case orderrev.KindCommitmentDisposition:
+			// An approved disposition of delivered goods (S5R-D05): settled, listed apart; PUR's
+			// allocation row of the line is already net of it.
+			disposed = append(disposed, x.ObjectID+" "+x.Disposition+" "+x.Quantity+" of line "+x.OrderLineID)
+			continue
 		case orderrev.KindDemandAllocation:
 			open = append(open, x.Kind+" "+x.OrderLineID+" "+x.Quantity)
 		default:
@@ -209,6 +214,9 @@ func (f impactFacts) notes(terms quote.Ref) map[string]string {
 	purNote := f.downstream + ": nothing open against the order"
 	if len(open) > 0 {
 		purNote = f.downstream + ": " + strings.Join(open, "; ")
+	}
+	if len(disposed) > 0 {
+		purNote += "; disposed of with approval: " + strings.Join(disposed, "; ")
 	}
 	quality := "issued commitments: none"
 	if len(inspected) > 0 {

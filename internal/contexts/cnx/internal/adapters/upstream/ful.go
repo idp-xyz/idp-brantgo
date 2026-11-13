@@ -42,8 +42,10 @@ type Currencies interface {
 //     line, SKU specification revision, quantity, unit and net amount, and the lot's net value.
 //
 // Both carry the end user and the destination from the parties the shipment binds, as TRD sealed
-// them: FUL records no end user, so the end user is the consignee the order binds, or the order's
-// customer when it binds none; the destination is the country PTY records for the consignee's
+// them: FUL records no end user yet, so the end user is the consignee the order binds, or the
+// order's customer when it binds none, and EndUserSource says which (S5R-D40; once FUL records the
+// end user a shipment states — unit R6 — parties takes it first with EndUserSource stated, the
+// derivation staying the fallback CNX-INV-002 names); the destination is the country PTY records for the consignee's
 // address (CNX's port Countries, R77; "" when the order binds no consignee address or PTY records no
 // country for it — the licence allocation then takes the destination the trade compliance
 // evaluation of the order revision recorded, S5 D-8). FUL records no export date: a lot's export
@@ -191,7 +193,7 @@ func (f FUL) lotExport(ctx context.Context, r application.ExportRef, l fulapi.Ex
 			return x, err
 		}
 	} else {
-		x.EndUserPartyID = l.CustomerID
+		x.EndUserPartyID, x.EndUserSource = l.CustomerID, api.EndUserCustomer
 	}
 	total, ok := new(big.Int).SetString(l.Totals.NetMinor, 10)
 	intact := ok && len(l.Lines) > 0
@@ -264,10 +266,10 @@ func (f FUL) parties(ctx context.Context, x *application.Export, s *fulapi.Shipm
 	}
 	switch len(consignees) {
 	case 0:
-		x.EndUserPartyID = customer
+		x.EndUserPartyID, x.EndUserSource = customer, api.EndUserCustomer
 		return nil
 	case 1:
-		x.EndUserPartyID = consignees[0]
+		x.EndUserPartyID, x.EndUserSource = consignees[0], api.EndUserConsignee
 	}
 	countries, err := f.Countries.ResolveAddressCountries(ctx, addresses)
 	if err != nil {

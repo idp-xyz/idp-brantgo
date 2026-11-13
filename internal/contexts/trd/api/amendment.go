@@ -180,12 +180,17 @@ type AmendmentCharge struct {
 }
 
 // AmendmentTerms are the next revision's terms {trade_terms_ref, named_place_ref, payment_terms_ref,
-// delivery}.
+// delivery, notify_party_ref}. NotifyPartyRef is the notify party the next revision binds (S5R-D40;
+// optional: absent binds none, so restate the current one to keep it), an address of the role
+// notify of a confirmed PTY party revision; one the current revision does not bind must be current
+// (AddressRoleRef v1; REFERENCE_STALE at apply otherwise). It is omitted from the request hash
+// when absent.
 type AmendmentTerms struct {
 	TradeTermsRef   ConfigRef
 	NamedPlaceRef   BusinessRef
 	PaymentTermsRef ConfigRef
 	Delivery        Delivery
+	NotifyPartyRef  *AddressRoleRef `json:",omitempty"`
 }
 
 // ImpactAssessment assesses one area {area, status (unaffected, affected or open), note (required
@@ -367,6 +372,9 @@ func (c PrepareAmendment) Validate() error {
 		return err
 	}
 	if err := t.Delivery.validate("/args/terms/delivery"); err != nil {
+		return err
+	}
+	if err := notifyRef(t.NotifyPartyRef, "/args/terms/notify_party_ref"); err != nil {
 		return err
 	}
 	if len(c.Impact) > len(impactAreas) {

@@ -8,7 +8,8 @@
 // the contract when they arrived in time, and the acceptances' effectivity ledger; then the sales
 // order an accepted revision converts into, its review and activation (ActiveOrderRef v1 for PUR),
 // its amendments and end, and the S/C and PI of its revisions with their signed copies; and, for
-// STL, CNX and FUL, OrderCommercialSnapshot v1 of drafts and active orders (OrderSnapshotLookups).
+// STL, CNX and FUL, OrderCommercialSnapshot v1 of drafts and active orders (OrderSnapshotLookups)
+// and, since S5R-D35, OrderRevisionRef v1 of any committed revision (OrderRevisionLookups).
 // Since S5 an order activates only on a clear trade compliance conclusion of CNX and, when its
 // payment plan has a stage due after shipment or invoice, a credit reservation of STL; an amendment
 // that asks for more credit applies only on a reservation for the revision it produces.
@@ -50,6 +51,7 @@ var (
 	_ api.AcceptanceLookups     = (*Module)(nil)
 	_ api.ActiveOrderLookups    = (*Module)(nil)
 	_ api.OrderSnapshotLookups  = (*Module)(nil)
+	_ api.OrderRevisionLookups  = (*Module)(nil)
 	_ api.ActiveOrderCommands   = (*Module)(nil)
 	_ api.OrderDocumentCommands = (*Module)(nil)
 	_ api.Auditor               = (*Module)(nil)

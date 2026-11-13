@@ -234,7 +234,9 @@ func TestRevisedCustomerBlocksReadyUntilReconfirmed(t *testing.T) {
 }
 
 // INQ-INV-001 and Python test_ai_cannot_verify_sources_even_with_broad_command_grants: an agent
-// prepares the draft, only a human confirms it.
+// prepares the draft, only a human confirms it. Since S4 B4 (WBS S4-04b, SD-07) the agent's lines
+// are candidates the human verifies line by line: a confirmation that does not verify them is
+// DRAFT_NOT_READY (Python confirms without it).
 func TestAgentPreparesAndOnlyAHumanConfirms(t *testing.T) {
 	w := newWorld(t)
 	human := w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "human.1"},
@@ -247,6 +249,9 @@ func TestAgentPreparesAndOnlyAHumanConfirms(t *testing.T) {
 	_, err = w.confirm(ai, "rfq.1", 1, "src.1")
 	w.want(err, kernel.CodePermissionDenied)
 	_, err = w.confirm(human, "rfq.1", 1, "src.1")
+	w.want(err, kernel.CodeDraftNotReady)
+	_, err = w.c.INQ.ConfirmRfqScope(human, inqapi.ConfirmRfqScope{IdempotencyKey: w.key(), RfqID: "rfq.1", ExpectedVersion: 1,
+		EvidenceIDs: []string{"src.1"}, VerifiedLines: []inqapi.LineVerification{{LineID: "L1"}}})
 	w.must(err)
 }
 

@@ -24,7 +24,8 @@ import (
 // under the code table version the command states (CAT, R39: the revision verified now; no guard,
 // so a revision verified anew before CNX commits leaves the evaluation on the one it read, recorded
 // with its revision and content hash), the screening_regulation revision (POL, R50), the current versions of the programme
-// lists named and their programmes naming the countries found or entered (reference data) and the
+// lists that revision enables (its programmes, S5R-D38) and their programmes naming the countries
+// found or entered (reference data, with the regions a programme is limited to, S5R-D15) and the
 // evidence sources (EVD, R54).
 //
 // In the transaction (tactical lockOrder, ADR-BR-011): the check of the order revision FOR UPDATE
@@ -33,12 +34,16 @@ import (
 // row version (VERSION_CONFLICT); a sealed order revision that is not intact (REFERENCE_INVALID);
 // another current revision of the order (REFERENCE_STALE); an order that ended (ORDER_NOT_ACTIVE); a
 // clear conclusion (INVALID_STATE: reopen it first); the regulation (REFERENCE_INVALID, POL's
-// CONFIG_NOT_ACTIVE or CONFIG_EXPIRED, re-checked by POL's ConfigGuard v1 FOR SHARE); a foreign
-// programme list (INVALID_KNOWN_VALUE: ADR-BR-017 needs the regulation's legal confirmation, which
-// POL cannot record for programme lists yet); every list held FOR SHARE through reference data's
-// list guard in list-code order and still at the version read (REFERENCE_STALE otherwise); the
-// evidence (REFERENCE_INVALID); the entered countries (domain). The evaluation is written with the
-// check; no event (an internal step without consumers, S3-D09).
+// CONFIG_NOT_ACTIVE or CONFIG_EXPIRED, re-checked by POL's ConfigGuard v1 FOR SHARE, which also
+// keeps the programmes read with it); programme_lists naming other lists than the revision enables
+// (INVALID_KNOWN_VALUE, S5R-D38: the input is abolished, accepted only when it agrees); a list
+// reference data holds as foreign that the revision enables without a legal confirmation
+// (INVALID_KNOWN_VALUE, ADR-BR-017; POL refuses to publish one, this guards a jurisdiction that
+// changed in between); every list held FOR SHARE through reference data's list guard in list-code
+// order and still at the version read (REFERENCE_STALE otherwise); the evidence (REFERENCE_INVALID);
+// the entered countries (domain). A revision enabling no programme list (published before S5R-D38)
+// leaves the gap programmes_missing: no clear conclusion. The evaluation is written with the check;
+// no event (an internal step without consumers, S3-D09).
 
 type evaluateFacts struct {
 	order      *Order
@@ -140,11 +145,26 @@ func (h *evaluateCommand) Prepare(ctx context.Context) error {
 		h.f.regulation = &r
 	}
 	dest, entered := h.entered()
-	if h.f.programmes, err = u.Programmes.ResolveProgrammes(ctx, h.cmd.ProgrammeLists, tcc.Countries(h.f.addresses(), dest, entered)); err != nil {
+	lists := enabledLists(h.f.regulation)
+	if h.f.programmes, err = u.Programmes.ResolveProgrammes(ctx, lists, tcc.Countries(h.f.addresses(), dest, entered)); err != nil {
 		return err
 	}
 	h.f.sources, err = h.s.sources(ctx, h.evidenceIDs())
 	return err
+}
+
+// enabledLists are the country programme lists a screening_regulation revision enables (S5R-D38),
+// in code order; none for a revision that is not one.
+func enabledLists(r *polapi.ResolvedConfig) []string {
+	if r == nil || r.Data.ScreeningRegulation == nil {
+		return nil
+	}
+	var out []string
+	for _, p := range r.Data.ScreeningRegulation.Programmes {
+		out = append(out, p.ListCode)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func (h *evaluateCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -229,18 +249,23 @@ func (h *evaluateCommand) Apply(ctx context.Context, exec bentopg.Executor, d au
 	if err = regulationGuard(ctx, exec, f.regulation.Ref, f.regulation.ContentHash, now, regPath); err != nil {
 		return action.Outcome{}, err
 	}
-	for i, code := range cmd.ProgrammeLists {
-		if v, ok := f.programmes.Versions[code]; ok && v.Jurisdiction == refapi.JurisdictionForeign {
-			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/programme_lists/"+strconv.Itoa(i),
-				"A foreign programme list needs the screening_regulation's legal confirmation (ADR-BR-017)")
+	lists := enabledLists(f.regulation)
+	if stated := slices.Sorted(slices.Values(cmd.ProgrammeLists)); len(stated) > 0 && !slices.Equal(stated, lists) {
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/programme_lists",
+			"The screening_regulation revision enables other programme lists (S5R-D38): leave programme_lists out")
+	}
+	for _, p := range reg.Programmes {
+		if v, ok := f.programmes.Versions[p.ListCode]; ok && v.Jurisdiction == refapi.JurisdictionForeign && p.LegalConfirmationEvidenceID == "" {
+			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, regPath,
+				"Programme list "+p.ListCode+" is foreign: the regulation enables it without a legal confirmation (ADR-BR-017)")
 		}
 	}
-	if err = listsStillCurrent(ctx, exec, cmd.ProgrammeLists, f.programmes.Versions, "/args/programme_lists"); err != nil {
+	if err = listsStillCurrent(ctx, exec, lists, f.programmes.Versions, regPath); err != nil {
 		return action.Outcome{}, err
 	}
 	in := tcc.Input{Binding: o.Binding, Regulation: tcc.Regulation{ID: f.regulation.Ref.ConfigID, Revision: f.regulation.Ref.Revision,
 		ContentHash: f.regulation.ContentHash, RescreenDays: reg.RescreenIntervalDays, ValidUntil: f.regulation.ValidUntil},
-		CodeTableVersion: cmd.CodeTableVersion, Lists: cmd.ProgrammeLists, Versions: f.programmes.Versions, Hits: f.programmes.Hits,
+		CodeTableVersion: cmd.CodeTableVersion, Lists: lists, Versions: f.programmes.Versions, Hits: f.programmes.Hits,
 		Addresses: f.addresses(), By: d.Actor, Epoch: d.Epoch, At: now}
 	if dest := cmd.Destination; dest != nil {
 		ev, err := evidenceOf(f.sources, dest.EvidenceIDs, "/args/destination/evidence_ids")
