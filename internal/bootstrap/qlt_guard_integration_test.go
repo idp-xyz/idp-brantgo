@@ -5,6 +5,7 @@ package bootstrap_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -207,10 +208,22 @@ func TestQualityReleaseGuardVerdicts(t *testing.T) {
 }
 
 // ADR-BR-004 option B against QLT: whichever transaction locks the release row first decides
-// (QLT-INV-002 "撤回与出运确认并发按锁序裁决").
+// (QLT-INV-002 "撤回与出运确认并发按锁序裁决"). With S5R-D18 the revocation reads what shipped on the
+// release after it holds the row (ReleaseConsumption v1, R79), so the frozen quantity it records is
+// right in every commit order: the whole release when it commits first, nothing when the shipment
+// holding the guard shipped all of it first.
 func TestQualityReleaseGuardDecidesEveryCommitOrder(t *testing.T) {
 	x := newQltWorld(t)
 	s := newShipments(x.world)
+	x.shipped.read(s.table)
+	frozen := func(t *testing.T, id, shipped, frozen string) {
+		t.Helper()
+		v, err := x.q.GetRelease(x.qc, id)
+		x.must(err)
+		if v.Revocation == nil || v.Revocation.ShippedQuantity != shipped || v.Revocation.FrozenQuantity != frozen {
+			t.Fatalf("revocation %+v; want shipped %s, frozen %s", v.Revocation, shipped, frozen)
+		}
+	}
 
 	// The revocation commits first: the shipment's guard then refuses and nothing ships.
 	t.Run("QLT commits first", func(t *testing.T) {
@@ -225,6 +238,7 @@ func TestQualityReleaseGuardDecidesEveryCommitOrder(t *testing.T) {
 		if s.status("ship.b1") != "prepared" {
 			t.Fatal("shipped on a revoked release")
 		}
+		frozen(t, "rel.commitment.b1", "0", "120")
 	})
 
 	// The shipment's guard passes and holds the release row FOR SHARE; the revocation waits until the
@@ -258,6 +272,8 @@ func TestQualityReleaseGuardDecidesEveryCommitOrder(t *testing.T) {
 		if s.status("ship.b2") != "confirmed" || s.guard(s.scope, "rel.commitment.b2", time.Now()).Status != qltapi.StatusRevoked {
 			t.Fatal("after the revocation")
 		}
+		// The revocation waited for the shipment and read it after taking the row (S5R-D18).
+		frozen(t, "rel.commitment.b2", "120", "0")
 	})
 
 	// The revocation updates the release row and holds it (a transaction holding its idempotency key
@@ -303,16 +319,22 @@ func TestQualityReleaseGuardDecidesEveryCommitOrder(t *testing.T) {
 		if s.status("ship.b3") != "prepared" {
 			t.Fatal("shipped on a revoked release")
 		}
+		frozen(t, "rel.commitment.b3", "0", "120")
 	})
 }
 
-// BT21 ("放行200件后100件已出运，再撤回放行并重放事件 → 未发部分冻结；已发部分保留；重复撤回无重复扣量") and
-// QLT-INV-002: 200 released, FUL ships 100 on the release, our QC revokes it; the other 100 can no
-// longer ship and the shipped 100 stay shipped; revoking again changes nothing and publishes
-// nothing; the revoked release still counts, so nothing becomes releasable again.
+// BT21 ("放行200件后100件已出运，再撤回放行并重放事件 → 未发部分冻结；已发部分保留；重复撤回无重复扣量；
+// 撤回记录冻结量，冻结量复检后可再放行（S5R-D18）") and QLT-INV-002: 200 released, FUL ships 100 on
+// the release, our QC revokes it; the other 100 can no longer ship and the shipped 100 stay shipped;
+// the revocation records 100 shipped and 100 frozen; revoking again changes nothing and publishes
+// nothing. Without a re-inspection the frozen 100 cannot be released again
+// (QUALITY_RELEASE_EXCEEDS_CONFORMING); after a re-inspection that supersedes the inspection the
+// release was judged on and restates the result, the revoked release counts only its shipped 100 and
+// the frozen 100 are released again and ship.
 func TestRevocationFreezesTheUnshippedRestBT21(t *testing.T) {
 	x := newQltWorld(t)
 	s := newShipments(x.world)
+	x.shipped.read(s.table)
 	x.released("commitment.bt21", "200")
 	s.prepare("ship.1", "rel.commitment.bt21", "100")
 	if _, err := s.confirm("ship.1", stage{}); err != nil {
@@ -326,7 +348,7 @@ func TestRevocationFreezesTheUnshippedRestBT21(t *testing.T) {
 	_, err := x.revoke(x.agent, "rel.commitment.bt21", key)
 	x.want(err, kernel.CodePermissionDenied)
 	r, err := x.revoke(x.qc, "rel.commitment.bt21", key)
-	if err != nil || r.Status != qltapi.StatusRevoked || r.RowVersion != 2 || r.Replayed {
+	if err != nil || r.Status != qltapi.StatusRevoked || r.RowVersion != 2 || r.Replayed || r.ShippedQuantity != "100" || r.FrozenQuantity != "100" {
 		t.Fatalf("revoke %+v, %v", r, err)
 	}
 	s.prepare("ship.2", "rel.commitment.bt21", "100")
@@ -345,18 +367,42 @@ func TestRevocationFreezesTheUnshippedRestBT21(t *testing.T) {
 		t.Fatalf("replay %+v, %v", replay, err)
 	}
 	if e := x.qltEvents(qltapi.EventQualityReleaseRevoked); len(e) != 1 || e[0].Payload["release_id"] != "rel.commitment.bt21" ||
-		e[0].Payload["released_quantity"] != "200" {
+		e[0].Payload["released_quantity"] != "200" || e[0].Payload["shipped_quantity"] != "100" || e[0].Payload["frozen_quantity"] != "100" {
 		t.Fatalf("revocation events %v", e)
 	}
 	v, err := x.q.GetRelease(x.qc, "rel.commitment.bt21")
 	x.must(err)
-	if v.State != qltapi.StatusRevoked || v.Revocation == nil || v.Revocation.Reason != "复检发现色差，撤回放行" || v.Revocation.RevokedBy != actorRef("human", "qc.1") {
+	if v.State != qltapi.StatusRevoked || v.Revocation == nil || v.Revocation.Reason != "复检发现色差，撤回放行" || v.Revocation.RevokedBy != actorRef("human", "qc.1") ||
+		v.Revocation.ShippedQuantity != "100" || v.Revocation.FrozenQuantity != "100" {
 		t.Fatalf("release %+v", v)
 	}
-	if st := x.standing("commitment.bt21"); st.Conforming != "200" || st.Released != "200" || st.Releasable != "0" ||
-		len(st.Releases) != 1 || st.Releases[0].State != qltapi.StatusRevoked {
+	if st := x.standing("commitment.bt21"); st.Conforming != "200" || st.Released != "200" || st.Frozen != "100" || st.Releasable != "0" ||
+		len(st.Releases) != 1 || st.Releases[0].State != qltapi.StatusRevoked || st.Releases[0].CountedQuantity != "200" || st.Releases[0].Thawed {
 		t.Fatalf("standing %+v", st)
 	}
 	_, err = x.grant(x.qc, "rel.again", subjectOf("commitment.bt21"), "100")
 	x.want(err, qltapi.CodeQualityReleaseExceedsConforming)
+
+	// S5R-D18: the re-inspection restates the result of all 200 (the shipped 100 among them) and
+	// supersedes the inspection the release was judged on; the frozen 100 may be released again.
+	_, err = x.inspect(x.qc, "insp.bt21.again", subjectOf("commitment.bt21"), "200", "200", supersedes("insp.commitment.bt21"))
+	x.must(err)
+	if st := x.standing("commitment.bt21"); st.Conforming != "200" || st.Released != "100" || st.Frozen != "0" || st.Releasable != "100" ||
+		st.Releases[0].CountedQuantity != "100" || !st.Releases[0].Thawed {
+		t.Fatalf("after the re-inspection %+v", st)
+	}
+	_, err = x.grant(x.qc, "rel.again", subjectOf("commitment.bt21"), "100.000001")
+	x.want(err, qltapi.CodeQualityReleaseExceedsConforming)
+	regrant, err := x.grant(x.qc, "rel.again", subjectOf("commitment.bt21"), "100")
+	if err != nil || regrant.Status != qltapi.StatusGranted || regrant.Concession {
+		t.Fatalf("the frozen 100 again %+v, %v", regrant, err)
+	}
+	if rv, err := x.q.GetRelease(x.qc, "rel.again"); err != nil || rv.ReleasedBefore != "100" || rv.Conforming != "200" ||
+		!slices.Equal(rv.InspectionIDs, []string{"insp.bt21.again"}) {
+		t.Fatalf("judged on %+v, %v", rv, err)
+	}
+	s.prepare("ship.3", "rel.again", "100")
+	if _, err = s.confirm("ship.3", stage{}); err != nil || s.status("ship.3") != "confirmed" {
+		t.Fatalf("the frozen 100 ship on the new release: %v", err)
+	}
 }

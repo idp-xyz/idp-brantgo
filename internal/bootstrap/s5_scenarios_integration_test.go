@@ -1080,13 +1080,19 @@ func TestS5SCCommitmentCancellationOverHTTP(t *testing.T) {
 // new evaluation is recorded blocked with it, shipment.1 stays confirmed and FUL's fulfilment keeps
 // L4's 24 shipped; a further revocation is answered replayed and publishes nothing; the relay
 // delivers the one QualityReleaseRevoked and its redelivery changes nothing; QLT's subject shows
-// 48 conforming, 48 released (the revoked release counts in full) and 0 releasable, so a new release
-// of the frozen 24 is QUALITY_RELEASE_EXCEEDS_CONFORMING. Unit test: A8 TestRevocationFreezesTheUnshippedRestBT21.
+// 48 conforming, 48 released (the revoked release counts in full while its frozen 24 awaits a
+// re-inspection) and 0 releasable, so a new release of the frozen 24 is
+// QUALITY_RELEASE_EXCEEDS_CONFORMING. S5R-D18 (R5): the revocation recorded 24 shipped and 24 frozen
+// from FUL's ReleaseConsumption v1 (R79); qc re-inspects L4 after the revocation, superseding
+// insp.L4 and restating all 48 conforming; the revoked release then counts its 24 shipped, the frozen
+// 24 is released again (rel.L4.again) and ships, and L4 has shipped its 48. Unit tests: A8
+// TestRevocationFreezesTheUnshippedRestBT21, R5 TestFrozenQuantityReleasedAgainAfterReinspectionBT21.
 func TestS5SCBT21RevocationAfterPartialShipmentOverHTTP(t *testing.T) {
-	s := newS5SC(t, s5scMeta{ID: "BT21", Title: "放行后部分出运再撤回 (BT21): the unshipped rest frozen, the shipped kept, a repeated revoke deducts nothing",
-		Design:    []string{"BT21", "QLT-INV-002", "FUL-INV-002", "R26"},
-		RestsOn:   []string{"A8", "B1a", "C1", "D1"},
-		UnitTests: []string{"TestRevocationFreezesTheUnshippedRestBT21 (A8)", "TestQualityReleaseGuardDecidesEveryCommitOrder (A8)"},
+	s := newS5SC(t, s5scMeta{ID: "BT21", Title: "放行后部分出运再撤回 (BT21): the unshipped rest frozen, the shipped kept, a repeated revoke deducts nothing; the frozen rest released again after a re-inspection (S5R-D18)",
+		Design:  []string{"BT21", "QLT-INV-001", "QLT-INV-002", "FUL-INV-002", "R26", "R79", "S5R-D18"},
+		RestsOn: []string{"A8", "B1a", "C1", "D1", "R5"},
+		UnitTests: []string{"TestRevocationFreezesTheUnshippedRestBT21 (A8)", "TestQualityReleaseGuardDecidesEveryCommitOrder (A8)",
+			"TestFrozenQuantityReleasedAgainAfterReinspectionBT21 (R5)", "TestFrozenQuantityReleasedAgainAfterReinspection (R5)"},
 		Deviations: []string{
 			"BRC-001's L4 release of 48 PCS with 24 shipped stands for the baseline's 200 released / 100 shipped (the same half).",
 		}})
@@ -1143,14 +1149,43 @@ func TestS5SCBT21RevocationAfterPartialShipmentOverHTTP(t *testing.T) {
 	s.want("quality_release_revoked_events", n, "1")
 	rel := s.get(brcQC, "/api/brant/v1/qlt/quality_releases/rel.L4")
 	s.want("release", fmt.Sprint(rel["state"], " by ", brcDig(rel, "revocation", "revoked_by", "id")), "revoked by qc")
-	st := s.get(brcQC, "/api/brant/v1/qlt/subjects/"+qltapi.SubjectCommitmentLine+"/commitment.1/lines/L4")
-	s.want("subject_L4", fmt.Sprint("conforming ", st["conforming"], " released ", st["released"], " releasable ", st["releasable"]),
-		"conforming 48 released 48 releasable 0")
-	s.refused(brcQC, "qlt", qltapi.Contract, qltapi.CommandGrantRelease, map[string]any{"release_id": "rel.L4.again",
-		"subject": map[string]any{"kind": qltapi.SubjectCommitmentLine, "id": "commitment.1", "line_id": "L4"}, "quantity": "24",
-		"valid_until": kernel.FormatTimestamp(time.Now().Add(30 * 24 * time.Hour))}, http.StatusUnprocessableEntity,
-		qltapi.CodeQualityReleaseExceedsConforming)
+	s.want("revocation_shipped_frozen", fmt.Sprint(brcDig(rel, "revocation", "shipped_quantity"), " ", brcDig(rel, "revocation", "frozen_quantity")),
+		"24 24")
+	subjectL4 := "/api/brant/v1/qlt/subjects/" + qltapi.SubjectCommitmentLine + "/commitment.1/lines/L4"
+	st := s.get(brcQC, subjectL4)
+	s.want("subject_L4", fmt.Sprint("conforming ", st["conforming"], " released ", st["released"], " frozen ", st["frozen"], " releasable ",
+		st["releasable"]), "conforming 48 released 48 frozen 24 releasable 0")
+	subject := map[string]any{"kind": qltapi.SubjectCommitmentLine, "id": "commitment.1", "line_id": "L4"}
+	again := map[string]any{"release_id": "rel.L4.again", "subject": subject, "quantity": "24",
+		"valid_until": kernel.FormatTimestamp(time.Now().Add(30 * 24 * time.Hour))}
+	s.refused(brcQC, "qlt", qltapi.Contract, qltapi.CommandGrantRelease, again, http.StatusUnprocessableEntity, qltapi.CodeQualityReleaseExceedsConforming)
 	s.figure("release_the_frozen_24_again", qltapi.CodeQualityReleaseExceedsConforming)
+
+	s.phase = "BT21: re-inspection and release of the frozen 24 (S5R-D18)"
+	s.fileOf(brcQC, "report.recheck", "recheck-ST01-L4.txt", "合成复检报告：L4 ST01 蓝/M 48 件（已出运 24 件按原检验、冻结 24 件复检），色差在标样范围内，全部合格。")
+	s.cmd(brcQC, "qlt", qltapi.Contract, qltapi.CommandRecordInspection, map[string]any{"inspection_id": "insp.L4.recheck", "subject": subject,
+		"inspected_quantity": "48", "conforming_quantity": "48", "nonconforming_quantity": "0", "sampling": map[string]any{"method": qltapi.SamplingFull},
+		"standard": map[string]any{"source_id": "standard"}, "inspector": map[string]any{"kind": qltapi.InspectorInternal},
+		"report_file_id": "report.recheck", "inspected_at": now(), "supersedes_inspection_id": "insp.L4", "reason": "撤回后复检冻结的 24 件"})
+	st = s.get(brcQC, subjectL4)
+	s.want("subject_L4_after_recheck", fmt.Sprint("conforming ", st["conforming"], " released ", st["released"], " frozen ", st["frozen"],
+		" releasable ", st["releasable"]), "conforming 48 released 24 frozen 0 releasable 24")
+	r = s.cmd(brcQC, "qlt", qltapi.Contract, qltapi.CommandGrantRelease, again)
+	s.want("release_the_frozen_24_after_recheck", r["status"], qltapi.StatusGranted)
+	shipLines := s.shipmentLines([]s5scShipLine{{"S1", "L4", "24", "delivery.1"}})
+	shipLines[0].(map[string]any)["quality_release_id"] = "rel.L4.again"
+	status, out = s.post(brcMerchandiser, "ful", fulapi.Contract, fulapi.CommandPrepareShipment, map[string]any{"shipment_id": "shipment.3",
+		"order_id": "order.1", "route": fulapi.RouteSupplierDirect, "lines": shipLines})
+	if status != http.StatusOK {
+		t.Fatalf("shipment.3 %d %v", status, out)
+	}
+	s.shipmentID = "shipment.3"
+	r, _ = s.evaluate(fulapi.ScopeShipment)
+	s.want("shipment_3_release", r["status"], fulapi.ReleaseGranted)
+	s.cmd(brcMerchandiser, "ful", fulapi.Contract, fulapi.CommandConfirmShipment, map[string]any{"shipment_id": "shipment.3", "expected_version": 1,
+		"evidence_ids": []string{"forwarder.receipt"}})
+	lines2, total2 := s.shipped()
+	s.want("shipped_after_recheck", fmt.Sprintf("L4 %s, %d in all", lines2["L4"], total2), "L4 48, 48 in all")
 }
 
 // openingReceivable has treasury record C10's opening receivable of customer.1 at the cutoff (a

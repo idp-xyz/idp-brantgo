@@ -117,7 +117,8 @@ func (r *race) confirmAs(i int) (fulapi.ShipmentReceipt, error) {
 // a revocation that committed first refuses the confirmation (TestConfirmationRechecksEveryGuard);
 // a confirmation that holds the release FOR SHARE makes quality_release.revoke wait until it
 // commits, and the next shipment on the revoked release is QUALITY_RELEASE_REQUIRED. The shipment
-// that committed keeps what it shipped.
+// that committed keeps what it shipped, and the revocation, which read FUL's ReleaseConsumption v1
+// after it got the row (R79, S5R-D18 "撤回与出运确认并发"), records it: 40 shipped, 60 frozen.
 func TestQualityRevocationWaitsForTheConfirmation(t *testing.T) {
 	w := newFulWorld(t)
 	rel := w.released("commitment.1", "100")
@@ -152,6 +153,10 @@ func TestQualityRevocationWaitsForTheConfirmation(t *testing.T) {
 	}
 	if v := w.shipment("shipment.1"); v.Status != fulapi.StatusConfirmed {
 		t.Fatalf("the confirmed shipment stays %+v", v)
+	}
+	if v, err := w.qlt.GetRelease(w.qc, rel); err != nil || v.Revocation == nil || v.Revocation.ShippedQuantity != "40" ||
+		v.Revocation.FrozenQuantity != "60" {
+		t.Fatalf("the revocation records what the confirmation shipped %+v %v", v.Revocation, err)
 	}
 	_, err = w.confirm(w.merch, "shipment.2", 1)
 	w.want(err, fulapi.CodeQualityReleaseRequired)

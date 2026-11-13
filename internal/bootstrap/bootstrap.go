@@ -257,8 +257,10 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		// PUR publishes no InspectionSubject v1 yet (S5 unit A4): QLT's port to it answers
-		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup.
-		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Parties: c.PTY})
+		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup. FUL's ReleaseConsumption v1
+		// (R79) is a SQL function QLT's revocation reads; FUL is composed later (S5R-D18).
+		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Agencies: qlt.PTYAgencies(c.PTY),
+			Consumption: qlt.FULReleaseConsumption()})
 	}
 	if err == nil {
 		db, err = p.newDB()

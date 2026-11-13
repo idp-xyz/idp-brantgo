@@ -13,7 +13,9 @@ import (
 // release before its own transaction through ReleaseLookups and binds it by ReleaseID; inside its
 // transaction, after it locked its own roots FOR UPDATE (ADR-BR-011), it re-checks the release with
 // QualityReleaseGuard v1 and keeps it so until that transaction ends. FUL keeps its own consumption
-// of each release (its quantity less what FUL shipped on it): QLT knows nothing of shipments.
+// of each release (its quantity less what FUL shipped on it); QLT reads it only when it revokes the
+// release, through FUL's ReleaseConsumption v1 (R79, S5R-D18), while it holds the row the guard
+// shares.
 //
 // QualityReleaseGuard v1 is a SECURITY DEFINER function in QLT's schema with a fixed search_path
 // (migrations/qlt/000001_qlt_quality.sql):
@@ -146,17 +148,21 @@ func (v QualityReleaseVerdict) Check(path string) error {
 
 // ResolvedRelease is what QLT says of one release at an instant (QualityReleaseRef v1): its status
 // and state then (granted, not_yet_valid, expired or revoked), row version, scope, quantity and
-// validity, and Code as the guard decides it.
+// validity, and Code as the guard decides it. Concession flags a release that carries conceded goods,
+// ConcessionQuantity how much of Quantity they are (S5R-D18: shown to the shipment and its documents);
+// both never change after the grant.
 type ResolvedRelease struct {
-	Ref        QualityReleaseRef
-	Status     string
-	State      string
-	RowVersion int64
-	Scope      ReleaseScope
-	Quantity   string
-	ValidFrom  time.Time
-	ValidUntil time.Time
-	Code       string
+	Ref                QualityReleaseRef
+	Status             string
+	State              string
+	RowVersion         int64
+	Scope              ReleaseScope
+	Quantity           string
+	ValidFrom          time.Time
+	ValidUntil         time.Time
+	Code               string
+	Concession         bool
+	ConcessionQuantity string
 }
 
 // Check returns nil when the release serves a shipment at the instant asked and
