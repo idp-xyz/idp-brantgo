@@ -84,12 +84,15 @@ func sim02Facts(n, q int64) Facts {
 		Net: payable, Tax: big.NewInt(0), Payable: payable}}}
 }
 
-// sim02Upstream is the order's CIF Hamburg terms (or incoterm's) as TRD shows them.
-func sim02Upstream(incoterm, number string) Upstream {
+// sim02Upstream is the order's CIF Hamburg terms (or incoterm's) as TRD shows the revision the
+// shipment binds (OrderRevisionRef v1, S5R-D35), its line L1 of q PCS at 9.20 USD.
+func sim02Upstream(incoterm, number string, q int64) Upstream {
+	payable := big.NewInt(920 * q).String()
 	return Upstream{Order: &OrderFacts{Binding: OrderBinding{OrderID: "order.sim02", OrderRevision: 2, OrderHash: strings.Repeat("e", 64)},
 		Incoterm: incoterm, Edition: "Incoterms 2020", NamedPlace: "DEHAM", Stages: []Stage{{StageID: "all", Percent: "100", Trigger: "after_shipment",
 			Days: 60, DayBasis: "calendar"}}, Addresses: []Address{{Role: "buyer", PartyID: "customer.b2", PartyRevision: 1,
-			Text: "Synthetic importer B2\nHamburg"}}},
+			Text: "Synthetic importer B2\nHamburg"}}, Lines: map[string]LinePrice{"L1": {UnitPrice: "9.20", PriceBasisQuantity: "1",
+			DiscountRatio: "0", NetMinor: payable, TaxMinor: "0", PayableMinor: payable}}, NetMinor: payable},
 		Names:    map[PartyKey]string{{PartyID: "customer.b2", Revision: 1}: "Synthetic Importer B2 GmbH"},
 		Currency: &Currency{Code: "USD", Revision: 1, MinorUnits: 2}, Found: map[string]bool{"evidence": true}, Number: number}
 }
@@ -108,7 +111,7 @@ func sim02Set(t *testing.T, incoterm string, n, q int64) (*Set, Facts) {
 	f := sim02Facts(n, q)
 	s := NewSet("docs.sim02", f.Shipment, "", act())
 	for _, kind := range []string{KindCommercialInvoice, KindPackingList} {
-		d, err := Prepare(s, sim02Request(kind), f, sim02Upstream(incoterm, strings.ToUpper(kind[:2])+"-SIM02"), act())
+		d, err := Prepare(s, sim02Request(kind), f, sim02Upstream(incoterm, strings.ToUpper(kind[:2])+"-SIM02", q), act())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -128,7 +131,8 @@ func policyRequest(insured string) InsuranceRequest {
 
 func policyUpstream() InsuranceUpstream {
 	return InsuranceUpstream{Insurer: insurer(), Currency: &Currency{Code: "USD", Revision: 1, MinorUnits: 2}, Found: map[string]bool{"evidence": true},
-		File: &File{ID: "file.policy", SHA256: strings.Repeat("f", 64), MimeType: "application/pdf"},
+		File:     &File{ID: "file.policy", SHA256: strings.Repeat("f", 64), MimeType: "application/pdf"},
+		Contract: &Contract{Percent: "110", Source: "trade_terms:terms.cif@1"},
 		Costing: Costing{Available: true, SnapshotID: "snapshot.ins", ResultHash: strings.Repeat("9", 64), Currency: "USD", MinorUnits: 2,
 			InsuranceMinor: "1200", Components: []string{"fee.2"}}}
 }
@@ -255,7 +259,7 @@ func TestIssueNeedsACoveringPolicyOnCIF(t *testing.T) {
 	// The shipment grows to 900 PCS before the issue: CI v2 is 8,280.00, the policy covers 8,602.00
 	// of the 9,108.00 needed. The PL still says 850; its differences are acknowledged.
 	g := sim02Facts(900, 900)
-	d, err := Prepare(s, sim02Request(KindCommercialInvoice), g, sim02Upstream("CIF", "CI-SIM02"), act())
+	d, err := Prepare(s, sim02Request(KindCommercialInvoice), g, sim02Upstream("CIF", "CI-SIM02", 900), act())
 	if err != nil {
 		t.Fatal(err)
 	}

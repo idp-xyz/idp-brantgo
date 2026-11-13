@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"slices"
+	"strconv"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/api"
@@ -10,6 +11,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/release"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
 	docs "go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipmentdocumentset"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -62,7 +64,7 @@ func grantedEvent(r *release.Release, paid shipment.OrderBinding, evaluation, ex
 			"payment_order_hash": paid.OrderHash, "evaluation_seq": evaluation, "exception_seq": exception, "guards_sha256": sha, "granted_at": at}}
 }
 
-// evaluateCommand runs commercial_release.evaluate (human, AI or system): it locks the shipment, the
+// evaluateCommand runs commercial_release.evaluate (human or AI, S5R-D29): it locks the shipment, the
 // order's fulfilment root and the release, runs every guard (judgeRelease: judge, or judgeDocuments
 // for the documents release of a confirmed shipment) and records the evaluation — granted, or blocked
 // with the first unmet guard — creating the release with its first evaluation.
@@ -134,18 +136,50 @@ func (s Service) EvaluateRelease(ctx context.Context, cmd api.EvaluateRelease) (
 
 // exceptionCommand runs commercial_release.grant_exception (human only): with the same locks as an
 // evaluation it runs every guard and grants the blocked release by an exception when only the
-// payment condition is unmet, for one unpaid stage (release.GrantException).
+// payment condition is unmet, for one unpaid stage (release.GrantException). Before the transaction
+// it asks POL for the credit_policy revision the exception names (ConfigRef v1, R49, no guard lock;
+// S5R-D09): its decision_validity_days bound the exception's validity.
 type exceptionCommand struct {
 	s       Service
 	cmd     api.GrantReleaseException
 	sources map[string]bool
+	policy  *polapi.ResolvedConfig // nil: POL shows no such revision to the actor
 	releaseRootsOf
 }
 
 func (h *exceptionCommand) Prepare(ctx context.Context) error {
 	var err error
-	h.sources, err = h.s.sources(ctx, h.cmd.EvidenceIDs)
+	if h.sources, err = h.s.sources(ctx, h.cmd.EvidenceIDs); err != nil {
+		return err
+	}
+	h.policy = nil
+	ref := polRef(*h.cmd.CreditPolicy)
+	got, err := h.s.Upstream.Documents.Configs.ResolveConfigs(ctx, []polapi.ConfigRef{ref}, h.s.Clock.Now())
+	if r, ok := got[ref]; ok {
+		h.policy = &r
+	}
 	return err
+}
+
+// creditPolicy is what bounds an exception's validity (S5R-D09, R49): the credit_policy revision POL
+// showed before the transaction, in force now for the company (POL's CONFIG_NOT_ACTIVE or
+// CONFIG_EXPIRED otherwise), with a decision validity — a revision that states none, saved before
+// S5, or one POL does not show is REFERENCE_INVALID: no policy, no exception (fail closed, as STL
+// judges its own credit decisions). It also returns the guard evidence entry naming it.
+func creditPolicy(rc *polapi.ResolvedConfig, path string) (*release.CreditPolicy, shipment.Entry, error) {
+	if rc == nil {
+		return nil, shipment.Entry{}, kernel.Reject(kernel.CodeReferenceInvalid, path, "POL shows no such credit_policy revision")
+	}
+	if err := rc.Check(path); err != nil {
+		return nil, shipment.Entry{}, err
+	}
+	p := rc.Data.CreditPolicy
+	if p == nil || p.DecisionValidityDays < 1 {
+		return nil, shipment.Entry{}, kernel.Reject(kernel.CodeReferenceInvalid, path, "The credit policy states no decision validity")
+	}
+	out := &release.CreditPolicy{ID: rc.Ref.ConfigID, Revision: rc.Ref.Revision, Hash: rc.ContentHash, DecisionValidityDays: p.DecisionValidityDays}
+	return out, shipment.Entry{Name: "pol:" + polapi.KindCreditPolicy + ":" + out.ID + "@" + strconv.FormatInt(out.Revision, 10),
+		Value: "in_force/" + out.Hash + "/decision_validity_days=" + strconv.Itoa(out.DecisionValidityDays)}, nil
 }
 
 func (h *exceptionCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -166,6 +200,10 @@ func (h *exceptionCommand) Apply(ctx context.Context, exec bentopg.Executor, d a
 	if err := shipment.Readable(h.cmd.EvidenceIDs, h.sources, "/args/evidence_ids"); err != nil {
 		return action.Outcome{}, err
 	}
+	policy, policyEntry, err := creditPolicy(h.policy, "/args/credit_policy")
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	now := kernel.Instant(h.s.Clock.Now())
 	j, err := h.s.judgeRelease(ctx, exec, &h.releaseRootsOf, h.cmd.Scope, now)
 	if err != nil {
@@ -174,8 +212,8 @@ func (h *exceptionCommand) Apply(ctx context.Context, exec bentopg.Executor, d a
 	until, _ := kernel.ParseTimestamp(h.cmd.ValidUntil)
 	from := rel.RowVersion
 	x, err := rel.GrantException(release.ExceptionRequest{Order: j.order, ExpectedVersion: h.cmd.ExpectedVersion, StageID: h.cmd.StageID, Currency: h.cmd.Currency,
-		ShortfallMinor: h.cmd.ShortfallMinor, ValidUntil: until, Reason: h.cmd.Reason, Evidence: slices.Clone(h.cmd.EvidenceIDs)}, j.other, j.payment,
-		j.entries, shipment.Act{By: d.Actor, Epoch: d.Epoch, At: now})
+		ShortfallMinor: h.cmd.ShortfallMinor, ValidUntil: until, Reason: h.cmd.Reason, Evidence: slices.Clone(h.cmd.EvidenceIDs), Policy: policy},
+		j.other, j.payment, append(j.entries, policyEntry), shipment.Act{By: d.Actor, Epoch: d.Epoch, At: now})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -188,7 +226,8 @@ func (h *exceptionCommand) Apply(ctx context.Context, exec bentopg.Executor, d a
 
 // GrantReleaseException grants a blocked release by a payment-condition exception
 // (commercial_release.grant_exception, human only; SM-FUL-RELEASE blocked → granted, FUL-INV-002,
-// UL-INV-28, BT13).
+// UL-INV-28, BT13; S5R-D09 validity bounded by the named credit policy, S5R-D28 independent of the
+// release's evaluators).
 func (s Service) GrantReleaseException(ctx context.Context, cmd api.GrantReleaseException) (api.ReleaseReceipt, error) {
 	h := &exceptionCommand{s: s, cmd: cmd}
 	res, err := s.run(ctx, action.Command{Name: api.CommandGrantReleaseException, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ShipmentID,

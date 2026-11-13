@@ -21095,6 +21095,26 @@
                   "args": {
                     "additionalProperties": false,
                     "properties": {
+                      "credit_policy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
                       "currency": {
                         "minLength": 1,
                         "type": "string"
@@ -21273,6 +21293,26 @@
                   "args": {
                     "additionalProperties": false,
                     "properties": {
+                      "credit_policy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
                       "currency": {
                         "minLength": 1,
                         "type": "string"
@@ -24619,6 +24659,19 @@
                   "args": {
                     "additionalProperties": false,
                     "properties": {
+                      "end_user_party": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "party_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
                       "lines": {
                         "items": {
                           "additionalProperties": false,
@@ -24810,6 +24863,19 @@
                   "args": {
                     "additionalProperties": false,
                     "properties": {
+                      "end_user_party": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "party_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
                       "lines": {
                         "items": {
                           "additionalProperties": false,

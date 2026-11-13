@@ -80,8 +80,11 @@ func (s *Set) Issue(expected int64, shipmentStatus string, diffs []Difference, a
 		switch {
 		case !ok:
 			return nil, nil, Reject(kernel.CodeInvalidKnownValue, at, "The reconciliation has no difference at "+a.Path)
-		case d.Required:
+		case d.Required && d.Item == "document":
 			return nil, nil, Reject(kernel.CodeInvalidKnownValue, at, "A missing "+strings.ReplaceAll(d.Document, "_", " ")+" is never acknowledged")
+		case d.Required:
+			return nil, nil, Reject(kernel.CodeInvalidKnownValue, at, "The "+strings.ReplaceAll(d.Item, "_", " ")+" of the "+
+				strings.ReplaceAll(d.Document, "_", " ")+" is resolved, never acknowledged")
 		}
 		accepted[a.Path] = true
 		acknowledged = append(acknowledged, Acknowledged{Difference: d, Reason: a.Reason})

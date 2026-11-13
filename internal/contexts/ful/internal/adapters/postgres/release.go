@@ -130,7 +130,8 @@ func loadReleaseParts(ctx context.Context, exec bentopg.Executor, scope kernel.S
 	}
 	rows, err = exec.Query(ctx, `SELECT seq, release_version, order_id, order_revision, coalesce(order_hash, ''), stage_id, currency,
 		shortfall_minor::text, valid_until, reason, evidence_ids, guard_entries, guard_entries_sha256, granted_by_kind, granted_by_id, grant_epoch,
-		granted_at
+		granted_at, coalesce(credit_policy_id, ''), coalesce(credit_policy_revision, 0), coalesce(credit_policy_hash, ''),
+		coalesce(decision_validity_days, 0)
 		FROM brant_ful.commercial_release_exception WHERE tenant_id = $1 AND company_id = $2 AND release_id = $3 ORDER BY seq`, t, c, r.ID)
 	if err != nil {
 		return err
@@ -138,10 +139,15 @@ func loadReleaseParts(ctx context.Context, exec bentopg.Executor, scope kernel.S
 	r.Exceptions, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (release.Exception, error) {
 		var x release.Exception
 		var kind string
+		var p release.CreditPolicy
 		if err := row.Scan(&x.Seq, &x.ReleaseVersion, &x.Order.OrderID, &x.Order.OrderRevision, &x.Order.OrderHash, &x.StageID, &x.Currency,
 			&x.ShortfallMinor, &x.ValidUntil, &x.Reason, &x.Evidence, &x.EntriesJSON, &x.EntriesSHA256, &kind, &x.Granted.By.ID, &x.Granted.Epoch,
-			&x.Granted.At); err != nil {
+			&x.Granted.At, &p.ID, &p.Revision, &p.Hash, &p.DecisionValidityDays); err != nil {
 			return x, err
+		}
+		if p.ID != "" {
+			// S5R-D09; exceptions before ful 000009 name no credit policy.
+			x.Policy = &p
 		}
 		if x.Order.OrderHash == "" {
 			// Exceptions before ful 000007 bind the release's order (its hash is not repeated).
@@ -214,13 +220,17 @@ func SaveException(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	}
 	t, c := scope2(scope)
 	x := r.Exceptions[len(r.Exceptions)-1]
+	if x.Policy == nil {
+		return errors.New("ful: an exception names the credit policy that bounds it (S5R-D09)")
+	}
 	_, err := exec.Exec(ctx, `INSERT INTO brant_ful.commercial_release_exception (tenant_id, company_id, release_id, seq, release_version,
 		order_id, order_revision, order_hash, stage_id, currency, shortfall_minor, valid_until, reason, evidence_ids, guard_entries,
-		guard_entries_sha256, granted_by_kind, granted_by_id, grant_epoch, granted_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+		guard_entries_sha256, granted_by_kind, granted_by_id, grant_epoch, granted_at, credit_policy_id, credit_policy_revision, credit_policy_hash,
+		decision_validity_days)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
 		t, c, r.ID, x.Seq, x.ReleaseVersion, x.Order.OrderID, x.Order.OrderRevision, x.Order.OrderHash, x.StageID, x.Currency, x.ShortfallMinor,
 		x.ValidUntil, x.Reason, strs(x.Evidence), x.EntriesJSON, x.EntriesSHA256, string(x.Granted.By.Kind), x.Granted.By.ID, x.Granted.Epoch,
-		x.Granted.At)
+		x.Granted.At, x.Policy.ID, x.Policy.Revision, x.Policy.Hash, x.Policy.DecisionValidityDays)
 	return err
 }
 

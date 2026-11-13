@@ -43,6 +43,9 @@ type guards struct {
 func (g *guards) ResolveActiveOrders(context.Context, []string) (map[string]trdapi.ActiveOrderFact, error) {
 	return nil, nil
 }
+func (g *guards) ResolveOrderRevisions(context.Context, []trdapi.OrderRevisionKey) (map[trdapi.OrderRevisionKey]trdapi.OrderRevisionFact, error) {
+	return nil, nil
+}
 func (g *guards) GuardOrder(_ context.Context, _ bentopg.Executor, b trdapi.OrderBinding) (trdapi.OrderVerdict, error) {
 	g.calls, g.guarded = append(g.calls, "trd"), append(g.guarded, b)
 	v := g.order

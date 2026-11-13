@@ -164,3 +164,32 @@ func TestFULExports(t *testing.T) {
 		t.Fatalf("each shipment is read once: %d reads", ful.reads)
 	}
 }
+
+// S5R-D40 (CNX-INV-002, R36): the end user a shipment states (FUL's party of role end_user, unit R6)
+// is the export's end user with source stated, before the consignee and the customer; the destination
+// stays the consignee address's country. A lot reads it through its shipment.
+func TestS5RD40TheStatedEndUserComesFirst(t *testing.T) {
+	ful := fulWorld()
+	s := ful.shipments["ship.1"]
+	s.Parties = append(s.Parties, fulapi.ShipmentParty{Role: fulapi.PartyRoleNotify, PartyID: "notify.1", PartyRevision: 1, AddressID: "office"},
+		fulapi.ShipmentParty{Role: fulapi.PartyRoleEndUser, PartyID: "enduser.1", PartyRevision: 3})
+	ful.shipments["ship.1"] = s
+	c := ful.shipments["ship.2"]
+	c.Parties = append(c.Parties, fulapi.ShipmentParty{Role: fulapi.PartyRoleEndUser, PartyID: "enduser.2", PartyRevision: 1})
+	ful.shipments["ship.2"] = c
+	countries := fakeCountries{{PartyID: "consignee.1", PartyRevision: 4, AddressID: "dock"}: "DE"}
+	a := FUL{FUL: func() FULLookups { return ful }, Currencies: fakeCurrencies{}, Countries: countries, Clock: time.Now}
+	refs := []application.ExportRef{{Kind: "shipment", ID: "ship.1"}, {Kind: "export_lot", ID: "lot.1"}, {Kind: "shipment", ID: "ship.2"}}
+	got, err := a.ResolveExports(context.Background(), refs)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("%d exports %v", len(got), err)
+	}
+	for _, r := range refs[:2] {
+		if x := got[r]; x.EndUserPartyID != "enduser.1" || x.EndUserSource != "stated" || x.Destination != "DE" {
+			t.Fatalf("%s: %+v", r.ID, x)
+		}
+	}
+	if x := got[refs[2]]; x.EndUserPartyID != "enduser.2" || x.EndUserSource != "stated" || x.Destination != "" {
+		t.Fatalf("a stated end user without a consignee %+v", x)
+	}
+}

@@ -105,7 +105,7 @@ func (w *fulWorld) agedFUL(by time.Duration) *ful.Module {
 func (w *fulWorld) documentsException(id string, expected int64, shortfall string) fulapi.GrantReleaseException {
 	return fulapi.GrantReleaseException{IdempotencyKey: w.key(), ShipmentID: id, Scope: fulapi.ScopeDocuments, ExpectedVersion: expected, StageID: "P2",
 		Currency: "USD", ShortfallMinor: shortfall, ValidUntil: kernel.FormatTimestamp(time.Now().Add(48 * time.Hour)),
-		Reason: "合成：客户书面承诺尾款随到港付清", EvidenceIDs: []string{"evidence"}}
+		Reason: "合成：客户书面承诺尾款随到港付清", EvidenceIDs: []string{"evidence"}, CreditPolicy: w.creditPolicy()}
 }
 
 // PTY after the confirmation (owner decision ~23:05; FUL-INV-002, PTY-INV-002, R44): on 30 % deposit

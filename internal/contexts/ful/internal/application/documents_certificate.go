@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"time"
 
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	docs "go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipmentdocumentset"
@@ -47,4 +48,32 @@ func (h *prepareDocumentCommand) certificate(ctx context.Context) error {
 	r := results[0]
 	h.up.Certificate = &docs.CertificateResult{Code: r.Code, Reason: r.Reason, Number: r.Number, Binding: r.Evidence()}
 	return nil
+}
+
+// recheck asks CNX again, before an issue's transaction or after the set's read, whether the
+// certificate result the set's current certificate of origin draft names applies to the shipment at
+// now (S5R-D12: "签发时再查一次"). It returns the answers by the draft they were asked for — empty
+// when the set has no such draft; Reconcile turns an answer that does not apply into a required
+// difference.
+func (s Service) recheck(ctx context.Context, set *docs.Set, now time.Time) (map[docs.RecheckKey]*docs.CertificateResult, error) {
+	out := map[docs.RecheckKey]*docs.CertificateResult{}
+	k, ok := set.ToRecheck()
+	if !ok {
+		return out, nil
+	}
+	results, err := s.Upstream.Documents.Certificates.ResolveCertificates(ctx, []cnxapi.CertificateUse{{
+		Ref:    cnxapi.CertificateRef{CertificateID: k.CertificateID, Version: k.CertificateVersion},
+		Kind:   cnxapi.CertificateOfOrigin,
+		Target: cnxapi.ExportTarget{Kind: cnxapi.TargetShipment, ID: set.ShipmentID},
+		At:     now,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	if len(results) != 1 {
+		return nil, errors.New("ful: CNX answered no certificate result")
+	}
+	r := results[0]
+	out[k] = &docs.CertificateResult{Code: r.Code, Reason: r.Reason, Number: r.Number, Binding: r.Evidence()}
+	return out, nil
 }

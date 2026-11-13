@@ -32,7 +32,11 @@ import (
 //     units never change);
 //  3. asks TRD for the shipment's order (ActiveOrderRef v1: the cost snapshot the quote adopted,
 //     R27) and CST for that snapshot's components by category (R78, read only, no guard): the
-//     costing's insurance component the premium is compared with.
+//     costing's insurance component the premium is compared with;
+//  4. asks TRD for the order revision the shipment binds (OrderRevisionRef v1, S5R-D35) and POL for
+//     the trade_terms revision it names (ConfigRef v1, R49, no guard lock — published revisions never
+//     change): the contract insurance percentage (insurance_percent, default 110; S5R-D06), and the
+//     revision's net total beside the shipment's own net value (the share shown with the premium).
 //
 // In the transaction, in FUL's root order as shipment_document.prepare: the shipment FOR SHARE, the
 // set FOR UPDATE (a new set: none yet; two first versions meet on its key and on the
@@ -70,6 +74,7 @@ type insuranceCommand struct {
 func (h *insuranceCommand) Prepare(ctx context.Context) error {
 	h.up = docs.InsuranceUpstream{}
 	var ship *shipment.Shipment
+	var prices map[string]shipment.Price
 	refused := false
 	err := h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		sc := scope(ctx)
@@ -93,8 +98,10 @@ func (h *insuranceCommand) Prepare(ctx context.Context) error {
 		}
 		if !d.Sees(ship.OwnerActor, ship.OwnerTeam) || ship.Status == shipment.StatusCancelled {
 			ship = nil
+			return nil
 		}
-		return nil
+		prices, err = postgres.LoadPrices(ctx, exec, sc, ship.ID)
+		return err
 	})
 	if err != nil || refused || ship == nil {
 		return err
@@ -128,8 +135,57 @@ func (h *insuranceCommand) Prepare(ctx context.Context) error {
 	if c, ok := configs[cur]; ok && c.Data.Currency != nil {
 		h.up.Currency = &docs.Currency{Code: cur.ConfigID, Revision: cur.Revision, MinorUnits: c.Data.Currency.MinorUnits}
 	}
-	h.up.Costing, err = h.s.costing(ctx, ship.Order.OrderID)
-	return err
+	if h.up.Costing, err = h.s.costing(ctx, ship.Order.OrderID); err != nil {
+		return err
+	}
+	return h.contract(ctx, ship, prices, now)
+}
+
+// contract reads the order revision the shipment binds (OrderRevisionRef v1) and the POL trade_terms
+// revision it names, whatever its state now (the contract is what that revision agreed): the contract
+// insurance percentage (S5R-D06) and the revision's net total beside the shipment's own net value at
+// the prices it keeps. Nothing is set when TRD or POL shows the actor neither (the domain refuses).
+func (h *insuranceCommand) contract(ctx context.Context, ship *shipment.Shipment, prices map[string]shipment.Price, now time.Time) error {
+	rev, err := h.s.boundRevision(ctx, binding(ship.Order))
+	if err != nil || rev == nil {
+		return err
+	}
+	h.up.Costing.OrderNetMinor = rev.NetMinor
+	if net, ok := shipmentNet(ship, prices); ok {
+		h.up.Costing.ShipmentNetMinor = net
+	}
+	ref := polapi.ConfigRef{Kind: rev.TradeTerms.Ref.Kind, ConfigID: rev.TradeTerms.Ref.ID, Revision: rev.TradeTerms.Ref.Revision}
+	if ref.Kind != polapi.KindTradeTerms {
+		return nil
+	}
+	got, err := h.s.Upstream.Documents.Configs.ResolveConfigs(ctx, []polapi.ConfigRef{ref}, now)
+	if err != nil {
+		return err
+	}
+	c, ok := got[ref]
+	if !ok || c.Data.TradeTerms == nil {
+		return nil
+	}
+	// A percentage FUL cannot read stays unstated: the domain refuses the record (fail closed).
+	if p, perr := c.Data.TradeTerms.ContractInsurancePercent(); perr == nil {
+		percent, _ := p.Exact()
+		h.up.Contract = &docs.Contract{Percent: percent, Source: ref.Kind + ":" + ref.ConfigID + "@" + strconv.FormatInt(ref.Revision, 10)}
+	}
+	return nil
+}
+
+// shipmentNet is the net value of sh's lines at the prices it keeps, minor units of the order
+// currency; false when a line keeps none.
+func shipmentNet(sh *shipment.Shipment, prices map[string]shipment.Price) (string, bool) {
+	total := shipment.Amounts{}
+	for _, l := range sh.Lines {
+		p, ok := prices[l.ID]
+		if !ok {
+			return "", false
+		}
+		total = total.Add(p.Of(l.Quantity, l.OrderQuantity))
+	}
+	return postgres.MinorText(total.Net), true
 }
 
 // costing asks TRD for the cost snapshot order's quote adopted and CST for its insurance component
@@ -328,6 +384,7 @@ func comparisonView(c docs.PremiumComparison) api.PremiumComparison {
 	if c.DifferenceMinor != "" {
 		v.Difference = amount(c.Currency, c.MinorUnits, c.DifferenceMinor)
 	}
+	v.ShipmentPercent = c.ShipmentPercent
 	return v
 }
 
@@ -337,8 +394,9 @@ func insurancePolicyView(d *docs.Document) api.InsurancePolicyView {
 		ServiceRoleID: p.Insurer.ServiceRoleID, Revision: p.Insurer.Revision}, PolicyNumber: p.PolicyNumber, Clauses: slices.Clone(p.Clauses),
 		IssuedOn: p.IssuedOn, Currency: api.ConfigRef{Kind: api.KindCurrency, ID: p.Currency.Code, Revision: p.Currency.Revision},
 		InsuredAmount: amount(p.Currency.Code, p.Currency.MinorUnits, p.InsuredMinor), Premium: amount(p.Currency.Code, p.Currency.MinorUnits,
-			p.PremiumMinor), CoveragePercent: p.CoveragePercent, Coverage: policyCoverageView(p.Coverage, p),
-		Costing: policyComparisonView(p), ContentSHA256: d.ContentSHA256, EvidenceIDs: slices.Clone(d.Evidence), Sources: entries(d.Sources),
+			p.PremiumMinor), CoveragePercent: p.CoveragePercent, ContractPercent: p.ContractPercent, ContractSource: p.ContractSource,
+		Coverage: policyCoverageView(p.Coverage, p),
+		Costing:  policyComparisonView(p), ContentSHA256: d.ContentSHA256, EvidenceIDs: slices.Clone(d.Evidence), Sources: entries(d.Sources),
 		RecordedBy: d.Prepared.By, RecordedAt: d.Prepared.At, AuthorityEpoch: d.Prepared.Epoch, Entries: entries(d.Entries),
 		EntriesSHA256: d.EntriesSHA256, IssueSeq: d.IssueSeq, IssuedAt: d.IssuedAt, SupersededAt: d.SupersededAt}
 	if f := d.File; f != nil {
@@ -358,7 +416,20 @@ func insurancePolicyView(d *docs.Document) api.InsurancePolicyView {
 func policyComparisonView(p *docs.InsurancePolicy) api.PremiumComparison {
 	v := comparisonView(p.Costing)
 	v.Premium = amount(p.Currency.Code, p.Currency.MinorUnits, p.Costing.PremiumMinor)
+	if p.Costing.ShipmentPercent != "" { // S5R-D06: the order's amounts are in the order currency, the policy's
+		v.ShipmentNet = amountOf(p, p.Costing.ShipmentNetMinor)
+		v.OrderNet = amountOf(p, p.Costing.OrderNetMinor)
+	}
 	return v
+}
+
+// amountOf is minor units of the order currency as a decimal: the currency of the CIF/CIP invoice the
+// policy was checked on, else the policy's own (FUL's documents are in the order currency).
+func amountOf(p *docs.InsurancePolicy, minor string) string {
+	if c := p.Coverage; c != nil && c.InvoiceCurrency != "" {
+		return amount(c.InvoiceCurrency, c.MinorUnits, minor)
+	}
+	return amount(p.Currency.Code, p.Currency.MinorUnits, minor)
 }
 
 // insuranceView is the insurance of set now.

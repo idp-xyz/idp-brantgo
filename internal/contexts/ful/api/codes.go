@@ -63,6 +63,10 @@ const (
 	// does not apply to the shipment — another kind, market or specification, or outside its validity
 	// (CNX's CertificateResultRef v1; CNX-INV-007; S5 C5).
 	CodeCertificateNotApplicable = "CERTIFICATE_NOT_APPLICABLE"
+	// CodeIndependentReviewRequired (422): the credit manager who would grant a payment-condition
+	// exception evaluated the release (S5R-D28; role templates' independence row of
+	// commercial_release.grant_exception).
+	CodeIndependentReviewRequired = "INDEPENDENT_REVIEW_REQUIRED"
 )
 
 var codes = map[string]kernel.Category{
@@ -88,6 +92,8 @@ var codes = map[string]kernel.Category{
 	CodeInsuranceCoverageInsufficient: kernel.CategoryInvalid,
 	// S5 C5
 	CodeCertificateNotApplicable: kernel.CategoryConflict,
+	// S5R-D28
+	CodeIndependentReviewRequired: kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code FUL declares.

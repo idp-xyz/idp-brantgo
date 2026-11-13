@@ -18,13 +18,27 @@ import (
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 )
 
-// TRD is FUL's port to TRD's sales orders (R27): ActiveOrderRef v1 and OrderGuard v1.
+// TRDLookups are the TRD lookups FUL reads before its transaction (R27): ActiveOrderRef v1 and
+// OrderRevisionRef v1 (S5R-D35). *trd.Module implements them.
+type TRDLookups interface {
+	trdapi.ActiveOrderLookups
+	trdapi.OrderRevisionLookups
+}
+
+// TRD is FUL's port to TRD's sales orders (R27): ActiveOrderRef v1, OrderRevisionRef v1 and
+// OrderGuard v1.
 type TRD struct {
-	Orders trdapi.ActiveOrderLookups
+	Orders TRDLookups
 }
 
 func (t TRD) ResolveActiveOrders(ctx context.Context, ids []string) (map[string]trdapi.ActiveOrderFact, error) {
 	return t.Orders.ResolveActiveOrders(ctx, ids)
+}
+
+// ResolveOrderRevisions reads committed order revisions by (order, revision) (OrderRevisionRef v1,
+// S5R-D35).
+func (t TRD) ResolveOrderRevisions(ctx context.Context, keys []trdapi.OrderRevisionKey) (map[trdapi.OrderRevisionKey]trdapi.OrderRevisionFact, error) {
+	return t.Orders.ResolveOrderRevisions(ctx, keys)
 }
 
 // GuardOrder runs OrderGuard v1, which locks the order row FOR SHARE until FUL's transaction ends.

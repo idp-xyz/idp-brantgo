@@ -65,3 +65,22 @@ func TestRecordBooking(t *testing.T) {
 		}
 	}
 }
+
+// S5R-D36 (Context Map R44 ServiceRoleRef v1; PTY service role kinds): a booking is confirmed by a
+// forwarder or a carrier — the kinds PTY verifies with a route — never by the route-less kinds
+// insurer, inspection_agency or customs_broker (INVALID_KNOWN_VALUE).
+func TestS5RD36BookingsAreAForwardersOrACarriers(t *testing.T) {
+	ref := ServiceRoleRef{PartyID: "provider.1", ServiceRoleID: "x", Revision: 1}
+	at := time.Date(2026, 11, 13, 8, 0, 0, 0, time.UTC)
+	req := BookingRequest{ServiceRole: ref, Number: "SHA1", Vessel: "V", Voyage: "1E", ETD: "2026-12-20", CutOff: at, ContainerType: "40HQ",
+		ContainerCount: 1, PortOfLoading: "CNSHA", PortOfDischarge: "DEHAM"}
+	for kind, ok := range map[string]bool{ServiceForwarder: true, ServiceCarrier: true, "insurer": false, "inspection_agency": false,
+		"customs_broker": false} {
+		s := &Shipment{ID: "shipment.1", Status: StatusPrepared}
+		_, err := s.RecordBooking(nil, req, map[ServiceRoleRef]ServiceRoleFact{ref: {Ref: ref, Role: kind}}, nil,
+			Act{By: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "merch.1"}, Epoch: 1, At: at})
+		if r, refused := kernel.AsRejection(err); ok == refused || (refused && r.Code != kernel.CodeInvalidKnownValue) {
+			t.Errorf("%s: %v", kind, err)
+		}
+	}
+}

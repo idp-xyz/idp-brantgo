@@ -81,12 +81,13 @@ type (
 	DeliveryLine = application.DeliveryLine
 	Compliance   = application.Compliance
 	Payments     = application.Payments
-	Costs        = application.Costs // CST's cost snapshot by category (R78, S5-16)
+	Costs        = application.Costs   // CST's cost snapshot by category (R78, S5-16)
+	TRDLookups   = upstream.TRDLookups // ActiveOrderRef v1 and OrderRevisionRef v1 (R27, S5R-D35)
 )
 
-// TRDOrders is the port to TRD over its ActiveOrderRef v1 lookup, OrderGuard v1 and order state
-// read.
-func TRDOrders(orders trdapi.ActiveOrderLookups) Orders { return upstream.TRD{Orders: orders} }
+// TRDOrders is the port to TRD over its ActiveOrderRef v1 and OrderRevisionRef v1 (S5R-D35) lookups,
+// OrderGuard v1 and order state read.
+func TRDOrders(orders TRDLookups) Orders { return upstream.TRD{Orders: orders} }
 
 // QLTReleases is the port to QLT over its QualityReleaseRef v1 lookup and QualityReleaseGuard v1.
 func QLTReleases(releases qltapi.ReleaseLookups) Releases { return upstream.QLT{Releases: releases} }
@@ -113,8 +114,8 @@ type DocumentUpstream = application.DocumentUpstream
 type Certificates = application.Certificates
 
 // DocumentPorts are the ports of bookings and shipment documents: POL's ConfigRef v1, ConfigGuard v1
-// and NumberIssue v1 (R49), PTY's parties and ServiceRoleRef v1 (R44), TRD's
-// OrderCommercialSnapshot v1 (R27). CNX's certificate results (CertificateResultRef v1, R56; S5 C5)
+// and NumberIssue v1 (R49), PTY's parties, PartyRef v1 and ServiceRoleRef v1 (R44), TRD's
+// OrderRevisionRef v1 (R27, S5R-D35). CNX's certificate results (CertificateResultRef v1, R56; S5 C5)
 // are added with DocumentUpstream.WithCertificates.
 func DocumentPorts(pol interface {
 	polapi.Queries
@@ -122,7 +123,7 @@ func DocumentPorts(pol interface {
 }, pty interface {
 	ptyapi.Queries
 	ptyapi.ProfileQueries
-}, trd trdapi.OrderSnapshotLookups) DocumentUpstream {
+}, trd trdapi.OrderRevisionLookups) DocumentUpstream {
 	cfg := upstream.POLConfig{Queries: pol, Commands: pol}
 	return DocumentUpstream{Configs: cfg, Numbers: cfg, Parties: upstream.PTYParties{Parties: pty, Profiles: pty}, Orders: trd}
 }

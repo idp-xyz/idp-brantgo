@@ -14,7 +14,8 @@ import (
 // the telex release) — records the decision of every evaluation, the payment-condition exceptions
 // and its consumption.
 //
-//	commercial_release.evaluate       human, AI or system (documentation): in FUL's transaction, with
+//	commercial_release.evaluate       human or AI (documentation; S5R-D29: no system actor — B0 has no
+//	                                  system re-evaluation): in FUL's transaction, with
 //	                                  the shipment, the order's fulfilment root and the release locked,
 //	                                  runs every guard in context code order — CNX TradeComplianceGuard
 //	                                  on the order revision the shipment binds and, when its conclusion
@@ -31,7 +32,12 @@ import (
 //	                                  the shipment, the scope, the stage, the currency and the shortfall
 //	                                  in minor units STL states now, until valid_until. Quality,
 //	                                  screening, trade compliance, licence, delivery and order guards are
-//	                                  never excepted: their own code refuses the exception.
+//	                                  never excepted: their own code refuses the exception. S5R-D28: the
+//	                                  credit manager is independent of the release's evaluators
+//	                                  (INDEPENDENT_REVIEW_REQUIRED); S5R-D09: valid_until is at most the
+//	                                  decision_validity_days of the POL credit_policy revision the
+//	                                  exception names (credit_policy, in force now; FUL's 90 days stay
+//	                                  the hard cap when the policy allows more).
 //	document_release.record           human only (documentation): records the release of the original
 //	                                  bill of lading or a telex release of a confirmed shipment, with
 //	                                  evidence. It needs a granted documents release and re-runs every
@@ -69,8 +75,9 @@ import (
 //
 // Request members in snake_case: commercial_release.evaluate {shipment_id, scope};
 // commercial_release.grant_exception {shipment_id, scope, expected_version, stage_id, currency,
-// shortfall_minor, valid_until, reason, evidence_ids}; document_release.record {shipment_id,
-// expected_version, release_kind, evidence_ids}.
+// shortfall_minor, valid_until, reason, evidence_ids, credit_policy {kind: "credit_policy", id,
+// revision}} (credit_policy since S5R-D09); document_release.record {shipment_id, expected_version,
+// release_kind, evidence_ids}.
 
 // Commands, reads, scopes, states and events of the commercial release.
 const (
@@ -99,14 +106,18 @@ const (
 	// FUL-INV-003 and the release consumption).
 	GuardFulfilment = "ful.fulfilment"
 
-	// MaxExceptionDays bounds an exception's validity.
+	// MaxExceptionDays bounds an exception's validity whatever the credit policy says: the hard cap
+	// S5R-D09 keeps for a policy whose decision_validity_days is out of the ordinary.
 	MaxExceptionDays = 90
+
+	// KindCreditPolicy is the POL kind an exception's validity is bounded by (S5R-D09, R49).
+	KindCreditPolicy = "credit_policy"
 )
 
 var minorPattern = regexp.MustCompile(`^[1-9][0-9]{0,23}$`)
 var currencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
 
-// EvaluateRelease evaluates the release of shipment ShipmentID for Scope. Human, AI or system.
+// EvaluateRelease evaluates the release of shipment ShipmentID for Scope. Human or AI (S5R-D29).
 type EvaluateRelease struct {
 	IdempotencyKey string
 	ShipmentID     string
@@ -116,7 +127,10 @@ type EvaluateRelease struct {
 // GrantReleaseException grants the blocked release of shipment ShipmentID for Scope at
 // ExpectedVersion by an exception for payment stage StageID, short ShortfallMinor (integer minor
 // units of Currency, as STL's PaymentConditionGuard states them), until ValidUntil (a UTC timestamp,
-// at most MaxExceptionDays ahead), for Reason, citing EvidenceIDs. Human only.
+// at most the decision_validity_days of CreditPolicy ahead and never more than MaxExceptionDays), for
+// Reason, citing EvidenceIDs. CreditPolicy names the POL credit_policy revision in force for the
+// company whose decision validity bounds the exception (S5R-D09; required — JSON omitempty only so
+// that the request hash of an exception granted before S5R stays what it was). Human only.
 type GrantReleaseException struct {
 	IdempotencyKey  string
 	ShipmentID      string
@@ -128,6 +142,7 @@ type GrantReleaseException struct {
 	ValidUntil      string
 	Reason          string
 	EvidenceIDs     []string
+	CreditPolicy    *ConfigRef `json:",omitempty"`
 }
 
 // RecordDocumentRelease records the release of the documents of confirmed shipment ShipmentID by
@@ -186,7 +201,13 @@ func (c GrantReleaseException) Validate() error {
 	if _, err := kernel.ParseTimestamp(c.ValidUntil); err != nil {
 		return schema("/args/valid_until")
 	}
-	return evidence(c.EvidenceIDs, "/args/evidence_ids")
+	if err := evidence(c.EvidenceIDs, "/args/evidence_ids"); err != nil {
+		return err
+	}
+	if c.CreditPolicy == nil {
+		return schema("/args/credit_policy")
+	}
+	return c.CreditPolicy.validate(KindCreditPolicy, "/args/credit_policy")
 }
 
 // Validate checks the closed contract: a known release kind and 1 to MaxEvidence sources.
@@ -380,21 +401,26 @@ type EvaluationView struct {
 
 // ExceptionView is a payment-condition exception of a release; Order is the order revision it is
 // bound to (the order's current revision for the documents release of a confirmed shipment).
+// CreditPolicy, CreditPolicyHash and DecisionValidityDays are the POL credit_policy revision its
+// validity was bounded by (S5R-D09; nil and zero for an exception granted before S5R).
 type ExceptionView struct {
-	Seq            int64
-	ReleaseVersion int64
-	Order          OrderBinding
-	StageID        string
-	Currency       string
-	ShortfallMinor string
-	ValidUntil     time.Time
-	Reason         string
-	EvidenceIDs    []string
-	Guards         []GuardEvidence
-	GuardsSHA256   string
-	GrantedBy      kernel.ActorRef
-	GrantedAt      time.Time
-	AuthorityEpoch int64
+	Seq                  int64
+	ReleaseVersion       int64
+	Order                OrderBinding
+	StageID              string
+	Currency             string
+	ShortfallMinor       string
+	ValidUntil           time.Time
+	CreditPolicy         *ConfigRef
+	CreditPolicyHash     string
+	DecisionValidityDays int
+	Reason               string
+	EvidenceIDs          []string
+	Guards               []GuardEvidence
+	GuardsSHA256         string
+	GrantedBy            kernel.ActorRef
+	GrantedAt            time.Time
+	AuthorityEpoch       int64
 }
 
 // ConsumptionView is what consumed a release: shipment.confirm, or document_release.record with

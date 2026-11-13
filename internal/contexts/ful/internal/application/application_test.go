@@ -36,7 +36,7 @@ func TestRules(t *testing.T) {
 		{api.CommandGetShipment, kernel.ActorSystem, true},
 		{api.CommandEvaluateRelease, kernel.ActorHuman, true},
 		{api.CommandEvaluateRelease, kernel.ActorAI, true},
-		{api.CommandEvaluateRelease, kernel.ActorSystem, true},
+		{api.CommandEvaluateRelease, kernel.ActorSystem, false}, // S5R-D29: B0 has no system re-evaluation
 		{api.CommandGrantReleaseException, kernel.ActorHuman, true},
 		{api.CommandGrantReleaseException, kernel.ActorAI, false},
 		{api.CommandGrantReleaseException, kernel.ActorSystem, false},
@@ -99,23 +99,38 @@ func TestRequestHash(t *testing.T) {
 	}
 }
 
-// What the domain is told of TRD's, QLT's and PUR's answers.
+// What the domain is told of TRD's, QLT's and PUR's answers: ActiveOrderRef v1 decides whether the
+// order serves at which binding; the lines, address roles and notify party are OrderRevisionRef v1's
+// of that binding (S5R-D35, D40) — without it the order is not intact for FUL; a release's concession
+// flag (S5R-D18).
 func TestUpstreamFacts(t *testing.T) {
-	f := trdapi.ActiveOrderFact{Binding: trdapi.OrderBinding{OrderID: "order.1", OrderRevision: 2, OrderHash: "h"}, CustomerRef: trdapi.PartyRef{
-		PartyID: "customer.1", Revision: 3}, Lines: []trdapi.OrderLine{{LineID: "L1", Sku: trdapi.SkuRef{SkuID: "sku.1", SpecRevision: 1}, Quantity: "120.000000",
-		UnitRef: trdapi.ConfigRef{Kind: "unit", ID: "pcs", Revision: 1}}}, Terms: trdapi.OrderTerms{Addresses: []trdapi.OrderAddress{{Role: "consignee",
-		PartyID: "consignee.1", PartyRevision: 1, AddressID: "dock"}}}}
-	o := orderFact(f)
-	if o.Code != "" || o.Customer != 3 || o.Lines[0].Quantity.String() != "120" || o.Lines[0].UnitID != "pcs" || o.Addresses[0].Role != "consignee" {
+	b := trdapi.OrderBinding{OrderID: "order.1", OrderRevision: 2, OrderHash: "h"}
+	f := trdapi.ActiveOrderFact{Binding: b, CustomerRef: trdapi.PartyRef{PartyID: "customer.1", Revision: 3}}
+	rev := &trdapi.OrderRevisionFact{Binding: b, Lines: []trdapi.OrderLine{{LineID: "L1", Sku: trdapi.SkuRef{SkuID: "sku.1", SpecRevision: 1},
+		Quantity: "120.000000", UnitRef: trdapi.ConfigRef{Kind: "unit", ID: "pcs", Revision: 1}}}, OrderTerms: trdapi.OrderTerms{
+		Addresses:   []trdapi.OrderAddress{{Role: "consignee", PartyID: "consignee.1", PartyRevision: 1, AddressID: "dock"}},
+		NotifyParty: &trdapi.OrderAddress{Role: "notify", PartyID: "notify.1", PartyRevision: 2, AddressID: "office"}}}
+	o := orderFact(f, rev)
+	if o.Code != "" || o.Customer != 3 || o.Lines[0].Quantity.String() != "120" || o.Lines[0].UnitID != "pcs" || o.Addresses[0].Role != "consignee" ||
+		o.Notify == nil || *o.Notify != (shipment.Party{Role: shipment.RoleNotify, PartyID: "notify.1", PartyRevision: 2, AddressID: "office"}) {
 		t.Fatalf("%+v", o)
 	}
-	f.Lines[0].Quantity = "lots"
-	if orderFact(f).Code != kernel.CodeReferenceInvalid {
+	if o := orderFact(f, nil); o.Code != kernel.CodeReferenceInvalid || o.Lines != nil {
+		t.Fatalf("S5R-D35: no bound revision, no shipment %+v", o)
+	}
+	refused := f
+	refused.Code = "ORDER_NOT_ACTIVE"
+	if o := orderFact(refused, nil); o.Code != "ORDER_NOT_ACTIVE" {
+		t.Fatalf("TRD's own refusal first %+v", o)
+	}
+	rev.Lines[0].Quantity = "lots"
+	if orderFact(f, rev).Code != kernel.CodeReferenceInvalid {
 		t.Fatal("an unreadable line makes the order not intact for FUL")
 	}
-	r := releaseFact(qltapi.ResolvedRelease{Ref: qltapi.QualityReleaseRef{ReleaseID: "rel.1"}, State: "granted", Quantity: "50",
+	r := releaseFact(qltapi.ResolvedRelease{Ref: qltapi.QualityReleaseRef{ReleaseID: "rel.1"}, State: "granted", Quantity: "50", Concession: true,
 		Scope: qltapi.ReleaseScope{Subject: qltapi.SubjectRef{Kind: qltapi.SubjectCommitmentLine, ID: "commitment.1", LineID: "L1"}, SupplierID: "s"}})
-	if r.ID != "rel.1" || r.Scope.CommitmentID != "commitment.1" || r.SubjectKind != shipment.SubjectCommitmentLine || r.Quantity.String() != "50" {
+	if r.ID != "rel.1" || r.Scope.CommitmentID != "commitment.1" || r.SubjectKind != shipment.SubjectCommitmentLine || r.Quantity.String() != "50" ||
+		!r.Concession {
 		t.Fatalf("%+v", r)
 	}
 	d := deliveryFact(DeliveryLine{Ref: api.DeliveryLineRef{DeliveryID: "d", LineID: "L1", Version: 2}, VerifiedQuantity: "60", CommitmentID: "c"})

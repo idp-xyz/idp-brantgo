@@ -20,6 +20,9 @@ const (
 	CodeReferenceStale               = "REFERENCE_STALE"
 	CodeBusinessKeyConflict          = "BUSINESS_KEY_CONFLICT"
 	CodeDependencyNotSupported       = "DEPENDENCY_NOT_SUPPORTED"
+	// CodeIndependentReviewRequired (422): the credit manager evaluated the release an exception
+	// would grant (S5R-D28; role templates' independence of commercial_release.grant_exception).
+	CodeIndependentReviewRequired = "INDEPENDENT_REVIEW_REQUIRED"
 )
 
 // Codes maps every code of the shipment rules to its category.
@@ -39,6 +42,7 @@ var Codes = map[string]kernel.Category{
 	CodeReferenceStale:               kernel.CategoryConflict,
 	CodeBusinessKeyConflict:          kernel.CategoryConflict,
 	CodeDependencyNotSupported:       kernel.CategoryInvalid,
+	CodeIndependentReviewRequired:    kernel.CategoryInvalid,
 }
 
 // Reject returns a rejection with a code of the shipment rules or a shared kernel code, at path.

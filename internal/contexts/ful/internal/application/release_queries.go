@@ -40,11 +40,16 @@ func releaseView(r *release.Release) api.ReleaseView {
 			Bindings: bindingsView(e.Bindings), EvaluatedBy: e.Evaluated.By, EvaluatedAt: e.Evaluated.At, AuthorityEpoch: e.Evaluated.Epoch})
 	}
 	for _, x := range r.Exceptions {
-		v.Exceptions = append(v.Exceptions, api.ExceptionView{Seq: x.Seq, ReleaseVersion: x.ReleaseVersion,
+		xv := api.ExceptionView{Seq: x.Seq, ReleaseVersion: x.ReleaseVersion,
 			Order: api.OrderBinding{OrderID: x.Order.OrderID, OrderRevision: x.Order.OrderRevision, OrderHash: x.Order.OrderHash}, StageID: x.StageID,
 			Currency: x.Currency, ShortfallMinor: x.ShortfallMinor, ValidUntil: x.ValidUntil, Reason: x.Reason, EvidenceIDs: slices.Clone(x.Evidence),
 			Guards: guardViews(x.Entries), GuardsSHA256: x.EntriesSHA256, GrantedBy: x.Granted.By, GrantedAt: x.Granted.At,
-			AuthorityEpoch: x.Granted.Epoch})
+			AuthorityEpoch: x.Granted.Epoch}
+		if p := x.Policy; p != nil { // S5R-D09
+			xv.CreditPolicy = &api.ConfigRef{Kind: api.KindCreditPolicy, ID: p.ID, Revision: p.Revision}
+			xv.CreditPolicyHash, xv.DecisionValidityDays = p.Hash, p.DecisionValidityDays
+		}
+		v.Exceptions = append(v.Exceptions, xv)
 	}
 	if c := r.Consumption; c != nil {
 		v.Consumption = &api.ConsumptionView{Command: c.Command, ReleaseKind: c.ReleaseKind, EvidenceIDs: slices.Clone(c.Evidence),

@@ -8,19 +8,23 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
+	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// prepareCommand runs shipment.prepare. Before the transaction it reads the order from TRD, the
-// releases from QLT and the delivery lines from PUR; inside it, it locks the shipment its ID names,
-// or else opens and locks the order's fulfilment root, reads what the order's confirmed shipments
-// consumed, decides, re-checks the order with OrderGuard v1 and writes the shipment with the price of
-// each line at the order revision it binds (S5-03b). Nothing is reserved: shipment.confirm decides
-// again.
+// prepareCommand runs shipment.prepare. Before the transaction it reads the order from TRD
+// (ActiveOrderRef v1: whether it serves new work and at which binding; OrderRevisionRef v1 of that
+// binding: the lines with their prices, the address roles and the notify party, S5R-D35, D40), the
+// releases from QLT, the delivery lines from PUR and the end user the request states from PTY
+// (PartyRef v1, S5R-D40); inside it, it locks the shipment its ID names, or else opens and locks the
+// order's fulfilment root, reads what the order's confirmed shipments consumed, decides, re-checks the
+// order with OrderGuard v1 and writes the shipment with the price of each line at the order revision
+// it binds (S5-03b). Nothing is reserved: shipment.confirm decides again.
 type prepareCommand struct {
 	s          Service
 	cmd        api.PrepareShipment
@@ -29,6 +33,7 @@ type prepareCommand struct {
 	prices     shipment.PriceFact
 	releases   map[string]shipment.ReleaseFact
 	deliveries map[shipment.DeliveryRef]shipment.DeliveryFact
+	endUser    *shipment.PartyFact
 	existing   *shipment.Shipment
 	consumed   shipment.Consumed
 	replay     bool
@@ -49,7 +54,22 @@ func (h *prepareCommand) Prepare(ctx context.Context) error {
 		return err
 	}
 	if f, ok := orders[h.req.OrderID]; ok {
-		h.order, h.prices = orderFact(f), priceFact(f)
+		var rev *trdapi.OrderRevisionFact
+		if f.Code == "" {
+			if rev, err = h.s.boundRevision(ctx, f.Binding); err != nil {
+				return err
+			}
+		}
+		h.order, h.prices = orderFact(f, rev), priceFact(rev)
+	}
+	if u := h.req.EndUser; u != nil {
+		got, err := h.s.Upstream.Documents.Parties.ResolveParties(ctx, ptyapi.Resolve{PartyIDs: []string{u.PartyID}})
+		if err != nil {
+			return err
+		}
+		if p, ok := got.Parties[u.PartyID]; ok {
+			h.endUser = &shipment.PartyFact{PartyID: p.PartyID, Status: p.Status, Revision: p.Revision}
+		}
 	}
 	var ids []string
 	var refs []api.DeliveryLineRef
@@ -122,8 +142,8 @@ func (h *prepareCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 		h.replay = true
 		return action.Outcome{ObjectID: s.ID, RowVersion: s.RowVersion, Status: s.Status}, nil
 	}
-	s, err := shipment.Prepare(h.req, shipment.Inputs{Order: h.order, Releases: h.releases, Deliveries: h.deliveries, Consumed: h.consumed,
-		Preparer: d.Actor, Epoch: d.Epoch, Team: d.Team, Now: h.s.Clock.Now()})
+	s, err := shipment.Prepare(h.req, shipment.Inputs{Order: h.order, Releases: h.releases, Deliveries: h.deliveries, EndUser: h.endUser,
+		Consumed: h.consumed, Preparer: d.Actor, Epoch: d.Epoch, Team: d.Team, Now: h.s.Clock.Now()})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -148,12 +168,16 @@ func (h *prepareCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 }
 
 // PrepareShipment prepares a shipment of an active order (shipment.prepare; SM-FUL-SHIPMENT, R27,
-// R26, R59, D-10, BT11).
+// R26, R59, D-10, BT11; S5R-D35 the bound revision, S5R-D40 the notify party and the stated end
+// user).
 func (s Service) PrepareShipment(ctx context.Context, cmd api.PrepareShipment) (api.ShipmentReceipt, error) {
 	h := &prepareCommand{s: s, cmd: cmd}
 	err := cmd.Validate()
 	if err == nil {
 		h.req = shipment.Request{ID: cmd.ShipmentID, OrderID: cmd.OrderID, Route: cmd.Route, RequestHash: requestHash(cmd)}
+		if u := cmd.EndUserParty; u != nil {
+			h.req.EndUser = &shipment.PartyRef{PartyID: u.PartyID, Revision: u.Revision}
+		}
 		for _, l := range cmd.Lines {
 			q, _ := api.Quantity(l.Quantity)
 			h.req.Lines = append(h.req.Lines, shipment.RequestLine{ID: l.LineID, OrderLineID: l.OrderLineID, Quantity: q,

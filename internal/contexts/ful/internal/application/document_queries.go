@@ -73,7 +73,14 @@ func setView(set *docs.Set, f docs.Facts, now time.Time) api.DocumentSetView {
 	v := api.DocumentSetView{DocumentSetID: set.ID, ShipmentID: set.ShipmentID, Order: api.OrderBinding{OrderID: set.Order.OrderID,
 		OrderRevision: set.Order.OrderRevision, OrderHash: set.Order.OrderHash}, RowVersion: set.RowVersion, Documents: []api.DocumentVersionView{},
 		Issues: []api.IssueView{}, Reconciliation: reconciliationView(set, f, now), CreatedBy: set.Created.By, CreatedAt: set.Created.At,
-		AuthorityEpoch: set.Created.Epoch}
+		AuthorityEpoch: set.Created.Epoch, QualityConcessions: []string{}}
+	if f.Shipment != nil {
+		for _, l := range f.Shipment.Lines {
+			if l.QualityConcession { // S5R-D18
+				v.QualityConcessions = append(v.QualityConcessions, l.ID)
+			}
+		}
+	}
 	for _, d := range set.Documents {
 		v.Documents = append(v.Documents, versionView(d))
 	}
@@ -94,12 +101,16 @@ func setView(set *docs.Set, f docs.Facts, now time.Time) api.DocumentSetView {
 }
 
 // GetDocumentSet returns a set the caller sees with its reconciliation now, audited as
-// shipment_document_set.get (ful.read): NOT_FOUND otherwise.
+// shipment_document_set.get (ful.read): NOT_FOUND otherwise. After its read transaction it asks CNX,
+// as an issue does, whether the certificate result the current certificate of origin draft names
+// still applies (S5R-D12), and states the reconciliation with that answer.
 func (s Service) GetDocumentSet(ctx context.Context, id string) (api.DocumentSetView, error) {
 	if !kernel.ValidIdentifier(id) {
 		return api.DocumentSetView{}, invalidID(s, ctx, api.CommandGetDocumentSet)
 	}
 	var v api.DocumentSetView
+	var read *docs.Set
+	var facts docs.Facts
 	err := s.Ledger.Read(ctx, api.CommandGetDocumentSet, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		set, err := postgres.LoadSet(ctx, exec, scope(ctx), id, postgres.NoLock)
 		if err != nil {
@@ -118,10 +129,21 @@ func (s Service) GetDocumentSet(ctx context.Context, id string) (api.DocumentSet
 		if f.Booking, err = postgres.CurrentBooking(ctx, exec, scope(ctx), set.ShipmentID); err != nil {
 			return err
 		}
-		v = setView(set, f, kernel.Instant(s.Clock.Now()))
+		v, read, facts = setView(set, f, kernel.Instant(s.Clock.Now())), set, f
 		return nil
 	})
-	return v, err
+	if err != nil || read == nil {
+		return v, err
+	}
+	if _, ok := read.ToRecheck(); !ok {
+		return v, nil
+	}
+	now := kernel.Instant(s.Clock.Now())
+	if facts.Rechecked, err = s.recheck(ctx, read, now); err != nil {
+		return api.DocumentSetView{}, err
+	}
+	v.Reconciliation = reconciliationView(read, facts, now)
+	return v, nil
 }
 
 // GetShipmentDocument returns the rendition of one language of a version with its bytes, audited as
