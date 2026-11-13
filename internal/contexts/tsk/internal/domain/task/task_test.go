@@ -175,7 +175,7 @@ func invoke(tk *Task, command Command, s setup, a Act) (Change, error) {
 	case CmdFail:
 		return tk.Fail("r", "alice", 0, a)
 	case CmdBindObject:
-		return tk.BindObject("quote.1", tk.ControlEpoch+1, a)
+		return tk.BindObject("quote.1", true, tk.ControlEpoch+1, a)
 	case CmdRelease:
 		return tk.Release("r", epoch, 0, a)
 	}
@@ -482,7 +482,7 @@ func TestTakeOverRecordsTRDsEpochAndTheBarrierWaits(t *testing.T) {
 	sys := Act{By: tskSys, Epoch: 1, At: t0}
 	hum := Act{By: alice, Epoch: 1, At: t0}
 	tk := running(t, ModeAI)
-	ok(t)(tk.BindObject("quote.1", 1, sys))
+	ok(t)(tk.BindObject("quote.1", true, 1, sys))
 	if !tk.Bound() || tk.ControlEpoch != 1 || tk.Binding.Epoch != 1 {
 		t.Fatalf("%+v", tk)
 	}
@@ -565,24 +565,34 @@ func TestUnboundTakeOverRecordsOnlyTheControlChange(t *testing.T) {
 	}
 }
 
-// task.bind_object: a running AI task binds one root, the one its target names if any, and records
-// TRD's epoch; a manual task, a second binding and another target's root are refused.
+// task.bind_object: a running AI task binds one root and records TRD's epoch: the root its target
+// names, or, when the target names none, a root an action of the task created (SM-TSK-TASK
+// "本任务的动作已创建报价根"; B1-D09); a manual task, a second binding, another target's root and a root
+// the task did not create are refused.
 func TestBindObject(t *testing.T) {
 	sys := Act{By: tskSys, Epoch: 1, At: t0}
 	tk := running(t, ModeAI)
 	tk.Target.QuoteID = "quote.1"
-	if err := tk.CheckBind("quote.2", sys); code(err) != kernel.CodeReferenceInvalid {
+	if err := tk.CheckBind("quote.2", true, sys); code(err) != kernel.CodeReferenceInvalid {
 		t.Fatalf("another root: %s", code(err))
 	}
-	ok(t)(tk.BindObject("quote.1", 4, sys))
-	if err := tk.CheckBind("quote.1", sys); code(err) != kernel.CodeInvalidState {
+	ok(t)(tk.BindObject("quote.1", false, 4, sys)) // the target names it: the task need not have created it
+	if err := tk.CheckBind("quote.1", true, sys); code(err) != kernel.CodeInvalidState {
 		t.Fatalf("second binding: %s", code(err))
 	}
+	free := running(t, ModeAI)
+	if _, err := free.BindObject("quote.9", false, 1, sys); code(err) != kernel.CodeReferenceInvalid || free.Bound() || free.Version != 3 {
+		t.Fatalf("a root the task did not create: %s %+v", code(err), free)
+	}
+	ok(t)(free.BindObject("quote.9", true, 1, sys))
+	if !free.Bound() || free.Target.QuoteID != "quote.9" {
+		t.Fatalf("a root the task created: %+v", free)
+	}
 	m := running(t, ModeManual)
-	if err := m.CheckBind("quote.1", sys); code(err) != kernel.CodeInvalidState {
+	if err := m.CheckBind("quote.1", true, sys); code(err) != kernel.CodeInvalidState {
 		t.Fatalf("manual task: %s", code(err))
 	}
-	if err := running(t, ModeAI).CheckBind("quote.1", Act{By: alice, Epoch: 1, At: t0}); code(err) != kernel.CodePermissionDenied {
+	if err := running(t, ModeAI).CheckBind("quote.1", true, Act{By: alice, Epoch: 1, At: t0}); code(err) != kernel.CodePermissionDenied {
 		t.Fatalf("a human binds: %s", code(err))
 	}
 }

@@ -39,17 +39,23 @@
 //	task.cancel             human only: any non-terminal state but stopping → stopping.
 //	task.finish_stop        system: stopping → paused (take control: control mode manual, TRD
 //	                        object_control.enter_manual; hand back: mode ai, TRD
-//	                        object_control.handoff) or → cancelled (cancel), once no action is
-//	                        submitted or unknown (stop barrier).
+//	                        object_control.handoff) or → cancelled (cancel). The stop barrier first
+//	                        reconciles every submitted or unknown action of the task with its target
+//	                        (ActionReconciliation v1, as the caller; ActionReconciled); while a target
+//	                        cannot answer, EXTERNAL_RESULT_UNKNOWN and TRD is not asked.
 //	task.close_unfulfilled  human or system: running, waiting_*, verifying or paused →
 //	                        closed_unfulfilled; never counted as success.
 //	task.fail               human only: running, waiting_*, verifying or paused → failed, with the
 //	                        person responsible for what follows.
-//	task.bind_object        system: running → running; binds the quote root the task's action
-//	                        created through TRD object_control.bind and records the control epoch
-//	                        TRD returns. TSK records the epoch; TRD is the fence (MD-31).
+//	task.bind_object        system: running → running; binds the quote root the task's target names
+//	                        or, when it names none, the root a committed action of the task created
+//	                        (quote.save_draft at root version 1; REFERENCE_INVALID otherwise) through
+//	                        TRD object_control.bind and records the control epoch TRD returns. TSK
+//	                        records the epoch; TRD is the fence (MD-31).
 //	task.release            human only: a terminal task, or a paused manual one, gives its root back
-//	                        through TRD object_control.release; the lifecycle does not change.
+//	                        through TRD object_control.release; the lifecycle does not change. When
+//	                        TRD holds the task's own root at an epoch the task never recorded (a
+//	                        control change whose record was lost), TSK learns TRD's epoch for it.
 //
 // Request members in snake_case: task.create {task_id, goal_code, control_mode, agent_id, owner_id,
 // target {rfq_id, quote_id, customer_id}, source {kind, id}, deadline, budget {max_model_calls,
@@ -367,7 +373,8 @@ type CancelTask struct {
 	Reason          string
 }
 
-// FinishStop completes the stop barrier of a stopping task. System.
+// FinishStop completes the stop barrier of a stopping task: it reconciles the task's submitted and
+// unknown actions with their targets, then changes the bound root's control at TRD. System.
 type FinishStop struct {
 	IdempotencyKey  string
 	TaskID          string

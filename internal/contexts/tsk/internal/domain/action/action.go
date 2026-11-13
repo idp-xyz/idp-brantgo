@@ -298,3 +298,17 @@ func (e *Execution) Reconcile(answer Answer, act Act) (Step, error) {
 	s.Version, s.Attempt = e.Version, e.Attempts
 	return s, nil
 }
+
+// CreatedRoot reports whether one of list, the actions of a task, created the root object at
+// context with command: the action is committed and the target's stored receipt names object at row
+// version 1, the version a root has when the save that creates it commits (SM-TSK-TASK
+// task.bind_object "本任务的动作已创建报价根": quote.save_draft at TRD).
+func CreatedRoot(list []*Execution, context, command, object string) bool {
+	for _, e := range list {
+		if e.State == Committed && e.Target.Context == context && e.Target.Command == command && e.Result != nil &&
+			e.Result.ObjectID == object && e.Result.RowVersion == 1 {
+			return true
+		}
+	}
+	return false
+}

@@ -13,7 +13,11 @@
 // (TSK-INV-002) and issues the claims task steps carry (D-2, TSK-INV-004). A take-over is two steps:
 // TRD's stop first — the fence holds from then on — and TSK's record second; when the second step
 // fails, the root stays fenced and the take-over is sent again: the TRD call of a task at a recorded
-// control epoch has one idempotency key, so it replays what TRD did instead of acting again.
+// control epoch has one idempotency key, so it replays what TRD did instead of acting again. When the
+// task moved on before the retry (goal verification, a pause, a close) and another control change
+// meets TRD's epoch instead, the port learns TRD's epoch for the task's own binding (adapters/trd).
+// The stop barrier (task.finish_stop) reconciles the task's open actions with their targets itself
+// before it changes the root's control (barrierCommand).
 //
 // Lock order inside TSK's transactions (ADR-BR-011): the task row FOR UPDATE, then the company's
 // authority guard FOR SHARE (the ledger), then the grant rows of the actors a command names (owner,

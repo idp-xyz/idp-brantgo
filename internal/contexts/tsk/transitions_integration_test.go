@@ -47,8 +47,9 @@ func pathFor(tr task.Transition) path {
 func (w *world) reach(id string, state task.State, p path) int64 {
 	w.t.Helper()
 	var target []func(*api.CreateTask)
-	if state == task.Verifying || state == task.Completed {
-		// goal.verify judges the task's quote root; a task without one is not met (Q01.quote, unit B2).
+	if state == task.Verifying || state == task.Completed || p.bound {
+		// goal.verify judges the task's quote root; a task without one is not met (Q01.quote, unit B2). A
+		// task binds the root its target names (or one its action created: the bind row below).
 		target = append(target, func(c *api.CreateTask) { c.Target.QuoteID = "quote." + id })
 	}
 	v := w.create(id, target...).RowVersion
@@ -157,6 +158,8 @@ func (w *world) apply(ctx context.Context, id string, v int64, tr task.Transitio
 	case task.CmdFail:
 		return w.m.FailTask(ctx, api.FailTask{IdempotencyKey: k, TaskID: id, ExpectedVersion: v, Reason: "失败", ResponsibleID: "alice"})
 	case task.CmdBindObject:
+		// The task's target names no root: it binds the root its own action created (S4 C1, B1-D09).
+		w.created(w.alice, id, "draft."+id, "quote.b."+id)
 		return w.m.BindObject(ctx, api.BindObject{IdempotencyKey: k, TaskID: id, ExpectedVersion: v, QuoteID: "quote.b." + id})
 	case task.CmdRelease:
 		return w.m.ReleaseObject(ctx, api.ReleaseObject{IdempotencyKey: k, TaskID: id, ExpectedVersion: v, Reason: "释放"})

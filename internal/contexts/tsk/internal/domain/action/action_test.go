@@ -297,3 +297,34 @@ func TestKnownContexts(t *testing.T) {
 		t.Fatal("pur")
 	}
 }
+
+// SM-TSK-TASK task.bind_object "本任务的动作已创建报价根" (S4 C1, B1-D09): a task created a root when one of
+// its actions committed the root's creating save — the target's receipt names the root at row
+// version 1. A later save of the root, another command or context, another root or an action that
+// did not commit is not its creation.
+func TestCreatedRootIsTheCommittedSaveThatMadeIt(t *testing.T) {
+	save := Target{Context: "trd", Command: "quote.save_draft", RequestHash: strings.Repeat("b", 64)}
+	made := &Execution{ID: ID("intent.save"), Target: save, State: Committed,
+		Result: &Result{ActionID: "act-9", ObjectID: "quote.1", RowVersion: 1, Status: "working"}}
+	if !CreatedRoot([]*Execution{made}, "trd", "quote.save_draft", "quote.1") {
+		t.Fatal("the committed creating save")
+	}
+	updated := *made
+	updated.Result = &Result{ActionID: "act-10", ObjectID: "quote.1", RowVersion: 2, Status: "working"}
+	open := *made
+	open.State, open.Result = Submitted, nil
+	other := *made
+	other.Target.Command = "quote.revise"
+	elsewhere := *made
+	elsewhere.Target.Context = "inq"
+	for name, list := range map[string][]*Execution{
+		"none": nil, "a later save": {&updated}, "an open save": {&open}, "another command": {&other}, "another context": {&elsewhere},
+	} {
+		if CreatedRoot(list, "trd", "quote.save_draft", "quote.1") {
+			t.Errorf("%s counts as the creation", name)
+		}
+	}
+	if CreatedRoot([]*Execution{made}, "trd", "quote.save_draft", "quote.2") {
+		t.Error("another root")
+	}
+}
