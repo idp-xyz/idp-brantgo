@@ -496,6 +496,8 @@ GRANT UPDATE (lifecycle, control_mode, control_epoch, task_version, target_quote
               stop_purpose, stop_from, stop_reason, stop_by_kind, stop_by_id, stop_at, scope_settled_at, completion_actor, end_cause,
               end_reason, end_responsible_id, ended_by_kind, ended_by_id, ended_at, updated_at)
     ON brant_tsk.business_task TO brant_app;
+-- Goal verifications (S4 B2, tsk 000002): one per goal.verify, never changed or deleted (trigger).
+GRANT SELECT, INSERT ON brant_tsk.goal_verification TO brant_app;
 
 -- internal/ai (brant_ai; plan S4 D-6): a delegation is revoked and an approval grant used or revoked,
 -- once each; their binding never changes and neither is deleted (triggers); the ledger only grows.

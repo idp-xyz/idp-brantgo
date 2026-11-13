@@ -88,7 +88,8 @@ func TestRulesFollowTheDesign(t *testing.T) {
 	}
 	var commands []string
 	for _, r := range Rules() {
-		read := r.Command == api.CommandGetTask || r.Command == api.CommandClaim || r.Command == api.CommandAudit
+		read := r.Command == api.CommandGetTask || r.Command == api.CommandClaim || r.Command == api.CommandAudit ||
+			r.Command == api.CommandVerifications
 		if read {
 			continue
 		}

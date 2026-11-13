@@ -303,9 +303,9 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		// TSK (S4) after TRD: it calls TRD's object control (R17) and its GoalReadiness v1 (R18,
-		// not published before S4 unit A3) before its own transactions.
-		c.TSK, err = tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(c.TRD), Readiness: tsk.ReadinessNotWired()})
+		// TSK (S4) after TRD: it calls TRD's object control (R17) and its GoalReadiness v1 (R18; S4
+		// unit B2: goal.verify) before its own transactions.
+		c.TSK, err = tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(c.TRD), Readiness: tsk.TRDReadiness(c.TRD)})
 	}
 	if err != nil {
 		return nil, err

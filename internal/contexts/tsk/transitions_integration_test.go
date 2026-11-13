@@ -46,7 +46,12 @@ func pathFor(tr task.Transition) path {
 // reach drives a new task through registered commands to state along p and returns its version.
 func (w *world) reach(id string, state task.State, p path) int64 {
 	w.t.Helper()
-	v := w.create(id).RowVersion
+	var target []func(*api.CreateTask)
+	if state == task.Verifying || state == task.Completed {
+		// goal.verify judges the task's quote root; a task without one is not met (Q01.quote, unit B2).
+		target = append(target, func(c *api.CreateTask) { c.Target.QuoteID = "quote." + id })
+	}
+	v := w.create(id, target...).RowVersion
 	if state == task.Created {
 		return v
 	}
