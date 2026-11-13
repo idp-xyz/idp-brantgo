@@ -406,6 +406,7 @@ func (s Service) ResolvePurchaseLines(ctx context.Context, refs []api.Commitment
 	}
 	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		f := newDeliveryFacts(ctx, exec, d)
+		disposed := map[string][]*commitment.Disposition{}
 		for _, ref := range refs {
 			c, err := f.commitment(ctx, ref.CommitmentID)
 			if err != nil {
@@ -438,9 +439,34 @@ func (s Service) ResolvePurchaseLines(ctx context.Context, refs []api.Commitment
 					Ref:              api.DeliveryLineRef{DeliveryID: x.ID, LineID: ref.OrderLineID, Version: v.Number},
 					VerifiedQuantity: text(l.Verified), HandoverPlace: v.HandoverPlace, HandedOverAt: v.HandedOverAt, VerifiedAt: v.Decision.At})
 			}
+			if line.DisposedQuantity, line.Dispositions, err = approvedDispositions(ctx, exec, disposed, ref); err != nil {
+				return err
+			}
 			out[ref] = line
 		}
 		return nil
 	})
 	return out, err
+}
+
+// approvedDispositions returns what the approved dispositions of line ref add up to and those
+// dispositions (PurchaseLineRef v1, R31, S5R-D42), reading each commitment's dispositions once into
+// loaded.
+func approvedDispositions(ctx context.Context, exec bentopg.Executor, loaded map[string][]*commitment.Disposition,
+	ref api.CommitmentLineRef) (string, []api.PurchaseDisposition, error) {
+	xs, ok := loaded[ref.CommitmentID]
+	if !ok {
+		var err error
+		if xs, err = postgres.DispositionsOfCommitment(ctx, exec, scope(ctx), ref.CommitmentID); err != nil {
+			return "", nil, err
+		}
+		loaded[ref.CommitmentID] = xs
+	}
+	out := []api.PurchaseDisposition{}
+	for _, x := range xs {
+		if x.Status == commitment.DispositionApproved && x.OrderLineID == ref.OrderLineID && x.Decision != nil {
+			out = append(out, api.PurchaseDisposition{DispositionID: x.ID, Disposition: x.Kind, Quantity: text(x.Quantity), DecidedAt: x.Decision.At})
+		}
+	}
+	return text(commitment.Disposed(xs)[ref.OrderLineID]), out, nil
 }

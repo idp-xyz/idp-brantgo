@@ -97,7 +97,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000007_trd_order_documents", "brant:000008_trd_order_state", "brant:000009_trd_control_manual",
 		"brant:000010_trd_cost_source_holds",
 		"brant:000001_pur_purchase_drafts", "brant:000002_pur_purchase_commitments", "brant:000003_pur_supplier_deliveries",
-		"brant:000004_pur_commitment_changes", "brant:000005_pur_allocation_reviews",
+		"brant:000004_pur_commitment_changes", "brant:000005_pur_allocation_reviews", "brant:000006_pur_commitment_dispositions",
 		"brant:000001_qlt_quality", "brant:000002_qlt_rerelease_concession",
 		"brant:000001_stl_customer_credit", "brant:000002_stl_funds_applications", "brant:000003_stl_payment_plan_review",
 		"brant:000004_stl_settlement_statements", "brant:000005_stl_credit_notes_reversal", "brant:000006_stl_charges_order_results",

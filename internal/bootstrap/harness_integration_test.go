@@ -59,7 +59,7 @@ var allPermissions = []string{
 	"purchase.commitment.request", "purchase.commitment.decide", "purchase.commitment.revoke", "purchase.commitment.issue",
 	"purchase.supplier_confirmation.record", "supplier_delivery.record", "supplier_delivery.verify",
 	"purchase.commitment.change.prepare", "purchase.commitment.change.decide", "purchase.commitment.change.apply", "purchase.commitment.cancel",
-	"allocation_review.settle",
+	"allocation_review.settle", "purchase.commitment.dispose", "purchase.commitment.disposition.decide",
 }
 
 type world struct {
