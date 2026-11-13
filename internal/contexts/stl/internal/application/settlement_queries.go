@@ -113,6 +113,9 @@ func (s Service) GetStatement(ctx context.Context, id string) (api.StatementView
 			NetMinor: st.Net.MinorString(), TaxMinor: st.Tax.MinorString(), AmountMinor: b.AmountMinor, AppliedMinor: b.AppliedMinor,
 			OpenMinor: b.OpenMinor, EvidenceIDs: st.EvidenceIDs, Lines: []api.StatementLineView{}, Installments: b.Installments,
 			Applications: b.Applications, CreditNotes: []api.CreditNoteRef{}, ConfirmedBy: st.Confirmed.By, ConfirmedAt: st.Confirmed.At, CheckedAt: now}
+		if st.Opening {
+			v.OpeningID = st.ID
+		}
 		credited, err := creditsOf(ctx, exec, st, d, &v.CreditNotes)
 		if err != nil {
 			return err

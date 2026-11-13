@@ -92,6 +92,9 @@ const (
 	SubjectTaxRefundCase = "tax_refund_case"
 	SubjectFundRecord    = "fund_record"
 	SubjectDocument      = "document"
+	// SubjectCreditNote is an STL credit note (CreditNoteRef v1, R38) confirmed on a sales statement of the lot's
+	// shipment lines: its impact recorded, nothing recomputed (S5 C10, CN-AT11 CNX half).
+	SubjectCreditNote = "credit_note"
 
 	MeasureAmount   = "amount"
 	MeasureQuantity = "quantity"
@@ -113,7 +116,7 @@ var (
 	requirementKinds = []string{RequirementCommercialInvoice, RequirementPackingList, RequirementBillOfLading, RequirementCustomsDeclaration,
 		RequirementCertificateOfOrigin, RequirementInsurance, RequirementInspectionCertificate, RequirementExportLicense,
 		RequirementPurchaseInvoice, RequirementTaxRefund, RequirementFundRecord, RequirementOther}
-	subjectKinds     = []string{SubjectExportLot, SubjectDeclaration, SubjectTaxRefundCase, SubjectFundRecord, SubjectDocument}
+	subjectKinds     = []string{SubjectExportLot, SubjectDeclaration, SubjectTaxRefundCase, SubjectFundRecord, SubjectDocument, SubjectCreditNote}
 	responsibilities = []string{"none", "internal", "customer", "supplier", "broker", "carrier", "authority", "bank", "other"}
 )
 
@@ -279,7 +282,7 @@ func (c ResolveReconciliation) Validate() error {
 		return schema("/args/subject/kind")
 	case !kernel.ValidIdentifier(c.Subject.ID):
 		return schema("/args/subject/id")
-	case c.Measure != MeasureAmount && c.Measure != MeasureQuantity:
+	case c.Measure != MeasureAmount && c.Measure != MeasureQuantity, c.Subject.Kind == SubjectCreditNote && c.Measure != MeasureAmount:
 		return schema("/args/measure")
 	case (c.Measure == MeasureAmount) != (c.Currency != nil):
 		return schema("/args/currency")
@@ -410,6 +413,21 @@ type ReconciliationView struct {
 	ResolvedBy       kernel.ActorRef
 	AuthorityEpoch   int64
 	ResolvedAt       time.Time
+	CreditNote       *CreditNoteLink // S5 C10: a credit_note subject as STL stated it
+}
+
+// CreditNoteLink is an STL credit note a reconciliation rests on (CreditNoteRef v1, R38), as STL stated it when
+// the reconciliation was recorded: kind, version, statement and order, currency and amount, and the export lot
+// lines of the bundle's lot its statement settles (CN-AT11).
+type CreditNoteLink struct {
+	CreditNoteID string   `json:"credit_note_id"`
+	CreditKind   string   `json:"kind"`
+	Version      int64    `json:"version"`
+	StatementID  string   `json:"statement_id"`
+	OrderID      string   `json:"order_id"`
+	Currency     string   `json:"currency"`
+	AmountMinor  string   `json:"amount_minor"`
+	LotLineIDs   []string `json:"lot_line_ids"`
 }
 
 // BundleView is a bundle: its lot, state, the current checklist (the latest check's), every check

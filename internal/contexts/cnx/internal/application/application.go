@@ -73,7 +73,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandInvoices, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetTaxCase, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandTaxCases, Permission: api.PermissionRead, ActorKinds: anyActor},
-	}, slices.Concat(declarationRules(), bundleRules(), certificateRules())...)
+	}, slices.Concat(declarationRules(), bundleRules(), certificateRules(), openingRules())...)
 }
 
 // Upstream are the contracts CNX reads.
@@ -87,12 +87,14 @@ type Upstream struct {
 	Exports    Exports        // FUL shipments and export lots (R36), CNX's port
 	Purchases  PurchaseLines  // PUR PurchaseLineRef v1 (R37), CNX's port
 	Funds      Funds          // STL FundRecordRef v1 (R38), CNX's port
+	// STL CreditNoteRef v1 (on R38; S5 C10, CN-AT11): the credit notes a reconciliation records the impact of.
+	CreditNotes CreditNotes
 }
 
 // Complete reports whether every upstream is wired.
 func (u Upstream) Complete() bool {
 	return u.Orders != nil && u.Countries != nil && u.Profiles != nil && u.Programmes != nil && u.Configs != nil && u.Sources != nil &&
-		u.Exports != nil && u.Purchases != nil && u.Funds != nil
+		u.Exports != nil && u.Purchases != nil && u.Funds != nil && u.CreditNotes != nil
 }
 
 // Service runs CNX's use cases.
@@ -123,6 +125,9 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 		return visible, err
 	}
 	if ok, visible, err := visibleCertificate(ctx, exec, command, id); ok {
+		return visible, err
+	}
+	if ok, visible, err := visibleOpening(ctx, exec, command, id); ok {
 		return visible, err
 	}
 	if strings.HasPrefix(command, "tax_refund_case.") {

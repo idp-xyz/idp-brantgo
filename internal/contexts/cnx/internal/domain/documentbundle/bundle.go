@@ -305,6 +305,10 @@ type Reconciliation struct {
 	By                    kernel.ActorRef
 	Epoch                 int64
 	At                    time.Time
+	// SubjectVersion and SubjectDetail: of a credit_note subject, the credit note's version and what STL stated of
+	// it (canonical JSON) when the reconciliation was recorded (S5 C10).
+	SubjectVersion int64
+	SubjectDetail  string
 }
 
 // Reconcile decides a reconciliation: the difference is external − internal, exactly; an approved

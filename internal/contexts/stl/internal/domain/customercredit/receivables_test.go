@@ -135,3 +135,25 @@ func TestReceivablesInAnotherCurrencyConvertAtTheReservationRate(t *testing.T) {
 		t.Fatalf("nothing open: %+v %v", r, err)
 	}
 }
+
+// An opening receivable (S5 C10, STL-INV-012 positive "截止日导入未结应收 7,000"; SC-09's limit 10,000 with 7,000 open
+// from a prior order): it binds no order, so it counts as open and forms no order's credit stage — a reservation
+// of a new order keeps its whole share. SC-09's portion 4,000 then exceeds the 10,000 limit by 1,000
+// (CREDIT_LIMIT_EXCEEDED: a decision opens); 45 days overdue it also exceeds the 30 days' tolerance.
+func TestAnOpeningReceivableCountsAsOpenInTheExposure(t *testing.T) {
+	at := time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)
+	owe := []OwedInstallment{owed("", "", "", "7000.00", "0.00", at.AddDate(0, 0, 3))}
+	r, err := ReceivablesOf(usd, owe, nil)
+	if err != nil || r.Open.String() != "7000.00 USD" || len(r.FormedBy) != 0 || len(r.FormedDocumentsBy) != 0 || !r.EarliestDue.Equal(at.AddDate(0, 0, 3)) {
+		t.Fatalf("%+v %v", r, err)
+	}
+	v, err := Assess(Assessment{Limit: m("10000"), Receivables: r, OrderID: "o.sc09", Portion: m("4000"), Now: at, ToleranceDays: 30})
+	if err != nil || v.Exposure.String() != "7000.00 USD" || v.After.String() != "11000.00 USD" || v.Excess.String() != "1000.00 USD" ||
+		v.Within() || v.Overdue() {
+		t.Fatalf("%+v %v", v, err)
+	}
+	if v = exposure(t, []OwedInstallment{owed("", "", "", "7000.00", "6000.00", at.AddDate(0, 0, -45))}, nil, at); v.Exposure.String() != "1000.00 USD" ||
+		!v.Overdue() || v.OverdueDays != 45 {
+		t.Fatalf("overdue opening receivable: %+v", v)
+	}
+}

@@ -52,6 +52,9 @@ var (
 
 	_ api.ResultCommands = (*Module)(nil)
 	_ api.ResultQueries  = (*Module)(nil)
+
+	_ api.OpeningCommands = (*Module)(nil)
+	_ api.OpeningQueries  = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),

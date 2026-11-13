@@ -282,7 +282,8 @@ func (p *Platform) Contexts() (*Contexts, error) {
 			// FUL's shipments and export lots (R36): FUL is composed after CNX, so its lookups are
 			// bound when CNX asks (S5 D-2).
 			Exports: cnx.FULExports(func() cnx.FULLookups { return c.FUL }, c.POL, cnx.PTYCountries(c.PTY)), Purchases: cnx.PURLines(c.PUR),
-			Funds: cnx.STLFunds(c.STL)})
+			// STL's fund records and credit notes (R38 STL→CNX; CreditNoteRef v1 for CN-AT11, S5 C10).
+			Funds: cnx.STLFunds(c.STL), CreditNotes: cnx.STLCreditNotes(c.STL)})
 	}
 	if err == nil {
 		db, err = p.newDB()

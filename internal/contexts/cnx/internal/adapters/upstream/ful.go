@@ -202,7 +202,7 @@ func (f FUL) lotExport(ctx context.Context, r application.ExportRef, l fulapi.Ex
 			continue
 		}
 		x.Lines = append(x.Lines, application.ExportLine{LineID: line.LineID, SkuID: line.SkuID, SpecRevision: line.SpecRevision, Quantity: q,
-			Unit: kernel.UnitCode(line.UnitID), ShipmentID: l.ShipmentID, OrderLineID: line.OrderLineID})
+			Unit: kernel.UnitCode(line.UnitID), ShipmentID: l.ShipmentID, OrderLineID: line.OrderLineID, ShipmentLineID: line.ShipmentLineID})
 	}
 	if !intact {
 		x.Code, x.Lines = kernel.CodeReferenceInvalid, nil

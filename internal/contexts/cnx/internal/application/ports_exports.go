@@ -67,4 +67,7 @@ type ExportLine struct {
 	ShipmentID   string
 	OrderLineID  string
 	Amount       kernel.Money
+	// ShipmentLineID is an export lot line's FUL shipment line (S5 C10: a credit note's statement names
+	// shipment lines; CN-AT11 ties it to the lot by them).
+	ShipmentLineID string
 }

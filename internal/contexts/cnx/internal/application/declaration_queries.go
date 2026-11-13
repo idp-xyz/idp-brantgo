@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
@@ -210,6 +211,13 @@ func (s Service) GetBundle(ctx context.Context, id string) (api.BundleView, erro
 				Responsibility: api.Responsibility{Kind: r.ResponsibilityKind, PartyID: r.ResponsibilityPartyID, Note: r.ResponsibilityNote},
 				Adjustment:     api.Adjustment{Kind: r.Adjustment, Note: r.AdjustmentNote}, Reason: r.Reason, ResolvedBy: r.By, AuthorityEpoch: r.Epoch,
 				ResolvedAt: r.At})
+			if r.SubjectDetail != "" { // S5 C10: a credit_note subject as STL stated it
+				var link api.CreditNoteLink
+				if err := json.Unmarshal([]byte(r.SubjectDetail), &link); err != nil {
+					return err
+				}
+				v.Reconciliations[len(v.Reconciliations)-1].CreditNote = &link
+			}
 		}
 		return nil
 	})

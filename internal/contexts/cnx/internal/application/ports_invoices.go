@@ -58,3 +58,35 @@ type FundRecord struct {
 	Currency      string
 	ReceivedMinor string
 }
+
+// CreditNotes is CNX's port to STL for the credit notes whose impact a reconciliation records (S5 C10, CN-AT11 CNX
+// half): stlapi CreditNoteLookups.ResolveCreditNotes (CreditNoteRef v1), read before CNX's transaction, STL's data
+// scope (a credit note the caller does not see is absent). It rides on Context Map R38 STL→CNX (OHS), whose
+// contract names FundRecordRef v1 only: no relationship names CreditNoteRef v1 yet (a gap for the Context Map). No
+// guard lock: the reconciliation records the credit note's version and what STL stated of it.
+type CreditNotes interface {
+	ResolveCreditNotes(ctx context.Context, ids []string) (map[string]CreditNote, error)
+}
+
+// CreditNote is a credit note as STL states it: kind, state and version, its sales statement and the statement's
+// state, the shipment lines the statement settles (FUL shipment line keys), the order, currency and amount in minor
+// units, and whether it counts against the statement's sales (confirmed on a standing statement).
+type CreditNote struct {
+	ID              string
+	Kind            string
+	Status          string
+	Version         int64
+	StatementID     string
+	StatementStatus string
+	Sources         []ShipmentLineKey
+	OrderID         string
+	Currency        string
+	AmountMinor     string
+	Effective       bool
+}
+
+// ShipmentLineKey names a FUL shipment line.
+type ShipmentLineKey struct {
+	ShipmentID string
+	LineID     string
+}

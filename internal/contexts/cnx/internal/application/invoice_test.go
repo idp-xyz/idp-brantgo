@@ -96,3 +96,24 @@ func TestInvoiceAndTaxCaseRequestHashIgnoresKeyAndVersion(t *testing.T) {
 		t.Fatal("the request hash covers the allocations")
 	}
 }
+
+// tax_refund_case.record_opening is a humanOnlyCommand (tax specialist; S5 C10); its reads need cnx.read; its
+// request is named and keyed like every command's.
+func TestTaxOpeningRules(t *testing.T) {
+	policy, err := authorization.NewPolicy(Rules()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := policy.Rule(api.CommandRecordTaxOpening)
+	if err != nil || r.Permission != api.CommandRecordTaxOpening || !r.Admits(kernel.ActorHuman) || r.Admits(kernel.ActorAI) || r.Admits(kernel.ActorSystem) {
+		t.Fatalf("%+v %v", r, err)
+	}
+	for _, command := range []string{api.CommandGetTaxOpening, api.CommandTaxOpenings} {
+		if r, err := policy.Rule(command); err != nil || r.Permission != api.PermissionRead {
+			t.Errorf("%s: %+v %v", command, r, err)
+		}
+	}
+	if name, key, _ := request(api.RecordTaxOpening{IdempotencyKey: "k1", OpeningID: "op.1"}); name != api.CommandRecordTaxOpening || key != "k1" {
+		t.Fatalf("%s %s", name, key)
+	}
+}

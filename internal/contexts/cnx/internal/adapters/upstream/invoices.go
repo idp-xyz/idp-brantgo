@@ -73,3 +73,32 @@ func (s STL) ResolveFundRecords(ctx context.Context, ids []string) (map[string]a
 	}
 	return out, nil
 }
+
+// STLCredits answers application.CreditNotes from STL's CreditNoteLookups (CreditNoteRef v1 on R38; an active
+// grant, STL's data scope).
+type STLCredits struct {
+	Notes stlapi.CreditNoteLookups
+}
+
+var _ application.CreditNotes = STLCredits{}
+
+// ResolveCreditNotes asks STL before CNX's transaction.
+func (s STLCredits) ResolveCreditNotes(ctx context.Context, ids []string) (map[string]application.CreditNote, error) {
+	out := map[string]application.CreditNote{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	got, err := s.Notes.ResolveCreditNotes(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for id, n := range got {
+		c := application.CreditNote{ID: n.CreditNoteID, Kind: n.CreditKind, Status: n.Status, Version: n.Version, StatementID: n.StatementID,
+			StatementStatus: n.StatementStatus, OrderID: n.OrderID, Currency: n.Currency, AmountMinor: n.AmountMinor, Effective: n.Effective}
+		for _, src := range n.Sources {
+			c.Sources = append(c.Sources, application.ShipmentLineKey{ShipmentID: src.ShipmentID, LineID: src.LineID})
+		}
+		out[id] = c
+	}
+	return out, nil
+}

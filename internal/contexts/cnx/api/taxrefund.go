@@ -380,6 +380,7 @@ type TaxCaseView struct {
 	OpenedAt       time.Time
 	AuthorityEpoch int64
 	CheckedAt      time.Time
+	Opening        *TaxOpeningRef // S5 C10: an opening case's opening item (its export is no FUL lot)
 }
 
 // TaxCaseSummary is one case of the company.

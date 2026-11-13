@@ -21,6 +21,8 @@ type STL interface {
 	stlapi.CreditNoteQueries
 	stlapi.ResultCommands
 	stlapi.ResultQueries
+	stlapi.OpeningCommands
+	stlapi.OpeningQueries
 	stlapi.Reconciler
 	stlapi.Auditor
 }
@@ -53,6 +55,7 @@ func stlCommands(c STL) *commandSet {
 			stlapi.CommandReviewOrderResult: reflected("", "", receiptOf[stlapi.Receipt](c.ReviewOrderResult)),
 			stlapi.CommandCloseOrderResult:  reflected("", "", receiptOf[stlapi.Receipt](c.CloseOrderResult)),
 			stlapi.CommandReopenOrderResult: reflected("", "", receiptOf[stlapi.Receipt](c.ReopenOrderResult)),
+			stlapi.CommandRecordOpening:     reflected("", "", receiptOf[stlapi.Receipt](c.RecordOpening)),
 		}}
 }
 
@@ -74,6 +77,18 @@ func (s *server) stlRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/stl/credit_notes/{id}", s.authenticated(read(s, s.cfg.STL.GetCreditNote, okView[stlapi.CreditNoteView])))
 	mux.Handle("GET /api/brant/v1/stl/charges/{id}", s.authenticated(read(s, s.cfg.STL.GetCharge, okView[stlapi.ChargeView])))
 	mux.Handle("GET /api/brant/v1/stl/orders/{id}/result", s.authenticated(read(s, s.cfg.STL.GetOrderResult, okView[stlapi.OrderResultView])))
+	mux.Handle("GET /api/brant/v1/stl/opening_balances", s.authenticated(s.openingBalances))
+	mux.Handle("GET /api/brant/v1/stl/opening_balances/{id}", s.authenticated(read(s, s.cfg.STL.GetOpening, okView[stlapi.OpeningView])))
+}
+
+// openingBalances answers GET /api/brant/v1/stl/opening_balances[?cutoff_at=<timestamp>] (C10).
+func (s *server) openingBalances(w http.ResponseWriter, r *http.Request) {
+	v, err := s.cfg.STL.Openings(r.Context(), r.URL.Query().Get("cutoff_at"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, okView(v))
 }
 
 // stlReads are STL's reads in the OpenAPI document.
@@ -106,4 +121,8 @@ var stlReads = []readRoute{
 		"A charge: its source, the orders or shipments it benefits, POL fee category, currency and conversion basis, its estimate and amount, its state (estimated, pending, confirmed) with who recorded, billed and confirmed it, and every allocation (basis, data basis, weights and shares by the largest remainder) with the one that counts", []string{"id"}, false},
 	{"/api/brant/v1/stl/orders/{id}/result", "stl.order_result.get", "stl",
 		"An order's operating result in its analysis currency, derived now from its sources: forecast, executing and confirmed result (by shipment batch) with their sources and gaps, the business settlement FX difference and the net cash; the close conditions (fulfilment, receivables, payables, purchase costs, direct charges; claims not_enabled); the result's state, every immutable closing snapshot, review and reopening. Not legal profit or FX accounting", []string{"id"}, false},
+	{"/api/brant/v1/stl/opening_balances", "stl.opening_balance.list", "stl",
+		"The opening items the caller sees (receivables, payables, customer and supplier prepayments recorded at a cutoff), of one cutoff with ?cutoff_at=<timestamp>, each with its source document, what was settled before the cutoff, what was open at it, what was applied since and what is open now; and the totals of the standing ones per cutoff, kind and currency (CN-AT16)", nil, false},
+	{"/api/brant/v1/stl/opening_balances/{id}", "stl.opening_balance.get", "stl",
+		"An opening item: its kind, cutoff, source document (amount, issued), party and order reference, what was settled before the cutoff and open at it, what was applied since and is open now, with its opening statement's receivable or payable or its opening fund record", []string{"id"}, false},
 }

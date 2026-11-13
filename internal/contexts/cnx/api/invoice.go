@@ -392,14 +392,16 @@ type MatchView struct {
 }
 
 // EvidenceBalanceView is the tax evidence balance of a verified invoice line for one purpose:
-// its quantity, what standing allocations use and what remains (CN-R04).
+// its quantity, what standing allocations use, what declarations finished before the cutoff consumed
+// (OpeningConsumed, S5 C10: "" without an opening balance) and what remains (CN-R04).
 type EvidenceBalanceView struct {
-	LineNo    int
-	Unit      string
-	Purpose   string
-	Quantity  string
-	Allocated string
-	Available string
+	LineNo          int
+	Unit            string
+	Purpose         string
+	Quantity        string
+	Allocated       string
+	OpeningConsumed string
+	Available       string
 }
 
 // InvoiceView is a purchase invoice: its state, the original, the candidate and who produced it,

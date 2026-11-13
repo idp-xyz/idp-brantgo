@@ -24,6 +24,8 @@ type CNX interface {
 	cnxapi.BundleQueries
 	cnxapi.CertificateCommands
 	cnxapi.CertificateQueries
+	cnxapi.TaxOpeningCommands
+	cnxapi.TaxOpeningQueries
 	cnxapi.Reconciler
 	cnxapi.Auditor
 }
@@ -53,6 +55,8 @@ func cnxCommands(c CNX) *commandSet {
 			cnxapi.CommandResolveReconciliation: reflected("", "", receiptOf[cnxapi.Receipt](c.ResolveReconciliation)),
 			// Certificate results name certificate_id (S5 C5).
 			cnxapi.CommandRegisterCertificate: reflected("", "", receiptOf[cnxapi.Receipt](c.RegisterCertificate)),
+			// Opening refund material names opening_id (S5 C10).
+			cnxapi.CommandRecordTaxOpening: reflected("", "", receiptOf[cnxapi.Receipt](c.RecordTaxOpening)),
 		}}
 }
 
@@ -95,6 +99,11 @@ var cnxReads = []readRoute{
 		"An official certificate result: every revision as registered (issuer, number, object with the lines CNX read of it, market, validity, file, verification basis and evidence, verifier, correction reason), its current revision and its state now", []string{"id"}, false},
 	{"/api/brant/v1/cnx/certificates/{id}/applicability", "cnx.certificate.applicability", "cnx",
 		"What CertificateResultRef v1 answers now for the certificate's current revision on the shipment or export lot ?target_kind=shipment|export_lot&target_id=: applicable or the code and reason (kind, market_unknown, market, not_yet_valid, expired, goods), the destination and the lines it covers", []string{"id"}, false},
+	// Opening refund material (S5 C10).
+	{"/api/brant/v1/cnx/tax_openings", "cnx.tax_opening.list", "cnx",
+		"The company's opening refund material, by cutoff: invoice balances (per line and purpose what declarations finished before the cutoff consumed, the remaining balance at the cutoff, allocated and available now) and opening refund cases (the export declared before the cutoff, the position it opened in, the case now)", nil, false},
+	{"/api/brant/v1/cnx/tax_openings/{id}", "cnx.tax_opening.get", "cnx",
+		"An opening item of refund material: its cutoff, source document and evidence; an invoice balance's lines with what was consumed before the cutoff, remained at it, is allocated and available now; an opening case's export reference and date, order reference, position at the cutoff and the case now", []string{"id"}, false},
 }
 
 // cnxRoutes registers CNX's reads.
@@ -113,6 +122,21 @@ func (s *server) cnxRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/cnx/tax_refund_cases/{id}", s.authenticated(read(s, s.cfg.CNX.GetTaxCase, okView[cnxapi.TaxCaseView])))
 	s.cnxDeclarationRoutes(mux)
 	s.cnxCertificateRoutes(mux)
+	mux.Handle("GET /api/brant/v1/cnx/tax_openings", s.authenticated(s.taxOpenings))
+	mux.Handle("GET /api/brant/v1/cnx/tax_openings/{id}", s.authenticated(read(s, s.cfg.CNX.GetTaxOpening, okView[cnxapi.TaxOpeningView])))
+}
+
+// taxOpenings answers GET /api/brant/v1/cnx/tax_openings (S5 C10).
+func (s *server) taxOpenings(w http.ResponseWriter, r *http.Request) {
+	v, err := s.cfg.CNX.TaxOpenings(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if v == nil {
+		v = []cnxapi.TaxOpeningView{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "tax_openings": wire(v)})
 }
 
 // purchaseInvoices answers GET /api/brant/v1/cnx/purchase_invoices.

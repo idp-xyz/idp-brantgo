@@ -80,6 +80,10 @@ func (s Service) GetInvoice(ctx context.Context, invoiceID string) (api.InvoiceV
 		if err != nil {
 			return err
 		}
+		consumed, err := postgres.Consumptions(ctx, exec, sc, inv.ID) // S5 C10: opening consumption
+		if err != nil {
+			return err
+		}
 		for _, l := range inv.Verified.Lines {
 			q, _ := kernel.ParseDecimal(l.Quantity, kernel.QuantityFormat)
 			for _, p := range []string{tr.ExportRefund, tr.ExportExemption} {
@@ -89,8 +93,14 @@ func (s Service) GetInvoice(ctx context.Context, invoiceID string) (api.InvoiceV
 						used = u.Used
 					}
 				}
-				v.Balances = append(v.Balances, api.EvidenceBalanceView{LineNo: l.LineNo, Unit: l.Unit, Purpose: p, Quantity: q.String(),
-					Allocated: used.String(), Available: q.Sub(used).String()})
+				b := api.EvidenceBalanceView{LineNo: l.LineNo, Unit: l.Unit, Purpose: p, Quantity: q.String(), Allocated: used.String()}
+				for _, x := range consumed {
+					if x.LineNo == l.LineNo && x.Purpose == p {
+						b.OpeningConsumed, used = x.Consumed.String(), used.Add(x.Consumed)
+					}
+				}
+				b.Available = q.Sub(used).String()
+				v.Balances = append(v.Balances, b)
 			}
 		}
 		return nil
@@ -176,6 +186,9 @@ func (s Service) GetTaxCase(ctx context.Context, caseID string) (api.TaxCaseView
 				rv.CurrencyCode = r.Currency.Code
 			}
 			v.Results = append(v.Results, rv)
+		}
+		if v.Opening, err = openingRef(ctx, exec, c); err != nil {
+			return err
 		}
 		a := tr.AmountsOf(results)
 		v.Amounts = api.TaxAmountsView{CurrencyCode: a.Currency, ExpectedMinor: minorText(a.Expected), PlannedMinor: minorText(a.Planned),

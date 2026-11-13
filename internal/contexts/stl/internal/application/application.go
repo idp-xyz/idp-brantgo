@@ -95,6 +95,10 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandReopenOrderResult, api.CommandReopenOrderResult),
 		{Command: api.CommandGetCharge, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetOrderResult, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Opening balances (C10): opening_balance.record is a humanOnlyCommand (treasury).
+		authorization.HumanOnly(api.CommandRecordOpening, api.CommandRecordOpening),
+		{Command: api.CommandGetOpening, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandOpenings, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -145,6 +149,9 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	case api.CommandReviewOrderResult, api.CommandCloseOrderResult, api.CommandReopenOrderResult:
 		r, err := postgres.LoadResult(ctx, exec, scope(ctx), id, postgres.NoLock)
 		return err == nil && r != nil && d.Sees(r.OwnerActor, r.OwnerTeam), err
+	case api.CommandRecordOpening:
+		o, err := postgres.LoadOpening(ctx, exec, scope(ctx), id, false)
+		return err == nil && o != nil && d.Sees(o.OwnerActor, o.OwnerTeam), err
 	}
 	sc := scope(ctx)
 	var subjects []string
@@ -314,6 +321,9 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.ReopenOrderResult:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandReopenOrderResult, key, c
+	case api.RecordOpening:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRecordOpening, key, c
 	}
 	return "", "", nil
 }
