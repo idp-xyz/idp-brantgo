@@ -327,7 +327,7 @@ func TestGoalReadinessJudgesOrderActive(t *testing.T) {
 // satisfied (the validity has passed and the conversion slot is taken).
 func TestGoalReadinessKeepsATimelyContractAfterTheQuoteExpired(t *testing.T) {
 	q := newOrderWorld(t)
-	f, expires := q.shortlyActivated("quote.1", 4*time.Second)
+	f, expires := q.shortlyActivated("quote.1", 10*time.Second) // 4 s lapsed before activation on a loaded host (sharded gate, 2026-11-13)
 	_, err := q.c.TRD.RecordResponse(q.author, q.full("response.1", "quote.1", 1, f.BusinessHash))
 	q.must(err)
 	acc, err := q.c.TRD.VerifyResponse(q.reviewer, q.verification("response.1", "acceptance.1", 1, f.BusinessHash))

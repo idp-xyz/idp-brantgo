@@ -273,7 +273,7 @@ func TestQuoteReadyFollowsTheCommittedApprovalNow(t *testing.T) {
 // revision's approval is spent (owner decision 2026-11-11).
 func TestQuoteReadyComparesInstants(t *testing.T) {
 	q := newTrdWorld(t)
-	_, expires := q.shortlyActivated("quote.1", 6*time.Second)
+	_, expires := q.shortlyActivated("quote.1", 10*time.Second)
 	if r := q.readiness(q.author, "quote.1", 0); !r.Ready || !r.ExpiresAt.Equal(expires) {
 		t.Fatalf("before the expiry: %+v", r)
 	}
