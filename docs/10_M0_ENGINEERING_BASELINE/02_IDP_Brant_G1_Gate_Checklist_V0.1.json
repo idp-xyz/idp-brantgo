@@ -3,7 +3,7 @@
   "version": "0.1",
   "date": "2026-11-07",
   "gateMapping": "Cargo 主档案的 G0（M0 启动门禁）在 Brant 对应 G1（详细设计与技术准入）；Brant 的 G0 是客户场景确认。两者都为 NO-GO。",
-  "productGates": {"G0": "NO-GO（真实证据）", "G1": "NO-GO", "G2": "NOT_STARTED", "G3": "NOT_STARTED", "G4": "NOT_STARTED", "G5": "NOT_STARTED"},
+  "productGates": {"G0": "NO-GO（真实证据）", "G1": "NO-GO", "G2": "NOT_STARTED", "G3": "NO-GO（模拟评审，负责人决定 E-7：缺专业角色签核与真实客户证据）", "G4": "NO-GO（模拟评审，负责人决定 E-7：无生产环境、无客户任务）", "G5": "NOT_STARTED"},
   "formalRule": "GO = all(required_approvals) and all(required_evidence) and all(mandatory_domain_tests) and all(integration_gates) and no(open_blocking_decisions)",
   "controls": [
     {"id": "C01", "name": "领域模型签核", "requirement": "UL V0.1（192 词条）、18 个候选上下文、63 条关系、47 条事实权威、68 条不变量经对应 Owner 签核", "evidence": "模拟评审（10 阶段第 09 章）：18 个上下文签核为接受或附条件接受；词条、事实权威与不变量接受（E0，未经真人签核）", "owner": "各 Domain Owner＋首席架构师", "state": "MET（模拟评审）", "blocking": true},

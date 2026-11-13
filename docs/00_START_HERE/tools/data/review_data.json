@@ -24,15 +24,15 @@
     {"id": "IG-03", "gate": "G1", "name": "同根并发（SC-03、BC-AT15、BC-AT17）", "evidence": "SC-03 已实测（根行 FOR UPDATE）；BC-AT15（两个请求键并发准备订单，只有一个成功）与 BC-AT17（替代与转单并发，订单占用名额后替代为 ROOT_CONVERSION_LOCKED）在本机 PG16 与 GitHub Actions 通过（S3 证据）", "owner": "TRD Owner＋技术负责人", "state": "DONE_CI"},
     {"id": "IG-04", "gate": "G1", "name": "跨上下文资格重查（SC-04）", "evidence": "方案 B 的生产守卫：ConfigGuard、PartyScreeningGuard、RfqGuard、SupplyConditionGuard、AdoptabilityGuard、TradingProfileGuard、AddressRoleGuard、SkuGuard、QuoteRevisionGuard、AcceptanceGuard、OrderGuard、PartyGuard，各有提交顺序测试（本机 PG16 与 GitHub Actions）；STL 信用与 CNX 贸易合规守卫按负责人决定 S4—S5 接入", "owner": "首席架构师", "state": "DONE_CI"},
     {"id": "IG-05", "gate": "G1", "name": "Outbox 中继与崩溃演练", "evidence": "SIGKILL 后重投、SIGTERM 正常退出；四条放弃路径写入死信并告警、人工重放（本机 PG16 与 GitHub Actions）", "owner": "技术负责人", "state": "DONE_CI"},
-    {"id": "IG-06", "gate": "G2", "name": "Inbox 去重与重放", "evidence": "事件 ID 去重、乱序与重复投递", "owner": "技术负责人", "state": "NOT_STARTED"},
+    {"id": "IG-06", "gate": "G2", "name": "Inbox 去重与重放", "evidence": "S4-06a（S5 单元 A1）：上下文声明订阅，brant-worker -dispatch 在进程内按事件 ID 去重投递到每个消费方自身的事务；重复投递、两个工作进程、死信重放、失败消费方重投均无重复效果；订阅来源必须是 Context Map 上游（单元测试对照白名单）。S5 的消费方（STL 信用与订单账户、CNX 合规复核、PUR、FUL、STL 订单变更复核）各有重放与乱序测试；BRC-001 S5 链 144 个事件经第二个分发器重投后无变化（本机 PG16 与 GitHub Actions，S5 证据）。乱序只按聚合分区保序，跨聚合不保证（设计如此）", "owner": "技术负责人", "state": "DONE_CI"},
     {"id": "IG-07", "gate": "G1", "name": "OIDC 身份与 authority_epoch", "evidence": "撤权与生效竞争、AI 人工命令拒绝已实测；OIDC 访问令牌校验与经 HTTP 的端到端测试通过（本地签发者）；未接入真实身份提供方", "owner": "安全负责人", "state": "PARTIAL"},
     {"id": "IG-08", "gate": "G2", "name": "文件存储与正式文档字节", "evidence": "同事务封存、字节完整性读取校验：报价正式文档已实现（S3-04）；EVD 文件登记的消费与对象存储未做", "owner": "TRD Owner", "state": "PARTIAL"},
     {"id": "IG-09", "gate": "G2", "name": "编号服务（POL 或 idp-platform-go）", "evidence": "原子分配、幂等、号段不回收：POL NumberIssue v1 在 TRD 事务之前以幂等键分配，被拒绝的试运行不占号，之后的失败只留下号段空缺，重试取回同一编号（S3-04）；idp-platform-go 编号服务未接入", "owner": "POL Owner＋平台负责人", "state": "PARTIAL"},
     {"id": "IG-10", "gate": "G2", "name": "EER 执行适配", "evidence": "停止屏障、恢复、预算强制", "owner": "集成负责人", "state": "NOT_STARTED"},
     {"id": "IG-11", "gate": "G2", "name": "BIP／邮件渠道", "evidence": "外发授权、operation_id、unknown 对账", "owner": "集成负责人", "state": "NOT_STARTED"},
     {"id": "IG-12", "gate": "G2", "name": "真实模型调用与评测（BC-AT28）", "evidence": "试次、修正、成本与权威断言", "owner": "AI Owner", "state": "NOT_STARTED"},
-    {"id": "IG-13", "gate": "G3", "name": "中国专业系统或人工路径对账（CN-AT）", "evidence": "外部回执原文与映射版本", "owner": "CNX Owner＋专业角色", "state": "NOT_STARTED"},
-    {"id": "IG-14", "gate": "G4", "name": "备份恢复与升级演练", "evidence": "一致性备份、恢复后再次升级", "owner": "SRE＋DBA", "state": "NOT_STARTED"}
+    {"id": "IG-13", "gate": "G3", "name": "中国专业系统或人工路径对账（CN-AT）", "evidence": "人工路径（负责人决定 E-1）：报关回执原文、映射版本与外部序号由人工登记，旧回执不覆盖新回执，unknown 先核实再重报；发票、退税资料与外部对账按 CN-AT 在 PG16 上通过，全部为合成数据（S5 证据）。@@S5-IG13@@ 海关单一窗口、税务、银行、保险与承运人连接器未做（S6-05），专业角色未签核", "owner": "CNX Owner＋专业角色", "state": "PARTIAL"},
+    {"id": "IG-14", "gate": "G4", "name": "备份恢复与升级演练", "evidence": "S5-11（单元 C7，2026-11-12，本机 WSL2 的 PostgreSQL 16.12 容器）：逻辑备份恢复与 PITR 各两轮，197 张表逐表行数与摘要一致、28 个 SHA-256 约束重算无违例、迁移账本不变；PITR 测得 RPO 7.6—17.1 秒、RTO 约 30 秒；S5 起点 3b76201 的库升级到当前迁移 22 个文件 1.86 秒、升级后集成冒烟通过。没有生产环境、异地归档与复制，属于本机证据", "owner": "SRE＋DBA", "state": "DONE_LOCAL"}
   ],
   "goAlignment": [
     {"topic": "语言与工具链", "cargo": "Go 1.26.5 精确（与 idp-bento-go 一致）", "brant": "go.mod：go 1.26.0、toolchain go1.26.5；本机以 GOTOOLCHAIN=go1.26.5 复跑 make ci", "status": "DONE_LOCAL"},
