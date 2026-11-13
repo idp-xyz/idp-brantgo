@@ -28,11 +28,13 @@ import (
 // (which loads its amendments: every amendment write happens under that lock), then the ledger's
 // authority guard row FOR SHARE. Prepare and apply read, before the transaction, what POL says of
 // the references the proposal adopts that the current revision does not bind (units, conversions,
-// tax applications and profiles, payment terms, trade terms) and turn it into orderrev.Facts;
-// apply re-checks inside its transaction, after the decider's grant (Authorizer.Qualify, FOR SHARE),
-// CAT's SkuGuard for every SKU specification it adopts and POL's ConfigGuard for every POL revision
-// it adopts, with the content hash read before (REFERENCE_STALE when it moved), in context code
-// order; then, once the revision the proposal yields is derived, STL's CreditGuard for that
+// tax applications and profiles, payment terms, trade terms) and what the next revision seals
+// (S5R-D35, D40: the Incoterm, the customer addresses' countries, the notify party's address; POL
+// and PTY; amendmentSeal) and turn it into orderrev.Facts; apply re-checks inside its transaction,
+// after the decider's grant (Authorizer.Qualify, FOR SHARE), CAT's SkuGuard for every SKU
+// specification it adopts, POL's ConfigGuard for every POL revision it adopts, with the content hash
+// read before (REFERENCE_STALE when it moved), and PTY's AddressRoleGuard for a notify party it
+// binds anew, in context code order; then, once the revision the proposal yields is derived, STL's CreditGuard for that
 // revision when it asks more credit than the current one (S5 D-9, TRD-INV-022:
 // CREDIT_RESERVATION_REQUIRED; amendedCredit). Trade compliance is not checked at apply: the new
 // revision has no conclusion, CNX opens a pending check for it and FUL's release gate blocks
@@ -58,11 +60,13 @@ type spec struct {
 	path string
 }
 
-// amendmentInputs is what an amendment command resolved before its transaction.
+// amendmentInputs is what an amendment command resolved before its transaction: the facts, and the
+// POL revisions, CAT specifications and PTY addresses (the notify party, S5R-D40) it adopts anew.
 type amendmentInputs struct {
-	facts   orderrev.Facts
-	configs []adopted
-	specs   []spec
+	facts     orderrev.Facts
+	configs   []adopted
+	specs     []spec
+	addresses []adoptedAddress
 }
 
 // proposalOf is the domain proposal of a prepare command.
@@ -86,6 +90,9 @@ func proposalOf(cmd api.PrepareAmendment) orderrev.Proposal {
 	}
 	p.Terms = orderrev.Terms{TradeTerms: ref(t.TradeTermsRef), NamedPlace: business(t.NamedPlaceRef), PaymentTerms: ref(t.PaymentTermsRef),
 		Delivery: delivery}
+	if n := t.NotifyPartyRef; n != nil {
+		p.Terms.NotifyParty = &quote.AddressRef{PartyID: n.PartyID, PartyRevision: n.PartyRevision, AddressID: n.AddressID}
+	}
 	return p
 }
 
@@ -170,9 +177,14 @@ func (s Service) amendmentInputs(ctx context.Context, id string, p orderrev.Prop
 	}
 	if p.Terms.TradeTerms != r.Terms.TradeTerms {
 		adopt(p.Terms.TradeTerms, base+"/terms/trade_terms_ref")
+	} else if r.Seal == nil {
+		read(p.Terms.TradeTerms) // its Incoterm, for the seal (S5R-D35)
 	}
 	got, err := s.resolve(ctx, need, at, &in)
 	if err != nil {
+		return in, err
+	}
+	if in.facts.Seal, err = s.amendmentSeal(ctx, r, p, got, base, &in); err != nil {
 		return in, err
 	}
 	if c := got[polRef(r.Currency)].Data.Currency; c != nil {
@@ -321,6 +333,13 @@ func guardAdopted(ctx context.Context, exec bentopg.Executor, in amendmentInputs
 			return nil, api.Reject(api.CodeReferenceStale, c.path)
 		}
 		entries = append(entries, quote.Entry{Name: "pol:" + c.ref.Kind + ":" + c.ref.ConfigID + "@" + itoa(c.ref.Revision), Value: "in_force/" + c.hash})
+	}
+	// PTY (R13): the notify party the proposal binds anew (S5R-D40), AddressRoleGuard v1.
+	for _, a := range in.addresses {
+		if err := guardAddress(ctx, exec, a.ref, a.path); err != nil {
+			return nil, err
+		}
+		entries = append(entries, quote.Entry{Name: "pty:" + a.ref.PartyID + "@" + itoa(a.ref.PartyRevision) + ":" + a.ref.AddressID, Value: "current"})
 	}
 	return entries, nil
 }

@@ -176,7 +176,7 @@ func TestBuildSnapshotTakesOnlyTheSealedDocument(t *testing.T) {
 	src := Source{QuoteID: "quote.1", Revision: 1, BusinessHash: rev.Seal.BusinessHash, Number: "QT-2026-00001",
 		DocumentSHA256: strings.Repeat("d", 64), AcceptanceID: "acceptance.1", AcceptanceVersion: 1, ArrivalAt: arrived,
 		ArrivalBasis: "channel_server", ExpiresAt: expires}
-	if _, err := BuildSnapshot(scope, "order.1", src, rev.Seal.Commercial, a); err != nil {
+	if _, err := BuildSnapshot(scope, "order.1", src, rev.Seal.Commercial, a, Sealing{}); err != nil {
 		t.Fatalf("the sealed document: %v", err)
 	}
 	sealed := func(edit func(*quote.Commercial)) ([]byte, string) {
@@ -203,7 +203,7 @@ func TestBuildSnapshotTakesOnlyTheSealedDocument(t *testing.T) {
 		doc, hash := sealed(edit)
 		s := src
 		s.BusinessHash = hash
-		if _, err := BuildSnapshot(scope, "order.1", s, doc, a); code(err) != "DRAFT_NOT_READY /args/business_revision" {
+		if _, err := BuildSnapshot(scope, "order.1", s, doc, a, Sealing{}); code(err) != "DRAFT_NOT_READY /args/business_revision" {
 			t.Errorf("%s: %s", name, code(err))
 		}
 	}
@@ -214,7 +214,7 @@ func TestBuildSnapshotTakesOnlyTheSealedDocument(t *testing.T) {
 		"a line's ID":       func(c *quote.Commercial) { c.Calculation.Lines[0].ID = "other" },
 	} {
 		doc, _ := sealed(edit)
-		if _, err := BuildSnapshot(scope, "order.1", src, doc, a); code(err) != "BUSINESS_HASH_MISMATCH /business_hash" {
+		if _, err := BuildSnapshot(scope, "order.1", src, doc, a, Sealing{}); code(err) != "BUSINESS_HASH_MISMATCH /business_hash" {
 			t.Errorf("%s with the sealed hash: %s", name, code(err))
 		}
 	}

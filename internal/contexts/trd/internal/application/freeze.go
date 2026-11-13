@@ -169,6 +169,10 @@ type guarded struct {
 	// legal is where refusals of the legal terms the freeze adopted from the issuer's default point
 	// (quote/legal.go): the draft names none, so they are refused at its issuer_ref; "" otherwise.
 	legal string
+	// notify is the notify party an order's revision binds (S5R-D40), guarded with the addresses at
+	// notifyPath; nil for none (a quote binds none).
+	notify     *ptyapi.AddressRoleRef
+	notifyPath string
 }
 
 // freezeGuards is what the freeze guards for draft d with seal s, the profile read as profileHash.
@@ -328,6 +332,11 @@ func (s Service) checkUpstream(ctx context.Context, exec bentopg.Executor, g gua
 	for i, a := range d.Addresses {
 		addresses[ptyapi.AddressRoleRef{PartyID: a.PartyID, PartyRevision: a.PartyRevision, AddressID: a.AddressID}] =
 			fmt.Sprintf("%s/customer_address_refs/%d", p, i)
+	}
+	if n := g.notify; n != nil {
+		if _, ok := addresses[*n]; !ok {
+			addresses[*n] = g.notifyPath
+		}
 	}
 	for _, a := range slices.SortedFunc(maps.Keys(addresses), compareAddress) {
 		v, err := ptyapi.ScanAddressRoleGuard(a, exec.QueryRow(ctx, ptyapi.AddressRoleGuardSQL, ptyapi.AddressRoleGuardArgs(a)...).Scan)

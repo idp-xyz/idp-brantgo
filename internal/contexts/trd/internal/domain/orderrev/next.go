@@ -50,6 +50,10 @@ type ProposedCharge struct {
 // ProposalOf returns the proposal that restates revision r unchanged, the start of every amendment.
 func ProposalOf(r *Revision) Proposal {
 	p := Proposal{Lines: []ProposedLine{}, Charges: []ProposedCharge{}, Terms: r.Terms}
+	if n := r.Terms.NotifyParty; n != nil {
+		notify := *n
+		p.Terms.NotifyParty = &notify
+	}
 	for _, l := range r.Lines {
 		p.Lines = append(p.Lines, ProposedLine{LineID: l.LineID, Sku: l.Sku, Quantity: l.Quantity, Unit: l.Unit, Conversion: l.Conversion,
 			UnitPrice:          l.UnitPrice,
@@ -82,6 +86,11 @@ type Facts struct {
 	// Stages are the stages of the proposal's payment terms when they are not the current
 	// revision's.
 	Stages []Stage
+	// Seal is what the next revision seals of the proposal's trade terms, the order's customer
+	// addresses and the notify party the proposal names (S5R-D35, D40; seal.go). The application
+	// always resolves it; nil derives a revision without a seal, as before S5R, and refuses a
+	// proposal that names a notify party (its address is needed).
+	Seal *SealFacts
 }
 
 // Measure keys Facts.Measures: a SKU specification and the sales unit a line counts it in.
@@ -181,6 +190,16 @@ func Next(base *Revision, by AmendmentRef, p Proposal, f Fulfilment, facts Facts
 		return nil, nil, err
 	}
 	next.Terms = p.Terms
+	switch {
+	case facts.Seal != nil:
+		seal, err := NewSeal(p.Terms, base.Parties.Customer.Addresses, *facts.Seal, path+"/terms/trade_terms_ref", path+"/terms/notify_party_ref")
+		if err != nil {
+			return nil, nil, err
+		}
+		next.Seal = seal
+	case p.Terms.NotifyParty != nil:
+		return nil, nil, kernel.Reject(kernel.CodeReferenceInvalid, path+"/terms/notify_party_ref", "The notify party's address is needed")
+	}
 
 	switch {
 	case len(p.Lines) == 0:
@@ -523,6 +542,8 @@ func checkTerms(t Terms, path string) error {
 		return kernel.Reject(kernel.CodeSchemaInvalid, path+"/payment_terms_ref", "")
 	case t.NamedPlace.Kind != "location" || !kernel.ValidIdentifier(t.NamedPlace.ID) || t.NamedPlace.Revision <= 0:
 		return kernel.Reject(kernel.CodeSchemaInvalid, path+"/named_place_ref", "")
+	case t.NotifyParty != nil && !validAddressRef(*t.NotifyParty):
+		return kernel.Reject(kernel.CodeSchemaInvalid, path+"/notify_party_ref", "")
 	}
 	d, at := t.Delivery, path+"/delivery"
 	invalid := func(why string) error { return kernel.Reject(kernel.CodeInvalidKnownValue, at, why) }
@@ -604,6 +625,9 @@ func diff(from, to *Revision) *Diff {
 	if !sameDelivery(from.Terms.Delivery, to.Terms.Delivery) {
 		d.Terms = append(d.Terms, "delivery")
 	}
+	if !sameAddress(from.Terms.NotifyParty, to.Terms.NotifyParty) {
+		d.Terms = append(d.Terms, "notify_party_ref")
+	}
 	return d
 }
 
@@ -654,6 +678,10 @@ func exact(d kernel.Decimal) string {
 }
 
 func sameRef(a, b *quote.Ref) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
+
+func sameAddress(a, b *quote.AddressRef) bool {
+	return (a == nil) == (b == nil) && (a == nil || *a == *b)
+}
 
 func conversionRef(x *calc.Conversion) *quote.Ref {
 	if x == nil {

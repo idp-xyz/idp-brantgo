@@ -1,6 +1,8 @@
 package order
 
 import (
+	"math/big"
+
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -74,3 +76,75 @@ func (o *Order) Ended() string {
 	}
 	return orderrev.CommandCloseUnfulfilled
 }
+
+// CostedLine is one line of the cost snapshot the source revision adopted, as CST gives it
+// (CostSnapshotRef v1, Context Map R11): its RFQ line (the costing context's line), its quantity in
+// the cost unit and its cost in minor units of the snapshot's currency.
+type CostedLine struct {
+	RfqLineID   string
+	Quantity    string
+	Unit        string
+	AmountMinor string
+}
+
+// LineCosts returns the costing cost of the lines of revision r of the order whose snapshot is s
+// (S5R-D33; R32 OrderCommercialSnapshot v1, OrderRevisionRef v1), by line ID, in minor units of the
+// calculation's comparison currency: for a line that quotes an RFQ line in the SKU specification and
+// cost unit the costing costed, what costed snapshot line gives that RFQ line at the costed
+// quantity, and for another quantity (an amendment changed it) that cost × the line's normalized
+// quantity ÷ the costed quantity, rounded HALF_UP to the minor unit once. The costing is used only
+// when it is the one the source revision's calculation sealed: in its calculation currency
+// (currency, the snapshot's) with lines adding up to the sealed cost (cost_minor); otherwise, and for
+// a line no costing priced (added by an amendment, another SKU specification), there is none.
+func (s Snapshot) LineCosts(r *orderrev.Revision, currency string, costed []CostedLine) map[string]string {
+	out := map[string]string{}
+	c := s.Commercial.Calculation
+	if c == nil || r == nil || currency == "" || currency != c.CostScope.Currency {
+		return out
+	}
+	byRfq := map[string]CostedLine{}
+	sum := new(big.Int)
+	for _, l := range costed {
+		amount, ok := new(big.Int).SetString(l.AmountMinor, 10)
+		if !ok || amount.Sign() < 0 {
+			return out
+		}
+		sum.Add(sum, amount)
+		byRfq[l.RfqLineID] = l
+	}
+	if sealed, ok := new(big.Int).SetString(c.CostMinor, 10); !ok || sealed.Cmp(sum) != 0 {
+		return out
+	}
+	bindings := map[string]quote.LineBinding{}
+	for _, b := range c.CostScope.Lines {
+		bindings[b.RfqLineID] = b
+	}
+	for _, l := range r.Lines {
+		b, bound := bindings[l.RfqLineID]
+		cl, priced := byRfq[l.RfqLineID]
+		if l.RfqLineID == "" || !bound || !priced || l.Sku.SkuID != b.SkuID || l.Sku.SpecRevision != b.SpecRevision || l.CostUnit != b.CostUnit ||
+			cl.Unit != b.CostUnit {
+			continue
+		}
+		costedQ, err1 := kernel.ParseDecimal(cl.Quantity, wideQuantity)
+		q, err2 := kernel.ParseDecimal(l.NormalizedQuantity, wideQuantity)
+		amount, err3 := kernel.ParseDecimal(cl.AmountMinor, wideQuantity)
+		if err1 != nil || err2 != nil || err3 != nil || costedQ.Sign() <= 0 {
+			continue
+		}
+		if q.Equal(costedQ) {
+			out[l.LineID] = cl.AmountMinor
+			continue
+		}
+		share, err := amount.Mul(q).Quo(costedQ)
+		if err != nil {
+			continue
+		}
+		out[l.LineID] = share.ScaledHalfUp(0).String()
+	}
+	return out
+}
+
+// wideQuantity reads the stored decimals of a costing (normalized quantities have up to 18
+// fractional digits; an amount in minor units is an integer of up to 24 digits).
+var wideQuantity = kernel.DecimalFormat{IntDigits: 24, Scale: 24}

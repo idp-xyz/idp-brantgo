@@ -181,6 +181,54 @@ func TestOpenDownstreamCommitments(t *testing.T) {
 	}
 }
 
+// S5R-D05 (TRD side, verified; R71 as R4 publishes it; TRD-INV-019 "为已交付未出运货物保留的需求分配视为未处置，
+// 除非 PUR 记录了获批处置"): PUR lists every approved disposition of delivered goods as its own row
+// (commitment_disposition, with its disposition) and each allocation net of them. TRD settles a row
+// with a disposition and judges the allocation as PUR states it: it never subtracts a disposition a
+// second time. 60 PCS of L4 delivered and kept for the order, nothing shipped: with 40 returned to the
+// supplier the allocation row says 20 — still open, and named as 20, not as 60 nor as nothing — and
+// with the other 20 written off PUR lists no allocation and the order cancels; a requested (not yet
+// approved) disposition is not listed at all.
+func TestS5RD05ApprovedDispositionsSettleWithoutASecondSubtraction(t *testing.T) {
+	r := revisionOne(t)
+	pur := func(cs ...Commitment) Downstream {
+		for i := range cs {
+			cs[i].Context = "PUR"
+		}
+		return Downstream{Source: "pur.downstream_commitments.v1", Open: cs}
+	}
+	cancelled := Commitment{Kind: KindPurchaseCommitment, ID: "commitment.1", State: StateFulfilled}
+	allocation := func(q string) Commitment {
+		return Commitment{Kind: KindDemandAllocation, ID: "L4", State: "allocated", LineID: "L4", Quantity: q}
+	}
+	disposed := func(id, kind, q string) Commitment {
+		return Commitment{Kind: KindCommitmentDisposition, ID: id, State: "approved", LineID: "L4", Quantity: q, Disposition: kind}
+	}
+	_, err := Cancel(Active, r, Fulfilment{}, pur(cancelled, allocation("60")), act("撤单"))
+	if rej, ok := kernel.AsRejection(err); !ok || !strings.Contains(rej.Fields[0].Reason, "allocates 60 of line L4, which shipped 0") {
+		t.Fatalf("60 delivered and not disposed of: %v", err)
+	}
+	_, err = Cancel(Active, r, Fulfilment{}, pur(cancelled, allocation("20"), disposed("disp.return", "return_to_supplier", "40")), act("撤单"))
+	if rej, ok := kernel.AsRejection(err); !ok || rej.Code != CodeDownstreamCommitmentOpen ||
+		!strings.Contains(rej.Fields[0].Reason, "allocates 20 of line L4, which shipped 0") || strings.Contains(rej.Fields[0].Reason, "disp.return") {
+		t.Fatalf("40 of 60 returned: the netted allocation alone is open: %v", err)
+	}
+	e, err := Cancel(Active, r, Fulfilment{}, pur(cancelled, disposed("disp.return", "return_to_supplier", "40"),
+		disposed("disp.writeoff", "write_off", "20")), act("撤单"))
+	if err != nil || e.Status != Cancelled || e.Downstream != "pur.downstream_commitments.v1" {
+		t.Fatalf("every delivered piece disposed of: %v %+v", err, e)
+	}
+	// Closing the remainder after 50 of 60 shipped: the 10 held for reuse settle the line.
+	_, err = CloseRemainder(Active, r, shipped("L4", "50"), pur(cancelled, allocation("60")), act("短交"))
+	if code(err) != "DOWNSTREAM_COMMITMENT_OPEN at /args/order_id" {
+		t.Fatalf("10 delivered beyond the shipments: %s", code(err))
+	}
+	if _, err = CloseRemainder(Active, r, shipped("L4", "50"), pur(cancelled, allocation("50"), disposed("disp.hold", "hold_for_reuse", "10")),
+		act("短交")); err != nil {
+		t.Fatalf("the 10 held for reuse: %v", err)
+	}
+}
+
 // ShipmentFacts v1 (R70) as the order's revision reads it: the answers of a line summed in the
 // line's unit; another unit, a line the revision does not have, or an unreadable or negative
 // quantity cannot be compared with the order (REFERENCE_INVALID).

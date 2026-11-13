@@ -46,7 +46,8 @@ import (
 //  7. the upstream guards in context code order, each locking its rows FOR SHARE until the order
 //     commits (orderUpstream): CAT SkuGuard; CNX TradeComplianceGuard on the order at its revision
 //     and hash (TRD-INV-023); CST AdoptabilityGuard; INQ RfqGuard; POL ConfigGuard; PTY
-//     TradingProfileGuard, AddressRoleGuard and PartyScreeningGuard; STL CreditGuard on the credit
+//     TradingProfileGuard, AddressRoleGuard (the customer's addresses and the notify party the
+//     order binds, S5R-D40) and PartyScreeningGuard; STL CreditGuard on the credit
 //     portion of the order's sealed payment plan, when the plan has a stage due after shipment or
 //     invoice (TRD-INV-022; order_guards.go). A lapse of a fact the source revision binds becomes a
 //     risk (with the sales exchange rate's age). Trade compliance that is not clear, a party not
@@ -178,6 +179,12 @@ func (s Service) orderUpstream(ctx context.Context, exec bentopg.Executor, h *or
 	var found upstreamFound
 	var err error
 	g := sealedGuards(src.revision, src.commercial)
+	// The notify party the order's revision binds (S5R-D40), with the customer's addresses: a lapse
+	// is a risk the order approval acknowledges, as theirs.
+	if rev, err := h.o.Revision(); err == nil && rev.Terms.NotifyParty != nil {
+		n := ptyRef(*rev.Terms.NotifyParty)
+		g.notify, g.notifyPath = &n, "/terms/notify_party_ref"
+	}
 	if activating {
 		// The order at its revision and hash, and the payment plan that revision sealed: what CNX
 		// concluded on and what STL reserved for (a draft is at revision 1, its snapshot).
