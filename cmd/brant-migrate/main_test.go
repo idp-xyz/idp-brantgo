@@ -82,6 +82,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000001_msg_dead_letter",
 		"brant:000001_ref_screening_lists", "brant:000002_ref_country_programmes", "brant:000003_ref_programme_regions",
 		"brant:000001_evd_sources", "brant:000002_evd_business_files", "brant:000003_evd_file_extracts",
+		"brant:000004_evd_formal_files",
 		"brant:000001_pty_parties", "brant:000002_pty_party_screening", "brant:000003_pty_profiles",
 		"brant:000004_pty_profile_guards", "brant:000005_pty_party_guard", "brant:000006_pty_address_country",
 		"brant:000007_pty_s5r_roles_payers",

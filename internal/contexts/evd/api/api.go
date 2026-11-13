@@ -311,6 +311,9 @@ type FileView struct {
 	ContentSHA256    string
 	SupersedesFileID string
 	RegisteredAt     time.Time
+	// Formal is the formal document of TRD the file holds, for a file EVD registered from TRD's
+	// events (formal.go); nil for other files.
+	Formal *FormalFile
 }
 
 // Queries is EVD's read side.

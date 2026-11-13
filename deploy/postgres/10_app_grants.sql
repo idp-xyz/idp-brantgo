@@ -27,6 +27,8 @@ GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant
     brant_evd.business_file, brant_evd.action_result, brant_evd.audit_event TO brant_app;
 -- File extracts (S4 B4) are immutable as well.
 GRANT SELECT, INSERT ON brant_evd.file_extract TO brant_app;
+-- TRD's formal documents registered as files (S4 C4, R65) are immutable as well.
+GRANT SELECT, INSERT ON brant_evd.formal_file TO brant_app;
 
 -- REF: screening list reference data. An import moves a list's current version; versions, entries and
 -- name keys are never updated or deleted; the ledger only grows. The list guard function is executed

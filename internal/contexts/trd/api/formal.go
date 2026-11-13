@@ -271,6 +271,10 @@ type FormalDocument struct {
 	Status           string
 	Formal           FormalView
 	Content          []byte
+	// OwnerActorID and OwnerTeamID are the quote root's owner, by whom TRD decides who sees the root
+	// and its documents (data scope): EVD files the document under them (Context Map R65, S4 C4).
+	OwnerActorID string
+	OwnerTeamID  string
 }
 
 // QuoteRevisionRef names a business revision of a quote {quote_id, business_revision}

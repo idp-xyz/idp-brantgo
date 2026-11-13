@@ -210,6 +210,10 @@ type OrderDocument struct {
 	OrderID  string
 	Document OrderDocumentView
 	Content  []byte
+	// OwnerActorID and OwnerTeamID are the owner of the order's quote root, by whom TRD decides who
+	// sees the order and its documents (data scope): EVD files the document under them (R65, S4 C4).
+	OwnerActorID string
+	OwnerTeamID  string
 }
 
 // OrderDocumentCommands is the command entry point of order documents. Errors are as Commands

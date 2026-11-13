@@ -48,13 +48,16 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetExtract, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandResolveSources, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
+		// The formal-file consumer's command (formal.go): its system actor only (R65, WBS S4-06c).
+		{Command: api.CommandRegisterFormalFile, Permission: api.CommandRegisterFormalFile, ActorKinds: []kernel.ActorKind{kernel.ActorSystem}},
+		{Command: CommandGetFormalFile, Permission: PermissionRead, ActorKinds: anyActor},
 	}
 }
 
 // Visible reports whether d's actor sees the source origin or file a stored result names.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	scope, _ := bento.ScopeFromContext(ctx)
-	if command == api.CommandRegisterFile {
+	if command == api.CommandRegisterFile || command == api.CommandRegisterFormalFile {
 		f, err := postgres.LoadFile(ctx, exec, scope, id, false)
 		return err == nil && f != nil && d.Sees(f.OwnerActor, f.OwnerTeam), err
 	}
@@ -69,6 +72,9 @@ type Service struct {
 	// Extractor reads business files for file_extract sources (internal/ai/ingest, wired by
 	// bootstrap); without one, file_extract is UNSUPPORTED_CONTRACT.
 	Extractor api.Extractor
+	// Formal returns TRD's FormalDocument read for the formal-file consumer (formal.go; R65), bound
+	// when asked because EVD is composed before TRD; nil without the consumer.
+	Formal func() FormalDocuments
 }
 
 // RegisterSource registers a text source (Python Core._register_source).
@@ -469,7 +475,12 @@ func (s Service) GetFile(ctx context.Context, id string) (api.FileView, error) {
 		}
 		v = api.FileView{FileID: f.ID, FileName: f.Name, MimeType: f.MimeType, Content: f.Content, ContentSHA256: f.SHA256,
 			SupersedesFileID: f.SupersedesFileID, RegisteredAt: f.RegisteredAt}
-		return nil
+		x, err := postgres.FormalFileByID(ctx, exec, scope, id)
+		if x != nil {
+			formal := formalView(x)
+			v.Formal = &formal
+		}
+		return err
 	})
 	return v, err
 }

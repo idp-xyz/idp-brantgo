@@ -153,8 +153,8 @@ var policyConsumers = []struct {
 	{"R18 approvals, revocations and acceptance → TSK resumes the waiting tasks", "tsk", trdapi.Source,
 		[]eventing.EventType{trdapi.EventQuoteReviewDecided, trdapi.EventQuoteApprovalRevoked, trdapi.EventAcceptanceVerified,
 			trdapi.EventOrderReviewDecided, trdapi.EventOrderApprovalRevoked}, ""},
-	{"R65 QuoteActivated, QuoteReplaced → EVD registers the formal file", "evd", trdapi.Source,
-		[]eventing.EventType{trdapi.EventQuoteActivated, trdapi.EventQuoteReplaced}, "S4-06c (S4 plan unit C4)"},
+	{"R65 QuoteActivated, QuoteReplaced, OrderDocumentGenerated → EVD registers the formal file", "evd", trdapi.Source,
+		[]eventing.EventType{trdapi.EventQuoteActivated, trdapi.EventQuoteReplaced, trdapi.EventOrderDocumentGenerated}, ""},
 }
 
 func TestEventPoliciesHaveConsumers(t *testing.T) {

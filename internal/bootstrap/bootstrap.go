@@ -204,7 +204,15 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		// EVD reads file_extract sources with the AI layer's extractor under Q01.upload.v0.1 (S4 B4).
-		c.EVD, err = evd.New(db, evd.WithExtractor(ingest.EVD{Profile: ingest.Q01Upload}))
+		// Its consumer evd.formal_files reads TRD's formal documents (R65, S4 C4); TRD is composed
+		// later (it reads EVD, R16), so its read is bound when an event arrives (D-2).
+		c.EVD, err = evd.New(db, evd.WithExtractor(ingest.EVD{Profile: ingest.Q01Upload}),
+			evd.WithFormalDocuments(func() evd.FormalDocuments {
+				if c.TRD == nil {
+					return nil
+				}
+				return c.TRD
+			}))
 	}
 	if err == nil {
 		db, err = p.newDB()
