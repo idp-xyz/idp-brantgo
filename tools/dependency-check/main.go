@@ -5,7 +5,9 @@
 //     module;
 //   - CODEOWNERS covering every bounded context and the kernel (AC7);
 //   - no Go code inside the master archive under docs/ (AC10);
-//   - test-support packages (pgtest) imported from test files only.
+//   - test-support packages (pgtest) imported from test files only;
+//   - tools that run before or around the test suite (tools/testshard) importing the standard
+//     library only.
 //
 // D7 (the <bc>api import alias) is a "should" rule and only produces warnings.
 //
@@ -165,10 +167,14 @@ const (
 	partDomain = "domain"
 	partOther  = "internal"
 	partStray  = "stray"
+	partStdlib = "stdlib" // a tool that imports the standard library only
 )
 
 // testSupport lists packages that exist for tests and may be imported from test files only.
 var testSupport = []string{"internal/foundation/database/pgtest"}
+
+// stdlibTools lists tools that import the standard library only, test files included.
+var stdlibTools = []string{"tools/testshard"}
 
 type class struct {
 	layer, context, part string
@@ -181,6 +187,11 @@ func classify(module, importPath string) class {
 	case seg[0] == "cmd":
 		return class{layer: layerEntry}
 	case seg[0] == "tools":
+		for _, t := range stdlibTools {
+			if rel == t {
+				return class{layer: layerTool, part: partStdlib}
+			}
+		}
 		return class{layer: layerTool}
 	case seg[0] == "tests":
 		return class{layer: layerTests}
@@ -259,6 +270,10 @@ func checkImports(module string, pkgs []listedPackage, allow map[[2]string]bool)
 					continue
 				}
 				seen[imp] = true
+				if from.part == partStdlib && !isStandard(imp) {
+					out = append(out, finding{"stdlib", name, "imports " + imp + "; this tool uses the standard library only"})
+					continue
+				}
 				if isTestSupport(module, imp) {
 					if !test && from.layer != layerTool {
 						out = append(out, finding{"testsupport", name, "imports " + strings.TrimPrefix(imp, module+"/") + ", which only test files may import"})
