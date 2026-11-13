@@ -496,6 +496,11 @@ GRANT UPDATE (lifecycle, control_mode, control_epoch, task_version, target_quote
               stop_purpose, stop_from, stop_reason, stop_by_kind, stop_by_id, stop_at, scope_settled_at, completion_actor, end_cause,
               end_reason, end_responsible_id, ended_by_kind, ended_by_id, ended_at, updated_at)
     ON brant_tsk.business_task TO brant_app;
+-- TSK action executions (S4 unit B1): an action's state, version, attempt count and committed result
+-- change; what it was registered with does not (trigger); the attempt log only grows.
+GRANT SELECT, INSERT ON brant_tsk.action_execution, brant_tsk.action_attempt TO brant_app;
+GRANT UPDATE (state, action_version, attempts, result_action_id, result_object_id, result_row_version, result_status, updated_at)
+    ON brant_tsk.action_execution TO brant_app;
 
 -- internal/ai (brant_ai; plan S4 D-6): a delegation is revoked and an approval grant used or revoked,
 -- once each; their binding never changes and neither is deleted (triggers); the ledger only grows.

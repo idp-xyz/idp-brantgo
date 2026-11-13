@@ -11,6 +11,7 @@ import (
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/reconcile"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/trd"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/application"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -28,6 +29,9 @@ var (
 	_ api.Queries    = (*Module)(nil)
 	_ api.Auditor    = (*Module)(nil)
 	_ api.Reconciler = (*Module)(nil)
+
+	_ api.ActionCommands = (*Module)(nil)
+	_ api.ActionQueries  = (*Module)(nil)
 )
 
 // The ports TSK calls TRD through (R17 ObjectControl commands v1, R18 GoalReadiness v1) and what
@@ -41,7 +45,17 @@ type (
 	Verdict        = application.Verdict
 	// TRD is what TSK calls in TRD's api: the object control commands and the quote read.
 	TRD = trd.TRD
+	// Reconcilers are TSK's ports to the ActionReconciliation v1 of the contexts a task step writes
+	// (R18, R66–R69; S4 unit B1), and Reconciler, Answer one of them and its answer.
+	Reconcilers = application.Reconcilers
+	Reconciler  = application.Reconciler
+	Answer      = application.Answer
+	// ActionReconcilers are those contexts' published reconcilers.
+	ActionReconcilers = reconcile.Contexts
 )
+
+// ActionReconciliation is TSK's ports to the ActionReconciliation v1 of r's contexts.
+func ActionReconciliation(r ActionReconcilers) Reconcilers { return reconcile.Ports(r) }
 
 // TRDControl is the port to TRD's object control over its api (bind, stop and release; enter_manual
 // and handoff answer DEPENDENCY_NOT_SUPPORTED until TRD publishes them).
@@ -54,7 +68,7 @@ func ReadinessNotWired() Readiness { return application.ReadinessNotWired{} }
 // New wires TSK to db, a transaction owner that belongs to TSK alone, and to its ports to TRD.
 func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 	if !upstream.Complete() {
-		return nil, errors.New("tsk: module needs its ports to TRD's object control and goal readiness")
+		return nil, errors.New("tsk: module needs its ports to TRD's object control and goal readiness, and to the action reconciliation of EVD, INQ, SUP, CST and TRD")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {
@@ -65,8 +79,8 @@ func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 		return nil, err
 	}
 	clock := bento.SystemClock{}
-	return &Module{application.Service{Clock: clock, Upstream: upstream, Actions: application.NoActions{}, Ledger: &action.Ledger{
+	return &Module{application.Service{Clock: clock, Upstream: upstream, Actions: application.StoredActions{}, Ledger: &action.Ledger{
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
-		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetTask, Visible: application.Visible,
+		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetTask, Visible: application.Visible, ReconcileAudit: api.ReconcileAudit,
 	}}}, nil
 }

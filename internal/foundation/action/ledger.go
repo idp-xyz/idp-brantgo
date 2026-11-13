@@ -98,6 +98,10 @@ type Ledger struct {
 	// (Python authorizes "read" before returning a stored result).
 	ReplayRead string
 	Visible    Visibility
+	// ReconcileAudit is the name reconciliations have in the audit trail; empty means
+	// ReconcileQuery. A context whose own command is named action.reconcile (TSK's ActionExecution,
+	// S4 unit B1) names its reconciliations otherwise, so its audit trail tells them apart.
+	ReconcileAudit string
 }
 
 var (
@@ -343,7 +347,7 @@ func (l *Ledger) stored(ctx context.Context, exec bentopg.Executor, p identity.P
 }
 
 // ReconcileQuery is the name a reconciliation has in the audit trail (Python audits
-// quote.query.action_reconciliation).
+// quote.query.action_reconciliation), unless the ledger names it otherwise (ReconcileAudit).
 const ReconcileQuery = "action.reconcile"
 
 // Reconciliation is what became of a command whose caller lost the answer.
@@ -382,11 +386,18 @@ func (l *Ledger) Reconcile(ctx context.Context, command, idempotencyKey, request
 		return rec, nil
 	}
 	if rej, ok := kernel.AsRejection(err); ok {
-		if auditErr := l.auditRejected(ctx, p, ReconcileQuery, "", rej.Code); auditErr != nil {
+		if auditErr := l.auditRejected(ctx, p, l.reconcileAudit(), "", rej.Code); auditErr != nil {
 			return Reconciliation{}, errors.Join(rej, auditErr)
 		}
 	}
 	return Reconciliation{}, err
+}
+
+func (l *Ledger) reconcileAudit() string {
+	if l.ReconcileAudit != "" {
+		return l.ReconcileAudit
+	}
+	return ReconcileQuery
 }
 
 func (l *Ledger) reconcile(ctx context.Context, p identity.Principal, command, key, hash string) (Reconciliation, error) {
@@ -425,7 +436,7 @@ func (l *Ledger) reconcile(ctx context.Context, p identity.Principal, command, k
 				rec.State, rec.Result = kernel.ReconcileCommitted, &res
 			}
 		}
-		return l.audit(ctx, exec, p, ReconcileQuery, rec.ObjectID, "read", "", "", d.Epoch)
+		return l.audit(ctx, exec, p, l.reconcileAudit(), rec.ObjectID, "read", "", "", d.Epoch)
 	})
 	if err != nil {
 		return Reconciliation{}, err
