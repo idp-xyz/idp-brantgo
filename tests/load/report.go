@@ -5,26 +5,29 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
 // Report is the machine-readable result of one run (report.json).
 type Report struct {
-	Tool        string        `json:"tool"`
-	Mode        string        `json:"mode"`
-	Label       string        `json:"label,omitempty"`
-	StartedAt   string        `json:"started_at"`
-	FinishedAt  string        `json:"finished_at"`
-	Tenant      string        `json:"tenant"`
-	Company     string        `json:"company"`
-	Environment Environment   `json:"environment"`
-	Workload    string        `json:"workload"`
-	Setup       SetupStats    `json:"setup"`
-	Prime       PrimeStats    `json:"prime"`
-	Stages      []StageReport `json:"stages,omitempty"`
-	Writes      *WritesStats  `json:"writes,omitempty"`
-	Drain       *DrainStats   `json:"outbox_drain,omitempty"`
-	NotExecuted []string      `json:"not_executed"`
+	Tool        string           `json:"tool"`
+	Mode        string           `json:"mode"`
+	Label       string           `json:"label,omitempty"`
+	StartedAt   string           `json:"started_at"`
+	FinishedAt  string           `json:"finished_at"`
+	Tenant      string           `json:"tenant"`
+	Company     string           `json:"company"`
+	Environment Environment      `json:"environment"`
+	Workload    string           `json:"workload"`
+	Setup       SetupStats       `json:"setup"`
+	Prime       PrimeStats       `json:"prime"`
+	Workers     int              `json:"dispatch_workers"`
+	Stages      []StageReport    `json:"stages,omitempty"`
+	Writes      *WritesStats     `json:"writes,omitempty"`
+	Drain       *DrainStats      `json:"outbox_drain,omitempty"`
+	Thresholds  *ThresholdReport `json:"thresholds,omitempty"`
+	NotExecuted []string         `json:"not_executed"`
 }
 
 // Environment is where the run took place.
@@ -58,11 +61,14 @@ type PrimeStats struct {
 	Reads    ClassStats `json:"reads"`
 }
 
-// Window is a stage's measurement window.
+// Window is a stage's measurement window: its length on the monotonic clock and the wall clock at
+// its edges. ClockStepS is how far the wall clock stepped within it (wall span minus monotonic
+// span); a step between an event's recorded_at and published_at adds to that event's relay lag.
 type Window struct {
-	From    string  `json:"from"`
-	To      string  `json:"to"`
-	Seconds float64 `json:"seconds"`
+	From       string  `json:"from"`
+	To         string  `json:"to"`
+	Seconds    float64 `json:"seconds"`
+	ClockStepS float64 `json:"wall_clock_step_s"`
 }
 
 // CycleStats is the order cycles that ended in a window.
@@ -91,6 +97,8 @@ type StageReport struct {
 	WorkerCores  float64    `json:"worker_cpu_cores"`
 	DB           DBStats    `json:"database"`
 	TopWaits     []string   `json:"top_wait_events,omitempty"`
+	// WorkerRelay is what the workers' own metrics counted in the window (S5R-D07).
+	WorkerRelay *WorkerRelayStats `json:"worker_relay_metrics,omitempty"`
 }
 
 // DrainStats is the relay emptying the Outbox after the last stage, with no load.
@@ -118,8 +126,8 @@ const workloadNote = "BRC-001 on one tenant and company (company.A), one custome
 	"order.review.decide, cnx trade_compliance.evaluate, GET check, trade_compliance.decide, stl credit.reserve (672.00 of the shared " +
 	"customer credit), GET order check, trd order.activate, pur purchase.draft.prepare (600.00): 17 commands and 4 reads, as six humans " +
 	"(sales, quote.reviewer, acceptance.verifier, order.reviewer, compliance, purchaser). A read user issues one of 14 GET routes " +
-	"uniformly on the cycles completed so far. Closed loop, no think time; brant-worker -dispatch relays the Outbox to the contexts' " +
-	"consumers (STL consumes the reservation on OrderActivated)."
+	"uniformly on the cycles completed so far. Closed loop, no think time; brant-worker -dispatch processes (2 by default, S5R-D07's " +
+	"reference deployment) relay the Outbox to the contexts' consumers (STL consumes the reservation on OrderActivated)."
 
 var notExecuted = []string{
 	"a front end: latencies are client-side over loopback HTTP (server plus transport), not browser end to end",
@@ -129,6 +137,8 @@ var notExecuted = []string{
 	"AI tasks, large reports, files above 4 KiB and external services: baseline 11.1 sets their limits apart",
 	"failures (process restart, database interruption, redelivery) during the stages: the recovery drill covers the database",
 	"a production-like host: the API, the worker, PostgreSQL (Docker) and the load generator share one WSL2 host with other work",
+	"a host whose wall clock is slewed, not stepped: WSL2 steps it forward by seconds now and then; each window reports the step it saw, " +
+		"and a step between an event's recorded_at and published_at adds to that event's relay lag (both stamps are wall-clock readings)",
 }
 
 func environment(ctx context.Context, obs *observer, cfg config) Environment {
@@ -174,8 +184,8 @@ func (r *Report) summary() string {
 	fmt.Fprintf(&b, "- %s, %s, kernel %s (WSL %v), nproc %d; %s\n", e.Go, e.OSArch, e.Kernel, e.WSL, e.CPUs, e.PostgreSQL)
 	fmt.Fprintf(&b, "- host at start: %s; MemAvailable %d MiB of %d MiB\n", e.Host.Uptime, e.Host.MemAvailMiB, e.Host.MemTotalMiB)
 	fmt.Fprintf(&b, "- API pool: %s; settings %v\n", e.APIPool, e.Settings)
-	fmt.Fprintf(&b, "- setup %.1f s (%d requests); prime %d cycles in %.1f s (commands P95 %.1f ms, reads P95 %.1f ms)\n\n",
-		r.Setup.Seconds, r.Setup.Requests, r.Prime.Cycles, r.Prime.Seconds, r.Prime.Commands.Latency.P95, r.Prime.Reads.Latency.P95)
+	fmt.Fprintf(&b, "- setup %.1f s (%d requests); prime %d cycles in %.1f s (commands P95 %.1f ms, reads P95 %.1f ms); %d brant-worker -dispatch\n\n",
+		r.Setup.Seconds, r.Setup.Requests, r.Prime.Cycles, r.Prime.Seconds, r.Prime.Commands.Latency.P95, r.Prime.Reads.Latency.P95, r.Workers)
 	if len(r.Stages) > 0 {
 		b.WriteString("| stage | users cmd/read | cmd ok/s | cmd P50/P95/P99 ms | cmd err/timeouts | read ok/s | read P50/P95/P99 ms | read err/timeouts | " +
 			"cycles/s | cycle P95 s | API cores | conns max / active mean | lock waiters max (samples) | longest lock wait s | " +
@@ -193,11 +203,35 @@ func (r *Report) summary() string {
 		for _, s := range r.Stages {
 			fmt.Fprintf(&b, "- stage %d: commits %d, rollbacks %d, deadlocks %d, cache hit %.4f, top waits %v", s.Stage, s.DB.Commits,
 				s.DB.Rollbacks, s.DB.Deadlocks, s.DB.CacheHitRatio, s.TopWaits)
+			fmt.Fprintf(&b, "; relay lag P50/P95/P99/max %.3f/%.3f/%.3f/%.3f s over %d events, oldest undelivered max %.3f s, wall clock step %.3f s",
+				s.DB.RelayLag.P50, s.DB.RelayLag.P95, s.DB.RelayLag.P99, s.DB.RelayLag.Max, s.DB.RelayLag.Published, s.DB.OldestUndeliveredMaxS,
+				s.Window.ClockStepS)
+			if w := s.WorkerRelay; w != nil {
+				fmt.Fprintf(&b, "; workers' metrics: %d workers published %.0f, %.2f %% within the P95 target, %.2f %% within the P99 target, "+
+					"%.0f failures, %.0f dead letters, settlement mean %.4f s", w.Workers, w.Published, w.ShareP95*100, w.ShareP99*100, w.Failures,
+					w.DeadLetters, w.SettleMeanS)
+				if w.ScrapeErrors > 0 {
+					fmt.Fprintf(&b, " (%d scrapes failed)", w.ScrapeErrors)
+				}
+			}
 			if len(s.Commands.ErrorCodes) > 0 || len(s.Reads.ErrorCodes) > 0 || s.Cycles.Failed > 0 {
 				fmt.Fprintf(&b, "; command errors %v, read errors %v, cycle failures %v", s.Commands.ErrorCodes, s.Reads.ErrorCodes, s.Cycles.Failures)
 			}
 			b.WriteString("\n")
 		}
+	}
+	if t := r.Thresholds; t != nil && len(t.Checks) > 0 {
+		fmt.Fprintf(&b, "\nThresholds (asserted %v; %d dispatch workers; relay targets up to %d command users, API targets up to %d): verdict %s, %d failed\n\n",
+			t.Asserted, t.Workers, t.ReferenceUsers, t.APIUsers, t.Verdict, t.Failed)
+		b.WriteString("| stage | command users | target | basis | limit s | observed s | status | note |\n|---|---|---|---|---|---|---|---|\n")
+		for _, c := range t.Checks {
+			observed := "–"
+			if c.ObservedS != nil {
+				observed = strconv.FormatFloat(*c.ObservedS, 'f', 3, 64)
+			}
+			fmt.Fprintf(&b, "| %d | %d | %s | %s | %g | %s | %s | %s |\n", c.Stage, c.CommandUsers, c.Target, c.Basis, c.LimitS, observed, c.Status, c.Note)
+		}
+		b.WriteString("\n")
 	}
 	if d := r.Drain; d != nil {
 		fmt.Fprintf(&b, "Outbox drain after the last stage: %.1f s, %d events published (%.1f/s), %d left, complete %v\n",

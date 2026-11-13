@@ -91,7 +91,8 @@ spike:
 	$(DB_ENV) BRANT_SPIKE_REPORT=$(CURDIR)/bin/spike-consistency.json $(GO) test -tags integration -count=1 -v ./tools/spikes/consistency
 
 # The observer samples pg_stat_activity, pg_locks and the Outbox as the development superuser. Run it
-# against a database of its own: its brant-worker -dispatch relays every tenant's pending events.
+# against a database of its own: its brant-worker -dispatch processes (2 by default, S5R-D07) relay
+# every tenant's pending events. LOAD_ARGS=-assert fails the run on a missed target (tests/load/thresholds.go).
 load: build
 	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
 	BRANT_LOAD_OBSERVER_DSN='postgres://postgres:dev-superuser-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
