@@ -66,16 +66,17 @@ func (w *fulWorld) recordDocuments(id string, expected int64, kind string) (fula
 
 // exceptionOnRevision2 is SQL that grants blocked release id by an exception on order revision 2
 // with hash, as the release commands write one (the release moved blocked → granted, then the
-// exception row) — for asOwner, which rolls back.
+// exception row, naming the credit policy that bounds it since S5R-D09) — for asOwner, which rolls
+// back.
 func exceptionOnRevision2(id, hash string) string {
 	return `UPDATE brant_ful.commercial_release SET status = 'granted', row_version = row_version + 1, exceptions = exceptions + 1
 		WHERE release_id = '` + id + `';
 		INSERT INTO brant_ful.commercial_release_exception (tenant_id, company_id, release_id, seq, release_version, order_id, order_revision,
 		order_hash, stage_id, currency, shortfall_minor, valid_until, reason, evidence_ids, guard_entries, guard_entries_sha256, granted_by_kind,
-		granted_by_id, grant_epoch, granted_at)
+		granted_by_id, grant_epoch, granted_at, credit_policy_id, credit_policy_revision, credit_policy_hash, decision_validity_days)
 		SELECT tenant_id, company_id, release_id, exceptions, row_version, order_id, 2, '` + hash + `', 'P2', 'USD', 1, now() + interval '1 day',
-		'x', '{}', '[]', encode(sha256('[]'::bytea), 'hex'), 'human', 'manager.1', 1, now() FROM brant_ful.commercial_release
-		WHERE release_id = '` + id + `'`
+		'x', '{}', '[]', encode(sha256('[]'::bytea), 'hex'), 'human', 'manager.1', 1, now(), 'credit.ful', 1, repeat('a', 64), 7
+		FROM brant_ful.commercial_release WHERE release_id = '` + id + `'`
 }
 
 // latestEvaluation is the latest evaluation of release id.
@@ -229,7 +230,7 @@ func TestDocumentsReleaseOfAConfirmedShipmentAfterAReductionBT10(t *testing.T) {
 	}
 	_, err = w.ful.GrantReleaseException(w.manager, fulapi.GrantReleaseException{IdempotencyKey: w.key(), ShipmentID: "shipment.3",
 		Scope: fulapi.ScopeShipment, ExpectedVersion: 1, StageID: "P1", Currency: "USD", ShortfallMinor: "100",
-		ValidUntil: kernel.FormatTimestamp(time.Now().Add(time.Hour)), Reason: "合成", EvidenceIDs: []string{"evidence"}})
+		ValidUntil: kernel.FormatTimestamp(time.Now().Add(time.Hour)), Reason: "合成", EvidenceIDs: []string{"evidence"}, CreditPolicy: w.creditPolicy()})
 	w.want(err, fulapi.CodeReferenceStale)
 	if v := w.releaseView(stale); v.Status != fulapi.ReleaseBlocked || len(v.Exceptions) != 0 {
 		t.Fatalf("the stale shipment release %+v", v)
@@ -238,7 +239,7 @@ func TestDocumentsReleaseOfAConfirmedShipmentAfterAReductionBT10(t *testing.T) {
 	// The credit manager's exception covers P2 of revision 2.
 	ex := fulapi.GrantReleaseException{IdempotencyKey: w.key(), ShipmentID: "shipment.1", Scope: fulapi.ScopeDocuments, ExpectedVersion: 3, StageID: "P2",
 		Currency: "USD", ShortfallMinor: "61600", ValidUntil: kernel.FormatTimestamp(time.Now().Add(48 * time.Hour)),
-		Reason: "合成：客户书面承诺尾款随到港付清", EvidenceIDs: []string{"evidence"}}
+		Reason: "合成：客户书面承诺尾款随到港付清", EvidenceIDs: []string{"evidence"}, CreditPolicy: w.creditPolicy()}
 	g, err := w.ful.GrantReleaseException(w.manager, ex)
 	if err != nil || g.Status != fulapi.ReleaseGranted || g.RowVersion != 4 {
 		t.Fatalf("the exception on revision 2 %+v %v", g, err)

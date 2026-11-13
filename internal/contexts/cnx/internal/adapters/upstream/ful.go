@@ -42,10 +42,9 @@ type Currencies interface {
 //     line, SKU specification revision, quantity, unit and net amount, and the lot's net value.
 //
 // Both carry the end user and the destination from the parties the shipment binds, as TRD sealed
-// them: FUL records no end user yet, so the end user is the consignee the order binds, or the
-// order's customer when it binds none, and EndUserSource says which (S5R-D40; once FUL records the
-// end user a shipment states — unit R6 — parties takes it first with EndUserSource stated, the
-// derivation staying the fallback CNX-INV-002 names); the destination is the country PTY records for the consignee's
+// them: the end user the shipment states (FUL's party of role end_user, S5R-D40, unit R6) with
+// EndUserSource stated, else the consignee the order binds, else the order's customer when it binds
+// none, and EndUserSource says which (the derivation CNX-INV-002 names); the destination is the country PTY records for the consignee's
 // address (CNX's port Countries, R77; "" when the order binds no consignee address or PTY records no
 // country for it — the licence allocation then takes the destination the trade compliance
 // evaluation of the order revision recorded, S5 D-8). FUL records no export date: a lot's export
@@ -247,13 +246,18 @@ func (f FUL) value(ctx context.Context, x application.Export, ref fulapi.Currenc
 	return x, nil
 }
 
-// parties sets the end user and the destination from the parties shipment s binds: the consignee
-// (one party; several are no end user) and the country PTY records for its address (one country;
-// several or none are no destination), the customer when the order binds no consignee.
+// parties sets the end user and the destination from the parties shipment s binds: the end user the
+// shipment states (S5R-D40), else the consignee (one party; several are no end user), else the
+// customer when the order binds no consignee; and the country PTY records for the consignee's address
+// (one country; several or none are no destination).
 func (f FUL) parties(ctx context.Context, x *application.Export, s *fulapi.ShipmentView, customer string) error {
 	var consignees []string
 	var addresses []application.AddressRef
+	stated := ""
 	for _, p := range s.Parties {
+		if p.Role == fulapi.PartyRoleEndUser {
+			stated = p.PartyID
+		}
 		if p.Role != ptyapi.AddressConsignee {
 			continue
 		}
@@ -264,12 +268,16 @@ func (f FUL) parties(ctx context.Context, x *application.Export, s *fulapi.Shipm
 			addresses = append(addresses, application.AddressRef{PartyID: p.PartyID, PartyRevision: p.PartyRevision, AddressID: p.AddressID})
 		}
 	}
-	switch len(consignees) {
-	case 0:
+	switch {
+	case stated != "":
+		x.EndUserPartyID, x.EndUserSource = stated, api.EndUserStated
+	case len(consignees) == 0:
 		x.EndUserPartyID, x.EndUserSource = customer, api.EndUserCustomer
-		return nil
-	case 1:
+	case len(consignees) == 1:
 		x.EndUserPartyID, x.EndUserSource = consignees[0], api.EndUserConsignee
+	}
+	if len(consignees) == 0 {
+		return nil
 	}
 	countries, err := f.Countries.ResolveAddressCountries(ctx, addresses)
 	if err != nil {

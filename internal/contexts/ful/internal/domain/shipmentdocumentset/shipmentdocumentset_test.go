@@ -58,7 +58,10 @@ func fixtureUpstream(number string) Upstream {
 		Edition: "Incoterms 2020", NamedPlace: "DEHAM", Stages: []Stage{{StageID: "P1", Percent: "30", Trigger: "order_confirmed", Days: 0},
 			{StageID: "P2", Percent: "70", Trigger: "after_shipment", Days: 30, DayBasis: "calendar"}},
 		Addresses: []Address{{Role: "buyer", PartyID: "customer.1", PartyRevision: 2, Text: "Synthetic buyer address\nHamburg"},
-			{Role: "consignee", PartyID: "consignee.1", PartyRevision: 1, Text: "Synthetic warehouse\nHamburg port"}}},
+			{Role: "consignee", PartyID: "consignee.1", PartyRevision: 1, Text: "Synthetic warehouse\nHamburg port"}},
+		Lines: map[string]LinePrice{"L1": {UnitPrice: "8.0000", PriceBasisQuantity: "1", DiscountRatio: "0", NetMinor: "96000", TaxMinor: "0",
+			PayableMinor: "96000"}, "L2": {UnitPrice: "12.5", PriceBasisQuantity: "1", DiscountRatio: "0", NetMinor: "30000", TaxMinor: "3900",
+			PayableMinor: "33900"}}, NetMinor: "126000"},
 		Names:    map[PartyKey]string{{PartyID: "customer.1", Revision: 2}: "Synthetic Buyer GmbH", {PartyID: "consignee.1", Revision: 1}: "Synthetic Logistics KG"},
 		Currency: &Currency{Code: "USD", Revision: 1, MinorUnits: 2}, Found: map[string]bool{"evidence": true}, Number: number}
 }

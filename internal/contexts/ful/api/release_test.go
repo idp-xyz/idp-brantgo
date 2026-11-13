@@ -15,18 +15,23 @@ func TestReleaseContracts(t *testing.T) {
 		t.Fatal(outcome(ev.Validate()))
 	}
 	ok := GrantReleaseException{IdempotencyKey: "k", ShipmentID: "shipment.1", Scope: ScopeDocuments, ExpectedVersion: 1, StageID: "P2", Currency: "USD",
-		ShortfallMinor: "200", ValidUntil: "2026-11-20T00:00:00Z", Reason: "客户书面承诺", EvidenceIDs: []string{"ev.1"}}
+		ShortfallMinor: "200", ValidUntil: "2026-11-20T00:00:00Z", Reason: "客户书面承诺", EvidenceIDs: []string{"ev.1"},
+		CreditPolicy: &ConfigRef{Kind: KindCreditPolicy, ID: "credit", Revision: 1}}
 	if ok.Validate() != nil {
 		t.Fatal(ok.Validate())
 	}
 	for want, edit := range map[string]func(*GrantReleaseException){
-		"SCHEMA_INVALID /args/expected_version": func(c *GrantReleaseException) { c.ExpectedVersion = 0 },
-		"SCHEMA_INVALID /args/stage_id":         func(c *GrantReleaseException) { c.StageID = "" },
-		"SCHEMA_INVALID /args/currency":         func(c *GrantReleaseException) { c.Currency = "usd" },
-		"SCHEMA_INVALID /args/shortfall_minor":  func(c *GrantReleaseException) { c.ShortfallMinor = "2.00" },
-		"SCHEMA_INVALID /args/valid_until":      func(c *GrantReleaseException) { c.ValidUntil = "tomorrow" },
-		"SCHEMA_INVALID /args/reason":           func(c *GrantReleaseException) { c.Reason = " " },
-		"SCHEMA_INVALID /args/evidence_ids/1":   func(c *GrantReleaseException) { c.EvidenceIDs = []string{"ev.1", "ev.1"} },
+		// S5R-D09: the exception names the credit policy that bounds its validity.
+		"SCHEMA_INVALID /args/credit_policy":          func(c *GrantReleaseException) { c.CreditPolicy = nil },
+		"SCHEMA_INVALID /args/credit_policy/kind":     func(c *GrantReleaseException) { c.CreditPolicy = &ConfigRef{Kind: "trade_terms", ID: "x", Revision: 1} },
+		"SCHEMA_INVALID /args/credit_policy/revision": func(c *GrantReleaseException) { c.CreditPolicy = &ConfigRef{Kind: KindCreditPolicy, ID: "x"} },
+		"SCHEMA_INVALID /args/expected_version":       func(c *GrantReleaseException) { c.ExpectedVersion = 0 },
+		"SCHEMA_INVALID /args/stage_id":               func(c *GrantReleaseException) { c.StageID = "" },
+		"SCHEMA_INVALID /args/currency":               func(c *GrantReleaseException) { c.Currency = "usd" },
+		"SCHEMA_INVALID /args/shortfall_minor":        func(c *GrantReleaseException) { c.ShortfallMinor = "2.00" },
+		"SCHEMA_INVALID /args/valid_until":            func(c *GrantReleaseException) { c.ValidUntil = "tomorrow" },
+		"SCHEMA_INVALID /args/reason":                 func(c *GrantReleaseException) { c.Reason = " " },
+		"SCHEMA_INVALID /args/evidence_ids/1":         func(c *GrantReleaseException) { c.EvidenceIDs = []string{"ev.1", "ev.1"} },
 	} {
 		c := ok
 		edit(&c)

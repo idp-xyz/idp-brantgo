@@ -55,9 +55,14 @@ func evaluated(t *testing.T, failure *kernel.Rejection) *Release {
 	return r
 }
 
+// longPolicy is a credit policy whose decision validity exceeds FUL's 90-day cap (S5R-D09: the cap
+// governs then).
+var longPolicy = CreditPolicy{ID: "credit", Revision: 1, Hash: strings.Repeat("c", 64), DecisionValidityDays: 3650}
+
 func exceptionRequest(r *Release) ExceptionRequest {
+	p := longPolicy
 	return ExceptionRequest{ExpectedVersion: r.RowVersion, StageID: "P2", Currency: "USD", ShortfallMinor: "200", ValidUntil: t0.Add(72 * time.Hour),
-		Reason: "客户书面承诺尾款差额随下批支付"}
+		Reason: "客户书面承诺尾款差额随下批支付", Policy: &p}
 }
 
 // SM-FUL-RELEASE: the first evaluation opens the release at version 1, blocked or granted; each
@@ -191,7 +196,8 @@ func TestExceptionsCoverOneUnpaidStageOnly(t *testing.T) {
 	}
 	x, err := r.GrantException(req, nil, unpaid(), []Entry{{Name: "n", Value: "v"}}, manager)
 	if err != nil || r.Status != StatusGranted || r.RowVersion != 2 || x.Seq != 1 || x.ReleaseVersion != 2 || x.Order != order || x.StageID != "P2" ||
-		x.ShortfallMinor != "200" || x.Currency != "USD" || x.Granted.By.ID != "manager.1" || len(x.EntriesSHA256) != 64 {
+		x.ShortfallMinor != "200" || x.Currency != "USD" || x.Granted.By.ID != "manager.1" || len(x.EntriesSHA256) != 64 || x.Policy == nil ||
+		*x.Policy != longPolicy {
 		t.Fatalf("granted %+v %+v %v", r, x, err)
 	}
 	if code(r.Exceptable(2)) != kernel.CodeInvalidState {
@@ -276,5 +282,70 @@ func TestBindingsJSON(t *testing.T) {
 	if _, ok := m["trade_compliance"]; ok || m["screenings"].([]any)[0].(map[string]any)["screening_id"] != "scr.1" ||
 		m["payment_condition"].(map[string]any)["applied_minor"] != "96000" || m["quality_releases"].([]any)[0].(map[string]any)["released_quantity"] != "100" {
 		t.Fatal(string(doc))
+	}
+}
+
+// S5R-D09 (FUL-INV-002, R49): an exception runs no longer than the decision_validity_days of the
+// credit_policy revision in force it names — the synthetic E-2 policy's 7 days refuse 7 days and a
+// second (INVALID_KNOWN_VALUE at /args/valid_until, the reason naming the policy) and grant exactly 7
+// days; FUL's 90 days stay the cap of a longer policy; no policy, or one stating no validity, refuses
+// it (REFERENCE_INVALID at /args/credit_policy: fail closed).
+func TestS5RD09TheCreditPolicyBoundsTheException(t *testing.T) {
+	week := CreditPolicy{ID: "credit", Revision: 2, Hash: strings.Repeat("e", 64), DecisionValidityDays: 7}
+	if week.MaxValidity() != 7*24*time.Hour || longPolicy.MaxValidity() != MaxExceptionValidity {
+		t.Fatal(week.MaxValidity(), longPolicy.MaxValidity())
+	}
+	for _, c := range []struct {
+		name   string
+		policy *CreditPolicy
+		until  time.Time
+		want   string
+		path   string
+	}{
+		{"one second beyond the policy's 7 days", &week, manager.At.Add(7*24*time.Hour + time.Second), kernel.CodeInvalidKnownValue, "/args/valid_until"},
+		{"no policy", nil, manager.At.Add(time.Hour), kernel.CodeReferenceInvalid, "/args/credit_policy"},
+		{"a policy without a decision validity", &CreditPolicy{ID: "old", Revision: 1}, manager.At.Add(time.Hour), kernel.CodeReferenceInvalid,
+			"/args/credit_policy"},
+	} {
+		r := evaluated(t, blocked(shipment.CodeCommercialReleaseBlocked))
+		req := exceptionRequest(r)
+		req.Policy, req.ValidUntil = c.policy, c.until
+		_, err := r.GrantException(req, nil, unpaid(), nil, manager)
+		rej, _ := kernel.AsRejection(err)
+		if rej == nil || rej.Code != c.want || rej.Fields[0].Path != c.path || r.Status != StatusBlocked {
+			t.Errorf("%s: %v", c.name, err)
+		}
+		if c.policy == &week && !strings.Contains(rej.Fields[0].Reason, "at most 7 days (credit_policy credit revision 2: decision_validity_days 7") {
+			t.Errorf("the reason names the policy: %s", rej.Fields[0].Reason)
+		}
+	}
+	r := evaluated(t, blocked(shipment.CodeCommercialReleaseBlocked))
+	req := exceptionRequest(r)
+	req.Policy, req.ValidUntil = &week, manager.At.Add(7*24*time.Hour)
+	x, err := r.GrantException(req, nil, unpaid(), nil, manager)
+	if err != nil || x.Policy == nil || *x.Policy != week || !x.ValidUntil.Equal(manager.At.Add(7*24*time.Hour)) {
+		t.Fatalf("exactly the policy's 7 days %+v %v", x, err)
+	}
+}
+
+// S5R-D28 (role templates' independence of commercial_release.grant_exception): the credit manager
+// who evaluated the release — any of its evaluations — cannot grant its exception
+// (INDEPENDENT_REVIEW_REQUIRED, before any guard is judged); another credit manager can.
+func TestS5RD28TheExceptionIsIndependentOfTheEvaluators(t *testing.T) {
+	r := evaluated(t, blocked(shipment.CodeCommercialReleaseBlocked))
+	r.Evaluate(Verdict{Failure: blocked(shipment.CodeCommercialReleaseBlocked), Guard: shipment.GuardPaymentCondition}, manager)
+	r.Evaluate(Verdict{Failure: blocked(shipment.CodeCommercialReleaseBlocked), Guard: shipment.GuardPaymentCondition}, doc)
+	if !r.Evaluator(manager.By) || !r.Evaluator(doc.By) || r.Evaluator(kernel.ActorRef{Kind: kernel.ActorHuman, ID: "manager.2"}) {
+		t.Fatal("evaluators")
+	}
+	for _, other := range []*kernel.Rejection{nil, blocked(shipment.CodeQualityReleaseRequired)} {
+		_, err := r.GrantException(exceptionRequest(r), other, unpaid(), nil, manager)
+		if rej, _ := kernel.AsRejection(err); rej == nil || rej.Code != shipment.CodeIndependentReviewRequired || rej.Fields[0].Path != "/args/scope" {
+			t.Fatalf("the evaluator's own exception: %v", err)
+		}
+	}
+	second := Act{By: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "manager.2"}, Epoch: 3, At: manager.At}
+	if _, err := r.GrantException(exceptionRequest(r), nil, unpaid(), nil, second); err != nil || r.Status != StatusGranted {
+		t.Fatalf("an independent credit manager %v", err)
 	}
 }

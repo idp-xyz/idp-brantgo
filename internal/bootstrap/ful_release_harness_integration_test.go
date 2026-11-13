@@ -26,10 +26,21 @@ import (
 
 // releaseKit is what the FUL world adds for the commercial release.
 type releaseKit struct {
-	treasury context.Context
-	manager  context.Context
-	doc      context.Context
-	bankUSD  polapi.ConfigRef
+	treasury        context.Context
+	manager         context.Context
+	doc             context.Context
+	bankUSD         polapi.ConfigRef
+	exceptionPolicy polapi.ConfigRef // the E-2 credit policy (decision validity 7 days) an exception names (S5R-D09)
+}
+
+// creditPolicy is the credit_policy reference a payment-condition exception names (S5R-D09).
+func (k *releaseKit) creditPolicy() *fulapi.ConfigRef {
+	return &fulapi.ConfigRef{Kind: fulapi.KindCreditPolicy, ID: k.exceptionPolicy.ConfigID, Revision: k.exceptionPolicy.Revision}
+}
+
+// creditPolicyArg is creditPolicy as an HTTP request's member.
+func (k *releaseKit) creditPolicyArg() map[string]any {
+	return map[string]any{"kind": fulapi.KindCreditPolicy, "id": k.exceptionPolicy.ConfigID, "revision": k.exceptionPolicy.Revision}
 }
 
 type heldPayments struct {
@@ -54,6 +65,7 @@ func (w *fulWorld) releasable() {
 	w.treasury, w.manager = w.assign("treasury.1", "treasury"), w.assign("manager.1", "credit_manager")
 	w.bankUSD = w.configure(w.author, w.reviewer, polapi.KindBankAccount, "bank.usd", 0, w.win.from, time.Time{},
 		bank(polapi.OwnerCompany, "company.A", "USD", polapi.AccountBoth), true)
+	w.exceptionPolicy = w.configure(w.author, w.reviewer, polapi.KindCreditPolicy, "credit.ful", 0, w.win.from, time.Time{}, e2Policy(), true)
 	w.payable(w.order)
 }
 

@@ -19,18 +19,25 @@ import (
 //	                  expected_version is the set's row version (0 creates the set, one per
 //	                  shipment). The insurer is a PTY service role of kind insurer serving now; the
 //	                  amounts are decimals of the POL currency revision named (at most its minor
-//	                  digits); coverage_percent is the contract's percentage (default 110, never
-//	                  below: Incoterms 2020 CIF/CIP A5). When the set's current commercial invoice
+//	                  digits); coverage_percent defaults to the contract's percentage — the
+//	                  insurance_percent of the POL trade_terms revision the order revision the
+//	                  shipment binds names (default 110, at least 110: Incoterms 2020 CIF/CIP A5;
+//	                  S5R-D06) — and may state more, never less (INVALID_KNOWN_VALUE). When the set's current commercial invoice
 //	                  states CIF or CIP the insured amount must be at least that percentage of the
 //	                  invoice total, rounded HALF_UP to the currency's minor units, in the invoice's
 //	                  currency (INSURANCE_COVERAGE_INSUFFICIENT). The premium is compared with the
-//	                  insurance component of the costing the order's quote adopted (CST, R78): the
-//	                  outcome is kept with the record and shown, never refused.
+//	                  insurance component of the costing the order's quote adopted (CST, R78), whole,
+//	                  same currency, never prorated, with the shipment's share of the order shown beside
+//	                  it (S5R-D06): the outcome is kept with the record and shown, never refused.
 //
 // With the policy record the set's reconciliation and issue change thus: when the current commercial
 // invoice states CIF or CIP, a set without a policy has the required difference /insurance_policy,
-// which no acknowledgement covers (SHIPMENT_DOCUMENTS_UNRECONCILED); a policy dated after the bill
-// of lading's shipped-on-board date is a difference against the B/L record; and the issue, after the
+// which no acknowledgement covers (SHIPMENT_DOCUMENTS_UNRECONCILED — a missing policy is a missing
+// required document, S5R-D06; INSURANCE_COVERAGE_INSUFFICIENT is for a cover below the percentage
+// only); a policy dated after the bill of lading's shipped-on-board date is a difference against the
+// B/L record (UCP 600 Art. 28(e)); clauses below what the Incoterm asks of the seller — CIP ICC (A)
+// or equivalent, CIF at least ICC (C) — are a difference /insurance_policy/clauses that may be
+// acknowledged when the contract agreed otherwise (S5R-D06); and the issue, after the
 // reconciliation, refuses a current policy that does not cover the current invoice
 // (INSURANCE_COVERAGE_INSUFFICIENT at /insurance_policy/insured_amount or /insurance_policy/currency).
 //
@@ -45,7 +52,7 @@ const (
 	DocumentInsurancePolicy = "insurance_policy"
 	// ServiceInsurer is the PTY service role kind of an insurer.
 	ServiceInsurer = "insurer"
-	// DefaultCoveragePercent is the contract percentage when none is stated.
+	// DefaultCoveragePercent is the contract percentage when the trade terms state none.
 	DefaultCoveragePercent = "110"
 	KindCurrency           = "currency"
 
@@ -80,7 +87,7 @@ type RecordInsurance struct {
 	Currency        ConfigRef
 	InsuredAmount   string
 	Premium         string
-	CoveragePercent string // "": DefaultCoveragePercent
+	CoveragePercent string // "": the contract's (S5R-D06)
 	FileID          string // the policy, an EVD file
 	EvidenceIDs     []string
 }
@@ -172,6 +179,12 @@ type PremiumComparison struct {
 	Premium         string
 	Difference      string
 	Reason          string
+	// The shipment's share of the order revision it binds (S5R-D06, shown for a partial shipment;
+	// "" when FUL cannot state it): its net value at the prices it keeps, the revision's net total
+	// (decimals of the order currency) and the percentage, HALF_UP to 2 places.
+	ShipmentNet     string
+	OrderNet        string
+	ShipmentPercent string
 }
 
 // InsuranceReceipt answers insurance.record: the receipt (ObjectID the set, RowVersion the set's,
@@ -199,6 +212,8 @@ type InsurancePolicyView struct {
 	InsuredAmount   string
 	Premium         string
 	CoveragePercent string
+	ContractPercent string // the contract's percentage (S5R-D06; "" for a record before S5R)
+	ContractSource  string // the POL trade_terms revision it came from, "trade_terms:<id>@<revision>"
 	Coverage        *InsuranceCoverage
 	Costing         PremiumComparison
 	ContentSHA256   string

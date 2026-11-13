@@ -55,6 +55,12 @@ func (p PTYParties) PartyName(ctx context.Context, partyID string, revision int6
 	return "", false, nil
 }
 
+// ResolveParties answers PartyRef v1 (an active grant only; parties the caller does not see are
+// absent).
+func (p PTYParties) ResolveParties(ctx context.Context, q ptyapi.Resolve) (ptyapi.Resolved, error) {
+	return p.Parties.ResolveParties(ctx, q)
+}
+
 func (p PTYParties) ResolveServiceRoles(ctx context.Context, refs []ptyapi.ServiceRoleRef, at time.Time) (map[ptyapi.ServiceRoleRef]ptyapi.ResolvedServiceRole, error) {
 	return p.Profiles.ResolveServiceRoles(ctx, refs, at)
 }

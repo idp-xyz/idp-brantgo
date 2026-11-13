@@ -139,3 +139,20 @@ func TestShipmentLineRefCheck(t *testing.T) {
 		t.Fatal("lookup bounds")
 	}
 }
+
+// S5R-D11: a requested booking is a node of the plan, before the confirmed one (FUL-AGG-MilestonePlan
+// node list; UL FUL-MilestonePlan): the booking record keeps no requested state.
+func TestS5RD11BookingRequestedIsANodeBeforeTheConfirmedBooking(t *testing.T) {
+	types := NodeTypes()
+	requested, confirmed := slices.Index(types, NodeBookingRequested), slices.Index(types, NodeBookingConfirmed)
+	if NodeBookingRequested != "booking_requested" || !NodeType(NodeBookingRequested) || requested < 0 || requested+1 != confirmed ||
+		types[requested-1] != NodeSupplierHandover || len(types) != 14 {
+		t.Fatalf("%v", types)
+	}
+	c := PlanMilestones{IdempotencyKey: "k", PlanID: "plan.1", Subject: MilestoneSubject{Kind: SubjectShipment, ID: "shipment.1"},
+		Nodes: []MilestoneNode{{NodeID: "N1", NodeType: NodeBookingRequested, PlannedOn: "2026-11-20"},
+			{NodeID: "N2", NodeType: NodeBookingConfirmed, PlannedOn: "2026-11-22", Predecessors: []string{"N1"}}}}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

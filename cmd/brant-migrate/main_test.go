@@ -107,7 +107,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000007_cnx_refund_methods", "brant:000008_cnx_s5r_compliance_licences",
 		"brant:000001_ful_shipments", "brant:000002_ful_milestones_export_lots", "brant:000003_ful_commercial_release",
 		"brant:000004_ful_booking_documents", "brant:000005_ful_insurance", "brant:000006_ful_shipment_reviews",
-		"brant:000007_ful_documents_release_current_revision", "brant:000008_ful_release_consumption",
+		"brant:000007_ful_documents_release_current_revision", "brant:000008_ful_release_consumption", "brant:000009_ful_s5r_documents",
 		"brant:000001_tsk_tasks", "brant:000002_tsk_action_executions", "brant:000003_tsk_goal_verifications",
 		"brant:000004_tsk_barrier_reconciliation",
 		"brant:000001_ai_delegations", "brant:000002_ai_model_calls",

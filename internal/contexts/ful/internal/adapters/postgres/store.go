@@ -147,7 +147,7 @@ func LoadShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 func loadLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s *shipment.Shipment) error {
 	t, c := scope2(scope)
 	rows, err := exec.Query(ctx, `SELECT line_id, order_line_id, sku_id, spec_revision, unit_id, unit_revision, order_line_quantity::text,
-		quantity::text, delivery_id, delivery_line_id, delivery_version, commitment_id, supplier_id, quality_release_id
+		quantity::text, delivery_id, delivery_line_id, delivery_version, commitment_id, supplier_id, quality_release_id, quality_concession
 		FROM brant_ful.shipment_line WHERE tenant_id = $1 AND company_id = $2 AND shipment_id = $3 ORDER BY line_no`, t, c, s.ID)
 	if err != nil {
 		return err
@@ -156,7 +156,7 @@ func loadLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s
 		var l shipment.Line
 		var ordered, qty string
 		if err := row.Scan(&l.ID, &l.OrderLineID, &l.SkuID, &l.SpecRevision, &l.UnitID, &l.UnitRevision, &ordered, &qty, &l.Delivery.DeliveryID,
-			&l.Delivery.LineID, &l.DeliveryVersion, &l.CommitmentID, &l.SupplierID, &l.ReleaseID); err != nil {
+			&l.Delivery.LineID, &l.DeliveryVersion, &l.CommitmentID, &l.SupplierID, &l.ReleaseID, &l.QualityConcession); err != nil {
 			return l, err
 		}
 		var err error
@@ -269,10 +269,10 @@ func InsertShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	for i, l := range s.Lines {
 		if _, err := exec.Exec(ctx, `INSERT INTO brant_ful.shipment_line (tenant_id, company_id, shipment_id, line_id, line_no, order_line_id,
 			sku_id, spec_revision, unit_id, unit_revision, order_line_quantity, quantity, delivery_id, delivery_line_id, delivery_version,
-			commitment_id, supplier_id, quality_release_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17, $18)`,
+			commitment_id, supplier_id, quality_release_id, quality_concession)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17, $18, $19)`,
 			t, c, s.ID, l.ID, i+1, l.OrderLineID, l.SkuID, l.SpecRevision, l.UnitID, l.UnitRevision, Text(l.OrderQuantity), Text(l.Quantity),
-			l.Delivery.DeliveryID, l.Delivery.LineID, l.DeliveryVersion, l.CommitmentID, l.SupplierID, l.ReleaseID); err != nil {
+			l.Delivery.DeliveryID, l.Delivery.LineID, l.DeliveryVersion, l.CommitmentID, l.SupplierID, l.ReleaseID, l.QualityConcession); err != nil {
 			return err
 		}
 	}

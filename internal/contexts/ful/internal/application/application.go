@@ -62,7 +62,8 @@ var (
 // shipment.confirm, commercial_release.grant_exception and document_release.record: an AI or system
 // actor is PERMISSION_DENIED. shipment.prepare, packing.plan, packing.record_actual and
 // shipment.cancel are human or AI (SM-FUL-SHIPMENT: cancel "human|ai");
-// commercial_release.evaluate is human, AI or system (SM-FUL-RELEASE). The permission of a command
+// commercial_release.evaluate is human or AI (SM-FUL-RELEASE; S5R-D29: B0 has no system
+// re-evaluation, a system actor is PERMISSION_DENIED). The permission of a command
 // is its name (role templates merchandiser, documentation, and credit_manager, which holds
 // commercial_release.grant_exception exclusively). Reads need ful.read, the audit trail ful.audit.
 func Rules() []authorization.Rule {
@@ -72,7 +73,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandRecordPacking, Permission: api.CommandRecordPacking, ActorKinds: humanOrAgent},
 		{Command: api.CommandCancelShipment, Permission: api.CommandCancelShipment, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandConfirmShipment, api.CommandConfirmShipment),
-		{Command: api.CommandEvaluateRelease, Permission: api.CommandEvaluateRelease, ActorKinds: anyActor},
+		{Command: api.CommandEvaluateRelease, Permission: api.CommandEvaluateRelease, ActorKinds: humanOrAgent}, // S5R-D29
 		authorization.HumanOnly(api.CommandGrantReleaseException, api.CommandGrantReleaseException),
 		authorization.HumanOnly(api.CommandRecordDocumentRelease, api.CommandRecordDocumentRelease),
 		{Command: api.CommandGetShipment, Permission: api.PermissionRead, ActorKinds: anyActor},

@@ -85,13 +85,15 @@ func marks(s string) string {
 // packing and booking — and with each other (FUL-INV-004, BT12): a missing CI or PL; for the CI
 // every shipment line's SKU, quantity and unit (against the shipment line), unit price and amount
 // (against the order line's price the shipment keeps), lines of no shipment line, the order
-// revision its terms came from (against the shipment's), its consignee (against the order's) and
-// ports (against the booking); for the PL every line's packed quantity (against the shipment line),
+// revision its terms came from (against the shipment's), its consignee and notify party (against
+// the order's; the notify party since S5R-D40) and ports (against the booking); for the PL every line's packed quantity (against the shipment line),
 // its quantity totals (against the CI), cartons, weights and volume and the actual packing it was
 // printed from (against the actual packing), consignee, notify and marks (against the CI) and ports;
 // for the B/L record its packages, gross weight and volume (against the PL, else the actual
 // packing), consignee, notify and marks (against the CI, else the PL), ports, vessel and voyage
-// (against the booking, else the CI). The differences are in path order.
+// (against the booking, else the CI); the CIF/CIP insurance policy (S5-16, S5R-D06) and the
+// certificate of origin (S5R-D12: co_not_registered; at issue, whether CNX's certificate result still
+// applies). The differences are in path order.
 func Reconcile(s *Set, f Facts) []Difference {
 	x := &diffs{}
 	ci, pl, bl := s.Current(KindCommercialInvoice), s.Current(KindPackingList), s.Current(KindBillOfLading)
@@ -117,6 +119,9 @@ func Reconcile(s *Set, f Facts) []Difference {
 		if oc := ci.Content.OrderConsignee; oc != nil {
 			x.text(ci, "consignee", "/consignee", partyText(&ci.Content.Consignee), partyText(oc), AgainstOrder)
 		}
+		if on := ci.Content.OrderNotify; on != nil { // S5R-D40: the notify party the order binds
+			x.text(ci, "notify", "/notify", partyText(ci.Content.Notify), partyText(on), AgainstOrder)
+		}
 		ports(x, ci, ci.Content.PortOfLoading, ci.Content.PortOfDischarge, f.Booking, nil)
 	}
 	if pl != nil && pl.Content != nil {
@@ -132,7 +137,8 @@ func Reconcile(s *Set, f Facts) []Difference {
 	if bl != nil && bl.Record != nil && bl.Record.BillOfLading != nil {
 		billOfLading(x, bl, plContent, ciContent, actual, f.Booking)
 	}
-	insurance(x, s, ci, bl) // S5-16: the CIF/CIP policy record (insurance.go)
+	insurance(x, s, ci, bl)        // S5-16: the CIF/CIP policy record (insurance.go)
+	certificate(x, s, f.Rechecked) // S5R-D12: the certificate of origin at issue (certificate.go)
 	sort.SliceStable(x.out, func(i, j int) bool { return x.out[i].Path < x.out[j].Path })
 	return x.out
 }
