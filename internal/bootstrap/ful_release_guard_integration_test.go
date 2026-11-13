@@ -199,7 +199,8 @@ func TestExportLicenseGatesTheRelease(t *testing.T) {
 	w.must(err)
 	cx, err := cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(w.c.TRD), Countries: cnx.PTYCountries(w.c.PTY), Profiles: cnx.CATProfiles(w.c.CAT),
 		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: exports, Purchases: cnx.PURLines(w.c.PUR),
-		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL)})
+		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL),
+		Brokers: cnx.PTYBrokers(w.c.PTY)}) // S5R-D36
 	w.must(err)
 	_, err = w.file(w.doc, "licence.1", "licence.txt", evdapi.MimeText, "合成出口许可证（测试数据）", "")
 	w.must(err)

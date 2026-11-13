@@ -458,6 +458,14 @@ GRANT UPDATE (issuer, number, current_revision, row_version, updated_at) ON bran
 -- reconciliation of a credit note keeps what STL stated of it in its own columns.
 GRANT SELECT, INSERT ON brant_cnx.tax_opening, brant_cnx.tax_evidence_opening TO brant_app;
 
+-- CNX S5R (R10; S5R-D20, D23): an expected case rebinds its export_tax_policy revision (column grant; the trigger allows it
+-- only then) and every rebinding is only inserted; the reads derive what red invoices reversed of an invoice line and
+-- whether a line's evidence is over-used with their functions.
+GRANT SELECT, INSERT ON brant_cnx.tax_policy_rebinding TO brant_app;
+GRANT UPDATE (policy_revision, policy_hash, refund_method, policy_valid_from, policy_valid_until) ON brant_cnx.tax_refund_case TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.purchase_invoice_line_reversed(text, text, text, integer) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.tax_evidence_overused(text, text, text, integer, text) TO brant_app;
+
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
 -- every update. A shipment is inserted prepared with its lines and parties and then changes only by

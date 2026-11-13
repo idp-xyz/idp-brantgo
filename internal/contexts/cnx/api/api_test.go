@@ -175,6 +175,8 @@ func TestCodesFollowTheCatalog(t *testing.T) {
 		"OPENING_BALANCE_DUPLICATE": kernel.CategoryConflict,
 		// S5R (R9): CNX-INV-001's evaluation gaps, CNX-INV-002's goods mismatch.
 		"TRADE_COMPLIANCE_EVALUATION_INCOMPLETE": kernel.CategoryInvalid, "EXPORT_LICENSE_GOODS_MISMATCH": kernel.CategoryConflict,
+		// S5R (R10): the commitment line's cap across purchase invoices.
+		"PURCHASE_INVOICE_MATCH_EXCEEDED": kernel.CategoryConflict,
 	}
 	got := Codes()
 	if len(got) != len(want) {

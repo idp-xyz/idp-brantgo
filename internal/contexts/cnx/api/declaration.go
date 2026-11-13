@@ -32,17 +32,22 @@ import (
 //	                                has a verified mapping (DECLARATION_MAPPING_UNVERIFIED otherwise,
 //	                                CN-AT03) on profiles still verified now (REFERENCE_STALE otherwise).
 //	                                The confirmed version is the data handed over for submission.
-//	declaration_case.record_submission  human only: the manual submission by a broker (PTY party) or
-//	                                our own clerk, under operation_reference, the business operation's
-//	                                identifier (unique). While the last submission's result is unknown
-//	                                nothing is submitted again: EXTERNAL_RESULT_UNKNOWN (CN-AT13).
+//	declaration_case.record_submission  human only: the manual submission by a broker (PTY party and the
+//	                                verified service role customs_broker it rests on, ServiceRoleRef v1 on
+//	                                R77, S5R-D36) or our own clerk, under operation_reference, the business
+//	                                operation's identifier (unique). While the last submission's result is
+//	                                unknown nothing is submitted again: EXTERNAL_RESULT_UNKNOWN (CN-AT13).
 //	declaration_case.record_receipt human only (D-17): an external result — outcome received,
 //	                                accepted, released, rejected, amended or withdrawn, with its
 //	                                original text, the external status code, the version of the
 //	                                external status mapping applied (mapping_version), its external
 //	                                sequence (the external version or business order) and the
 //	                                declaration number — or unknown (a timeout or an unclear result,
-//	                                with a reason, no external facts). A receipt not after the result
+//	                                with a reason, no external facts) — or, after unknown, not_received
+//	                                (S5R-D13: the verification found customs never received it, by the
+//	                                status customs' own query shows or the broker's written confirmation;
+//	                                with a reason and its evidence, no external facts; final, the lot's
+//	                                next attempt may then be prepared). A receipt not after the result
 //	                                recorded never overrides it: DECLARATION_RECEIPT_STALE (CN-AT06).
 //	                                A release states the export date customs gives (exported_at, the
 //	                                出口日期 a tax refund case binds its policy at), an amendment may
@@ -54,7 +59,7 @@ import (
 // export_lot_id, code_table_version, items [{item_no, lines [{line_id, unit_conversion {id,
 // revision}}]}]}; declaration_case.confirm {declaration_id, expected_version, version, evidence_ids,
 // reason}; declaration_case.record_submission {declaration_id, expected_version, operation_reference,
-// submitter {kind, party_id, name}, submitted_at, evidence_ids, note};
+// submitter {kind, party_id, service_role {id, revision}, name}, submitted_at, evidence_ids, note};
 // declaration_case.record_receipt {declaration_id, expected_version, receipt_id, outcome, external
 // {sequence, status_code, original_text, received_at}, mapping_version, declaration_number,
 // exported_at, amended_items [{item_no, quantity}], evidence_ids, reason}.
@@ -84,6 +89,8 @@ const (
 	DeclarationRejected  = "rejected"
 	DeclarationAmended   = "amended"
 	DeclarationWithdrawn = "withdrawn"
+	// DeclarationNotReceived (S5R-D13): after an unknown result, customs never received the declaration. Final.
+	DeclarationNotReceived = "not_received"
 )
 
 // Mapping states, submitters and the base unit of declarations.
@@ -107,7 +114,7 @@ const (
 )
 
 var receiptOutcomes = []string{DeclarationUnknown, DeclarationReceived, DeclarationAccepted, DeclarationReleased, DeclarationRejected,
-	DeclarationAmended, DeclarationWithdrawn}
+	DeclarationAmended, DeclarationWithdrawn, DeclarationNotReceived}
 
 // UnitConversionRef is a POL unit_conversion revision.
 type UnitConversionRef struct {
@@ -224,12 +231,19 @@ func (c ConfirmDeclaration) Validate() error {
 	return evidence(c.EvidenceIDs, "/args/evidence_ids", 0)
 }
 
-// Submitter is who filed the declaration: a broker (报关行, its PTY party and name) or our own clerk
-// (name only).
+// Submitter is who filed the declaration: a broker (报关行, its PTY party, the verified PTY service role of kind
+// customs_broker it rests on — ServiceRoleRef v1, R77, S5R-D36 — and its name) or our own clerk (name only).
 type Submitter struct {
-	Kind    string
-	PartyID string
-	Name    string
+	Kind        string
+	PartyID     string
+	ServiceRole *ServiceRoleRef `json:",omitempty"`
+	Name        string
+}
+
+// ServiceRoleRef names a revision of a PTY service role of the submitter's party (PTY ServiceRoleRef v1).
+type ServiceRoleRef struct {
+	ID       string
+	Revision int64
 }
 
 // RecordSubmission records the manual submission of DeclarationID's confirmed version at
@@ -262,6 +276,12 @@ func (c RecordSubmission) Validate() error {
 	case (c.Submitter.Kind == SubmitterBroker) != (c.Submitter.PartyID != ""),
 		c.Submitter.PartyID != "" && !kernel.ValidIdentifier(c.Submitter.PartyID):
 		return schema("/args/submitter/party_id")
+	case (c.Submitter.Kind == SubmitterBroker) != (c.Submitter.ServiceRole != nil):
+		return schema("/args/submitter/service_role")
+	case c.Submitter.ServiceRole != nil && !kernel.ValidIdentifier(c.Submitter.ServiceRole.ID):
+		return schema("/args/submitter/service_role/id")
+	case c.Submitter.ServiceRole != nil && (c.Submitter.ServiceRole.Revision < 1 || c.Submitter.ServiceRole.Revision > maxVersion):
+		return schema("/args/submitter/service_role/revision")
 	case !Text(c.Submitter.Name, MaxSubmitterName):
 		return schema("/args/submitter/name")
 	case !timestamp(c.SubmittedAt):
@@ -289,8 +309,9 @@ type AmendedItem struct {
 }
 
 // RecordReceipt records, as ReceiptID, an external result of DeclarationID at ExpectedVersion (human
-// only). Outcome unknown names no External, MappingVersion or DeclarationNumber and needs a Reason;
-// every other outcome names them and at least one evidence source. ExportedAt (a UTC timestamp) is
+// only). Outcome unknown names no External, MappingVersion or DeclarationNumber and needs a Reason; so does
+// not_received, whose evidence the domain requires (INVALID_KNOWN_VALUE without: CNX-INV-003, S5R-D13); every
+// other outcome names them and at least one evidence source. ExportedAt (a UTC timestamp) is
 // required for released, optional for amended and absent otherwise; AmendedItems only for amended.
 type RecordReceipt struct {
 	IdempotencyKey    string
@@ -323,7 +344,7 @@ func (c RecordReceipt) Validate() error {
 	case c.Reason != "" && !Text(c.Reason, MaxReason):
 		return schema("/args/reason")
 	}
-	unknown := c.Outcome == DeclarationUnknown
+	unknown := c.Outcome == DeclarationUnknown || c.Outcome == DeclarationNotReceived
 	if unknown {
 		switch {
 		case c.External != nil:
@@ -532,12 +553,13 @@ type ConfirmationEntryView struct {
 	ConfirmedAt    time.Time
 }
 
-// SubmissionView is a manual submission.
+// SubmissionView is a manual submission; ServiceRoleKind is the kind of the broker's PTY service role (S5R-D36).
 type SubmissionView struct {
 	SubmissionNo       int
 	Version            int
 	OperationReference string
 	Submitter          Submitter
+	ServiceRoleKind    string
 	SubmittedAt        time.Time
 	Evidence           []EvidenceView
 	Note               string

@@ -21,8 +21,8 @@ import (
 
 // Opening refund material (S5 unit C10, WBS S5-20; CNX-AGG-TaxRefundCase value object OpeningPosition, CNX-INV-004;
 // MD-51; baseline 11.2; CN-R09; CN-AT16 CNX half, BT17). Upstreams, read before CNX's transaction: EVD (R54, the
-// evidence of the item and of an opening case's position) and POL (R50: the export_tax_policy revision in force at
-// an opening case's export date, policyAt as tax_refund_case.allocate binds it, and the currency revision of its
+// evidence of the item and of an opening case's position) and POL (R50: the export_tax_policy revision ConfigAt v1
+// answers for an opening case's export date, policyAt as tax_refund_case.allocate binds it (S5R-D23), and the currency revision of its
 // position's amount). In the transaction CNX locks, for an opening case, the export's latest case FOR UPDATE (a
 // second opening of the export waits and sees the first) and then the invoices of its allocations FOR UPDATE in
 // ID order; for an invoice balance the invoice FOR UPDATE — the order tax_refund_case.allocate locks in, so
@@ -44,7 +44,7 @@ func openingRequest(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandRecordTaxOpening, key, c
 	}
-	return "", "", nil
+	return rebindRequest(cmd)
 }
 
 // visibleOpening is Visible's part for opening items (company-wide like the cases).
@@ -62,8 +62,8 @@ func visibleOpening(ctx context.Context, exec bentopg.Executor, command, id stri
 // (REFERENCE_INVALID); a cutoff after now, an export date after the cutoff (INVALID_KNOWN_VALUE). An invoice
 // balance: an invoice the company lacks (REFERENCE_INVALID), not a verified blue one (INVALID_STATE), the domain's
 // (REFERENCE_INVALID, TAX_EVIDENCE_EXCEEDED). An opening case: an export CNX declared itself (REFERENCE_INVALID: its
-// lot's case is allocated from FUL's lot), the policy binding (REFERENCE_INVALID, CONFIG_NOT_ACTIVE,
-// CONFIG_EXPIRED), an allocation ID taken (BUSINESS_KEY_CONFLICT), the domain's allocation refusals, then the
+// lot's case is allocated from FUL's lot), the policy binding (REFERENCE_INVALID, CONFIG_NOT_ACTIVE; a taxable
+// revision INVALID_STATE, S5R-D14; a revision published since REFERENCE_STALE), an allocation ID taken (BUSINESS_KEY_CONFLICT), the domain's allocation refusals, then the
 // position's currency (REFERENCE_INVALID, POL's verdict), amounts (INVALID_KNOWN_VALUE) and evidence
 // (REFERENCE_INVALID). TaxOpeningRecorded is published.
 type recordTaxOpening struct {
@@ -71,7 +71,7 @@ type recordTaxOpening struct {
 	cmd       api.RecordTaxOpening
 	sources   map[string]evdapi.SourceRef
 	currency  *polapi.ResolvedConfig
-	policy    *polapi.ResolvedConfig
+	policy    *polapi.RevisionAt
 	policyErr error
 
 	recorded *tr.Opening
@@ -107,45 +107,13 @@ func (h *recordTaxOpening) Prepare(ctx context.Context) error {
 		}
 	}
 	exported, _ := kernel.ParseTimestamp(c.Export.ExportedAt)
-	h.policy, err = h.s.policyValidAt(ctx, c.PolicyID, kernel.Instant(exported))
+	// The revision ConfigAt v1 answers for the export date, as tax_refund_case.allocate binds it (S5R-D23: one rule for
+	// every case; it replaces C10's taxrefund.ValidAt).
+	h.policy, err = h.s.policyAt(ctx, c.PolicyID, kernel.Instant(exported))
 	if _, ok := kernel.AsRejection(err); ok {
 		h.policyErr, err = err, nil
 	}
 	return err
-}
-
-// policyValidAt finds the export_tax_policy revision of policyID an opening case binds for its export date at
-// (taxrefund.ValidAt: published, not retired, its validity containing at — its publication may follow the export)
-// and reads it from POL as it stands now; REFERENCE_INVALID when POL has no such policy, CONFIG_NOT_ACTIVE when no
-// published revision's validity contains at.
-func (s Service) policyValidAt(ctx context.Context, policyID string, at time.Time) (*polapi.ResolvedConfig, error) {
-	const path = "/args/policy_id"
-	view, err := s.Upstream.Configs.GetConfig(ctx, polapi.KindExportTaxPolicy, policyID)
-	if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodeNotFound {
-		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "POL has no such export tax policy")
-	}
-	if err != nil {
-		return nil, err
-	}
-	var revisions []tr.Revision
-	for _, r := range view.Revisions {
-		revisions = append(revisions, tr.Revision{Revision: r.Revision, Status: r.Status, PublishedAt: r.PublishedAt, EndedAt: r.EndedAt,
-			ValidFrom: r.ValidFrom, ValidUntil: r.ValidUntil})
-	}
-	revision := tr.ValidAt(revisions, at)
-	if revision == 0 {
-		return nil, polapi.Reject(polapi.CodeConfigNotActive, path)
-	}
-	ref := polapi.ConfigRef{Kind: polapi.KindExportTaxPolicy, ConfigID: policyID, Revision: revision}
-	resolved, err := s.Upstream.Configs.ResolveConfigs(ctx, []polapi.ConfigRef{ref}, s.Clock.Now())
-	if err != nil {
-		return nil, err
-	}
-	r, ok := resolved[ref]
-	if !ok || r.Data.ExportTaxPolicy == nil {
-		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "")
-	}
-	return &r, nil
 }
 
 func (h *recordTaxOpening) invoiceIDs() []string {
@@ -295,6 +263,12 @@ func (h *recordTaxOpening) openCase(ctx context.Context, exec bentopg.Executor, 
 	case h.policyErr != nil:
 		return action.Outcome{}, h.policyErr
 	}
+	if err := tr.CheckOpens(h.policy.Data.ExportTaxPolicy.RefundMethod, "/args/policy_id"); err != nil {
+		return action.Outcome{}, err
+	}
+	if err := policyStillAt(ctx, exec, h.policy, exported, "/args/policy_id"); err != nil {
+		return action.Outcome{}, err
+	}
 	for i, a := range c.Allocations {
 		taken, err := postgres.TaxAllocationExists(ctx, exec, sc, a.AllocationID)
 		if err != nil {
@@ -308,11 +282,8 @@ func (h *recordTaxOpening) openCase(ctx context.Context, exec bentopg.Executor, 
 	if h.lotCase != nil {
 		attempt = h.lotCase.Attempt + 1
 	}
-	p := h.policy
 	tc := &tr.Case{ID: action.NewID("trc", now), ExportLotID: x.Reference, Attempt: attempt, ExportedAt: exported, Status: c.Position.Stage,
-		RowVersion: 1, OpenedBy: d.Actor, Epoch: d.Epoch, OpenedAt: now, Opening: true,
-		Policy: tr.Binding{PolicyID: p.Ref.ConfigID, Revision: p.Ref.Revision, ContentHash: p.ContentHash, RefundMethod: p.Data.ExportTaxPolicy.RefundMethod,
-			ValidFrom: kernel.Instant(p.ValidFrom), ValidUntil: p.ValidUntil}}
+		RowVersion: 1, OpenedBy: d.Actor, Epoch: d.Epoch, OpenedAt: now, Opening: true, Policy: bindingOf(h.policy)}
 	exportLines := map[string]tr.ExportLine{}
 	for _, l := range x.Lines {
 		q, _ := kernel.ParseDecimal(l.Quantity, kernel.QuantityFormat)

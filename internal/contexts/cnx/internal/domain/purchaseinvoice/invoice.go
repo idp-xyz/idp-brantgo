@@ -5,9 +5,12 @@
 // a human verified, kept apart, with the matches of its lines to PUR commitment lines.
 //
 // The invoice is the root (CAS on its row version). Its states: imported → verified | rejected;
-// verified → reversed when a red invoice that names it is verified. A reversal deletes nothing: the
-// matches of the reversed invoice and the tax evidence allocated from it are derived to be under
-// review. Uniqueness is by (kind, number) among invoices that are not rejected.
+// a verified blue invoice stays verified when a red invoice reverses part of it and becomes reversed
+// with the red invoice that reverses what remained (S5R-D20, reversal.go). A reversal deletes nothing:
+// the matches it touches are under review and the tax evidence allocated from a line is under review
+// while it exceeds what the line evidences now. Uniqueness is by (kind, number) among invoices that are
+// not rejected. A buyer that is not the company's entity is refused: the supplier reissues the invoice,
+// there is no approved mode (S5R-D21).
 package purchaseinvoice
 
 import (
@@ -24,12 +27,16 @@ import (
 const (
 	CodeInvoiceDuplicate    = "INVOICE_DUPLICATE"
 	CodePartyEntityMismatch = "PARTY_ENTITY_MISMATCH"
+	// CodeMatchExceeded: the quantity standing matches take of a purchase commitment line would exceed what it buys
+	// (error catalog: PURCHASE_INVOICE_MATCH_EXCEEDED, 409, S5R).
+	CodeMatchExceeded = "PURCHASE_INVOICE_MATCH_EXCEEDED"
 )
 
 // Categories are the categories of the domain's own codes.
 var Categories = map[string]kernel.Category{
 	CodeInvoiceDuplicate:    kernel.CategoryConflict,
 	CodePartyEntityMismatch: kernel.CategoryConflict,
+	CodeMatchExceeded:       kernel.CategoryConflict,
 }
 
 func reject(code, path, reason string) *kernel.Rejection {
@@ -51,6 +58,8 @@ const (
 
 	Standing = "standing"
 	Review   = "review"
+	// Reversal is the state of a red invoice's match: it takes back part of a blue invoice's match (S5R-D20).
+	Reversal = "reversal"
 )
 
 // Party is a party an invoice names.
@@ -172,9 +181,10 @@ type Company struct {
 	RegistrationNo string
 }
 
-// CheckBuyer refuses a buyer that is not the company's entity (CNX-INV-005 "受票主体与本公司不一致时
-// 不自动接受", CN-AT15): its taxpayer number and its name must be the company profile's. A buyer
-// field never names another company of the tenant: the invoice belongs to the caller's company.
+// CheckBuyer refuses a buyer that is not the company's entity (CNX-INV-005 "受票主体与本公司不一致时直接拒绝，供应商须
+// 重开", S5R-D21, CN-AT15): its taxpayer number and its name must be the company profile's. There is no approved
+// mode: a VAT invoice's buyer must be right, the supplier reissues it. A buyer field never names another company of
+// the tenant: the invoice belongs to the caller's company.
 func CheckBuyer(f Facts, c Company, path string) error {
 	switch {
 	case c.RegistrationNo == "":
@@ -360,10 +370,14 @@ type Match struct {
 	MatchedAt         time.Time
 }
 
-// Status is the match's state as its invoice's state decides it: under review once the invoice was
-// reversed (CN-R06 "红冲或作废使相关匹配待复核").
-func (m Match) Status(invoiceStatus string) string {
-	if invoiceStatus == Reversed {
+// Status is the match's state as its invoice's state and the take-backs of red invoices decide it (CN-R06
+// "红冲或作废使相关匹配待复核", S5R-D20): a red invoice's match is a reversal; a blue one's is under review once the
+// invoice was reversed or a red invoice took back part of it, standing otherwise.
+func (m Match) Status(invoiceStatus, colour string, takenBack kernel.Decimal) string {
+	switch {
+	case colour == Red:
+		return Reversal
+	case invoiceStatus == Reversed || takenBack.Sign() > 0:
 		return Review
 	}
 	return Standing
@@ -373,8 +387,9 @@ func (m Match) Status(invoiceStatus string) string {
 // resolve it for the caller) and the quantity standing matches of other invoices already take of
 // each commitment line: the commitment line must be issued or confirmed (INVALID_STATE), its
 // supplier the invoice's (PARTY_ENTITY_MISMATCH), its unit the invoice line's (INVALID_KNOWN_VALUE:
-// no conversion is guessed), Σ matched of an invoice line at most its quantity and Σ standing
-// matched of a commitment line at most what it buys (INVALID_KNOWN_VALUE). A match records the
+// no conversion is guessed), Σ matched of an invoice line at most its quantity (INVALID_KNOWN_VALUE) and Σ
+// standing matched of a commitment line at most what it buys (PURCHASE_INVOICE_MATCH_EXCEEDED, S5R; standing:
+// the matches of verified blue invoices less what red invoices took back). A match records the
 // quantity delivered when it was made: an invoice may come before the goods (先票后货).
 func CheckMatches(f Facts, invoiceID string, in []MatchInput, lines map[LineRef]PurchaseLine, standing map[LineRef]kernel.Decimal, at time.Time) ([]Match, error) {
 	perLine := map[int]kernel.Decimal{}
@@ -402,7 +417,8 @@ func CheckMatches(f Facts, invoiceID string, in []MatchInput, lines map[LineRef]
 		perLine[m.LineNo] = sum
 		ref := perRef[m.Ref].Add(m.Quantity)
 		if standing[m.Ref].Add(ref).Cmp(l.PurchaseQuantity) > 0 {
-			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, p+"/quantity", "More than the commitment line buys is matched")
+			return nil, reject(CodeMatchExceeded, p+"/quantity", "Invoices would match "+standing[m.Ref].Add(ref).String()+" of the "+
+				l.PurchaseQuantity.String()+" the commitment line buys")
 		}
 		perRef[m.Ref] = ref
 		out = append(out, Match{InvoiceID: invoiceID, LineNo: m.LineNo, Ref: m.Ref, Quantity: m.Quantity, Unit: l.Unit, SupplierID: l.SupplierID,

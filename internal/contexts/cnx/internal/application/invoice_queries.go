@@ -68,12 +68,38 @@ func (s Service) GetInvoice(ctx context.Context, invoiceID string) (api.InvoiceV
 		if err != nil {
 			return err
 		}
-		for _, m := range matches {
-			v.Matches = append(v.Matches, api.MatchView{LineNo: m.LineNo, CommitmentID: m.Ref.CommitmentID, OrderLineID: m.Ref.OrderLineID,
-				Quantity: m.Quantity.String(), Unit: m.Unit, SupplierID: m.SupplierID, PONumber: m.PONumber, PurchaseQuantity: m.PurchaseQuantity.String(),
-				DeliveredQuantity: m.DeliveredQuantity.String(), Status: m.Status(inv.Status), MatchedAt: m.MatchedAt})
+		colour := inv.Verified.Colour
+		var reds []*pin.Invoice
+		var taken []pin.Match
+		if colour == pin.Blue { // S5R-D20: what red invoices reversed of it and took back of its matches
+			if reds, err = postgres.RedInvoices(ctx, exec, sc, inv.ID); err != nil {
+				return err
+			}
+			if taken, err = postgres.TakeBacks(ctx, exec, sc, inv.ID); err != nil {
+				return err
+			}
 		}
-		if inv.Verified.Colour != pin.Blue {
+		reversed, takenBack := pin.Reversals(*inv.Verified, reds, taken)
+		v.ReversedByIDs = []string{}
+		for _, r := range reds {
+			v.ReversedByIDs = append(v.ReversedByIDs, r.ID)
+		}
+		switch {
+		case inv.Status == pin.Reversed:
+			v.Reversal = api.ReversalFull
+		case len(reds) > 0:
+			v.Reversal = api.ReversalPartial
+		}
+		for _, m := range matches {
+			mv := api.MatchView{LineNo: m.LineNo, CommitmentID: m.Ref.CommitmentID, OrderLineID: m.Ref.OrderLineID,
+				Quantity: m.Quantity.String(), Unit: m.Unit, SupplierID: m.SupplierID, PONumber: m.PONumber, PurchaseQuantity: m.PurchaseQuantity.String(),
+				DeliveredQuantity: m.DeliveredQuantity.String(), Status: m.Status(inv.Status, colour, takenBack[m.Key()]), MatchedAt: m.MatchedAt}
+			if colour == pin.Blue {
+				mv.TakenBack = takenBack[m.Key()].String()
+			}
+			v.Matches = append(v.Matches, mv)
+		}
+		if colour != pin.Blue {
 			return nil
 		}
 		usage, err := postgres.InvoiceUsage(ctx, exec, sc, inv.ID)
@@ -93,13 +119,14 @@ func (s Service) GetInvoice(ctx context.Context, invoiceID string) (api.InvoiceV
 						used = u.Used
 					}
 				}
-				b := api.EvidenceBalanceView{LineNo: l.LineNo, Unit: l.Unit, Purpose: p, Quantity: q.String(), Allocated: used.String()}
+				b := api.EvidenceBalanceView{LineNo: l.LineNo, Unit: l.Unit, Purpose: p, Quantity: q.String(), Reversed: reversed[l.LineNo].Quantity.String(),
+					Allocated: used.String()}
 				for _, x := range consumed {
 					if x.LineNo == l.LineNo && x.Purpose == p {
 						b.OpeningConsumed, used = x.Consumed.String(), used.Add(x.Consumed)
 					}
 				}
-				b.Available = q.Sub(used).String()
+				b.Available = q.Sub(reversed[l.LineNo].Quantity).Sub(used).String()
 				v.Balances = append(v.Balances, b)
 			}
 		}
@@ -170,6 +197,14 @@ func (s Service) GetTaxCase(ctx context.Context, caseID string) (api.TaxCaseView
 			Policy: policyView(c.Policy), Status: c.Status, RowVersion: c.RowVersion, Allocations: []api.TaxAllocationView{},
 			Results: []api.TaxResultView{}, OpenedBy: c.OpenedBy, OpenedAt: c.OpenedAt, AuthorityEpoch: c.Epoch,
 			CheckedAt: kernel.Instant(s.Clock.Now())}
+		if v.PolicyAt, v.PolicySuperseded, err = policyAtView(ctx, exec, c); err != nil { // S5R-D23
+			return err
+		}
+		rebindings, err := postgres.Rebindings(ctx, exec, sc, c.ID)
+		if err != nil {
+			return err
+		}
+		v.Rebindings = rebindingViews(rebindings)
 		for _, a := range allocations {
 			v.Allocations = append(v.Allocations, api.TaxAllocationView{AllocationID: a.ID, ExportLineID: a.ExportLineID, ShipmentID: a.ShipmentID,
 				OrderLineID: a.OrderLineID, SkuID: a.SkuID, SpecRevision: a.SpecRevision, ExportQuantity: a.ExportQuantity.String(),
@@ -180,7 +215,8 @@ func (s Service) GetTaxCase(ctx context.Context, caseID string) (api.TaxCaseView
 		for _, r := range results {
 			rv := api.TaxResultView{ResultID: r.ID, Stage: r.Stage, From: r.From, AmountMinor: minorText(r.Amount), OffsetMinor: minorText(r.Offset),
 				TaxPeriod: r.TaxPeriod, Reviewer: r.Reviewer, ReviewEvidence: taxEvidenceViews(r.ReviewEvidence), ExternalReference: r.ExternalReference,
-				ResultText: r.ResultText, FundRecordID: r.FundRecordID, Evidence: taxEvidenceViews(r.Evidence), Reason: r.Reason, RecordedBy: r.By,
+				ResultText: r.ResultText, FundRecordID: r.FundRecordID, PurchaseInvoiceID: r.PurchaseInvoiceID, Evidence: taxEvidenceViews(r.Evidence),
+				Reason: r.Reason, RecordedBy: r.By,
 				RecordedAt: r.At, AuthorityEpoch: r.Epoch}
 			if r.Currency != nil {
 				rv.CurrencyCode = r.Currency.Code

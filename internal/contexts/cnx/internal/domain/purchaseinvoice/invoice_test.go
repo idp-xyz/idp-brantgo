@@ -120,7 +120,8 @@ func TestMatchesToPurchaseLines(t *testing.T) {
 	ms, err := CheckMatches(blue(), "pin.1", []MatchInput{{LineNo: 1, Ref: l1, Quantity: kernel.MustDecimal("100")},
 		{LineNo: 1, Ref: l2, Quantity: kernel.MustDecimal("20")}}, lines, nil, at)
 	if err != nil || len(ms) != 2 || !ms[0].DeliveredQuantity.Equal(kernel.MustDecimal("100")) || ms[0].PONumber != "PO-1" ||
-		ms[1].DeliveredQuantity.Sign() != 0 || ms[0].Status(Verified) != Standing || ms[0].Status(Reversed) != Review {
+		ms[1].DeliveredQuantity.Sign() != 0 || ms[0].Status(Verified, Blue, kernel.Decimal{}) != Standing || ms[0].Status(Reversed, Blue, kernel.Decimal{}) != Review ||
+		ms[0].Status(Verified, Blue, kernel.MustDecimal("1")) != Review || ms[0].Status(Verified, Red, kernel.Decimal{}) != Reversal {
 		t.Fatalf("%+v %v", ms, err)
 	}
 	for _, c := range []struct {
@@ -142,8 +143,9 @@ func TestMatchesToPurchaseLines(t *testing.T) {
 			"INVALID_KNOWN_VALUE /args/matches/0/quantity"},
 		{[]MatchInput{{LineNo: 1, Ref: l1, Quantity: kernel.MustDecimal("100")}, {LineNo: 1, Ref: l2, Quantity: kernel.MustDecimal("21")}}, lines, nil,
 			"INVALID_KNOWN_VALUE /args/matches/1/quantity"},
+		// S5R: the commitment line's cap across invoices answers PURCHASE_INVOICE_MATCH_EXCEEDED (catalog, R10 adopts it).
 		{[]MatchInput{{LineNo: 1, Ref: l1, Quantity: kernel.MustDecimal("21")}}, lines, map[LineRef]kernel.Decimal{l1: kernel.MustDecimal("100")},
-			"INVALID_KNOWN_VALUE /args/matches/0/quantity"},
+			CodeMatchExceeded + " /args/matches/0/quantity"},
 	} {
 		if _, err := CheckMatches(blue(), "pin.1", c.in, c.lines, c.standing, at); code(err) != c.want {
 			t.Errorf("%s, want %s", code(err), c.want)

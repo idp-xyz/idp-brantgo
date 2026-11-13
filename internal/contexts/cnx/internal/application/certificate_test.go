@@ -63,7 +63,8 @@ func TestCertificateDomainIsTheContract(t *testing.T) {
 			t.Errorf("domain %q, api %q", domain, contract)
 		}
 	}
-	if len(cert.Kinds) != 3 {
+	if len(cert.Kinds) != 4 || cert.KindPreferentialOrigin != api.CertificatePreferentialOrigin || cert.FormCertificate != api.OriginFormCertificate ||
+		cert.FormOriginDeclaration != api.OriginFormOriginDeclaration || cert.BodyCustoms != api.IssuingBodyCustoms || cert.BodyCCPIT != api.IssuingBodyCCPIT {
 		t.Errorf("kinds %v", cert.Kinds)
 	}
 }

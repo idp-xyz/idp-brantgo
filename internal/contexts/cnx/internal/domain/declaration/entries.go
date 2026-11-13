@@ -24,21 +24,25 @@ type Confirmation struct {
 }
 
 // Submission is a manual submission of the confirmed version: the business operation's identifier,
-// the broker (PTY party) or our own clerk, when it was submitted and its evidence.
+// the broker (PTY party, and since S5R-D36 the verified service role of kind customs_broker it rests on) or our own
+// clerk, when it was submitted and its evidence.
 type Submission struct {
-	DeclarationID      string
-	No                 int
-	Version            int
-	OperationReference string
-	SubmitterKind      string
-	SubmitterPartyID   string
-	SubmitterName      string
-	SubmittedAt        time.Time
-	Evidence           []Evidence
-	Note               string
-	By                 kernel.ActorRef
-	Epoch              int64
-	At                 time.Time
+	DeclarationID       string
+	No                  int
+	Version             int
+	OperationReference  string
+	SubmitterKind       string
+	SubmitterPartyID    string
+	ServiceRoleID       string // "" for our own clerk, and for a broker's submission recorded before S5R
+	ServiceRoleRevision int64
+	ServiceRoleKind     string
+	SubmitterName       string
+	SubmittedAt         time.Time
+	Evidence            []Evidence
+	Note                string
+	By                  kernel.ActorRef
+	Epoch               int64
+	At                  time.Time
 }
 
 // Receipt is a recorded external result, or an unknown one (no sequence, text, mapping or number).

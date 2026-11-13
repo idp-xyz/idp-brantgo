@@ -58,6 +58,9 @@ var (
 
 	_ api.TaxOpeningCommands = (*Module)(nil)
 	_ api.TaxOpeningQueries  = (*Module)(nil)
+
+	// PurchaseInvoiceRef v1 for STL (R55; S5R-D20).
+	_ api.PurchaseInvoiceLookups = (*Module)(nil)
 )
 
 // Upstream are the contracts of CNX's upstreams: TRD's orders (R46), PTY's address countries
@@ -151,6 +154,17 @@ func TRDOrders(snapshots trdapi.OrderSnapshotLookups) Orders {
 // PTYCountries is CNX's port to PTY on PTY's AddressRoleRef v1 lookups with the country (R77).
 func PTYCountries(roles upstream.AddressRoles) Countries { return upstream.PTY{Roles: roles} }
 
+// Brokers is CNX's port to PTY's customs brokers (R77, ServiceRoleRef v1; S5R-D36).
+type (
+	Brokers   = application.Brokers
+	BrokerRef = application.BrokerRef
+	Broker    = application.Broker
+)
+
+// PTYBrokers is CNX's port to PTY on PTY's ServiceRoleRef v1 lookups (R77; S5R-D36): the customs broker a declaration's
+// submission rests on.
+func PTYBrokers(roles upstream.ServiceRoles) Brokers { return upstream.Brokers{Roles: roles} }
+
 // REFProgrammes is CNX's port to reference data's country programme lists.
 func REFProgrammes(programmes upstream.Programmes) Programmes {
 	return upstream.REF{Programmes: programmes}
@@ -165,7 +179,7 @@ func CATProfiles(profiles catapi.DeclarationProfileLookups) Profiles {
 // New wires CNX to db, a transaction owner that belongs to CNX alone, and to its upstreams.
 func New(db *bentopg.DB, u Upstream) (*Module, error) {
 	if !u.Complete() {
-		return nil, errors.New("cnx: module needs the ports to TRD, PTY, CAT, FUL, PUR, STL and reference data and the lookups of POL and EVD")
+		return nil, errors.New("cnx: module needs the ports to TRD, PTY (countries and brokers), CAT, FUL, PUR, STL and reference data and the lookups of POL and EVD")
 	}
 	policy, err := authorization.NewPolicy(application.Rules()...)
 	if err != nil {

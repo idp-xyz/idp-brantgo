@@ -81,24 +81,3 @@ func TestAnOpeningCaseTakesItsAllocationsInItsPosition(t *testing.T) {
 		}
 	}
 }
-
-// CN-AT12 for an opening case: the revision whose validity contains the export date binds, also when it was
-// published after the export (recorded at the cutover); a retired or draft revision never binds; of two the latest
-// published; none valid at the date is 0 (CONFIG_NOT_ACTIVE).
-func TestAnOpeningCaseBindsThePolicyValidAtItsExportDate(t *testing.T) {
-	day := func(n int) time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, n) }
-	revisions := []Revision{
-		{Revision: 1, Status: "superseded", PublishedAt: day(300), EndedAt: day(301), ValidFrom: day(0), ValidUntil: day(200)},
-		{Revision: 2, Status: "active", PublishedAt: day(301), ValidFrom: day(200)},
-		{Revision: 3, Status: "retired", PublishedAt: day(302), EndedAt: day(303), ValidFrom: day(0)},
-		{Revision: 4, Status: "draft", ValidFrom: day(0)},
-	}
-	for at, want := range map[int]int64{100: 1, 250: 2, -1: 0} {
-		if got := ValidAt(revisions, day(at)); got != want {
-			t.Errorf("export on day %d binds revision %d, want %d", at, got, want)
-		}
-	}
-	if InForceAt(revisions, day(100)) != 0 {
-		t.Fatal("a FUL lot's case binds only what was published by its export date")
-	}
-}

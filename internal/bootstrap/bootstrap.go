@@ -294,7 +294,9 @@ func (p *Platform) Contexts() (*Contexts, error) {
 			// bound when CNX asks (S5 D-2).
 			Exports: cnx.FULExports(func() cnx.FULLookups { return c.FUL }, c.POL, cnx.PTYCountries(c.PTY)), Purchases: cnx.PURLines(c.PUR),
 			// STL's fund records and credit notes (R38 STL→CNX; CreditNoteRef v1 for CN-AT11, S5 C10).
-			Funds: cnx.STLFunds(c.STL), CreditNotes: cnx.STLCreditNotes(c.STL)})
+			Funds: cnx.STLFunds(c.STL), CreditNotes: cnx.STLCreditNotes(c.STL),
+			// PTY's customs brokers (R77, ServiceRoleRef v1; S5R-D36).
+			Brokers: cnx.PTYBrokers(c.PTY)})
 	}
 	if err == nil {
 		db, err = p.newDB()
