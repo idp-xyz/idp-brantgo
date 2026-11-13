@@ -36,7 +36,9 @@ type fakeTRD struct {
 	keys    map[string]int64 // key → the epoch it was answered with
 	calls   []call
 	fail    map[string]error
-	hook    func(op string) // runs once after the first, not replayed, call of an operation
+	lose    map[string]error // an operation that commits and whose answer is then lost, once
+	asked   int              // Bound's questions (not calls: nothing changes)
+	hook    func(op string)  // runs once after the first, not replayed, call of an operation
 	verdict tsk.Goal
 	assess  func(tsk.Goal) (string, []string)
 	full    func(tsk.Goal) (tsk.Verdict, error) // a whole assessment or a refusal (verification_integration_test.go)
@@ -51,7 +53,7 @@ type call struct {
 }
 
 func newFake() *fakeTRD {
-	return &fakeTRD{epoch: map[string]int64{}, keys: map[string]int64{}, fail: map[string]error{}}
+	return &fakeTRD{epoch: map[string]int64{}, keys: map[string]int64{}, fail: map[string]error{}, lose: map[string]error{}}
 }
 
 func (f *fakeTRD) do(ctx context.Context, op string, r tsk.ControlRequest) (int64, error) {
@@ -71,6 +73,11 @@ func (f *fakeTRD) do(ctx context.Context, op string, r tsk.ControlRequest) (int6
 	e := f.epoch[r.QuoteID]
 	f.keys[r.Key], c.Answer = e, e
 	f.calls = append(f.calls, c)
+	if err := f.lose[op]; err != nil {
+		delete(f.lose, op)
+		f.mu.Unlock()
+		return 0, err
+	}
 	hook := f.hook
 	f.hook = nil
 	f.mu.Unlock()
@@ -94,6 +101,26 @@ func (f *fakeTRD) Handoff(ctx context.Context, r tsk.ControlRequest) (int64, err
 }
 func (f *fakeTRD) Release(ctx context.Context, r tsk.ControlRequest) (int64, error) {
 	return f.do(ctx, "release", r)
+}
+
+// Bound answers from the binds the fake committed, as TRD's ledger reconciles one: the epoch of the
+// bind under r.Key when it was for the same root, task and delegation, else 0.
+func (f *fakeTRD) Bound(_ context.Context, r tsk.ControlRequest) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.asked++
+	if err := f.fail["bound"]; err != nil {
+		return 0, err
+	}
+	for _, c := range f.calls {
+		if c.Op == "bind" && !c.Replay && c.Key == r.Key {
+			if c.Quote == r.QuoteID && c.Task == r.TaskID && c.Initiator == r.Initiator && c.Agent == r.Agent {
+				return c.Answer, nil
+			}
+			return 0, nil
+		}
+	}
+	return 0, nil
 }
 
 func (f *fakeTRD) Assess(_ context.Context, g tsk.Goal) (verdict tsk.Verdict, err error) {

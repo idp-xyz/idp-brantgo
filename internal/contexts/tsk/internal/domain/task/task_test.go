@@ -565,6 +565,70 @@ func TestUnboundTakeOverRecordsOnlyTheControlChange(t *testing.T) {
 	}
 }
 
+// S4 C3 (C1's gap "lost bind record"): TRD bound the task's root and TSK's record of the bind was
+// lost. The control change that needs the root adopts the binding TRD's ledger shows at TRD's epoch —
+// only a root the task may bind (its target's, or one it created), only for a task with an AI agent
+// and without a bound root, never at an epoch the task recorded already — and then proceeds from it:
+// a take-over records the stop's later epoch, a release of a task taken over without the root gives
+// it back.
+func TestAdoptBindingOfALostBind(t *testing.T) {
+	hum := Act{By: alice, Epoch: 1, At: t0}
+	tk := running(t, ModeAI)
+	tk.Target.QuoteID = "quote.1"
+	if err := tk.AdoptBinding("quote.2", true, 1, t0); code(err) != kernel.CodeReferenceInvalid {
+		t.Fatalf("another root than the target's: %s", code(err))
+	}
+	if err := tk.AdoptBinding("quote.1", false, 0, t0); code(err) != CodeControlEpochStale || tk.Bound() {
+		t.Fatalf("an epoch the task recorded: %s", code(err))
+	}
+	if err := tk.AdoptBinding("quote.1", false, 1, t0); err != nil || !tk.Bound() || tk.ControlEpoch != 1 || tk.Binding.Epoch != 1 ||
+		tk.Version != 3 {
+		t.Fatalf("adopted: %v %+v", err, tk)
+	}
+	if err := tk.AdoptBinding("quote.1", false, 2, t0); code(err) != kernel.CodeInvalidState {
+		t.Fatalf("a second binding: %s", code(err))
+	}
+	ch, err := tk.TakeControl("人工接管", 2, hum)
+	if err != nil || ch.ControlEpoch != 2 || tk.Binding.Epoch != 2 || tk.State != Stopping {
+		t.Fatalf("take-over after adoption: %v %+v", err, ch)
+	}
+
+	free := running(t, ModeAI)
+	if err = free.AdoptBinding("quote.9", false, 1, t0); code(err) != kernel.CodeReferenceInvalid {
+		t.Fatalf("a root the task did not create: %s", code(err))
+	}
+	if err = free.AdoptBinding("quote.9", true, 1, t0); err != nil || free.Target.QuoteID != "quote.9" {
+		t.Fatalf("a root the task created: %v %+v", err, free)
+	}
+	none := running(t, ModeManual)
+	none.Agent = ""
+	if err = none.AdoptBinding("quote.1", true, 1, t0); code(err) != kernel.CodeInvalidState {
+		t.Fatalf("a task without an agent: %s", code(err))
+	}
+
+	// Taken over before the bind was learned: paused in manual mode without a root; the release
+	// adopts it and gives it back at TRD's epoch.
+	late := running(t, ModeAI)
+	ok(t)(late.TakeControl("x", 0, hum))
+	ok(t)(late.FinishStop(0, 0, Act{By: tskSys, Epoch: 1, At: t0}))
+	if err = late.CheckReleaseState(hum); err != nil {
+		t.Fatalf("a paused manual task may release: %v", err)
+	}
+	if err = late.CheckRelease(0, hum); code(err) != kernel.CodeInvalidState {
+		t.Fatalf("nothing recorded: %s", code(err))
+	}
+	if err = late.AdoptBinding("quote.5", true, 3, t0); err != nil {
+		t.Fatal(err)
+	}
+	ok(t)(late.Release("交还报价根", 4, 0, hum))
+	if late.Binding.State != BindingReleased || late.ControlEpoch != 4 {
+		t.Fatalf("%+v", late.Binding)
+	}
+	if err = running(t, ModeAI).CheckReleaseState(hum); code(err) != kernel.CodeInvalidState {
+		t.Fatalf("a running task: %s", code(err))
+	}
+}
+
 // task.bind_object: a running AI task binds one root and records TRD's epoch: the root its target
 // names, or, when the target names none, a root an action of the task created (SM-TSK-TASK
 // "本任务的动作已创建报价根"; B1-D09); a manual task, a second binding, another target's root and a root

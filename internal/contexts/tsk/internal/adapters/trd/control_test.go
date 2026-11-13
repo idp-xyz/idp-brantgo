@@ -23,6 +23,10 @@ type fakeControl struct {
 	sent        []string // command@claim epoch/expected epoch
 	reads       int
 	refuseRead  error
+	// binds holds the binds TRD committed, by key; reconciled counts the reconciliations asked.
+	binds      map[string]trdapi.BindControl
+	reconciled int
+	refuseRec  error
 }
 
 func (f *fakeControl) change(ctx context.Context, key, command string, expected int64, to string) (trdapi.Receipt, error) {
@@ -76,6 +80,30 @@ func (f *fakeControl) ReleaseControl(ctx context.Context, c trdapi.ReleaseContro
 func (f *fakeControl) GetQuote(context.Context, string) (trdapi.QuoteView, error) {
 	f.reads++
 	return trdapi.QuoteView{QuoteID: "quote.1", Control: trdapi.ControlView{State: f.state, TaskID: f.task, ControlEpoch: f.epoch}}, f.refuseRead
+}
+
+// Reconcile answers from the binds TRD committed, as TRD's ledger does: committed for the same
+// request under the key (its expected epoch is outside the request hash), payload_conflict for
+// another, not_committed for none.
+func (f *fakeControl) Reconcile(_ context.Context, cmd trdapi.Command) (trdapi.Reconciliation, error) {
+	f.reconciled++
+	if f.refuseRec != nil {
+		return trdapi.Reconciliation{}, f.refuseRec
+	}
+	c, ok := cmd.(trdapi.BindControl)
+	if !ok {
+		return trdapi.Reconciliation{}, errors.New("only binds are reconciled here")
+	}
+	stored, ok := f.binds[c.IdempotencyKey]
+	if !ok {
+		return trdapi.Reconciliation{State: kernel.ReconcileNotCommitted}, nil
+	}
+	c.ExpectedControlEpoch, stored.ExpectedControlEpoch = 0, 0
+	if c != stored {
+		return trdapi.Reconciliation{State: kernel.ReconcilePayloadConflict, ActionID: "act." + c.IdempotencyKey, ObjectID: stored.QuoteID}, nil
+	}
+	r := trdapi.Receipt{ActionID: "act." + c.IdempotencyKey, ObjectID: c.QuoteID, RowVersion: 1, Status: trdapi.ControlBound}
+	return trdapi.Reconciliation{State: kernel.ReconcileCommitted, ActionID: r.ActionID, ObjectID: r.ObjectID, Receipt: &r}, nil
 }
 
 func request(key string, epoch int64) application.ControlRequest {
@@ -147,3 +175,42 @@ func TestControlKeepsTRDsRefusalUnlessTheBindingIsTheTasks(t *testing.T) {
 		}
 	}
 }
+
+// S4 C3 (C1's gap "lost bind record"): TRD's object_control.bind committed and TSK's record of it was
+// lost. Bound learns it from TRD's ledger by the bind TSK sent — the same key, root, task and
+// delegation, whatever expected epoch — and answers the epoch TRD bound the root at; nothing under
+// the key, another request under it (another root) or another delegation answer 0; TRD's refusal of
+// the read passes on. Nothing is executed at TRD.
+func TestBoundLearnsALostBindFromTRDsLedger(t *testing.T) {
+	key := application.DeriveKey("task.1", trdapi.CommandBindControl, 0)
+	f := &fakeControl{state: trdapi.ControlBound, task: "task.1", epoch: 1, keys: map[string]trdapi.Receipt{},
+		binds: map[string]trdapi.BindControl{key: {IdempotencyKey: key, QuoteID: "quote.1", TaskID: "task.1", InitiatorID: "clerk.1",
+			AgentID: "agent.1", ExpectedControlEpoch: 0}}}
+	c := Control{TRD: f}
+	ask := func(key, quote, initiator string) (int64, error) {
+		r := request(key, 0)
+		r.QuoteID, r.Initiator = quote, initiator
+		return c.Bound(context.Background(), r)
+	}
+	if e, err := ask(key, "quote.1", "clerk.1"); err != nil || e != 1 {
+		t.Fatalf("bound at %d: %v", e, err)
+	}
+	for name, got := range map[string][2]any{
+		"another key":       pair(ask(application.DeriveKey("task.1", trdapi.CommandBindControl, 3), "quote.1", "clerk.1")),
+		"another root":      pair(ask(key, "quote.2", "clerk.1")),
+		"another initiator": pair(ask(key, "quote.1", "clerk.2")),
+	} {
+		if got[0] != int64(0) || got[1] != nil {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+	f.refuseRec = kernel.Reject(kernel.CodePermissionDenied, "/", "")
+	if _, err := ask(key, "quote.1", "clerk.1"); code(err) != kernel.CodePermissionDenied {
+		t.Fatalf("refused read: %v", err)
+	}
+	if len(f.sent) != 0 || f.reconciled != 5 {
+		t.Fatalf("sent %v, reconciled %d", f.sent, f.reconciled)
+	}
+}
+
+func pair(e int64, err error) [2]any { return [2]any{e, err} }

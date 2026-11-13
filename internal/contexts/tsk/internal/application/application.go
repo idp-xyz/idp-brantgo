@@ -95,6 +95,11 @@ type ObjectControl interface {
 	EnterManual(ctx context.Context, r ControlRequest) (int64, error)
 	Handoff(ctx context.Context, r ControlRequest) (int64, error)
 	Release(ctx context.Context, r ControlRequest) (int64, error)
+	// Bound reports what became of the bind TSK sent TRD as r (Key, TaskID, QuoteID, Initiator,
+	// Agent): the control epoch TRD bound the root at when TRD's ledger holds that bind under r.Key,
+	// 0 when it holds nothing for that request (ActionReconciliation, Context Map R18: TRD's ledger
+	// is read, nothing is executed; S4 C3, the lost bind record).
+	Bound(ctx context.Context, r ControlRequest) (int64, error)
 }
 
 // Goal is what goal verification asks TRD about: the task's goal at its version, its target (the

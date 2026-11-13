@@ -103,6 +103,8 @@ type Config struct {
 	STL      STL
 	CNX      CNX
 	FUL      FUL
+	TSK      TSK // S4, optional as well: TSK's commands and reads
+	AI       AI  // S4, optional: the AI layer's commands and reads and the task-step route (unit C3)
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -147,6 +149,12 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.FUL != nil {
 		s.contexts["ful"] = fulCommands(cfg.FUL)
+	}
+	if cfg.TSK != nil {
+		s.contexts["tsk"] = tskCommands(cfg.TSK)
+	}
+	if cfg.AI != nil {
+		s.contexts["ai"] = aiCommands(cfg.AI)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +244,12 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.FUL != nil {
 		s.fulRoutes(mux)
+	}
+	if cfg.TSK != nil {
+		s.tskRoutes(mux)
+	}
+	if cfg.AI != nil {
+		s.aiRoutes(mux)
 	}
 	return s.correlated(mux), nil
 }

@@ -28,6 +28,7 @@ func OpenAPI() ([]byte, error) {
 	sets = append(sets, stlCommands(struct{ STL }{}))
 	sets = append(sets, cnxCommands(struct{ CNX }{}))
 	sets = append(sets, fulCommands(struct{ FUL }{}))
+	sets = append(sets, tskCommands(struct{ TSK }{}), aiCommands(struct{ AI }{}))
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -97,7 +98,7 @@ func OpenAPI() ([]byte, error) {
 			}
 		}
 	}
-	for _, r := range slices.Concat(reads, stlReads, cnxReads, fulReads) {
+	for _, r := range slices.Concat(reads, stlReads, cnxReads, fulReads, tskReads, aiReads) {
 		get := map[string]any{"operationId": r.id, "tags": []string{r.tag}, "summary": r.summary, "responses": readResponses()}
 		var params []any
 		for _, p := range r.params {
@@ -118,10 +119,12 @@ func OpenAPI() ([]byte, error) {
 		}
 		paths[r.path] = map[string]any{method: get}
 	}
+	paths[StepPath] = stepOperation()
 	paths["/healthz"] = map[string]any{"get": map[string]any{"operationId": "healthz", "security": []any{}, "responses": map[string]any{
 		"200": map[string]any{"description": "The process serves requests."}}}}
 	schemas := map[string]any{
 		"Receipt":        schemaOf(reflect.TypeFor[receipt]()),
+		"StepReceipt":    schemaOf(reflect.TypeFor[stepReceipt]()),
 		"Reconciliation": schemaOf(reflect.TypeFor[reconciliation]()),
 		"Rejection":      schemaOf(reflect.TypeFor[rejection]()),
 		"TransportError": schemaOf(reflect.TypeFor[transportError]()),
