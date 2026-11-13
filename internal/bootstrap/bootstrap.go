@@ -33,6 +33,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/stl"
 	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/contexts/trd"
+	"go.idp.xyz/idp-brant/internal/contexts/tsk"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database"
@@ -181,6 +182,7 @@ type Contexts struct {
 	STL *stl.Module
 	CNX *cnx.Module
 	FUL *ful.Module
+	TSK *tsk.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -296,6 +298,14 @@ func (p *Platform) Contexts() (*Contexts, error) {
 			Documents: ful.DocumentPorts(c.POL, c.PTY, c.TRD).WithCertificates(c.CNX),
 			Costs:     c.CST, // S5-16: the costing's insurance component (R78)
 		})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// TSK (S4) after TRD: it calls TRD's object control (R17) and its GoalReadiness v1 (R18,
+		// not published before S4 unit A3) before its own transactions.
+		c.TSK, err = tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(c.TRD), Readiness: tsk.ReadinessNotWired()})
 	}
 	if err != nil {
 		return nil, err

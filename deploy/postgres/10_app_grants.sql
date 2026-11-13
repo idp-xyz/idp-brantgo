@@ -484,3 +484,15 @@ GRANT UPDATE (status, row_version, settled_by_kind, settled_by_id, settle_epoch,
 GRANT UPDATE (disposition, disposition_shipment_id, disposition_revision, disposition_ref, disposition_status, disposition_at,
               disposition_reason)
     ON brant_ful.shipment_review_item TO brant_app;
+
+-- TSK business tasks (S4-01): a task is inserted created and moves only along SM-TSK-TASK, one version at
+-- a time, never changing what it was created with (trigger); its history only grows (trigger); nothing
+-- is deleted; the ledger only grows. FOR UPDATE on tasks needs the column grants.
+GRANT USAGE ON SCHEMA brant_tsk TO brant_app;
+GRANT SELECT, INSERT ON brant_tsk.business_task, brant_tsk.task_transition, brant_tsk.action_result, brant_tsk.audit_event TO brant_app;
+GRANT UPDATE (lifecycle, control_mode, control_epoch, task_version, target_quote_id, binding_quote_id, binding_state, binding_epoch,
+              bound_at, released_at, wait_kind, wait_reason, wait_responsible_id, wait_items, awaiting_kind, awaiting_id, awaiting_version,
+              wait_due_at, wait_since, pause_cause, pause_reason, pause_responsible_id, resume_condition, paused_at, paused_from,
+              stop_purpose, stop_from, stop_reason, stop_by_kind, stop_by_id, stop_at, scope_settled_at, completion_actor, end_cause,
+              end_reason, end_responsible_id, ended_by_kind, ended_by_id, ended_at, updated_at)
+    ON brant_tsk.business_task TO brant_app;
