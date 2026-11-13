@@ -145,7 +145,7 @@ func TestCodesFollowTheCatalog(t *testing.T) {
 		"PARTY_ENTITY_MISMATCH": kernel.CategoryConflict, "DECLARATION_RECEIPT_STALE": kernel.CategoryConflict,
 		"DECLARATION_MAPPING_UNVERIFIED": kernel.CategoryInvalid, "EXTERNAL_RESULT_UNKNOWN": kernel.CategoryConflict,
 		"DOCUMENT_REQUIREMENT_UNVERIFIED": kernel.CategoryConflict, "CERTIFICATE_NOT_APPLICABLE": kernel.CategoryConflict,
-		"OPENING_BALANCE_DUPLICATE": kernel.CategoryConflict,
+		"OPENING_BALANCE_DUPLICATE": kernel.CategoryConflict, "PURCHASE_INVOICE_MATCH_EXCEEDED": kernel.CategoryConflict,
 	}
 	got := Codes()
 	if len(got) != len(want) {

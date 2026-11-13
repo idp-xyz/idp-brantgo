@@ -82,8 +82,6 @@ func TestInvoiceContracts(t *testing.T) {
 		{VerifyInvoice{IdempotencyKey: "k", PurchaseInvoiceID: "pin.1", ExpectedVersion: 1, Decision: DecisionReject, Facts: &f, Reason: "x"}, "/args/facts"},
 		{VerifyInvoice{IdempotencyKey: "k", PurchaseInvoiceID: "pin.1", ExpectedVersion: 1, Decision: DecisionReject}, "/args/reason"},
 		{VerifyInvoice{IdempotencyKey: "k", PurchaseInvoiceID: "pin.1", ExpectedVersion: 0, Decision: DecisionReject, Reason: "x"}, "/args/expected_version"},
-		{VerifyInvoice{IdempotencyKey: "k", PurchaseInvoiceID: "pin.1", ExpectedVersion: 1, Decision: DecisionVerify, Facts: &red,
-			Matches: verify.Matches}, "/args/matches"},
 		{VerifyInvoice{IdempotencyKey: "k", PurchaseInvoiceID: "pin.1", ExpectedVersion: 1, Decision: DecisionVerify, Facts: &f,
 			Matches: []InvoiceMatch{{LineNo: 2, CommitmentID: "c", OrderLineID: "L1", Quantity: "1"}}}, "/args/matches/0/line_no"},
 		{VerifyInvoice{IdempotencyKey: "k", PurchaseInvoiceID: "pin.1", ExpectedVersion: 1, Decision: DecisionVerify, Facts: &f,
@@ -92,6 +90,11 @@ func TestInvoiceContracts(t *testing.T) {
 		if got := pathOf(c.cmd.Validate()); got != "SCHEMA_INVALID "+c.want {
 			t.Errorf("%s, want %s", got, c.want)
 		}
+	}
+	// S5R-D20: a red invoice's matches are the blue matches it takes back, on its own lines.
+	if err := (VerifyInvoice{IdempotencyKey: "k", PurchaseInvoiceID: "pin.1", ExpectedVersion: 1, Decision: DecisionVerify, Facts: &red,
+		Matches: verify.Matches}).Validate(); err != nil {
+		t.Fatalf("a red invoice takes back matches: %v", err)
 	}
 	for _, code := range []string{CodeInvoiceDuplicate, CodeTaxEvidenceExceeded, CodePartyEntityMismatch} {
 		if c, ok := Category(code); !ok || c != kernel.CategoryConflict {

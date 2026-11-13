@@ -155,11 +155,15 @@ type Counts struct {
 // one stated by an AI agent (PERMISSION_DENIED: only a human verifies); a customs declaration stated
 // verified whose declaration customs has not released (DOCUMENT_REQUIREMENT_UNVERIFIED); a verified
 // certificate requirement without certificate results or not covering every lot line
-// (checkCertificates, S5 C5); then, when
+// (checkCertificates, S5 C5); before them, more than one certificate of origin or origin declaration named
+// (checkOneOrigin, S5R-D12: INVALID_KNOWN_VALUE); then, when
 // the checker states the bundle complete, the first requirement that is only present or missing
 // (DOCUMENT_REQUIREMENT_UNVERIFIED: an attachment is not a verification). It returns the counts.
 func Check(in CheckInput) (Counts, error) {
 	var n Counts
+	if err := checkOneOrigin(in.Requirements); err != nil {
+		return n, err
+	}
 	for i, r := range in.Requirements {
 		path := "/args/requirements/" + strconv.Itoa(i) + "/status"
 		if r.Status == Verified && !in.Human {

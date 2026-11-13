@@ -6,11 +6,18 @@
 //
 // The case is the root, locked FOR UPDATE by every allocation and result. The evidence balances are
 // derived from immutable allocation entries (S5 D-3): per purpose, Σ counting allocations of an
-// invoice line never exceed its quantity — two allocations from different cases are serialized by
-// the invoice root, which each locks FOR UPDATE —, nor those of an export line its quantity. An
-// allocation counts unless a later one replaced it or its case was rejected by the external
-// result: a local cancellation never returns evidence (CN-R09). Brant computes no refund
-// (CN-E01): every amount of a result is a person's statement.
+// invoice line never exceed what it evidences — its quantity less what red invoices reversed of it
+// (S5R-D20) — two allocations from different cases are serialized by the invoice root, which each locks
+// FOR UPDATE —, nor those of an export line its quantity. An allocation counts unless a later one
+// replaced it or its case was rejected by the external result: a local cancellation never returns
+// evidence (CN-R09). Brant computes no refund (CN-E01): every amount of a result is a person's
+// statement.
+//
+// S5R: a case binds the export_tax_policy revision POL's ConfigAt v1 answers for the export date (its validity
+// contains it, whenever it was published; the latest published when several do), and an expected case may rebind
+// the revision ConfigAt answers later (Rebind, S5R-D23); a taxable export opens no case (S5R-D14); a case not
+// declared in time converts to an exemption (converted_to_exemption, S5R-D14); a filed case records the external
+// rollback of a purchase invoice's evidence before a red invoice may reverse it (evidence_rolled_back, S5R-D20).
 package taxrefund
 
 import (
@@ -39,6 +46,13 @@ const (
 	Approved  = "approved"
 	Received  = "received"
 	Rejected  = "rejected"
+	// ConvertedToExemption (S5R-D14): the export was not declared for a refund in time and is exempt; final. Its
+	// allocations keep counting: the invoice lines evidenced this export whatever its treatment (CN-R09).
+	ConvertedToExemption = "converted_to_exemption"
+	// EvidenceRolledBack (S5R-D20) is a stage a filed case (submitted, approved, received) records without moving:
+	// the external rollback of a purchase invoice's evidence (进货凭证信息回退), which a red invoice reversing that invoice
+	// needs first.
+	EvidenceRolledBack = "evidence_rolled_back"
 
 	ExportRefund    = "export_refund"
 	ExportExemption = "export_exemption"
@@ -63,8 +77,20 @@ func refunds(method string) bool {
 	return method == MethodExemptCreditRefund || method == MethodExemptRefund
 }
 
-// Binding is the export_tax_policy revision a case binds (PolicyVersion): the one in force at the
-// export date (CN-AT12, CN-R08 "适用方法变化不追溯覆盖历史").
+// Refunds reports whether method refunds VAT (免抵退 or 免退; S5R-D14).
+func Refunds(method string) bool { return refunds(method) }
+
+// CheckOpens refuses a case under a taxable revision (S5R-D14: 征税的出口批次不开退税案件; INVALID_STATE at path).
+func CheckOpens(method, path string) error {
+	if method == MethodTaxable {
+		return kernel.Reject(kernel.CodeInvalidState, path, "The export tax policy revision in force at the export date is taxable (征税): "+
+			"a taxable export opens no tax refund case")
+	}
+	return nil
+}
+
+// Binding is the export_tax_policy revision a case binds (PolicyVersion): the one whose validity contains the export
+// date, whenever it was published (POL ConfigAt v1; S5R-D23, CN-AT12, CN-R08 "适用方法变化不追溯覆盖历史").
 type Binding struct {
 	PolicyID     string
 	Revision     int64
@@ -74,30 +100,30 @@ type Binding struct {
 	ValidUntil   time.Time
 }
 
-// Revision is one revision of an export_tax_policy as POL lists it.
-type Revision struct {
-	Revision    int64
-	Status      string
-	PublishedAt time.Time
-	EndedAt     time.Time
-	ValidFrom   time.Time
-	ValidUntil  time.Time
-}
-
-// InForceAt returns the revision of revisions in force at instant at: published at or before it,
-// not ended by it and valid at it; 0 when none is (POL's ResolveConfigs decides it again).
-func InForceAt(revisions []Revision, at time.Time) int64 {
-	for _, r := range revisions {
-		switch {
-		case r.PublishedAt.IsZero() || r.PublishedAt.After(at):
-		case !r.EndedAt.IsZero() && !r.EndedAt.After(at):
-		case at.Before(r.ValidFrom):
-		case !r.ValidUntil.IsZero() && !at.Before(r.ValidUntil):
-		default:
-			return r.Revision
+// Rebind judges rebinding expected case c to revision b of its policy, the one POL's ConfigAt v1 answers now for its
+// export date (tax_refund_case.rebind_policy, S5R-D23), with the case's allocations: only an expected case rebinds
+// (INVALID_STATE /args/case_id: planned and after the binding no longer changes); a revision it binds already is no
+// rebinding (INVALID_STATE /args/revision); never to a taxable revision (CheckOpens), nor to one that refunds nothing
+// while export_refund evidence counts in the case (INVALID_STATE /args/revision).
+func Rebind(c *Case, b Binding, allocations []*Allocation) error {
+	switch {
+	case c.Status != Expected:
+		return kernel.Reject(kernel.CodeInvalidState, "/args/case_id", "The tax refund case is "+c.Status+": only an expected case rebinds its policy")
+	case b.Revision == c.Policy.Revision:
+		return kernel.Reject(kernel.CodeInvalidState, "/args/revision", "The case binds revision "+strconv.FormatInt(b.Revision, 10)+" already")
+	}
+	if err := CheckOpens(b.RefundMethod, "/args/revision"); err != nil {
+		return err
+	}
+	if !refunds(b.RefundMethod) {
+		for _, a := range allocations {
+			if a.Purpose == ExportRefund && a.Counts() {
+				return kernel.Reject(kernel.CodeInvalidState, "/args/revision", "Revision "+strconv.FormatInt(b.Revision, 10)+" refunds nothing ("+
+					b.RefundMethod+") and allocation "+a.ID+" evidences export_refund")
+			}
 		}
 	}
-	return 0
+	return nil
 }
 
 // Case is the TaxRefundCase root.
@@ -148,20 +174,24 @@ type Allocation struct {
 	ReplacedBy     string
 	InvoiceStatus  string
 	CaseStatus     string
-	By             kernel.ActorRef
-	Epoch          int64
-	At             time.Time
+	// LineOverused: what counting allocations and the opening consumption take of the invoice line for the purpose
+	// exceeds what it evidences now, since a red invoice reversed part of it (S5R-D20).
+	LineOverused bool
+	By           kernel.ActorRef
+	Epoch        int64
+	At           time.Time
 }
 
 // Status is the allocation's state: released once its case was rejected, replaced once a later
-// allocation took its place, under review once its invoice was reversed, standing otherwise.
+// allocation took its place, under review once its invoice was reversed or its invoice line's evidence is
+// over-used after a partial reversal (S5R-D20), standing otherwise.
 func (a *Allocation) Status() string {
 	switch {
 	case a.CaseStatus == Rejected:
 		return Released
 	case a.ReplacedBy != "":
 		return Replaced
-	case a.InvoiceStatus == "reversed":
+	case a.InvoiceStatus == "reversed" || a.LineOverused:
 		return Review
 	}
 	return Standing
@@ -182,7 +212,8 @@ type ExportLine struct {
 }
 
 // InvoiceLine is a verified purchase invoice line: its invoice's state and colour, kind and
-// number, unit and quantity.
+// number, unit and the quantity it evidences now — its printed quantity less what verified red invoices
+// reversed of it (S5R-D20).
 type InvoiceLine struct {
 	InvoiceID     string
 	InvoiceStatus string
@@ -240,8 +271,9 @@ type InvoiceLineRef struct {
 // admits (export_refund needs a refund method; INVALID_KNOWN_VALUE) and the invoice line's unit
 // (INVALID_KNOWN_VALUE: no conversion is guessed); a replacement names an allocation of the case on
 // the same export line under review (INVALID_STATE). Then, per purpose, Σ counting allocations of
-// the invoice line, with these, at most its quantity and of the export line at most its quantity
-// (TAX_EVIDENCE_EXCEEDED).
+// the invoice line, with these, at most what it evidences and of the export line at most its quantity
+// (TAX_EVIDENCE_EXCEEDED); a replacement leaves the allocation it replaces out of both, so it may take the
+// same invoice line again (S5R-D20).
 func Allocate(x Context, in []AllocateInput) ([]*Allocation, error) {
 	c := x.Case
 	if c.Status != Expected && c.Status != Planned {
@@ -294,6 +326,10 @@ func allocate(x Context, in []AllocateInput) ([]*Allocation, error) {
 			}
 			k := [2]string{r.ExportLineID, r.Purpose}
 			exportUsed[k] = exportUsed[k].Sub(r.Quantity)
+			rk := LineKey{InvoiceID: r.InvoiceID, LineNo: r.LineNo, Purpose: r.Purpose}
+			if _, ok := used[rk]; ok {
+				used[rk] = used[rk].Sub(r.Quantity)
+			}
 		}
 		lk := LineKey{InvoiceID: a.InvoiceID, LineNo: a.LineNo, Purpose: a.Purpose}
 		if sum := used[lk].Add(a.Quantity); sum.Cmp(il.Quantity) > 0 {
@@ -343,6 +379,7 @@ type Result struct {
 	ExternalReference string
 	ResultText        string
 	FundRecordID      string
+	PurchaseInvoiceID string // evidence_rolled_back: the invoice whose evidence was rolled back (S5R-D20)
 	Evidence          []Evidence
 	Reason            string
 	By                kernel.ActorRef
@@ -350,18 +387,26 @@ type Result struct {
 	At                time.Time
 }
 
-// next is SM-CNX-TAXCASE: the stage each state may record.
+// next is SM-CNX-TAXCASE: the stage each state may record. S5R adds converted_to_exemption from expected and planned
+// (S5R-D14) and evidence_rolled_back on a filed case, which keeps its state (S5R-D20).
 var next = map[string][]string{
-	Expected:  {Expected, Planned},
-	Planned:   {Submitted},
-	Submitted: {Approved, Rejected},
-	Approved:  {Received},
+	Expected:  {Expected, Planned, ConvertedToExemption},
+	Planned:   {Submitted, ConvertedToExemption},
+	Submitted: {Approved, Rejected, EvidenceRolledBack},
+	Approved:  {Received, EvidenceRolledBack},
+	Received:  {EvidenceRolledBack},
 }
+
+// Filed reports whether a case in state s was submitted to the tax authority and not rejected: a red invoice
+// reversing evidence it uses needs the evidence rolled back first (S5R-D20).
+func Filed(s string) bool { return s == Submitted || s == Approved || s == Received }
 
 // Record judges result r on case c with its earlier results and allocations: the stage must follow
 // the case's state (INVALID_STATE; expected → expected records a new estimate); a plan needs
-// counting evidence and none under review (INVALID_STATE); every amount of a case is in one currency
-// (INVALID_KNOWN_VALUE). It returns the case's state after r.
+// counting evidence and none under review (INVALID_STATE); a conversion to an exemption needs a policy
+// that refunds (INVALID_STATE); a rollback names an invoice the case's counting evidence uses
+// (INVALID_KNOWN_VALUE) and not rolled back in the case before (INVALID_STATE); every amount of a case is
+// in one currency (INVALID_KNOWN_VALUE). It returns the case's state after r: a rollback keeps it.
 func Record(c *Case, results []*Result, allocations []*Allocation, r *Result) (string, error) {
 	allowed := false
 	for _, s := range next[c.Status] {
@@ -369,6 +414,28 @@ func Record(c *Case, results []*Result, allocations []*Allocation, r *Result) (s
 	}
 	if !allowed {
 		return "", kernel.Reject(kernel.CodeInvalidState, "/args/stage", "The tax refund case is "+c.Status+": "+r.Stage+" does not follow")
+	}
+	switch r.Stage {
+	case ConvertedToExemption:
+		if !refunds(c.Policy.RefundMethod) {
+			return "", kernel.Reject(kernel.CodeInvalidState, "/args/stage", "The case's export tax policy refunds nothing ("+c.Policy.RefundMethod+
+				"): there is no refund to convert to an exemption")
+		}
+	case EvidenceRolledBack:
+		uses := false
+		for _, a := range allocations {
+			uses = uses || (a.InvoiceID == r.PurchaseInvoiceID && a.Counts())
+		}
+		if !uses {
+			return "", kernel.Reject(kernel.CodeInvalidKnownValue, "/args/purchase_invoice_id", "The case's evidence uses no line of invoice "+r.PurchaseInvoiceID)
+		}
+		for _, e := range results {
+			if e.Stage == EvidenceRolledBack && e.PurchaseInvoiceID == r.PurchaseInvoiceID {
+				return "", kernel.Reject(kernel.CodeInvalidState, "/args/purchase_invoice_id", "Invoice "+r.PurchaseInvoiceID+
+					"'s evidence was rolled back in the case by result "+e.ID)
+			}
+		}
+		return c.Status, nil
 	}
 	if r.Stage == Planned {
 		counting := 0
@@ -434,4 +501,18 @@ func AmountsOf(results []*Result) Amounts {
 	}
 	a.ApprovedLessExpected, a.ReceivedLessApproved = diff(a.Approved, a.Expected), diff(a.Received, a.Approved)
 	return a
+}
+
+// Rebinding is a rebinding of an expected case (tax_refund_case.rebind_policy, S5R-D23): from which revision of its
+// policy to which, the case's version it made, why, by whom, under which authority epoch, when.
+type Rebinding struct {
+	ID          string
+	CaseID      string
+	CaseVersion int64
+	PolicyID    string
+	From, To    Binding
+	Reason      string
+	By          kernel.ActorRef
+	Epoch       int64
+	At          time.Time
 }

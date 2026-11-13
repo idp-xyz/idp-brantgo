@@ -100,6 +100,67 @@ func TouchCase(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c
 	return err
 }
 
+// LockCaseInvoices holds the invoice roots of case id's allocations FOR SHARE, in ID order (after the case's FOR UPDATE):
+// a case filed (submitted) under them is serialized with a red invoice reversing one of them (S5R-D20), whose
+// verification locks the invoice FOR UPDATE and then reads which filed cases still need a rollback.
+func LockCaseInvoices(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) error {
+	_, err := exec.Exec(ctx, `SELECT 1 FROM brant_cnx.purchase_invoice i WHERE i.tenant_id = $1 AND i.company_id = $2
+		AND i.purchase_invoice_id IN (SELECT a.purchase_invoice_id FROM brant_cnx.tax_evidence_allocation a WHERE a.tenant_id = $1
+			AND a.company_id = $2 AND a.case_id = $3) ORDER BY i.purchase_invoice_id FOR SHARE`, scoped(scope, id)...)
+	return err
+}
+
+// RebindCase moves expected case c from row version from to the policy revision it binds now (S5R-D23).
+func RebindCase(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c *tr.Case, from int64, at time.Time) error {
+	var until *time.Time
+	if !c.Policy.ValidUntil.IsZero() {
+		u := kernel.Instant(c.Policy.ValidUntil)
+		until = &u
+	}
+	tag, err := exec.Exec(ctx, `UPDATE brant_cnx.tax_refund_case SET policy_revision = $4, policy_hash = $5, refund_method = $6,
+		policy_valid_from = $7, policy_valid_until = $8, row_version = $9, updated_at = $10
+		WHERE tenant_id = $1 AND company_id = $2 AND case_id = $3 AND row_version = $11 AND status = 'expected'`,
+		scoped(scope, c.ID, c.Policy.Revision, c.Policy.ContentHash, c.Policy.RefundMethod, kernel.Instant(c.Policy.ValidFrom), until, c.RowVersion,
+			kernel.Instant(at), from)...)
+	if err == nil && tag.RowsAffected() != 1 {
+		err = ErrConflict
+	}
+	return err
+}
+
+// InsertRebinding appends a rebinding of a case.
+func InsertRebinding(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *tr.Rebinding) error {
+	_, err := exec.Exec(ctx, `INSERT INTO brant_cnx.tax_policy_rebinding (tenant_id, company_id, rebinding_id, case_id, case_version, policy_id,
+		from_revision, from_hash, from_method, to_revision, to_hash, to_method, reason, rebound_by_kind, rebound_by_id, authority_epoch, rebound_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		scoped(scope, r.ID, r.CaseID, r.CaseVersion, r.PolicyID, r.From.Revision, r.From.ContentHash, r.From.RefundMethod, r.To.Revision,
+			r.To.ContentHash, r.To.RefundMethod, r.Reason, string(r.By.Kind), r.By.ID, r.Epoch, kernel.Instant(r.At))...)
+	return err
+}
+
+// Rebindings returns the rebindings of case id, oldest first.
+func Rebindings(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) ([]*tr.Rebinding, error) {
+	rows, err := exec.Query(ctx, `SELECT rebinding_id, case_version, policy_id, from_revision, from_hash, from_method, to_revision, to_hash, to_method,
+		reason, rebound_by_kind, rebound_by_id, authority_epoch, rebound_at FROM brant_cnx.tax_policy_rebinding
+		WHERE tenant_id = $1 AND company_id = $2 AND case_id = $3 ORDER BY case_version`, scoped(scope, id)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*tr.Rebinding
+	for rows.Next() {
+		r := tr.Rebinding{CaseID: id}
+		var kind string
+		if err := rows.Scan(&r.ID, &r.CaseVersion, &r.PolicyID, &r.From.Revision, &r.From.ContentHash, &r.From.RefundMethod, &r.To.Revision,
+			&r.To.ContentHash, &r.To.RefundMethod, &r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At); err != nil {
+			return nil, err
+		}
+		r.By.Kind, r.At = kernel.ActorKind(kind), kernel.Instant(r.At)
+		out = append(out, &r)
+	}
+	return out, rows.Err()
+}
+
 // LockInvoices locks the invoice roots ids FOR UPDATE, in their order (sorted by the caller).
 func LockInvoices(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, ids []string) error {
 	for _, id := range ids {
@@ -120,7 +181,9 @@ func InvoiceLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 		}
 		l := tr.InvoiceLine{InvoiceID: r.InvoiceID, LineNo: r.LineNo}
 		var unit, q string
-		err := exec.QueryRow(ctx, `SELECT i.status, i.colour, i.invoice_kind, i.invoice_number, l.unit, trim_scale(l.quantity)::text
+		// The quantity a line evidences now: printed, less what verified red invoices reversed of it (S5R-D20).
+		err := exec.QueryRow(ctx, `SELECT i.status, i.colour, i.invoice_kind, i.invoice_number, l.unit,
+			trim_scale(l.quantity - brant_cnx.purchase_invoice_line_reversed(l.tenant_id, l.company_id, l.purchase_invoice_id, l.line_no))::text
 			FROM brant_cnx.purchase_invoice_line l JOIN brant_cnx.purchase_invoice i ON i.tenant_id = l.tenant_id AND i.company_id = l.company_id
 			AND i.purchase_invoice_id = l.purchase_invoice_id WHERE l.tenant_id = $1 AND l.company_id = $2 AND l.purchase_invoice_id = $3
 			AND l.line_no = $4`, scoped(scope, r.InvoiceID, r.LineNo)...).Scan(&l.InvoiceStatus, &l.Colour, &l.Kind, &l.Number, &unit, &q)
@@ -209,7 +272,8 @@ func CaseAllocations(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 		trim_scale(a.export_quantity)::text, a.export_unit, a.purchase_invoice_id, i.invoice_kind, i.invoice_number, i.status, a.line_no, a.purpose,
 		trim_scale(a.quantity)::text, a.unit, coalesce(a.replaces, ''), coalesce((SELECT r.allocation_id FROM brant_cnx.tax_evidence_allocation r
 		WHERE r.tenant_id = a.tenant_id AND r.company_id = a.company_id AND r.replaces = a.allocation_id), ''), a.allocated_by_kind,
-		a.allocated_by_id, a.authority_epoch, a.allocated_at
+		a.allocated_by_id, a.authority_epoch, a.allocated_at,
+		brant_cnx.tax_evidence_overused(a.tenant_id, a.company_id, a.purchase_invoice_id, a.line_no, a.purpose)
 		FROM brant_cnx.tax_evidence_allocation a JOIN brant_cnx.purchase_invoice i ON i.tenant_id = a.tenant_id AND i.company_id = a.company_id
 		AND i.purchase_invoice_id = a.purchase_invoice_id
 		WHERE a.tenant_id = $1 AND a.company_id = $2 AND a.case_id = $3 ORDER BY a.allocated_at, a.allocation_id`, scoped(scope, c.ID)...)
@@ -223,7 +287,7 @@ func CaseAllocations(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 		var eq, eu, q, u, kind string
 		if err := rows.Scan(&a.ID, &a.ExportLineID, &a.ShipmentID, &a.OrderLineID, &a.SkuID, &a.SpecRevision, &eq, &eu, &a.InvoiceID,
 			&a.InvoiceKind, &a.InvoiceNumber, &a.InvoiceStatus, &a.LineNo, &a.Purpose, &q, &u, &a.Replaces, &a.ReplacedBy, &kind, &a.By.ID,
-			&a.Epoch, &a.At); err != nil {
+			&a.Epoch, &a.At, &a.LineOverused); err != nil {
 			return nil, err
 		}
 		if a.ExportQuantity, err = decimal(eq); err != nil {
@@ -281,12 +345,12 @@ func InsertTaxResult(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.tax_refund_result (tenant_id, company_id, result_id, case_id, stage, from_status, currency_id,
 		currency_revision, currency_code, minor_units, amount_minor, offset_minor, tax_period, reviewer, review_evidence, external_reference,
-		result_text, fund_record_id, evidence, reason, recorded_by_kind, recorded_by_id, authority_epoch, recorded_at)
+		result_text, fund_record_id, evidence, reason, recorded_by_kind, recorded_by_id, authority_epoch, recorded_at, purchase_invoice_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12::numeric, nullif($13, ''), nullif($14, ''), $15, nullif($16, ''),
-		nullif($17, ''), nullif($18, ''), $19, nullif($20, ''), $21, $22, $23, $24)`,
+		nullif($17, ''), nullif($18, ''), $19, nullif($20, ''), $21, $22, $23, $24, nullif($25, ''))`,
 		scoped(scope, r.ID, r.CaseID, r.Stage, r.From, currencyID, revision, code, minorUnits, amount, offset, r.TaxPeriod, r.Reviewer,
 			string(review), r.ExternalReference, r.ResultText, r.FundRecordID, string(evidence), r.Reason, string(r.By.Kind), r.By.ID, r.Epoch,
-			kernel.Instant(r.At))...)
+			kernel.Instant(r.At), r.PurchaseInvoiceID)...)
 	return err
 }
 
@@ -302,7 +366,8 @@ func TaxResults(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, 
 	rows, err := exec.Query(ctx, `SELECT result_id, stage, from_status, coalesce(currency_id, ''), coalesce(currency_revision, 0),
 		coalesce(currency_code, ''), coalesce(minor_units, 0), coalesce(amount_minor::text, ''), coalesce(offset_minor::text, ''),
 		coalesce(tax_period, ''), coalesce(reviewer, ''), review_evidence, coalesce(external_reference, ''), coalesce(result_text, ''),
-		coalesce(fund_record_id, ''), evidence, coalesce(reason, ''), recorded_by_kind, recorded_by_id, authority_epoch, recorded_at
+		coalesce(fund_record_id, ''), evidence, coalesce(reason, ''), recorded_by_kind, recorded_by_id, authority_epoch, recorded_at,
+		coalesce(purchase_invoice_id, '')
 		FROM brant_cnx.tax_refund_result WHERE tenant_id = $1 AND company_id = $2 AND case_id = $3 ORDER BY recorded_at, result_id`, scoped(scope, id)...)
 	if err != nil {
 		return nil, err
@@ -314,7 +379,8 @@ func TaxResults(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, 
 		var c tr.Currency
 		var amount, offset, review, evidence, kind string
 		if err := rows.Scan(&r.ID, &r.Stage, &r.From, &c.ConfigID, &c.Revision, &c.Code, &c.MinorUnits, &amount, &offset, &r.TaxPeriod, &r.Reviewer,
-			&review, &r.ExternalReference, &r.ResultText, &r.FundRecordID, &evidence, &r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At); err != nil {
+			&review, &r.ExternalReference, &r.ResultText, &r.FundRecordID, &evidence, &r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At,
+			&r.PurchaseInvoiceID); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(review), &r.ReviewEvidence); err != nil {

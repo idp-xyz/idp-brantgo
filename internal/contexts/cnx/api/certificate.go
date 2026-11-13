@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"regexp"
 	"slices"
 	"strconv"
 	"time"
@@ -15,7 +16,10 @@ import (
 // verified the original, and answers whether it applies to a shipment or export lot.
 //
 //	certificate.register  human only (documentation): certificate_kind certificate_of_origin|
-//	                      license_copy|inspection_certificate, number and issuer (the issuer's number of a kind names
+//	                      license_copy|inspection_certificate|preferential_certificate_of_origin (S5R-D12: with
+//	                      agreement_code, e.g. RCEP or CN-ASEAN, origin_form certificate — issued by issuing_body
+//	                      customs or ccpit — or origin_declaration, an approved exporter's declaration; Brant judges
+//	                      no origin rule), number and issuer (the issuer's number of a kind names
 //	                      one certificate of the company), issued_on, the object it applies to {kind
 //	                      sku_spec with sku_specs, or export_lot|shipment with id — FUL's, read through
 //	                      CNX's port (R36) and recorded with its lines}, the destination market (ISO
@@ -28,9 +32,9 @@ import (
 //	                      and a reason registers a correction as its next revision: history is never
 //	                      overwritten, and the kind never changes.
 //
-// Request members in snake_case: certificate.register {certificate_id, expected_version, certificate_kind, number,
-// issuer, issued_on, object {kind, id, sku_specs [{sku_id, spec_revision}]}, market, valid_from,
-// valid_until, file_id, license_id, basis, evidence_ids, reason}.
+// Request members in snake_case: certificate.register {certificate_id, expected_version, certificate_kind,
+// agreement_code, origin_form, issuing_body, number, issuer, issued_on, object {kind, id, sku_specs [{sku_id,
+// spec_revision}]}, market, valid_from, valid_until, file_id, license_id, basis, evidence_ids, reason}.
 const (
 	CommandRegisterCertificate = "certificate.register"
 
@@ -49,6 +53,15 @@ const (
 	CertificateOfOrigin    = "certificate_of_origin"
 	CertificateLicenseCopy = "license_copy"
 	CertificateInspection  = "inspection_certificate"
+	// CertificatePreferentialOrigin (S5R-D12): a preferential certificate of origin, or an approved exporter's origin
+	// declaration, with its agreement code. Where a use needs a certificate of origin, a preferential one serves.
+	CertificatePreferentialOrigin = "preferential_certificate_of_origin"
+
+	// Forms of a preferential certificate of origin and the bodies that issue a certificate (S5R-D12).
+	OriginFormCertificate       = "certificate"
+	OriginFormOriginDeclaration = "origin_declaration"
+	IssuingBodyCustoms          = "customs"
+	IssuingBodyCCPIT            = "ccpit"
 
 	ObjectSkuSpec   = "sku_spec"
 	ObjectExportLot = "export_lot"
@@ -83,7 +96,10 @@ const (
 	MaxCertificates       = 20 // certificates one bundle requirement names
 )
 
-var certificateKinds = []string{CertificateOfOrigin, CertificateLicenseCopy, CertificateInspection}
+var (
+	certificateKinds = []string{CertificateOfOrigin, CertificateLicenseCopy, CertificateInspection, CertificatePreferentialOrigin}
+	agreementCode    = regexp.MustCompile(`^[A-Z][A-Z0-9-]{1,31}$`)
+)
 
 // CertificateObject is what a certificate applies to: SkuSpecs (kind sku_spec), or the FUL export lot
 // or shipment ID (kinds export_lot, shipment).
@@ -99,18 +115,23 @@ type RegisterCertificate struct {
 	CertificateID   string // "" registers a new certificate
 	ExpectedVersion int64  // 0 for a new certificate; the certificate's row version for a correction
 	CertificateKind string
-	Number          string
-	Issuer          string
-	IssuedOn        string // YYYY-MM-DD
-	Object          CertificateObject
-	Market          string
-	ValidFrom       string
-	ValidUntil      string
-	FileID          string
-	LicenseID       string // license_copy only, optional
-	Basis           string
-	EvidenceIDs     []string
-	Reason          string // a correction's reason; omitted for a new certificate
+	// AgreementCode, OriginForm and IssuingBody state a preferential certificate of origin (S5R-D12): required for that
+	// kind (IssuingBody for the certificate form only), omitted for every other.
+	AgreementCode string `json:",omitempty"`
+	OriginForm    string `json:",omitempty"`
+	IssuingBody   string `json:",omitempty"`
+	Number        string
+	Issuer        string
+	IssuedOn      string // YYYY-MM-DD
+	Object        CertificateObject
+	Market        string
+	ValidFrom     string
+	ValidUntil    string
+	FileID        string
+	LicenseID     string // license_copy only, optional
+	Basis         string
+	EvidenceIDs   []string
+	Reason        string // a correction's reason; omitted for a new certificate
 }
 
 // Validate checks the closed contract.
@@ -125,6 +146,14 @@ func (c RegisterCertificate) Validate() error {
 		return schema("/args/expected_version")
 	case !contains(certificateKinds, c.CertificateKind):
 		return schema("/args/certificate_kind")
+	case (c.CertificateKind == CertificatePreferentialOrigin) != (c.AgreementCode != ""), c.AgreementCode != "" && !agreementCode.MatchString(c.AgreementCode):
+		return schema("/args/agreement_code")
+	case (c.CertificateKind == CertificatePreferentialOrigin) != (c.OriginForm != ""),
+		c.OriginForm != "" && c.OriginForm != OriginFormCertificate && c.OriginForm != OriginFormOriginDeclaration:
+		return schema("/args/origin_form")
+	case (c.OriginForm == OriginFormCertificate) != (c.IssuingBody != ""),
+		c.IssuingBody != "" && c.IssuingBody != IssuingBodyCustoms && c.IssuingBody != IssuingBodyCCPIT:
+		return schema("/args/issuing_body")
 	case !Text(c.Number, MaxCertificateNumber):
 		return schema("/args/number")
 	case !Text(c.Issuer, MaxCertificateIssuer):
@@ -288,6 +317,9 @@ type CertificateResult struct {
 	CurrentRevision int64
 	ContentSHA256   string
 	Kind            string
+	AgreementCode   string // a preferential certificate of origin's (S5R-D12), with its form and issuing body
+	OriginForm      string
+	IssuingBody     string
 	Number          string
 	Issuer          string
 	IssuedOn        string
@@ -363,6 +395,9 @@ type CertificateRevisionView struct {
 	State          string
 	File           EvidenceView
 	LicenseID      string
+	AgreementCode  string // S5R-D12: a preferential certificate of origin's agreement, form and issuing body
+	OriginForm     string
+	IssuingBody    string
 	Basis          string
 	Evidence       []EvidenceView
 	Supersedes     int64
@@ -393,6 +428,7 @@ type CertificateView struct {
 type CertificateSummary struct {
 	CertificateID   string
 	Kind            string
+	AgreementCode   string // a preferential certificate of origin's (S5R-D12)
 	Number          string
 	Issuer          string
 	Market          string

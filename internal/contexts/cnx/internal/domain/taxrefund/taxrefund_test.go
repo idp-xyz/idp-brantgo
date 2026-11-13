@@ -185,29 +185,33 @@ func (w *world) must(t *testing.T, err error) {
 	}
 }
 
-// CN-AT12: the revision in force at the export date is the one published at or before it, not
-// ended by it and valid at it; a later revision does not reach back (CN-R08 "适用方法变化不追溯覆盖历史").
-func TestRevisionInForceAtTheExportDateCNAT12(t *testing.T) {
-	t0 := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
-	revisions := []Revision{
-		{Revision: 1, Status: "superseded", PublishedAt: t0, EndedAt: t0.Add(48 * time.Hour), ValidFrom: t0},
-		{Revision: 2, Status: "active", PublishedAt: t0.Add(48 * time.Hour), ValidFrom: t0},
-		{Revision: 3, Status: "draft", ValidFrom: t0},
+// S5R-D23 and S5R-D14 (CN-AT12): which revision applies at the export date is POL's ConfigAt v1 (its validity
+// contains the date, whenever it was published; POL's own tests). CNX decides what may bind: a taxable revision
+// opens no case; an expected case rebinds another revision, never a taxable one, nor one refunding nothing while
+// export_refund evidence counts; planned and after, nothing rebinds.
+func TestS5RBindingAndRebindingCNAT12(t *testing.T) {
+	if CheckOpens(MethodExemptRefund, "/args/policy_id") != nil || code(CheckOpens(MethodTaxable, "/args/policy_id")) != "INVALID_STATE /args/policy_id" {
+		t.Fatal("only a taxable revision opens no case")
 	}
-	for at, want := range map[time.Time]int64{
-		t0.Add(-time.Hour):     0,
-		t0:                     1,
-		t0.Add(24 * time.Hour): 1,
-		t0.Add(48 * time.Hour): 2,
-		t0.Add(96 * time.Hour): 2,
+	c := &Case{ID: "trc.1", Status: Expected, Policy: Binding{PolicyID: "export.tax", Revision: 1, RefundMethod: MethodExemptRefund}}
+	refund := &Allocation{ID: "a.1", Purpose: ExportRefund, InvoiceStatus: "verified", CaseStatus: Expected}
+	for _, x := range []struct {
+		status string
+		to     Binding
+		allocs []*Allocation
+		want   string
+	}{
+		{Expected, Binding{Revision: 2, RefundMethod: MethodExemptCreditRefund}, []*Allocation{refund}, "OK"},
+		{Expected, Binding{Revision: 2, RefundMethod: MethodExempt}, nil, "OK"},
+		{Expected, Binding{Revision: 1, RefundMethod: MethodExemptRefund}, nil, "INVALID_STATE /args/revision"},
+		{Expected, Binding{Revision: 2, RefundMethod: MethodTaxable}, nil, "INVALID_STATE /args/revision"},
+		{Expected, Binding{Revision: 2, RefundMethod: MethodExempt}, []*Allocation{refund}, "INVALID_STATE /args/revision"},
+		{Planned, Binding{Revision: 2, RefundMethod: MethodExemptRefund}, nil, "INVALID_STATE /args/case_id"},
 	} {
-		if got := InForceAt(revisions, at); got != want {
-			t.Errorf("at %s: %d, want %d", at, got, want)
+		c.Status = x.status
+		if got := code(Rebind(c, x.to, x.allocs)); got != x.want {
+			t.Errorf("%s to %+v: %s, want %s", x.status, x.to, got, x.want)
 		}
-	}
-	limited := []Revision{{Revision: 1, PublishedAt: t0, ValidFrom: t0.Add(time.Hour), ValidUntil: t0.Add(2 * time.Hour)}}
-	if InForceAt(limited, t0) != 0 || InForceAt(limited, t0.Add(time.Hour)) != 1 || InForceAt(limited, t0.Add(2*time.Hour)) != 0 {
-		t.Fatal("validity is half-open")
 	}
 }
 

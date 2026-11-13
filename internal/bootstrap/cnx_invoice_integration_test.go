@@ -96,7 +96,8 @@ func newInvoiceWorldDelivered(t *testing.T, delivered string) *invoiceWorld {
 	w.must(err)
 	w.cnx, err = cnx.New(db, cnx.Upstream{Orders: fixedOrders{}, Countries: cnx.PTYCountries(w.c.PTY), Profiles: fixedProfiles{},
 		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: w.ful, Purchases: cnx.PURLines(w.pur),
-		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL)})
+		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL),
+		Brokers: cnx.PTYBrokers(w.c.PTY)}) // S5R-D36
 	w.must(err)
 	doc := w.assign("doc.c3a", "documentation")
 	w.declare = declarer{t: t, cnx: w.cnx, doc: doc, key: w.key, evidence: w.source(doc, "customs.receipt.c3a", "合成报关单放行回执（测试数据）")}
@@ -309,10 +310,11 @@ func TestCNAT18CandidatesAreVerifiedByAHuman(t *testing.T) {
 		t.Fatalf("events %v", events)
 	}
 
-	// The commitment line takes no more than it buys across invoices.
+	// The commitment line takes no more than it buys across invoices (S5R: R10 adopts the catalog's
+	// PURCHASE_INVOICE_MATCH_EXCEEDED, which S5 answered INVALID_KNOWN_VALUE).
 	second := w.imported(w.purchaser, w.facts("SYN0002", "10"))
 	_, err = w.cnx.VerifyInvoice(w.tax, w.verifyCmd(second, w.facts("SYN0002", "10"), l1("1")))
-	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/matches/0/quantity" {
+	if code(err) != cnxapi.CodePurchaseInvoiceMatchExceeded || path(err) != "/args/matches/0/quantity" {
 		t.Fatalf("121 matched on 120 bought: %s %s", code(err), path(err))
 	}
 	// A rejection keeps the record and frees the number for a correct import.
@@ -342,11 +344,13 @@ func TestCNAT18CandidatesAreVerifiedByAHuman(t *testing.T) {
 	}
 }
 
-// CN-AT15 (invoice buyer) and CNX-INV-005 "受票主体与本公司不一致时不自动接受，待获准模式复核": a buyer
-// that is not the company's entity — another taxpayer, even under the company's name — is refused
-// with PARTY_ENTITY_MISMATCH and nothing is recorded: the invoice stays imported, under review. A
-// buyer field never moves an invoice to another company (the invoice is the caller's company's).
-// The supplier of a match must be the commitment's.
+// CN-AT15 (invoice buyer) and CNX-INV-005 "受票主体与本公司不一致时直接拒绝，供应商须重开" (S5R-D21: no approved
+// mode; S5's text said 待获准模式复核): a buyer that is not the company's entity — another taxpayer, even under the
+// company's name — is refused with PARTY_ENTITY_MISMATCH and nothing is recorded: the invoice stays imported until
+// a human rejects it or verifies what the original really says (here the candidate misread the buyer). A buyer
+// field never moves an invoice to another company (the invoice is the caller's company's). The supplier of a
+// match must be the commitment's. (The name is S5's: CN-AT suite evidence cites it; s5r_cnx_customs_tax_integration_test.go
+// shows the rejection and the supplier's reissued invoice.)
 func TestCNAT15BuyerEntityMismatchStaysInReview(t *testing.T) {
 	w := newInvoiceWorld(t)
 	f := w.facts("SYN0015", "120")
@@ -545,12 +549,13 @@ func TestCNAT04ConcurrentAllocationsOneWins(t *testing.T) {
 }
 
 // CN-AT12 "企业适用政策变化且有历史未结业务" (CN-R08 "适用方法变化不追溯覆盖历史"): export.tax revision 1
-// (exempt_refund) is in force when lot.old leaves; revision 2 (exempt_credit_refund) supersedes it;
-// lot.old's case, opened afterwards, binds revision 1 — the revision in force at its export date,
-// found through POL's revisions and confirmed by ResolveConfigs at that date — and keeps it for
-// later allocations, while lot.new's binds revision 2. A lot that left before any revision was
-// published has none: CONFIG_NOT_ACTIVE. The binding under revision 2 refuses nothing the method
-// admits; under not_applicable the refund purpose is refused.
+// (exempt_refund) is in force when lot.old leaves; revision 2 (exempt_credit_refund), valid from a later
+// instant, supersedes it; lot.old's case, opened afterwards, binds revision 1 — the revision whose
+// validity contains its export date (S5R-D23: POL's ConfigAt v1, whenever it was published; S5 bound the
+// revision published by the export date) — and keeps it for later allocations, while lot.new's binds
+// revision 2. A lot that left before any revision's validity has none: CONFIG_NOT_ACTIVE (S5 tested a lot
+// that left before the publication, which ConfigAt binds now). The binding under revision 2 refuses
+// nothing the method admits; under exempt the refund purpose is refused.
 func TestCNAT12CaseBindsThePolicyInForceAtTheExportDate(t *testing.T) {
 	w := newInvoiceWorld(t)
 	inv := w.invoice(w.facts("SYN0012", "1000"))
@@ -558,10 +563,10 @@ func TestCNAT12CaseBindsThePolicyInForceAtTheExportDate(t *testing.T) {
 	w.must(err)
 	exportDate := before.Revisions[0].PublishedAt
 	w.lot("lot.old", exportDate, "o1", "100", "o2", "100")
-	w.lot("lot.early", exportDate.Add(-time.Hour), "e1", "100")
+	w.lot("lot.early", w.win.from.Add(-time.Hour), "e1", "100")
 	time.Sleep(5 * time.Millisecond)
 	review2 := w.source(w.author, "tax.review.2", "合成专业复核结论二：免抵退（仅供测试）")
-	_, err = w.saveConfig(w.author, polapi.KindExportTaxPolicy, "export.tax", 2, w.win.from, time.Time{},
+	_, err = w.saveConfig(w.author, polapi.KindExportTaxPolicy, "export.tax", 2, time.Now().UTC(), time.Time{},
 		exportTax(polapi.RefundExemptCreditRefund, review2))
 	w.must(err)
 	_, err = w.c.POL.Publish(w.reviewer, polapi.Publish{IdempotencyKey: w.key(), Kind: polapi.KindExportTaxPolicy, ConfigID: "export.tax",
@@ -764,8 +769,13 @@ func TestCNAT05RedReversalPutsMatchesBackToReview(t *testing.T) {
 
 	redFacts := w.red("SYN0006", blue)
 	r := w.imported(w.agent, redFacts)
-	_, err = w.cnx.VerifyInvoice(w.tax, w.verifyCmd(r, redFacts, l1("1")))
-	w.want(err, kernel.CodeSchemaInvalid)
+	// S5R-D20: a red invoice's matches take back the blue one's; a match the blue one lacks is refused (S5 refused
+	// any red match: SCHEMA_INVALID).
+	_, err = w.cnx.VerifyInvoice(w.tax, w.verifyCmd(r, redFacts, cnxapi.InvoiceMatch{LineNo: 1, CommitmentID: "commitment.9", OrderLineID: "L1",
+		Quantity: "1"}))
+	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/matches/0/commitment_id" {
+		t.Fatalf("a take-back of a match the blue invoice lacks: %s %s", code(err), path(err))
+	}
 	unknown := w.red("SYN0006", w.facts("SYN0404", "120"))
 	_, err = w.cnx.VerifyInvoice(w.tax, w.verifyCmd(r, unknown))
 	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/facts/red_of" {
@@ -951,7 +961,8 @@ func TestInvoiceAndTaxCaseRecordsAreAppendOnly(t *testing.T) {
 		{`UPDATE brant_cnx.purchase_invoice SET status = 'imported', row_version = row_version + 1`, "keeps its import"},
 		{`DELETE FROM brant_cnx.purchase_invoice`, "never deleted"},
 		{`UPDATE brant_cnx.tax_refund_case SET status = 'received', row_version = row_version + 1`, "follows SM-CNX-TAXCASE"},
-		{`UPDATE brant_cnx.tax_refund_case SET policy_revision = 2, row_version = row_version + 1`, "follows SM-CNX-TAXCASE"},
+		// S5R-D23: an expected case rebinds only with a recorded rebinding (checked at commit).
+		{`UPDATE brant_cnx.tax_refund_case SET policy_revision = 2, row_version = row_version + 1`, "only with a recorded rebinding"},
 		{`UPDATE brant_cnx.tax_evidence_allocation SET quantity = 1`, "never change"},
 		{`UPDATE brant_cnx.purchase_invoice_line SET quantity = 1000`, "never change"},
 		// 100 more of the 100 PCS line for x2: Σ 200.

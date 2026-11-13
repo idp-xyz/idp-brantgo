@@ -47,6 +47,8 @@ const (
 	// An official certificate's object, market or validity is not the use's: another SKU
 	// specification, shipment or lot, another market, or expired (CNX-INV-007, CN-AT14).
 	CodeCertificateNotApplicable = "CERTIFICATE_NOT_APPLICABLE"
+	// Invoices would match more of a purchase commitment line than it buys (S5R; R10 adopts the catalog's code).
+	CodePurchaseInvoiceMatchExceeded = "PURCHASE_INVOICE_MATCH_EXCEEDED"
 )
 
 var codes = map[string]kernel.Category{
@@ -67,6 +69,7 @@ var codes = map[string]kernel.Category{
 	CodeDocumentRequirementUnverified: kernel.CategoryConflict,
 	CodeCertificateNotApplicable:      kernel.CategoryConflict,
 	CodeOpeningBalanceDuplicate:       kernel.CategoryConflict, // C10 (opening.go)
+	CodePurchaseInvoiceMatchExceeded:  kernel.CategoryConflict, // S5R R10
 }
 
 // Category returns the category of a code CNX declares.

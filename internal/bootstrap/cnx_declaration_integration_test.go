@@ -675,7 +675,8 @@ func newDeclWorld(t *testing.T) *declWorld {
 	w.cnx, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(f.c.TRD), Countries: cnx.PTYCountries(f.c.PTY), Profiles: cnx.CATProfiles(f.c.CAT),
 		Programmes: cnx.REFProgrammes(f.c.REF), Configs: f.c.POL, Sources: f.c.EVD,
 		Exports: cnx.FULExports(func() cnx.FULLookups { return f.ful }, f.c.POL, cnx.PTYCountries(f.c.PTY)), Purchases: cnx.PURLines(f.c.PUR),
-		Funds: cnx.STLFunds(f.c.STL), CreditNotes: cnx.STLCreditNotes(f.c.STL)})
+		Funds: cnx.STLFunds(f.c.STL), CreditNotes: cnx.STLCreditNotes(f.c.STL),
+		Brokers: cnx.PTYBrokers(f.c.PTY)}) // S5R-D36
 	w.must(err)
 	w.d = declarer{t: t, cnx: w.cnx, doc: w.cx.doc1, key: w.key, evidence: w.source(w.cx.doc1, "customs.receipt.ful", "合成报关单回执（测试数据）")}
 	return w

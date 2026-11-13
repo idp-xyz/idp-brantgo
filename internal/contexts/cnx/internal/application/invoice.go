@@ -5,6 +5,8 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
@@ -136,16 +138,21 @@ func (s Service) ImportInvoice(ctx context.Context, cmd api.ImportInvoice) (api.
 
 // purchase_invoice.verify (human only; tax specialist). Before CNX's transaction, for a
 // verification: the verified currency revision and the company's profile (POL; the profile needs
-// pol.read), and the commitment lines matched (PUR, PurchaseLineRef v1). In the transaction, after
+// pol.read), and the commitment lines a blue invoice matches (PUR, PurchaseLineRef v1). In the transaction, after
 // the invoice (and, for a red one, the blue one it names) FOR UPDATE and the matched lines' advisory
 // locks: NOT_FOUND, VERSION_CONFLICT, INVALID_STATE (not imported); a rejection is stored. A
 // verification then refuses in this order: the verified kind and number held by another invoice
 // (INVOICE_DUPLICATE), the currency, the amounts (INVALID_KNOWN_VALUE), a buyer that is not the
-// company's entity (PARTY_ENTITY_MISMATCH: the invoice stays imported, CN-AT15), for a red invoice
-// the blue one it names (REFERENCE_INVALID, INVALID_STATE, PARTY_ENTITY_MISMATCH), then the matches
-// (REFERENCE_INVALID, INVALID_STATE, PARTY_ENTITY_MISMATCH, INVALID_KNOWN_VALUE). A verified red
-// invoice reverses the blue one: its matches and the evidence allocated from it are under review
-// from then on (CN-R06). PurchaseInvoiceVerified is published.
+// company's entity (PARTY_ENTITY_MISMATCH: refused outright, the supplier reissues the invoice; no approved mode,
+// S5R-D21, CN-AT15). For a blue invoice then the matches (REFERENCE_INVALID, INVALID_STATE, PARTY_ENTITY_MISMATCH,
+// INVALID_KNOWN_VALUE, PURCHASE_INVOICE_MATCH_EXCEEDED). For a red invoice (S5R-D20) the blue one it names
+// (REFERENCE_INVALID, INVALID_STATE, PARTY_ENTITY_MISMATCH), a filed tax refund case whose evidence uses the blue
+// one without an evidence_rolled_back of it (INVALID_STATE), its lines against what remains of the blue one's
+// (INVALID_KNOWN_VALUE), then the matches it takes back (REFERENCE_INVALID, INVALID_KNOWN_VALUE). A red invoice that
+// reverses what remained of the blue one reverses it: its matches and the evidence allocated from it are under review
+// from then on (CN-R06); one that reverses part of it leaves it verified, moves its version, puts the matches it
+// touches under review and the evidence of a line under review while it exceeds what the line evidences.
+// PurchaseInvoiceVerified is published.
 type verifyInvoice struct {
 	s        Service
 	cmd      api.VerifyInvoice
@@ -183,6 +190,9 @@ func (h *verifyInvoice) Prepare(ctx context.Context) error {
 		}
 	}
 	var refs []PurchaseLineRef
+	if f.Colour == api.ColourRed { // a red invoice's matches take back a blue one's: PUR is not asked (S5R-D20)
+		return nil
+	}
 	for _, m := range h.cmd.Matches {
 		r := PurchaseLineRef{CommitmentID: m.CommitmentID, OrderLineID: m.OrderLineID}
 		if !slices.Contains(refs, r) {
@@ -273,25 +283,27 @@ func (h *verifyInvoice) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if err = pin.CheckBuyer(facts, h.company, "/args/facts"); err != nil {
 		return action.Outcome{}, err
 	}
-	if facts.Colour == pin.Red {
-		if err = pin.CheckReversible(h.original, facts, "/args/facts/red_of"); err != nil {
-			return action.Outcome{}, err
-		}
-		inv.RedOfID = h.original.ID
-	}
 	in := h.matchInputs()
 	refs := pin.Refs(in)
-	standing, err := postgres.StandingMatched(ctx, exec, sc, refs, inv.ID)
-	if err != nil {
-		return action.Outcome{}, err
-	}
-	lines := map[pin.LineRef]pin.PurchaseLine{}
-	for r, l := range h.lines {
-		lines[pin.LineRef(r)] = pin.PurchaseLine(l)
-	}
-	matches, err := pin.CheckMatches(facts, inv.ID, in, lines, standing, now)
-	if err != nil {
-		return action.Outcome{}, err
+	var matches []pin.Match
+	var red *reversal
+	if facts.Colour == pin.Red {
+		if red, err = h.reverse(ctx, exec, facts, in, now); err != nil {
+			return action.Outcome{}, err
+		}
+		inv.RedOfID, matches = h.original.ID, red.takeBacks
+	} else {
+		standing, err := postgres.StandingMatched(ctx, exec, sc, refs, inv.ID)
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		lines := map[pin.LineRef]pin.PurchaseLine{}
+		for r, l := range h.lines {
+			lines[pin.LineRef(r)] = pin.PurchaseLine(l)
+		}
+		if matches, err = pin.CheckMatches(facts, inv.ID, in, lines, standing, now); err != nil {
+			return action.Outcome{}, err
+		}
 	}
 	inv.Status, inv.Verified = pin.Verified, &facts
 	if err = postgres.DecideInvoice(ctx, exec, sc, inv, from); err != nil {
@@ -306,28 +318,80 @@ func (h *verifyInvoice) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	fields := map[string]any{"purchase_invoice_id": inv.ID, "kind": facts.Kind, "colour": facts.Colour, "number": facts.Number,
 		"supplier_party_id": facts.Supplier.PartyID, "currency": facts.Currency.Code, "lines": len(facts.Lines), "matches": len(matches),
 		"commitment_ids": commitmentIDs(refs), "reversed_invoice_id": inv.RedOfID}
-	if o := h.original; facts.Colour == pin.Red {
+	if o := h.original; red != nil {
 		ofrom := o.RowVersion
 		o.RowVersion++
-		if err = postgres.ReverseInvoice(ctx, exec, sc, o, inv.ID, ofrom, now); err != nil {
-			return action.Outcome{}, err
-		}
-		fields["reversed_invoice_version"] = o.RowVersion
-		if ms, err := postgres.Matches(ctx, exec, sc, o.ID); err == nil {
-			var ors []pin.LineRef
-			for _, m := range ms {
-				if !slices.Contains(ors, m.Ref) {
-					ors = append(ors, m.Ref)
-				}
-			}
-			fields["review_commitment_ids"] = commitmentIDs(ors)
+		if red.full {
+			err = postgres.ReverseInvoice(ctx, exec, sc, o, inv.ID, ofrom, now)
 		} else {
+			err = postgres.TouchInvoice(ctx, exec, sc, o, ofrom, now)
+		}
+		if err != nil {
 			return action.Outcome{}, err
 		}
+		fields["reversed_invoice_version"], fields["reversal"] = o.RowVersion, red.kind()
+		var ors []pin.LineRef
+		for _, m := range red.blueMatches {
+			if _, touched := facts.Line(m.LineNo); (red.full || touched) && !slices.Contains(ors, m.Ref) {
+				ors = append(ors, m.Ref)
+			}
+		}
+		fields["review_commitment_ids"] = commitmentIDs(ors)
 	}
 	return action.Outcome{ObjectID: inv.ID, RowVersion: inv.RowVersion, Status: inv.Status, Events: []action.Event{{
 		Type: api.EventInvoiceVerified, AggregateType: "PurchaseInvoice", AggregateID: inv.ID, AggregateVersion: inv.RowVersion,
 		Fields: fields}}}, nil
+}
+
+// reversal is what a red invoice's verification decided of the blue invoice it reverses (S5R-D20).
+type reversal struct {
+	full        bool
+	takeBacks   []pin.Match
+	blueMatches []pin.Match
+}
+
+func (r *reversal) kind() string {
+	if r.full {
+		return api.ReversalFull
+	}
+	return api.ReversalPartial
+}
+
+// reverse judges red facts against the blue invoice they name, under its FOR UPDATE lock (S5R-D20): the blue invoice
+// (CheckReversible), the filed tax refund cases that use its evidence without a rollback (INVALID_STATE), the red
+// lines against what remains of it and the matches taken back.
+func (h *verifyInvoice) reverse(ctx context.Context, exec bentopg.Executor, facts pin.Facts, in []pin.MatchInput, now time.Time) (*reversal, error) {
+	sc, o := scope(ctx), h.original
+	const path = "/args/facts/red_of"
+	if err := pin.CheckReversible(o, facts, path); err != nil {
+		return nil, err
+	}
+	filed, err := postgres.FiledCasesWithoutRollback(ctx, exec, sc, o.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(filed) > 0 {
+		return nil, kernel.Reject(kernel.CodeInvalidState, path, "Invoice "+o.ID+"'s evidence is used by filed tax refund case "+strings.Join(filed, ", ")+
+			": record its evidence_rolled_back (进货凭证信息回退) there first")
+	}
+	reds, err := postgres.RedInvoices(ctx, exec, sc, o.ID)
+	if err != nil {
+		return nil, err
+	}
+	taken, err := postgres.TakeBacks(ctx, exec, sc, o.ID)
+	if err != nil {
+		return nil, err
+	}
+	reversed, takenBack := pin.Reversals(o.Facts(), reds, taken)
+	out := &reversal{}
+	if out.full, err = pin.CheckRedLines(o, reversed, facts); err != nil {
+		return nil, err
+	}
+	if out.blueMatches, err = postgres.Matches(ctx, exec, sc, o.ID); err != nil {
+		return nil, err
+	}
+	out.takeBacks, err = pin.CheckTakeBacks(o, reversed, out.blueMatches, takenBack, facts, h.invoice.ID, in, out.full, now)
+	return out, err
 }
 
 func commitmentIDs(refs []pin.LineRef) []string {

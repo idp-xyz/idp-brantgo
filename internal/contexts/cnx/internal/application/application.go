@@ -73,7 +73,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandInvoices, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetTaxCase, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandTaxCases, Permission: api.PermissionRead, ActorKinds: anyActor},
-	}, slices.Concat(declarationRules(), bundleRules(), certificateRules(), openingRules())...)
+	}, slices.Concat(declarationRules(), bundleRules(), certificateRules(), openingRules(), rebindRules())...)
 }
 
 // Upstream are the contracts CNX reads.
@@ -89,12 +89,14 @@ type Upstream struct {
 	Funds      Funds          // STL FundRecordRef v1 (R38), CNX's port
 	// STL CreditNoteRef v1 (on R38; S5 C10, CN-AT11): the credit notes a reconciliation records the impact of.
 	CreditNotes CreditNotes
+	// PTY ServiceRoleRef v1 of customs brokers (R77; S5R-D36): the service role a broker's submission rests on.
+	Brokers Brokers
 }
 
 // Complete reports whether every upstream is wired.
 func (u Upstream) Complete() bool {
 	return u.Orders != nil && u.Countries != nil && u.Profiles != nil && u.Programmes != nil && u.Configs != nil && u.Sources != nil &&
-		u.Exports != nil && u.Purchases != nil && u.Funds != nil && u.CreditNotes != nil
+		u.Exports != nil && u.Purchases != nil && u.Funds != nil && u.CreditNotes != nil && u.Brokers != nil
 }
 
 // Service runs CNX's use cases.

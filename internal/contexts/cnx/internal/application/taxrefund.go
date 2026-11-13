@@ -29,62 +29,72 @@ import (
 // the ledger's authority guard FOR SHARE. No upstream row is locked: R36 and R38 carry no guard,
 // and the policy binding needs none (see policyAt).
 
-// policyAt finds the export_tax_policy revision of policyID in force at instant at, the export
-// date (CN-AT12, CN-R08 "适用方法变化不追溯覆盖历史"): POL lists the configuration's revisions (GetConfig,
-// which needs pol.read), the revision published at or before at, not superseded or retired by it
-// and valid at it is the candidate, and POL's ResolveConfigs at that instant decides it. Nil with a
-// rejection when POL has no such configuration (REFERENCE_INVALID) or none was in force then
-// (CONFIG_NOT_ACTIVE or POL's verdict).
+// policyAt asks POL's ConfigAt v1 (R50; S5R-D23, POL-INV-007) which export_tax_policy revision of policyID applies at
+// instant at, the export date (CN-AT12; 财税〔2012〕39号: the rate follows the 出口日期 on the declaration): the revision whose
+// validity contains it, whenever it was published, the latest published when several do. Before CNX's transaction; it
+// needs an active grant only. Nil with POL's rejection at /args/policy_id when POL has no such configuration
+// (REFERENCE_INVALID) or none applies then (CONFIG_NOT_ACTIVE).
 //
-// ConfigGuard v1 decides the current state of a revision, so it would refuse the revision of a past
-// export once a newer one superseded it. The binding needs no guard: a published revision never
-// changes, and whether it was in force at an instant already past (the export date is never in
-// the future, allocate checks it) cannot change either.
-func (s Service) policyAt(ctx context.Context, policyID string, exportedAt time.Time) (*polapi.ResolvedConfig, error) {
+// A published revision never changes, so the binding needs no guard lock; but a revision published later whose
+// validity also contains the export date would answer instead: policyStillAt asks again inside the transaction, and
+// an expected case shows the newer answer as policy_superseded (tax_refund_case.get) and may rebind it.
+func (s Service) policyAt(ctx context.Context, policyID string, at time.Time) (*polapi.RevisionAt, error) {
 	const path = "/args/policy_id"
-	view, err := s.Upstream.Configs.GetConfig(ctx, polapi.KindExportTaxPolicy, policyID)
-	if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodeNotFound {
-		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "POL has no such export tax policy")
-	}
+	r, err := s.Upstream.Configs.ConfigAt(ctx, polapi.ConfigAtQuery{Kind: polapi.KindExportTaxPolicy, ConfigID: policyID, At: at})
 	if err != nil {
 		return nil, err
-	}
-	var revisions []tr.Revision
-	for _, r := range view.Revisions {
-		revisions = append(revisions, tr.Revision{Revision: r.Revision, Status: r.Status, PublishedAt: r.PublishedAt, EndedAt: r.EndedAt,
-			ValidFrom: r.ValidFrom, ValidUntil: r.ValidUntil})
-	}
-	revision := tr.InForceAt(revisions, exportedAt)
-	if revision == 0 {
-		return nil, polapi.Reject(polapi.CodeConfigNotActive, path)
-	}
-	ref := polapi.ConfigRef{Kind: polapi.KindExportTaxPolicy, ConfigID: policyID, Revision: revision}
-	resolved, err := s.Upstream.Configs.ResolveConfigs(ctx, []polapi.ConfigRef{ref}, exportedAt)
-	if err != nil {
-		return nil, err
-	}
-	r, ok := resolved[ref]
-	if !ok || r.Data.ExportTaxPolicy == nil {
-		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "")
 	}
 	if err = r.Check(path); err != nil {
 		return nil, err
 	}
+	if r.Data.ExportTaxPolicy == nil {
+		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "")
+	}
 	return &r, nil
+}
+
+// configAt runs POL's ConfigAt v1 SQL function with CNX's executor inside CNX's transaction or read (no lock).
+func configAt(ctx context.Context, exec bentopg.Executor, policyID string, at time.Time) (polapi.ConfigAtVerdict, error) {
+	q := polapi.ConfigAtQuery{Kind: polapi.KindExportTaxPolicy, ConfigID: policyID, At: kernel.Instant(at)}
+	return polapi.ScanConfigAt(q, exec.QueryRow(ctx, polapi.ConfigAtSQL, polapi.ConfigAtArgs(q)...).Scan)
+}
+
+// policyStillAt checks inside CNX's transaction that ConfigAt v1 still answers revision r for instant at: a revision
+// published since that also applies then is REFERENCE_STALE at path (send again).
+func policyStillAt(ctx context.Context, exec bentopg.Executor, r *polapi.RevisionAt, at time.Time, path string) error {
+	v, err := configAt(ctx, exec, r.Ref.ConfigID, at)
+	if err != nil {
+		return err
+	}
+	if err = v.Check(path); err != nil {
+		return err
+	}
+	if v.Ref.Revision != r.Ref.Revision || v.ContentHash != r.ContentHash {
+		return api.Reject(api.CodeReferenceStale, path, "Revision "+strconv.FormatInt(v.Ref.Revision, 10)+
+			" of the export tax policy applies at the export date now: send again")
+	}
+	return nil
+}
+
+// bindingOf is the binding of revision r.
+func bindingOf(r *polapi.RevisionAt) tr.Binding {
+	return tr.Binding{PolicyID: r.Ref.ConfigID, Revision: r.Ref.Revision, ContentHash: r.ContentHash, RefundMethod: r.Data.ExportTaxPolicy.RefundMethod,
+		ValidFrom: kernel.Instant(r.ValidFrom), ValidUntil: r.ValidUntil}
 }
 
 // tax_refund_case.allocate (human or AI; tax specialist). Before CNX's transaction: the export lot
 // and its lines (FUL, port Exports), the lot's export date — the 出口日期 customs states on its
 // declaration, which CNX records itself (S5 C3a; not FUL's departure milestone, CN-R07) — and the
-// export_tax_policy revision in force at it (POL, policyAt). In the transaction, after the lot's
+// export_tax_policy revision ConfigAt v1 answers for it (POL, policyAt; S5R-D23). In the transaction, after the lot's
 // case FOR UPDATE, the invoices FOR UPDATE in ID order and the lot's declaration case FOR SHARE, the
 // refusals in this order: a lot FUL does not resolve or whose record is not intact
 // (REFERENCE_INVALID), a cancelled lot or one without a declared export date (INVALID_STATE), an
 // export date that changed since it was read (REFERENCE_STALE: send again), an
 // allocation ID taken (BUSINESS_KEY_CONFLICT), the case's policy other than policy_id
-// (REFERENCE_STALE), for a new case the policy binding (REFERENCE_INVALID, CONFIG_NOT_ACTIVE,
-// CONFIG_EXPIRED), then the domain's (INVALID_STATE, REFERENCE_INVALID, INVALID_KNOWN_VALUE,
-// TAX_EVIDENCE_EXCEEDED). The lot's first allocation, or the first after its case was rejected,
+// (REFERENCE_STALE), for a new case the policy binding (REFERENCE_INVALID, CONFIG_NOT_ACTIVE), a taxable
+// revision (INVALID_STATE: a taxable export opens no case, S5R-D14), a revision published since that applies at
+// the export date now (REFERENCE_STALE: send again), then the domain's (INVALID_STATE, REFERENCE_INVALID,
+// INVALID_KNOWN_VALUE, TAX_EVIDENCE_EXCEEDED). The lot's first allocation, or the first after its case was rejected,
 // opens the case. TaxEvidenceAllocated is published.
 type allocateTaxEvidence struct {
 	s         Service
@@ -92,7 +102,7 @@ type allocateTaxEvidence struct {
 	lot       *Export
 	exported  lotExport // as read before the transaction, for the policy binding
 	export    lotExport // as read in the transaction, under the declaration's FOR SHARE lock
-	policy    *polapi.ResolvedConfig
+	policy    *polapi.RevisionAt
 	policyErr error
 	taxCase   *tr.Case
 }
@@ -186,15 +196,19 @@ func (h *allocateTaxEvidence) Apply(ctx context.Context, exec bentopg.Executor, 
 		if h.policyErr != nil {
 			return action.Outcome{}, h.policyErr
 		}
+		if err := tr.CheckOpens(h.policy.Data.ExportTaxPolicy.RefundMethod, "/args/policy_id"); err != nil {
+			return action.Outcome{}, err
+		}
+		if err := policyStillAt(ctx, exec, h.policy, h.export.ExportedAt, "/args/policy_id"); err != nil {
+			return action.Outcome{}, err
+		}
 		attempt := 1
 		if c != nil {
 			attempt = c.Attempt + 1
 		}
-		p := h.policy
 		c = &tr.Case{ID: action.NewID("trc", now), ExportLotID: cmd.ExportLotID, Attempt: attempt, OrderID: lot.OrderID,
-			ExportedAt: kernel.Instant(h.export.ExportedAt), Policy: tr.Binding{PolicyID: p.Ref.ConfigID, Revision: p.Ref.Revision, ContentHash: p.ContentHash,
-				RefundMethod: p.Data.ExportTaxPolicy.RefundMethod, ValidFrom: kernel.Instant(p.ValidFrom), ValidUntil: p.ValidUntil},
-			Status: tr.Expected, RowVersion: 1, OpenedBy: d.Actor, Epoch: d.Epoch, OpenedAt: now}
+			ExportedAt: kernel.Instant(h.export.ExportedAt), Policy: bindingOf(h.policy), Status: tr.Expected, RowVersion: 1, OpenedBy: d.Actor,
+			Epoch: d.Epoch, OpenedAt: now}
 	}
 	var existing []*tr.Allocation
 	var err error
@@ -272,10 +286,12 @@ func (s Service) AllocateTaxEvidence(ctx context.Context, cmd api.AllocateTaxEvi
 
 // tax_refund_case.record_result (human only; tax specialist). Before CNX's transaction: the
 // currency revision of the amount (POL), the evidence sources (EVD) and, for a received refund, the
-// fund record (STL, port Funds). In the transaction, after the case FOR UPDATE: NOT_FOUND,
-// VERSION_CONFLICT, the currency (REFERENCE_INVALID, POL's verdict), the domain's INVALID_STATE (the
-// stage does not follow; a plan without standing evidence or with evidence under review) and
-// INVALID_KNOWN_VALUE (another currency than the case's), the amounts' digits (INVALID_KNOWN_VALUE),
+// fund record (STL, port Funds). In the transaction, after the case FOR UPDATE (and, for a submission, its
+// invoices FOR SHARE: S5R-D20, see postgres.LockCaseInvoices): NOT_FOUND, VERSION_CONFLICT, the currency
+// (REFERENCE_INVALID, POL's verdict), the domain's INVALID_STATE (the stage does not follow; a plan without standing
+// evidence or with evidence under review; a conversion to an exemption under a policy that refunds nothing, S5R-D14;
+// an invoice's evidence rolled back in the case already, S5R-D20) and INVALID_KNOWN_VALUE (another currency than the
+// case's; a rollback of an invoice the case's evidence does not use), the amounts' digits (INVALID_KNOWN_VALUE),
 // the evidence (REFERENCE_INVALID), the fund record (REFERENCE_INVALID; not money in, in another
 // currency or less than the amount: INVALID_KNOWN_VALUE). A rejection, the external result, returns
 // the case's evidence to the invoice lines' balances. TaxRefundResultRecorded is published.
@@ -312,8 +328,13 @@ func (h *recordTaxResult) Prepare(ctx context.Context) error {
 
 func (h *recordTaxResult) Lock(ctx context.Context, exec bentopg.Executor) error {
 	var err error
-	h.taxCase, err = postgres.LoadCase(ctx, exec, scope(ctx), h.cmd.CaseID, postgres.ForUpdate)
-	return err
+	if h.taxCase, err = postgres.LoadCase(ctx, exec, scope(ctx), h.cmd.CaseID, postgres.ForUpdate); err != nil || h.taxCase == nil {
+		return err
+	}
+	if h.cmd.Stage == tr.Submitted {
+		return postgres.LockCaseInvoices(ctx, exec, scope(ctx), h.taxCase.ID)
+	}
+	return nil
 }
 
 func (h *recordTaxResult) evidence(ids []string, path string) ([]tr.Evidence, error) {
@@ -338,8 +359,8 @@ func (h *recordTaxResult) Apply(ctx context.Context, exec bentopg.Executor, d au
 	}
 	now := kernel.Instant(h.s.Clock.Now())
 	r := &tr.Result{ID: action.NewID("trr", now), CaseID: c.ID, Stage: cmd.Stage, From: c.Status, TaxPeriod: cmd.TaxPeriod,
-		ExternalReference: cmd.ExternalReference, ResultText: cmd.ResultText, FundRecordID: cmd.FundRecordID, Reason: cmd.Reason, By: d.Actor,
-		Epoch: d.Epoch, At: now}
+		ExternalReference: cmd.ExternalReference, ResultText: cmd.ResultText, FundRecordID: cmd.FundRecordID, PurchaseInvoiceID: cmd.PurchaseInvoiceID,
+		Reason: cmd.Reason, By: d.Actor, Epoch: d.Epoch, At: now}
 	var kc kernel.Currency
 	if cmd.Currency != nil {
 		cur, err := currencyOf(h.currency, "/args/currency")
@@ -414,6 +435,9 @@ func (h *recordTaxResult) Apply(ctx context.Context, exec bentopg.Executor, d au
 		"policy_id": c.Policy.PolicyID, "policy_revision": c.Policy.Revision}
 	if r.FundRecordID != "" {
 		fields["fund_record_id"] = r.FundRecordID
+	}
+	if r.PurchaseInvoiceID != "" {
+		fields["purchase_invoice_id"] = r.PurchaseInvoiceID
 	}
 	return action.Outcome{ObjectID: c.ID, RowVersion: c.RowVersion, Status: c.Status, Events: []action.Event{{
 		Type: api.EventTaxRefundResultRecord, AggregateType: "TaxRefundCase", AggregateID: c.ID, AggregateVersion: c.RowVersion,

@@ -21,33 +21,49 @@ import (
 //	                               export_lot_id to verified purchase invoice lines, each with a
 //	                               purpose and a quantity in the invoice line's unit. The lot's
 //	                               first allocation opens its case, which binds the export_tax_policy
-//	                               revision of policy_id in force at the lot's export date (POL,
-//	                               CN-AT12). Per purpose, Σ standing allocations of an invoice line
-//	                               never exceed its quantity, nor those of an export line its
-//	                               quantity (TAX_EVIDENCE_EXCEEDED; CN-R04). An allocation from an
-//	                               invoice a red invoice reversed is under review; a new allocation
-//	                               of the same export line replaces it (replaces).
+//	                               revision of policy_id whose validity contains the lot's export date,
+//	                               whenever it was published (POL ConfigAt v1, S5R-D23, CN-AT12); a taxable
+//	                               revision opens no case (INVALID_STATE, S5R-D14). Per purpose, Σ standing
+//	                               allocations of an invoice line never exceed what it evidences (its
+//	                               quantity less what red invoices reversed, S5R-D20), nor those of an
+//	                               export line its quantity (TAX_EVIDENCE_EXCEEDED; CN-R04). An allocation
+//	                               from an invoice a red invoice reversed, or of a line whose evidence a
+//	                               partial reversal left over-used, is under review; a new allocation of
+//	                               the same export line replaces it (replaces), from the same line too.
 //	tax_refund_case.record_result  human only (tax specialist), at expected_version, one stage of
 //	                               SM-CNX-TAXCASE, kept apart (CN-R08): expected (the estimate,
 //	                               stays expected), planned (拟申报: amount, tax_period and the
 //	                               professional review), submitted (external_reference), approved
 //	                               (result_text, the refund amount approved and the offset 免抵
 //	                               amount), received (amount and the STL fund record, FundRecordRef
-//	                               v1, R38), rejected (result_text). Only a rejection, an external
+//	                               v1, R38), rejected (result_text); converted_to_exemption (S5R-D14:
+//	                               from expected or planned, final; the reason and evidence of the missed
+//	                               deadline); evidence_rolled_back (S5R-D20: a submitted, approved or
+//	                               received case keeps its state; purchase_invoice_id, result_text and
+//	                               evidence of the external rollback of that invoice's evidence, which a
+//	                               red invoice reversing it needs first). Only a rejection, an external
 //	                               result, returns the case's evidence to its balances: a local
 //	                               cancellation does not exist (CN-R09).
+//	tax_refund_case.rebind_policy  human only (tax specialist; S5R-D23), at expected_version: an expected
+//	                               case binds revision, the one POL's ConfigAt v1 answers now for its
+//	                               export date (a revision published later whose validity also contains
+//	                               it: the case read shows policy_superseded), with a reason. Planned and
+//	                               after, the binding no longer changes.
 //
 // Request members in snake_case: tax_refund_case.allocate {export_lot_id, policy_id, allocations
 // [{allocation_id, export_line_id, purchase_invoice_id, line_no, purpose, quantity, replaces}]};
 // tax_refund_case.record_result {case_id, expected_version, stage, currency {id, revision}, amount,
 // offset_amount, tax_period, review {reviewer, evidence_ids}, external_reference, result_text,
-// fund_record_id, evidence_ids, reason}.
+// fund_record_id, purchase_invoice_id, evidence_ids, reason}; tax_refund_case.rebind_policy {case_id,
+// expected_version, revision, reason}.
 
 // Commands, reads and events of tax refund cases (role template tax specialist; humanOnlyCommands
 // name tax_refund_case.record_result).
 const (
 	CommandAllocateTaxEvidence = "tax_refund_case.allocate"
 	CommandRecordTaxResult     = "tax_refund_case.record_result"
+	// CommandRebindPolicy (S5R-D23; R0's name): an expected case rebinds the revision ConfigAt v1 answers now.
+	CommandRebindPolicy = "tax_refund_case.rebind_policy"
 
 	// Reads: a case with its policy binding, allocations, results and amounts; the company's cases.
 	CommandGetTaxCase          = "tax_refund_case.get"
@@ -64,6 +80,11 @@ const (
 	TaxApproved  = "approved"
 	TaxReceived  = "received"
 	TaxRejected  = "rejected"
+	// TaxConvertedToExemption (S5R-D14): not declared for a refund in time, the export is exempt; final.
+	TaxConvertedToExemption = "converted_to_exemption"
+	// TaxEvidenceRolledBack (S5R-D20) is a stage a filed case records without moving: the external rollback of a
+	// purchase invoice's evidence (进货凭证信息回退).
+	TaxEvidenceRolledBack = "evidence_rolled_back"
 )
 
 // Purposes of a tax evidence allocation (CN-R04 "用途"; baseline 22.2 "相同凭证的不同用途不能混用同一个余额"):
@@ -173,6 +194,8 @@ type ProfessionalReview struct {
 //	approved   currency, amount (the refund approved), offset_amount (optional), result_text, evidence_ids
 //	received   currency, amount, fund_record_id; reason optional
 //	rejected   result_text, evidence_ids; reason optional
+//	converted_to_exemption  evidence_ids (the missed deadline), reason (S5R-D14)
+//	evidence_rolled_back    purchase_invoice_id, result_text, evidence_ids; reason optional (S5R-D20)
 //
 // The members a stage does not take are omitted.
 type RecordTaxResult struct {
@@ -188,6 +211,7 @@ type RecordTaxResult struct {
 	ExternalReference string
 	ResultText        string
 	FundRecordID      string
+	PurchaseInvoiceID string `json:",omitempty"`
 	EvidenceIDs       []string
 	Reason            string
 }
@@ -202,7 +226,7 @@ func (c RecordTaxResult) Validate() error {
 	case c.ExpectedVersion < 1 || c.ExpectedVersion > maxVersion:
 		return schema("/args/expected_version")
 	}
-	var money, offset, period, review, reference, text, fund, evidenceMin, reasonRequired bool
+	var money, offset, period, review, reference, text, fund, invoice, evidenceMin, reasonRequired bool
 	evidenceAllowed := true
 	switch c.Stage {
 	case TaxExpected:
@@ -217,6 +241,10 @@ func (c RecordTaxResult) Validate() error {
 		money, fund, evidenceAllowed = true, true, false
 	case TaxRejected:
 		text, evidenceMin = true, true
+	case TaxConvertedToExemption:
+		evidenceMin, reasonRequired = true, true
+	case TaxEvidenceRolledBack:
+		invoice, text, evidenceMin = true, true, true
 	default:
 		return schema("/args/stage")
 	}
@@ -247,6 +275,8 @@ func (c RecordTaxResult) Validate() error {
 		return schema("/args/result_text")
 	case fund && !kernel.ValidIdentifier(c.FundRecordID), !fund && c.FundRecordID != "":
 		return schema("/args/fund_record_id")
+	case invoice && !kernel.ValidIdentifier(c.PurchaseInvoiceID), !invoice && c.PurchaseInvoiceID != "":
+		return schema("/args/purchase_invoice_id")
 	case !evidenceAllowed && len(c.EvidenceIDs) != 0:
 		return schema("/args/evidence_ids")
 	case reasonRequired && !Text(c.Reason, MaxReason), !reasonRequired && c.Reason != "" && !Text(c.Reason, MaxReason):
@@ -267,8 +297,36 @@ func (c RecordTaxResult) Validate() error {
 	return evidence(c.EvidenceIDs, "/args/evidence_ids", min)
 }
 
+// RebindPolicy rebinds expected case CaseID at ExpectedVersion to Revision of its export_tax_policy, the revision POL's
+// ConfigAt v1 answers now for the case's export date, for Reason (human only; S5R-D23).
+type RebindPolicy struct {
+	IdempotencyKey  string
+	CaseID          string
+	ExpectedVersion int64
+	Revision        int64
+	Reason          string
+}
+
+// Validate checks the closed contract.
+func (c RebindPolicy) Validate() error {
+	switch {
+	case !kernel.ValidIdentifier(c.IdempotencyKey):
+		return schema("/idempotency_key")
+	case !kernel.ValidIdentifier(c.CaseID):
+		return schema("/args/case_id")
+	case c.ExpectedVersion < 1 || c.ExpectedVersion > maxVersion:
+		return schema("/args/expected_version")
+	case c.Revision < 1 || c.Revision > maxVersion:
+		return schema("/args/revision")
+	case !Text(c.Reason, MaxReason):
+		return schema("/args/reason")
+	}
+	return nil
+}
+
 func (AllocateTaxEvidence) cnxCommand() {}
 func (RecordTaxResult) cnxCommand()     {}
+func (RebindPolicy) cnxCommand()        {}
 
 // PolicyBindingView is the export_tax_policy revision a case binds: the one in force at the export
 // date, with its content hash, refund method and validity.
@@ -298,6 +356,7 @@ type TaxCaseReceipt struct {
 type TaxCaseCommands interface {
 	AllocateTaxEvidence(ctx context.Context, cmd AllocateTaxEvidence) (TaxCaseReceipt, error)
 	RecordTaxResult(ctx context.Context, cmd RecordTaxResult) (TaxCaseReceipt, error)
+	RebindPolicy(ctx context.Context, cmd RebindPolicy) (TaxCaseReceipt, error)
 }
 
 // TaxAllocationView is an allocation: the export line FUL gave (lot, shipment, order line, SKU
@@ -340,6 +399,7 @@ type TaxResultView struct {
 	ExternalReference string
 	ResultText        string
 	FundRecordID      string
+	PurchaseInvoiceID string // evidence_rolled_back (S5R-D20)
 	Evidence          []EvidenceView
 	Reason            string
 	RecordedBy        kernel.ActorRef
@@ -362,25 +422,55 @@ type TaxAmountsView struct {
 	ReceivedLessApprovedMinor string
 }
 
-// TaxCaseView is a case: the export lot, the policy binding, its state, every allocation and
-// result, oldest first, and the amounts.
-type TaxCaseView struct {
-	CaseID         string
-	ExportLotID    string
-	Attempt        int
-	OrderID        string
-	ExportedAt     time.Time
-	Policy         PolicyBindingView
-	Status         string
-	RowVersion     int64
-	Allocations    []TaxAllocationView
-	Results        []TaxResultView
-	Amounts        TaxAmountsView
-	OpenedBy       kernel.ActorRef
-	OpenedAt       time.Time
+// PolicyAtView is what POL's ConfigAt v1 answers now for a case's policy at its export date (S5R-D23): the revision
+// and its content hash, or POL's code (CONFIG_NOT_ACTIVE, REFERENCE_INVALID) when none applies.
+type PolicyAtView struct {
+	Revision    int64
+	ContentHash string
+	Code        string
+}
+
+// RebindingView is a rebinding of an expected case (tax_refund_case.rebind_policy, S5R-D23).
+type RebindingView struct {
+	RebindingID    string
+	CaseVersion    int64
+	FromRevision   int64
+	FromHash       string
+	FromMethod     string
+	ToRevision     int64
+	ToHash         string
+	ToMethod       string
+	Reason         string
+	ReboundBy      kernel.ActorRef
 	AuthorityEpoch int64
-	CheckedAt      time.Time
-	Opening        *TaxOpeningRef // S5 C10: an opening case's opening item (its export is no FUL lot)
+	ReboundAt      time.Time
+}
+
+// TaxCaseView is a case: the export lot, the policy binding, its state, every allocation and
+// result, oldest first, and the amounts. While the case is expected, PolicyAt is what ConfigAt v1 answers now for
+// its export date and PolicySuperseded reports that it answers another revision than the one bound (a revision
+// published later whose validity also contains the export date: rebind it, S5R-D23); planned and after, the binding
+// no longer changes and PolicyAt is nil. Rebindings lists every rebinding, oldest first.
+type TaxCaseView struct {
+	CaseID           string
+	ExportLotID      string
+	Attempt          int
+	OrderID          string
+	ExportedAt       time.Time
+	Policy           PolicyBindingView
+	PolicyAt         *PolicyAtView
+	PolicySuperseded bool
+	Rebindings       []RebindingView
+	Status           string
+	RowVersion       int64
+	Allocations      []TaxAllocationView
+	Results          []TaxResultView
+	Amounts          TaxAmountsView
+	OpenedBy         kernel.ActorRef
+	OpenedAt         time.Time
+	AuthorityEpoch   int64
+	CheckedAt        time.Time
+	Opening          *TaxOpeningRef // S5 C10: an opening case's opening item (its export is no FUL lot)
 }
 
 // TaxCaseSummary is one case of the company.

@@ -108,7 +108,8 @@ func newLicenseWorld(t *testing.T) *licenseWorld {
 	w.must(err)
 	w.cnx, err = cnx.New(cdb, cnx.Upstream{Orders: cnx.TRDOrders(w.c.TRD), Countries: cnx.PTYCountries(w.c.PTY), Profiles: fixedProfiles{},
 		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: w.ful, Purchases: cnx.PURLines(w.c.PUR),
-		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL)})
+		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL),
+		Brokers: cnx.PTYBrokers(w.c.PTY)}) // S5R-D36
 	w.must(err)
 	return w
 }

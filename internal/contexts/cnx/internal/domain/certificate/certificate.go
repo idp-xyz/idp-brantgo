@@ -46,6 +46,16 @@ const (
 	KindOrigin      = "certificate_of_origin"
 	KindLicenseCopy = "license_copy"
 	KindInspection  = "inspection_certificate"
+	// KindPreferentialOrigin (S5R-D12): a preferential certificate of origin issued outside Brant — by customs or CCPIT
+	// under a trade agreement, or the origin declaration of an approved exporter (RCEP) — with its agreement code. Brant
+	// registers the result; it judges no origin rule (GTC-05).
+	KindPreferentialOrigin = "preferential_certificate_of_origin"
+
+	// The forms of a preferential certificate of origin and the bodies that issue one (S5R-D12).
+	FormCertificate       = "certificate"
+	FormOriginDeclaration = "origin_declaration"
+	BodyCustoms           = "customs"
+	BodyCCPIT             = "ccpit"
 
 	ObjectSkuSpec   = "sku_spec"
 	ObjectExportLot = "export_lot"
@@ -70,7 +80,17 @@ const (
 )
 
 // Kinds are the certificate kinds.
-var Kinds = []string{KindOrigin, KindLicenseCopy, KindInspection}
+var Kinds = []string{KindOrigin, KindLicenseCopy, KindInspection, KindPreferentialOrigin}
+
+// Origin reports whether kind is a certificate of origin or a preferential one: what one customs declaration takes one
+// of (S5R-D12, CNX-INV-008 "一份报关单对应一份原产地证书或原产地声明").
+func Origin(kind string) bool { return kind == KindOrigin || kind == KindPreferentialOrigin }
+
+// Serves reports whether a certificate of kind serves a use that needs kind use: its own kind, and a preferential
+// certificate of origin also where a certificate of origin is needed (it is one; S5R-D12).
+func Serves(kind, use string) bool {
+	return kind == use || (use == KindOrigin && kind == KindPreferentialOrigin)
+}
 
 // Spec is a SKU specification revision.
 type Spec struct {
@@ -139,6 +159,11 @@ type Content struct {
 	LicenseID  string     `json:"license_id,omitempty"`
 	Basis      string     `json:"basis"`
 	Evidence   []Evidence `json:"evidence"`
+	// A preferential certificate of origin's agreement code, form and issuing body (S5R-D12); omitted for every other
+	// kind, so the documents registered before keep their bytes and hashes.
+	AgreementCode string `json:"agreement_code,omitempty"`
+	OriginForm    string `json:"origin_form,omitempty"`
+	IssuingBody   string `json:"issuing_body,omitempty"`
 }
 
 // DocumentContract names a revision document's layout.
@@ -368,7 +393,7 @@ func Judge(r *Revision, current int, u Use) Verdict {
 		}
 	}
 	switch {
-	case r.Kind != u.Kind:
+	case !Serves(r.Kind, u.Kind):
 		v.Reason = ReasonKind
 	case u.Target.Destination == "":
 		v.Reason = ReasonMarketUnknown

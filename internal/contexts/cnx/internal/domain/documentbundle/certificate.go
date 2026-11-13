@@ -55,6 +55,31 @@ type CertificateRef struct {
 	Covered        []string `json:"covered"`
 }
 
+// originKind reports whether a certificate of kind is a certificate of origin or a preferential one (S5R-D12).
+func originKind(kind string) bool {
+	return kind == "certificate_of_origin" || kind == "preferential_certificate_of_origin"
+}
+
+// checkOneOrigin refuses a check whose requirements name more than one certificate of origin or origin declaration
+// (S5R-D12, CNX-INV-008 "一份报关单对应一份原产地证书或原产地声明"; CN-R14): the bundle is the export lot's, which one customs
+// declaration declares. INVALID_KNOWN_VALUE at the second one's path.
+func checkOneOrigin(reqs []Requirement) error {
+	first := ""
+	for i, r := range reqs {
+		for j, c := range r.Certificates {
+			switch {
+			case !originKind(c.Kind) || c.CertificateID == first:
+			case first == "":
+				first = c.CertificateID
+			default:
+				return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/requirements/"+strconv.Itoa(i)+"/certificate_ids/"+strconv.Itoa(j),
+					"One customs declaration takes one certificate of origin or origin declaration: certificate "+first+" is named already")
+			}
+		}
+	}
+	return nil
+}
+
 // checkCertificates decides requirement r at index i of a check of a lot with lines (CN-AT14): a
 // verified certificate_of_origin or inspection_certificate requirement without certificates
 // (DOCUMENT_REQUIREMENT_UNVERIFIED), a verified requirement whose certificates leave a lot line

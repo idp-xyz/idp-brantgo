@@ -106,9 +106,14 @@ func (s Service) GetDeclaration(ctx context.Context, id string) (api.Declaration
 			return err
 		}
 		for _, x := range submissions {
-			v.Submissions = append(v.Submissions, api.SubmissionView{SubmissionNo: x.No, Version: x.Version, OperationReference: x.OperationReference,
-				Submitter: api.Submitter{Kind: x.SubmitterKind, PartyID: x.SubmitterPartyID, Name: x.SubmitterName}, SubmittedAt: x.SubmittedAt,
-				Evidence: declarationEvidenceViews(x.Evidence), Note: x.Note, RecordedBy: x.By, AuthorityEpoch: x.Epoch, RecordedAt: x.At})
+			sv := api.SubmissionView{SubmissionNo: x.No, Version: x.Version, OperationReference: x.OperationReference,
+				Submitter: api.Submitter{Kind: x.SubmitterKind, PartyID: x.SubmitterPartyID, Name: x.SubmitterName}, ServiceRoleKind: x.ServiceRoleKind,
+				SubmittedAt: x.SubmittedAt, Evidence: declarationEvidenceViews(x.Evidence), Note: x.Note, RecordedBy: x.By, AuthorityEpoch: x.Epoch,
+				RecordedAt: x.At}
+			if x.ServiceRoleID != "" {
+				sv.Submitter.ServiceRole = &api.ServiceRoleRef{ID: x.ServiceRoleID, Revision: x.ServiceRoleRevision}
+			}
+			v.Submissions = append(v.Submissions, sv)
 		}
 		receipts, err := postgres.Receipts(ctx, exec, sc, c.ID)
 		if err != nil {
