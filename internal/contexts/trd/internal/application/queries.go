@@ -31,7 +31,7 @@ import (
 func readRules() []authorization.Rule {
 	var out []authorization.Rule
 	for _, q := range []string{api.QueryQuoteReady, api.QueryQuoteHistory, api.QueryApprovalHistory, api.QueryDocumentHistory,
-		api.QueryCommitHistory, api.QueryOutboxHistory, api.QueryDispatchPreflight, api.QueryDispatchTarget} {
+		api.QueryCommitHistory, api.QueryOutboxHistory, api.QueryDispatchPreflight, api.QueryDispatchTarget, api.QueryGoalReadiness} {
 		out = append(out, authorization.Rule{Command: q, Permission: PermissionRead, ActorKinds: anyActor})
 	}
 	return out
@@ -183,8 +183,8 @@ func (s Service) QuoteReady(ctx context.Context, rq api.ReadyQuery) (api.QuoteRe
 // the inputs f read before the transaction (inputs: their refusal). In order: the object control
 // as a write by the caller would meet it; the revision (NOT_FOUND for a revision the root does not
 // have, NO_ACTIVE_REVISION, QUOTE_NOT_CURRENT for one that is not active); its commit evidence;
-// its formal document's bytes; a risk hold; the validity; the approval its commit evidence names
-// (quote.ReadyApproval); the upstream guards (guardUpstream); then the cost scope and sales terms
+// its formal document's bytes; a risk hold; the validity; the conversion slot (taken:
+// CONVERSION_SLOT_CONFLICT); the approval its commit evidence names (quote.ReadyApproval); the upstream guards (guardUpstream); then the cost scope and sales terms
 // bound again on the current inputs, and the sales exchange rate's age.
 func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authorization.Decision, q *quote.Quote, named int64, f facts,
 	inputs error, at time.Time) (api.QuoteReadiness, error) {
@@ -224,6 +224,12 @@ func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authori
 	}
 	if !kernel.Instant(at).Before(rev.Seal.ExpiresAt) {
 		_ = r.add(api.CheckValidity, refusal(api.CodeQuoteExpired, "/expires_at"))
+	}
+	if q.Slot != nil {
+		// The root's one full_v1 conversion is taken: the revision serves no conversion any more (S3
+		// gap closed in S4 unit A3; baseline 15.4: 已占用时返回已有订单或明确冲突 — the order is the
+		// root's GetQuote conversion and GoalReadiness's evidence).
+		_ = r.add(api.CheckConversion, api.Reject(api.CodeConversionSlotConflict, "/quote_id"))
 	}
 	if _, err := q.ReadyApproval(rev, at, s.standings(ctx, exec, q)); r.add(api.CheckApproval, err) != nil {
 		return out, err

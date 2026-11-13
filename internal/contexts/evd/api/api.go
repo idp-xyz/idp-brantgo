@@ -145,6 +145,46 @@ type Commands interface {
 	RegisterFile(ctx context.Context, cmd RegisterFile) (Receipt, error)
 }
 
+// Command is one of EVD's commands: RegisterSource or RegisterFile.
+type Command interface{ evdCommand() }
+
+func (RegisterSource) evdCommand() {}
+func (RegisterFile) evdCommand()   {}
+
+// Reconciliation is what became of a command whose answer the caller lost.
+type Reconciliation struct {
+	State    kernel.ReconcileState
+	ActionID string   // committed and payload_conflict
+	ObjectID string   // committed and payload_conflict
+	Receipt  *Receipt // the stored receipt; committed only
+}
+
+// Reconciler recovers from an unknown outcome without executing anything (contract 06, 动作对账;
+// WBS S4-02 closes the S3 gap "动作对账：EVD 尚无"). The caller passes the command exactly as it
+// sent it, idempotency key included; EVD hashes it as the command did. Reconciling needs evd.read,
+// not the command's own permission, and re-checks it and the caller's data scope over the source or
+// file the stored result names now (X-INV-003): PERMISSION_DENIED and NOT_FOUND as for a read.
+type Reconciler interface {
+	Reconcile(ctx context.Context, cmd Command) (Reconciliation, error)
+}
+
+// ActionReconciler is EVD's ActionReconciliation v1 (Context Map R66 EVD→TSK, S4 decision D-11):
+// reconciliation by the ledger identity of a command, for a caller that kept the request rather
+// than the command (TSK's ActionExecution, which records it before the command is sent; a file's
+// bytes need not be sent again to learn what became of its registration).
+//
+// RequestOf returns the command name, idempotency key and request hash EVD's ledger records for cmd
+// — hashed exactly as executing it hashes it — and executes and reads nothing; a command EVD does
+// not know is SCHEMA_INVALID. ReconcileHash answers what Reconcile answers for the command that
+// hashes to requestHash: committed with the stored receipt, payload_conflict or not_committed,
+// after the same checks, audited the same way (action.reconcile), executing nothing. An unknown
+// command name, an invalid key or a request hash that is not 64 lower-case hexadecimal digits is
+// SCHEMA_INVALID.
+type ActionReconciler interface {
+	RequestOf(cmd Command) (kernel.ActionRequest, error)
+	ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (Reconciliation, error)
+}
+
 // SourceRef is SourceRef v1: a source origin and the hash of its content.
 type SourceRef struct {
 	SourceID      string

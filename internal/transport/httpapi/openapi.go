@@ -72,12 +72,26 @@ func OpenAPI() ([]byte, error) {
 				"responses":   commandResponses(),
 			}}
 			if set.reconcilable(n) {
+				description, reconcileBody := "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. "+ingress, body
+				if set.reconcilableByHash(n) {
+					description = "The body is the request exactly as it was sent, or its envelope with the request hash in place of the arguments (ActionReconciliation v1: the SHA-256 of the business arguments the context's ledger records). Nothing is executed; the context's read permission and the caller's data scope are checked now. " + ingress
+					byHash := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "request_hash"},
+						"properties": map[string]any{
+							"contract":        map[string]any{"const": set.contract},
+							"command":         map[string]any{"const": n},
+							"idempotency_key": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
+							"request_hash":    map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+						}}
+					full := body["content"].(map[string]any)["application/json"].(map[string]any)["schema"]
+					reconcileBody = map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
+						"oneOf": []any{full, byHash}}}}}
+				}
 				paths["/api/brant/v1/"+set.bc+"/commands/"+n+"/reconcile"] = map[string]any{"post": map[string]any{
 					"operationId": set.bc + "." + n + ".reconcile",
 					"tags":        []string{set.bc},
 					"summary":     "What became of " + n + " sent with this idempotency key (动作对账)",
-					"description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. " + ingress,
-					"requestBody": body,
+					"description": description,
+					"requestBody": reconcileBody,
 					"responses":   reconcileResponses(),
 				}}
 			}
@@ -91,6 +105,9 @@ func OpenAPI() ([]byte, error) {
 		}
 		for _, p := range readQuery[r.path] {
 			params = append(params, map[string]any{"name": p, "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 0}})
+		}
+		for _, p := range readTextQuery[r.path] {
+			params = append(params, map[string]any{"name": p.name, "in": "query", "required": p.required, "schema": map[string]any{"type": "string", "minLength": 1}})
 		}
 		if params != nil {
 			get["parameters"] = params
@@ -178,6 +195,8 @@ var reads = []readRoute{
 		"A formal quote document: its binding and bytes (Base64), verified on read", []string{"id", "revision"}, false},
 	{"/api/brant/v1/trd/quotes/{id}/ready", "trd.quote.ready", "trd",
 		"Whether a revision (?business_revision=, the active one by default) serves the next step now: every check that fails is a reason (quote_ready)", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes/{id}/goal_readiness", "trd.goal.readiness", "trd",
+		"GoalReadiness v1 (?goal=quote_ready|order_active, required; goal_version=1; business_revision, customer_id, rfq_id optional): every Q01 assertion the goal requires (baseline 15.4) as satisfied, unsatisfied, unknown or error with its checks and evidence, and the outcome; order_active names the root's full_v1 order", []string{"id"}, false},
 	{"/api/brant/v1/trd/quotes/{id}/history", "trd.quote.history", "trd", "A page of the quote's revisions with their events (?after=, ?limit=)", []string{"id"}, false},
 	{"/api/brant/v1/trd/quotes/{id}/approvals", "trd.quote.approval.history", "trd",
 		"A page of the quote's review requests and approvals with their effectivity events (?after=, ?limit=)", []string{"id"}, false},
@@ -237,14 +256,23 @@ var reads = []readRoute{
 		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink or -replay-dispatch)", []string{"source", "event_id"}, true},
 }
 
+// readTextQuery names the string query parameters of a read.
+var readTextQuery = map[string][]struct {
+	name     string
+	required bool
+}{
+	"/api/brant/v1/trd/quotes/{id}/goal_readiness": {{"goal", true}, {"customer_id", false}, {"rfq_id", false}},
+}
+
 // readQuery names the optional integer query parameters of a read.
 var readQuery = map[string][]string{
-	"/api/brant/v1/trd/quotes/{id}/ready":     {"business_revision"},
-	"/api/brant/v1/trd/quotes/{id}/history":   {"after", "limit"},
-	"/api/brant/v1/trd/quotes/{id}/approvals": {"after", "limit"},
-	"/api/brant/v1/trd/quotes/{id}/documents": {"after", "limit"},
-	"/api/brant/v1/trd/quotes/{id}/commits":   {"after", "limit"},
-	"/api/brant/v1/trd/quotes/{id}/outbox":    {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/goal_readiness": {"goal_version", "business_revision"},
+	"/api/brant/v1/trd/quotes/{id}/ready":          {"business_revision"},
+	"/api/brant/v1/trd/quotes/{id}/history":        {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/approvals":      {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/documents":      {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/commits":        {"after", "limit"},
+	"/api/brant/v1/trd/quotes/{id}/outbox":         {"after", "limit"},
 }
 
 func commandResponses() map[string]any {

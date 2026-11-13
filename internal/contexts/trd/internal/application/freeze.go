@@ -163,6 +163,9 @@ type guarded struct {
 	// hooks run at their place in context code order (order activation: the extension points of CNX
 	// after CAT and of STL after PTY, and PTY's screening after its address guards); nil for none.
 	afterCAT, afterPTY func() error
+	// skipSpecs leaves CAT's SkuGuard to the caller (GoalReadiness judges the SKU specifications as
+	// Q01.industry, apart from the other upstream facts, goal.go).
+	skipSpecs bool
 	// legal is where refusals of the legal terms the freeze adopted from the issuer's default point
 	// (quote/legal.go): the draft names none, so they are refused at its issuer_ref; "" otherwise.
 	legal string
@@ -236,19 +239,12 @@ func (s Service) checkUpstream(ctx context.Context, exec bentopg.Executor, g gua
 		return onLapse(refusal, detail)
 	}
 	// CAT (R14): SkuGuard v1 on every SKU specification revision, in (SKU, revision) order.
-	specs := map[catapi.SpecRef]string{}
-	for i, l := range d.Lines {
-		ref := catapi.SpecRef{SkuID: l.Sku.SkuID, SpecRevision: l.Sku.SpecRevision}
-		if _, ok := specs[ref]; !ok {
-			specs[ref] = fmt.Sprintf("%s/lines/%d/sku_ref", p, i)
+	if !g.skipSpecs {
+		skus := make([]quote.SkuRef, len(d.Lines))
+		for i, l := range d.Lines {
+			skus[i] = l.Sku
 		}
-	}
-	for _, ref := range slices.SortedFunc(maps.Keys(specs), compareSpec) {
-		v, err := catapi.ScanSkuGuard(ref, exec.QueryRow(ctx, catapi.SkuGuardSQL, catapi.SkuGuardArgs(ref)...).Scan)
-		if err != nil {
-			return none, err
-		}
-		if err = lapsed(v.Check(specs[ref]), v.Status); err != nil {
+		if err := guardSpecs(ctx, exec, skus, p, lapsed); err != nil {
 			return none, err
 		}
 	}
@@ -348,6 +344,29 @@ func (s Service) checkUpstream(ctx context.Context, exec bentopg.Executor, g gua
 		}
 	}
 	return adoptable, nil
+}
+
+// guardSpecs calls CAT's SkuGuard v1 (R14) on every SKU specification revision of skus, the SKUs of
+// lines prefix/lines/<i>, in (SKU, revision) order; lapsed decides each refusal, whose path is the
+// first line binding the revision.
+func guardSpecs(ctx context.Context, exec bentopg.Executor, skus []quote.SkuRef, prefix string, lapsed lapse) error {
+	specs := map[catapi.SpecRef]string{}
+	for i, sku := range skus {
+		ref := catapi.SpecRef{SkuID: sku.SkuID, SpecRevision: sku.SpecRevision}
+		if _, ok := specs[ref]; !ok {
+			specs[ref] = fmt.Sprintf("%s/lines/%d/sku_ref", prefix, i)
+		}
+	}
+	for _, ref := range slices.SortedFunc(maps.Keys(specs), compareSpec) {
+		v, err := catapi.ScanSkuGuard(ref, exec.QueryRow(ctx, catapi.SkuGuardSQL, catapi.SkuGuardArgs(ref)...).Scan)
+		if err != nil {
+			return err
+		}
+		if err = lapsed(v.Check(specs[ref]), v.Status); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func compareAddress(a, b ptyapi.AddressRoleRef) int {

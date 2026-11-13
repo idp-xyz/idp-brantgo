@@ -128,21 +128,36 @@ func unwrapExecuted(err error) error {
 // decodeCommand checks the request against the command's contract and returns the context's
 // command: size and closed JSON, contract and command, the structure of the arguments.
 func (s *server) decodeCommand(r *http.Request, set *commandSet, name string, run commandFunc) (any, error) {
-	limit, values := s.cfg.MaxBodyBytes, strictjson.DefaultMaxValues
+	raw, limit, values, err := s.readBody(r, set, name)
+	if err != nil {
+		return nil, err
+	}
+	return decodeEnvelope(raw, set, name, run, limit, values)
+}
+
+// readBody reads the body of a request of command name within its ingress limits: the bytes, and
+// the limits that apply to them.
+func (s *server) readBody(r *http.Request, set *commandSet, name string) (raw []byte, limit int64, values int, err error) {
+	limit, values = s.cfg.MaxBodyBytes, strictjson.DefaultMaxValues
 	if l := set.limits[name]; l.MaxBytes > limit {
 		limit, values = l.MaxBytes, max(l.MaxValues, values)
 	}
 	body := http.MaxBytesReader(nil, r.Body, limit+1)
-	raw, err := io.ReadAll(body)
+	raw, err = io.ReadAll(body)
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return nil, kernel.Reject(kernel.CodeRequestTooLarge, "/", "")
+			return nil, 0, 0, kernel.Reject(kernel.CodeRequestTooLarge, "/", "")
 		}
-		return nil, err
+		return nil, 0, 0, err
 	}
+	return raw, limit, values, nil
+}
+
+// decodeEnvelope decodes raw, the body of a request of command name, into the context's command.
+func decodeEnvelope(raw []byte, set *commandSet, name string, run commandFunc, limit int64, values int) (any, error) {
 	var env envelope
-	if err = strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit, MaxValues: values}); err != nil {
+	if err := strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit, MaxValues: values}); err != nil {
 		return nil, err
 	}
 	switch {
@@ -303,7 +318,7 @@ func evdCommands(c EVD) *commandSet {
 		ContentBase64    string `json:"content_base64"`
 		SupersedesFileID string `json:"supersedes_file_id"`
 	}
-	return &commandSet{bc: "evd", contract: evdapi.Contract, auditor: c, audit: c.Audit,
+	return &commandSet{bc: "evd", contract: evdapi.Contract, auditor: c, audit: c.Audit, reconcile: hashReconciler(c.Reconcile, c.ReconcileHash),
 		// A 10 MiB file is about 13.4 MiB of Base64 (Python allows 15 MiB for this contract).
 		limits: map[string]strictjson.Limits{evdapi.CommandRegisterFile: {MaxBytes: MaxFileBody}},
 		commands: map[string]commandFunc{
@@ -596,7 +611,7 @@ func inqCommands(c INQ) *commandSet {
 		SourceIDs        []string `json:"source_ids"`
 		UnresolvedFields []string `json:"unresolved_fields"`
 	}
-	return &commandSet{bc: "inq", contract: inqapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
+	return &commandSet{bc: "inq", contract: inqapi.Contract, auditor: c, audit: c.Audit, reconcile: hashReconciler(c.Reconcile, c.ReconcileHash), commands: map[string]commandFunc{
 		inqapi.CommandSaveRfq: handle(func(key string, a saveRfq) (inqapi.SaveRfq, error) {
 			v, err := version(a.ExpectedVersion)
 			cmd := inqapi.SaveRfq{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, CustomerID: a.CustomerID, ContactID: a.ContactID,

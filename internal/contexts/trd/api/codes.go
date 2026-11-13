@@ -110,6 +110,9 @@ func Category(code string) (kernel.Category, bool) {
 	if c, ok := QueryCategory(code); ok {
 		return c, true
 	}
+	if c, ok := GoalCategory(code); ok {
+		return c, true
+	}
 	return DocumentCategory(code)
 }
 
