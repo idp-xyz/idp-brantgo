@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,9 +31,13 @@ type guards struct {
 	payment    stlapi.PaymentVerdict
 	order      trdapi.OrderVerdict
 	state      trdapi.OrderState
-	// what STL's and TRD's guards were asked
-	paid    []int64
-	guarded []trdapi.OrderBinding
+	// complianceAt answers CNX's guard for an order revision instead of compliance (S5 C1c).
+	complianceAt map[int64]cnxapi.TradeComplianceVerdict
+	// what CNX's, PTY's, STL's and TRD's guards were asked
+	complied []cnxapi.OrderBinding
+	screened []string
+	paid     []int64
+	guarded  []trdapi.OrderBinding
 }
 
 func (g *guards) ResolveActiveOrders(context.Context, []string) (map[string]trdapi.ActiveOrderFact, error) {
@@ -64,13 +69,16 @@ func (g *guards) GuardDeliveryLine(context.Context, bentopg.Executor, api.Delive
 	g.calls = append(g.calls, "pur")
 	return g.delivery, nil
 }
-func (g *guards) GuardScreening(context.Context, bentopg.Executor, string, time.Time) (ptyapi.ScreeningGuardResult, error) {
-	g.calls = append(g.calls, "pty")
+func (g *guards) GuardScreening(_ context.Context, _ bentopg.Executor, id string, _ time.Time) (ptyapi.ScreeningGuardResult, error) {
+	g.calls, g.screened = append(g.calls, "pty"), append(g.screened, id)
 	return g.screening, nil
 }
 func (g *guards) GuardTradeCompliance(_ context.Context, _ bentopg.Executor, b cnxapi.OrderBinding, _ time.Time) (cnxapi.TradeComplianceVerdict, error) {
-	g.calls = append(g.calls, "cnx.compliance")
+	g.calls, g.complied = append(g.calls, "cnx.compliance"), append(g.complied, b)
 	v := g.compliance
+	if x, ok := g.complianceAt[b.OrderRevision]; ok {
+		v = x
+	}
 	v.Ref = b
 	return v, nil
 }
@@ -278,31 +286,46 @@ func judgedRelease(t *testing.T, g *guards, roots *releaseRootsOf, scope string)
 	return j
 }
 
-// Owner decision 2026-11-12 (S5 C1b; WF-07, BT10, D-5, R27, R45): the documents release of a
-// confirmed shipment asks TRD's order state for the current revision, STL's PaymentConditionGuard
-// for the documents scope on it and TRD's OrderGuard on the current binding — in that order, STL
-// before TRD — and asks CNX, PTY, PUR and QLT nothing: it binds what the confirmation's release bound
-// and names the confirmation. A confirmed shipment whose confirmation consumed no shipment release,
-// the shipment scope and a prepared shipment's documents release are judged as before.
+// documentsCalls is what the documents release of a confirmed shipment asks (S5 C1b, C1c): TRD's
+// order state, CNX on the revision the goods left under and on the later current revision, PTY on
+// the customer, STL's documents scope, TRD's OrderGuard.
+var documentsCalls = []string{"trd.state", "cnx.compliance", "cnx.compliance", "pty", "stl.documents", "trd"}
+
+func entryNames(j *judgement) []string {
+	var names []string
+	for _, e := range j.entries {
+		names = append(names, e.Name)
+	}
+	return names
+}
+
+// Owner decisions 2026-11-12 (S5 C1b and C1c; WF-07, BT10, D-5, R27, R44, R45, R56): the documents
+// release of a confirmed shipment asks TRD's order state for the current revision, then in context
+// code order CNX's TradeComplianceGuard on the revision the goods left under and on the current
+// revision, PTY's PartyScreeningGuard on every party, STL's PaymentConditionGuard for the documents
+// scope on the current revision and TRD's OrderGuard on the current binding; it asks PUR and QLT
+// nothing: it binds what the confirmation's release bound, names the confirmation and binds CNX's and
+// PTY's answers beside it. A confirmed shipment whose confirmation consumed no shipment release, the
+// shipment scope and a prepared shipment's documents release are judged as before.
 func TestJudgeDocumentsOfAConfirmedShipmentOnTheCurrentRevision(t *testing.T) {
 	conf := consumedShipmentRelease(t)
 	g := amendedGuards()
 	roots := &releaseRootsOf{existing: shipmentOf(shipment.StatusConfirmed), confirmation: conf}
 	j := judgedRelease(t, g, roots, release.ScopeDocuments)
-	if j.failure != nil || !slices.Equal(g.calls, []string{"trd.state", "stl.documents", "trd"}) || !slices.Equal(g.paid, []int64{3}) ||
-		len(g.guarded) != 1 || g.guarded[0] != (trdapi.OrderBinding{OrderID: "order.1", OrderRevision: 3, OrderHash: hash3}) {
-		t.Fatalf("%v %v paid %v guarded %v", j.failure, g.calls, g.paid, g.guarded)
+	if j.failure != nil || !slices.Equal(g.calls, documentsCalls) || !slices.Equal(g.paid, []int64{3}) ||
+		len(g.guarded) != 1 || g.guarded[0] != (trdapi.OrderBinding{OrderID: "order.1", OrderRevision: 3, OrderHash: hash3}) ||
+		!slices.Equal(g.complied, []cnxapi.OrderBinding{{OrderID: "order.1", OrderRevision: 1, OrderHash: hash}, {OrderID: "order.1",
+			OrderRevision: 3, OrderHash: hash3}}) || !slices.Equal(g.screened, []string{"customer.1"}) {
+		t.Fatalf("%v %v paid %v guarded %v complied %v", j.failure, g.calls, g.paid, g.guarded, g.complied)
 	}
 	if j.order != (shipment.OrderBinding{OrderID: "order.1", OrderRevision: 3, OrderHash: hash3}) {
 		t.Fatalf("judged %+v", j.order)
 	}
-	var names []string
-	for _, e := range j.entries {
-		names = append(names, e.Name)
-	}
-	if !slices.Equal(names, []string{"guards_checked_at", release.GuardConfirmation, shipment.GuardPaymentCondition, shipment.GuardOrder}) ||
-		j.entries[1].Value != "rls.s1/v2/consumed/"+conf.Consumption.EntriesSHA256+"/r1" || j.entries[3].Value != "active/r3" ||
-		!strings.Contains(j.entries[2].Value, "/r3/") {
+	if !slices.Equal(entryNames(j), []string{"guards_checked_at", release.GuardConfirmation, shipment.GuardTradeCompliance,
+		release.GuardTradeComplianceCurrent, "screening:customer.1", shipment.GuardPaymentCondition, shipment.GuardOrder}) ||
+		j.entries[1].Value != "rls.s1/v2/consumed/"+conf.Consumption.EntriesSHA256+"/r1" || j.entries[2].Value != "clear/clear/chk.1/dec.1/false/r1" ||
+		j.entries[3].Value != "clear/clear/chk.1/dec.1/false/r3" || j.entries[4].Value != "clear/no_match/scr.1" ||
+		!strings.Contains(j.entries[5].Value, "/r3/") || j.entries[6].Value != "active/r3" {
 		t.Fatalf("entries %+v", j.entries)
 	}
 	b := j.bindings
@@ -310,6 +333,15 @@ func TestJudgeDocumentsOfAConfirmedShipmentOnTheCurrentRevision(t *testing.T) {
 		b.Deliveries[0].Verified != "800" || b.QualityReleases[0].Released != "600" || b.Payment.Scope != release.ScopeDocuments ||
 		b.Payment.OrderRevision != 3 || b.Order.OrderRevision != 3 || b.Order.OrderHash != hash3 || b.Order.Status != "active" {
 		t.Fatalf("bindings %+v", b)
+	}
+	if !slices.Equal(b.Confirmation.Reused, []string{shipment.GuardTradeCompliance, shipment.GuardSupplierDelivery, shipment.GuardQualityRelease,
+		release.GuardFulfilment}) || !slices.Equal(b.Confirmation.Rechecked, release.Rechecked) {
+		t.Fatalf("reused %v rechecked %v", b.Confirmation.Reused, b.Confirmation.Rechecked)
+	}
+	if r := b.Rechecked; r == nil || len(r.TradeCompliance) != 2 || r.TradeCompliance[0].OrderRevision != 1 || r.TradeCompliance[0].OrderHash != hash ||
+		r.TradeCompliance[1].OrderRevision != 3 || r.TradeCompliance[1].Blocked || len(r.Screenings) != 1 ||
+		r.Screenings[0] != (release.RecheckedScreening{PartyID: "customer.1", Status: "clear", Reason: "no_match", ScreeningID: "scr.1", PartyRevision: 3}) {
+		t.Fatalf("rechecked %+v", b.Rechecked)
 	}
 
 	// Ended orders, an unpaid stage of the current revision, TRD moving on, an unknown state.
@@ -339,7 +371,11 @@ func TestJudgeDocumentsOfAConfirmedShipmentOnTheCurrentRevision(t *testing.T) {
 		g := amendedGuards()
 		c.edit(g)
 		j := judgedRelease(t, g, &releaseRootsOf{existing: shipmentOf(shipment.StatusConfirmed), confirmation: conf}, release.ScopeDocuments)
-		if codeOf(j.failure) != c.failure || codeOf(j.other) != c.other || !slices.Equal(g.paid, []int64{c.paid}) || len(g.calls) != 3 {
+		calls := documentsCalls
+		if c.paid == 1 {
+			calls = slices.Delete(slices.Clone(documentsCalls), 2, 3) // no later revision: CNX asked once
+		}
+		if codeOf(j.failure) != c.failure || codeOf(j.other) != c.other || !slices.Equal(g.paid, []int64{c.paid}) || !slices.Equal(g.calls, calls) {
 			t.Errorf("%s: %s %s paid %v %v", c.name, codeOf(j.failure), codeOf(j.other), g.paid, g.calls)
 		}
 	}
@@ -366,4 +402,109 @@ func TestJudgeDocumentsOfAConfirmedShipmentOnTheCurrentRevision(t *testing.T) {
 			t.Errorf("%s: %v paid %v %+v", c.name, g.calls, g.paid, j.bindings.Confirmation)
 		}
 	}
+}
+
+// Owner decision 2026-11-12 ~23:05 (S5 C1c; FUL-INV-002, CNX-INV-001, SM-CNX-COMPLIANCE, PTY-INV-002,
+// R44, R56): a block that appears after the confirmation still stops the documents release of a
+// confirmed shipment. CNX refuses it only for a blocked conclusion of the revision the goods left
+// under or of the order's current revision; an expired conclusion, a newer programme list version, a
+// check reopened, re-evaluated or not yet opened for the current revision leave the confirmation's
+// clear conclusion standing. PTY refuses anything but clear, as at the confirmation. Both are
+// noted before the payment condition and neither is excepted (j.other); every guard is still asked.
+func TestJudgeDocumentsAsksForABlockAfterTheConfirmation(t *testing.T) {
+	conf := consumedShipmentRelease(t)
+	cnx := func(rev int64, status, reason string) func(*guards) {
+		return func(g *guards) {
+			if g.complianceAt == nil {
+				g.complianceAt = map[int64]cnxapi.TradeComplianceVerdict{}
+			}
+			v := cnxapi.TradeComplianceVerdict{Status: status, Reason: reason, CheckID: "chk.r" + strconv.FormatInt(rev, 10)}
+			if status == cnxapi.StatusBlocked {
+				v.DecisionID = "dec.blocked"
+			}
+			if status != cnxapi.StatusClear {
+				v.Code = cnxapi.CodeTradeComplianceNotClear
+			}
+			g.complianceAt[rev] = v
+		}
+	}
+	pty := func(status, reason string) func(*guards) {
+		return func(g *guards) {
+			g.screening = ptyapi.ScreeningGuardResult{Status: status, Reason: reason, ScreeningID: "scr.2", PartyRevision: 3}
+		}
+	}
+	unpaid := func(g *guards) {
+		g.payment.Status, g.payment.Reason, g.payment.AppliedMinor, g.payment.StageID, g.payment.ShortfallMinor, g.payment.Code =
+			stlapi.PaymentBlocked, stlapi.PaymentStageUnpaid, "28800", "P2", "61600", stlapi.CodeCommercialReleaseBlocked
+	}
+	both := func(fs ...func(*guards)) func(*guards) {
+		return func(g *guards) {
+			for _, f := range fs {
+				f(g)
+			}
+		}
+	}
+	for _, c := range []struct {
+		name           string
+		edit           func(*guards)
+		failure, guard string
+		other          string
+		blocked        []bool
+	}{
+		{"revision 1 reopened and concluded blocked", cnx(1, cnxapi.StatusBlocked, cnxapi.ReasonBlocked), api.CodeTradeComplianceNotClear,
+			shipment.GuardTradeCompliance, api.CodeTradeComplianceNotClear, []bool{true, false}},
+		{"the current revision concluded blocked", cnx(3, cnxapi.StatusBlocked, cnxapi.ReasonBlocked), api.CodeTradeComplianceNotClear,
+			shipment.GuardTradeCompliance, api.CodeTradeComplianceNotClear, []bool{false, true}},
+		{"blocked and unpaid: the block first, never excepted", both(cnx(1, cnxapi.StatusBlocked, cnxapi.ReasonBlocked), unpaid),
+			api.CodeTradeComplianceNotClear, shipment.GuardTradeCompliance, api.CodeTradeComplianceNotClear, []bool{true, false}},
+		{"blocked under another hash", cnx(1, cnxapi.StatusBlocked, cnxapi.ReasonOrderChanged), api.CodeTradeComplianceNotClear,
+			shipment.GuardTradeCompliance, api.CodeTradeComplianceNotClear, []bool{true, false}},
+		{"revision 1 expired", cnx(1, cnxapi.StatusExpired, cnxapi.ReasonExpired), "OK", "", "OK", []bool{false, false}},
+		{"a newer programme list version", cnx(1, cnxapi.StatusPending, cnxapi.ReasonListUpdated), "OK", "", "OK", []bool{false, false}},
+		{"revision 1 reopened", cnx(1, cnxapi.StatusPending, cnxapi.ReasonNotEvaluated), "OK", "", "OK", []bool{false, false}},
+		{"revision 1 evaluated again, not concluded", cnx(1, cnxapi.StatusPending, cnxapi.ReasonAwaitingDecision), "OK", "", "OK", []bool{false, false}},
+		{"no check of the current revision yet", cnx(3, cnxapi.StatusPending, cnxapi.ReasonOrderRevised), "OK", "", "OK", []bool{false, false}},
+		{"expired and unpaid: the payment condition alone, excepted", both(cnx(1, cnxapi.StatusExpired, cnxapi.ReasonExpired), unpaid),
+			api.CodeCommercialReleaseBlocked, shipment.GuardPaymentCondition, "OK", []bool{false, false}},
+		{"a decided true match", pty(ptyapi.ScreeningBlocked, ptyapi.ReasonTrueMatch), api.CodePartyScreeningNotClear, shipment.GuardPartyScreening,
+			api.CodePartyScreeningNotClear, []bool{false, false}},
+		{"the negative list", pty(ptyapi.ScreeningBlocked, ptyapi.ReasonNegativeList), api.CodePartyScreeningNotClear,
+			shipment.GuardPartyScreening, api.CodePartyScreeningNotClear, []bool{false, false}},
+		{"a suspected match", pty(ptyapi.ScreeningMatch, ptyapi.ReasonSuspectedMatch), api.CodePartyScreeningNotClear,
+			shipment.GuardPartyScreening, api.CodePartyScreeningNotClear, []bool{false, false}},
+		{"a screening list with a newer version", pty(ptyapi.ScreeningPending, ptyapi.ReasonListUpdated), api.CodePartyScreeningNotClear,
+			shipment.GuardPartyScreening, api.CodePartyScreeningNotClear, []bool{false, false}},
+		{"the screening expired", pty(ptyapi.ScreeningExpired, ptyapi.ReasonExpired), api.CodePartyScreeningNotClear,
+			shipment.GuardPartyScreening, api.CodePartyScreeningNotClear, []bool{false, false}},
+		{"the party changed", pty(ptyapi.ScreeningPending, ptyapi.ReasonPartyChanged), api.CodePartyScreeningNotClear,
+			shipment.GuardPartyScreening, api.CodePartyScreeningNotClear, []bool{false, false}},
+		{"screened and unpaid: screening first", both(pty(ptyapi.ScreeningBlocked, ptyapi.ReasonTrueMatch), unpaid),
+			api.CodePartyScreeningNotClear, shipment.GuardPartyScreening, api.CodePartyScreeningNotClear, []bool{false, false}},
+		{"compliance before screening", both(cnx(3, cnxapi.StatusBlocked, cnxapi.ReasonBlocked), pty(ptyapi.ScreeningBlocked, ptyapi.ReasonTrueMatch)),
+			api.CodeTradeComplianceNotClear, shipment.GuardTradeCompliance, api.CodeTradeComplianceNotClear, []bool{false, true}},
+	} {
+		g := amendedGuards()
+		c.edit(g)
+		j := judgedRelease(t, g, &releaseRootsOf{existing: shipmentOf(shipment.StatusConfirmed), confirmation: conf}, release.ScopeDocuments)
+		if codeOf(j.failure) != c.failure || j.guard != c.guard || codeOf(j.other) != c.other || !slices.Equal(g.calls, documentsCalls) {
+			t.Errorf("%s: %s %s %s %v", c.name, codeOf(j.failure), j.guard, codeOf(j.other), g.calls)
+			continue
+		}
+		r := j.bindings.Rechecked
+		if len(r.TradeCompliance) != 2 || r.TradeCompliance[0].Blocked != c.blocked[0] || r.TradeCompliance[1].Blocked != c.blocked[1] ||
+			r.Screenings[0].Status != g.screening.Status || r.Screenings[0].Reason != g.screening.Reason || j.bindings.Screenings[0].ScreeningID != "scr.1" {
+			t.Errorf("%s: rechecked %+v", c.name, r)
+		}
+		if c.guard == shipment.GuardPartyScreening && path0(j.failure) != "/shipment/parties/0" ||
+			c.guard == shipment.GuardTradeCompliance && path0(j.failure) != "/args/shipment_id" {
+			t.Errorf("%s: at %s", c.name, path0(j.failure))
+		}
+	}
+}
+
+func path0(r *kernel.Rejection) string {
+	if r == nil || len(r.Fields) == 0 {
+		return ""
+	}
+	return r.Fields[0].Path
 }

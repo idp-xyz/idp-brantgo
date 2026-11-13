@@ -179,6 +179,9 @@ type (
 		// shipment (confirmed.go): the goods' bindings above are the confirmation's, and Payment and
 		// Order were judged on Order's revision, the order's current one.
 		Confirmation *ConfirmationBinding `json:"confirmation,omitempty"`
+		// Rechecked is set with Confirmation since S5 C1c (blocks.go): what CNX and PTY answered when
+		// the documents release asked them again, beside the confirmation's verdicts above.
+		Rechecked *RecheckBinding `json:"rechecked,omitempty"`
 	}
 )
 

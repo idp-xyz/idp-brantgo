@@ -82,6 +82,12 @@ func (s Service) judgeRelease(ctx context.Context, exec bentopg.Executor, r *rel
 	return s.judge(ctx, exec, r.existing, r.consumed, releaseScope, r.release, now)
 }
 
+func complianceVerdict(b shipment.OrderBinding, v cnxapi.TradeComplianceVerdict) release.ComplianceVerdict {
+	return release.ComplianceVerdict{Order: b, Status: v.Status, Reason: v.Reason, CheckID: v.CheckID,
+		DecisionID: v.DecisionID, LicenseRequired: v.LicenseRequired, RegulationID: v.RegulationID, RegulationRevision: v.RegulationRevision,
+		ValidUntil: v.ValidUntil}
+}
+
 func paymentVerdict(v stlapi.PaymentVerdict) release.PaymentVerdict {
 	return release.PaymentVerdict{Scope: v.Query.Scope, Satisfied: v.Satisfied(), Status: v.Status, Reason: v.Reason, OrderRevision: v.OrderRevision,
 		OrderHash: v.OrderHash, Currency: v.Currency, RequiredMinor: v.RequiredMinor, AppliedMinor: v.AppliedMinor, StageID: v.StageID,
@@ -130,19 +136,13 @@ func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.
 			return nil, err
 		}
 	}
-	for _, id := range sh.ScreenedParties() {
-		g, err := s.Upstream.Screening.GuardScreening(ctx, exec, id, now)
-		if err != nil {
-			return nil, err
-		}
-		e, refused := sh.CheckScreening(id, shipment.ScreeningVerdict{Clear: g.Clear, Status: g.Status, Reason: g.Reason, ScreeningID: g.ScreeningID,
-			PartyRevision: g.PartyRevision})
-		j.entries = append(j.entries, e)
-		j.bindings.Screenings = append(j.bindings.Screenings, release.ScreeningBinding{PartyID: id, Status: g.Status, ScreeningID: g.ScreeningID,
-			PartyRevision: g.PartyRevision})
-		if err = j.note(shipment.GuardPartyScreening, refused); err != nil {
-			return nil, err
-		}
+	screened, err := s.screen(ctx, exec, j, sh, now)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range screened {
+		j.bindings.Screenings = append(j.bindings.Screenings, release.ScreeningBinding{PartyID: p.PartyID, Status: p.Status, ScreeningID: p.ScreeningID,
+			PartyRevision: p.PartyRevision})
 	}
 	before := sh.Before(consumed)
 	for _, u := range sh.Deliveries() {
@@ -192,6 +192,30 @@ func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.
 	return j, nil
 }
 
+// screen asks PTY's PartyScreeningGuard v1 (R44) with FUL's executor on every party of sh, in party
+// ID order, each keeping the party's screening FOR SHARE until the transaction ends; it records
+// every answer in j's evidence, notes the first party not screened clear (PARTY_SCREENING_NOT_CLEAR,
+// shipment.CheckScreening) and returns the answers.
+func (s Service) screen(ctx context.Context, exec bentopg.Executor, j *judgement, sh *shipment.Shipment, now time.Time) ([]release.RecheckedScreening,
+	error) {
+	out := []release.RecheckedScreening{}
+	for _, id := range sh.ScreenedParties() {
+		g, err := s.Upstream.Screening.GuardScreening(ctx, exec, id, now)
+		if err != nil {
+			return nil, err
+		}
+		e, refused := sh.CheckScreening(id, shipment.ScreeningVerdict{Clear: g.Clear, Status: g.Status, Reason: g.Reason, ScreeningID: g.ScreeningID,
+			PartyRevision: g.PartyRevision})
+		j.entries = append(j.entries, e)
+		out = append(out, release.RecheckedScreening{PartyID: id, Status: g.Status, Reason: g.Reason, ScreeningID: g.ScreeningID,
+			PartyRevision: g.PartyRevision})
+		if err = j.note(shipment.GuardPartyScreening, refused); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // judgePayment asks STL's PaymentConditionGuard v1 (R45) for scope on the order binding j judges
 // (j.order), with FUL's executor, and records its answer: satisfied, covered by a live exception of
 // rel, or COMMERCIAL_RELEASE_BLOCKED.
@@ -213,13 +237,16 @@ func (s Service) judgePayment(ctx context.Context, exec bentopg.Executor, j *jud
 
 // judgeDocuments judges, with FUL's executor in the caller's transaction (which holds the shipment,
 // the order's fulfilment root, the documents release and — for document_release.record — the
-// document set), the documents release of confirmed shipment sh by the owner's rule of 2026-11-12
-// (S5 C1b; release/confirmed.go): the goods' guards are not asked again — goods and entry are what
-// the shipment's confirmation bound (release.Confirmation) —; TRD's order state read, which takes no
-// lock, gives the order's current revision and hash (R27); STL's PaymentConditionGuard v1 for the
-// documents scope runs on that revision, which a live exception of rel may cover (R45, D-5); then
-// TRD's OrderGuard v1 on that binding (R27), each keeping its row FOR SHARE until the transaction
-// ends — context code order, STL before TRD. rel may be nil.
+// document set), the documents release of confirmed shipment sh by the owner's rules of 2026-11-12
+// (S5 C1b, release/confirmed.go; S5 C1c, release/blocks.go): goods and entry are what the shipment's
+// confirmation bound (release.Confirmation) — the export licence, supplier deliveries, quality
+// releases and FUL-INV-001 are not asked again —; TRD's order state read, which takes no lock, gives
+// the order's current revision and hash (R27); then, each keeping its rows FOR SHARE until the
+// transaction ends, in context code order: CNX's TradeComplianceGuard v1 on the revision the goods
+// left under and, when later, on the current revision, refusing only a blocked conclusion (R56,
+// CNX-INV-001); PTY's PartyScreeningGuard v1 on every party, refusing anything but clear (R44); STL's
+// PaymentConditionGuard v1 for the documents scope on the current revision, which a live exception
+// of rel may cover (R45, D-5); TRD's OrderGuard v1 on the current binding (R27). rel may be nil.
 func (s Service) judgeDocuments(ctx context.Context, exec bentopg.Executor, sh *shipment.Shipment, goods release.Bindings, entry shipment.Entry,
 	rel *release.Release, now time.Time) (*judgement, error) {
 	const at = "/args/shipment_id"
@@ -229,6 +256,27 @@ func (s Service) judgeDocuments(ctx context.Context, exec bentopg.Executor, sh *
 		return nil, err
 	}
 	j.order = release.Current(sh.Order, st.Known, st.OrderRevision, st.OrderHash)
+	again := &release.RecheckBinding{TradeCompliance: []release.RecheckedCompliance{}}
+	revisions := []shipment.OrderBinding{sh.Order}
+	if j.order.OrderRevision > sh.Order.OrderRevision {
+		revisions = append(revisions, j.order)
+	}
+	for i, b := range revisions {
+		cv, err := s.Upstream.Compliance.GuardTradeCompliance(ctx, exec, cnxapi.OrderBinding{OrderID: b.OrderID, OrderRevision: b.OrderRevision,
+			OrderHash: b.OrderHash}, now)
+		if err != nil {
+			return nil, err
+		}
+		e, seen, refused := release.CheckComplianceBlock(complianceVerdict(b, cv), i > 0, at)
+		j.entries, again.TradeCompliance = append(j.entries, e), append(again.TradeCompliance, seen)
+		if err = j.note(shipment.GuardTradeCompliance, refused); err != nil {
+			return nil, err
+		}
+	}
+	if again.Screenings, err = s.screen(ctx, exec, j, sh, now); err != nil {
+		return nil, err
+	}
+	j.bindings.Rechecked = again
 	if err = s.judgePayment(ctx, exec, j, release.ScopeDocuments, rel, now); err != nil {
 		return nil, err
 	}

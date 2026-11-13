@@ -1,6 +1,7 @@
 package release
 
 import (
+	"slices"
 	"strconv"
 	"time"
 
@@ -16,9 +17,11 @@ import (
 //   - money on the order's current revision: STL's PaymentConditionGuard v1 for the documents scope
 //     on the revision and hash TRD shows now, because what the customer owes now is that
 //     revision's;
-//   - goods as confirmed: trade compliance, the export licence, party screening, supplier
-//     deliveries, quality releases and FUL-INV-001 are not asked again; the release reuses what the
-//     consumed shipment release of the shipment bound (Confirmation) and names it;
+//   - goods as confirmed: the export licence, supplier deliveries, quality releases and FUL-INV-001
+//     are not asked again, and trade compliance's clear conclusion stands; the release reuses what
+//     the consumed shipment release of the shipment bound (Confirmation) and names it — but a block
+//     that appeared after the confirmation still stops it (owner decision 2026-11-12 ~23:05, S5 C1c,
+//     blocks.go): CNX is asked again for a blocked conclusion, PTY for every party's screening;
 //   - the order on that current binding with TRD's OrderGuard v1: active, or ended by order.close or
 //     order.close_remainder (status closed) — the documents of what shipped are still released —,
 //     but not cancelled (an order with a confirmed shipment cannot be cancelled since S5 C4a:
@@ -43,7 +46,9 @@ const GuardConfirmation = "ful.shipment_confirmation"
 // ConfirmationBinding is the shipment confirmation a documents release of a confirmed shipment
 // reuses: the consumed shipment release, its version, the evaluation whose bindings the goods'
 // guards repeat, the SHA-256 of the confirming transaction's guard evidence, when it was consumed,
-// the order revision the goods left under and the guards reused.
+// the order revision the goods left under, the guards whose confirmation verdict it relies on
+// (Reused) and the guards it asked again in its own transaction (Rechecked, S5 C1c: CNX for a block,
+// PTY for clear; their answers are Bindings.Rechecked). An evaluation before C1c has no Rechecked.
 type ConfirmationBinding struct {
 	ReleaseID      string    `json:"release_id"`
 	ReleaseVersion int64     `json:"release_version"`
@@ -52,12 +57,14 @@ type ConfirmationBinding struct {
 	ConfirmedAt    time.Time `json:"confirmed_at"`
 	OrderRevision  int64     `json:"order_revision"`
 	Reused         []string  `json:"reused"`
+	Rechecked      []string  `json:"rechecked,omitempty"`
 }
 
 // Confirmation returns what the shipment release r, consumed by shipment.confirm, lets a documents
 // release of the same shipment reuse: the bindings of the goods' guards of its latest evaluation
 // (the one in force when the confirmation consumed it) with the binding that names the
 // confirmation, and the evidence entry pinning the confirming transaction's sealed guard evidence.
+// Party screening is bound as the confirmation saw it but not reused: it is asked again (blocks.go).
 // ok is false when r is not such a release (none, not consumed, never evaluated).
 func (r *Release) Confirmation() (Bindings, Entry, bool) {
 	if r == nil || r.Scope != ScopeShipment || r.Status != StatusConsumed || r.Consumption == nil || len(r.Evaluations) == 0 {
@@ -73,8 +80,6 @@ func (r *Release) Confirmation() (Bindings, Entry, bool) {
 	}
 	if out.Screenings == nil {
 		out.Screenings = []ScreeningBinding{}
-	} else {
-		reused = append(reused, shipment.GuardPartyScreening)
 	}
 	if out.Deliveries == nil {
 		out.Deliveries = []DeliveryBinding{}
@@ -89,7 +94,7 @@ func (r *Release) Confirmation() (Bindings, Entry, bool) {
 	reused = append(reused, GuardFulfilment)
 	c := r.Consumption
 	out.Confirmation = &ConfirmationBinding{ReleaseID: r.ID, ReleaseVersion: r.RowVersion, EvaluationSeq: e.Seq, GuardsSHA256: c.EntriesSHA256,
-		ConfirmedAt: c.Consumed.At, OrderRevision: r.Order.OrderRevision, Reused: reused}
+		ConfirmedAt: c.Consumed.At, OrderRevision: r.Order.OrderRevision, Reused: reused, Rechecked: slices.Clone(Rechecked)}
 	entry := Entry{Name: GuardConfirmation, Value: r.ID + "/v" + strconv.FormatInt(r.RowVersion, 10) + "/" + r.Status + "/" + c.EntriesSHA256 +
 		"/r" + strconv.FormatInt(r.Order.OrderRevision, 10)}
 	return out, entry, true

@@ -111,6 +111,11 @@ const (
 	// shipment confirmation whose verdicts it reused (S5 C1b): "<release>/v<version>/consumed/<guard
 	// evidence SHA-256>/r<order revision the goods left under>".
 	GuardConfirmation = "ful.shipment_confirmation"
+	// GuardTradeComplianceCurrent names, in the evidence of the documents release of a confirmed
+	// shipment whose order moved to a later revision, CNX's answer for that current revision (S5
+	// C1c): "<status>/<reason>/<check>/<decision>/<license_required>/r<revision>";
+	// GuardTradeCompliance names the same for the revision the goods left under.
+	GuardTradeComplianceCurrent = "cnx.trade_compliance_guard.v1/current"
 
 	MaxLines          = 200
 	MaxPackages       = 500
