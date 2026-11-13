@@ -14,7 +14,7 @@ func TestChargeAndOrderResultContracts(t *testing.T) {
 		return RecordCharge{IdempotencyKey: "k", ChargeID: "freight.sa", Status: ChargeEstimated,
 			Source:        ChargeSource{Kind: ChargeSourceLogistics, PartyID: "forwarder.1", Reference: "OFFER-1"},
 			Beneficiaries: []ChargeTarget{{Kind: ChargeTargetShipment, OrderID: "order.sa", ShipmentID: "shipment.60"}},
-			FeeCategory:   &fee, Currency: &cur, Conversion: &ChargeConversion{Kind: ConversionSameCurrency}, Amount: "500.00",
+			FeeCategory:   &fee, Currency: &cur, Conversion: &ChargeConversion{Kind: ConversionSameCurrency}, CostComponent: ComponentPreCarriage, Amount: "500.00",
 			OccurredOn: "2026-11-12", AnalysisOn: "2026-11-30", Basis: "预计运费"}
 	}
 	if err := record().Validate(); err != nil {

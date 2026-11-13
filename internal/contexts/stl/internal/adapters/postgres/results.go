@@ -49,13 +49,13 @@ func InsertCharge(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, c
 	_, err := exec.Exec(ctx, `INSERT INTO brant_stl.charge (tenant_id, company_id, charge_id, status, version, source_kind, source_party_id,
 		source_reference, fee_category_id, fee_category_revision, currency, minor_units, currency_revision, estimate_minor, amount_minor,
 		conversion_kind, fx_rate_id, fx_rate_revision, fx_rate_hash, fx_rate, fx_target_currency, occurred_on, analysis_on, basis, evidence_ids,
-		owner_actor_id, owner_team_id, recorded_by_kind, recorded_by_id, record_epoch, recorded_at, allocation_seq, updated_at)
+		owner_actor_id, owner_team_id, recorded_by_kind, recorded_by_id, record_epoch, recorded_at, allocation_seq, updated_at, cost_component, recharged)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::text::numeric, $15::text::numeric, $16, $17, $18, $19,
-		$20::text::numeric, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, 0, $31)`,
+		$20::text::numeric, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, 0, $31, $32, $33)`,
 		t, co, c.ID, c.Status, c.Version, c.Source.Kind, nullable(c.Source.PartyID), nullable(c.Source.Reference), c.FeeCategory.ID,
 		c.FeeCategory.Revision, cur.Code(), int16(cur.MinorUnits()), c.CurrencyRevision, estimate, c.Amount.MinorString(), c.Conversion.Kind,
 		rateID, rateRevision, rateHash, rate, rateTo, c.OccurredOn, c.AnalysisOn, c.Basis, nonNil(c.EvidenceIDs), c.OwnerActor, team(c.OwnerTeam),
-		kind, id, epoch, at)
+		kind, id, epoch, at, c.CostComponent, c.Recharged)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ const chargeColumns = `charge_id, status, version, source_kind, coalesce(source_
 	amount_minor::text, conversion_kind, fx_rate_id, fx_rate_revision, fx_rate_hash, fx_rate::text, fx_target_currency, occurred_on, analysis_on,
 	basis, evidence_ids, owner_actor_id, coalesce(owner_team_id, ''), recorded_by_kind, recorded_by_id, record_epoch, recorded_at, billed_by_kind,
 	billed_by_id, bill_epoch, billed_at, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at, confirm_evidence_ids, confirm_reason,
-	allocation_seq`
+	allocation_seq, cost_component, recharged`
 
 func scanCharge(row pgx.Row) (*charge.Charge, error) {
 	var c charge.Charge
@@ -151,7 +151,7 @@ func scanCharge(row pgx.Row) (*charge.Charge, error) {
 	err := row.Scan(&c.ID, &c.Status, &c.Version, &c.Source.Kind, &c.Source.PartyID, &c.Source.Reference, &c.EstimateReference, &c.FeeCategory.ID,
 		&c.FeeCategory.Revision, &code, &units, &c.CurrencyRevision, &estimate, &amount, &c.Conversion.Kind, &rateID, &rateRevision, &rateHash, &rate,
 		&rateTo, &c.OccurredOn, &c.AnalysisOn, &c.Basis, &c.EvidenceIDs, &c.OwnerActor, &c.OwnerTeam, &rKind, &rBy, &rEpoch, &rAt, &bKind, &bBy,
-		&bEpoch, &bAt, &cKind, &cBy, &cEpoch, &cAt, &c.ConfirmEvidence, &cReason, &c.AllocationSeq)
+		&bEpoch, &bAt, &cKind, &cBy, &cEpoch, &cAt, &c.ConfirmEvidence, &cReason, &c.AllocationSeq, &c.CostComponent, &c.Recharged)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -439,10 +439,10 @@ func InsertSnapshot(ctx context.Context, exec bentopg.Executor, sc kernel.Scope,
 	t, co := ts(sc)
 	kind, id, epoch, at := fact(s.By)
 	_, err := exec.Exec(ctx, `INSERT INTO brant_stl.order_result_snapshot (tenant_id, company_id, order_id, seq, order_revision, order_hash, currency,
-		minor_units, net_sales_minor, result_minor, content, content_sha256, reason, closed_by_kind, closed_by_id, close_epoch, closed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text::numeric, $10::text::numeric, $11::text::jsonb, $12, $13, $14, $15, $16, $17)`,
+		minor_units, net_sales_minor, result_minor, content, content_sha256, reason, closed_by_kind, closed_by_id, close_epoch, closed_at, cancelled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text::numeric, $10::text::numeric, $11::text::jsonb, $12, $13, $14, $15, $16, $17, $18)`,
 		t, co, orderID, s.Seq, s.OrderRevision, s.OrderHash, s.Currency.Code(), int16(s.Currency.MinorUnits()), s.NetSales.MinorString(),
-		s.Result.MinorString(), string(s.Content), s.ContentSHA256, nullable(s.Reason), kind, id, epoch, at)
+		s.Result.MinorString(), string(s.Content), s.ContentSHA256, nullable(s.Reason), kind, id, epoch, at, s.Cancelled)
 	return err
 }
 

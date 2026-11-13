@@ -103,6 +103,7 @@ type Snapshot struct {
 	ContentSHA256 string
 	Reason        string
 	By            fundrecord.Act
+	Cancelled     bool // S5R-D42: the result of a cancelled order
 }
 
 // Reopening is one order_result.reopen of snapshot Seq, with its reason and evidence.

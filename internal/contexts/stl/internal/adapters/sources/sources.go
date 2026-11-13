@@ -168,7 +168,12 @@ func (p PUR) ResolveOrderPurchases(ctx context.Context, orderID string) ([]appli
 			}
 			v := status[r.CommitmentID]
 			line := application.OrderPurchaseLine{CommitmentID: r.CommitmentID, OrderLineID: r.OrderLineID, Status: v.Status, SupplierID: v.SupplierID,
-				Currency: l.Currency, MinorUnits: l.MinorUnits, NetMinor: l.NetMinor}
+				Currency: l.Currency, MinorUnits: l.MinorUnits, NetMinor: l.NetMinor, PurchaseQuantity: l.Line.PurchaseQuantity,
+				VerifiedQuantity: l.VerifiedQuantity}
+			for _, d := range l.Dispositions { // S5R-D42: approved dispositions
+				line.Dispositions = append(line.Dispositions, application.OrderDisposition{DispositionID: d.DispositionID, Disposition: d.Disposition,
+					Quantity: d.Quantity})
+			}
 			for _, d := range l.Deliveries {
 				line.Deliveries = append(line.Deliveries, api.SettlementSourceRef{DeliveryID: d.Ref.DeliveryID, LineID: d.Ref.LineID, Version: d.Ref.Version})
 			}

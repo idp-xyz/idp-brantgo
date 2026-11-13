@@ -138,6 +138,11 @@ func LoadFund(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, id st
 	if err != nil || f == nil {
 		return f, err
 	}
+	if f.Reversed() {
+		if f.Reversal, err = loadFundReversal(ctx, exec, sc, id); err != nil {
+			return nil, err
+		}
+	}
 	rows, err := exec.Query(ctx, `SELECT seq, resolution, amount_minor::text, evidence_ids, reason, resolved_by_kind, resolved_by_id, resolve_epoch,
 		resolved_at FROM brant_stl.fund_difference_resolution WHERE tenant_id = $1 AND company_id = $2 AND fund_record_id = $3 ORDER BY seq`, t, c, id)
 	if err != nil {
@@ -159,12 +164,13 @@ func LoadFund(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, id st
 	return f, err
 }
 
-// FundByReference returns the fund record the bank reference is recorded on for the account, "" when none.
+// FundByReference returns the fund record that stands with the bank reference on the account, "" when none (a
+// reversed record frees its reference, S5R-D22).
 func FundByReference(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, account, reference string) (string, error) {
 	t, c := ts(sc)
 	var id string
 	err := exec.QueryRow(ctx, `SELECT fund_record_id FROM brant_stl.fund_record WHERE tenant_id = $1 AND company_id = $2 AND bank_account_id = $3
-		AND bank_reference = $4`, t, c, account, reference).Scan(&id)
+		AND bank_reference = $4 AND status <> 'reversed'`, t, c, account, reference).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
@@ -179,12 +185,13 @@ type Draw struct {
 	Amount       kernel.Money
 }
 
-// Draws returns what is drawn on fund record f.
+// Draws returns what is drawn on fund record f and stands: a reversed refund, return or conversion draws nothing
+// (S5R-D22).
 func Draws(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, f *fr.FundRecord) ([]Draw, error) {
 	t, c := ts(sc)
 	rows, err := exec.Query(ctx, `SELECT fund_record_id, kind, CASE WHEN kind = 'fx_conversion' THEN sold_minor ELSE received_minor END::text
-		FROM brant_stl.fund_record WHERE tenant_id = $1 AND company_id = $2 AND source_fund_record_id = $3 ORDER BY recorded_at, fund_record_id`,
-		t, c, f.ID)
+		FROM brant_stl.fund_record WHERE tenant_id = $1 AND company_id = $2 AND source_fund_record_id = $3 AND status <> 'reversed'
+		ORDER BY recorded_at, fund_record_id`, t, c, f.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -356,18 +363,20 @@ func InsertApplication(ctx context.Context, exec bentopg.Executor, sc kernel.Sco
 		installment = &x.InstallmentSeq
 	}
 	cv := conversionArgs(x.Conversion)
+	sr := settlementArgs(x.Settlement)
 	_, err := exec.Exec(ctx, `INSERT INTO brant_stl.application (tenant_id, company_id, application_id, fund_record_id, target_kind, order_id,
 		order_revision, stage_id, currency, minor_units, amount_minor, status, version, owner_actor_id, owner_team_id, applied_by_kind, applied_by_id,
 		apply_epoch, applied_at, updated_at, statement_id, installment_seq, moved_from, credit_note_id, source_currency, source_minor_units,
 		source_amount_minor, fx_rate_id, fx_rate_revision, fx_rate_hash, fx_rate, analysis_currency, analysis_minor_units, analysis_rate,
-		fx_difference_minor, payer_basis, payer_profile_revision) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::numeric, $12, $13,
+		fx_difference_minor, payer_basis, payer_profile_revision, charge_id, settlement_rate_id, settlement_rate_revision, settlement_rate_hash,
+		settlement_rate, settlement_currency, settlement_minor_units) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::numeric, $12, $13,
 		$14, $15, $16, $17, $18, $19, $19, $20, $21, $22, $23, $24, $25, $26::text::numeric, $27, $28, $29, $30::text::numeric, $31, $32,
-		$33::text::numeric, $34::text::numeric, coalesce(nullif($35, ''), 'customer'), nullif($36, 0))`,
+		$33::text::numeric, $34::text::numeric, coalesce(nullif($35, ''), 'customer'), nullif($36, 0), $37, $38, $39, $40, $41::text::numeric, $42, $43)`,
 		t, c, x.ID, nullable(x.FundRecordID), x.TargetKind, nullable(x.OrderID), revision, nullable(x.StageID), x.Amount.Currency().Code(),
 		int16(x.Amount.Currency().MinorUnits()), x.Amount.MinorString(), x.Status, x.Version, x.OwnerActor, team(x.OwnerTeam), kind, id, epoch, at,
 		nullable(x.StatementID), installment, nullable(x.MovedFrom), nullable(x.CreditNoteID), cv.currency, cv.units, cv.amount, cv.rateID,
 		cv.rateRevision, cv.rateHash, cv.rate, cv.analysisCurrency, cv.analysisUnits, cv.analysisRate, cv.difference, x.PayerBasis,
-		x.PayerProfileRevision)
+		x.PayerProfileRevision, nullable(x.ChargeID), sr.id, sr.revision, sr.hash, sr.rate, sr.currency, sr.units)
 	return err
 }
 
@@ -376,7 +385,9 @@ const applicationColumns = `a.application_id, coalesce(a.fund_record_id, ''), a.
 	a.applied_by_kind, a.applied_by_id, a.apply_epoch, a.applied_at, u.unapplied_by_kind, u.unapplied_by_id, u.unapply_epoch, u.unapplied_at, u.reason,
 	coalesce(a.statement_id, ''), coalesce(a.installment_seq, 0), coalesce(a.moved_from, ''), coalesce(a.credit_note_id, ''), a.source_currency,
 	a.source_minor_units, a.source_amount_minor::text, a.fx_rate_id, a.fx_rate_revision, a.fx_rate_hash, a.fx_rate::text, a.analysis_currency,
-	a.analysis_minor_units, a.analysis_rate::text, a.fx_difference_minor::text, a.payer_basis, coalesce(a.payer_profile_revision, 0)`
+	a.analysis_minor_units, a.analysis_rate::text, a.fx_difference_minor::text, a.payer_basis, coalesce(a.payer_profile_revision, 0),
+	coalesce(a.charge_id, ''), a.settlement_rate_id, a.settlement_rate_revision, a.settlement_rate_hash, a.settlement_rate::text,
+	a.settlement_currency, a.settlement_minor_units`
 
 const applicationFrom = ` FROM brant_stl.application a LEFT JOIN brant_stl.application_unapply u ON u.tenant_id = a.tenant_id
 	AND u.company_id = a.company_id AND u.application_id = a.application_id`
@@ -391,10 +402,12 @@ func scanApplication(row pgx.Row) (*fa.Application, error) {
 	var uEpoch *int64
 	var uAt *time.Time
 	var cv conversionRow
+	var sr settlementRow
 	err := row.Scan(&x.ID, &x.FundRecordID, &x.TargetKind, &x.OrderID, &x.OrderRevision, &x.StageID, &code, &units, &amount, &x.Status, &x.Version,
 		&x.OwnerActor, &x.OwnerTeam, &kind, &by, &epoch, &at, &uKind, &uBy, &uEpoch, &uAt, &uReason, &x.StatementID, &x.InstallmentSeq, &x.MovedFrom,
 		&x.CreditNoteID, &cv.currency, &cv.units, &cv.amount, &cv.rateID, &cv.rateRevision, &cv.rateHash, &cv.rate, &cv.analysisCurrency,
-		&cv.analysisUnits, &cv.analysisRate, &cv.difference, &x.PayerBasis, &x.PayerProfileRevision)
+		&cv.analysisUnits, &cv.analysisRate, &cv.difference, &x.PayerBasis, &x.PayerProfileRevision, &x.ChargeID, &sr.id, &sr.revision, &sr.hash,
+		&sr.rate, &sr.currency, &sr.units)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -409,6 +422,9 @@ func scanApplication(row pgx.Row) (*fa.Application, error) {
 		return nil, err
 	}
 	if x.Conversion, err = cv.conversion(); err != nil {
+		return nil, err
+	}
+	if x.Settlement, err = sr.settlement(); err != nil {
 		return nil, err
 	}
 	x.Applied = frAct(kind, by, epoch, at, "")

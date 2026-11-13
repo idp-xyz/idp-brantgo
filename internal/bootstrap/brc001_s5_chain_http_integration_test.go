@@ -1169,8 +1169,9 @@ func (c *brcS5) charge() {
 	r := c.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.brc", "expected_version": 0,
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "log.1"},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": "order.1"}}, "fee_category": c.freight, "currency": c.usd,
-		"conversion": map[string]any{"kind": "same_currency"}, "amount": "60.00", "occurred_on": today(), "analysis_on": today(),
-		"basis": "provider.1 海运报价 log.1：F1 60.00 USD"})
+		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": "60.00", "occurred_on": today(),
+		"analysis_on": today(),
+		"basis":       "provider.1 海运报价 log.1：F1 60.00 USD"})
 	if r["status"] != "estimated" {
 		c.t.Fatalf("charge.record %v", r)
 	}

@@ -101,6 +101,11 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandRecordOpening, api.CommandRecordOpening),
 		{Command: api.CommandGetOpening, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandOpenings, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// S5R-D20, S5R-D22 (R8): payable_adjustment.request (treasury), payable_adjustment.confirm and fund.reverse (credit
+		// manager) are humanOnlyCommands, each under the permission of its name (role templates).
+		authorization.HumanOnly(api.CommandRequestPayableAdjustment, api.CommandRequestPayableAdjustment),
+		authorization.HumanOnly(api.CommandConfirmPayableAdjustment, api.CommandConfirmPayableAdjustment),
+		authorization.HumanOnly(api.CommandReverseFund, api.CommandReverseFund),
 	}
 }
 
@@ -112,6 +117,9 @@ type Upstream struct {
 	Sources    evdapi.Queries // EVD SourceRef v1 (R75)
 	Shipments  Shipments      // FUL ShipmentLineRef v1 (R30), STL's port (sources.go)
 	Deliveries Deliveries     // PUR PurchaseSettlementSource v1 (R31), STL's port
+	// Invoices is CNX's PurchaseInvoiceRef v1 (R55, S5R-D20), STL's port (invoices.go); optional: nil is a CNX that
+	// shows STL no purchase invoice (the invoice_reversed flag reads not shown; an adjustment's invoice is not found).
+	Invoices PurchaseInvoices
 }
 
 // Complete reports whether every upstream is wired.
@@ -154,6 +162,9 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	case api.CommandRecordOpening:
 		o, err := postgres.LoadOpening(ctx, exec, scope(ctx), id, false)
 		return err == nil && o != nil && d.Sees(o.OwnerActor, o.OwnerTeam), err
+	case api.CommandRequestPayableAdjustment, api.CommandConfirmPayableAdjustment:
+		a, err := postgres.LoadAdjustment(ctx, exec, scope(ctx), id)
+		return err == nil && a != nil && d.Sees(a.OwnerActor, a.OwnerTeam), err
 	}
 	sc := scope(ctx)
 	var subjects []string
@@ -329,6 +340,15 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.RecordOpening:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandRecordOpening, key, c
+	case api.RequestPayableAdjustment:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRequestPayableAdjustment, key, c
+	case api.ConfirmPayableAdjustment:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandConfirmPayableAdjustment, key, c
+	case api.ReverseFund:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReverseFund, key, c
 	}
 	return "", "", nil
 }

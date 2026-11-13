@@ -51,8 +51,10 @@ func installmentViews(st *settlement.Statement, applied map[int]kernel.Money, no
 	return out
 }
 
-// balance is statement st's receivable or payable now, with the applications d sees.
-func balance(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, st *settlement.Statement, d authorization.Decision, now time.Time) (api.BalanceView, error) {
+// balance is statement st's receivable or payable now, with the applications d sees; a payable also with its
+// adjustments and its invoice_reversed flag from inv, what CNX showed before the read (S5R-D20).
+func balance(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, st *settlement.Statement, d authorization.Decision, now time.Time,
+	inv invoiceFacts) (api.BalanceView, error) {
 	applied, err := postgres.InstallmentApplied(ctx, exec, sc, st)
 	if err != nil {
 		return api.BalanceView{}, err
@@ -61,15 +63,47 @@ func balance(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, st *se
 	if err != nil {
 		return api.BalanceView{}, err
 	}
+	adjusted, err := postgres.Adjusted(ctx, exec, sc, st)
+	if err != nil {
+		return api.BalanceView{}, err
+	}
 	open := balanceOpen(st, applied)
+	// S5R-D20: what payments put on the installments, the payable's confirmed adjustments apart.
+	payments := map[int]kernel.Money{}
+	for seq, a := range applied {
+		payments[seq] = a
+	}
+	if adjusted.Sign() > 0 && len(st.Installments) > 0 {
+		seq := st.Installments[0].Seq
+		payments[seq], _ = payments[seq].Sub(adjusted)
+	}
 	paid := zeroIn(st.Currency())
-	for _, a := range applied {
+	for _, a := range payments {
 		paid, _ = paid.Add(a)
 	}
 	v := api.BalanceView{StatementID: st.ID, Kind: fa.TargetOf(st.Kind), Status: st.Status, CounterpartyID: st.CounterpartyID, OrderID: st.OrderID,
 		OrderRevision: st.OrderRevision, Currency: st.Currency().Code(), AmountMinor: st.Amount.MinorString(), AppliedMinor: paid.MinorString(),
 		OpenMinor: open.MinorString(), Installments: installmentViews(st, applied, now), Applications: []api.AllocationView{},
+		AdjustedMinor: adjusted.MinorString(), Adjustments: []api.PayableAdjustmentView{}, Invoices: []api.PurchaseInvoiceView{},
 		ConfirmedAt: st.Confirmed.At, CheckedAt: now}
+	if st.Kind == settlement.KindPurchase {
+		list, err := postgres.Adjustments(ctx, exec, sc, st.ID)
+		if err != nil {
+			return api.BalanceView{}, err
+		}
+		v.Adjustments = adjustmentViews(list, st, d)
+		v.InvoicesShown = inv.shown
+		v.InvoiceReversed, v.Invoices = invoiceFlag(st, inv)
+	}
+	if adjusted.Sign() > 0 {
+		// An installment's applied amount shows its payments; its open amount is net of the adjustments as well.
+		for i := range v.Installments {
+			x := &v.Installments[i]
+			if p, ok := payments[x.Seq]; ok {
+				x.AppliedMinor = p.MinorString()
+			}
+		}
+	}
 	for _, i := range v.Installments {
 		if i.OpenMinor != "0" && (v.EarliestDueAt.IsZero() || i.DueAt.Before(v.EarliestDueAt)) {
 			v.EarliestDueAt = i.DueAt
@@ -95,16 +129,63 @@ func visibleStatement(ctx context.Context, exec bentopg.Executor, id string, d a
 	return st, nil
 }
 
+// invoicesOf asks CNX, before a read's transaction, for the invoices of the purchase statements ids name, or of
+// order orderID's purchase statements (S5R-D20, R55: no lock).
+func (s Service) invoicesOf(ctx context.Context, orderID string, ids ...string) (map[string]invoiceFacts, error) {
+	out := map[string]invoiceFacts{}
+	if s.Upstream.Invoices == nil {
+		return out, nil
+	}
+	var list []*settlement.Statement
+	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		sc := scope(ctx)
+		if orderID != "" {
+			var err error
+			list, err = postgres.Statements(ctx, exec, sc, settlement.KindPurchase, orderID)
+			return err
+		}
+		for _, id := range ids {
+			if !kernel.ValidIdentifier(id) {
+				continue
+			}
+			st, err := postgres.LoadStatement(ctx, exec, sc, id, false)
+			if err != nil {
+				return err
+			}
+			if st != nil {
+				list = append(list, st)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, st := range list {
+		if st.Kind != settlement.KindPurchase {
+			continue
+		}
+		if out[st.ID], err = s.statementInvoices(ctx, st); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // GetStatement returns a settlement statement (settlement_statement.get).
 func (s Service) GetStatement(ctx context.Context, id string) (api.StatementView, error) {
 	var v api.StatementView
-	err := s.read(ctx, api.CommandGetStatement, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+	inv, err := s.invoicesOf(ctx, "", id)
+	if err != nil {
+		return v, err
+	}
+	err = s.read(ctx, api.CommandGetStatement, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		sc, now := scope(ctx), kernel.Instant(s.Clock.Now())
 		st, err := visibleStatement(ctx, exec, id, d)
 		if err != nil {
 			return err
 		}
-		b, err := balance(ctx, exec, sc, st, d, now)
+		b, err := balance(ctx, exec, sc, st, d, now, inv[st.ID])
 		if err != nil {
 			return err
 		}
@@ -112,7 +193,9 @@ func (s Service) GetStatement(ctx context.Context, id string) (api.StatementView
 			OrderID: st.OrderID, OrderRevision: st.OrderRevision, OrderHash: st.OrderHash, ShippedAt: st.ShippedAt, Currency: b.Currency,
 			NetMinor: st.Net.MinorString(), TaxMinor: st.Tax.MinorString(), AmountMinor: b.AmountMinor, AppliedMinor: b.AppliedMinor,
 			OpenMinor: b.OpenMinor, EvidenceIDs: st.EvidenceIDs, Lines: []api.StatementLineView{}, Installments: b.Installments,
-			Applications: b.Applications, CreditNotes: []api.CreditNoteRef{}, ConfirmedBy: st.Confirmed.By, ConfirmedAt: st.Confirmed.At, CheckedAt: now}
+			Applications: b.Applications, CreditNotes: []api.CreditNoteRef{}, ConfirmedBy: st.Confirmed.By, ConfirmedAt: st.Confirmed.At, CheckedAt: now,
+			AdjustedMinor: b.AdjustedMinor, Adjustments: b.Adjustments, InvoiceReversed: b.InvoiceReversed, InvoicesShown: b.InvoicesShown,
+			Invoices: b.Invoices}
 		if st.Opening {
 			v.OpeningID = st.ID
 		}
@@ -143,6 +226,13 @@ func (s Service) GetStatement(ctx context.Context, id string) (api.StatementView
 
 func (s Service) getBalance(ctx context.Context, command, kind, id string) (api.BalanceView, error) {
 	var v api.BalanceView
+	var inv map[string]invoiceFacts
+	if kind == settlement.KindPurchase {
+		var err error
+		if inv, err = s.invoicesOf(ctx, "", id); err != nil {
+			return v, err
+		}
+	}
 	err := s.read(ctx, command, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		st, err := visibleStatement(ctx, exec, id, d)
 		if err != nil {
@@ -151,7 +241,7 @@ func (s Service) getBalance(ctx context.Context, command, kind, id string) (api.
 		if st.Kind != kind {
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
-		v, err = balance(ctx, exec, scope(ctx), st, d, kernel.Instant(s.Clock.Now()))
+		v, err = balance(ctx, exec, scope(ctx), st, d, kernel.Instant(s.Clock.Now()), inv[st.ID])
 		return err
 	})
 	return v, err
@@ -173,6 +263,13 @@ func (s Service) GetPayable(ctx context.Context, id string) (api.BalanceView, er
 // account nor a statement of the order.
 func (s Service) GetOrderSettlement(ctx context.Context, orderID string) (api.OrderSettlementView, error) {
 	var v api.OrderSettlementView
+	var inv map[string]invoiceFacts
+	if kernel.ValidIdentifier(orderID) {
+		var err error
+		if inv, err = s.invoicesOf(ctx, orderID); err != nil {
+			return v, err
+		}
+	}
 	err := s.read(ctx, api.CommandGetOrderSettlement, orderID, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		sc, now := scope(ctx), kernel.Instant(s.Clock.Now())
 		v = api.OrderSettlementView{OrderID: orderID, Stages: []api.StagePositionView{}, Receivables: []api.BalanceView{},
@@ -224,7 +321,7 @@ func (s Service) GetOrderSettlement(ctx context.Context, orderID string) (api.Or
 				continue
 			}
 			found = true
-			b, err := balance(ctx, exec, sc, st, d, now)
+			b, err := balance(ctx, exec, sc, st, d, now, invoiceFacts{})
 			if err != nil {
 				return err
 			}
@@ -243,7 +340,12 @@ func (s Service) GetOrderSettlement(ctx context.Context, orderID string) (api.Or
 			if err != nil {
 				return err
 			}
+			netCredited, err := netCreditsOf(ctx, exec, st)
+			if err != nil {
+				return err
+			}
 			netSum, _ = netSum.Add(st.Net)
+			netSum, _ = netSum.Sub(netCredited) // S5R-D46(2): net sales lose a credit note's net part
 			creditedSum, _ = creditedSum.Add(credited)
 			applied, err := postgres.InstallmentApplied(ctx, exec, sc, st)
 			if err != nil {
@@ -263,8 +365,7 @@ func (s Service) GetOrderSettlement(ctx context.Context, orderID string) (api.Or
 		if !settledSum.Currency().IsZero() {
 			v.SettledMinor, v.AppliedMinor, v.OpenMinor, v.OverdueMinor = settledSum.MinorString(), appliedSum.MinorString(), openSum.MinorString(),
 				overdueSum.MinorString()
-			net, _ := netSum.Sub(creditedSum)
-			v.CreditedMinor, v.NetSalesMinor = creditedSum.MinorString(), net.MinorString()
+			v.CreditedMinor, v.NetSalesMinor = creditedSum.MinorString(), netSum.MinorString()
 		} else if v.Currency != "" {
 			v.SettledMinor, v.AppliedMinor, v.OpenMinor, v.OverdueMinor, v.CreditedMinor, v.NetSalesMinor = "0", "0", "0", "0", "0", "0"
 		}
@@ -288,7 +389,7 @@ func (s Service) GetOrderSettlement(ctx context.Context, orderID string) (api.Or
 					Currency: st.Currency().Code(), CommitmentID: l.CommitmentID, SourceID: l.Source.ID, OrderLineID: l.OrderLineID,
 					Quantity: l.Quantity.String(), AmountMinor: l.Amount.MinorString()})
 			}
-			b, err := balance(ctx, exec, sc, st, d, now)
+			b, err := balance(ctx, exec, sc, st, d, now, inv[st.ID])
 			if err != nil {
 				return err
 			}
@@ -321,6 +422,22 @@ func creditsOf(ctx context.Context, exec bentopg.Executor, st *settlement.Statem
 				return sum, err
 			}
 			*views = append(*views, r)
+		}
+	}
+	return sum, nil
+}
+
+// netCreditsOf is the sum of the net parts of statement st's effective credit notes (S5R-D46(2)).
+func netCreditsOf(ctx context.Context, exec bentopg.Executor, st *settlement.Statement) (kernel.Money, error) {
+	sum := zeroIn(st.Currency())
+	notes, err := postgres.CreditNotes(ctx, exec, scope(ctx), st.ID, "")
+	if err != nil {
+		return sum, err
+	}
+	for i := range notes {
+		if n := &notes[i]; n.Effective(st) {
+			net, _ := n.Split(st)
+			sum, _ = sum.Add(net)
 		}
 	}
 	return sum, nil

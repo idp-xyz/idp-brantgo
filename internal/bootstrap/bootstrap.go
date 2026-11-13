@@ -23,6 +23,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/ingest"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/ful"
@@ -281,7 +282,15 @@ func (p *Platform) Contexts() (*Contexts, error) {
 					return nil
 				}
 				return c.FUL
-			}), Deliveries: stl.PURSettlementSources(c.PUR)})
+			}), Deliveries: stl.PURSettlementSources(c.PUR),
+			// CNX's PurchaseInvoiceRef v1 for the invoice_reversed flag and payable adjustments (R55, S5R-D20): CNX is
+			// composed after STL, so its lookups are bound when STL asks.
+			Invoices: stl.CNXPurchaseInvoices(func() cnxapi.PurchaseInvoiceLookups {
+				if c.CNX == nil {
+					return nil
+				}
+				return c.CNX
+			})})
 	}
 	if err == nil {
 		db, err = p.newDB()

@@ -61,6 +61,7 @@ var codes = map[string]kernel.Category{
 	CodeAllocationInvalid:           kernel.CategoryInvalid,
 	CodeOrderResultNotSettled:       kernel.CategoryConflict,
 	CodeOpeningBalanceDuplicate:     kernel.CategoryConflict, // C10 (opening.go)
+	CodeFundRecordHasApplications:   kernel.CategoryConflict, // S5R-D22 (payables.go)
 }
 
 // Category returns the category of a code STL declares.

@@ -72,7 +72,7 @@ func freight(t *testing.T) *charge.Charge {
 	t.Helper()
 	s60 := charge.Target{Kind: charge.TargetShipment, OrderID: "order.sa", ShipmentID: "shipment.60"}
 	s40 := charge.Target{Kind: charge.TargetShipment, OrderID: "order.sa", ShipmentID: "shipment.40"}
-	c, err := charge.Record(charge.RecordInput{ID: "freight.sa", Status: charge.StatusEstimated, Source: charge.Source{Kind: charge.SourceLogisticsOffer,
+	c, err := charge.Record(charge.RecordInput{CostComponent: charge.ComponentPreCarriage, ID: "freight.sa", Status: charge.StatusEstimated, Source: charge.Source{Kind: charge.SourceLogisticsOffer,
 		PartyID: "forwarder.1", Reference: "OFFER-1"}, Amount: m(cny, 50000), Conversion: charge.Conversion{Kind: charge.ConversionSameCurrency},
 		OccurredOn: at, AnalysisOn: at, Basis: "预计运费", Beneficiaries: []charge.Target{s60, s40}, By: by})
 	if err != nil {
@@ -194,7 +194,7 @@ func TestBT18ShippedButNotSettled(t *testing.T) {
 	in.Order.Status, in.Order.Ended = "active", ""
 	in.Applications = in.Applications[:2]
 	in.Applied["statement.400"] = map[int]kernel.Money{}
-	late, err := charge.Record(charge.RecordInput{ID: "inspection", Status: charge.StatusPending, Source: charge.Source{Kind: charge.SourceInternal},
+	late, err := charge.Record(charge.RecordInput{CostComponent: charge.ComponentPreCarriage, ID: "inspection", Status: charge.StatusPending, Source: charge.Source{Kind: charge.SourceInternal},
 		Amount: m(cny, 12000), Conversion: charge.Conversion{Kind: charge.ConversionSameCurrency}, OccurredOn: at, AnalysisOn: at, Basis: "验货费",
 		Beneficiaries: []charge.Target{{Kind: charge.TargetOrder, OrderID: "order.sa"}}, By: by})
 	if err != nil {
@@ -264,7 +264,7 @@ func TestBRC001ConfirmedResult(t *testing.T) {
 			ID: "delivery.1", LineID: "L1"}, OrderID: "order.1", OrderLineID: "L1", CommitmentID: "commitment.1", Quantity: dec("120"),
 			Net: m(usd, 60000), Amount: m(usd, 60000)}}}
 	order := charge.Target{Kind: charge.TargetOrder, OrderID: "order.1"}
-	fr, err := charge.Record(charge.RecordInput{ID: "freight.1", Status: charge.StatusEstimated, Source: charge.Source{Kind: charge.SourceInternal},
+	fr, err := charge.Record(charge.RecordInput{CostComponent: charge.ComponentPreCarriage, ID: "freight.1", Status: charge.StatusEstimated, Source: charge.Source{Kind: charge.SourceInternal},
 		Amount: m(usd, 6000), Conversion: charge.Conversion{Kind: charge.ConversionSameCurrency}, OccurredOn: at, AnalysisOn: at, Basis: "运费",
 		Beneficiaries: []charge.Target{order}, By: by})
 	if err != nil {
@@ -302,7 +302,7 @@ func TestSBCreditNoteInTheConfirmedResult(t *testing.T) {
 	p := &settlement.Statement{ID: "statement.p", Kind: settlement.KindPurchase, Status: settlement.StatusConfirmed, Version: 1, Net: m(usd, 40000),
 		Amount: m(usd, 40000), Lines: []settlement.Line{{Seq: 1, Source: settlement.SourceKey{Kind: settlement.SourceDeliveryLine, ID: "d", LineID: "L1"},
 			OrderID: "order.sb", OrderLineID: "L1", CommitmentID: "c", Quantity: dec("100"), Net: m(usd, 40000), Amount: m(usd, 40000)}}}
-	fr, err := charge.Record(charge.RecordInput{ID: "freight.sb", Status: charge.StatusPending, Source: charge.Source{Kind: charge.SourceInternal},
+	fr, err := charge.Record(charge.RecordInput{CostComponent: charge.ComponentPreCarriage, ID: "freight.sb", Status: charge.StatusPending, Source: charge.Source{Kind: charge.SourceInternal},
 		Amount: m(usd, 5000), Conversion: charge.Conversion{Kind: charge.ConversionSameCurrency}, OccurredOn: at, AnalysisOn: at, Basis: "运费",
 		Beneficiaries: []charge.Target{{Kind: charge.TargetShipment, OrderID: "order.sb", ShipmentID: "shipment.sb"}}, By: by})
 	if err != nil {

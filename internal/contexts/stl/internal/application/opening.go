@@ -272,7 +272,7 @@ func openingView(ctx context.Context, exec bentopg.Executor, o *settlement.Openi
 		if err != nil || st == nil {
 			return v, err
 		}
-		b, err := balance(ctx, exec, sc, st, d, now)
+		b, err := balance(ctx, exec, sc, st, d, now, invoiceFacts{})
 		if err != nil {
 			return v, err
 		}

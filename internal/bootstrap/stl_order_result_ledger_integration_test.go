@@ -140,8 +140,8 @@ func (w *resultWorld) estimate(id, ref, amount string, beneficiaries ...stlapi.C
 	fee, cny := stlRef(w.freight), stlRef(w.cny)
 	return stlapi.RecordCharge{ChargeID: id, Status: stlapi.ChargeEstimated, Source: stlapi.ChargeSource{Kind: stlapi.ChargeSourceLogistics,
 		PartyID: "forwarder.1", Reference: ref}, Beneficiaries: beneficiaries, FeeCategory: &fee, Currency: &cny,
-		Conversion: &stlapi.ChargeConversion{Kind: stlapi.ConversionSameCurrency}, Amount: amount, OccurredOn: "2026-11-01",
-		AnalysisOn: "2026-11-01", Basis: "合成：货代报价的预计运费"}
+		Conversion: &stlapi.ChargeConversion{Kind: stlapi.ConversionSameCurrency}, CostComponent: stlapi.ComponentPreCarriage, Amount: amount,
+		OccurredOn: "2026-11-01", AnalysisOn: "2026-11-01", Basis: "合成：货代报价的预计运费"}
 }
 
 // billOf is the forwarder's bill of charge id at version: pending, amount CNY, occurred on.
@@ -442,6 +442,7 @@ func TestBT24LateFreightReopensTheResult(t *testing.T) {
 	fee, cny := stlRef(w.freight), stlRef(w.cny)
 	late.Beneficiaries, late.FeeCategory, late.Currency = []stlapi.ChargeTarget{orderTarget("order.sa")}, &fee, &cny
 	late.Conversion = &stlapi.ChargeConversion{Kind: stlapi.ConversionSameCurrency}
+	late.CostComponent = stlapi.ComponentPreCarriage // S5R-D24: a new charge states its cost component
 	r, err := w.record(w.officer, late)
 	w.must(err)
 	if r.Status != stlapi.ChargePending || r.EstimateMinor != "" {

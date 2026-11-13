@@ -29,6 +29,15 @@ type Orders interface {
 	ResolveOrders(ctx context.Context, orderIDs []string) (map[string]Order, error)
 }
 
+// OrderRevisions is the optional half of STL's port to TRD for OrderRevisionRef v1 (Context Map R32 "订单修订的
+// Incoterm（费用承担核对，S5R-D24，经 OrderRevisionRef v1）", no lock): ResolveOrderIncoterms answers, for order bindings,
+// the Incoterm the revision seals (or TRD derives for a revision written before S5R-D35); absent bindings are revisions
+// TRD does not show intact. adapters/orders implements it when TRD's lookups answer OrderRevisionLookups; a port that
+// does not implement it leaves the Incoterm of the order's snapshot (Order.Incoterm).
+type OrderRevisions interface {
+	ResolveOrderIncoterms(ctx context.Context, bindings []OrderBinding) (map[OrderBinding]string, error)
+}
+
 // Order states TRD reports (SM-TRD-ORDER).
 const (
 	OrderDraft  = "draft"
@@ -79,6 +88,8 @@ type Order struct {
 	// it is a draft or active) and the current revision's net sales in minor units of the order currency.
 	Ended    string
 	NetMinor string
+	// S5R-D24: the Incoterm of the POL trade_terms revision the order's current revision binds (TRD TradeTerms).
+	Incoterm string
 }
 
 // OrderAnalysis is the order's analysis rate (TRD AnalysisFX, baseline 4.5): one unit of OrderCurrency is Rate

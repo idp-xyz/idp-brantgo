@@ -24,6 +24,7 @@ type STL interface {
 	stlapi.OpeningCommands
 	stlapi.OpeningQueries
 	stlapi.PayerCommands
+	stlapi.PayableCommands
 	stlapi.Reconciler
 	stlapi.Auditor
 }
@@ -58,6 +59,10 @@ func stlCommands(c STL) *commandSet {
 			stlapi.CommandReopenOrderResult: reflected("", "", receiptOf[stlapi.Receipt](c.ReopenOrderResult)),
 			stlapi.CommandRecordOpening:     reflected("", "", receiptOf[stlapi.Receipt](c.RecordOpening)),
 			stlapi.CommandVerifyPayer:       reflected("", "", receiptOf[stlapi.Receipt](c.VerifyPayer)),
+			// S5R-D20, S5R-D22 (R8).
+			stlapi.CommandRequestPayableAdjustment: reflected("", "", receiptOf[stlapi.Receipt](c.RequestPayableAdjustment)),
+			stlapi.CommandConfirmPayableAdjustment: reflected("", "", receiptOf[stlapi.Receipt](c.ConfirmPayableAdjustment)),
+			stlapi.CommandReverseFund:              reflected("", "", receiptOf[stlapi.Receipt](c.ReverseFund)),
 		}}
 }
 

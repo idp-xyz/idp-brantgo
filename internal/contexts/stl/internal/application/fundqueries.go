@@ -20,7 +20,7 @@ import (
 func visibleFund(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (visible, handled bool, err error) {
 	sc := scope(ctx)
 	switch command {
-	case api.CommandRecordFund, api.CommandResolveDifference, api.CommandVerifyPayer:
+	case api.CommandRecordFund, api.CommandResolveDifference, api.CommandVerifyPayer, api.CommandReverseFund:
 		f, err := postgres.LoadFund(ctx, exec, sc, id, false)
 		return err == nil && f != nil && d.Sees(f.OwnerActor, f.OwnerTeam), true, err
 	case api.CommandOpenOrderAccount, api.CommandOpenReview, api.CommandSettleReview:
@@ -37,7 +37,16 @@ func allocationView(x *fa.Application) api.AllocationView {
 	return api.AllocationView{ApplicationID: x.ID, FundRecordID: x.FundRecordID, CreditNoteID: x.CreditNoteID, TargetKind: x.TargetKind,
 		OrderID: x.OrderID, OrderRevision: x.OrderRevision, StageID: x.StageID, StatementID: x.StatementID, InstallmentSeq: x.InstallmentSeq,
 		MovedFrom: x.MovedFrom, AmountMinor: x.Amount.MinorString(), Status: x.Status, Conversion: conversionView(x.Conversion),
-		PayerBasis: payerBasis(x), PayerProfileRevision: x.PayerProfileRevision}
+		PayerBasis: payerBasis(x), PayerProfileRevision: x.PayerProfileRevision, ChargeID: x.ChargeID, SettlementRate: settlementView(x.Settlement)}
+}
+
+// settlementView is the settlement rate a receipt in the order's currency recorded (S5R-D19), nil without one.
+func settlementView(s *fa.SettlementRate) *api.SettlementRateView {
+	if s == nil {
+		return nil
+	}
+	return &api.SettlementRateView{FXRate: api.ConfigRef{Kind: api.KindFXRate, ConfigID: s.Use.ID, Revision: s.Use.Revision}, FXRateHash: s.Use.Hash,
+		Rate: s.Value.String(), Currency: s.Currency.Code()}
 }
 
 // payerBasis is x's payer basis as the reads show it (S5R-D21): customer when none is recorded.
@@ -75,6 +84,9 @@ func fundRef(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, f *fr.
 		DrawnMinor: e.Drawn.MinorString(), SoldMinor: e.Sold.MinorString(), AvailableMinor: f.Available(e).MinorString(),
 		CashMinor: f.Cash(e).MinorString(), SourceFundRecordID: f.SourceID, Resolutions: []api.ResolutionView{}, Draws: []api.DrawView{},
 		Allocations: []api.AllocationView{}, RecordedBy: f.Recorded.By, RecordedAt: f.Recorded.At, PayerVerifications: []api.PayerVerificationView{}}
+	if x := f.Reversal; x != nil {
+		r.Reversal = &api.FundReversalView{Reason: x.By.Reason, EvidenceIDs: x.EvidenceIDs, ReversedBy: x.By.By, ReversedAt: x.By.At}
+	}
 	for _, v := range verified {
 		r.PayerVerifications = append(r.PayerVerifications, api.PayerVerificationView{Seq: v.Seq, PayerID: v.PayerID, CustomerID: v.CustomerID,
 			EvidenceIDs: v.EvidenceIDs, Reason: v.By.Reason, VerifiedBy: v.By.By, VerifiedAt: v.By.At})
@@ -222,7 +234,8 @@ func (s Service) GetApplication(ctx context.Context, id string) (api.Application
 			OrderID: x.OrderID, OrderRevision: x.OrderRevision, StageID: x.StageID, StatementID: x.StatementID, InstallmentSeq: x.InstallmentSeq,
 			MovedFrom: x.MovedFrom, Currency: x.Amount.Currency().Code(), AmountMinor: x.Amount.MinorString(), Conversion: conversionView(x.Conversion),
 			Status: x.Status, Version: x.Version, AppliedBy: x.Applied.By, AppliedAt: x.Applied.At, PayerBasis: payerBasis(x),
-			PayerProfileRevision: x.PayerProfileRevision, CheckedAt: kernel.Instant(s.Clock.Now())}
+			PayerProfileRevision: x.PayerProfileRevision, ChargeID: x.ChargeID, SettlementRate: settlementView(x.Settlement),
+			CheckedAt: kernel.Instant(s.Clock.Now())}
 		v.UnappliedBy, v.UnappliedAt, v.UnapplyReason = actOf(x.Unapplied)
 		return nil
 	})

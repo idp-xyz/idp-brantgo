@@ -274,6 +274,23 @@ func (s Service) ConfirmSettlement(ctx context.Context, cmd api.ConfirmSettlemen
 		}
 		return err
 	})
+	if err != nil || out.StatementKind != settlement.KindPurchase {
+		return out, err
+	}
+	// S5R-D20: a purchase statement's confirmation shows its invoice_reversed flag (CNX, read after the commit).
+	inv, err := s.invoicesOf(ctx, "", out.ObjectID)
+	if err != nil {
+		return out, err
+	}
+	f := inv[out.ObjectID]
+	out.InvoicesShown = f.shown
+	err = s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		st, err := postgres.LoadStatement(ctx, exec, scope(ctx), out.ObjectID, false)
+		if err == nil && st != nil {
+			out.InvoiceReversed, _ = invoiceFlag(st, f)
+		}
+		return err
+	})
 	return out, err
 }
 
@@ -321,7 +338,8 @@ type applyStatement struct {
 	cmd       api.Apply
 	order     *Order
 	rate      settlementRate
-	permitted int64 // S5R-D21: the customer's trading profile revision when it permits the fund's payer
+	settle    settlementRate // S5R-D19: the settlement rate into the order's analysis currency it names
+	permitted int64          // S5R-D21: the customer's trading profile revision when it permits the fund's payer
 	fund      *fr.FundRecord
 	statement *settlement.Statement
 	taken     bool
@@ -354,7 +372,7 @@ func (h *applyStatement) Prepare(ctx context.Context) error {
 			return err
 		}
 	}
-	if h.cmd.FXRate == nil {
+	if h.cmd.FXRate == nil && h.cmd.SettlementFXRate == nil {
 		return nil
 	}
 	if order != "" {
@@ -365,6 +383,9 @@ func (h *applyStatement) Prepare(ctx context.Context) error {
 		if o, ok := orders[order]; ok {
 			h.order = &o
 		}
+	}
+	if h.settle, err = h.s.settlementLookup(ctx, h.cmd.SettlementFXRate, h.order); err != nil {
+		return err
 	}
 	h.rate, err = h.s.lookupRate(ctx, h.cmd.FXRate, from, to)
 	return err
@@ -418,13 +439,17 @@ func (h *applyStatement) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	settle, err := h.settle.settlementInput(ctx, exec, now, h.order)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	verified, err := postgres.PayerVerifications(ctx, exec, sc, f.ID)
 	if err != nil {
 		return action.Outcome{}, err
 	}
 	x, err := fa.ApplyToStatement(fa.StatementInput{ID: c.ApplicationID, Fund: f, FundEntries: entries, Statement: st, StageID: c.Target.StageID,
-		Applied: applied, Amount: amount, FX: fx, Payers: fa.Payers{Verified: verified, Permitted: h.permitted}, By: fundAct(d, now, ""),
-		Team: d.Team})
+		Applied: applied, Amount: amount, FX: fx, Settlement: settle, Payers: fa.Payers{Verified: verified, Permitted: h.permitted},
+		By: fundAct(d, now, ""), Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -438,6 +463,10 @@ func (h *applyStatement) Apply(ctx context.Context, exec bentopg.Executor, d aut
 // its fund record and order account for a stage application (B2a), its fund record, statement and
 // (receivable) order account for an application to a statement.
 func lockApplicationRoots(ctx context.Context, exec bentopg.Executor, x *fa.Application) error {
+	if x.ChargeID != "" {
+		_, _, err := lockChargeRoots(ctx, exec, x.FundRecordID, x.ChargeID)
+		return err
+	}
 	if x.StatementID == "" {
 		_, _, err := lockRoots(ctx, exec, x.FundRecordID, x.OrderID)
 		return err

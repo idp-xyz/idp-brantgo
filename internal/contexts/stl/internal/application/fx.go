@@ -24,6 +24,7 @@ import (
 type settlementRate struct {
 	rate    *polapi.ExchangeRate
 	refusal error
+	path    string // the member that names it ("" is /args/fx_rate)
 }
 
 // fundCurrency returns the currency code of fund record id, "" when STL has none in the caller's scope.
@@ -42,6 +43,11 @@ func (s Service) fundCurrency(ctx context.Context, id string) (string, error) {
 // lookupRate asks POL for fx_rate ref converting from into to for settlement now. POL's refusals are kept for
 // Apply, at /args/fx_rate.
 func (s Service) lookupRate(ctx context.Context, ref *api.ConfigRef, from, to string) (settlementRate, error) {
+	return s.lookupRateAt(ctx, ref, from, to, "/args/fx_rate")
+}
+
+// lookupRateAt is lookupRate for the member at path (S5R-D19: /args/settlement_fx_rate).
+func (s Service) lookupRateAt(ctx context.Context, ref *api.ConfigRef, from, to, path string) (settlementRate, error) {
 	if ref == nil || from == "" || to == "" {
 		return settlementRate{}, nil
 	}
@@ -53,12 +59,12 @@ func (s Service) lookupRate(ctx context.Context, ref *api.ConfigRef, from, to st
 		if len(rej.Fields) > 0 {
 			reason = rej.Fields[0].Reason
 		}
-		return settlementRate{refusal: kernel.RejectAs(rej.Code, rej.Category, "/args/fx_rate", reason)}, nil
+		return settlementRate{refusal: kernel.RejectAs(rej.Code, rej.Category, path, reason), path: path}, nil
 	}
 	if err != nil {
 		return settlementRate{}, err
 	}
-	return settlementRate{rate: &x}, nil
+	return settlementRate{rate: &x, path: path}, nil
 }
 
 // input re-checks the rate with POL's ConfigGuard v1 in STL's transaction (R33 guard lock) and returns it
@@ -70,7 +76,11 @@ func (r settlementRate) input(ctx context.Context, exec bentopg.Executor, at tim
 	if r.rate == nil {
 		return nil, nil
 	}
-	if err := guardConfig(ctx, exec, r.rate.Rate, r.rate.ContentHash, at, "/args/fx_rate"); err != nil {
+	path := r.path
+	if path == "" {
+		path = "/args/fx_rate"
+	}
+	if err := guardConfig(ctx, exec, r.rate.Rate, r.rate.ContentHash, at, path); err != nil {
 		return nil, err
 	}
 	return &fa.FXInput{Rate: r.rate.Value, Use: fa.RateUse{ID: r.rate.Rate.ConfigID, Revision: r.rate.Rate.Revision, Hash: r.rate.ContentHash},
@@ -101,6 +111,24 @@ func basisOf(o *Order, source, target kernel.Currency) *fa.AnalysisBasis {
 	}
 	b.Rate = rate
 	return b
+}
+
+// analysisCode is the code of order o's analysis currency when TRD states one other than the order's own ("" otherwise).
+func analysisCode(o *Order) string {
+	if o == nil || o.Analysis == nil || o.Analysis.Currency == "" || o.Analysis.Currency == o.Analysis.OrderCurrency {
+		return ""
+	}
+	return o.Analysis.Currency
+}
+
+// settlementInput re-checks the settlement rate an application names into order o's analysis currency (S5R-D19) and
+// returns it for the rules; nil when none is named.
+func (r settlementRate) settlementInput(ctx context.Context, exec bentopg.Executor, at time.Time, o *Order) (*fa.SettlementInput, error) {
+	x, err := r.input(ctx, exec, at, nil)
+	if err != nil || x == nil {
+		return nil, err
+	}
+	return &fa.SettlementInput{FX: x, Analysis: analysisCode(o)}, nil
 }
 
 func conversionView(c *fa.Conversion) *api.ConversionView {

@@ -12,6 +12,7 @@ import (
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
+	fa "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/application"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/charge"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/orderresult"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -189,6 +190,9 @@ func (h *recordCharge) Prepare(ctx context.Context) error {
 	if h.shipments, _, err = h.s.orderShipments(ctx, h.orderIDs); err != nil {
 		return err
 	}
+	if err = h.s.sealedIncoterms(ctx, h.orders); err != nil {
+		return err
+	}
 	if h.configs, err = h.s.resolveConfigs(ctx, h.s.Clock.Now(), map[string]polapi.ConfigRef{"/args/fee_category": polRef(*c.FeeCategory),
 		"/args/currency": polRef(*c.Currency)}); err != nil {
 		if _, refused := kernel.AsRejection(err); !refused {
@@ -206,6 +210,33 @@ func (h *recordCharge) Prepare(ctx context.Context) error {
 		}
 	}
 	return err
+}
+
+// sealedIncoterms replaces the snapshot's Incoterm of orders by the one their current revision seals, when TRD answers
+// OrderRevisionRef v1 (S5R-D24, R32).
+func (s Service) sealedIncoterms(ctx context.Context, orders map[string]Order) error {
+	p, ok := s.Upstream.Orders.(OrderRevisions)
+	if !ok || len(orders) == 0 {
+		return nil
+	}
+	bindings := make([]OrderBinding, 0, len(orders))
+	for _, o := range orders {
+		if o.Code == "" && o.Binding.OrderRevision > 0 {
+			bindings = append(bindings, o.Binding)
+		}
+	}
+	sort.Slice(bindings, func(i, j int) bool { return bindings[i].OrderID < bindings[j].OrderID })
+	terms, err := p.ResolveOrderIncoterms(ctx, bindings)
+	if err != nil {
+		return err
+	}
+	for id, o := range orders {
+		if term, ok := terms[o.Binding]; ok {
+			o.Incoterm = term
+			orders[id] = o
+		}
+	}
+	return nil
 }
 
 // repath moves a rejection to path.
@@ -275,6 +306,12 @@ func (h *recordCharge) Apply(ctx context.Context, exec bentopg.Executor, d autho
 		}
 		beneficiaries = append(beneficiaries, targetOf(b))
 	}
+	// S5R-D24: the main carriage of an order whose buyer bears it is not our cost, unless it is recharged.
+	for _, id := range h.orderIDs {
+		if err := charge.CheckComponent(c.CostComponent, c.Recharged, h.orders[id].Incoterm, id); err != nil {
+			return action.Outcome{}, err
+		}
+	}
 	conv := charge.Conversion{Kind: c.Conversion.Kind}
 	if conv.Kind == charge.ConversionFXRate {
 		x, err := h.rate.input(ctx, exec, h.s.Clock.Now(), nil)
@@ -295,7 +332,8 @@ func (h *recordCharge) Apply(ctx context.Context, exec bentopg.Executor, d autho
 		return action.Outcome{}, err
 	}
 	ch, err := charge.Record(charge.RecordInput{ID: c.ChargeID, Status: c.Status, Source: sourceOf(c.Source), FeeCategory: charge.ConfigUse{
-		ID: fee.Ref.ConfigID, Revision: fee.Ref.Revision}, CurrencyRevision: cur.Ref.Revision, Amount: amount, Conversion: conv, OccurredOn: occurred,
+		ID: fee.Ref.ConfigID, Revision: fee.Ref.Revision}, CurrencyRevision: cur.Ref.Revision, Amount: amount, Conversion: conv,
+		CostComponent: c.CostComponent, Recharged: c.Recharged, OccurredOn: occurred,
 		AnalysisOn: analysed, Basis: c.Basis, EvidenceIDs: c.EvidenceIDs, Beneficiaries: beneficiaries, By: fundAct(d, now, ""), Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
@@ -620,7 +658,8 @@ func chargeView(c *charge.Charge) api.ChargeView {
 	v := api.ChargeView{ChargeID: c.ID, Status: c.Status, Version: c.Version, Source: api.ChargeSource{Kind: c.Source.Kind, PartyID: c.Source.PartyID,
 		Reference: c.Source.Reference}, EstimateReference: c.EstimateReference, FeeCategory: api.ConfigRef{Kind: api.KindFeeCategory,
 		ConfigID: c.FeeCategory.ID, Revision: c.FeeCategory.Revision}, Currency: c.Currency().Code(), CurrencyRevision: c.CurrencyRevision,
-		AmountMinor: c.Amount.MinorString(), Conversion: api.ChargeConversionView{Kind: c.Conversion.Kind}, OccurredOn: api.FormatDate(c.OccurredOn),
+		AmountMinor: c.Amount.MinorString(), Conversion: api.ChargeConversionView{Kind: c.Conversion.Kind}, CostComponent: c.CostComponent,
+		Recharged: c.Recharged, OccurredOn: api.FormatDate(c.OccurredOn),
 		AnalysisOn: api.FormatDate(c.AnalysisOn), Basis: c.Basis, EvidenceIDs: c.EvidenceIDs, Beneficiaries: []api.ChargeTarget{},
 		AllocationSeq: c.AllocationSeq, Allocations: []api.ChargeAllocationView{}, RecordedBy: c.Recorded.By, RecordedAt: c.Recorded.At,
 		ConfirmEvidenceIDs: c.ConfirmEvidence}
@@ -661,6 +700,23 @@ func (s Service) GetCharge(ctx context.Context, id string) (api.ChargeView, erro
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		v = chargeView(c)
+		// S5R-D19: the payment state derives from the payments applied to the charge.
+		apps, err := postgres.ChargeApplications(ctx, exec, scope(ctx), []string{c.ID})
+		if err != nil {
+			return err
+		}
+		paid := zeroIn(c.Currency())
+		v.Payments = []api.AllocationView{}
+		for i := range apps[c.ID] {
+			x := &apps[c.ID][i]
+			if x.Stands() {
+				paid, _ = paid.Add(x.Amount)
+			}
+			if d.Sees(x.OwnerActor, x.OwnerTeam) {
+				v.Payments = append(v.Payments, allocationView(x))
+			}
+		}
+		v.PaidMinor, v.OpenMinor, v.PaymentStatus = paid.MinorString(), fa.ChargeOpen(c, paid).MinorString(), c.PaymentStatus(paid)
 		v.CheckedAt = kernel.Instant(s.Clock.Now())
 		return nil
 	})

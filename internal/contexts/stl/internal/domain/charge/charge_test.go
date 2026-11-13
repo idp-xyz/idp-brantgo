@@ -39,7 +39,7 @@ func ship(order, id string) Target {
 
 func record(t *testing.T, status string, amount kernel.Money, beneficiaries ...Target) *Charge {
 	t.Helper()
-	c, err := Record(RecordInput{ID: "charge.1", Status: status, Source: Source{Kind: SourceLogisticsOffer, PartyID: "forwarder.1", Reference: "OFFER-1"},
+	c, err := Record(RecordInput{CostComponent: ComponentPreCarriage, ID: "charge.1", Status: status, Source: Source{Kind: SourceLogisticsOffer, PartyID: "forwarder.1", Reference: "OFFER-1"},
 		FeeCategory: ConfigUse{ID: "freight", Revision: 2}, CurrencyRevision: 2, Amount: amount, Conversion: Conversion{Kind: ConversionSameCurrency},
 		OccurredOn: at, AnalysisOn: at, Basis: "合成：海运费", Beneficiaries: beneficiaries, By: by})
 	if err != nil {

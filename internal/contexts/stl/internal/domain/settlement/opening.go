@@ -159,11 +159,15 @@ func RecordOpening(in OpeningInput) (*Opening, *Statement, error) {
 	return o, st, nil
 }
 
-// ReverseOpening is what settlement.reverse of an opening statement does to its item: reversed, so its source
-// document may be recorded again.
+// ReverseOpening is what settlement.reverse of an opening statement — or fund.reverse of an opening prepayment's fund
+// record (S5R-D22) — does to its item: reversed, so its source document may be recorded again.
 func (o *Opening) ReverseOpening(at time.Time) error {
-	if o.Status != OpeningRecorded || o.StatementID == "" {
-		return state("/args/statement_id", "The opening item is "+o.Status)
+	if o.Status != OpeningRecorded {
+		path := "/args/statement_id"
+		if o.StatementID == "" {
+			path = "/args/fund_record_id"
+		}
+		return state(path, "The opening item is "+o.Status)
 	}
 	o.Status, o.UpdatedAt = OpeningReversed, kernel.Instant(at)
 	return nil

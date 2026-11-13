@@ -16,7 +16,42 @@ type TRD struct {
 	Lookups trdapi.OrderSnapshotLookups
 }
 
-var _ application.Orders = TRD{}
+var (
+	_ application.Orders         = TRD{}
+	_ application.OrderRevisions = TRD{}
+)
+
+// ResolveOrderIncoterms asks TRD's OrderRevisionLookups (OrderRevisionRef v1, an active grant, no lock) for the
+// revisions bindings name and returns the Incoterm of each intact one whose hash is the binding's (S5R-D24); nothing
+// when TRD's lookups do not answer revisions.
+func (t TRD) ResolveOrderIncoterms(ctx context.Context, bindings []application.OrderBinding) (map[application.OrderBinding]string, error) {
+	out := map[application.OrderBinding]string{}
+	revisions, ok := t.Lookups.(trdapi.OrderRevisionLookups)
+	if !ok || len(bindings) == 0 {
+		return out, nil
+	}
+	for start := 0; start < len(bindings); start += trdapi.MaxOrderRefs {
+		batch := bindings[start:min(start+trdapi.MaxOrderRefs, len(bindings))]
+		keys := make([]trdapi.OrderRevisionKey, 0, len(batch))
+		for _, b := range batch {
+			keys = append(keys, trdapi.OrderRevisionKey{OrderID: b.OrderID, OrderRevision: b.OrderRevision})
+		}
+		if err := trdapi.ValidateOrderRevisionKeys(keys); err != nil {
+			return nil, err
+		}
+		facts, err := revisions.ResolveOrderRevisions(ctx, keys)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range batch {
+			f, ok := facts[trdapi.OrderRevisionKey{OrderID: b.OrderID, OrderRevision: b.OrderRevision}]
+			if ok && f.Code == "" && f.Binding.OrderHash == b.OrderHash {
+				out[b] = f.TradeTerms.Incoterm
+			}
+		}
+	}
+	return out, nil
+}
 
 // ResolveOrders asks TRD's OrderSnapshotLookups (an active grant, TRD's data scope) and returns
 // what TRD says of each visible order at its current revision, draft or active or ended.
@@ -40,7 +75,7 @@ func orderOf(f trdapi.OrderSnapshotFact) application.Order {
 	o := application.Order{Binding: application.OrderBinding{OrderID: f.Binding.OrderID, OrderRevision: f.Binding.OrderRevision,
 		OrderHash: f.Binding.OrderHash}, Status: f.Status, Code: f.Code, CustomerID: f.CustomerRef.PartyID,
 		Currency: application.CurrencyRef{ID: f.CurrencyRef.ID, Revision: f.CurrencyRef.Revision}, CreditPortionMinor: f.CreditPortionMinor,
-		Ended: f.Ended, NetMinor: f.NetMinor}
+		Ended: f.Ended, NetMinor: f.NetMinor, Incoterm: f.TradeTerms.Incoterm}
 	o.Stages = stagesOf(f.Stages)
 	if a := f.AnalysisFX; a.OrderCurrency != "" {
 		o.Analysis = &application.OrderAnalysis{OrderCurrency: a.OrderCurrency, Currency: a.ComparisonCurrencyRef.ID, Rate: a.Rate,
