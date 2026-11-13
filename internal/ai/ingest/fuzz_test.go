@@ -14,7 +14,8 @@ var mimes = []string{evdapi.MimeText, evdapi.MimePDF, evdapi.MimeXLSX, "text/csv
 
 // FuzzExtract asserts for every reader that an extract is deterministic, within the profile, sealed
 // over its canonical form and locatable (each segment at its own locator), and that every refusal
-// is INPUT_PROFILE_UNSUPPORTED without an extract (WBS S4-04: fuzz targets for each reader).
+// is INPUT_PROFILE_UNSUPPORTED without an extract (WBS S4-04: fuzz targets for each reader); unit B4
+// adds that the located form reads back into the same extract (ParseCanonical).
 func FuzzExtract(f *testing.F) {
 	f.Add(uint8(0), []byte(inquiry))
 	f.Add(uint8(0), []byte("a\r\n\r\nb\tc\n"))
@@ -39,6 +40,10 @@ func FuzzExtract(f *testing.F) {
 		}
 		if e.Characters > p.MaxCharacters || e.SHA256 != sha(e.Canonical()) || e.FileSHA256 != sha(data) || len(e.Segments) == 0 {
 			t.Fatalf("extract %+v", e)
+		}
+		// B4: what EVD stores reads back into the same extract.
+		if back, err := ParseCanonical(e.Canonical()); err != nil || !reflect.DeepEqual(back, e) {
+			t.Fatalf("the located form does not read back: %v", err)
 		}
 		for _, s := range e.Segments {
 			got, err := e.At(s.Locator)

@@ -113,9 +113,10 @@ type Result struct {
 // Capability is a registered command. Its zero value is not usable; build one with Define.
 type Capability struct {
 	Spec
-	input  reflect.Type
-	object func(any) ObjectRef
-	run    func(context.Context, any) (any, error)
+	input   reflect.Type
+	object  func(any) ObjectRef
+	run     func(context.Context, any) (any, error)
+	prepare func(context.Context, any) (any, error)
 }
 
 // KeyField is the api command field that carries the idempotency key. The execution entry sets it
@@ -158,6 +159,36 @@ func Define[C any, R any](spec Spec, object func(C) ObjectRef, run func(context.
 			return r, err
 		},
 	}, nil
+}
+
+// Prepared returns c, built by Define (with its error err), with a preparation: deterministic
+// server-side completion of a decoded command before it is hashed, admitted and run (the gateway
+// calls it after the delegation check). Unit B4's source locating of rfq.save_draft is one: the
+// model's field locators are verified against the extracts and its lines' pending fields completed
+// (AI-INV-004: the model's claims are candidates). A preparation never decides what the owning
+// context decides; its rejections are the call's. Re-sending a prepared call uses the prepared
+// command, so its request hash stays the one the target ledger records.
+func Prepared[C any](c Capability, err error, prepare func(context.Context, C) (C, error)) (Capability, error) {
+	if err != nil {
+		return Capability{}, err
+	}
+	if c.input != reflect.TypeFor[C]() || prepare == nil {
+		return Capability{}, fmt.Errorf("%w: %s: the preparation does not take %s", ErrInvalid, c.Command, c.input)
+	}
+	c.prepare = func(ctx context.Context, cmd any) (any, error) { return prepare(ctx, cmd.(C)) }
+	return c, nil
+}
+
+// Prepare completes cmd, a value of the input type, with the capability's preparation; a
+// capability without one returns cmd as it is.
+func (c Capability) Prepare(ctx context.Context, cmd any) (any, error) {
+	if reflect.TypeOf(cmd) != c.input {
+		return nil, fmt.Errorf("capability: %s prepares %s, not %T", c.Command, c.input, cmd)
+	}
+	if c.prepare == nil {
+		return cmd, nil
+	}
+	return c.prepare(ctx, cmd)
 }
 
 func checkSpec(s Spec) error {

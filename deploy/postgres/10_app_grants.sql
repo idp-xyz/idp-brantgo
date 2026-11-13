@@ -25,6 +25,8 @@ GRANT UPDATE (state, replay_attempts, last_replay_at, last_replay_error, replaye
 GRANT USAGE ON SCHEMA brant_evd TO brant_app;
 GRANT SELECT, INSERT ON brant_evd.source_content, brant_evd.source_origin, brant_evd.source_import,
     brant_evd.business_file, brant_evd.action_result, brant_evd.audit_event TO brant_app;
+-- File extracts (S4 B4) are immutable as well.
+GRANT SELECT, INSERT ON brant_evd.file_extract TO brant_app;
 
 -- REF: screening list reference data. An import moves a list's current version; versions, entries and
 -- name keys are never updated or deleted; the ledger only grows. The list guard function is executed
@@ -115,6 +117,8 @@ GRANT USAGE ON SCHEMA brant_inq TO brant_app;
 GRANT SELECT, INSERT, UPDATE ON brant_inq.customer_rfq TO brant_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON brant_inq.rfq_line, brant_inq.rfq_source TO brant_app;
 GRANT SELECT, INSERT ON brant_inq.action_result, brant_inq.audit_event TO brant_app;
+-- Corrections of lines an AI actor proposed (S4 B4) only grow.
+GRANT SELECT, INSERT ON brant_inq.rfq_correction TO brant_app;
 -- RfqGuard v1: downstream contexts call it in their own transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_inq.guard_rfq_ready_v1(text, bigint, text) TO brant_app;
 

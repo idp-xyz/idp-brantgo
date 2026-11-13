@@ -107,7 +107,10 @@ type Gateway struct {
 //   - the arguments are one closed JSON object of the capability's api command, without the
 //     idempotency key and without empty strings (SCHEMA_INVALID at /args/...; AI-INV-004);
 //   - the delegation allows the capability for the task now (policy.Check: GRANT_INVALID,
-//     GRANT_EXPIRED, PERMISSION_DENIED).
+//     GRANT_EXPIRED, PERMISSION_DENIED);
+//   - the capability's preparation completes the command (unit B4: rfq.save_draft's field locators
+//     verified against the file extracts, read as the agent; its refusals, such as
+//     REFERENCE_INVALID or INPUT_PROFILE_UNSUPPORTED, are the call's and audited).
 func (g Gateway) Decode(ctx context.Context, b Binding, call model.ToolCall) (Call, error) {
 	p, err := identity.FromContext(ctx)
 	if err != nil {
@@ -129,13 +132,18 @@ func (g Gateway) Decode(ctx context.Context, b Binding, call model.ToolCall) (Ca
 	if err != nil {
 		return Call{}, g.audit(ctx, c.Command, "", err)
 	}
-	hash, err := c.RequestHash(cmd)
-	if err != nil {
-		return Call{}, err
-	}
 	auth, err := g.Policy.Check(ctx, policy.Step{DelegationID: b.DelegationID, TaskID: b.TaskID, Capability: c})
 	if err != nil {
 		return Call{}, err // audited by Check
+	}
+	// The capability's preparation (unit B4: source locating) completes the command before it is
+	// hashed, so the hash is the one the target ledger records.
+	if cmd, err = c.Prepare(ctx, cmd); err != nil {
+		return Call{}, g.audit(ctx, c.Command, "", err)
+	}
+	hash, err := c.RequestHash(cmd)
+	if err != nil {
+		return Call{}, err
 	}
 	return Call{Capability: c, Command: cmd, RequestHash: hash, Object: c.Object(cmd), Delegation: auth.Delegation}, nil
 }

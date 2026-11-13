@@ -19,6 +19,7 @@ import (
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	"go.idp.xyz/idp-brant/internal/ai/ingest"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
@@ -200,7 +201,8 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.EVD, err = evd.New(db)
+		// EVD reads file_extract sources with the AI layer's extractor under Q01.upload.v0.1 (S4 B4).
+		c.EVD, err = evd.New(db, evd.WithExtractor(ingest.EVD{Profile: ingest.Q01Upload}))
 	}
 	if err == nil {
 		db, err = p.newDB()
