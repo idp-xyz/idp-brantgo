@@ -513,8 +513,10 @@ func (b *brc001) foundation() {
 		"renderer_version": polapi.QuoteRendererVersion, "title": "Quotation", "sections": polapi.QuoteSections(), "footer_note": "合成测试，不构成要约"})
 	b.seq = b.config("number_sequence", "quote.seq", map[string]any{"document_type": polapi.DocumentTypeQuote, "prefix": "QT-", "width": 5,
 		"reset": polapi.ResetAnnual, "time_zone": "Asia/Shanghai"})
+	// S5R-D38: the regulation enables the country programme lists CNX evaluates against.
 	b.config("screening_regulation", "screening", map[string]any{"lists": []any{map[string]any{"list_code": "cn.uel", "jurisdiction": polapi.JurisdictionCN}},
-		"rescreen_interval_days": 30})
+		"rescreen_interval_days": 30, "programmes": []any{map[string]any{"list_code": cnProgrammeList, "jurisdiction": polapi.JurisdictionCN},
+			map[string]any{"list_code": unProgrammeList, "jurisdiction": polapi.JurisdictionUN}}})
 	cfg := b.get(brcSales, "/api/brant/v1/pol/configs/payment_terms/payment.30-70")
 	if cfg["active_revision"] != float64(1) {
 		b.t.Fatalf("payment terms %v", cfg)

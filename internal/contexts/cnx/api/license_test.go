@@ -12,7 +12,7 @@ func validRegister() RegisterLicense {
 	return RegisterLicense{IdempotencyKey: "k1", LicenseNumber: "SYN-EL-1", Issuer: "合成发证机关", Holder: "合成出口商",
 		Goods: LicensedGoods{SkuSpecs: []SpecRef{{SkuID: "sku.1", SpecRevision: 1}}}, LicensedQuantity: "1000", Unit: "PCS",
 		Currency: CurrencyRef{ID: "USD", Revision: 1}, LicensedValue: "10000.00", Destination: "DE", EndUser: EndUser{PartyID: "customer.1", Name: "合成"},
-		ValidFrom: "2026-11-01T00:00:00Z", ValidUntil: "2027-05-01T00:00:00Z", FileID: "licence.1"}
+		ValidFrom: "2026-11-01T00:00:00Z", ValidUntil: "2027-05-01T00:00:00Z", FileID: "licence.1", CustomsOffice: "2248"}
 }
 
 // export_license.register's closed contract: goods are SKU specifications or a classification,
@@ -38,12 +38,35 @@ func TestRegisterLicenseContract(t *testing.T) {
 		"/args/end_user/party_id": func(c *RegisterLicense) { c.EndUser.PartyID = "" },
 		"/args/valid_until":       func(c *RegisterLicense) { c.ValidUntil = c.ValidFrom },
 		"/args/file_id":           func(c *RegisterLicense) { c.FileID = "" },
+		// S5R-D04: the customs office is required (一证一关); multi_use needs the licence face's
+		// evidence, single_use none.
+		"/args/customs_office":     func(c *RegisterLicense) { c.CustomsOffice = "" },
+		"/args/usage_mode":         func(c *RegisterLicense) { c.UsageMode = "once" },
+		"/args/usage_evidence_ids": func(c *RegisterLicense) { c.UsageMode = UsageMultiUse },
+		"/args/usage_evidence_ids/1": func(c *RegisterLicense) {
+			c.UsageMode, c.UsageEvidenceIDs = UsageMultiUse, []string{"face.1", "face.1"}
+		},
 	} {
 		c := validRegister()
 		edit(&c)
 		if got := verdict(c.Validate()); got != "SCHEMA_INVALID "+want {
 			t.Errorf("%s: %s", want, got)
 		}
+	}
+	for _, edit := range []func(*RegisterLicense){
+		func(c *RegisterLicense) { c.UsageMode = UsageSingleUse },
+		func(c *RegisterLicense) { c.UsageMode, c.UsageEvidenceIDs = UsageMultiUse, []string{"face.1"} },
+	} {
+		c := validRegister()
+		edit(&c)
+		if err := c.Validate(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	single := validRegister()
+	single.UsageEvidenceIDs = []string{"face.1"}
+	if got := verdict(single.Validate()); got != "SCHEMA_INVALID /args/usage_evidence_ids" {
+		t.Fatal(got)
 	}
 	byCode := validRegister()
 	byCode.Goods = LicensedGoods{Classification: &Classification{CodeTableVersion: "CN-2026", CommodityCodes: []string{"6109100021"}}}
@@ -92,6 +115,57 @@ func TestAllocateAndReleaseContracts(t *testing.T) {
 	w.ExternalResult.Kind, w.Quantity, w.Value = ExternalWithdrawn, "", ""
 	if err := w.Validate(); err != nil {
 		t.Fatal(err)
+	}
+	w.Basis = BasisExternalResult
+	if err := w.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	// S5R-D03: basis local_cancellation names nothing but its reason.
+	local := func() ReleaseLicense {
+		return ReleaseLicense{IdempotencyKey: "k1", LicenseID: "elc.1", ExpectedVersion: 2, AllocationID: "a1", ReleaseID: "r1",
+			Basis: BasisLocalCancellation, Reason: "出运在报关前取消"}
+	}
+	if err := local().Validate(); err != nil || !local().LocalCancellation() || valid().LocalCancellation() {
+		t.Fatal(err)
+	}
+	for want, edit := range map[string]func(*ReleaseLicense){
+		"/args/basis":           func(c *ReleaseLicense) { c.Basis = "cancelled" },
+		"/args/external_result": func(c *ReleaseLicense) { c.ExternalResult = valid().ExternalResult },
+		"/args/quantity":        func(c *ReleaseLicense) { c.Quantity = "1" },
+		"/args/value":           func(c *ReleaseLicense) { c.Value = "0" },
+		"/args/reason":          func(c *ReleaseLicense) { c.Reason = "" },
+	} {
+		c := local()
+		edit(&c)
+		if got := verdict(c.Validate()); got != "SCHEMA_INVALID "+want {
+			t.Errorf("%s: %s", want, got)
+		}
+	}
+}
+
+// S5R-D04: the shipment's export lots cover it together (lots_allocated): the shipment's lines must
+// hash to what the lots' allocations cover; the guard decided their quantities, so lines in
+// different units pass; a line no lot covers is lines_not_covered.
+func TestExportLicenseGuardAcceptsLotAllocations(t *testing.T) {
+	lines := []ShipmentLine{{LineID: "l1", SkuID: "sku.1", SpecRevision: 1, Quantity: "600", Unit: "PCS"},
+		{LineID: "l2", SkuID: "sku.2", SpecRevision: 1, Quantity: "40.5", Unit: "KGM"}}
+	hash, _ := LinesHash(lines)
+	until := time.Date(2027, 5, 1, 0, 0, 0, 0, time.UTC)
+	v, err := ScanExportLicenseGuard("s1", licenseRow(true, LicenseStatusAllocated, LicenseReasonLotsAllocated, nil, &hash, &until, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := verdict(v.Check("/args/shipment_id", lines)); got != "OK" {
+		t.Fatal(got)
+	}
+	err = v.Check("/args/shipment_id", lines[:1])
+	if rej, ok := kernel.AsRejection(err); !ok || rej.Code != CodeExportLicenseRequired || !strings.HasSuffix(rej.Fields[0].Reason, LicenseReasonLinesNotCovered) {
+		t.Fatalf("%v", err)
+	}
+	required := CodeExportLicenseRequired
+	v, _ = ScanExportLicenseGuard("s1", licenseRow(false, LicenseStatusRequired, LicenseReasonQuantityExceeded, nil, &hash, &until, &required))
+	if got := verdict(v.Check("/args/shipment_id", lines)); got != "EXPORT_LICENSE_REQUIRED /args/shipment_id" {
+		t.Fatal(got)
 	}
 }
 

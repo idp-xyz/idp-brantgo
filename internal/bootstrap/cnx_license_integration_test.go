@@ -83,6 +83,7 @@ type licenseWorld struct {
 	outside               context.Context
 	usd                   polapi.ConfigRef
 	licenseFile, evidence string
+	face                  string // S5R-D04: the licence face that says multi_use
 }
 
 func newLicenseWorld(t *testing.T) *licenseWorld {
@@ -100,6 +101,7 @@ func newLicenseWorld(t *testing.T) *licenseWorld {
 	w.must(err)
 	w.licenseFile = "licence.1"
 	w.evidence = w.source(w.doc1, "receipt.1", "合成报关回执：改单／撤销（测试数据）")
+	w.face = w.source(w.doc1, "licence.face", "合成许可证证面：非一批一证（测试数据）")
 	w.pool = pgtest.AppPool(t)
 	db, err := bentopg.NewDB(w.pool)
 	w.must(err)
@@ -114,14 +116,17 @@ func newLicenseWorld(t *testing.T) *licenseWorld {
 }
 
 // registerCmd is a synthetic licence: 1,000 PCS of sku.1 r1 for USD 10,000.00, destination DE,
-// end user customer.1, valid from an hour ago for 30 days.
+// end user customer.1, valid from an hour ago for 30 days, at customs office 2248, multi_use on the
+// licence face's evidence (S5R-D04: TD-AT13's 600 + 400 holds only for a licence that is not
+// 一批一证).
 func (w *licenseWorld) registerCmd(number string) cnxapi.RegisterLicense {
 	now := time.Now().UTC()
 	return cnxapi.RegisterLicense{IdempotencyKey: w.key(), LicenseNumber: number, Issuer: "合成发证机关（测试）", Holder: "合成出口商（测试）",
 		Goods: cnxapi.LicensedGoods{SkuSpecs: []cnxapi.SpecRef{{SkuID: "sku.1", SpecRevision: 1}}}, LicensedQuantity: "1000", Unit: "PCS",
 		Currency: cnxapi.CurrencyRef{ID: w.usd.ConfigID, Revision: w.usd.Revision}, LicensedValue: "10000.00", Destination: "DE",
 		EndUser: cnxapi.EndUser{PartyID: "customer.1", Name: "合成最终用户"}, ValidFrom: kernel.FormatTimestamp(now.Add(-time.Hour)),
-		ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: w.licenseFile}
+		ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: w.licenseFile, UsageMode: cnxapi.UsageMultiUse,
+		UsageEvidenceIDs: []string{w.face}, CustomsOffice: "2248"}
 }
 
 func (w *licenseWorld) register(number string) cnxapi.LicenseReceipt {
@@ -396,7 +401,11 @@ func TestTDAT13ExpiredLicenceAndMismatchesAreRefused(t *testing.T) {
 		x := w.ful.exports[cnx.ExportRef{Kind: cnxapi.TargetShipment, ID: "ship.2"}]
 		edit(&x)
 		w.ful.put(x)
-		if _, err := w.allocate(w.doc1, l.LicenseID, "alloc.2", "ship.2"); code(err) != cnxapi.CodeExportLicenseExpired || path(err) != "/args/target/id" {
+		want := cnxapi.CodeExportLicenseExpired
+		if name == "goods" {
+			want = cnxapi.CodeExportLicenseGoodsMismatch // S5R: registered for CNX-INV-002 in place of EXPORT_LICENSE_EXPIRED
+		}
+		if _, err := w.allocate(w.doc1, l.LicenseID, "alloc.2", "ship.2"); code(err) != want || path(err) != "/args/target/id" {
 			t.Errorf("%s: %s %s", name, code(err), path(err))
 		}
 	}
@@ -412,7 +421,7 @@ func TestTDAT13ExpiredLicenceAndMismatchesAreRefused(t *testing.T) {
 	x := w.ful.exports[cnx.ExportRef{Kind: cnxapi.TargetShipment, ID: "ship.2"}]
 	x.Destination, x.EndUserPartyID, x.Lines[0].SpecRevision = "DE", "customer.1", 2
 	w.ful.put(x)
-	if _, err := w.allocate(w.doc1, c.LicenseID, "alloc.4", "ship.2"); code(err) != cnxapi.CodeExportLicenseExpired {
+	if _, err := w.allocate(w.doc1, c.LicenseID, "alloc.4", "ship.2"); code(err) != cnxapi.CodeExportLicenseGoodsMismatch {
 		t.Fatalf("unclassified line: %s", code(err))
 	}
 
@@ -687,11 +696,17 @@ func TestExportLicenseRecordsAreAppendOnly(t *testing.T) {
 		// 600 more for another shipment: Σ 1,200 above the 1,000 licensed.
 		{`INSERT INTO brant_cnx.export_license_allocation SELECT tenant_id, company_id, 'alloc.forged', license_id, target_kind, 'ship.2',
 			target_version, 1, order_id, order_revision, destination, end_user_party_id, lines, lines_hash, quantity, value_minor, currency_code,
-			allocated_by_kind, allocated_by_id, authority_epoch, allocated_at FROM brant_cnx.export_license_allocation`, "would be exceeded"},
+			allocated_by_kind, allocated_by_id, authority_epoch, allocated_at, 'ship.2', end_user_source FROM brant_cnx.export_license_allocation`,
+			"would be exceeded"},
+		// S5R-D04, D40: an allocation names its shipment and where its end user came from.
+		{`INSERT INTO brant_cnx.export_license_allocation SELECT tenant_id, company_id, 'alloc.forged', license_id, target_kind, 'ship.3',
+			target_version, 1, order_id, order_revision, destination, end_user_party_id, lines, lines_hash, 1, 0, currency_code,
+			allocated_by_kind, allocated_by_id, authority_epoch, allocated_at FROM brant_cnx.export_license_allocation`, "names its shipment"},
 		// A second attempt for ship.1 while its first allocation is outstanding.
 		{`INSERT INTO brant_cnx.export_license_allocation SELECT tenant_id, company_id, 'alloc.forged', license_id, target_kind, target_id,
 			target_version, 2, order_id, order_revision, destination, end_user_party_id, lines, lines_hash, 1, 0, currency_code,
-			allocated_by_kind, allocated_by_id, authority_epoch, allocated_at FROM brant_cnx.export_license_allocation`, "holds an allocation"},
+			allocated_by_kind, allocated_by_id, authority_epoch, allocated_at, shipment_id, end_user_source FROM brant_cnx.export_license_allocation`,
+			"holds an allocation"},
 		{`INSERT INTO brant_cnx.export_license_release SELECT tenant_id, company_id, 'rel.forged', license_id, allocation_id, 'withdrawn',
 			'stated', 'SYN', 'x', allocated_at, '[{"source_id":"x","content_sha256":"x"}]', quantity + 1, 0, 'x', 'human', 'doc.2',
 			authority_epoch, allocated_at FROM brant_cnx.export_license_allocation`, "less outstanding"},
@@ -721,7 +736,7 @@ func TestExportLicensesOverHTTP(t *testing.T) {
 		"unit": "PCS", "currency": map[string]any{"id": w.usd.ConfigID, "revision": w.usd.Revision}, "licensed_value": "10000.00",
 		"destination": "DE", "end_user": map[string]any{"party_id": "customer.1", "name": "合成最终用户"},
 		"valid_from": kernel.FormatTimestamp(now.Add(-time.Hour)), "valid_until": kernel.FormatTimestamp(now.Add(24 * time.Hour)),
-		"file_id": w.licenseFile}
+		"file_id": w.licenseFile, "customs_office": "2248"} // S5R-D04: required (一证一关)
 	registered := clerk.command("cnx", cnxapi.Contract, cnxapi.CommandRegisterLicense, args)
 	id, _ := registered["object_id"].(string)
 	if registered["status"] != "registered" || registered["row_version"] != float64(1) || id == "" {

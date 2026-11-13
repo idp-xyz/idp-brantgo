@@ -208,7 +208,8 @@ func TestExportLicenseGatesTheRelease(t *testing.T) {
 		Holder: "合成出口商（测试）", Goods: cnxapi.LicensedGoods{SkuSpecs: []cnxapi.SpecRef{{SkuID: w.line.Sku.SkuID, SpecRevision: w.line.Sku.SpecRevision}}},
 		LicensedQuantity: "1000", Unit: w.line.UnitRef.ID, Currency: cnxapi.CurrencyRef{ID: w.usd.ConfigID, Revision: w.usd.Revision},
 		LicensedValue: "10000.00", Destination: "DE", EndUser: cnxapi.EndUser{PartyID: "customer.1", Name: "合成最终用户"},
-		ValidFrom: kernel.FormatTimestamp(now.Add(-time.Hour)), ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: "licence.1"})
+		ValidFrom: kernel.FormatTimestamp(now.Add(-time.Hour)), ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: "licence.1",
+		CustomsOffice: "2248"}) // S5R-D04: 一证一关
 	w.must(err)
 	value, err := kernel.RoundMoney(kernel.MustCurrency("USD", 2), kernel.MustDecimal("960"))
 	w.must(err)

@@ -46,7 +46,8 @@ func newOrderWorld(t *testing.T, entries ...refapi.ScreeningEntry) *trdWorld {
 		PublishedOn: "2026-11-01", FileSHA256: hex.EncodeToString(sum[:]), EntryCount: len(entries), Entries: entries})
 	q.must(err)
 	reg := q.configure(q.author, q.reviewer, polapi.KindScreeningRegulation, "screening", 0, q.win.from, time.Time{},
-		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 30}}, true)
+		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 30,
+			Programmes: syntheticProgrammes}}, true)
 	_, err = q.c.PTY.RecordScreening(q.author, ptyapi.RecordScreening{IdempotencyKey: q.key(), PartyID: "customer.1", ExpectedVersion: 0,
 		RegulationID: reg.ConfigID, RegulationRevision: reg.Revision})
 	q.must(err)
