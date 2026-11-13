@@ -33,7 +33,7 @@ S5 的范围按负责人 2026-11-12 的决定为全深度（E-5）：订单经�
 - S5-02 · A8 e874f59 | 检验、处置与质量放行 | 外部检验机构的报告是证据，放行由我方授权人员决定（F-06，AI 与系统被拒）；复检替代旧检验、不增加可放行量（BT08）；放行量不超过有效检验的合格量减已放行量；撤销冻结未出运部分，重复撤销无变化（BT21）；QualityReleaseGuard v1 供 FUL 在事务内锁定。
 - S5-03 · B1a 9b5be90、B1a2 f1c6f48、B1b 1a1ec07 | 出运、节点与出口批次 | shipment.prepare 绑定生效订单修订、直发交付行与质量放行；出运确认（人工）先锁出运根、再锁订单履约根，按代码顺序调用全部守卫，FUL-INV-001 按订单行累计确认量不超过当前修订（零容差），两个出运抢最后的数量只有一个成功，重放不重复出运（BT11）；直发交付只算核实量（TD-AT14）。节点区分供应商声称、内部核实与已接受，报关放行、实际离港、交付与客户验收是不同节点（CN-R07）；出口批次映射分批出运的多行（CN-AT02）。ShipmentFacts v1、ShipmentLineRef v1、ExportLotRef v1 供 TRD、STL、CNX 读取。
 - S5-04 · B2a 7e59d81、B2b b760a7c | 资金记录、核销与结算单 | 资金记录（人工、附银行证据）分开汇款额、到账额与银行费用，未解释差额在独立批准人解释前不可用（CN-R10）；结汇是转账记录，不是第二笔收款（CN-AT09）；订单账户承载当前修订的付款阶段，预付款核销到阶段，结算单确认后移到应收；同一出运行或交付行只结算一次，并发只有一个成功（STL-INV-001）；核销不超过来源余额与目标未结额（STL-INV-002）。PaymentConditionGuard v1 按出运或单证范围判定付款条件。CN-AT07、CN-AT08、CN-AT09 与基线 4.6 S-A 的现金一侧在 PG16 上通过。
-- S5-05 · C3a 8f85e62、C3b 79484ed | 中国最小协同（人工路径） | 报关案从出口批次、已核实申报档案与外销合同准备，人工提交与登记回执（原文、映射版本与外部序号），旧回执不覆盖新回执，unknown 先核实再重报；采购发票导入为候选、人工核实并匹配承诺行，红字冲回把匹配送回复核；退税案按用途分配发票余额（并发只有一个成功），预计、已批与已收分开；单证包列出缺失项、负责人与期限，存在不等于有效。CNX 读取 FUL 的出口批次，出口日期取报关回执上的出口日期（负责人确认）。@@S5-D2A-CARD@@
+- S5-05 · C3a 8f85e62、C3b 79484ed | 中国最小协同（人工路径） | 报关案从出口批次、已核实申报档案与外销合同准备，人工提交与登记回执（原文、映射版本与外部序号），旧回执不覆盖新回执，unknown 先核实再重报；采购发票导入为候选、人工核实并匹配承诺行，红字冲回把匹配送回复核；退税案按用途分配发票余额（并发只有一个成功），预计、已批与已收分开；单证包列出缺失项、负责人与期限，存在不等于有效。CNX 读取 FUL 的出口批次，出口日期取报关回执上的出口日期（负责人确认）。D2a 在一个套件中经 HTTP 端到端运行全部 18 个 CN-AT 用例，全部通过（04 节）。
 - S5-07 · C1 a422f9e、C1b 6a79b3e、C1c 4d1aa66 | 商业条件放行 | commercial_release.evaluate 按出运或单证范围一次调用全部守卫并记录 granted 或 blocked 与首个未满足的码；例外只由信用经理批准、只覆盖一个未付阶段的付款条件，从不覆盖质量、筛查、合规或许可证（FUL-INV-002、BT13）；出运确认与单证放行在自身事务内重查并消耗放行。SC-08／TD-AT08（2.00 未解释差额被阻断，解释并核销后放行）、TD-AT12、质量撤销与出运确认、核销撤销与单证放行的两种提交顺序在 PG16 上通过。负责人 2026-11-12 的两项决定由 C1b、C1c 实现：已出运货物的单证放行按订单当前修订判定付款条件，出运确认后新出现的阻断仍然阻止单证放行。
 - S5-08 · C2 6378737 | 订舱与出运单证套 | 订舱按版本记录；商业发票与装箱单由 shipment-text/0.1.0 按 POL 版式以中英文渲染并由 POL 编号，提单与原产地证为外部单证记录；签发前逐项核对发票、装箱单、提单、出运行、实际装箱与订单行的差异，未解决或未确认不能签发（BT12、FUL-INV-004）；签发件不可变，编号不复用；单证放行绑定已签发的提单。CN-AT17 的双语单证与签署件登记在 PG16 上通过（界面一半未做）。
 - S5-09 · C4a f88bee4、C4b-CNX 9d668fc、C4b-STL 6244a7e、C4b-PUR 638d02a、C4b-FUL 43122ce | 订单变更传播 | TRD 在锁订单后无锁读取 FUL 的出运事实与 PUR 的下游承诺（D-1）：已出运的不能取消、不能减到已出运以下，关闭要求逐行出运等于订购，短交关闭要求已有出运（TD-AT01、TD-AT02、ES-09），取消与出运确认的两种提交顺序都正确（TRD-INV-019）；变更准备从下游事实预填影响项。OrderAmended 与订单结束事件触发 PUR 分配复核、FUL 出运复核、STL 付款计划复核与信用迁移、CNX 新修订的待定核查（PL-09、PL-14），每个修订只处理一次（BT10）。
@@ -110,26 +110,26 @@ D1 按代码而非字面执行了计划 §5 的 15 处细节，每处保留步�
 
 | CN-AT | 用例 | 单元 | 单元测试 | D2a |
 |---|---|---|---|---|
-| 01 | 单一主体正常出口链 | D1；D2a 两次出运变体 | TestBRC001OrderToSettlementOverHTTP（一次出运） | @@D2A-01@@ |
-| 02 | 分批出运、多行出口 | B1b、C3a | TestExportLotsMapSplitShipmentsCNAT02、TestCNAT02DeclaresMultiLineLotsFromFUL；多个销售行进入一个批次只在领域测试中证明（共享订单只有一行） | @@D2A-02@@ |
-| 03 | 发票品名与单位对报关 | C3a | TestCNAT03MappingWithoutAProfessionalBasisIsNotConfirmed（DECLARATION_MAPPING_UNVERIFIED） | @@D2A-03@@ |
-| 04 | 一张采购发票跨批次使用 | C3b | TestCNAT04PurposeBalancesAcrossBatches、TestCNAT04ConcurrentAllocationsOneWins（TAX_EVIDENCE_EXCEEDED，并发只有一个成功） | @@D2A-04@@ |
-| 05 | 先出运后开票、红字冲回 | C3b | TestCNAT05RedReversalPutsMatchesBackToReview、TestRedReversalAndAllocationCommitOrders；应付不随红冲调整（B2b 决定 7） | @@D2A-05@@ |
-| 06 | 修改与撤回报关、乱序回执 | C3a | TestCNAT06AmendedAndWithdrawnDeclarationsWithOutOfOrderReceipts（DECLARATION_RECEIPT_STALE） | @@D2A-06@@ |
-| 07 | 合并付款含银行费用 | B2a | TestCombinedPaymentForTwoOrders | @@D2A-07@@ |
-| 08 | 付款人不同、退汇与退款 | B2a | TestRefundsReturnsAndPayers；第三方付款人保持 PARTY_ENTITY_MISMATCH 待核 | @@D2A-08@@ |
-| 09 | 先结汇后人民币收款 | B2a | TestBaseline46CashSideAndConversion（结汇记录不是第二笔收款） | @@D2A-09@@ |
-| 10 | 预计、已批与已收退税 | C3b | TestCNAT10ExpectedApprovedAndReceivedStayApart | @@D2A-10@@ |
-| 11 | 出口后折让或退货 | C8（STL 一半）、C10（CNX 一半） | TestBaseline47SBCreditNote、TestCNAT11CreditNoteAfterExportIsReflectedInCNX；退货入库属 STK（S6-01） | @@D2A-11@@ |
-| 12 | 政策变化与未结历史业务 | A3a、C3b | TestExportTaxPolicyChangeKeepsTheRevisionOfOldExports、TestCNAT12CaseBindsThePolicyInForceAtTheExportDate | @@D2A-12@@ |
-| 13 | 提交超时、结果后到 | C3a | TestCNAT13SubmissionTimeoutIsVerifiedBeforeAnythingIsSubmittedAgain（EXTERNAL_RESULT_UNKNOWN） | @@D2A-13@@ |
-| 14 | 缺失单证、证书不适用 | C3a、C5 | TestCNAT14BundleListsWhatIsMissingAndPresenceIsNotValidity、TestCNAT14CertificateResultsApplyOnlyToTheirObjectMarketAndValidity | @@D2A-14@@ |
-| 15 | 出口方、发票买方与收款方主体不一致 | C3b、B2a | TestCNAT15BuyerEntityMismatchStaysInReview；收款账户须为本公司账户（B2a，领域测试）；“经获批方式复核”没有命令 | @@D2A-15@@ |
-| 16 | 期初余额与退税资料 | C10 | TestCNAT16OpeningBalancesReconcileAtTheCutoff、TestCNAT16OpeningRefundMaterialReconciles | @@D2A-16@@ |
-| 17 | 中文操作、双语单证、盖章修订 | C2；TRD 的 S/C 与 PI 签署件（S3） | TestBilingualDocumentsCorrespondAndSignedCopiesCNAT17（接口一半；界面未做） | @@D2A-17@@ |
-| 18 | AI 读取发票与报关差异 | C3b | TestCNAT18CandidatesAreVerifiedByAHuman（AI 只导入候选，核实限人工，差异显示） | @@D2A-18@@ |
+| 01 | 单一主体正常出口链 | D1；D2a 两次出运变体 | TestBRC001OrderToSettlementOverHTTP（一次出运） | TestCNATSuite01SingleEntityExportInTwoShipments 通过：两次出运各 480.00，两个批次报关放行（回执原文、映射 v1），发票 120 PCS 分配 60 ＋ 60 到两个退税案（预计、无金额），单证包完整，资金标为商业核销（CN-R11），订单关闭、占用释放 |
+| 02 | 分批出运、多行出口 | B1b、C3a | TestExportLotsMapSplitShipmentsCNAT02、TestCNAT02DeclaresMultiLineLotsFromFUL；多个销售行进入一个批次只在领域测试中证明（共享订单只有一行） | TestCNATSuite02SplitShipmentsAndMultiLineExports 通过：L2 分 20 ＋ 16 出运，再多 1 件为 SHIPMENT_QUANTITY_EXCEEDED；两个批次 352.00、608.00，第二批两个报关项；漏行、重复批次与第二个未结报关均被拒；各销售行报关量 = 出运量 = 订购量 |
+| 03 | 发票品名与单位对报关 | C3a | TestCNAT03MappingWithoutAProfessionalBasisIsNotConfirmed（DECLARATION_MAPPING_UNVERIFIED） | TestCNATSuite03InvoiceUnitDiffersFromDeclaration 通过（偏差：L4 以 4 DOZEN 贯穿各上下文）：单位未换算的报关项不能确认（DECLARATION_MAPPING_UNVERIFIED），受控换算后 48 PCS = 48 件，旧版本确认为 REFERENCE_STALE |
+| 04 | 一张采购发票跨批次使用 | C3b | TestCNAT04PurposeBalancesAcrossBatches、TestCNAT04ConcurrentAllocationsOneWins（TAX_EVIDENCE_EXCEEDED，并发只有一个成功） | TestCNATSuite04OneInvoiceAcrossBatches 通过：两笔并发分配一胜一 TAX_EVIDENCE_EXCEEDED，胜者同键重试为同一动作，败者改用余量与另一张发票；免税用途余额分开。并发经 HTTP 同时发送，未在数据库中强制重叠（C3b 的测试强制） |
+| 05 | 先出运后开票、红字冲回 | C3b | TestCNAT05RedReversalPutsMatchesBackToReview、TestRedReversalAndAllocationCommitOrders；应付不随红冲调整（B2b 决定 7） | TestCNATSuite05ShipFirstInvoiceLaterRedReversal 通过：先出运、报关与付款后到票；红冲后 4 个匹配与 4 个分配转复核，规划为 INVALID_STATE；交付、出运、批次与已付应付不变；更正发票替换分配。应付侧的暂估调整没有命令 |
+| 06 | 修改与撤回报关、乱序回执 | C3a | TestCNAT06AmendedAndWithdrawnDeclarationsWithOutOfOrderReceipts（DECLARATION_RECEIPT_STALE） | TestCNATSuite06AmendedWithdrawnDeclarationOutOfOrderReceipts 通过（偏差：退税案在修改后保留已绑定的出口日期）：迟到与重复回执为 DECLARATION_RECEIPT_STALE 且无变化；修改产生版本 2（120 → 110），撤回后再收到放行为 INVALID_STATE；用途不因撤回恢复 |
+| 07 | 合并付款含银行费用 | B2a | TestCombinedPaymentForTwoOrders | TestCNATSuite07CombinedPaymentWithBankCharges 通过（偏差：第二张订单为期初应收）：汇款 1,000.00 = 到账 980.00 ＋ 已解释银行费用 15.00 ＋ 待定 5.00；资金岗位自行解释为 PERMISSION_DENIED；敞口 1,000.00 → 5.00 |
+| 08 | 付款人不同、退汇与退款 | B2a | TestRefundsReturnsAndPayers；第三方付款人保持 PARTY_ENTITY_MISMATCH 待核 | TestCNATSuite08DifferentPayerReturnedRemittanceAndRefund 通过：第三方付款核销为 PARTY_ENTITY_MISMATCH 待定，退汇从中扣减；超出余额的退款为 APPLICATION_EXCEEDS_AVAILABLE，退款另成资金记录；第三方付款依据的核实没有命令 |
+| 09 | 先结汇后人民币收款 | B2a | TestBaseline46CashSideAndConversion（结汇记录不是第二笔收款） | TestCNATSuite09FXConversionThenCNYReceipt 通过：670.00 USD 按 7.1 结汇 CNY 4,757.00 为一条结汇记录；人民币一侧作为客户收款为 BUSINESS_KEY_CONFLICT，二次结汇超额，结汇记录不能核销；应收与净销售不变 |
+| 10 | 预计、已批与已收退税 | C3b | TestCNAT10ExpectedApprovedAndReceivedStayApart | TestCNATSuite10ExpectedApprovedAndReceivedRefundDiffer 通过（偏差：税务局为 PTY 供应商主体，文书由 admin 登记）：预计 507.00、核准 480.00 ＋ 抵 20.00、到账 480.00 分开记录，金额与币种不符的到账被拒；不按冻结政策解释（CN-D02、CN-D07 未冻结） |
+| 11 | 出口后折让或退货 | C8（STL 一半）、C10（CNX 一半） | TestBaseline47SBCreditNote、TestCNAT11CreditNoteAfterExportIsReflectedInCNX；退货入库属 STK（S6-01） | TestCNATSuite11AllowanceAfterExport 通过：贷项 50.00 确认前在 CNX 反映为 INVALID_STATE，确认并核销后（未结 672.00 → 622.00、净销售 910.00）在单证包对账中反映，差额 −50；报关、退税案、批次与出运不变。退运属 STK |
+| 12 | 政策变化与未结历史业务 | A3a、C3b | TestExportTaxPolicyChangeKeepsTheRevisionOfOldExports、TestCNAT12CaseBindsThePolicyInForceAtTheExportDate | TestCNATSuite12PolicyChangeWithOpenHistoricalBusiness 通过：先出口的批次保留政策修订 r1，新修订发布后出口的批次绑定 r2（export_refund 被拒、免税可用），旧案在变化后仍按 r1 增加分配 |
+| 13 | 提交超时、结果后到 | C3a | TestCNAT13SubmissionTimeoutIsVerifiedBeforeAnythingIsSubmittedAgain（EXTERNAL_RESULT_UNKNOWN） | TestCNATSuite13SubmissionTimeoutThenVerifiedResult 通过：结果 unknown 时重报为 EXTERNAL_RESULT_UNKNOWN，原提交同键重试为同一动作；无出口日期时分配为 INVALID_STATE；登记回执后才可分配 |
+| 14 | 缺失单证、证书不适用 | C3a、C5 | TestCNAT14BundleListsWhatIsMissingAndPresenceIsNotValidity、TestCNAT14CertificateResultsApplyOnlyToTheirObjectMarketAndValidity | TestCNATSuite14MissingDocumentAndCertificateNotApplicable 通过：原产地证列为缺件（负责岗位、期限），上传件存在不等于已核实（DOCUMENT_REQUIREMENT_UNVERIFIED），他国或未覆盖全部行的证书为 CERTIFICATE_NOT_APPLICABLE，适用证书使单证包完整。FUL 原产地证记录的 certificate_ref 由 C5 的测试覆盖 |
+| 15 | 出口方、发票买方与收款方主体不一致 | C3b、B2a | TestCNAT15BuyerEntityMismatchStaysInReview；收款账户须为本公司账户（B2a，领域测试）；“经获批方式复核”没有命令 | TestCNATSuite15EntityMismatchExporterBuyerPayee 通过（偏差：拒收后由供应商重开）：买方主体不符为 PARTY_ENTITY_MISMATCH 并保持导入状态，另一公司的读取为 404，他人账户的收款被拒，报关不接受出口方成员；获批方式复核没有命令，出口方非本公司（CN-M03）不在 CN-M01 |
+| 16 | 期初余额与退税资料 | C10 | TestCNAT16OpeningBalancesReconcileAtTheCutoff、TestCNAT16OpeningRefundMaterialReconciles | TestCNATSuite16OpeningBalancesAndRefundMaterial 通过：截止时点的期初应收 7,000.00、应付 1,800.00、预收 2,000.00 与期初发票余额、已核准退税案对账，重复导入为 OPENING_BALANCE_DUPLICATE，敞口加 7,000.00，只有预收是现金 |
+| 17 | 中文操作、双语单证、盖章修订 | C2；TRD 的 S/C 与 PI 签署件（S3） | TestBilingualDocumentsCorrespondAndSignedCopiesCNAT17（接口一半；界面未做） | TestCNATSuite17BilingualDocumentsAndSignedCopies 通过：中英文商业发票与装箱单出自同一内容并逐项对应，草稿不能登记签署件，AI 被拒，盖章扫描件登记一次，外销合同会签（TRD）；拒绝均为目录码，中文文本取自错误码目录。界面不在本仓库 |
+| 18 | AI 读取发票与报关差异 | C3b | TestCNAT18CandidatesAreVerifiedByAHuman（AI 只导入候选，核实限人工，差异显示） | TestCNATSuite18AIReadsInvoicesAndDeclarations 通过：AI 导入误读的候选（12 PCS／60.00），其核实、确认与回执登记为 PERMISSION_DENIED；税务专员按 120／600.00 核实，6 处差异各注明来源 |
 
-@@D2A-SUMMARY@@
+D2a（单元提交 d21d52d，合并 7aedd52）在 internal/bootstrap 中新增 cnat_integration_test.go、cnat_harness_integration_test.go 与 cnat_dozen_integration_test.go：TestCNATSuite01—18 每个用例使用新租户，从 D1 的 BRC-001 链分叉，经 HTTP 由用例指定的人工或 AI 代理以本地签发者的令牌发出全部命令与读取，事件经进程内分发投递并重投一次无变化；18 个用例共 4,770 个请求（3,671 POST、1,099 GET），套件约 105 s。证据运行于 2026-11-13（UTC），在最终树 df25a38 上 18 个全部通过（Go 1.26.8，WSL2，PostgreSQL 16.12 容器 brant-pg16-d2a）；单元门禁 make check 0，make integration 107 包 ok（03:25—03:40 UTC）。各用例的完整记录与矩阵在证据 11—13。全部用例都在 D1 的链上运行，D1 的 15 处细节偏差同样适用；另加的夹具：sales 另持 credit_note.request（销售经办模板的权限），AI 代理 agent.reader 持显式权限，另一公司的读者持 cnx.read。任何用例都没有执行：海关单一窗口、税务机关、银行、承运人、货代与检验机构的系统、真实身份提供方与界面；全部数字、主体与外部结果为合成，证明的是组合进程上的规则，不是合规处理（基线 §24.3）。没有发现产品缺陷。
 
 ## 05 伴随场景 {#s5}
 
@@ -137,22 +137,22 @@ D1 按代码而非字面执行了计划 §5 的 15 处细节，每处保留步�
 
 | 场景 | 内容 | 单元与测试 | D2b |
 |---|---|---|---|
-| SC-08 ／ TD-AT08 | 核心设计条款 30 %／70 % 出运前：670.00 到账、2.00 未解释 → COMMERCIAL_RELEASE_BLOCKED，解释并核销后放行 | C1 TestSC08ReleaseWaitsForTheUnexplainedDifference | @@D2B-SC08@@ |
-| SC-09 | 两张订单：额度 10,000、未结 7,000、占用 4,000 → 信用决定 → 信用经理放行 → 生效；禁运目的国 → TRADE_COMPLIANCE_NOT_CLEAR，保持草稿 | B4 TestOrderActivationAsksTradeComplianceThenCredit；C10 TestSC09AnOpeningReceivableCountsInTheCreditExposure（未结 7,000 来自期初应收） | @@D2B-SC09@@ |
-| SIM-02 变体 | CIF 汉堡 1,000 × 9.20、O/A 60 天、变更减 10 % 后 PUR 复核与草稿作废、保险 110 %、工厂交付 850 / 900、出运 850、短交关闭 50 → STL 释放 | C6 TestInsuranceOnTheCIFInvoiceSIM02Step8；C11 TestCommitmentShortReceiptSIM02；C4b-PUR、C4b-FUL 的复核测试 | @@D2B-SIM02@@ |
-| TD-AT13 | 许可证 1,000、已分配 600、再分配 500 → EXPORT_LICENSE_EXCEEDED；过期 → EXPORT_LICENSE_EXPIRED；并发只有一笔成功 | B5 TestTDAT13ExportLicenseRegisterAllocateAndGuard、TestTDAT13ConcurrentAllocationsOneWins | @@D2B-TDAT13@@ |
-| TD-AT14 ／ ES-12 | 承诺 120、核实 100、未核实声称 20：出运 120 → SUPPLIER_DELIVERY_INSUFFICIENT | B1a2 TestShipmentOnVerifiedDeliveriesTDAT14；B3 的 PUR 一半 | @@D2B-TDAT14@@ |
-| BT10 | 部分出运后减量或改色：承诺、装箱与付款计划的影响可追溯，已出运事实保留 | C4b-PUR TestAllocationReviewFollowsAReducedOrderBT10；C4b-FUL TestShipmentReviewFollowsAReducedOrderBT10；C1b TestDocumentsReleaseOfAConfirmedShipmentAfterAReductionBT10 | @@D2B-BT10@@ |
-| BT12 | 装箱单箱数与发票数量不符：逐项显示差异，未解决不能签发 | C2 TestShipmentDocumentsReconcileBeforeIssueBT12 | @@D2B-BT12@@ |
-| BT21 | 放行 200、出运 100、撤销 → 剩余 100 冻结，二次撤销无变化 | A8 TestRevocationFreezesTheUnshippedRestBT21 | @@D2B-BT21@@ |
-| 基线 4.6 S-A | 预付 200、结算 600 ＋ 400、以 6.875 结汇 800 = CNY 5,500、运费 650 → 390 ＋ 260、确认结果 CNY 2,350 = 1,410 ＋ 940、汇差 −100 | B2a TestBaseline46CashSideAndConversion；B2b TestBaseline46SAStatements；C8 TestCrossCurrencyApplicationAtTheSettlementRateS_A；C9 TestBaseline46SAOrderResult | @@D2B-SA@@ |
-| 基线 4.7 S-B | 1,000 的贷项 100 → 净销售 900，应收减少，数量不变 | C8 TestBaseline47SBCreditNote；C9 TestSBCreditNoteInTheConfirmedResult（领域） | @@D2B-SB@@ |
-| 跨币种核销 | 人民币收款按结算汇率核销美元应收，汇差单列；缺结算汇率 → FX_SCOPE_MISMATCH | C8 TestCrossCurrencyApplicationAtTheSettlementRateS_A、TestCrossCurrencyPrepaymentMovesInProportion | @@D2B-FX@@ |
-| 结算冲销 | 有有效核销时冲销被拒，撤销核销后冲销，出运行只再结算一次 | C8 TestReversalRestoresTheSourceOnce、TestReversalAndApplicationOfOneStatementOneWins | @@D2B-REV@@ |
-| BT18 ／ BT24 | 费用待定时关闭被拒并列出维度；关闭后补录下月运费 → 重新打开、新快照、旧快照保留 | C9 TestBaseline46SAOrderResult（BT18 部分）、TestBT24LateFreightReopensTheResult | @@D2B-BT18@@ |
-| 承诺变更与取消 | SIM-02 短交 850；取消释放分配、保留已核实交付 | C11 TestCommitmentShortReceiptSIM02、TestCommitmentCancelReleasesTheUndeliveredAllocationAndKeepsTheVerified | @@D2B-C11@@ |
+| SC-08 ／ TD-AT08 | 核心设计条款 30 %／70 % 出运前：670.00 到账、2.00 未解释 → COMMERCIAL_RELEASE_BLOCKED，解释并核销后放行 | C1 TestSC08ReleaseWaitsForTheUnexplainedDifference | TestS5SC08ReleaseWaitsForTheUnexplainedDifferenceOverHTTP 通过（偏差：订单从一开始按 30 %／70 % 出运前成立，不用变更）：670.00 核销后放行 blocked（P2 短 2.00），出运确认 409；信用经理解释 2.00 后仍 blocked，核销 2.00 后同一放行 granted；单证放行原提单；结算单 960.00 未结 0 |
+| SC-09 | 两张订单：额度 10,000、未结 7,000、占用 4,000 → 信用决定 → 信用经理放行 → 生效；禁运目的国 → TRADE_COMPLIANCE_NOT_CLEAR，保持草稿 | B4 TestOrderActivationAsksTradeComplianceThenCredit；C10 TestSC09AnOpeningReceivableCountsInTheCreditExposure（未结 7,000 来自期初应收） | TestS5SCSC09CreditDecisionAndEmbargoedOrderOverHTTP 通过：期初应收 7,000.00 使敞口 7,000.00；订单 A 出运后部分 4,000.00 → 信用决定 CREDIT_LIMIT_EXCEEDED（超额 1,000.00），生效 409，信用经理放行后占用、生效；订单 B 收货人在 AQ（合成禁运地区）→ 合规 blocked，TRADE_COMPLIANCE_NOT_CLEAR，保持草稿 |
+| SIM-02 变体 | CIF 汉堡 1,000 × 9.20、O/A 60 天、变更减 10 % 后 PUR 复核与草稿作废、保险 110 %、工厂交付 850 / 900、出运 850、短交关闭 50 → STL 释放 | C6 TestInsuranceOnTheCIFInvoiceSIM02Step8；C11 TestCommitmentShortReceiptSIM02；C4b-PUR、C4b-FUL 的复核测试 | TestS5SCSIM02VariantOverHTTP 通过：CIF 9,200.00，信用决定后生效；减 10 % 后 PUR 复核作废草稿并另起 900，STL 复核信用部分 9,200.00 → 8,280.00，CNX 新修订 clear；交付 450 ＋ 400，短交变更后承诺 fulfilled；无保险单 409、8,601.99 不足额 422，8,602.00（7,820.00 × 110 %）足额；短交关闭余 50，占用释放 |
+| TD-AT13 | 许可证 1,000、已分配 600、再分配 500 → EXPORT_LICENSE_EXCEEDED；过期 → EXPORT_LICENSE_EXPIRED；并发只有一笔成功 | B5 TestTDAT13ExportLicenseRegisterAllocateAndGuard、TestTDAT13ConcurrentAllocationsOneWins | TestS5SCTDAT13ExportLicenceOverHTTP 通过：放行在分配许可证前为 EXPORT_LICENSE_REQUIRED；许可证 A（1,000）分配 600 后放行；500 再分配到 A 为 EXPORT_LICENSE_EXCEEDED，过期的 B 为 EXPORT_LICENSE_EXPIRED，另一许可证 C 使订单整单出运 |
+| TD-AT14 ／ ES-12 | 承诺 120、核实 100、未核实声称 20：出运 120 → SUPPLIER_DELIVERY_INSUFFICIENT | B1a2 TestShipmentOnVerifiedDeliveriesTDAT14；B3 的 PUR 一半 | TestS5SCTDAT14ShipmentOnlyOnVerifiedDeliveryOverHTTP 通过：声称 120、核实 100（L4 28）、待核 20、拒绝 5；出运 120 为 SUPPLIER_DELIVERY_INSUFFICIENT，待核与已拒为 SUPPLIER_DELIVERY_UNVERIFIED；出运 100 |
+| BT10 | 部分出运后减量或改色：承诺、装箱与付款计划的影响可追溯，已出运事实保留 | C4b-PUR TestAllocationReviewFollowsAReducedOrderBT10；C4b-FUL TestShipmentReviewFollowsAReducedOrderBT10；C1b TestDocumentsReleaseOfAConfirmedShipmentAfterAReductionBT10 | TestS5SCBT10OrderChangeAfterPartialShipmentOverHTTP 通过：已出运 60 后减到低于已出运为 QUANTITY_BELOW_SHIPPED；L4 48 → 36 的修订 2 由五个消费方各处理一次；PUR、FUL、STL 复核分别以承诺变更、替换出运、接受处置，CNX 修订 2 重新 clear；已出运事实保留 |
+| BT12 | 装箱单箱数与发票数量不符：逐项显示差异，未解决不能签发 | C2 TestShipmentDocumentsReconcileBeforeIssueBT12 | TestS5SCBT12PackingListMismatchBlocksTheIssueOverHTTP 通过：工厂装箱单与出运行、实际装箱、发票有 6 处差异，签发 409 并逐项给出路径；按实际装箱的装箱单版本 2 对齐后签发，同一编号 PL-2026-00001，版本 1 被替代 |
+| BT21 | 放行 200、出运 100、撤销 → 剩余 100 冻结，二次撤销无变化 | A8 TestRevocationFreezesTheUnshippedRestBT21 | TestS5SCBT21RevocationAfterPartialShipmentOverHTTP 通过：L4 放行 48、已出运 24 后撤销，二次撤销重放无新事件；第二个出运确认为 QUALITY_RELEASE_REQUIRED；冻结的 24 不能再放行（QUALITY_RELEASE_EXCEEDS_CONFORMING） |
+| 基线 4.6 S-A | 预付 200、结算 600 ＋ 400、以 6.875 结汇 800 = CNY 5,500、运费 650 → 390 ＋ 260、确认结果 CNY 2,350 = 1,410 ＋ 940、汇差 −100 | B2a TestBaseline46CashSideAndConversion；B2b TestBaseline46SAStatements；C8 TestCrossCurrencyApplicationAtTheSettlementRateS_A；C9 TestBaseline46SAOrderResult | TestS5SCSABaseline46OverHTTP 通过（偏差：人民币到账按结算汇率直接核销，不经结汇记录）：CNY 1,400.00 → USD 200.00，CNY 5,500.00 → 400.00 ＋ 400.00（各 −50.00），运费 650 → 390.00 ＋ 260.00，确认结果 CNY 2,350.00 = 1,410.00 ＋ 940.00，预测 2,500.00，汇差 −100.00，净现金 2,900 |
+| 基线 4.7 S-B | 1,000 的贷项 100 → 净销售 900，应收减少，数量不变 | C8 TestBaseline47SBCreditNote；C9 TestSBCreditNoteInTheConfirmedResult（领域） | TestS5SCSBCreditNoteOverHTTP 通过：销售经办申请退货贷项 100.00、自行确认为 PERMISSION_DENIED，信用经理确认并核销；数量仍为 100 PCS，净销售 900，经营结果 900 − 400 − 50 = 450.00（退回 10 PCS 入库的 40.00 属 STK，故非基线的 490.00） |
+| 跨币种核销 | 人民币收款按结算汇率核销美元应收，汇差单列；缺结算汇率 → FX_SCOPE_MISMATCH | C8 TestCrossCurrencyApplicationAtTheSettlementRateS_A、TestCrossCurrencyPrepaymentMovesInProportion | TestS5SCCrossCurrencyWriteOffAtTheSettlementRateOverHTTP 通过：CNY 4,620.00 核销 P2 672.00，无汇率或信用用途汇率为 FX_SCOPE_MISMATCH，结算汇率 0.145454545455 得 USD 672.00，应收未结 0 |
+| 结算冲销 | 有有效核销时冲销被拒，撤销核销后冲销，出运行只再结算一次 | C8 TestReversalRestoresTheSourceOnce、TestReversalAndApplicationOfOneStatementOneWins | TestS5SCSettlementReversalAfterUnapplyOverHTTP 通过：有移入的预付核销时冲销为 SETTLEMENT_HAS_APPLICATIONS，撤销后由信用经理冲销，再结算一次，第三张结算单为 SETTLEMENT_SOURCE_DUPLICATE |
+| BT18 ／ BT24 | 费用待定时关闭被拒并列出维度；关闭后补录下月运费 → 重新打开、新快照、旧快照保留 | C9 TestBaseline46SAOrderResult（BT18 部分）、TestBT24LateFreightReopensTheResult | TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP 通过：费用待定时关闭 409 列出履约、应收、采购成本与直接费用；全部结清后快照 1 为 300.00（31.25 %）；下月运费 20.00 须重新打开，快照 2 为 280.00，快照 1 保留并标为重新打开 |
+| 承诺变更与取消 | SIM-02 短交 850；取消释放分配、保留已核实交付 | C11 TestCommitmentShortReceiptSIM02、TestCommitmentCancelReleasesTheUndeliveredAllocationAndKeepsTheVerified | TestS5SCSIM02VariantOverHTTP（短交 850，承诺 fulfilled，余 50 短交关闭）与 TestS5SCCommitmentCancellationOverHTTP 通过：取消释放未交付的 L3、L4 分配，保留已核实的 60，草稿保持已承诺，替代草稿另向 supplier.B 采购 |
 
-@@D2B-SUMMARY@@
+D2b（单元提交 a78d064，合并 f76861c）新增 s5_scenarios_integration_test.go 与 s5sc_deal_integration_test.go：14 个测试 TestS5SC…OverHTTP，每个使用一个租户，九个在 BRC-001 上运行，五个（SC-09、TD-AT13、S-A、S-B、SIM-02）需要 BRC-001 给不出的数字，在按场景构造的成交（deal builder）上从询价走到订单；16 个场景行全部执行，共 3,054 个请求，证据运行 73 s（2026-11-13，最终提交 a78d064，Go 1.26.8，WSL2，PostgreSQL 16.12 容器 brant-pg16-d2b）；单元门禁 make check 0，make integration 107 包 ok。期初应收 7,000.00 的种子在 SC-09 与 SIM-02 中运行。省略的部分各在记录中写明理由：SIM-02 第 1—3、5、10、11 步（不属计划的变体）；BT10 的改色（C4b 的单元测试）；TD-AT14 两个出运确认的竞争（B1a、B1b 的 PG16 测试）；S-B 的退货入库（STK，S6-01）。没有发现产品缺陷。各场景的完整记录与矩阵在证据 14—16。
 
 ## 06 容量基准与恢复演练（S5-11，G4 的准备） {#s6}
 
@@ -338,7 +338,7 @@ D1 按代码而非字面执行了计划 §5 的 15 处细节，每处保留步�
 | 缺口 | 发现单元 |
 |---|---|
 | documentation 模板没有 number.issue，商业发票与装箱单须由单证员取号（测试另授权限）；或改由 POL 代上下文取号 | C2、C6、D1 |
-| treasury、credit_manager、credit_officer、tax_specialist 没有 source.register（tax_specialist 也没有 file.register），compliance 没有 source.register：依据银行水单、账单与发票作决定的人不能登记这些证据 | A7b、D1 |
+| treasury、credit_manager、credit_officer、tax_specialist 没有 source.register（tax_specialist 也没有 file.register），compliance 没有 source.register：依据银行水单、账单、发票与税务文书作决定的人不能登记这些证据（D2a 的 CN-AT10 由 admin 登记税务局文书） | A7b、D1、D2a、D2b |
 | shipment.confirm：事件风暴 ES-10、ES-12 写单证员，岗位模板只给跟单（按模板实现） | B1a、C1 |
 | order.activate 在销售经办模板，计划 §5 写订单审核人 | D1 |
 | order_account.open 借用 payment_plan_review.open 权限；建议设自有权限，由资金岗位与系统消费方持有，销售与 AI 不持有 | B2a、B6b |
@@ -359,7 +359,7 @@ D1 按代码而非字面执行了计划 §5 的 15 处细节，每处保留步�
 | 生效订单持有已交付未出运的货物时不能取消：SM-TRD-ORDER 的“或已有获批处置”没有来源（可由 PUR 命令写入 DownstreamCommitments v1 的 disposition，或由订单结束前的复核结果提供） | C4b-PUR |
 | CIF／CIP 缺保险单的码：FUL-INV-005 与错误码目录写 INSURANCE_COVERAGE_INSUFFICIENT，计划写 SHIPMENT_DOCUMENTS_UNRECONCILED（按计划实现）；TRD／POL 没有合同保险比例；核价保险组件是否按部分出运分摊 | C6 |
 | 事件队列（Outbox 中继）延迟目标：C7 建议参考负载下 P95 ≤ 5 s、2—3 个分发进程 | C7 |
-| 信用：新修订信用需求变小时占用不减，敞口在订单结束前偏高；consumed → released 是否增加“被后续修订替代”；游离占用（应用未要求而另行占用）至过期前计入敞口 | C4b-STL |
+| 信用：新修订信用需求变小时占用不减，敞口在订单结束前偏高；consumed → released 是否增加“被后续修订替代”；游离占用（应用未要求而另行占用）至过期前计入敞口。D2b 的 SIM-02：订单减到 8,280.00 后，较大的占用保持 consumed，敞口仍按 16,200.00（含期初 7,000.00）计至订单结束 | C4b-STL、D2b |
 | 付款条件例外的有效期上限（单元取 90 天，设计无值） | C1 |
 | 单证放行的细则：已结束订单上撤销生效批准仍拒绝；PTY 筛查严格（任何非 clear 都阻止，含筛查过期与名单更新）还是只识别真实阻断；CNX 中间修订不查 | C1b、C1c |
 | 订舱是否需要“已申请”状态；证书适用性的判定时点、每张原产地证是否必须是登记的 CNX 结果、证书种类是否包括目的市场供应链合规证据与优惠原产地 | C2、C5 |
@@ -367,8 +367,12 @@ D1 按代码而非字面执行了计划 §5 的 15 处细节，每处保留步�
 | 退税用途 export_refund／export_exemption 与退税方式（免税与征税未区分）须专业确认 | A3a、C3b |
 | 国别：区域级项目（ISO 3166-2）不能表达；POL 公司档案、适用法律与筛查条目的国别只校验格式；国别项目来源的批准矩阵行仍为 PENDING | A3b |
 | 商业发票与其他发票共用 POL 的 invoice 计数器 | A3a |
+| 贸易合规：评估有禁运命中时人工仍可判为 clear（A7 决定 4：命中只是候选，由合规人工判断）；SC-09 的“订单审批不能覆盖”成立，因为 TRD 的订单审核从不覆盖 CNX 的结论 | A7、D2b |
+| 质量：撤销的放行全额计入，冻结的未出运数量永远不能再放行（D2b 的 BT21：冻结的 24 件再放行为 QUALITY_RELEASE_EXCEEDS_CONFORMING） | A8、D2b |
+| 结算：订单经营结果不能把结汇记录（fx_conversion）归到订单的业务结算汇差，净现金不含费用付款（D2b 的 S-A 改为按结算汇率直接核销人民币到账，得出基线的 −100.00 汇差，净现金 2,900） | C9、D2b |
+| 红字发票对应付（暂估）的影响没有命令或消费方（应付只依据核实交付）；第三方付款人的付款依据、主体不一致的“获批方式复核”没有命令 | B2a、B2b、C3b、D2a |
 | 期初：期初应收不能开贷项；期初资金记录不能冲销；期初应收币种与额度币种不同时为 FX_SCOPE_MISMATCH；POL 没有“追溯录入的历史政策修订” | C10 |
-| 运营：出口退税政策须在海关放行之前发布，之后发布的修订不适用于已出口批次；FCA 下买方指定货代的运费仍记为我方直接费用（报价成本含运费） | D1 |
+| 运营：出口退税政策须在海关放行之前发布，之后发布的修订不适用于已出口批次；FCA 下买方指定货代的运费仍记为我方直接费用（报价成本含运费）；出口退税政策的新修订只适用于发布后出口的批次（D2a 的 CN-AT12） | C3b、D1、D2a |
 
 ### 战术模型修订
 
@@ -421,8 +425,9 @@ Python V0.50 没有 S5 的内容：08 阶段的映射表（577 行）没有 QLT�
 | 6a79b3e | C1b | 迁移 1 个；竞态 104 包 ok（15:17）；合并后的树即单元已通过集成门禁的树 | 43344603484 成功 |
 | fc6fc58、ad9e7fd、3a7cb7f | C9、C7、测试修正 | 迁移 1 个；竞态 107 包 ok；集成 106 包 ok、1 个包失败：TestLoadGeneratorSmoke 在与套件共用的数据库上有 3 次探测超过 1 s 采样周期（Outbox 积压约 60 万行）；3a7cb7f 放宽该测试，make check 通过（11-13 01:54） | 3a7cb7f 43348362221 成功 |
 | 4d1aa66 | C1c | 集成 107 包 ok；竞态 107 包 ok（11-13 02:36） | 43353425674 成功 |
-| 2c7cd8a、fd6635b | D1、C10 | 迁移 2 个；集成 107 包 ok（02:53）；@@GATE-fd6635b-RACE@@ | @@CI-fd6635b@@ |
-| @@GATE-D2@@ | D2a、D2b | @@GATE-D2-RESULT@@ | @@CI-D2@@ |
+| 2c7cd8a、fd6635b | D1、C10 | 迁移 2 个；集成 107 包 ok（02:53）；竞态 107 包 ok，无数据竞争（03:09） | 43357384395 成功 |
+| 7aedd52 | D2a | 迁移 0 个；竞态 107 包 ok，无数据竞争（04:04）；合并后的树即 D2a 已通过集成门禁的树（107 包 ok） | 随 f76861c 推送 |
+| f76861c | D2b | @@GATE-f76861c@@ | @@CI-f76861c@@ |
 
 S5 期间发现并修复的缺陷：C4b-STL 版本的 PaymentConditionGuard v1 把超额核销的阶段按全额计入（C1 发现，B2b 在 stl 000004 中按到期额封顶并加测试）；B1b 的测试与 C4a 的规则冲突（582b692）；TestExpiredOrRevokedApprovalLeavesNoFormalArtifacts 的 3 秒窗口在竞态检测下过短（10d0bfe）；负载冒烟测试在共用数据库上的采样容差（3a7cb7f）。未发现其他产品缺陷。
 
@@ -441,7 +446,10 @@ S5 期间发现并修复的缺陷：C4b-STL 版本的 PaymentConditionGuard v1 �
 | 08_brc001_s5_chain_table.md | 由记录生成的表格：逐步结果、分发、金额与未执行项 |
 | 09_brc001_s5_compare.txt | 两次运行的比对：规范化后 0 差异 |
 | 10_capacity_and_recovery/ | C7 的阶梯负载报告（三轮）、汇总表与两轮演练的日志、事实表与校验结果 |
-| @@EVIDENCE-D2@@ | |
+| 11_cnat_matrix.json、12_cnat_matrix.md | D2a 的 CN-AT 矩阵：每个用例的要求、测试、负责单元与其测试、观察结果、拒绝码、未执行项与偏差 |
+| 13_cnat_cases/ | D2a 每个用例的完整记录 cn-at01—18.json（每个请求与分发轮次） |
+| 14_s5_scenarios.json、15_s5_scenarios_table.md | D2b 的伴随场景矩阵：每个场景的设计编号、依据的单元与测试、断言的数字、偏差、省略部分与未执行项 |
+| 16_s5_scenarios/ | D2b 每个场景的完整记录（每个请求与分发轮次） |
 
 {{s5_evidence}}
 

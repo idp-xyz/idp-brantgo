@@ -1,0 +1,3930 @@
+{
+  "scenario": "BT18-BT24",
+  "title": "经营结果：有未结事项不结清 (BT18)；次月运费重开，历史快照不覆盖 (BT24)",
+  "design": [
+    "BT18",
+    "BT24",
+    "STL-INV-010",
+    "STL-INV-011",
+    "SM-STL-ORDER-RESULT",
+    "baseline 4.5"
+  ],
+  "rests_on": [
+    "C9",
+    "B2b",
+    "D1"
+  ],
+  "unit_tests": [
+    "TestBaseline46SAOrderResult (C9, BT18 part)",
+    "TestBT24LateFreightReopensTheResult (C9)",
+    "TestOrderResultOnRealRecordsBRC001OverHTTP (C9)"
+  ],
+  "deviations": [
+    "BRC-001's figures (USD): the late freight is 20.00 USD (C9's ledger test uses S-A's CNY 100.00)."
+  ],
+  "omitted": [
+    "§5 steps 17, 18 and 22–24 (export lot, declaration, invoice, tax case, bundle): the order result's close conditions do not include them (D1 runs them)"
+  ],
+  "test": "TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP",
+  "executed": true,
+  "result": "passed",
+  "figures": {
+    "allocate_while_settled": "INVALID_STATE",
+    "close": "settled v2",
+    "close_after_shipment": "/conditions/fulfilment /conditions/receivables /conditions/purchase_costs /conditions/direct_charges",
+    "close_with_estimated_freight": "/conditions/direct_charges",
+    "close_without_a_new_review": "INVALID_STATE",
+    "conditions_after_shipment": "reviewed fulfilment=unmet receivables=unmet payables=met purchase_costs=unmet direct_charges=unmet claims=not_enabled",
+    "confirm_while_settled": "INVALID_STATE",
+    "freight_recorded": "estimated",
+    "late_charge_dates": "2026-12-05 / 2026-12-05 recorded true",
+    "late_freight": "pending occurred 2026-12-05",
+    "reopen": "open v3",
+    "reopenings": "1 次月运费补录：BILL-NEXT",
+    "result_events": "2 closed, 1 reopened",
+    "result_with_late_freight": "settled snapshot_1 true executing 28000",
+    "second_close": "settled v5",
+    "snapshot_1": "30000 31.25",
+    "snapshots": "2 #1 30000 reopened true sha kept true; #2 28000 charges 8000"
+  },
+  "not_executed": [
+    "§5 steps 17, 18 and 22–24 (export lot, declaration, invoice, tax case, bundle): the order result's close conditions do not include them (D1 runs them)",
+    "sending the purchase order and the supplier's confirmation through a channel: purchase.commitment.issue and purchase.supplier_confirmation.record record the human sending and receiving as facts on EVD evidence",
+    "the external inspection agency's system: qc records the agency's report (an EVD file) as a fact",
+    "the carrier's and the forwarder's systems: the booking, the B/L record and the forwarder's bill are entered from EVD evidence",
+    "China customs (single window): the declaration's submission and receipt are recorded manually (CN-M01), the receipt's original text is synthetic",
+    "the bank: fund records are entered by treasury from synthetic bank advices",
+    "the tax authority: the VAT special invoice is a synthetic scan imported and verified by tax.officer; no refund is submitted, approved or received, the case stays expected",
+    "CLM: the order result records claims not_enabled (S5 has no claims context)",
+    "the Outbox relay to an external sink: the relay publishes to the in-process dispatcher (brant-worker -dispatch)",
+    "a real identity provider"
+  ],
+  "requests": 285,
+  "chain": {
+    "scenario": "BT18-BT24",
+    "wbs": "S5 D2b (S5 plan §5 companions)",
+    "parity": "BT18, BT24, STL-INV-010, STL-INV-011, SM-STL-ORDER-RESULT, baseline 4.5",
+    "test": "TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP",
+    "result": "passed",
+    "started_at": "2026-11-13T03:44:17.065786Z",
+    "finished_at": "2026-11-13T03:44:23.714573Z",
+    "environment": {
+      "go": "go1.26.8",
+      "identity": "local OIDC issuer of the test (RS256, typ at+jwt, JWKS by discovery); no real identity provider",
+      "os_arch": "linux/amd64",
+      "postgresql": "16.12",
+      "transport": "bootstrap.Platform.API behind net/http/httptest on loopback"
+    },
+    "tenant": "tenant.a2023f247161",
+    "company": "company.A",
+    "actors": {
+      "acceptance.verifier": "客户确认核实人",
+      "admin": "管理员（POL 草稿）",
+      "buyer": "采购／核价经办（起草）",
+      "compliance": "合规（名单与主体筛查）",
+      "config.reviewer": "配置与交易档案发布人（独立复核）",
+      "cost.checker": "核价复核（核实、评估、冻结）",
+      "credit.manager.1": "信用经理",
+      "credit.manager.2": "信用经理",
+      "credit.officer": "信用专员",
+      "doc.1": "单证（申报要素归类）",
+      "doc.2": "单证（归类核实）",
+      "merchandiser": "跟单",
+      "order.reviewer": "订单审核人",
+      "purchaser": "采购编制人",
+      "qc": "质检",
+      "quote.reviewer": "报价审核人",
+      "sales": "销售经办",
+      "tax.officer": "税务专员",
+      "treasury": "资金"
+    },
+    "fixtures": [
+      {
+        "what": "tenant tenant.a2023f247161 with company.A",
+        "how": "newWorld (pgtest.UniqueID)",
+        "why": "a tenant is the access token's brant_tenant claim; there is no business HTTP route for it"
+      },
+      {
+        "what": "grants of the ten humans",
+        "how": "bootstrap.Platform.Provision: every permission, company data scope, team trade",
+        "why": "operator-only (cmd/brant-admin grant); no business HTTP route"
+      },
+      {
+        "what": "role templates of doc.1, doc.2 (documentation) and credit.manager.1, credit.manager.2 (credit_manager)",
+        "how": "bootstrap.Platform.AssignRoles with company data scope",
+        "why": "operator-only; STL reads the approver's tier from the credit_manager template (S5 D-6)"
+      },
+      {
+        "what": "access tokens",
+        "how": "the test's local OIDC issuer, one token per request",
+        "why": "no real identity provider is connected before the B0 pilot gate"
+      },
+      {
+        "what": "role templates of merchandiser (merchandiser), qc (quality_inspector), treasury (treasury), tax.officer (tax_specialist) and credit.officer (credit_officer)",
+        "how": "bootstrap.Platform.AssignRoles with company data scope",
+        "why": "operator-only; no business HTTP route"
+      },
+      {
+        "what": "number.issue for doc.1 besides the documentation template",
+        "how": "bootstrap.Platform.Provision with the documentation template's permissions plus number.issue",
+        "why": "POL NumberIssue v1 numbers the commercial invoice and the packing list as the acting human; the documentation template lacks number.issue (C2's reported gap)"
+      },
+      {
+        "what": "the Inbox actors of every consumer the composed contexts subscribe",
+        "how": "bootstrap.Platform.ProvisionInbox (as brant-admin inbox)",
+        "why": "operator-only; a consumer's commands run as system:inbox.<consumer>"
+      },
+      {
+        "what": "the event relay",
+        "how": "bootstrap.Platform.Relay publishing to messaging.Dispatcher of Contexts.Subscriptions (brant-worker -dispatch in process) over a throwaway Bento outbox fed with the platform Outbox's events of the tenant, unchanged",
+        "why": "a relay on the shared bento.outbox would also claim other tests' events"
+      }
+    ],
+    "not_executed": [
+      "sending the purchase order and the supplier's confirmation through a channel: purchase.commitment.issue and purchase.supplier_confirmation.record record the human sending and receiving as facts on EVD evidence",
+      "the external inspection agency's system: qc records the agency's report (an EVD file) as a fact",
+      "the carrier's and the forwarder's systems: the booking, the B/L record and the forwarder's bill are entered from EVD evidence",
+      "China customs (single window): the declaration's submission and receipt are recorded manually (CN-M01), the receipt's original text is synthetic",
+      "the bank: fund records are entered by treasury from synthetic bank advices",
+      "the tax authority: the VAT special invoice is a synthetic scan imported and verified by tax.officer; no refund is submitted, approved or received, the case stays expected",
+      "CLM: the order result records claims not_enabled (S5 has no claims context)",
+      "the Outbox relay to an external sink: the relay publishes to the in-process dispatcher (brant-worker -dispatch)",
+      "a real identity provider"
+    ],
+    "amounts": {
+      "commercial_invoice": "960.00 USD",
+      "cost_snapshot": "660.00 USD",
+      "cost_snapshot_minor": "66000",
+      "credit_reserved": "672.00 USD",
+      "credit_reserved_minor": "67200",
+      "order_payable": "960.00 USD",
+      "order_payable_minor": "96000",
+      "payable": "600.00 USD",
+      "payable_open": "0.00 USD",
+      "purchase_commitment": "600.00 USD",
+      "purchase_draft": "600.00 USD",
+      "purchase_draft_net_minor": "60000",
+      "quote_payable": "960.00 USD",
+      "quote_payable_minor": "96000",
+      "quote_payments": "288.00 + 672.00 USD",
+      "quote_profit": "300.00 USD",
+      "receipt_p1": "288.00 USD",
+      "receivable": "960.00 USD",
+      "receivable_applied": "288.00 + 670.00 + 2.00 USD",
+      "receivable_open": "0.00 USD",
+      "scenario_B_minor": "69600",
+      "shipped": "120 PCS"
+    },
+    "steps": [
+      {
+        "n": 1,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.001",
+        "status": 200,
+        "object_id": "evidence",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 2,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.002",
+        "status": 200,
+        "object_id": "currency:USD",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 3,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.003",
+        "status": 200,
+        "object_id": "currency:USD",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 4,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.004",
+        "status": 200,
+        "object_id": "unit:PCS",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 5,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.005",
+        "status": 200,
+        "object_id": "unit:PCS",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 6,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.006",
+        "status": 200,
+        "object_id": "tax_profile:tax.zero",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 7,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.007",
+        "status": 200,
+        "object_id": "tax_profile:tax.zero",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 8,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.008",
+        "status": 200,
+        "object_id": "fee_category:freight",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 9,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.009",
+        "status": 200,
+        "object_id": "fee_category:freight",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 10,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.010",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.red.S",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 11,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.011",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.red.S",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 12,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.012",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.red.S",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 13,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.013",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.red.S",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 14,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.014",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.red.M",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 15,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.015",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.red.M",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 16,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.016",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.red.M",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 17,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.017",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.red.M",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 18,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.018",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.blue.S",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 19,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.019",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.blue.S",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 20,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.020",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.blue.S",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 21,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.021",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.blue.S",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 22,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.022",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.blue.M",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 23,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.023",
+        "status": 200,
+        "object_id": "tax_application:purchase.ST01.blue.M",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 24,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.024",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.blue.M",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 25,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.025",
+        "status": 200,
+        "object_id": "tax_application:sales.ST01.blue.M",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 26,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.026",
+        "status": 200,
+        "object_id": "tax_application:tax.service",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 27,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.027",
+        "status": 200,
+        "object_id": "tax_application:tax.service",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 28,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.028",
+        "status": 200,
+        "object_id": "payment_terms:payment.30-70",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 29,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.029",
+        "status": 200,
+        "object_id": "payment_terms:payment.30-70",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 30,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.030",
+        "status": 200,
+        "object_id": "trade_terms:FCA",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 31,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.031",
+        "status": 200,
+        "object_id": "trade_terms:FCA",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 32,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.032",
+        "status": 200,
+        "object_id": "pricing_policy:policy.1",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 33,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.033",
+        "status": 200,
+        "object_id": "pricing_policy:policy.1",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 34,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.034",
+        "status": 200,
+        "object_id": "company_profile:company.A",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 35,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.035",
+        "status": 200,
+        "object_id": "company_profile:company.A",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 36,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.036",
+        "status": 200,
+        "object_id": "quote_document_template:quote.template",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 37,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.037",
+        "status": 200,
+        "object_id": "quote_document_template:quote.template",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 38,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.038",
+        "status": 200,
+        "object_id": "number_sequence:quote.seq",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 39,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.039",
+        "status": 200,
+        "object_id": "number_sequence:quote.seq",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 40,
+        "phase": "EVD and POL foundation",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.040",
+        "status": 200,
+        "object_id": "screening_regulation:screening",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 41,
+        "phase": "EVD and POL foundation",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.041",
+        "status": 200,
+        "object_id": "screening_regulation:screening",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 42,
+        "phase": "EVD and POL foundation",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/pol/configs/payment_terms/payment.30-70",
+        "status": 200,
+        "facts": {
+          "active_revision": 1
+        }
+      },
+      {
+        "n": 43,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.042",
+        "status": 200,
+        "object_id": "source.1",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 44,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.save_draft",
+        "idempotency_key": "brc001.043",
+        "status": 200,
+        "object_id": "customer.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 45,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.confirm",
+        "idempotency_key": "brc001.044",
+        "status": 200,
+        "object_id": "customer.1",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 46,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/contact.save_draft",
+        "idempotency_key": "brc001.045",
+        "status": 200,
+        "object_id": "contact.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 47,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/contact.confirm",
+        "idempotency_key": "brc001.046",
+        "status": 200,
+        "object_id": "contact.1",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 48,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/pty/parties/customer.1",
+        "status": 200,
+        "facts": {
+          "addresses": 2,
+          "revision": 1
+        }
+      },
+      {
+        "n": 49,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.save_draft",
+        "idempotency_key": "brc001.047",
+        "status": 200,
+        "object_id": "ST01.red.S",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 50,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.confirm",
+        "idempotency_key": "brc001.048",
+        "status": 200,
+        "object_id": "ST01.red.S",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 51,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.save_draft",
+        "idempotency_key": "brc001.049",
+        "status": 200,
+        "object_id": "ST01.red.M",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 52,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.confirm",
+        "idempotency_key": "brc001.050",
+        "status": 200,
+        "object_id": "ST01.red.M",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 53,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.save_draft",
+        "idempotency_key": "brc001.051",
+        "status": 200,
+        "object_id": "ST01.blue.S",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 54,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.confirm",
+        "idempotency_key": "brc001.052",
+        "status": 200,
+        "object_id": "ST01.blue.S",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 55,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.save_draft",
+        "idempotency_key": "brc001.053",
+        "status": 200,
+        "object_id": "ST01.blue.M",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 56,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/sku.confirm",
+        "idempotency_key": "brc001.054",
+        "status": 200,
+        "object_id": "ST01.blue.M",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 57,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/inq/commands/rfq.save_draft",
+        "idempotency_key": "brc001.055",
+        "status": 200,
+        "object_id": "rfq.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 58,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/inq/commands/rfq.confirm_scope",
+        "idempotency_key": "brc001.056",
+        "status": 200,
+        "object_id": "rfq.1",
+        "row_version": 2,
+        "result": "ready"
+      },
+      {
+        "n": 59,
+        "phase": "S1 front",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/inq/rfqs/rfq.1",
+        "status": 200,
+        "facts": {
+          "quantities": [
+            "24",
+            "36",
+            "12",
+            "48"
+          ],
+          "row_version": 2,
+          "status": "ready"
+        }
+      },
+      {
+        "n": 60,
+        "phase": "PTY trading profile and screening",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/trading_profile.save_draft",
+        "idempotency_key": "brc001.057",
+        "status": 200,
+        "object_id": "customer.1",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 61,
+        "phase": "PTY trading profile and screening",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/trading_profile.publish",
+        "idempotency_key": "brc001.058",
+        "status": 200,
+        "object_id": "customer.1",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 62,
+        "phase": "PTY trading profile and screening",
+        "actor": "compliance",
+        "method": "POST",
+        "path": "/api/brant/v1/ref/commands/screening_list.import",
+        "idempotency_key": "brc001.059",
+        "status": 200,
+        "object_id": "cn.uel:v1",
+        "row_version": 1,
+        "result": "imported"
+      },
+      {
+        "n": 63,
+        "phase": "PTY trading profile and screening",
+        "actor": "compliance",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party_screening.record",
+        "idempotency_key": "brc001.060",
+        "status": 200,
+        "object_id": "customer.1",
+        "row_version": 1,
+        "result": "clear"
+      },
+      {
+        "n": 64,
+        "phase": "PTY trading profile and screening",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/pty/parties/customer.1/trading_profile",
+        "status": 200,
+        "facts": {
+          "active_revision": 1
+        }
+      },
+      {
+        "n": 65,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.061",
+        "status": 200,
+        "object_id": "supplier.quotes",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 66,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.save_draft",
+        "idempotency_key": "brc001.062",
+        "status": 200,
+        "object_id": "supplier.A",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 67,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.confirm",
+        "idempotency_key": "brc001.063",
+        "status": 200,
+        "object_id": "supplier.A",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 68,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_rfq.save_draft",
+        "idempotency_key": "brc001.064",
+        "status": 200,
+        "object_id": "request.A",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 69,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_rfq.record_issued",
+        "idempotency_key": "brc001.065",
+        "status": 200,
+        "object_id": "request.A",
+        "row_version": 2,
+        "result": "issued"
+      },
+      {
+        "n": 70,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_offer.save_draft",
+        "idempotency_key": "brc001.066",
+        "status": 200,
+        "object_id": "offer.A",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 71,
+        "phase": "SUP supply conditions",
+        "actor": "cost.checker",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_offer.verify",
+        "idempotency_key": "brc001.067",
+        "status": 200,
+        "object_id": "offer.A",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 72,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "GET",
+        "path": "/api/brant/v1/sup/supplier_offers/offer.A",
+        "status": 200,
+        "facts": {
+          "active_revision": 1,
+          "unit_price": "5.00"
+        }
+      },
+      {
+        "n": 73,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.save_draft",
+        "idempotency_key": "brc001.068",
+        "status": 200,
+        "object_id": "supplier.B",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 74,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.confirm",
+        "idempotency_key": "brc001.069",
+        "status": 200,
+        "object_id": "supplier.B",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 75,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_rfq.save_draft",
+        "idempotency_key": "brc001.070",
+        "status": 200,
+        "object_id": "request.B",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 76,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_rfq.record_issued",
+        "idempotency_key": "brc001.071",
+        "status": 200,
+        "object_id": "request.B",
+        "row_version": 2,
+        "result": "issued"
+      },
+      {
+        "n": 77,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_offer.save_draft",
+        "idempotency_key": "brc001.072",
+        "status": 200,
+        "object_id": "offer.B",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 78,
+        "phase": "SUP supply conditions",
+        "actor": "cost.checker",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/supplier_offer.verify",
+        "idempotency_key": "brc001.073",
+        "status": 200,
+        "object_id": "offer.B",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 79,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "GET",
+        "path": "/api/brant/v1/sup/supplier_offers/offer.B",
+        "status": 200,
+        "facts": {
+          "active_revision": 1,
+          "unit_price": "5.30"
+        }
+      },
+      {
+        "n": 80,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.save_draft",
+        "idempotency_key": "brc001.074",
+        "status": 200,
+        "object_id": "provider.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 81,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.confirm",
+        "idempotency_key": "brc001.075",
+        "status": 200,
+        "object_id": "provider.1",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 82,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/service_role.verify",
+        "idempotency_key": "brc001.076",
+        "status": 200,
+        "object_id": "provider.1",
+        "row_version": 3,
+        "result": "verified"
+      },
+      {
+        "n": 83,
+        "phase": "SUP supply conditions",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/logistics_offer.save_draft",
+        "idempotency_key": "brc001.077",
+        "status": 200,
+        "object_id": "log.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 84,
+        "phase": "SUP supply conditions",
+        "actor": "cost.checker",
+        "method": "POST",
+        "path": "/api/brant/v1/sup/commands/logistics_offer.verify",
+        "idempotency_key": "brc001.078",
+        "status": 200,
+        "object_id": "log.1",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 85,
+        "phase": "CST costing",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/cst/commands/costing_context.save_draft",
+        "idempotency_key": "brc001.079",
+        "status": 200,
+        "object_id": "context.1",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 86,
+        "phase": "CST costing",
+        "actor": "cost.checker",
+        "method": "POST",
+        "path": "/api/brant/v1/cst/commands/costing_context.verify",
+        "idempotency_key": "brc001.080",
+        "status": 200,
+        "object_id": "context.1",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 87,
+        "phase": "CST costing",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/cst/commands/cost_scenario.save_draft",
+        "idempotency_key": "brc001.081",
+        "status": 200,
+        "object_id": "scenario.A",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 88,
+        "phase": "CST costing",
+        "actor": "cost.checker",
+        "method": "POST",
+        "path": "/api/brant/v1/cst/commands/cost_scenario.evaluate",
+        "idempotency_key": "brc001.082",
+        "status": 200,
+        "object_id": "eval-01a1d301-933c-768f-b871-a3505847e825",
+        "row_version": 1,
+        "result": "evaluated"
+      },
+      {
+        "n": 89,
+        "phase": "CST costing",
+        "actor": "cost.checker",
+        "method": "GET",
+        "path": "/api/brant/v1/cst/cost_evaluations/eval-01a1d301-933c-768f-b871-a3505847e825",
+        "status": 200,
+        "facts": {
+          "comparison_status": "comparable",
+          "evaluation_id": "eval-01a1d301-933c-768f-b871-a3505847e825",
+          "result_hash": "df519287c5b2c9ee2a4fc5cec0c1f3c68278cb7f9807bc04224f95c939fd807d",
+          "total": "660.00 USD",
+          "total_minor": "66000"
+        }
+      },
+      {
+        "n": 90,
+        "phase": "CST costing",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/cst/commands/cost_scenario.save_draft",
+        "idempotency_key": "brc001.083",
+        "status": 200,
+        "object_id": "scenario.B",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 91,
+        "phase": "CST costing",
+        "actor": "cost.checker",
+        "method": "POST",
+        "path": "/api/brant/v1/cst/commands/cost_scenario.evaluate",
+        "idempotency_key": "brc001.084",
+        "status": 200,
+        "object_id": "eval-01a1d301-938d-7df3-a64b-7e3001c15fc4",
+        "row_version": 1,
+        "result": "evaluated"
+      },
+      {
+        "n": 92,
+        "phase": "CST costing",
+        "actor": "cost.checker",
+        "method": "GET",
+        "path": "/api/brant/v1/cst/cost_evaluations/eval-01a1d301-938d-7df3-a64b-7e3001c15fc4",
+        "status": 200,
+        "facts": {
+          "comparison_status": "comparable",
+          "evaluation_id": "eval-01a1d301-938d-7df3-a64b-7e3001c15fc4",
+          "result_hash": "dcba5474a8b1766ae6a95f5bbf5c8d343e5efa5af1a4db7503975cf320eb39f2",
+          "total": "696.00 USD",
+          "total_minor": "69600"
+        }
+      },
+      {
+        "n": 93,
+        "phase": "CST costing",
+        "actor": "cost.checker",
+        "method": "POST",
+        "path": "/api/brant/v1/cst/commands/cost_snapshot.freeze",
+        "idempotency_key": "brc001.085",
+        "status": 200,
+        "object_id": "snap-01a1d301-93c6-766e-bd3d-0ff0bc6ef7ec",
+        "row_version": 2,
+        "result": "frozen"
+      },
+      {
+        "n": 94,
+        "phase": "CST costing",
+        "actor": "cost.checker",
+        "method": "GET",
+        "path": "/api/brant/v1/cst/cost_snapshots/snap-01a1d301-93c6-766e-bd3d-0ff0bc6ef7ec",
+        "status": 200,
+        "facts": {
+          "result_hash": "df519287c5b2c9ee2a4fc5cec0c1f3c68278cb7f9807bc04224f95c939fd807d",
+          "snapshot_id": "snap-01a1d301-93c6-766e-bd3d-0ff0bc6ef7ec",
+          "total": "660.00 USD",
+          "total_minor": "66000"
+        }
+      },
+      {
+        "n": 95,
+        "phase": "CST costing",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/cst/cost_snapshots/snap-01a1d301-93c6-766e-bd3d-0ff0bc6ef7ec/adoptability",
+        "status": 200,
+        "facts": {
+          "currently_eligible_for_quote": true,
+          "status": "adoptable"
+        }
+      },
+      {
+        "n": 96,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.save_draft",
+        "idempotency_key": "brc001.086",
+        "status": 200,
+        "object_id": "quote.1",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 97,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.freeze",
+        "idempotency_key": "brc001.087",
+        "status": 200,
+        "object_id": "quote.1",
+        "row_version": 2,
+        "result": "frozen"
+      },
+      {
+        "n": 98,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1",
+        "status": 200,
+        "facts": {
+          "business_hash": "d951fa5f8d296f5a0b276e140d1d2d530df36b2cece357b01b71269715b8cd30",
+          "business_revision": 1,
+          "cost_minor": "66000",
+          "margin_rule": "pass",
+          "minimum_margin": "0.25",
+          "net_minor": "96000",
+          "payable": "960.00 USD",
+          "payable_minor": "96000",
+          "payments_minor": [
+            "28800",
+            "67200"
+          ],
+          "profit_minor": "30000"
+        }
+      },
+      {
+        "n": 99,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.submit_review",
+        "idempotency_key": "brc001.088",
+        "status": 200,
+        "object_id": "quote.1",
+        "row_version": 3,
+        "result": "pending_approval"
+      },
+      {
+        "n": 100,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.review.decide",
+        "idempotency_key": "brc001.089",
+        "status": 422,
+        "code": "INDEPENDENT_REVIEW_REQUIRED",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/review_request_id",
+              "reason": "The reviewer contributed to, froze or submitted the revision"
+            }
+          ]
+        }
+      },
+      {
+        "n": 101,
+        "phase": "TRD quote",
+        "actor": "quote.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.review.decide",
+        "idempotency_key": "brc001.090",
+        "status": 200,
+        "object_id": "quote.1",
+        "row_version": 4,
+        "result": "approved"
+      },
+      {
+        "n": 102,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1/approvals/approval.quote.1/check",
+        "status": 200,
+        "facts": {
+          "releasable": true
+        }
+      },
+      {
+        "n": 103,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.activate",
+        "idempotency_key": "brc001.091",
+        "status": 200,
+        "object_id": "quote.1",
+        "row_version": 5,
+        "result": "active"
+      },
+      {
+        "n": 104,
+        "phase": "TRD quote",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1/ready",
+        "status": 200,
+        "facts": {
+          "business_revision": 1,
+          "ready": true
+        }
+      },
+      {
+        "n": 105,
+        "phase": "TRD customer acceptance",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.092",
+        "status": 200,
+        "object_id": "mail",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 106,
+        "phase": "TRD customer acceptance",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.response.record",
+        "idempotency_key": "brc001.093",
+        "status": 200,
+        "object_id": "response.1",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 107,
+        "phase": "TRD customer acceptance",
+        "actor": "acceptance.verifier",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/quote.response.verify",
+        "idempotency_key": "brc001.094",
+        "status": 200,
+        "object_id": "acceptance.1",
+        "row_version": 1,
+        "result": "valid"
+      },
+      {
+        "n": 108,
+        "phase": "TRD customer acceptance",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/customer_responses/response.1",
+        "status": 200,
+        "facts": {
+          "business_hash": "d951fa5f8d296f5a0b276e140d1d2d530df36b2cece357b01b71269715b8cd30",
+          "classification": "full_unconditional"
+        }
+      },
+      {
+        "n": 109,
+        "phase": "TRD customer acceptance",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/acceptances/acceptance.1",
+        "status": 200,
+        "facts": {
+          "arrival_at": "2026-11-13T03:44:18.723391Z",
+          "effectivity": "valid",
+          "expires_at": "2026-11-16T03:44:18.444526Z",
+          "formation_rule": "arrival",
+          "formed": true,
+          "number": "QT-2026-00001"
+        }
+      },
+      {
+        "n": 110,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/order.prepare",
+        "idempotency_key": "brc001.095",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 111,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1",
+        "status": 200,
+        "facts": {
+          "order_hash": "0688d3d7a0f090214c5384b810d3072f6e90463265e94c2631480321539f8c48",
+          "order_revision": 1,
+          "slot": "full_v1"
+        }
+      },
+      {
+        "n": 112,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/order.review.request",
+        "idempotency_key": "brc001.096",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 2,
+        "result": "open"
+      },
+      {
+        "n": 113,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/order.review.decide",
+        "idempotency_key": "brc001.097",
+        "status": 422,
+        "code": "REVIEWER_NOT_INDEPENDENT",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/review_id",
+              "reason": "The reviewer prepared the order or requested the review"
+            }
+          ]
+        }
+      },
+      {
+        "n": 114,
+        "phase": "TRD sales order",
+        "actor": "order.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/order.review.decide",
+        "idempotency_key": "brc001.098",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 3,
+        "result": "approved"
+      },
+      {
+        "n": 115,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1/check?review_id=review.order.1",
+        "status": 200,
+        "code": "TRADE_COMPLIANCE_NOT_CLEAR",
+        "facts": {
+          "activatable": false,
+          "code": "TRADE_COMPLIANCE_NOT_CLEAR"
+        }
+      },
+      {
+        "n": 116,
+        "phase": "CNX trade compliance",
+        "actor": "compliance",
+        "method": "POST",
+        "path": "/api/brant/v1/ref/commands/country_programme.import",
+        "idempotency_key": "brc001.099",
+        "status": 200,
+        "object_id": "cn.country_programmes:v1",
+        "row_version": 1,
+        "result": "imported"
+      },
+      {
+        "n": 117,
+        "phase": "CNX trade compliance",
+        "actor": "compliance",
+        "method": "POST",
+        "path": "/api/brant/v1/ref/commands/country_programme.import",
+        "idempotency_key": "brc001.100",
+        "status": 200,
+        "object_id": "un.country_programmes:v1",
+        "row_version": 1,
+        "result": "imported"
+      },
+      {
+        "n": 118,
+        "phase": "CNX trade compliance",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.save_draft",
+        "idempotency_key": "brc001.101",
+        "status": 200,
+        "object_id": "decl.ST01.red.S",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 119,
+        "phase": "CNX trade compliance",
+        "actor": "doc.2",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.verify",
+        "idempotency_key": "brc001.102",
+        "status": 200,
+        "object_id": "decl.ST01.red.S",
+        "row_version": 2,
+        "result": "verified"
+      },
+      {
+        "n": 120,
+        "phase": "CNX trade compliance",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.save_draft",
+        "idempotency_key": "brc001.103",
+        "status": 200,
+        "object_id": "decl.ST01.red.M",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 121,
+        "phase": "CNX trade compliance",
+        "actor": "doc.2",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.verify",
+        "idempotency_key": "brc001.104",
+        "status": 200,
+        "object_id": "decl.ST01.red.M",
+        "row_version": 2,
+        "result": "verified"
+      },
+      {
+        "n": 122,
+        "phase": "CNX trade compliance",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.save_draft",
+        "idempotency_key": "brc001.105",
+        "status": 200,
+        "object_id": "decl.ST01.blue.S",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 123,
+        "phase": "CNX trade compliance",
+        "actor": "doc.2",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.verify",
+        "idempotency_key": "brc001.106",
+        "status": 200,
+        "object_id": "decl.ST01.blue.S",
+        "row_version": 2,
+        "result": "verified"
+      },
+      {
+        "n": 124,
+        "phase": "CNX trade compliance",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.save_draft",
+        "idempotency_key": "brc001.107",
+        "status": 200,
+        "object_id": "decl.ST01.blue.M",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 125,
+        "phase": "CNX trade compliance",
+        "actor": "doc.2",
+        "method": "POST",
+        "path": "/api/brant/v1/cat/commands/declaration_profile.verify",
+        "idempotency_key": "brc001.108",
+        "status": 200,
+        "object_id": "decl.ST01.blue.M",
+        "row_version": 2,
+        "result": "verified"
+      },
+      {
+        "n": 126,
+        "phase": "CNX trade compliance",
+        "actor": "compliance",
+        "method": "POST",
+        "path": "/api/brant/v1/cnx/commands/trade_compliance.evaluate",
+        "idempotency_key": "brc001.109",
+        "status": 200,
+        "object_id": "tcc-01a1d301-968b-7982-a723-a361b7fc59eb",
+        "row_version": 1,
+        "result": "pending"
+      },
+      {
+        "n": 127,
+        "phase": "CNX trade compliance",
+        "actor": "compliance",
+        "method": "GET",
+        "path": "/api/brant/v1/cnx/trade_compliance_checks/tcc-01a1d301-968b-7982-a723-a361b7fc59eb",
+        "status": 200
+      },
+      {
+        "n": 128,
+        "phase": "CNX trade compliance",
+        "actor": "compliance",
+        "method": "POST",
+        "path": "/api/brant/v1/cnx/commands/trade_compliance.decide",
+        "idempotency_key": "brc001.110",
+        "status": 200,
+        "object_id": "tcc-01a1d301-968b-7982-a723-a361b7fc59eb",
+        "row_version": 2,
+        "result": "clear",
+        "facts": {
+          "check_id": "tcc-01a1d301-968b-7982-a723-a361b7fc59eb",
+          "conclusion": "clear",
+          "order_revision": 1
+        }
+      },
+      {
+        "n": 129,
+        "phase": "CNX trade compliance",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1/check?review_id=review.order.1",
+        "status": 200,
+        "code": "CREDIT_RESERVATION_REQUIRED",
+        "facts": {
+          "activatable": false,
+          "code": "CREDIT_RESERVATION_REQUIRED"
+        }
+      },
+      {
+        "n": 130,
+        "phase": "STL credit",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.111",
+        "status": 200,
+        "object_id": "credit_policy:credit.usd",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 131,
+        "phase": "STL credit",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.112",
+        "status": 200,
+        "object_id": "credit_policy:credit.usd",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 132,
+        "phase": "STL credit",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/credit_limit.request",
+        "idempotency_key": "brc001.113",
+        "status": 200,
+        "object_id": "limit.1",
+        "row_version": 1,
+        "result": "requested"
+      },
+      {
+        "n": 133,
+        "phase": "STL credit",
+        "actor": "credit.manager.1",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/credit_limit.publish",
+        "idempotency_key": "brc001.114",
+        "status": 200,
+        "object_id": "limit.1",
+        "row_version": 2,
+        "result": "requested"
+      },
+      {
+        "n": 134,
+        "phase": "STL credit",
+        "actor": "credit.manager.2",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/credit_limit.publish",
+        "idempotency_key": "brc001.115",
+        "status": 200,
+        "object_id": "limit.1",
+        "row_version": 3,
+        "result": "published"
+      },
+      {
+        "n": 135,
+        "phase": "STL credit",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/credit.reserve",
+        "idempotency_key": "brc001.116",
+        "status": 200,
+        "object_id": "res.order.1",
+        "row_version": 1,
+        "result": "reserved"
+      },
+      {
+        "n": 136,
+        "phase": "STL credit",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/credit_reservations/res.order.1",
+        "status": 200,
+        "facts": {
+          "basis": "within_limit",
+          "exposure_minor": "67200",
+          "portion_minor": "67200"
+        }
+      },
+      {
+        "n": 137,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1/check?review_id=review.order.1",
+        "status": 200,
+        "facts": {
+          "activatable": true,
+          "unchecked": null
+        }
+      },
+      {
+        "n": 138,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/order.activate",
+        "idempotency_key": "brc001.117",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 4,
+        "result": "active"
+      },
+      {
+        "n": 139,
+        "phase": "TRD sales order",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1",
+        "status": 200,
+        "facts": {
+          "credit_guard": "covered",
+          "credit_portion_minor": "67200",
+          "credit_reservation_id": "res.order.1",
+          "trade_compliance": "clear/cleared/tcc-01a1d301-968b-7982-a723-a361b7fc59eb/tcd-01a1d301-96a5-71c5-9aff-2359484bb92b/false"
+        }
+      },
+      {
+        "n": 140,
+        "phase": "PUR purchase draft",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/purchase.draft.prepare",
+        "idempotency_key": "brc001.118",
+        "status": 200,
+        "object_id": "purchase.1",
+        "row_version": 1,
+        "result": "prepared"
+      },
+      {
+        "n": 141,
+        "phase": "read back",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1",
+        "status": 200,
+        "facts": {
+          "active_revision": 1,
+          "conversion_order_id": "order.1",
+          "conversion_slot": "full_v1",
+          "payable_minor": "96000"
+        }
+      },
+      {
+        "n": 142,
+        "phase": "read back",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1/active",
+        "status": 200,
+        "facts": {
+          "conversion_taken": true,
+          "document_sha256": "8d16d37aaa5740a1d54ed03e19551acf0e2cb7674cea36d403f9a663dcda4c0e",
+          "number": "QT-2026-00001"
+        }
+      },
+      {
+        "n": 143,
+        "phase": "read back",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1/revisions/1/document",
+        "status": 200,
+        "facts": {
+          "bytes": 1260,
+          "document_sha256": "8d16d37aaa5740a1d54ed03e19551acf0e2cb7674cea36d403f9a663dcda4c0e",
+          "number": "QT-2026-00001",
+          "renderer": "quote-text/0.1.0",
+          "states": [
+            "Net: 96000 | Tax: 0 | Payable: 96000",
+            "P1 | 30% | 28800",
+            "P2 | 70% | 67200"
+          ]
+        }
+      },
+      {
+        "n": 144,
+        "phase": "read back",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1/ready",
+        "status": 200,
+        "facts": {
+          "ready": true,
+          "reasons": null
+        }
+      },
+      {
+        "n": 145,
+        "phase": "read back",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1",
+        "status": 200,
+        "facts": {
+          "cost_snapshot_id": "snap-01a1d301-93c6-766e-bd3d-0ff0bc6ef7ec",
+          "line_payable_minor": [
+            "19200",
+            "28800",
+            "9600",
+            "38400"
+          ],
+          "net_minor": "96000",
+          "order_hash": "0688d3d7a0f090214c5384b810d3072f6e90463265e94c2631480321539f8c48",
+          "order_revision": 1,
+          "payable": "960.00 USD",
+          "payable_minor": "96000",
+          "row_version": 4,
+          "status": "active"
+        }
+      },
+      {
+        "n": 146,
+        "phase": "read back",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/purchase_drafts/purchase.1",
+        "status": 200,
+        "facts": {
+          "commitment_state": "not_committed",
+          "draft_hash": "107f11f45bdd14533451adf46b61b3e2e72ac98118299e416b79e6d31e43d0ad",
+          "gross_minor": "60000",
+          "line_net_minor": [
+            "12000",
+            "18000",
+            "6000",
+            "24000"
+          ],
+          "net": "600.00 USD",
+          "net_minor": "60000",
+          "order_hash": "0688d3d7a0f090214c5384b810d3072f6e90463265e94c2631480321539f8c48",
+          "order_id": "order.1",
+          "order_revision": 1,
+          "supplier_id": "supplier.A"
+        }
+      },
+      {
+        "n": 147,
+        "phase": "read back",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/orders/order.1/allocations",
+        "status": 200,
+        "facts": {
+          "allocated": [
+            "24",
+            "36",
+            "12",
+            "48"
+          ],
+          "remaining": "0"
+        }
+      },
+      {
+        "n": 148,
+        "phase": "有效订单唯一",
+        "actor": "sales",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/order.prepare",
+        "idempotency_key": "brc001.119",
+        "status": 409,
+        "code": "CONVERSION_SLOT_CONFLICT",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/quote_id",
+              "reason": "The quote's full_v1 conversion slot is taken"
+            }
+          ]
+        }
+      },
+      {
+        "n": 149,
+        "phase": "有效订单唯一",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.2",
+        "status": 404,
+        "code": "NOT_FOUND"
+      },
+      {
+        "n": 150,
+        "phase": "有效订单唯一",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/purchase.draft.prepare",
+        "idempotency_key": "brc001.120",
+        "status": 409,
+        "code": "PURCHASE_ALLOCATION_EXCEEDED",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/lines/0/quantity",
+              "reason": "Allocating 1 exceeds the remaining 0 of the order line's 24"
+            }
+          ]
+        }
+      },
+      {
+        "n": 151,
+        "phase": "有效订单唯一",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/purchase_drafts/purchase.2",
+        "status": 404,
+        "code": "NOT_FOUND"
+      },
+      {
+        "n": 152,
+        "phase": "有效订单唯一",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/orders/order.1/allocations",
+        "status": 200,
+        "facts": {
+          "allocated": [
+            "24",
+            "36",
+            "12",
+            "48"
+          ],
+          "remaining": "0"
+        }
+      },
+      {
+        "n": 153,
+        "phase": "有效订单唯一",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/quotes/quote.1",
+        "status": 200,
+        "facts": {
+          "conversion_order_id": "order.1"
+        }
+      },
+      {
+        "n": 154,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.121",
+        "status": 200,
+        "object_id": "bank_account:bank.usd",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 155,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.122",
+        "status": 200,
+        "object_id": "bank_account:bank.usd",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 156,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.123",
+        "status": 200,
+        "object_id": "number_sequence:po.seq",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 157,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.124",
+        "status": 200,
+        "object_id": "number_sequence:po.seq",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 158,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.125",
+        "status": 200,
+        "object_id": "shipment_document_template:ship.ci.en",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 159,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.126",
+        "status": 200,
+        "object_id": "shipment_document_template:ship.ci.en",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 160,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.127",
+        "status": 200,
+        "object_id": "shipment_document_template:ship.pl.en",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 161,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.128",
+        "status": 200,
+        "object_id": "shipment_document_template:ship.pl.en",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 162,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.129",
+        "status": 200,
+        "object_id": "number_sequence:ci.seq",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 163,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.130",
+        "status": 200,
+        "object_id": "number_sequence:ci.seq",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 164,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.131",
+        "status": 200,
+        "object_id": "number_sequence:pl.seq",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 165,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.132",
+        "status": 200,
+        "object_id": "number_sequence:pl.seq",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 166,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.133",
+        "status": 200,
+        "object_id": "tax.review",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 167,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.134",
+        "status": 200,
+        "object_id": "export_tax_policy:export.tax",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 168,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.135",
+        "status": 200,
+        "object_id": "export_tax_policy:export.tax",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 169,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.136",
+        "status": 200,
+        "object_id": "order_document_template:order.sc",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 170,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.137",
+        "status": 200,
+        "object_id": "order_document_template:order.sc",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 171,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "admin",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.save_draft",
+        "idempotency_key": "brc001.138",
+        "status": 200,
+        "object_id": "number_sequence:order.seq",
+        "row_version": 1,
+        "result": "working"
+      },
+      {
+        "n": 172,
+        "phase": "§5 step 1: POL configurations of the S5 steps",
+        "actor": "config.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pol/commands/config.publish",
+        "idempotency_key": "brc001.139",
+        "status": 200,
+        "object_id": "number_sequence:order.seq",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 173,
+        "phase": "§5 step 6: STL consumers of OrderActivated",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/credit_reservations/res.order.1",
+        "status": 200,
+        "facts": {
+          "consumed_by": {
+            "id": "inbox.stl.order_credit",
+            "kind": "system"
+          },
+          "portion_minor": "67200",
+          "status": "consumed",
+          "version": 2
+        }
+      },
+      {
+        "n": 174,
+        "phase": "§5 step 6: STL consumers of OrderActivated",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/order_accounts/order.1",
+        "status": 200,
+        "facts": {
+          "conditions": [
+            {
+              "applied_minor": "0",
+              "reason": "stage_unpaid",
+              "required_minor": "28800",
+              "scope": "shipment",
+              "shortfall_minor": "28800",
+              "stage_id": "P1",
+              "status": "blocked"
+            },
+            {
+              "applied_minor": "0",
+              "reason": "stage_unpaid",
+              "required_minor": "28800",
+              "scope": "documents",
+              "shortfall_minor": "28800",
+              "stage_id": "P1",
+              "status": "blocked"
+            }
+          ],
+          "order_revision": 1,
+          "stages": 2
+        }
+      },
+      {
+        "n": 175,
+        "phase": "§5 step 7: STL receipt of P1 and its application",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.140",
+        "status": 200,
+        "object_id": "bank.p1",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 176,
+        "phase": "§5 step 7: STL receipt of P1 and its application",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/fund.record",
+        "idempotency_key": "brc001.141",
+        "status": 200,
+        "object_id": "fund.p1",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 177,
+        "phase": "§5 step 7: STL receipt of P1 and its application",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/application.apply",
+        "idempotency_key": "brc001.142",
+        "status": 200,
+        "object_id": "app.p1",
+        "row_version": 1,
+        "result": "applied"
+      },
+      {
+        "n": 178,
+        "phase": "§5 step 7: STL receipt of P1 and its application",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/order_accounts/order.1",
+        "status": 200,
+        "facts": {
+          "conditions": [
+            {
+              "applied_minor": "28800",
+              "required_minor": "28800",
+              "scope": "shipment",
+              "status": "satisfied"
+            },
+            {
+              "applied_minor": "28800",
+              "required_minor": "28800",
+              "scope": "documents",
+              "status": "satisfied"
+            }
+          ],
+          "stage_P1_applied_minor": "28800"
+        }
+      },
+      {
+        "n": 179,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/purchase_drafts/purchase.1",
+        "status": 200
+      },
+      {
+        "n": 180,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/purchase.commitment.request",
+        "idempotency_key": "brc001.143",
+        "status": 200,
+        "object_id": "commitment.1",
+        "row_version": 1,
+        "result": "requested"
+      },
+      {
+        "n": 181,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "order.reviewer",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/purchase.commitment.decide",
+        "idempotency_key": "brc001.144",
+        "status": 200,
+        "object_id": "commitment.1",
+        "row_version": 2,
+        "result": "approved"
+      },
+      {
+        "n": 182,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.145",
+        "status": 200,
+        "object_id": "po.sent",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 183,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/purchase.commitment.issue",
+        "idempotency_key": "brc001.146",
+        "status": 200,
+        "object_id": "commitment.1",
+        "row_version": 3,
+        "result": "issued"
+      },
+      {
+        "n": 184,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.147",
+        "status": 200,
+        "object_id": "supplier.ack",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 185,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/purchase.supplier_confirmation.record",
+        "idempotency_key": "brc001.148",
+        "status": 200,
+        "object_id": "commitment.1",
+        "row_version": 4,
+        "result": "confirmed"
+      },
+      {
+        "n": 186,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/purchase_commitments/commitment.1",
+        "status": 200,
+        "facts": {
+          "draft_hash": "107f11f45bdd14533451adf46b61b3e2e72ac98118299e416b79e6d31e43d0ad",
+          "po_number": "PO-2026-00001",
+          "status": "confirmed"
+        }
+      },
+      {
+        "n": 187,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/purchase.draft.void",
+        "idempotency_key": "brc001.149",
+        "status": 409,
+        "code": "PURCHASE_DRAFT_COMMITTED",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/draft_id",
+              "reason": "A draft that formed a purchase commitment is not voided"
+            }
+          ]
+        }
+      },
+      {
+        "n": 188,
+        "phase": "§5 step 8: PUR purchase commitment",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/purchase_drafts/purchase.1",
+        "status": 200,
+        "facts": {
+          "commitment_state": "committed",
+          "net_minor": "60000"
+        }
+      },
+      {
+        "n": 189,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.save_draft",
+        "idempotency_key": "brc001.150",
+        "status": 200,
+        "object_id": "agency.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 190,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/party.confirm",
+        "idempotency_key": "brc001.151",
+        "status": 200,
+        "object_id": "agency.1",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 191,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "buyer",
+        "method": "POST",
+        "path": "/api/brant/v1/pty/commands/service_role.verify",
+        "idempotency_key": "brc001.152",
+        "status": 200,
+        "object_id": "agency.1",
+        "row_version": 3,
+        "result": "verified"
+      },
+      {
+        "n": 192,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.153",
+        "status": 200,
+        "object_id": "standard",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 193,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/file.register",
+        "idempotency_key": "brc001.154",
+        "status": 200,
+        "object_id": "report.final",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 194,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/inspection.record",
+        "idempotency_key": "brc001.155",
+        "status": 200,
+        "object_id": "insp.L1",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 195,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/quality_release.grant",
+        "idempotency_key": "brc001.156",
+        "status": 200,
+        "object_id": "rel.L1",
+        "row_version": 1,
+        "result": "granted"
+      },
+      {
+        "n": 196,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "GET",
+        "path": "/api/brant/v1/qlt/quality_releases/rel.L1",
+        "status": 200
+      },
+      {
+        "n": 197,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/inspection.record",
+        "idempotency_key": "brc001.157",
+        "status": 200,
+        "object_id": "insp.L2",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 198,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/quality_release.grant",
+        "idempotency_key": "brc001.158",
+        "status": 200,
+        "object_id": "rel.L2",
+        "row_version": 1,
+        "result": "granted"
+      },
+      {
+        "n": 199,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "GET",
+        "path": "/api/brant/v1/qlt/quality_releases/rel.L2",
+        "status": 200
+      },
+      {
+        "n": 200,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/inspection.record",
+        "idempotency_key": "brc001.159",
+        "status": 200,
+        "object_id": "insp.L3",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 201,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/quality_release.grant",
+        "idempotency_key": "brc001.160",
+        "status": 200,
+        "object_id": "rel.L3",
+        "row_version": 1,
+        "result": "granted"
+      },
+      {
+        "n": 202,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "GET",
+        "path": "/api/brant/v1/qlt/quality_releases/rel.L3",
+        "status": 200
+      },
+      {
+        "n": 203,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/inspection.record",
+        "idempotency_key": "brc001.161",
+        "status": 200,
+        "object_id": "insp.L4",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 204,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "POST",
+        "path": "/api/brant/v1/qlt/commands/quality_release.grant",
+        "idempotency_key": "brc001.162",
+        "status": 200,
+        "object_id": "rel.L4",
+        "row_version": 1,
+        "result": "granted"
+      },
+      {
+        "n": 205,
+        "phase": "§5 step 9: QLT inspection and quality release",
+        "actor": "qc",
+        "method": "GET",
+        "path": "/api/brant/v1/qlt/quality_releases/rel.L4",
+        "status": 200,
+        "facts": {
+          "released": 120
+        }
+      },
+      {
+        "n": 206,
+        "phase": "§5 step 10: FUL milestones",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/milestone.plan",
+        "idempotency_key": "brc001.163",
+        "status": 200,
+        "object_id": "plan.order.1",
+        "row_version": 1,
+        "result": "active"
+      },
+      {
+        "n": 207,
+        "phase": "§5 step 10: FUL milestones",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.164",
+        "status": 200,
+        "object_id": "cargo.ready",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 208,
+        "phase": "§5 step 10: FUL milestones",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/milestone.record_actual",
+        "idempotency_key": "brc001.165",
+        "status": 200,
+        "object_id": "plan.order.1",
+        "row_version": 2,
+        "result": "active"
+      },
+      {
+        "n": 209,
+        "phase": "§5 step 10: FUL milestones",
+        "actor": "merchandiser",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/milestone_plans/plan.order.1",
+        "status": 200,
+        "facts": {
+          "actuals": 1,
+          "evidence_level": "internal_verified",
+          "node": "M3 packing_complete",
+          "revision": null
+        }
+      },
+      {
+        "n": 210,
+        "phase": "§5 step 11: PUR supplier delivery",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.166",
+        "status": 200,
+        "object_id": "forwarder.receipt",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 211,
+        "phase": "§5 step 11: PUR supplier delivery",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/supplier_delivery.record",
+        "idempotency_key": "brc001.167",
+        "status": 200,
+        "object_id": "delivery.1",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 212,
+        "phase": "§5 step 11: PUR supplier delivery",
+        "actor": "purchaser",
+        "method": "POST",
+        "path": "/api/brant/v1/pur/commands/supplier_delivery.verify",
+        "idempotency_key": "brc001.168",
+        "status": 200,
+        "object_id": "delivery.1",
+        "row_version": 2,
+        "result": "verified"
+      },
+      {
+        "n": 213,
+        "phase": "§5 step 11: PUR supplier delivery",
+        "actor": "purchaser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/purchase_commitments/commitment.1/deliveries",
+        "status": 200,
+        "facts": {
+          "deliveries": [
+            {
+              "order_line_id": "L1",
+              "purchase_quantity": "24",
+              "remaining_quantity": "0",
+              "sku_id": "ST01.red.S",
+              "spec_revision": 1,
+              "unit_id": "PCS",
+              "unit_revision": 1,
+              "verified_quantity": "24"
+            },
+            {
+              "order_line_id": "L2",
+              "purchase_quantity": "36",
+              "remaining_quantity": "0",
+              "sku_id": "ST01.red.M",
+              "spec_revision": 1,
+              "unit_id": "PCS",
+              "unit_revision": 1,
+              "verified_quantity": "36"
+            },
+            {
+              "order_line_id": "L3",
+              "purchase_quantity": "12",
+              "remaining_quantity": "0",
+              "sku_id": "ST01.blue.S",
+              "spec_revision": 1,
+              "unit_id": "PCS",
+              "unit_revision": 1,
+              "verified_quantity": "12"
+            },
+            {
+              "order_line_id": "L4",
+              "purchase_quantity": "48",
+              "remaining_quantity": "0",
+              "sku_id": "ST01.blue.M",
+              "spec_revision": 1,
+              "unit_id": "PCS",
+              "unit_revision": 1,
+              "verified_quantity": "48"
+            }
+          ]
+        }
+      },
+      {
+        "n": 214,
+        "phase": "§5 step 12: FUL shipment, packing and booking",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/shipment.prepare",
+        "idempotency_key": "brc001.169",
+        "status": 200,
+        "object_id": "shipment.1",
+        "row_version": 1,
+        "result": "prepared"
+      },
+      {
+        "n": 215,
+        "phase": "§5 step 12: FUL shipment, packing and booking",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/packing.plan",
+        "idempotency_key": "brc001.170",
+        "status": 200,
+        "object_id": "shipment.1",
+        "row_version": 2,
+        "result": "prepared"
+      },
+      {
+        "n": 216,
+        "phase": "§5 step 12: FUL shipment, packing and booking",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/packing.record_actual",
+        "idempotency_key": "brc001.171",
+        "status": 200,
+        "object_id": "shipment.1",
+        "row_version": 3,
+        "result": "prepared"
+      },
+      {
+        "n": 217,
+        "phase": "§5 step 12: FUL shipment, packing and booking",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.172",
+        "status": 200,
+        "object_id": "booking.confirmation",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 218,
+        "phase": "§5 step 12: FUL shipment, packing and booking",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/booking.record",
+        "idempotency_key": "brc001.173",
+        "status": 200,
+        "object_id": "shipment.1",
+        "row_version": 1,
+        "result": "booked"
+      },
+      {
+        "n": 219,
+        "phase": "§5 step 12: FUL shipment, packing and booking",
+        "actor": "merchandiser",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/shipments/shipment.1",
+        "status": 200,
+        "facts": {
+          "lines": 4,
+          "row_version": 3,
+          "status": "prepared"
+        }
+      },
+      {
+        "n": 220,
+        "phase": "§5 step 13: FUL commercial release of the shipment",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/commercial_release.evaluate",
+        "idempotency_key": "brc001.174",
+        "status": 200,
+        "object_id": "rls-01a1d301-a064-7b45-9e80-528a116c4093",
+        "row_version": 1,
+        "result": "granted"
+      },
+      {
+        "n": 221,
+        "phase": "§5 step 13: FUL commercial release of the shipment",
+        "actor": "doc.1",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/commercial_releases/rls-01a1d301-a064-7b45-9e80-528a116c4093",
+        "status": 200,
+        "facts": {
+          "delivery_verified": 120,
+          "guards_sha256": "9514449cff04d74b373d54ac2df6ec192bcadb171f8d368357e04d2e22d8d7d3",
+          "license_required": false,
+          "order": "active",
+          "outcome": "granted",
+          "payment_applied_minor": "28800",
+          "payment_condition": "satisfied",
+          "quality_released": 120,
+          "release_id": "rls-01a1d301-a064-7b45-9e80-528a116c4093",
+          "screening": "clear",
+          "trade_compliance": "clear"
+        }
+      },
+      {
+        "n": 222,
+        "phase": "§5 step 14: FUL shipment confirmation",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/shipment.confirm",
+        "idempotency_key": "brc001.175",
+        "status": 200,
+        "object_id": "shipment.1",
+        "row_version": 4,
+        "result": "confirmed"
+      },
+      {
+        "n": 223,
+        "phase": "§5 step 14: FUL shipment confirmation",
+        "actor": "merchandiser",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/shipments/shipment.1",
+        "status": 200,
+        "facts": {
+          "guards": 14,
+          "guards_sha256": "d8157f9f6fda9337eb5fa1b4ea4ca2c67a6f321d219a11c5c0f99108b298c7f8",
+          "status": "confirmed",
+          "unchecked_guards": 0
+        }
+      },
+      {
+        "n": 224,
+        "phase": "§5 step 14: FUL shipment confirmation",
+        "actor": "merchandiser",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/orders/order.1/fulfilment",
+        "status": 200,
+        "facts": {
+          "shipped": 120
+        }
+      },
+      {
+        "n": 225,
+        "phase": "§5 step 19: STL sales statement and receivable",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/settlement.confirm",
+        "idempotency_key": "brc001.176",
+        "status": 200,
+        "object_id": "stmt.sales.1",
+        "row_version": 1,
+        "result": "confirmed"
+      },
+      {
+        "n": 226,
+        "phase": "§5 step 19: STL sales statement and receivable",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/receivables/stmt.sales.1",
+        "status": 200,
+        "facts": {
+          "amount_minor": "96000",
+          "applied_minor": "28800",
+          "installments": [
+            "P1 28800 applied 28800 open 0",
+            "P2 67200 applied 0 open 67200"
+          ],
+          "open_minor": "67200"
+        }
+      },
+      {
+        "n": 227,
+        "phase": "§5 step 19: STL sales statement and receivable",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/applications/app.p1",
+        "status": 200,
+        "facts": {
+          "p1_application": "moved"
+        }
+      },
+      {
+        "n": 228,
+        "phase": "§5 step 19: STL sales statement and receivable",
+        "actor": "credit.officer",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/customers/customer.1/credit",
+        "status": 200,
+        "facts": {
+          "exposure_currency": "USD",
+          "exposure_minor": "67200"
+        }
+      },
+      {
+        "n": 229,
+        "phase": "BT18: shipped, not settled",
+        "actor": "credit.officer",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.record",
+        "idempotency_key": "brc001.177",
+        "status": 200,
+        "object_id": "freight.brc",
+        "row_version": 1,
+        "result": "estimated"
+      },
+      {
+        "n": 230,
+        "phase": "BT18: shipped, not settled",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.review",
+        "idempotency_key": "brc001.178",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 1,
+        "result": "reviewed"
+      },
+      {
+        "n": 231,
+        "phase": "BT18: shipped, not settled",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.close",
+        "idempotency_key": "brc001.179",
+        "status": 409,
+        "code": "ORDER_RESULT_NOT_SETTLED",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/conditions/fulfilment",
+              "reason": "fulfilment: TRD: the order is active, not complete or short-closed"
+            },
+            {
+              "path": "/conditions/receivables",
+              "reason": "receivables: receivable stmt.sales.1 open 672.00 USD"
+            },
+            {
+              "path": "/conditions/purchase_costs",
+              "reason": "purchase_costs: delivery delivery.1 of commitment commitment.1 line L1 is verified, not settled; delivery delivery.1 of commitment commitment.1 line L2 is verified, not settled; delivery delivery.1..."
+            },
+            {
+              "path": "/conditions/direct_charges",
+              "reason": "direct_charges: charge freight.brc is estimated"
+            }
+          ]
+        }
+      },
+      {
+        "n": 232,
+        "phase": "BT18: shipped, not settled",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/orders/order.1/result",
+        "status": 200
+      },
+      {
+        "n": 233,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/shipment_document.prepare",
+        "idempotency_key": "brc001.180",
+        "status": 200,
+        "object_id": "docs.shipment.1",
+        "row_version": 1,
+        "result": "draft"
+      },
+      {
+        "n": 234,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/shipment_document.prepare",
+        "idempotency_key": "brc001.181",
+        "status": 200,
+        "object_id": "docs.shipment.1",
+        "row_version": 2,
+        "result": "draft"
+      },
+      {
+        "n": 235,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/file.register",
+        "idempotency_key": "brc001.182",
+        "status": 200,
+        "object_id": "bl.scan",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 236,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/shipment_document.prepare",
+        "idempotency_key": "brc001.183",
+        "status": 200,
+        "object_id": "docs.shipment.1",
+        "row_version": 3,
+        "result": "draft"
+      },
+      {
+        "n": 237,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/document_sets/docs.shipment.1",
+        "status": 200,
+        "facts": {
+          "differences": 0,
+          "reconciliation": "reconciled",
+          "reconciliation_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      },
+      {
+        "n": 238,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/shipment_document.issue",
+        "idempotency_key": "brc001.184",
+        "status": 200,
+        "object_id": "docs.shipment.1",
+        "row_version": 4,
+        "result": "issued"
+      },
+      {
+        "n": 239,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/document_sets/docs.shipment.1",
+        "status": 200
+      },
+      {
+        "n": 240,
+        "phase": "§5 step 15: FUL shipment documents",
+        "actor": "doc.1",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/document_sets/docs.shipment.1/documents/commercial_invoice/versions/1/en",
+        "status": 200,
+        "facts": {
+          "bl_number": "SYNSTAR026E0001",
+          "ci_number": "CI-2026-00001",
+          "ci_sha256": "7d2c3f2e466ae2c6032087c97ab6354dee6410694256e7d0c49defb868e33d5b",
+          "ci_states": "Net: 960.00 | Tax: 0.00 | Total: 960.00",
+          "pl_number": "PL-2026-00001"
+        }
+      },
+      {
+        "n": 241,
+        "phase": "§5 step 16: FUL documents release",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/commercial_release.evaluate",
+        "idempotency_key": "brc001.185",
+        "status": 200,
+        "object_id": "rls-01a1d301-a24e-7aef-8d66-03f6f9eac86a",
+        "row_version": 1,
+        "result": "granted"
+      },
+      {
+        "n": 242,
+        "phase": "§5 step 16: FUL documents release",
+        "actor": "doc.1",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/commercial_releases/rls-01a1d301-a24e-7aef-8d66-03f6f9eac86a",
+        "status": 200,
+        "facts": {
+          "outcome": "granted",
+          "payment_condition": "satisfied",
+          "release_id": "rls-01a1d301-a24e-7aef-8d66-03f6f9eac86a",
+          "required_minor": "28800"
+        }
+      },
+      {
+        "n": 243,
+        "phase": "§5 step 16: FUL documents release",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.186",
+        "status": 200,
+        "object_id": "bl.release",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 244,
+        "phase": "§5 step 16: FUL documents release",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/ful/commands/document_release.record",
+        "idempotency_key": "brc001.187",
+        "status": 200,
+        "object_id": "rls-01a1d301-a24e-7aef-8d66-03f6f9eac86a",
+        "row_version": 2,
+        "result": "consumed"
+      },
+      {
+        "n": 245,
+        "phase": "§5 step 16: FUL documents release",
+        "actor": "doc.1",
+        "method": "GET",
+        "path": "/api/brant/v1/ful/commercial_releases/rls-01a1d301-a24e-7aef-8d66-03f6f9eac86a",
+        "status": 200,
+        "facts": {
+          "release_kind": "original_bl",
+          "status": "consumed"
+        }
+      },
+      {
+        "n": 246,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.188",
+        "status": 200,
+        "object_id": "bank.p2",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 247,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/fund.record",
+        "idempotency_key": "brc001.189",
+        "status": 200,
+        "object_id": "fund.p2",
+        "row_version": 1,
+        "result": "recorded",
+        "facts": {
+          "difference_minor": "200",
+          "status": "recorded"
+        }
+      },
+      {
+        "n": 248,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/application.apply",
+        "idempotency_key": "brc001.190",
+        "status": 409,
+        "code": "FUND_DIFFERENCE_UNEXPLAINED",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/amount",
+              "reason": "Only 670.00 USD is available: 2.00 USD of the difference is unexplained"
+            }
+          ]
+        }
+      },
+      {
+        "n": 249,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "credit.manager.1",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/fund.resolve_difference",
+        "idempotency_key": "brc001.191",
+        "status": 200,
+        "object_id": "fund.p2",
+        "row_version": 2,
+        "result": "difference_resolved"
+      },
+      {
+        "n": 250,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/application.apply",
+        "idempotency_key": "brc001.192",
+        "status": 200,
+        "object_id": "app.p2",
+        "row_version": 1,
+        "result": "applied"
+      },
+      {
+        "n": 251,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/application.apply",
+        "idempotency_key": "brc001.193",
+        "status": 200,
+        "object_id": "app.p2.charge",
+        "row_version": 1,
+        "result": "applied"
+      },
+      {
+        "n": 252,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/receivables/stmt.sales.1",
+        "status": 200,
+        "facts": {
+          "applied_minor": "96000",
+          "installments": [
+            "P1 28800 applied 28800 open 0",
+            "P2 67200 applied 67200 open 0"
+          ],
+          "open_minor": "0"
+        }
+      },
+      {
+        "n": 253,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/fund_records/fund.p2",
+        "status": 200,
+        "facts": {
+          "fund_available_minor": "0",
+          "fund_resolved_minor": "200"
+        }
+      },
+      {
+        "n": 254,
+        "phase": "§5 step 20: STL collection of P2 with a bank charge",
+        "actor": "credit.officer",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/customers/customer.1/credit",
+        "status": 200,
+        "facts": {
+          "exposure_currency": "USD",
+          "exposure_minor": "0"
+        }
+      },
+      {
+        "n": 255,
+        "phase": "§5 step 21: STL purchase statement, payable and payment",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/settlement.confirm",
+        "idempotency_key": "brc001.194",
+        "status": 200,
+        "object_id": "stmt.purchase.1",
+        "row_version": 1,
+        "result": "confirmed"
+      },
+      {
+        "n": 256,
+        "phase": "§5 step 21: STL purchase statement, payable and payment",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/payables/stmt.purchase.1",
+        "status": 200,
+        "facts": {
+          "amount_minor": "60000",
+          "open_minor": "60000"
+        }
+      },
+      {
+        "n": 257,
+        "phase": "§5 step 21: STL purchase statement, payable and payment",
+        "actor": "doc.1",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.195",
+        "status": 200,
+        "object_id": "bank.pay",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 258,
+        "phase": "§5 step 21: STL purchase statement, payable and payment",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/fund.record",
+        "idempotency_key": "brc001.196",
+        "status": 200,
+        "object_id": "fund.pay.1",
+        "row_version": 1,
+        "result": "recorded"
+      },
+      {
+        "n": 259,
+        "phase": "§5 step 21: STL purchase statement, payable and payment",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/application.apply",
+        "idempotency_key": "brc001.197",
+        "status": 200,
+        "object_id": "app.pay.1",
+        "row_version": 1,
+        "result": "applied"
+      },
+      {
+        "n": 260,
+        "phase": "§5 step 21: STL purchase statement, payable and payment",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/payables/stmt.purchase.1",
+        "status": 200,
+        "facts": {
+          "applied_minor": "60000",
+          "open_minor": "0"
+        }
+      },
+      {
+        "n": 261,
+        "phase": "§5 step 25: TRD order close",
+        "actor": "merchandiser",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1",
+        "status": 200
+      },
+      {
+        "n": 262,
+        "phase": "§5 step 25: TRD order close",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/trd/commands/order.close",
+        "idempotency_key": "brc001.198",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 5,
+        "result": "closed"
+      },
+      {
+        "n": 263,
+        "phase": "§5 step 25: TRD order close",
+        "actor": "merchandiser",
+        "method": "GET",
+        "path": "/api/brant/v1/trd/orders/order.1",
+        "status": 200,
+        "facts": {
+          "end_command": "order.close",
+          "fulfilment_source": "ful.shipment_facts.v1",
+          "row_version": 5,
+          "shipped": [
+            "24",
+            "36",
+            "12",
+            "48"
+          ],
+          "status": "closed"
+        }
+      },
+      {
+        "n": 264,
+        "phase": "§5 step 25: TRD order close",
+        "actor": "merchandiser",
+        "method": "GET",
+        "path": "/api/brant/v1/pur/purchase_commitments/commitment.1",
+        "status": 200,
+        "facts": {
+          "commitment_fulfilled": true
+        }
+      },
+      {
+        "n": 265,
+        "phase": "§5 step 25: STL consumer of OrderClosed",
+        "actor": "sales",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/credit_reservations/res.order.1",
+        "status": 200,
+        "facts": {
+          "released_by": {
+            "id": "inbox.stl.order_credit",
+            "kind": "system"
+          },
+          "status": "released",
+          "version": 3
+        }
+      },
+      {
+        "n": 266,
+        "phase": "§5 step 25: STL consumer of OrderClosed",
+        "actor": "credit.officer",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/customers/customer.1/credit",
+        "status": 200,
+        "facts": {
+          "exposure_currency": "USD",
+          "exposure_minor": "0"
+        }
+      },
+      {
+        "n": 267,
+        "phase": "BT18: the freight still estimated",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.close",
+        "idempotency_key": "brc001.199",
+        "status": 409,
+        "code": "ORDER_RESULT_NOT_SETTLED",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/conditions/direct_charges",
+              "reason": "direct_charges: charge freight.brc is estimated"
+            }
+          ]
+        }
+      },
+      {
+        "n": 268,
+        "phase": "BT18: the freight still estimated",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.200",
+        "status": 200,
+        "object_id": "freight.bill",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 269,
+        "phase": "BT18: the freight still estimated",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.confirm",
+        "idempotency_key": "brc001.201",
+        "status": 200,
+        "object_id": "freight.brc",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 270,
+        "phase": "BT18: the freight still estimated",
+        "actor": "credit.officer",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.allocate",
+        "idempotency_key": "brc001.202",
+        "status": 200,
+        "object_id": "freight.brc",
+        "row_version": 3,
+        "result": "confirmed"
+      },
+      {
+        "n": 271,
+        "phase": "BT18: the freight still estimated",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.close",
+        "idempotency_key": "brc001.203",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 2,
+        "result": "settled"
+      },
+      {
+        "n": 272,
+        "phase": "BT18: the freight still estimated",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/orders/order.1/result",
+        "status": 200
+      },
+      {
+        "n": 273,
+        "phase": "BT24: next month's freight",
+        "actor": "merchandiser",
+        "method": "POST",
+        "path": "/api/brant/v1/evd/commands/source.register",
+        "idempotency_key": "brc001.204",
+        "status": 200,
+        "object_id": "freight.bill.late",
+        "row_version": 1,
+        "result": "registered"
+      },
+      {
+        "n": 274,
+        "phase": "BT24: next month's freight",
+        "actor": "credit.officer",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.record",
+        "idempotency_key": "brc001.205",
+        "status": 200,
+        "object_id": "freight.late",
+        "row_version": 1,
+        "result": "pending"
+      },
+      {
+        "n": 275,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/orders/order.1/result",
+        "status": 200
+      },
+      {
+        "n": 276,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.confirm",
+        "idempotency_key": "brc001.206",
+        "status": 422,
+        "code": "INVALID_STATE",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/charge_id",
+              "reason": "The result of order order.1 is settled: reopen it (order_result.reopen) before a late charge counts (BT24)"
+            }
+          ]
+        }
+      },
+      {
+        "n": 277,
+        "phase": "BT24: next month's freight",
+        "actor": "credit.officer",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.allocate",
+        "idempotency_key": "brc001.207",
+        "status": 422,
+        "code": "INVALID_STATE",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/charge_id",
+              "reason": "The result of order order.1 is settled: reopen it (order_result.reopen) before a late charge counts (BT24)"
+            }
+          ]
+        }
+      },
+      {
+        "n": 278,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.reopen",
+        "idempotency_key": "brc001.208",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 3,
+        "result": "open"
+      },
+      {
+        "n": 279,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.confirm",
+        "idempotency_key": "brc001.209",
+        "status": 200,
+        "object_id": "freight.late",
+        "row_version": 2,
+        "result": "confirmed"
+      },
+      {
+        "n": 280,
+        "phase": "BT24: next month's freight",
+        "actor": "credit.officer",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/charge.allocate",
+        "idempotency_key": "brc001.210",
+        "status": 200,
+        "object_id": "freight.late",
+        "row_version": 3,
+        "result": "confirmed"
+      },
+      {
+        "n": 281,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.close",
+        "idempotency_key": "brc001.211",
+        "status": 422,
+        "code": "INVALID_STATE",
+        "facts": {
+          "field_errors": [
+            {
+              "path": "/args/order_id",
+              "reason": "The order result is open: it is closed after a review"
+            }
+          ]
+        }
+      },
+      {
+        "n": 282,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.review",
+        "idempotency_key": "brc001.212",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 4,
+        "result": "reviewed"
+      },
+      {
+        "n": 283,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "POST",
+        "path": "/api/brant/v1/stl/commands/order_result.close",
+        "idempotency_key": "brc001.213",
+        "status": 200,
+        "object_id": "order.1",
+        "row_version": 5,
+        "result": "settled"
+      },
+      {
+        "n": 284,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/orders/order.1/result",
+        "status": 200
+      },
+      {
+        "n": 285,
+        "phase": "BT24: next month's freight",
+        "actor": "treasury",
+        "method": "GET",
+        "path": "/api/brant/v1/stl/charges/freight.late",
+        "status": 200
+      }
+    ],
+    "dispatches": [
+      {
+        "when": "after the activation (S3 chain, §5 step 6)",
+        "after_step": 172,
+        "events": 80,
+        "by_type": {
+          "idp-brant.cat.declaration_profile_verified.v1": 4,
+          "idp-brant.cat.sku_confirmed.v1": 4,
+          "idp-brant.cnx.trade_compliance_decided.v1": 1,
+          "idp-brant.cst.cost_scenario_evaluated.v1": 2,
+          "idp-brant.cst.cost_snapshot_frozen.v1": 1,
+          "idp-brant.cst.costing_context_verified.v1": 1,
+          "idp-brant.evd.source_registered.v1": 5,
+          "idp-brant.inq.rfq_scope_confirmed.v1": 1,
+          "idp-brant.pol.config_published.v1": 30,
+          "idp-brant.pol.document_number_issued.v1": 1,
+          "idp-brant.pty.contact_confirmed.v1": 1,
+          "idp-brant.pty.party_confirmed.v1": 4,
+          "idp-brant.pty.party_screening_recorded.v1": 1,
+          "idp-brant.pty.service_role_verified.v1": 1,
+          "idp-brant.pty.trading_profile_published.v1": 1,
+          "idp-brant.pur.purchase_draft_prepared.v1": 1,
+          "idp-brant.ref.country_programmes_imported.v1": 2,
+          "idp-brant.ref.screening_list_imported.v1": 1,
+          "idp-brant.stl.credit_limit_published.v1": 1,
+          "idp-brant.stl.credit_limit_requested.v1": 1,
+          "idp-brant.stl.credit_reserved.v1": 1,
+          "idp-brant.sup.logistics_offer_verified.v1": 1,
+          "idp-brant.sup.supplier_offer_verified.v1": 2,
+          "idp-brant.sup.supplier_rfq_issued.v1": 2,
+          "idp-brant.trd.acceptance_verified.v1": 1,
+          "idp-brant.trd.customer_response_recorded.v1": 1,
+          "idp-brant.trd.order_activated.v1": 1,
+          "idp-brant.trd.order_prepared.v1": 1,
+          "idp-brant.trd.order_review_decided.v1": 1,
+          "idp-brant.trd.order_review_requested.v1": 1,
+          "idp-brant.trd.quote_activated.v1": 1,
+          "idp-brant.trd.quote_frozen.v1": 1,
+          "idp-brant.trd.quote_review_decided.v1": 1,
+          "idp-brant.trd.quote_review_requested.v1": 1
+        },
+        "processed": {
+          "cnx.trade_compliance ← idp-brant.pol.config_published.v1": 30,
+          "cnx.trade_compliance ← idp-brant.ref.country_programmes_imported.v1": 2,
+          "stl.order_account ← idp-brant.trd.order_activated.v1": 1,
+          "stl.order_credit ← idp-brant.trd.order_activated.v1": 1
+        },
+        "redelivered": 80,
+        "facts": {
+          "order_account": "open",
+          "reservation": "consumed"
+        }
+      },
+      {
+        "when": "after order.close",
+        "after_step": 264,
+        "events": 47,
+        "by_type": {
+          "idp-brant.evd.file_registered.v1": 2,
+          "idp-brant.evd.source_registered.v1": 10,
+          "idp-brant.ful.commercial_release_granted.v1": 2,
+          "idp-brant.ful.documents_released.v1": 1,
+          "idp-brant.ful.milestone_actual_recorded.v1": 1,
+          "idp-brant.ful.shipment_confirmed.v1": 1,
+          "idp-brant.ful.shipment_document_issued.v1": 1,
+          "idp-brant.pol.document_number_issued.v1": 3,
+          "idp-brant.pty.party_confirmed.v1": 1,
+          "idp-brant.pty.service_role_verified.v1": 1,
+          "idp-brant.pur.purchase_commitment_approved.v1": 1,
+          "idp-brant.pur.purchase_commitment_issued.v1": 1,
+          "idp-brant.pur.supplier_confirmation_recorded.v1": 1,
+          "idp-brant.pur.supplier_delivery_verified.v1": 1,
+          "idp-brant.qlt.inspection_recorded.v1": 4,
+          "idp-brant.qlt.quality_released.v1": 4,
+          "idp-brant.stl.applied.v1": 4,
+          "idp-brant.stl.credit_reservation_consumed.v1": 1,
+          "idp-brant.stl.fund_difference_resolved.v1": 1,
+          "idp-brant.stl.fund_recorded.v1": 3,
+          "idp-brant.stl.settlement_confirmed.v1": 2,
+          "idp-brant.trd.order_closed.v1": 1
+        },
+        "processed": {
+          "stl.order_credit ← idp-brant.trd.order_closed.v1": 1
+        },
+        "redelivered": 47,
+        "facts": {
+          "reservation": "released"
+        }
+      },
+      {
+        "when": "at the end of BT18/BT24",
+        "after_step": 285,
+        "events": 8,
+        "by_type": {
+          "idp-brant.evd.source_registered.v1": 2,
+          "idp-brant.stl.charge_allocated.v1": 2,
+          "idp-brant.stl.credit_reservation_released.v1": 1,
+          "idp-brant.stl.order_result_closed.v1": 2,
+          "idp-brant.stl.order_result_reopened.v1": 1
+        },
+        "processed": {},
+        "redelivered": 8
+      }
+    ]
+  }
+}

@@ -31,7 +31,7 @@
     {"id": "IG-10", "gate": "G2", "name": "EER 执行适配", "evidence": "停止屏障、恢复、预算强制", "owner": "集成负责人", "state": "NOT_STARTED"},
     {"id": "IG-11", "gate": "G2", "name": "BIP／邮件渠道", "evidence": "外发授权、operation_id、unknown 对账", "owner": "集成负责人", "state": "NOT_STARTED"},
     {"id": "IG-12", "gate": "G2", "name": "真实模型调用与评测（BC-AT28）", "evidence": "试次、修正、成本与权威断言", "owner": "AI Owner", "state": "NOT_STARTED"},
-    {"id": "IG-13", "gate": "G3", "name": "中国专业系统或人工路径对账（CN-AT）", "evidence": "人工路径（负责人决定 E-1）：报关回执原文、映射版本与外部序号由人工登记，旧回执不覆盖新回执，unknown 先核实再重报；发票、退税资料与外部对账按 CN-AT 在 PG16 上通过，全部为合成数据（S5 证据）。@@S5-IG13@@ 海关单一窗口、税务、银行、保险与承运人连接器未做（S6-05），专业角色未签核", "owner": "CNX Owner＋专业角色", "state": "PARTIAL"},
+    {"id": "IG-13", "gate": "G3", "name": "中国专业系统或人工路径对账（CN-AT）", "evidence": "人工路径（负责人决定 E-1）：报关回执原文、映射版本与外部序号由人工登记，旧回执不覆盖新回执，unknown 先核实再重报；发票、退税资料与外部对账按 CN-AT 在 PG16 上通过，全部为合成数据（S5 证据）。D2a 的套件经 HTTP 端到端运行 CN-AT01—18，全部通过（S5 证据 11—13）。以人工路径关闭；海关单一窗口、税务、银行、保险与承运人连接器未做（S6-05），专业角色未签核", "owner": "CNX Owner＋专业角色", "state": "DONE_CI"},
     {"id": "IG-14", "gate": "G4", "name": "备份恢复与升级演练", "evidence": "S5-11（单元 C7，2026-11-12，本机 WSL2 的 PostgreSQL 16.12 容器）：逻辑备份恢复与 PITR 各两轮，197 张表逐表行数与摘要一致、28 个 SHA-256 约束重算无违例、迁移账本不变；PITR 测得 RPO 7.6—17.1 秒、RTO 约 30 秒；S5 起点 3b76201 的库升级到当前迁移 22 个文件 1.86 秒、升级后集成冒烟通过。没有生产环境、异地归档与复制，属于本机证据", "owner": "SRE＋DBA", "state": "DONE_LOCAL"}
   ],
   "goAlignment": [

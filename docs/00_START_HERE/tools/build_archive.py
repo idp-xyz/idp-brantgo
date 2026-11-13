@@ -55,7 +55,9 @@ S3_EVIDENCE_FILES = S1_EVIDENCE_FILES + ["07_brc001_chain.json"]
 S5_EVIDENCE_FILES = [
     "README.md", "01_environment.json", "02_go_source_manifest.txt", "03_make_check.txt", "04_gate_results.md",
     "05_github_actions_runs.json.txt", "06_brc001_s5_chain.json", "07_brc001_s5_chain_run2.json", "08_brc001_s5_chain_table.md",
-    "09_brc001_s5_compare.txt", "10_capacity_and_recovery/README.md",
+    "09_brc001_s5_compare.txt", "10_capacity_and_recovery/README.md", "11_cnat_matrix.json", "12_cnat_matrix.md",
+    "13_cnat_cases/cn-at01.json", "13_cnat_cases/cn-at18.json", "14_s5_scenarios.json", "15_s5_scenarios_table.md",
+    "16_s5_scenarios/SC-08.json",
 ]
 # Spike outcomes the M0 report states; the build fails if the evidence says otherwise.
 SPIKE_EXPECTED = {
