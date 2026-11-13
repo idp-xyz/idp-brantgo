@@ -15,8 +15,10 @@
 // business owner (OwnerRef) and the contacts with the row versions the editor saw (Python
 // party_profile.contact_refs). A published revision keeps what it bound; once the party or a
 // contact moves on, the revision is stale for new use and a new revision must bind the new
-// versions. Checks run in the order of the Python contracts: existence and visibility, root
-// version, state, independence, references.
+// versions. It may list permitted payers (S5R-D21, PermittedPayers): other confirmed parties whose
+// payments count as the party's own, verified by the publication; a payer that changes later never
+// makes the revision stale. Checks run in the order of the Python contracts: existence and
+// visibility, root version, state, independence, references.
 package profile
 
 import (
@@ -84,16 +86,29 @@ type ContactRef struct {
 	RowVersion int64  `json:"row_version"`
 }
 
-// Content is the whole content of a revision. Contacts are sorted by ID.
+// Content is the whole content of a revision. Contacts are sorted by ID; so are the permitted
+// payers, which are omitted when there are none, so a revision saved before they existed keeps its
+// content hash (S5R-D21).
 type Content struct {
-	PartyRevision int64        `json:"party_revision"`
-	PaymentTerms  TermsRef     `json:"payment_terms"`
-	TradeTerms    TermsRef     `json:"trade_terms"`
-	Owner         Owner        `json:"owner"`
-	Contacts      []ContactRef `json:"contact_refs"`
+	PartyRevision   int64        `json:"party_revision"`
+	PaymentTerms    TermsRef     `json:"payment_terms"`
+	TradeTerms      TermsRef     `json:"trade_terms"`
+	Owner           Owner        `json:"owner"`
+	Contacts        []ContactRef `json:"contact_refs"`
+	PermittedPayers []string     `json:"permitted_payers,omitempty"`
 }
 
-// NewContent returns content with its contacts sorted by ID.
+// Canonical returns c with its contacts and permitted payers sorted by ID, no contacts as an empty
+// list and no permitted payers as none.
+func (c Content) Canonical() Content {
+	out := NewContent(c.PartyRevision, c.PaymentTerms, c.TradeTerms, c.Owner, c.Contacts)
+	if len(c.PermittedPayers) > 0 {
+		out.PermittedPayers = slices.Sorted(slices.Values(c.PermittedPayers))
+	}
+	return out
+}
+
+// NewContent returns content without permitted payers, its contacts sorted by ID.
 func NewContent(partyRevision int64, payment, trade TermsRef, owner Owner, contacts []ContactRef) Content {
 	c := Content{PartyRevision: partyRevision, PaymentTerms: payment, TradeTerms: trade, Owner: owner, Contacts: slices.Clone(contacts)}
 	slices.SortFunc(c.Contacts, func(a, b ContactRef) int { return cmp.Compare(a.ContactID, b.ContactID) })
@@ -106,7 +121,7 @@ func NewContent(partyRevision int64, payment, trade TermsRef, owner Owner, conta
 // Hash returns the content hash: the SHA-256 of the canonical JSON of the content. Field order
 // is fixed by the Go types and contacts are sorted, so equal content always hashes equally.
 func (c Content) Hash() string {
-	c = NewContent(c.PartyRevision, c.PaymentTerms, c.TradeTerms, c.Owner, c.Contacts)
+	c = c.Canonical()
 	doc, err := json.Marshal(c)
 	if err != nil {
 		panic("profile: content does not marshal: " + err.Error()) // only strings and integers
@@ -183,7 +198,7 @@ func (r *Root) Save(c Content, by kernel.ActorRef, epoch int64, at time.Time) (*
 		r.Working = &Revision{Number: r.LastRevision, Status: Working}
 	}
 	w := r.Working
-	w.Content = NewContent(c.PartyRevision, c.PaymentTerms, c.TradeTerms, c.Owner, c.Contacts)
+	w.Content = c.Canonical()
 	w.Hash, w.SavedBy, w.SavedEpoch, w.SavedAt = w.Content.Hash(), by, epoch, at
 	r.Version++
 	return w, created
@@ -237,10 +252,17 @@ type ContactFact struct {
 	RowVersion int64
 }
 
+// PayerFact is what PTY says about a permitted payer now: whether it is confirmed. A party that does
+// not exist or that the actor does not see has no fact.
+type PayerFact struct {
+	Confirmed bool
+}
+
 // Facts are the current state of a content's references inside PTY.
 type Facts struct {
 	Party    PartyFact
 	Contacts map[string]ContactFact
+	Payers   map[string]PayerFact
 }
 
 // CheckReferences requires the content to bind the party's current confirmed revision and its
@@ -266,6 +288,17 @@ func CheckReferences(partyID string, c Content, f Facts) error {
 			return Reject(CodeReferenceStale, path+"/row_version", "The contact is at row version "+strconv.FormatInt(fact.RowVersion, 10))
 		case !fact.Confirmed:
 			return kernel.Reject(kernel.CodeReferenceInvalid, path+"/id", "The contact is not confirmed")
+		}
+	}
+	// Permitted payers (S5R-D21): other parties, confirmed, that the actor sees.
+	for i, id := range c.PermittedPayers {
+		path := "/args/permitted_payers/" + strconv.Itoa(i)
+		fact, ok := f.Payers[id]
+		switch {
+		case id == partyID:
+			return kernel.Reject(kernel.CodeInvalidKnownValue, path, "The party pays for itself without being listed")
+		case !ok || !fact.Confirmed:
+			return kernel.Reject(kernel.CodeReferenceInvalid, path, "The payer is not a confirmed party the actor sees")
 		}
 	}
 	return nil

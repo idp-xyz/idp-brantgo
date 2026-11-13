@@ -38,6 +38,9 @@ func purCommands(c PUR) *commandSet {
 			// Allocation reviews after an order change (S5-09b); a review names its object review_id.
 			// allocation_review.open is the Inbox consumer's and is not routed.
 			purapi.CommandSettleAllocationReview: reflected("", "", receiptOf[purapi.Receipt](c.SettleAllocationReview)),
+			// Dispositions of delivered goods (S5R-04, S5R-D05); a disposition names its object disposition_id.
+			purapi.CommandDisposeCommitment: reflected("", "", receiptOf[purapi.Receipt](c.DisposeCommitment)),
+			purapi.CommandDecideDisposition: reflected("", "", receiptOf[purapi.Receipt](c.DecideDisposition)),
 		}}
 }
 

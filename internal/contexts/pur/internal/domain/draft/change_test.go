@@ -51,3 +51,64 @@ func TestChangeModeRecordsWhatADraftRefuses(t *testing.T) {
 		t.Fatalf("draft document %s", b)
 	}
 }
+
+// S5R-D41 (PUR-INV-009 "只减少数量（含整行降为零）的变更不查供应条件有效期，单价沿用当前修订；增加数量或改价仍须有效的已核实供应条件"):
+// a decrease-only change is prepared on a supply condition that lapsed — SUP's SUPPLY_CONDITION_EXPIRED or
+// SUPPLY_CONDITION_NOT_CURRENT is no refusal, any other verdict still is — and an all_units price group
+// keeps the tier the revision in force applied: 1000 PCS at 4.50 (the tier from 1000), cut to 950 by a
+// short receipt, stays at 4.50 instead of the 5.00 of the tier below. A change that is not decrease-only
+// is refused on the lapsed condition and priced at the tier its quantity falls in.
+func TestDecreaseOnlyChangeKeepsTheIssuedPrice(t *testing.T) {
+	w := fixture()
+	tiered := w.variant("offer.tiered", func(c *Condition) {
+		c.PricingMode = ModeAllUnits
+		c.Tiers = []Tier{{Lower: "0", Upper: "1000", UnitPrice: "5"}, {Lower: "1000", UnitPrice: "4.5"}}
+	})
+	w = w.with(tiered)
+	w.in.Order.Lines["L1"] = line("L1", "L1", "sku.1", "1000")
+	w.req.Lines[0].Quantity = kernel.MustDecimal("1000")
+	issued := w.prepare(t).Doc
+	if g := issued.PriceGroups[0]; g.RawAmount != "4500" || g.AppliedTiers[0].UnitPrice != "4.5" || g.PriceKept {
+		t.Fatalf("issued group %+v", g)
+	}
+	kept := KeptPrices(issued)
+	if len(kept) != 1 || kept[tiered].UnitPrice != "4.5" {
+		t.Fatalf("kept prices %+v", kept)
+	}
+	w.req.Lines[0].Quantity = kernel.MustDecimal("950")
+	s := w.in.Supply[tiered.Ref]
+	s.Check = func(p string) error {
+		return kernel.RejectAs(CodeSupplyConditionExpired, kernel.CategoryInvalid, p, "")
+	}
+	w.in.Supply[tiered.Ref] = s
+	w.in.Change = &Change{Revision: 2, Dates: map[string]string{}}
+	w.refused(t, "SUPPLY_CONDITION_EXPIRED /args/lines/0/source")
+	w.in.Change.DecreaseOnly, w.in.Change.Prices = true, kept
+	p := w.prepare(t)
+	if g := p.Doc.PriceGroups[0]; g.RawAmount != "4275" || !g.PriceKept || len(g.AppliedTiers) != 1 || g.AppliedTiers[0].UnitPrice != "4.5" ||
+		g.AppliedTiers[0].Quantity != "950" || !p.DecreaseOnly {
+		t.Fatalf("decrease-only group %+v", g)
+	}
+	doc, _, err := p.SealRevision(DocRevision{CommitmentID: "commitment.1", ChangeID: "change.short", BaseRevision: 1, Revision: 2, DecreaseOnly: true},
+		"adoptable", "", "")
+	if err != nil || !strings.Contains(string(doc), `"decrease_only":true`) || !strings.Contains(string(doc), `"price_kept":true`) {
+		t.Fatalf("sealed %s %v", doc, err)
+	}
+	if err = RecomputeRevision(doc, w.prepare(t), "/args/change_id"); err != nil {
+		t.Fatalf("recomputes equal: %v", err)
+	}
+	if !Lapsed(kernel.RejectAs(CodeSupplyConditionNotCurrent, kernel.CategoryConflict, "/", "")) ||
+		Lapsed(kernel.Reject(kernel.CodeReferenceInvalid, "/", "")) || Lapsed(nil) {
+		t.Fatal("lapsed")
+	}
+	s.Check = func(p string) error { return kernel.Reject(kernel.CodeReferenceInvalid, p, "") }
+	w.in.Supply[tiered.Ref] = s
+	w.refused(t, "REFERENCE_INVALID /args/lines/0/source")
+	// Not decrease-only: the tier the quantity falls in.
+	s.Check = inForce
+	w.in.Supply[tiered.Ref] = s
+	w.in.Change.DecreaseOnly, w.in.Change.Prices = false, nil
+	if g := w.prepare(t).Doc.PriceGroups[0]; g.RawAmount != "4750" || g.PriceKept {
+		t.Fatalf("repriced group %+v", g)
+	}
+}

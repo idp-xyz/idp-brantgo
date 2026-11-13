@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
@@ -130,5 +131,38 @@ func TestS5ConfigDataOverHTTP(t *testing.T) {
 		if parsed.Components.Schemas[name] == nil {
 			t.Errorf("the OpenAPI document has no %s", name)
 		}
+	}
+}
+
+// S5R-D06, D14, D38: the new members of POL's data travel over the wire like the others and stay
+// absent when they are not stated, so an old view still reads back as the request it was.
+func TestS5RConfigDataOverHTTP(t *testing.T) {
+	for kind, in := range map[string]string{
+		"trade_terms": `{"incoterm":"CIF","edition":"2020","named_place":"DEHAM","responsibility_note":"r",` +
+			`"delivery":{"kind":"fixed_date","date":"2027-01-31","days":0},"insurance_percent":"120"}`,
+		"screening_regulation": `{"lists":[{"list_code":"cn.uel","jurisdiction":"CN"}],"rescreen_interval_days":30,` +
+			`"programmes":[{"list_code":"cn.country_programmes","jurisdiction":"CN"},{"list_code":"eu.p","jurisdiction":"foreign",` +
+			`"legal_confirmation_evidence_id":"legal.eu"}]}`,
+		"export_tax_policy": `{"name":"n","refund_method":"taxable","policy_basis":"b","professional_review_evidence_id":"review"}`,
+	} {
+		d, err := configData(kind, json.RawMessage(in))
+		if err != nil {
+			t.Fatal(kind, err)
+		}
+		var a, b any
+		if err = json.Unmarshal(dataJSON(d), &a); err != nil {
+			t.Fatal(err)
+		}
+		if err = json.Unmarshal([]byte(in), &b); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(a, b) {
+			t.Errorf("%s reads back as %s", kind, dataJSON(d))
+		}
+	}
+	d, err := configData("trade_terms", json.RawMessage(`{"incoterm":"FCA","edition":"2020","named_place":"n","responsibility_note":"r",`+
+		`"delivery":{"kind":"fixed_date","date":"2027-01-31"}}`))
+	if err != nil || d.TradeTerms.InsurancePercent != "" || strings.Contains(string(dataJSON(d)), "insurance_percent") {
+		t.Fatalf("terms without an insurance percentage: %s %v", dataJSON(d), err)
 	}
 }

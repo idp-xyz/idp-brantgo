@@ -51,7 +51,17 @@ const (
 	MethodExemptCreditRefund = "exempt_credit_refund"
 	MethodExemptRefund       = "exempt_refund"
 	MethodNotApplicable      = "not_applicable"
+	// MethodExempt (免税) and MethodTaxable (征税) are the statutory methods without a refund (S5R-D14);
+	// POL refuses not_applicable on a new revision.
+	MethodExempt  = "exempt"
+	MethodTaxable = "taxable"
 )
+
+// refunds reports whether method refunds VAT (免抵退 or 免退): only then may evidence be allocated for
+// export_refund (S5R-D14: export_refund 对应免抵退或免退).
+func refunds(method string) bool {
+	return method == MethodExemptCreditRefund || method == MethodExemptRefund
+}
 
 // Binding is the export_tax_policy revision a case binds (PolicyVersion): the one in force at the
 // export date (CN-AT12, CN-R08 "适用方法变化不追溯覆盖历史").
@@ -272,7 +282,7 @@ func allocate(x Context, in []AllocateInput) ([]*Allocation, error) {
 			return nil, kernel.Reject(kernel.CodeInvalidState, p+"/purchase_invoice_id", "The invoice is "+il.InvoiceStatus)
 		case il.Colour != "blue":
 			return nil, kernel.Reject(kernel.CodeInvalidState, p+"/purchase_invoice_id", "A red invoice evidences nothing")
-		case a.Purpose == ExportRefund && c.Policy.RefundMethod == MethodNotApplicable:
+		case a.Purpose == ExportRefund && !refunds(c.Policy.RefundMethod):
 			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, p+"/purpose", "The bound export tax policy has no refund method")
 		case il.Unit != el.Unit:
 			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, p+"/quantity", "The export line's unit is "+string(el.Unit)+", the invoice line's "+string(il.Unit))

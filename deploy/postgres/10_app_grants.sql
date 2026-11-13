@@ -57,6 +57,8 @@ GRANT EXECUTE ON FUNCTION brant_pty.party_screening_state(text, timestamptz, boo
 -- moves its version; a working revision is edited and published, a published one only superseded
 -- (trigger); a working revision's contacts are replaced whole (trigger).
 GRANT SELECT, INSERT, DELETE ON brant_pty.party_address, brant_pty.trading_profile_contact TO brant_app;
+-- S5R-D21: a working revision's permitted payers are replaced whole (trigger).
+GRANT SELECT, INSERT, DELETE ON brant_pty.trading_profile_payer TO brant_app;
 GRANT SELECT, INSERT ON brant_pty.party_revision_address, brant_pty.service_role, brant_pty.trading_profile,
     brant_pty.trading_profile_revision TO brant_app;
 GRANT UPDATE (root_version, last_revision, updated_at) ON brant_pty.trading_profile TO brant_app;
@@ -105,6 +107,8 @@ GRANT SELECT, INSERT ON brant_pol.issued_number, brant_pol.foundation_snapshot, 
     brant_pol.action_result, brant_pol.audit_event TO brant_app;
 -- ConfigGuard v1: downstream contexts call it in their own transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_pol.guard_config_in_force_v1(text, text, bigint, timestamptz) TO brant_app;
+-- ConfigAt v1 (S5R-D23): the revision valid at an instant, read without a lock in a downstream transaction.
+GRANT EXECUTE ON FUNCTION brant_pol.config_at_v1(text, text, timestamptz) TO brant_app;
 
 -- INQ: a draft's lines and sources are replaced whole; the ledger only grows.
 GRANT USAGE ON SCHEMA brant_inq TO brant_app;
@@ -286,19 +290,27 @@ GRANT UPDATE (status, row_version, settled_by_kind, settled_by_id, settle_epoch,
 GRANT UPDATE (disposition, disposition_draft_id, disposition_change_id, disposition_commitment_id, disposition_revision, disposition_at,
               disposition_reason)
     ON brant_pur.allocation_review_item TO brant_app;
+-- PUR commitment dispositions (S5R-04, S5R-D05): a disposition is inserted requested and decided once (trigger), its
+-- deferred check calls PUR's helper functions as the application role; nothing is deleted. FOR UPDATE on dispositions
+-- needs the column grants.
+GRANT SELECT, INSERT ON brant_pur.purchase_commitment_disposition TO brant_app;
+GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason, updated_at)
+    ON brant_pur.purchase_commitment_disposition TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pur.commitment_line_disposed(text, text, text, text) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a
 -- release is inserted granted on the quantities its subject's rows give (trigger) and only revoked,
--- once; nothing is deleted; the ledger only grows. FOR UPDATE on inspections and releases needs the
--- column grants. FUL's transactions execute QualityReleaseGuard v1.
+-- once, with what FUL shipped on it (S5R-D18); nothing is deleted; the ledger only grows. FOR UPDATE
+-- on inspections and releases needs the column grants. FUL's transactions execute
+-- QualityReleaseGuard v1; QLT's revocation executes FUL's ReleaseConsumption v1, granted below.
 GRANT USAGE ON SCHEMA brant_qlt TO brant_app;
 GRANT SELECT, INSERT ON brant_qlt.inspection, brant_qlt.disposition_item, brant_qlt.quality_release, brant_qlt.action_result,
     brant_qlt.audit_event TO brant_app;
 GRANT UPDATE (status, row_version, disposed_by_kind, disposed_by_id, dispose_epoch, disposed_at, disposition_reason,
     disposition_evidence_ids, superseded_by_inspection_id, superseded_at) ON brant_qlt.inspection TO brant_app;
-GRANT UPDATE (status, row_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence_ids)
-    ON brant_qlt.quality_release TO brant_app;
+GRANT UPDATE (status, row_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence_ids,
+    shipped_quantity, frozen_quantity) ON brant_qlt.quality_release TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_qlt.guard_quality_release_v1(text, timestamptz) TO brant_app;
 
 -- STL customer credit (S5-12a): a credit root moves its version and its count of limit versions by
@@ -447,6 +459,8 @@ GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed
               guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at,
               cancel_reason) ON brant_ful.shipment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;
+-- QLT's quality_release.revoke executes ReleaseConsumption v1 (R79, S5R-D18) inside its own transactions.
+GRANT EXECUTE ON FUNCTION brant_ful.release_consumption_v1(text) TO brant_app;
 
 -- FUL milestones and export lots (S5-03b): a shipment line's price is only inserted with its
 -- shipment; a milestone plan moves only its version, revision, counts and last revision (trigger),

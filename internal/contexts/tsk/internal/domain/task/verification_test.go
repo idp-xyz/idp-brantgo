@@ -27,7 +27,7 @@ func verifying(t *testing.T, goal string, mode Mode, bound bool) *Task {
 	sys := Act{By: tskSys, Epoch: 1, At: t0}
 	tk.Target.QuoteID = "quote.1"
 	if bound {
-		ok(t)(tk.BindObject("quote.1", 1, sys))
+		ok(t)(tk.BindObject("quote.1", false, 1, sys))
 	}
 	ok(t)(tk.Verify(0, sys))
 	return tk

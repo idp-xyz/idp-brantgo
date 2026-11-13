@@ -23,9 +23,10 @@ import (
 //
 // A trading profile (UL PTY-TradingProfile) is the relationship of a party with the company:
 // settlement terms as exact POL revisions (payment_terms and trade_terms, ConfigRef v1, read from
-// POL under R60), the business owner and the contacts at the row versions the editor saw. It is
-// saved in working revisions and published by a human other than the revision's last editor;
-// TradingProfileRef v1 names (party, revision) for TRD and STL (R13, R43).
+// POL under R60), the business owner, the contacts at the row versions the editor saw and the
+// permitted payers (S5R-D21). It is saved in working revisions and published by a human other than
+// the revision's last editor; TradingProfileRef v1 names (party, revision) for TRD and STL (R13,
+// R43).
 const (
 	CommandVerifyServiceRole     = "service_role.verify"        // human only
 	CommandSaveTradingProfile    = "trading_profile.save_draft" // human or AI
@@ -47,25 +48,49 @@ const (
 	MaxContactRefs = 50
 	// MaxConfigIDLength is POL's longest config_id.
 	MaxConfigIDLength = 40
+	// MaxPermittedPayers bounds the permitted payers a trading profile lists (S5R-D21).
+	MaxPermittedPayers = 20
 
 	// KindPaymentTerms and KindTradeTerms are the POL configuration kinds of the settlement terms.
 	KindPaymentTerms = "payment_terms"
 	KindTradeTerms   = "trade_terms"
 )
 
-// Service roles a party verifies (T02 service_role.role).
+// Service roles a party verifies (T02 service_role.role; S5R-D36, UL PTY-ServicePartyRole): a
+// forwarder (货代) or carrier (承运人) serves a route, an exact origin and destination (UN/LOCODE);
+// an insurer (保险人), an inspection agency (检验机构, QLT R73) and a customs broker (报关行, CNX R77)
+// are verified parties whose role has no route, so they state one only when they want to
+// (ServiceKindNeedsRoute).
+//
+// broker and inspection are the names S1 gave the customs broker and the inspection agency, with a
+// route like a forwarder's. They stay readable and verifiable with a route until QLT (S5R R5) and
+// CNX (S5R R10) resolve inspection_agency and customs_broker; new verifications use the S5R names.
 const (
-	ServiceForwarder  = "forwarder"
-	ServiceCarrier    = "carrier"
+	ServiceForwarder        = "forwarder"
+	ServiceCarrier          = "carrier"
+	ServiceInsurer          = "insurer"
+	ServiceInspectionAgency = "inspection_agency"
+	ServiceCustomsBroker    = "customs_broker"
+
+	// ServiceBroker and ServiceInspection are the S1 names of the customs broker and the
+	// inspection agency (with a route); new verifications use ServiceCustomsBroker and
+	// ServiceInspectionAgency, and QLT and CNX move to them (S5R R5, R10).
 	ServiceBroker     = "broker"
 	ServiceInspection = "inspection"
-	ServiceInsurer    = "insurer"
 )
 
-var serviceKinds = []string{ServiceForwarder, ServiceCarrier, ServiceBroker, ServiceInspection, ServiceInsurer}
+var (
+	serviceKinds = []string{ServiceForwarder, ServiceCarrier, ServiceInsurer, ServiceInspectionAgency, ServiceCustomsBroker, ServiceBroker,
+		ServiceInspection}
+	routeKinds = []string{ServiceForwarder, ServiceCarrier, ServiceBroker, ServiceInspection}
+)
 
 // ServiceKindKnown reports whether role is one of the service roles.
 func ServiceKindKnown(role string) bool { return slices.Contains(serviceKinds, role) }
+
+// ServiceKindNeedsRoute reports whether a service role of kind role serves a route, an exact origin
+// and destination (S5R-D36: forwarder and carrier, and the S1 names broker and inspection).
+func ServiceKindNeedsRoute(role string) bool { return slices.Contains(routeKinds, role) }
 
 // Location reports whether s is an exact location code: a UN/LOCODE of a two-letter country and a
 // three-character place ("CNSHA"). Zones and routes are not locations (T02 spec 13.1: exact origin
@@ -88,7 +113,9 @@ func Location(s string) bool {
 // supplier: the service ServiceCode of kind Role between Origin and Destination (UN/LOCODE),
 // valid in [ValidFrom, ValidUntil) (UTC timestamps), on evidence the verifying human may read.
 // ExpectedVersion is the party's row version, which the verification increments. Only a human
-// verifies.
+// verifies. A role whose kind serves no route (ServiceKindNeedsRoute false: insurer,
+// inspection_agency, customs_broker) may leave Origin and Destination empty (S5R-D36); a location it
+// states is still an exact UN/LOCODE.
 type VerifyServiceRole struct {
 	IdempotencyKey  string
 	PartyID         string
@@ -115,9 +142,9 @@ func (c VerifyServiceRole) Validate() error {
 		return schema("/args/role")
 	case !kernel.ValidIdentifier(c.ServiceCode):
 		return schema("/args/service_code")
-	case !Location(c.Origin):
+	case !Location(c.Origin) && (c.Origin != "" || ServiceKindNeedsRoute(c.Role)):
 		return schema("/args/origin")
-	case !Location(c.Destination):
+	case !Location(c.Destination) && (c.Destination != "" || ServiceKindNeedsRoute(c.Role)):
 		return schema("/args/destination")
 	}
 	from, err := kernel.ParseTimestamp(c.ValidFrom)
@@ -161,6 +188,13 @@ type PinnedContact struct {
 // PartyRevision, the settlement terms (exact POL revisions of payment_terms and trade_terms in force
 // now), the business owner and 0 to MaxContactRefs contacts of the party, each confirmed at its row
 // version.
+//
+// PermittedPayers (S5R-D21, UL PTY-TradingProfile) are 0 to MaxPermittedPayers other parties that
+// may pay for the party: each a confirmed party the editor sees, never the party itself, listed
+// once. Publishing the revision, on the evidence of the payment arrangement (a payment mandate or a
+// tripartite agreement), is their verification; STL then takes a receipt from a permitted payer as
+// the customer's (R43, TradingProfileRef v1). A permitted payer is a party ID: PTY does not re-check
+// it after publication, and a downstream reads the payer's PartyRef v1 for its current state.
 type SaveTradingProfile struct {
 	IdempotencyKey  string
 	PartyID         string
@@ -170,6 +204,7 @@ type SaveTradingProfile struct {
 	TradeTerms      TermsRef
 	Owner           OwnerRef
 	ContactRefs     []PinnedContact
+	PermittedPayers []string `json:",omitempty"`
 }
 
 // Validate checks the closed contract.
@@ -203,6 +238,14 @@ func (c SaveTradingProfile) Validate() error {
 			return schema(path + "/row_version")
 		case slices.IndexFunc(c.ContactRefs, func(o PinnedContact) bool { return o.ContactID == ref.ContactID }) != i:
 			return schema("/args/contact_refs")
+		}
+	}
+	if len(c.PermittedPayers) > MaxPermittedPayers {
+		return schema("/args/permitted_payers")
+	}
+	for i, id := range c.PermittedPayers {
+		if !kernel.ValidIdentifier(id) || slices.Index(c.PermittedPayers, id) != i {
+			return schema("/args/permitted_payers/" + strconv.Itoa(i))
 		}
 	}
 	return nil
@@ -261,7 +304,8 @@ type ProfileCommands interface {
 	PublishTradingProfile(ctx context.Context, cmd PublishTradingProfile) (Receipt, error)
 }
 
-// ServiceRoleView is one verified revision of a service role.
+// ServiceRoleView is one verified revision of a service role. Origin and Destination are empty for a
+// role that states no route (S5R-D36).
 type ServiceRoleView struct {
 	ServiceRoleID  string
 	Revision       int64
@@ -289,12 +333,15 @@ type TradingProfileRevisionView struct {
 	TradeTerms    TermsRef
 	Owner         OwnerRef
 	ContactRefs   []PinnedContact
-	SavedBy       kernel.ActorRef // the last editor
-	SavedAt       time.Time
-	PublishedBy   kernel.ActorRef // zero before publication
-	PublishedAt   time.Time
-	EvidenceIDs   []string  // the evidence the publisher verified
-	EndedAt       time.Time // when it was superseded
+	// PermittedPayers are the party IDs of the permitted payers in ID order, none when it lists none
+	// (S5R-D21).
+	PermittedPayers []string
+	SavedBy         kernel.ActorRef // the last editor
+	SavedAt         time.Time
+	PublishedBy     kernel.ActorRef // zero before publication
+	PublishedAt     time.Time
+	EvidenceIDs     []string  // the evidence the publisher verified
+	EndedAt         time.Time // when it was superseded
 }
 
 // TradingProfileView is a party's trading profile in the caller's company and all its revisions,
@@ -357,9 +404,12 @@ type ResolvedAddressRole struct {
 	Stale           string
 }
 
-// ResolvedServiceRole is what PTY says about one ServiceRoleRef at an instant. Code is empty when
-// the revision is the latest of its service role, the party is confirmed in the revision it was
-// verified against, and its validity contains the instant; otherwise it is REFERENCE_STALE.
+// ResolvedServiceRole is what PTY says about one ServiceRoleRef at an instant (ServiceRoleRef v1;
+// Context Map R05, R44, R73, R77). Code is empty when the revision is the latest of its service
+// role, the party is confirmed in the revision it was verified against, and its validity contains
+// the instant; otherwise it is REFERENCE_STALE. Role is the kind the downstream checks (FUL a
+// forwarder, carrier or insurer, QLT an inspection_agency, CNX a customs_broker; S5R-D36); Origin
+// and Destination are empty for a role that states no route.
 type ResolvedServiceRole struct {
 	Ref            ServiceRoleRef
 	Role           string
@@ -389,8 +439,11 @@ type ResolvedTradingProfile struct {
 	TradeTerms     TermsRef
 	Owner          OwnerRef
 	ContactRefs    []PinnedContact
-	Code           string
-	Stale          string
+	// PermittedPayers are the party IDs whose receipts count as the party's own (S5R-D21; STL,
+	// R43), in ID order; none when the revision lists none. They never make the revision stale.
+	PermittedPayers []string
+	Code            string
+	Stale           string
 }
 
 // Check returns nil when the address serves new business and REFERENCE_STALE at path otherwise.

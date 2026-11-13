@@ -8,7 +8,6 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
-	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/internal/domain/inspection"
@@ -57,7 +56,8 @@ func recordRequest(cmd api.RecordInspection) inspection.Request {
 }
 
 // recordCommand runs inspection.record. Before the transaction it reads the subject from PUR, the
-// standard, evidence and report from EVD and the agency from PTY; inside it, it locks the
+// standard, evidence and report from EVD and the agency from PTY (QLT's port Agencies, S5R-D36);
+// inside it, it locks the
 // inspection its ID names, or else every inspection of the subject FOR UPDATE, decides and writes
 // the inspection and, for a re-inspection or correction, the supersession of the one it cites.
 type recordCommand struct {
@@ -107,13 +107,13 @@ func (h *recordCommand) Prepare(ctx context.Context) error {
 		return factErr(err, "/args/report_file_id")
 	}
 	if a := h.req.Agency; a != nil {
-		ref := ptyapi.ServiceRoleRef{PartyID: a.PartyID, ServiceRoleID: a.ServiceRoleID, Revision: a.RoleRevision}
-		roles, err := h.s.Upstream.Parties.ResolveServiceRoles(ctx, []ptyapi.ServiceRoleRef{ref}, h.req.InspectedAt)
+		ref := api.AgencyRef{PartyID: a.PartyID, ServiceRoleID: a.ServiceRoleID, Revision: a.RoleRevision}
+		got, err := h.s.Upstream.Agencies.ResolveAgencies(ctx, []api.AgencyRef{ref}, h.req.InspectedAt)
 		if err != nil {
 			return err
 		}
-		if r, ok := roles[ref]; ok {
-			h.agency = &inspection.Agency{Role: r.Role, Check: r.Check}
+		if r, ok := got[ref]; ok {
+			h.agency = &inspection.Agency{InspectionAgency: r.InspectionAgency, Check: r.Check}
 		}
 	}
 	return nil

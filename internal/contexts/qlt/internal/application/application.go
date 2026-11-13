@@ -2,17 +2,22 @@
 // live in domain/inspection, the release rules in domain/release; SQL lives in adapters/postgres.
 //
 // QLT's upstream contexts are PUR (Context Map R24, InspectionSubject v1, through QLT's own port
-// Subjects), EVD (R72, SourceRef v1 for standards and evidence, FileRef v1 for reports) and PTY
-// (R73, ServiceRoleRef v1 for external inspection agencies). None of these relationships is a guard
-// edge: a command reads them through their api packages before QLT's transaction begins (the
-// ledger's Preparer step) and the domain judges what they said inside it. QLT never calls another
-// context's transaction owner, and it publishes QualityReleaseGuard v1 to FUL (R26).
+// Subjects), EVD (R72, SourceRef v1 for standards and evidence, FileRef v1 for reports), PTY (R73,
+// ServiceRoleRef v1 for external inspection agencies, through QLT's own port Agencies; S5R-D36) and
+// FUL (R79, ReleaseConsumption v1, through the port ReleaseConsumption; S5R-D18). None of these
+// relationships is a guard edge. PUR, EVD and PTY are read through their api packages before QLT's
+// transaction begins (the ledger's Preparer step) and the domain judges what they said inside it;
+// FUL's ReleaseConsumption v1 is the reverse read of R26 (S5-D33): quality_release.revoke runs it
+// with QLT's own executor inside its transaction, after it locked the release row, without a lock.
+// QLT never calls another context's transaction owner, and it publishes QualityReleaseGuard v1 to
+// FUL (R26).
 //
 // Lock order inside QLT's transactions (ADR-BR-011, tactical lockOrder "QLT (release root; subject
 // inspections)"): the command's own root FOR UPDATE — the inspection or release its ID names, when
-// it exists — then, for inspection.record and quality_release.grant, every inspection of the
-// subject FOR UPDATE in inspection ID order, then the company authority guard FOR SHARE. Every
-// command that changes what a subject may release locks the subject's inspections, so they
+// it exists — then, for inspection.record, quality_release.grant and quality_release.revoke, every
+// inspection of the subject FOR UPDATE in inspection ID order, then the company authority guard FOR
+// SHARE. Every command that changes what a subject may release locks the subject's inspections
+// (disposition.decide locks the one inspection it disposes, which the others lock too), so they
 // commit one at a time; two first inspections of a subject collide on the subject's inspection
 // number and the second runs again.
 package application
@@ -21,12 +26,10 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
-	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -55,20 +58,18 @@ func Rules() []authorization.Rule {
 	}
 }
 
-// Parties is what QLT reads from PTY: service roles (ServiceRoleRef v1, R73).
-type Parties interface {
-	ResolveServiceRoles(ctx context.Context, refs []ptyapi.ServiceRoleRef, at time.Time) (map[ptyapi.ServiceRoleRef]ptyapi.ResolvedServiceRole, error)
-}
-
 // Upstream are the contexts QLT reads references from.
 type Upstream struct {
-	Subjects Subjects       // PUR InspectionSubject v1 (R24), QLT's port
-	Sources  evdapi.Queries // EVD SourceRef v1 and FileRef v1 (R72)
-	Parties  Parties        // PTY ServiceRoleRef v1 (R73)
+	Subjects    Subjects           // PUR InspectionSubject v1 (R24), QLT's port
+	Sources     evdapi.Queries     // EVD SourceRef v1 and FileRef v1 (R72)
+	Agencies    Agencies           // PTY ServiceRoleRef v1 of inspection agencies (R73, S5R-D36), QLT's port
+	Consumption ReleaseConsumption // FUL ReleaseConsumption v1 (R79, S5R-D18)
 }
 
 // Complete reports whether every upstream is wired.
-func (u Upstream) Complete() bool { return u.Subjects != nil && u.Sources != nil && u.Parties != nil }
+func (u Upstream) Complete() bool {
+	return u.Subjects != nil && u.Sources != nil && u.Agencies != nil && u.Consumption != nil
+}
 
 // Service runs QLT's use cases.
 type Service struct {

@@ -157,6 +157,47 @@ func (s Service) ResolveConfigs(ctx context.Context, refs []api.ConfigRef, at ti
 	return out, err
 }
 
+// ConfigAt answers ConfigAt v1 (S5R-D23, POL-INV-007): the revision of a configuration that applies
+// at an instant by its validity, published before or after it (config.At). It reads every revision
+// of the configuration without locks: published revisions never change. Bank accounts follow the
+// read rules of GetConfig; one the reader may not see is not known to it.
+func (s Service) ConfigAt(ctx context.Context, q api.ConfigAtQuery) (api.RevisionAt, error) {
+	if err := q.Validate(); err != nil {
+		return api.RevisionAt{}, err
+	}
+	at := kernel.Instant(q.At)
+	unknown := api.RevisionAt{Ref: api.ConfigRef{Kind: q.Kind, ConfigID: q.ConfigID}, Code: kernel.CodeReferenceInvalid}
+	out := unknown
+	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		stored, err := postgres.Revisions(ctx, exec, scope(ctx), q.Kind, q.ConfigID)
+		if err != nil || len(stored) == 0 {
+			return err
+		}
+		revisions := make([]*config.Revision, len(stored))
+		for i, r := range stored {
+			revisions[i] = r.Rev
+		}
+		rev := config.At(revisions, at)
+		if rev == nil {
+			out = api.RevisionAt{Ref: unknown.Ref, Code: config.CodeConfigNotActive}
+			return nil
+		}
+		out = api.RevisionAt{Ref: api.ConfigRef{Kind: q.Kind, ConfigID: q.ConfigID, Revision: rev.Number}, Status: string(rev.Status),
+			ContentHash: rev.Hash, ValidFrom: rev.Content.ValidFrom, ValidUntil: rev.Content.ValidUntil, PublishedAt: rev.Publication.At,
+			EndedAt: rev.EndedAt, Data: data(rev.Content)}
+		reader := accounts{s: s, d: d}
+		visible, err := reader.show(ctx, exec, &out.Data)
+		if err == nil && !visible {
+			out = unknown
+		}
+		return err
+	})
+	if err != nil {
+		return api.RevisionAt{}, err
+	}
+	return out, nil
+}
+
 // LookupFX applies POL-INV-003 to one use of an exchange rate (Python foundation.fx.convert without
 // the conversion, which the caller does with kernel.ExchangeRate).
 func (s Service) LookupFX(ctx context.Context, q api.FXQuery) (api.ExchangeRate, error) {

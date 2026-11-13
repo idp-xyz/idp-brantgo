@@ -173,7 +173,8 @@ func newFulWorld(t *testing.T) *fulWorld {
 	}
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
-	w.qlt, err = qlt.New(db, qlt.Upstream{Subjects: w.subjects, Sources: q.c.EVD, Parties: q.c.PTY})
+	w.qlt, err = qlt.New(db, qlt.Upstream{Subjects: w.subjects, Sources: q.c.EVD, Agencies: qlt.PTYAgencies(q.c.PTY),
+		Consumption: qlt.FULReleaseConsumption()})
 	w.must(err)
 	db, err = bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)

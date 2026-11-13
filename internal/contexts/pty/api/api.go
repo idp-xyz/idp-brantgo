@@ -49,7 +49,9 @@ const (
 )
 
 // Address roles: what an address of a party is for in trade (Python party_profile.addresses[].role,
-// T03 A31). A role is declared with the address, never derived from trade terms.
+// T03 A31). A role is declared with the address, never derived from trade terms. notify is the
+// notify party of a bill of lading and a commercial invoice (S5R-D40, UL PTY-AddressRole): an order
+// may bind it (TRD), FUL prints and checks it and screens its party (R44).
 const (
 	AddressBuyer     = "buyer"
 	AddressSeller    = "seller"
@@ -58,9 +60,11 @@ const (
 	AddressConsignee = "consignee"
 	AddressShipper   = "shipper"
 	AddressBilling   = "billing"
+	AddressNotify    = "notify"
 )
 
-var addressRoles = []string{AddressBuyer, AddressSeller, AddressPayer, AddressPayee, AddressConsignee, AddressShipper, AddressBilling}
+var addressRoles = []string{AddressBuyer, AddressSeller, AddressPayer, AddressPayee, AddressConsignee, AddressShipper, AddressBilling,
+	AddressNotify}
 
 // AddressRoleKnown reports whether role is one of the address roles.
 func AddressRoleKnown(role string) bool { return slices.Contains(addressRoles, role) }

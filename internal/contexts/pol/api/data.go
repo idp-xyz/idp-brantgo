@@ -75,13 +75,27 @@ const (
 	ShipmentDocumentCommercialInvoice = "commercial_invoice"
 	ShipmentDocumentPackingList       = "packing_list"
 
-	// Export tax refund methods of an export_tax_policy (CN-R08: 免、抵、退 are different results).
-	// exempt_credit_refund is 免抵退, exempt_refund is 免退; not_applicable says that no export tax
-	// refund applies to the company's exports, so CNX opens no refund case. Which one applies is the
+	// Export tax refund methods of an export_tax_policy (CN-R08: 免、抵、退 are different results), the
+	// four VAT treatments of exports the law defines (财税〔2012〕39号; S5R-D14, POL-INV-006):
+	// exempt_credit_refund is 免抵退 (a manufacturer), exempt_refund is 免退 (a trading company, the
+	// first customer's method), exempt is 免税 (exempt without refund) and taxable is 征税 (taxed as a
+	// domestic sale). A refund case of CNX serves exempt_credit_refund and exempt_refund (purpose
+	// export_refund) or keeps the records of an exempt export (export_exemption); a taxable export
+	// opens no case. not_applicable, which S5 used for both exempt and taxable, stays readable on the
+	// revisions that carry it, and a new revision may not state it. Which method applies is the
 	// professional review's finding (CN-D02); Brant records it and computes no tax (CN-E01).
 	RefundExemptCreditRefund = "exempt_credit_refund"
 	RefundExemptRefund       = "exempt_refund"
+	RefundExempt             = "exempt"
+	RefundTaxable            = "taxable"
 	RefundNotApplicable      = "not_applicable"
+
+	// DefaultInsurancePercent is the contract insurance percentage of trade terms that state none,
+	// and MinInsurancePercent the lowest one a revision may state: the insured amount of a CIF or CIP
+	// shipment is at least 110 % of the invoice value (Incoterms 2020 A5, UCP 600 Art. 28(f)(ii);
+	// S5R-D06, POL-INV-006).
+	DefaultInsurancePercent = "110"
+	MinInsurancePercent     = "110"
 
 	LimitSourceInternalAssessment = "internal_assessment"
 	LimitSourceSinosureBuyerLimit = "sinosure_buyer_limit"
@@ -133,7 +147,9 @@ var (
 	quoteSections  = []string{"issuer", "recipient", "identity", "lines", "totals", "terms", "delivery", "payments", "validity", "notes"}
 	cisgChoices    = []string{CISGApplies, CISGExcluded}
 	formationRules = []string{FormationArrival, FormationDispatch}
-	refundMethods  = []string{RefundExemptCreditRefund, RefundExemptRefund, RefundNotApplicable}
+	// refundMethods are the methods the contract admits; a new revision may not state not_applicable
+	// (POL-INV-006), which only revisions saved before S5R carry.
+	refundMethods = []string{RefundExemptCreditRefund, RefundExemptRefund, RefundExempt, RefundTaxable, RefundNotApplicable}
 
 	// governingLaw is an ISO 3166-1 alpha-2 country, optionally with an ISO 3166-2 subdivision
 	// (GB-ENG for England and Wales, US-NY for New York).
@@ -233,11 +249,13 @@ type ConfigData struct {
 // MaxConfigIDLength characters), so a company has one profile. DefaultLegalTerms is the tenant's
 // default legal terms (G0 walkthrough F-02: 默认 CISG 与中国法，由租户配置): a quote issued by the
 // company that names no legal terms of its own seals these at its freeze. Nil: no default is
-// configured, and such a quote seals none.
+// configured, and such a quote seals none. Country is an ISO 3166-1 alpha-2 code; a new revision
+// states an officially assigned one (kernel.ValidCountryCode: UK for GB is INVALID_KNOWN_VALUE),
+// while a revision saved before S5R stays readable with the code it has (S5R-D15, POL-INV-006).
 type CompanyProfile struct {
 	LegalName         string
 	RegistrationNo    string
-	Country           string // ISO 3166-1 alpha-2: ^[A-Z]{2}$
+	Country           string // ISO 3166-1 alpha-2: ^[A-Z]{2}$, officially assigned on a new revision
 	Address           string
 	BaseCurrency      string // currency code, configured and in force
 	TimeZone          string // IANA time zone, such as Asia/Shanghai
@@ -294,12 +312,30 @@ type Calendar struct {
 }
 
 // TradeTerms are an Incoterms 2020 rule with its named place and how delivery is dated.
+//
+// InsurancePercent is the contract insurance percentage (S5R-D06, POL-INV-006): the insured amount
+// of a shipment under these terms is at least this percentage of the invoice value; FUL checks the
+// insurance policy of a CIF or CIP shipment against it (FUL-INV-005). It is optional, a
+// PercentFormat decimal not below MinInsurancePercent; empty means DefaultInsurancePercent
+// (ContractInsurancePercent). POL leaves it out of the stored data and of the request hash when it
+// is empty, so trade terms saved before it existed keep their content hash and their requests
+// replay unchanged.
 type TradeTerms struct {
 	Incoterm           string // EXW, FCA, CPT, CIP, DAP, DPU, DDP, FAS, FOB, CFR or CIF
 	Edition            string // 2020
 	NamedPlace         string
 	ResponsibilityNote string
 	Delivery           Delivery
+	InsurancePercent   string `json:",omitempty"` // "" (110) or PercentFormat, at least 110
+}
+
+// ContractInsurancePercent returns the contract insurance percentage of the terms: InsurancePercent,
+// or DefaultInsurancePercent when they state none (S5R-D06).
+func (t TradeTerms) ContractInsurancePercent() (kernel.Decimal, error) {
+	if t.InsurancePercent == "" {
+		return kernel.ParseDecimal(DefaultInsurancePercent, PercentFormat)
+	}
+	return kernel.ParseDecimal(t.InsurancePercent, PercentFormat)
 }
 
 // Delivery is a fixed date (Kind fixed_date with Date), or a lead time (Kind lead_time) of Days
@@ -505,7 +541,7 @@ type CreditApprovalTier struct {
 // publisher must be able to read it (R63). Brant records the method and computes no tax (CN-E01).
 type ExportTaxPolicy struct {
 	Name                         string
-	RefundMethod                 string // exempt_credit_refund, exempt_refund or not_applicable
+	RefundMethod                 string // exempt_credit_refund, exempt_refund, exempt or taxable; not_applicable on old revisions only
 	PolicyBasis                  string // the policy documents the method rests on
 	ProfessionalReviewEvidenceID string // identifier of an EVD source
 }
@@ -514,14 +550,24 @@ type ExportTaxPolicy struct {
 // again (ADR-BR-017, Context Map R60 POL->PTY). PTY screens only against the lists named here; a
 // conclusion stays valid RescreenIntervalDays after the screening. Brant records the lists and the
 // legal confirmations; it gives no legal opinion.
+//
+// Programmes are the country programme lists (internal/reference, country_programme.import) the
+// company enables for CNX's trade compliance check (S5R-D38, Context Map R50, UL
+// POL-ScreeningRegulationProfile): CNX reads them from the revision a check binds instead of taking
+// them from the evaluation's input. Each follows the rules of Lists: a list code reference data
+// imports it under, its jurisdiction, and for a foreign list the tenant's legal confirmation, which
+// the publication cites (ADR-BR-017). Programmes are optional, 0 to MaxScreeningLists; POL leaves
+// them out of the stored data and of the request hash when there are none, so a regulation saved
+// before they existed keeps its content hash.
 type ScreeningRegulation struct {
 	Lists                []ScreeningList
-	RescreenIntervalDays int // 1–3650
+	RescreenIntervalDays int             // 1–3650
+	Programmes           []ScreeningList `json:",omitempty"`
 }
 
-// ScreeningList is one enabled list. A foreign list needs LegalConfirmationEvidenceID: the EVD
-// source of the tenant's legal confirmation, which the publication must cite among its evidence,
-// so the publisher must be able to read it (R63).
+// ScreeningList is one enabled list or programme list. A foreign list needs
+// LegalConfirmationEvidenceID: the EVD source of the tenant's legal confirmation, which the
+// publication must cite among its evidence, so the publisher must be able to read it (R63).
 type ScreeningList struct {
 	ListCode                    string // the list code reference data imports it under
 	Jurisdiction                string // CN, UN or foreign
@@ -535,6 +581,9 @@ type ScreeningList struct {
 // its content into the commercial document; the issuer's company profile may name the tenant's
 // default (CompanyProfile.DefaultLegalTerms), which the design sets as the CISG with PRC law. Brant
 // records the terms a tenant's legal function publishes; it gives no legal opinion.
+//
+// GoverningLaw's country is an officially assigned ISO 3166-1 alpha-2 code on a new revision
+// (kernel.ValidCountryCode, S5R-D15); the subdivision is checked for its form only.
 //
 // POL checks the formation rule where the terms fix it: when the CISG applies, an acceptance takes
 // effect when it reaches the offeror and the contract is concluded then (CISG Art. 18(2), 23), and
@@ -585,9 +634,24 @@ func (r *ScreeningRegulation) validate() error {
 	if len(r.Lists) < 1 || len(r.Lists) > MaxScreeningLists {
 		return schema("/args/data/lists")
 	}
+	if err := screeningLists(r.Lists, "/args/data/lists"); err != nil {
+		return err
+	}
+	if r.RescreenIntervalDays < 1 || r.RescreenIntervalDays > maxRescreenDays {
+		return schema("/args/data/rescreen_interval_days")
+	}
+	if len(r.Programmes) > MaxScreeningLists {
+		return schema("/args/data/programmes")
+	}
+	return screeningLists(r.Programmes, "/args/data/programmes")
+}
+
+// screeningLists checks enabled lists at path: distinct list codes, a known jurisdiction, and the
+// legal confirmation of a foreign list (ADR-BR-017).
+func screeningLists(lists []ScreeningList, path string) error {
 	seen := map[string]bool{}
-	for i, l := range r.Lists {
-		at := "/args/data/lists/" + strconv.Itoa(i)
+	for i, l := range lists {
+		at := path + "/" + strconv.Itoa(i)
 		switch {
 		case len(l.ListCode) > maxListCodeLength || !kernel.ValidIdentifier(l.ListCode) || seen[l.ListCode]:
 			return schema(at + "/list_code")
@@ -600,9 +664,6 @@ func (r *ScreeningRegulation) validate() error {
 			return schema(at + "/legal_confirmation_evidence_id")
 		}
 		seen[l.ListCode] = true
-	}
-	if r.RescreenIntervalDays < 1 || r.RescreenIntervalDays > maxRescreenDays {
-		return schema("/args/data/rescreen_interval_days")
 	}
 	return nil
 }
@@ -746,7 +807,8 @@ func (c *Calendar) validate() error {
 
 func (t *TradeTerms) validate() error {
 	if err := first(field{"incoterm", slices.Contains(incoterms, t.Incoterm)}, field{"edition", t.Edition == IncotermsEdition2020},
-		field{"named_place", name(t.NamedPlace)}, field{"responsibility_note", name(t.ResponsibilityNote)}); err != nil {
+		field{"named_place", name(t.NamedPlace)}, field{"responsibility_note", name(t.ResponsibilityNote)},
+		field{"insurance_percent", t.InsurancePercent == "" || decimal(t.InsurancePercent, PercentFormat)}); err != nil {
 		return err
 	}
 	d := t.Delivery

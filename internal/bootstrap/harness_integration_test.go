@@ -32,6 +32,8 @@ var allPermissions = []string{
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "item_code_mapping.save_draft", "item_code_mapping.publish",
 	"cat.read", "cat.audit",
 	"config.save_draft", "config.discard_draft", "config.publish", "config.retire", "number.issue", "foundation.snapshot",
+	// S5R-D30: publication by kind (polapi.PublishCapability).
+	"config.publish.credit_policy", "config.publish.export_tax_policy", "config.publish.screening_regulation",
 	"pol.read", "pol.audit", "pol.read_sensitive",
 	"rfq.save_draft", "rfq.confirm_scope", "rfq.cancel", "rfq.close", "inq.read", "inq.audit",
 	"party_screening.record", "party_screening.decide", "party_screening.block",
@@ -57,7 +59,7 @@ var allPermissions = []string{
 	"purchase.commitment.request", "purchase.commitment.decide", "purchase.commitment.revoke", "purchase.commitment.issue",
 	"purchase.supplier_confirmation.record", "supplier_delivery.record", "supplier_delivery.verify",
 	"purchase.commitment.change.prepare", "purchase.commitment.change.decide", "purchase.commitment.change.apply", "purchase.commitment.cancel",
-	"allocation_review.settle",
+	"allocation_review.settle", "purchase.commitment.dispose", "purchase.commitment.disposition.decide",
 }
 
 type world struct {

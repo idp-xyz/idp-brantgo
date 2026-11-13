@@ -49,7 +49,10 @@ type Prepared struct {
 	Sources          map[Ref]Use
 	Allocations      []*allocation.Allocation
 	SupplyValidUntil time.Time
-	request          Request
+	// DecreaseOnly: prepared as a commitment change that only buys less (Change.DecreaseOnly, S5R-D41);
+	// SupplyConditionGuard v1's SUPPLY_CONDITION_EXPIRED and SUPPLY_CONDITION_NOT_CURRENT do not refuse it.
+	DecreaseOnly bool
+	request      Request
 }
 
 // line is one request line as the rules judged it.
@@ -81,8 +84,8 @@ const (
 // REFERENCE_STALE), an offer for another RFQ (SUPPLY_SCOPE_MISMATCH), the condition line (unknown:
 // REFERENCE_INVALID; another specification revision: SPECIFICATION_MISMATCH; an RFQ line the offer
 // does not answer: SUPPLY_SCOPE_MISMATCH), the specification and every configuration in force
-// (CAT's and POL's verdicts), one unit throughout (DEPENDENCY_NOT_SUPPORTED: no conversion in this
-// stage), quantities exact at the unit's precision and at most 10^6 (INVALID_KNOWN_VALUE) and the
+// (CAT's and POL's verdicts), one unit throughout (UNIT_SCOPE_MISMATCH: the order line's, no conversion
+// in this stage; PUR-INV-012, S5R-D41), quantities exact at the unit's precision and at most 10^6 (INVALID_KNOWN_VALUE) and the
 // delivery (PUR-INV-006); then one supplier and one set of terms (SUPPLIER_MISMATCH,
 // PURCHASE_TERMS_INCONSISTENT, PUR-INV-003); every overbuy marked with a reason
 // (OVERBUY_NOT_APPROVED; the purchase commitment decision approves it, S5 decision D-14); MOQ and order multiple on the purchased quantities (MOQ_NOT_MET,
@@ -170,7 +173,22 @@ func Prepare(req Request, in Inputs) (*Prepared, error) {
 	}
 	out.Allocations = slices.Collect(maps.Values(roots))
 	allocation.Sort(out.Allocations)
+	out.DecreaseOnly = in.Change != nil && in.Change.DecreaseOnly
 	return out, nil
+}
+
+// Codes of SUP's verdicts a decrease-only change does not refuse on (S5R-D41): the supply condition was
+// superseded, withdrawn or retired, or its validity ended.
+const (
+	CodeSupplyConditionNotCurrent = "SUPPLY_CONDITION_NOT_CURRENT"
+	CodeSupplyConditionExpired    = "SUPPLY_CONDITION_EXPIRED"
+)
+
+// Lapsed reports whether err is SUP's verdict that a supply condition is no longer in force — not
+// current or expired — and nothing else: what a decrease-only change does not check (S5R-D41).
+func Lapsed(err error) bool {
+	rej, ok := kernel.AsRejection(err)
+	return ok && (rej.Code == CodeSupplyConditionNotCurrent || rej.Code == CodeSupplyConditionExpired)
 }
 
 // judge decides one line's supply condition, references, units, quantities and delivery.
@@ -182,7 +200,7 @@ func (in Inputs) judge(pk *picked, judged map[Ref]bool, out *Prepared) error {
 		return fail(kernel.CodeReferenceInvalid, p, "No sealed supply condition revision the caller sees")
 	}
 	if !judged[s.Ref] {
-		if err := s.Check(p); err != nil {
+		if err := s.Check(p); err != nil && (in.Change == nil || !in.Change.DecreaseOnly || !Lapsed(err)) {
 			return err
 		}
 		party, ok := in.Parties[s.SupplierID]
@@ -244,7 +262,7 @@ func (in Inputs) judge(pk *picked, judged map[Ref]bool, out *Prepared) error {
 	}
 	for _, r := range []*ConfigKey{c.PurchaseUnit, c.PriceUnit, c.TierUnit, c.MOQ.unit()} {
 		if r != nil && *r != ol.Unit {
-			return fail(CodeDependencyNotSupported, p, "Purchase, price, tier and MOQ units are the order line's unit; no conversion in this stage")
+			return fail(CodeUnitScopeMismatch, p, "Purchase, price, tier and MOQ units are the order line's unit; no conversion in this stage (PUR-INV-012)")
 		}
 	}
 	unit := in.Configs[ol.Unit].Unit
@@ -428,7 +446,14 @@ func (in Inputs) document(req Request, picks []picked, out *Prepared) error {
 		if err != nil {
 			return err
 		}
-		raw, applied, err := s.amount(g.qty, at)
+		var raw kernel.Decimal
+		var applied []AppliedTier
+		pin, kept := in.keptPrice(g.source, s)
+		if kept {
+			raw, applied, err = s.at(g.qty, pin, at)
+		} else {
+			raw, applied, err = s.amount(g.qty, at)
+		}
 		if err != nil {
 			return err
 		}
@@ -471,7 +496,7 @@ func (in Inputs) document(req Request, picks []picked, out *Prepared) error {
 			Quantity: text(g.qty), UnitRef: docRef(*g.cond.PurchaseUnit), PricingMode: g.cond.PricingMode,
 			PriceBasisQuantity: g.cond.PriceBasisQuantity, AppliedTiers: tiers, TaxProfileRef: docRef(*g.cond.TaxProfile),
 			TaxPriceBasis: profile.PriceBasis, TaxRate: profile.Rate, TaxRecovery: profile.Recovery, RawAmount: text(raw),
-			NetMinor: minor(split.Net), TaxMinor: minor(split.Tax), GrossMinor: minor(split.Gross)})
+			NetMinor: minor(split.Net), TaxMinor: minor(split.Tax), GrossMinor: minor(split.Gross), PriceKept: kept})
 	}
 
 	totals := struct{ net, tax, gross, cost *big.Int }{new(big.Int), new(big.Int), new(big.Int), new(big.Int)}

@@ -155,15 +155,25 @@ func TestRevisionsKeepTheVerifiedDeliveries(t *testing.T) {
 
 // SM-PUR-COMMITMENT issued | confirmed → cancelled ("授权人工、理由与供应商证据；释放分配"; "已核实交付量保留"): each line
 // keeps exactly what was verified — the allocated quantity first, the rest as overbuy —, the
-// cancellation is its next revision with the binding of the one it ends; once.
+// cancellation is its next revision with the binding of the one it ends; once. S5R-D41 (PUR-INV-011
+// "承诺有未核实的交付声明（recorded）时取消被拒"): while a claim awaits its verification the cancellation is
+// INVALID_STATE, reason unverified_delivery_pending, and nothing moves.
 func TestCancelKeepsTheVerifiedDeliveries(t *testing.T) {
 	c := issued(t, fixture())
 	current := []LineQuantity{lineQ("100", "20")}
 	act := Act{By: buyer, Epoch: 9, At: now.Add(time.Hour), Reason: "factory closed"}
-	if _, err := c.Cancel(2, current, nil, act, nil); code(err) != "VERSION_CONFLICT /args/expected_version" {
+	if _, err := c.Cancel(2, current, nil, nil, act, nil); code(err) != "VERSION_CONFLICT /args/expected_version" {
 		t.Fatal(code(err))
 	}
-	r, err := c.Cancel(3, current, map[string]kernel.Decimal{"L1": q("110")}, act, []Evidence{{SourceID: "letter", Locator: "p2"}})
+	_, err := c.Cancel(3, current, nil, []string{"delivery.2"}, act, nil)
+	if rej, _ := kernel.AsRejection(err); code(err) != "INVALID_STATE /args/commitment_id" ||
+		!strings.HasPrefix(rej.Fields[0].Reason, "unverified_delivery_pending: ") || !strings.Contains(rej.Fields[0].Reason, "delivery.2") {
+		t.Fatalf("a pending claim stops the cancellation (S5R-D41): %v", err)
+	}
+	if c.Status != StatusIssued || c.Revision != 1 || c.RowVersion != 3 {
+		t.Fatalf("nothing moved %+v", c)
+	}
+	r, err := c.Cancel(3, current, map[string]kernel.Decimal{"L1": q("110")}, nil, act, []Evidence{{SourceID: "letter", Locator: "p2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,19 +184,19 @@ func TestCancelKeepsTheVerifiedDeliveries(t *testing.T) {
 	if !IsCommitted(c.Status) || IsOpen(c.Status) {
 		t.Fatal("a cancelled commitment's draft stays committed and the commitment is not open")
 	}
-	if _, err = c.Cancel(4, current, nil, act, nil); code(err) != "INVALID_STATE /args/commitment_id" {
+	if _, err = c.Cancel(4, current, nil, nil, act, nil); code(err) != "INVALID_STATE /args/commitment_id" {
 		t.Fatal(code(err))
 	}
 	if err = c.Confirm(4, Confirmation{Act: Act{At: now.Add(2 * time.Hour)}, Result: ResultAsIssued, ReceivedAt: now.Add(2 * time.Hour)}); code(err) != "INVALID_STATE /args/commitment_id" {
 		t.Fatal(code(err))
 	}
 	none := issued(t, fixture())
-	r, err = none.Cancel(3, []LineQuantity{lineQ("120", "0")}, nil, act, nil)
+	r, err = none.Cancel(3, []LineQuantity{lineQ("120", "0")}, nil, nil, act, nil)
 	if err != nil || !r.Lines[0].Purchased().IsZero() {
 		t.Fatalf("nothing delivered keeps nothing: %v %+v", err, r)
 	}
 	requestedOnly := requested(t, fixture())
-	if _, err = requestedOnly.Cancel(1, nil, nil, act, nil); code(err) != "INVALID_STATE /args/commitment_id" {
+	if _, err = requestedOnly.Cancel(1, nil, nil, []string{"delivery.2"}, act, nil); code(err) != "INVALID_STATE /args/commitment_id" {
 		t.Fatal(code(err))
 	}
 }

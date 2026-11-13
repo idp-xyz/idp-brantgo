@@ -10,6 +10,7 @@
 /deploy/               @idpxyz
 /docs/                 @idpxyz
 /tests/                @idpxyz
+/ops/                  @idpxyz
 /internal/contexts/evd/ @idpxyz
 /internal/contexts/pty/ @idpxyz
 /internal/contexts/cat/ @idpxyz

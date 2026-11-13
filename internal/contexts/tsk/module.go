@@ -59,9 +59,19 @@ type (
 // ActionReconciliation is TSK's ports to the ActionReconciliation v1 of r's contexts.
 func ActionReconciliation(r ActionReconcilers) Reconcilers { return reconcile.Ports(r) }
 
-// TRDControl is the port to TRD's object control over its api (bind, stop and release; enter_manual
-// and handoff answer DEPENDENCY_NOT_SUPPORTED until TRD publishes them).
+// TRDControl is the port to TRD's object control over its api: bind, stop, enter_manual, handoff
+// and release (R17 ObjectControl commands v1). A change TRD refuses as CONTROL_EPOCH_STALE while it
+// holds the root for the same task at a later epoch — a control change of the task whose record in
+// TSK was lost — is sent again at TRD's epoch (S4 C1).
 func TRDControl(t TRD) ObjectControl { return trd.Control{TRD: t} }
+
+// ControlKey is the idempotency key TSK sends TRD's object control command trdCommand with for task
+// taskID at the control epoch the task recorded: every attempt of the TSK command, whatever its own
+// key, sends TRD this key, so TRD replays the change it made once (SM-TSK-TASK task.take_control
+// "按 action_id 重试").
+func ControlKey(taskID, trdCommand string, epoch int64) string {
+	return application.DeriveKey(taskID, trdCommand, epoch)
+}
 
 // ReadinessNotWired is the port to TRD's GoalReadiness v1 while TRD does not publish it: goal.verify
 // answers DEPENDENCY_NOT_SUPPORTED.

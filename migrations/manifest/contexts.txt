@@ -32,7 +32,8 @@ stl
 cnx
 # ful is last of the S5 order after pur (qlt, stl, cnx, ful): its transactions call the guard
 # functions of PTY, PUR, QLT and TRD, and from its commercial release on those of CNX and STL
-# (R26, R27, R44, R45, R56, R59); TRD reads its ShipmentFacts v1 at run time only (R70).
+# (R26, R27, R44, R45, R56, R59); TRD reads its ShipmentFacts v1 at run time only (R70), and QLT its
+# ReleaseConsumption v1 (R79, S5R-D18).
 ful
 # tsk (S4) after its upstreams trd (R18 GoalReadiness v1 and TRD's object control, R17) and evd, inq,
 # sup, cst (R66-R69 ActionReconciliation v1): it reads them before its transactions and calls no guard

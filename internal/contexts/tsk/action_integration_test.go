@@ -18,6 +18,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
+	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -38,12 +39,13 @@ type fakeTargets struct {
 	mu     sync.Mutex
 	ledger map[string]map[string]ledgerEntry // context → key → entry
 	fail   map[string]error                  // context → the refusal or error of its next answers
+	refuse map[string]error                  // actor ID → the refusal every context gives that actor
 	asked  []string                          // "context command key" per question
 	onAsk  func()                            // runs once, after the next answer
 }
 
 func newTargets() *fakeTargets {
-	return &fakeTargets{ledger: map[string]map[string]ledgerEntry{}, fail: map[string]error{}}
+	return &fakeTargets{ledger: map[string]map[string]ledgerEntry{}, fail: map[string]error{}, refuse: map[string]error{}}
 }
 
 type fakePort struct {
@@ -51,13 +53,17 @@ type fakePort struct {
 	context string
 }
 
-func (p fakePort) ReconcileHash(_ context.Context, command, key, hash string) (tsk.Answer, error) {
+func (p fakePort) ReconcileHash(ctx context.Context, command, key, hash string) (tsk.Answer, error) {
 	f := p.f
 	f.mu.Lock()
 	f.asked = append(f.asked, p.context+" "+command+" "+key)
 	if err := f.fail[p.context]; err != nil {
 		f.mu.Unlock()
 		return tsk.Answer{}, err
+	}
+	if pr, err := identity.FromContext(ctx); err == nil && f.refuse[pr.Actor.ID] != nil {
+		f.mu.Unlock()
+		return tsk.Answer{}, f.refuse[pr.Actor.ID]
 	}
 	e, ok := f.ledger[p.context][key]
 	hook := f.onAsk
@@ -97,6 +103,27 @@ func (f *fakeTargets) commit(context, key, hash, object string) api.TargetReceip
 	return r
 }
 
+// created stores in TRD's ledger the save that created quote at root version 1 under the key of
+// intent's action, and has ctx record that action for task: the target answers committed, so the
+// action is registered committed with TRD's receipt — the root the task's action created
+// (SM-TSK-TASK task.bind_object "本任务的动作已创建报价根").
+func (w *world) created(ctx context.Context, task, intent, quote string) api.ActionReceipt {
+	w.t.Helper()
+	f, key := w.target, api.ActionIDOf(intent)
+	f.mu.Lock()
+	if f.ledger[api.TargetTRD] == nil {
+		f.ledger[api.TargetTRD] = map[string]ledgerEntry{}
+	}
+	f.ledger[api.TargetTRD][key] = ledgerEntry{hash: hashC, receipt: api.TargetReceipt{ActionID: "act-" + key, ObjectID: quote, RowVersion: 1,
+		Status: "working"}}
+	f.mu.Unlock()
+	r := w.ok(w.submit(ctx, task, intent, saveDraft(hashC), 0))
+	if r.State != api.ActionCommitted || r.Result == nil || r.Result.ObjectID != quote {
+		w.t.Fatalf("%+v", r)
+	}
+	return r
+}
+
 func (f *fakeTargets) questions() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -106,7 +133,12 @@ func (f *fakeTargets) questions() int {
 var (
 	hashA = strings.Repeat("a", 64)
 	hashB = strings.Repeat("b", 64)
+	hashC = strings.Repeat("c", 64)
 )
+
+func saveDraft(hash string) api.TargetCommand {
+	return api.TargetCommand{Context: api.TargetTRD, Command: "quote.save_draft", RequestHash: hash}
+}
 
 func activation(hash string) api.TargetCommand {
 	return api.TargetCommand{Context: api.TargetTRD, Command: "order.activate", RequestHash: hash}
@@ -314,11 +346,14 @@ func TestSameIntentIsOneAction(t *testing.T) {
 }
 
 // Q01 V0.1 tests/test_execution.py::test_unknown_external_record_blocks_takeover_barrier and
-// TSK-INV-003's negative: the agent's attempt on the bound root is submitted, then its answer is
-// lost (unknown); a person takes over; the stop barrier is EXTERNAL_RESULT_UNKNOWN until the action
-// is reconciled — the agent cannot submit while the task stops, the executor may still record what
-// it saw —; the person's reconciliation finds nothing committed, the barrier completes under manual
-// control; the agent is then CONTROL_MODE_MISMATCH and the person's step needs the new claim epoch.
+// TSK-INV-003's negative (unknown 在途时 task.finish_stop 返回 EXTERNAL_RESULT_UNKNOWN): the agent's attempt
+// on the bound root is submitted, then its answer is lost (unknown); a person takes over. The stop
+// barrier asks the target what it holds under the action's key first (S4 C1); here the target
+// refuses TSK's system actor, so the result stays unknown and the barrier is EXTERNAL_RESULT_UNKNOWN
+// — TRD is not asked to change the root, the agent cannot submit while the task stops, the executor
+// may still record what it saw —; the person's reconciliation finds nothing committed, the barrier
+// then completes under manual control without asking the target again; the agent is then
+// CONTROL_MODE_MISMATCH and the person's step needs the new claim epoch.
 func TestUnknownAttemptBlocksTheTakeOverBarrier(t *testing.T) {
 	w := newWorld(t)
 	r := w.bound("task.1", "quote.1")
@@ -330,9 +365,13 @@ func TestUnknownAttemptBlocksTheTakeOverBarrier(t *testing.T) {
 	}
 	r = w.must(w.m.TakeControl(w.alice, api.TakeControl{IdempotencyKey: w.key(), TaskID: "task.1", ExpectedVersion: r.RowVersion,
 		Reason: "模型持续不可用"}))
+	w.target.refuse["tsk"] = kernel.Reject(kernel.CodePermissionDenied, "/", "TSK's system actor does not read the target")
 	finish := api.FinishStop{IdempotencyKey: "k.finish", TaskID: "task.1", ExpectedVersion: r.RowVersion}
 	_, err := w.m.FinishStop(w.sys, finish)
 	w.want(err, api.CodeExternalResultUnknown)
+	if v := w.action(key); v.State != api.ActionUnknown || len(v.Log) != 2 || w.get("task.1").Lifecycle != api.StateStopping {
+		t.Fatalf("a refused barrier changed the action %+v", v)
+	}
 	_, err = w.submit(w.agent, "task.1", "intent.2", activation(hashB), r.ControlEpoch)
 	w.want(err, kernel.CodeInvalidState)
 	_, err = w.submit(w.alice, "task.1", "intent.2", activation(hashB), r.ControlEpoch)
@@ -344,7 +383,11 @@ func TestUnknownAttemptBlocksTheTakeOverBarrier(t *testing.T) {
 	if rec.State != api.ActionNotCommitted || rec.Attempt != 1 {
 		t.Fatalf("%+v", rec)
 	}
+	asked := w.target.questions()
 	r = w.must(w.m.FinishStop(w.sys, finish))
+	if w.target.questions() != asked {
+		t.Fatalf("the barrier asked again about a settled action: %v", w.target.asked[asked:])
+	}
 	if r.Status != api.StatePaused || r.ControlMode != api.ModeManual || r.ControlEpoch != 3 {
 		t.Fatalf("%+v", r)
 	}
@@ -574,7 +617,8 @@ func TestRecordSurvivesALostCommit(t *testing.T) {
 }
 
 // A record and a take-over meet on the task row (the record holds it FOR SHARE, the take-over FOR
-// UPDATE): either the attempt is recorded first and the barrier waits for it, or the take-over is
+// UPDATE): either the attempt is recorded first and the barrier reconciles it before it completes
+// (S4 C1: the target holds nothing, so not_committed by TSK's system actor), or the take-over is
 // first and the attempt is refused; no attempt is recorded behind a completed barrier.
 func TestAttemptAndTakeOverSerializeOnTheTask(t *testing.T) {
 	w := newWorld(t)
@@ -603,11 +647,14 @@ func TestAttemptAndTakeOverSerializeOnTheTask(t *testing.T) {
 			t.Fatal(takeErr)
 		}
 		_, finishErr := w.m.FinishStop(w.sys, api.FinishStop{IdempotencyKey: "k.finish." + task, TaskID: task, ExpectedVersion: took.RowVersion})
+		w.want(finishErr, "OK")
 		switch code(recordErr) {
 		case "OK":
-			w.want(finishErr, api.CodeExternalResultUnknown)
+			v := w.action(api.ActionIDOf("intent." + task))
+			if last := v.Log[len(v.Log)-1]; v.State != api.ActionNotCommitted || last.Actor.Kind != kernel.ActorSystem {
+				t.Fatalf("the barrier left %+v", v)
+			}
 		case kernel.CodeInvalidState:
-			w.want(finishErr, "OK")
 		default:
 			t.Fatalf("the record: %v", recordErr)
 		}
