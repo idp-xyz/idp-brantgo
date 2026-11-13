@@ -49,3 +49,61 @@ TD-AT13,CNX,ExportLicense,export_license.allocate,"许可 1,000 件；已分配 
 TD-AT14,PUR／FUL,SupplierDelivery,shipment.confirm,直发：承诺 120 件，核实交付 100 件，另有未核实上报 20 件,出运 120 件返回 SUPPLIER_DELIVERY_INSUFFICIENT；未核实上报不计入,Domain,05 阶段战术设计,SPEC
 TD-AT15,PTY,PartyScreening,party_screening.decide,新客户与名单条目疑似命中；另一主体在负向名单,新客户筛查前为 pending；合规人工判为误报后 clear 并登记正向名单；名单条目更新后正向名单失效；负向名单主体始终 blocked,Domain,05 阶段战术设计（参照 SAP GTS）,SPEC
 TD-AT16,STL,CustomerCredit,credit_exception.decide,"超额 3,000；信用专员层级上限 1,000、信用经理 5,000",信用专员放行返回 CREDIT_DECISION_NOT_AUTHORIZED；信用经理放行后 credit.reserve 成功；决定过期后须重新申请,Domain,05 阶段战术设计（参照 SAP FSCM）,SPEC
+AN01,INQ／internal/ai,CustomerRfq,Q01,客户款号对应两个 SKU，附件未给单位,标记候选和缺项，等待用户补充；未确认前不生效报价或订单，保留原文与纠正,AI-E2E,基线 9.1,SPEC
+AN02,TRD／internal/ai,QuoteRoot,Q01,客户新条款已确认，旧来信及历史摘要仍可检索,使用适用的当前条款并呈现来源和版本；过期或冲突资料不得静默决定条件,AI-E2E,基线 9.1,SPEC
+AN03,TRD,QuoteRoot,Q01,报价已审核；随后价格、数量、关键附件或收件人变化,内容不匹配的旧授权失效；重新预览及审批，不用旧审批提交新内容,AI-E2E,基线 9.1,SPEC
+AN04,TSK／internal/ai,BusinessTask,task.resume,任务等待客户回复期间发起人权限或委托已撤销,恢复时重新鉴权，停止需该授权的动作并转交责任人，无越权结果,AI-E2E,基线 9.1,SPEC
+AN05,TSK／TRD,ActionExecution,order.activate,生效订单命令已提交成功，任务未写回成功状态,杀死进程后按稳定 action_id 对账或重放取得原结果；只有一份订单及事实，不换幂等键重做,Recovery,基线 9.1,SPEC
+AN06,TSK,BusinessTask,task.resume,任务在等待审批或客户回复，来源和检查点已保存,重启后导入明确关联回复：恢复原任务与目标并核对报价版本；重复回复、替代报价与重新领取不重复建任务或订单,Recovery,基线 9.1,SPEC
+AN07,CAT／TRD／internal/ai,SalesOrder,order.activate,服装模板要求样衣确认但尚未满足，AI 认为信息充分,业务入口拒绝或等待规定确认；提示词、模型说明和普通审批均不能跳过必需规则,AI-E2E,基线 9.1,SPEC
+AN08,TSK,BusinessTask,task.take_control,Q01 未完成，模型持续不可用,人工接管并通过专业页面处理；未执行后台动作停止，无并行重复提交，completion_actor 为 manual,Recovery,基线 9.1,SPEC
+AN09,internal/ai,Execution,Q01,工具持续返回可重试失败，预算和重试上限已配置,达上限暂停并记录原因、成本和恢复条件；无无限调用，恢复前核查已有副作用,AI-E2E,基线 9.1,SPEC
+AN10,internal/ai,Gateway,Q01,附件嵌入跨租户查询、改收款账户、伪造授权或调用未注册工具的指令,外部内容无权改写授权或工具登记；越权被服务端拒绝，无敏感泄漏或未授权写入,Security,基线 9.1,SPEC
+AN11,TSK／TRD,BusinessTask,goal.verify,目标 order_active，但仅有有效报价或模型声称订单已建,权威订单及确认不足则保持未完成；quote_ready 里程碑不能替代目标,AI-E2E,基线 9.1,SPEC
+AN12,TSK／internal/ai／全链,BusinessTask,WF-01,真实脱敏询价、适用成本规则、人工处理基线及明确客户确认,真实报价及订单的数量金额、依据和目标正确；记录人工分钟、修订、等待与全部执行成本,AI-E2E,基线 9.1,SPEC
+CT01,TRD,QuoteRoot,quote.freeze,S-D 的 2 DOZEN×96 与 24 PCS×8,基数同为 24，行金额同为 192；换算与价格依据保留,Domain,基线 19.2,SPEC
+CT02,TRD,QuoteRoot,quote.freeze,同行 quantity=2 DOZEN、base_quantity=2 PCS,BASE_QUANTITY_MISMATCH，不生效,Domain,基线 19.2,SPEC
+CT03,INQ,CustomerRfq,rfq.confirm_scope,四行矩阵合计 120、材料总计 118,等待核实，不静默改一个数字凑平,Domain,基线 19.2,SPEC
+CT04,CST／TRD,QuoteRoot,quote.freeze,同一收费已含在行价又要求再次相加,CHARGE_DOUBLE_COUNT，先修订,Domain,基线 19.2,SPEC
+CT05,TRD,Acceptance,quote.response.verify,客户确认金额正确但客户或报价修订不同,ACCEPTANCE_SCOPE_MISMATCH，不转单,Domain,基线 19.2,SPEC
+CT06,TRD,Acceptance,quote.response.verify,过期或已替代报价收到接受回复,停止自动转换，关联原沟通并人工处理,Domain,基线 19.2,SPEC
+CT07,TRD,CustomerResponse,quote.response.verify,客户“接受，但改色／减量”,不形成 full_unconditional；形成差异或新报价,Domain,基线 19.2,SPEC
+CT08,TRD,QuoteRoot,quote.metadata.update,仅内部注释变更，business_hash 不变,更新 row_version 后重新校验；不因无关字段自动重审,Domain,基线 19.2,SPEC
+CT09,TRD,QuoteRoot,quote.activate,报价或外发关键内容变化,对应旧批准失效；未批准的新内容不得执行,Domain,基线 19.2,SPEC
+CT10,TSK／TRD,BusinessTask／ObjectControl,task.take_control∥写命令,AI 提交与人工接管同时到达,应用事务确定先后；旧 epoch 之后的提交被拒，已提交事实保留,Concurrency,基线 19.2,SPEC
+CT11,TSK,ActionExecution,action.record_attempt,新 plan_revision 重做已成功动作,沿用原意图查结果；不产生第二张订单,Recovery,基线 19.2,SPEC
+CT12,TRD,QuoteRoot,order.prepare,同一报价根的新修订再次整单转换,领域 full_v1 约束阻止第二次有效转换,Domain,基线 19.2,SPEC
+CT13,TSK,BusinessTask,goal.verify,必需行业检查 unknown／error，可选展示通过,不得 completed；展示具体原因及恢复条件,Domain,基线 19.2,SPEC
+CT14,TSK／internal/ai,BusinessTask,task.resume,旧模型停用或插件升级，原任务仍等待,按兼容、迁移或暂停规则处理，不静默跳过条件,Domain,基线 19.2,SPEC
+CT15,ALL,—,任意写命令,非法十进制、负数量、零数量、缺关键参数或未注册命令,schema 或领域校验明确拒绝；格式有效不等于业务有效,Contract,基线 19.2,SPEC
+CT16,EVD／TSK,Source,读取与重放,资料权限撤销，旧证据 URL 或旧运行轨迹仍存在,访问重新鉴权，不能借引用绕过当前权限；完成历史不抹除,Security,基线 19.2,SPEC
+A47-01,PUR,PurchaseCommitment,purchase.commitment.decide／revoke／issue,编制人或申请人自审、AI 身份、缺少权限；供应条件被替代、过期或撤回；订单审批撤销；重算不一致；偏差无理由；审批过期、撤销与发出竞争,均拒绝（INDEPENDENT_REVIEW_REQUIRED、PERMISSION_DENIED、SUPPLY_CONDITION_NOT_CURRENT、SUPPLY_CONDITION_EXPIRED、ORDER_APPROVAL_REVOKED、PURCHASE_DRAFT_STALE、PURCHASE_DEVIATION_UNACKNOWLEDGED）；竞争只有一个结果；失败回滚，重启后重放一致,Concurrency-PG16,A46 报告（A47 最低验收）,SPEC
+SC-08,FUL／STL,CommercialRelease,commercial_release.evaluate,见 Context Map SC-08,差额处理前 COMMERCIAL_RELEASE_BLOCKED；处理后放行并绑定质量、付款条件与筛查版本,Integration,Context Map,SPEC
+SC-09,STL／CNX／TRD,CustomerCredit／TradeComplianceCheck,credit.reserve／order.activate,见 Context Map SC-09,例外前 CREDIT_LIMIT_EXCEEDED；禁运订单 TRADE_COMPLIANCE_NOT_CLEAR 且普通审批不能覆盖；第一张订单生效并记录占用与例外,Integration,Context Map,SPEC
+BT08,QLT,Inspection／QualityRelease,inspection.record／quality_release.grant,20 件隔离、返工并复检,放行量按有效结果更新；重复复检不重复增加可用量；权限与标准版本可查,Domain,基线 9.3,SPEC
+BT10,TRD／PUR／FUL／STL,SalesOrder／DemandAllocation／OrderFulfilment／OrderAccount,order.amendment.apply,部分已出运后减量或改色,展示采购、装箱与付款计划影响并逐项复核；已发生部分保留；处置可追溯,Integration,基线 9.3,SPEC
+BT11,FUL,Shipment,shipment.confirm,按 200／800 两批装箱出运，重做一次相同提交,箱至订单数量一致；累计不超可发量；重试不重复出运,Integration,基线 9.3,SPEC
+BT12,FUL,ShipmentDocumentSet,shipment_document.issue,商业发票、装箱单或提单草稿含版本或数量差异,逐项显示差异与修订；版本与来源可追溯；缺必需核对不能签发（SHIPMENT_DOCUMENTS_UNRECONCILED）,Domain,基线 9.3,SPEC
+BT13,FUL／STL／QLT,CommercialRelease,commercial_release.evaluate,合同要求的预付款、信用或质检条件未满足,按政策等待或拒绝；例外绑定规则与对象，不以普通备注放行,Integration,基线 9.3,SPEC
+BT17,STL／CNX,SettlementStatement／TaxRefundCase,opening_balance.record／tax_refund_case.record_opening,导入未结应收应付、未核销预收与未退税资料,截止时点可对账；上线后不重建同一账款或用途（OPENING_BALANCE_DUPLICATE）,Domain,基线 9.3,SPEC
+BT18,STL,OrderResult,order_result.close,发货完成但有未结费用或未决事项,显示各维度状态与待办；不因发货完成宣告结清（ORDER_RESULT_NOT_SETTLED）,Domain,基线 9.3,SPEC
+BT21,QLT／FUL,QualityRelease,quality_release.revoke,放行 200 件后 100 件已出运，再撤回放行并重放事件,未发部分冻结；已发部分保留；重复撤回无重复扣量,Concurrency-PG16,基线 9.4,SPEC
+BT24,STL,OrderResult／Charge,order_result.reopen,订单关闭后补入次月运费，并尝试改写上期快照,记录发生、录入与分析日期及重新打开；历史快照不被覆盖,Domain,基线 9.4,SPEC
+CN-AT01,CNX／PUR／FUL／STL,—,—,单主体、自营一般贸易的普通出口,采购、交付、购进票、两批出运、报关结果、收汇与退税资料贯通；无虚构外部成功,E2E,基线 24.3,SPEC
+CN-AT02,FUL／CNX,—,—,一单分批出口、同次出口包含多销售行,销售、出运与报关项映射可核对，累计不超有效业务范围,Integration,基线 24.3,SPEC
+CN-AT03,CNX／CAT,—,—,票据品名或单位与报关资料不同,须受控映射或换算及专业依据；无法证实时阻断申报资料确认（DECLARATION_MAPPING_UNVERIFIED）,Domain,基线 24.3,SPEC
+CN-AT04,CNX,—,—,同一购进凭证部分用于多批业务,按用途核对剩余；并发与重试不重复占用（TAX_EVIDENCE_EXCEEDED）,Concurrency-PG16,基线 24.3,SPEC
+CN-AT05,CNX／STL,—,—,先出运后到票，原票随后红冲,交付事实保留；应付与退税资料分别处理影响，匹配待复核,Integration,基线 24.3,SPEC
+CN-AT06,CNX,—,—,改单或撤销后重复、乱序回执,保留版本链，旧结果不覆盖新状态（DECLARATION_RECEIPT_STALE），不重复恢复凭证用途,Domain,基线 24.3,SPEC
+CN-AT07,STL,—,—,客户合并付款，银行有扣费,原币资金与多单核销守恒，费用另有依据，未解释差额待处理,Integration,基线 24.3,SPEC
+CN-AT08,STL,—,—,付款方不同，或发生退汇／退款,核实付款依据与责任；实际资金与商业调整分别记录（PARTY_ENTITY_MISMATCH 待复核）,Domain,基线 24.3,SPEC
+CN-AT09,STL,—,—,外币结汇，再导入人民币入账,只形成一次资金转换；不新增销售收入或第二次客户回款,Domain,基线 24.3,SPEC
+CN-AT10,CNX,—,—,预计退税、核准与到账金额不同,三者分开记录；差异按冻结政策解释,Domain,基线 24.3,SPEC
+CN-AT11,STL／CNX,—,—,出口后折让或退运,销售、报关与税务影响分别形成受控记录；贷项不自动完成退税调整,Integration,基线 24.3,SPEC
+CN-AT12,CNX／POL,—,—,企业适用政策变化且有历史未结业务,按有效期与专业核实结果处理，旧业务不被新配置覆盖,Domain,基线 24.3,SPEC
+CN-AT13,CNX,—,—,提交超时，随后收到专业结果,先核实再重试，原业务操作唯一；无回执时不宣称办理成功（EXTERNAL_RESULT_UNKNOWN）,Domain,基线 24.3,SPEC
+CN-AT14,CNX／FUL,—,—,单证缺件或证书不适用,列缺件、适用对象、责任人与期限；已上传文件不直接满足要求（CERTIFICATE_NOT_APPLICABLE）,Domain,基线 24.3,SPEC
+CN-AT15,CNX／STL,—,—,出口主体、受票或收款主体不一致,发现差异并转获准模式复核；不能通过外部主体字段绕过公司隔离,Security,基线 24.3,SPEC
+CN-AT16,STL／CNX,—,—,业务期初、未退税资料及未达账款导入,截止、来源余额与已办状态可核对；上线不重复生成现金、应付或用途占用,Domain,基线 24.3,SPEC
+CN-AT17,FUL／CNX,—,—,中文操作、双语单证与盖章件修订,币种、金额、品名与条款对应；保存签署版本，草稿不能冒充已签署,Integration,基线 24.3,SPEC
+CN-AT18,CNX,—,—,AI 读取票据或报关资料后误匹配,显示来源与差异；候选须人工核实后进入同一业务命令，AI 身份不能核验或过账（PERMISSION_DENIED）,Security,基线 24.3,SPEC

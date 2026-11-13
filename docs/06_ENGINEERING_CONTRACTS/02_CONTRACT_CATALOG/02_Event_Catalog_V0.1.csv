@@ -72,6 +72,9 @@ PUR,PurchaseCommitmentIssued,idp-brant.pur.purchase_commitment_issued.v1,idp-bra
 PUR,SupplierConfirmationRecorded,idp-brant.pur.supplier_confirmation_recorded.v1,idp-brant.pur,PurchaseCommitment,S3
 PUR,PurchaseDraftVoided,idp-brant.pur.purchase_draft_voided.v1,idp-brant.pur,PurchaseDraft,S3
 PUR,SupplierDeliveryVerified,idp-brant.pur.supplier_delivery_verified.v1,idp-brant.pur,SupplierDelivery,S3
+PUR,PurchaseCommitmentRevoked,idp-brant.pur.purchase_commitment_revoked.v1,idp-brant.pur,PurchaseCommitment,S3
+PUR,PurchaseCommitmentChanged,idp-brant.pur.purchase_commitment_changed.v1,idp-brant.pur,PurchaseCommitment,S3
+PUR,PurchaseCommitmentCancelled,idp-brant.pur.purchase_commitment_cancelled.v1,idp-brant.pur,PurchaseCommitment,S3
 MFG,CollaborationPlanPublished,idp-brant.mfg.collaboration_plan_published.v1,idp-brant.mfg,CollaborationPlan,S6
 MFG,SubcontractOrderIssued,idp-brant.mfg.subcontract_order_issued.v1,idp-brant.mfg,SubcontractOrder,S6
 MFG,OperationProgressRecorded,idp-brant.mfg.operation_progress_recorded.v1,idp-brant.mfg,SubcontractOrder,S6
@@ -99,6 +102,12 @@ STL,CreditLimitPublished,idp-brant.stl.credit_limit_published.v1,idp-brant.stl,C
 STL,CreditReserved,idp-brant.stl.credit_reserved.v1,idp-brant.stl,CustomerCredit,S5
 STL,CreditReservationReleased,idp-brant.stl.credit_reservation_released.v1,idp-brant.stl,CustomerCredit,S5
 STL,CreditDecisionOpened,idp-brant.stl.credit_decision_opened.v1,idp-brant.stl,CustomerCredit,S5
+STL,SettlementReversed,idp-brant.stl.settlement_reversed.v1,idp-brant.stl,SettlementStatement,S5
+STL,FundDifferenceResolved,idp-brant.stl.fund_difference_resolved.v1,idp-brant.stl,FundRecord,S5
+STL,CreditReservationConsumed,idp-brant.stl.credit_reservation_consumed.v1,idp-brant.stl,CustomerCredit,S5
+STL,CreditExceptionDecided,idp-brant.stl.credit_exception_decided.v1,idp-brant.stl,CustomerCredit,S5
+STL,ChargeAllocated,idp-brant.stl.charge_allocated.v1,idp-brant.stl,Charge,S5
+STL,OrderResultReopened,idp-brant.stl.order_result_reopened.v1,idp-brant.stl,OrderResult,S5
 CLM,ClaimOpened,idp-brant.clm.claim_opened.v1,idp-brant.clm,ClaimCase,S6
 CLM,ReturnRegistered,idp-brant.clm.return_registered.v1,idp-brant.clm,ReturnRecord,S6
 CLM,RemedyDecided,idp-brant.clm.remedy_decided.v1,idp-brant.clm,ClaimCase,S6
@@ -109,8 +118,12 @@ CNX,TaxEvidenceAllocated,idp-brant.cnx.tax_evidence_allocated.v1,idp-brant.cnx,T
 CNX,DocumentBundleChecked,idp-brant.cnx.document_bundle_checked.v1,idp-brant.cnx,DocumentBundle,S5
 CNX,TradeComplianceDecided,idp-brant.cnx.trade_compliance_decided.v1,idp-brant.cnx,TradeComplianceCheck,S5
 CNX,ExportLicenseAllocated,idp-brant.cnx.export_license_allocated.v1,idp-brant.cnx,ExportLicense,S5
+CNX,TradeComplianceReopened,idp-brant.cnx.trade_compliance_reopened.v1,idp-brant.cnx,TradeComplianceCheck,S5
+CNX,CertificateRegistered,idp-brant.cnx.certificate_registered.v1,idp-brant.cnx,CertificateResult,S5
+CNX,TaxRefundResultRecorded,idp-brant.cnx.tax_refund_result_recorded.v1,idp-brant.cnx,TaxRefundCase,S5
 CRM,OpportunityAdvanced,idp-brant.crm.opportunity_advanced.v1,idp-brant.crm,Opportunity,S6
 TSK,TaskCreated,idp-brant.tsk.task_created.v1,idp-brant.tsk,BusinessTask,S4
 TSK,TaskControlChanged,idp-brant.tsk.task_control_changed.v1,idp-brant.tsk,BusinessTask,S4
 TSK,TaskCompleted,idp-brant.tsk.task_completed.v1,idp-brant.tsk,BusinessTask,S4
 TSK,TaskClosedUnfulfilled,idp-brant.tsk.task_closed_unfulfilled.v1,idp-brant.tsk,BusinessTask,S4
+TSK,ActionReconciled,idp-brant.tsk.action_reconciled.v1,idp-brant.tsk,ActionExecution,S4
