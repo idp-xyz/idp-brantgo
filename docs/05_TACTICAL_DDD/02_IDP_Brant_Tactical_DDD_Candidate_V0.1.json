@@ -15,12 +15,13 @@
     "历史事实可读与当前可用分开：后续变化登记风险或撤销事件，不倒写已提交的合法事实。",
     "合同成立与内部生效分开：客户承诺在报价有效期内到达即合同成立；订单准备、审批与生效是对已成立合同的内部执行授权，报价随后到期不否定合同，上游变化作为风险由审批逐项确认（ADR-BR-013）。",
     "人工核实、审批与正式化命令只接受人工身份；humanOnlyCommands 是这份清单的唯一来源，命令目录与 M0 门禁页由它生成。AI 产生候选并走同一命令路径。",
-    "一个事务只修改一个既有聚合实例；同上下文内允许同时创建由本命令派生的新聚合，限于登记的例外：order.prepare 占用名额并创建订单草稿；quote.response.verify 创建 Acceptance；cost_snapshot.freeze 冻结场景并创建快照；purchase.draft.prepare 更新需求分配余额并创建草稿。需要串行化的余额（资金可用额、订单累计出运、许可证用量、凭证用途余额）锁定所属根 FOR UPDATE 并由不可变分录派生，不另改第二个聚合（S5 D-3）。",
+    "一个事务只修改一个既有聚合实例；同上下文内允许同时创建由本命令派生的新聚合，限于登记的例外：order.prepare 占用名额并创建订单草稿；quote.response.verify 创建 Acceptance；cost_snapshot.freeze 冻结场景并创建快照；purchase.draft.prepare 更新需求分配余额并创建草稿；inspection.record 带 supersedes 时把旧检验标为 superseded 并创建新检验；shipment.confirm 确认出运并消耗同范围放行；settlement.confirm 确认销售结算单时把阶段核销改写为 moved 并在应收上形成替代核销；purchase_invoice.verify 核实红字发票时把被冲蓝票标为 reversed（全额红冲）；purchase.commitment.change.apply 与 purchase.commitment.cancel 同时移动需求分配根（S5R 补录）。需要串行化的余额（资金可用额、订单累计出运、许可证用量、凭证用途余额）锁定所属根 FOR UPDATE 并由不可变分录派生，不另改第二个聚合（S5 D-3）。",
     "不在本上下文事务内写入其他上下文：正式文档字节、哈希与编号绑定封存在 TRD 自身 schema；编号由 POL 在下游事务之前分配（回滚留号段空缺），EVD 经事件登记文件引用。",
-    "一次成功写入原子提交业务变化、动作结果、提交证据、审计与 Outbox；失败不留下半份事实。"
+    "一次成功写入原子提交业务变化、动作结果、提交证据、审计与 Outbox；失败不留下半份事实。",
+    "集成事件载荷含 ID、版本，以及各聚合 eventPayloads 登记的业务值（数量、金额、期限、结论）；不含个人信息、法定标识与文件内容（S5R-D43，取代“载荷只含 ID 与版本”）。"
   ],
   "lockOrder": [
-    "本上下文聚合根行 FOR UPDATE；多根按 ID 排序（TRD 为报价根及其 ObjectControl，PUR 为采购承诺根与订单行需求分配，FUL 为出运根与订单履约根，STL 为资金记录根与订单账户或结算单根，CNX 为许可证根或退税案件根）",
+    "本上下文聚合根行 FOR UPDATE；多根按 ID 排序（TRD 为报价根及其 ObjectControl，PUR 为供应商交付根 → 采购承诺根（只锁不写）→ 订单行需求分配根，承诺命令从不锁交付根；QLT 为放行根，撤回在锁定后无锁读取 FUL ReleaseConsumption v1（S5R-D18）；FUL 为出运根与订单履约根，STL 为资金记录根与订单账户或结算单根，CNX 为许可证根或退税案件根）",
     "同根下级行 FOR UPDATE，固定顺序：QuoteRevision 与 RevisionEffectivity → AcceptanceEffectivity → SalesOrder 与 OrderAmendment → ApprovalEffectivity（报价批准与订单审批）",
     "上游守卫行 FOR SHARE：经上游发布的守卫函数调用，按上下文代码字母序；公司授权守卫（authority_epoch）属于上游守卫",
     "ActionResult／CommitEvidence／审计／Outbox 追加",
@@ -67,7 +68,7 @@
           ],
           "goPackage": "internal/contexts/pty/internal/domain/party",
           "pythonSource": "service.py master.*；BC_T01_reference.sql master／master_evidence",
-          "notes": "Python 以 master.kind 区分 customer／supplier；Go 以角色集合表达，同一主体可同时是客户和供应商。 地址增加 ISO 3166-1 国家代码，供 CNX 贸易合规核查（R77，S5 D-8，负责人决定 2026-11-12）。"
+          "notes": "Python 以 master.kind 区分 customer／supplier；Go 以角色集合表达，同一主体可同时是客户和供应商。 地址增加 ISO 3166-1 国家代码，供 CNX 贸易合规核查（R77，S5 D-8，负责人决定 2026-11-12）。 S5R：地址角色增加 notify（通知方，D40）。服务方角色种类 forwarder、carrier、insurer、inspection_agency、customs_broker，只有 forwarder 与 carrier 要求航线（UN/LOCODE），其余只需已核实（D36）。"
         },
         {
           "id": "PTY-AGG-TradingProfile",
@@ -77,7 +78,8 @@
           "entities": [],
           "valueObjects": [
             "SettlementTermsRef",
-            "OwnerRef"
+            "OwnerRef",
+            "PermittedPayers"
           ],
           "identity": "(tenant, company, party_id)",
           "concurrency": "revision＋root_version",
@@ -93,7 +95,7 @@
           ],
           "goPackage": "internal/contexts/pty/internal/domain/profile",
           "pythonSource": "foundation 交易伙伴档案（T03 A29）",
-          "notes": "首期只有一个启用公司。"
+          "notes": "首期只有一个启用公司。 S5R-D21：档案可列许可付款人（PartyRef，经档案发布）；来自许可付款人的收款在 STL 不是主体不一致。字段 omitempty，旧哈希不变。"
         },
         {
           "id": "PTY-AGG-Contact",
@@ -164,7 +166,8 @@
         "主数据核实仅限人工身份且须具备来源读取权限。"
       ],
       "crossBoundary": [
-        "向 INQ、SUP、TRD、PUR、FUL、STL 发布 PartyRef v1；向 TRD、FUL 发布 PartyScreeningGuard；消费 POL screening_regulation 与 internal/reference 名单版本；守卫读取当前版本（ADR-BR-004）。"
+        "向 INQ、SUP、TRD、PUR、FUL、STL 发布 PartyRef v1；向 TRD、FUL 发布 PartyScreeningGuard；消费 POL screening_regulation 与 internal/reference 名单版本；守卫读取当前版本（ADR-BR-004）。",
+        "经 internal/reference 读取名单版本（R80，S5R-D34）。"
       ],
       "consistency": "单聚合 CAS；跨上下文只按引用与版本。",
       "risks": [
@@ -231,7 +234,19 @@
           ],
           "goPackage": "internal/contexts/cat/internal/domain/mapping",
           "pythonSource": "foundation 客户／供应商货号映射",
-          "notes": "缺失映射进入待核实，不自动替换 SKU。"
+          "notes": "缺失映射进入待核实，不自动替换 SKU。",
+          "eventPayloads": {
+            "ItemCodeMappingPublished": [
+              "mapping_id",
+              "revision",
+              "root_version",
+              "party_id",
+              "party_role",
+              "sku_id",
+              "spec_revision",
+              "superseded_revision"
+            ]
+          }
         },
         {
           "id": "CAT-AGG-Item",
@@ -284,21 +299,34 @@
             "LegalUnitConversion",
             "OriginBasis"
           ],
-          "identity": "(tenant, company, sku_id, profile_revision)",
+          "identity": "(tenant, company, sku_id, spec_revision, code_table_version)，profile_revision 为修订号；profile_id 为句柄（S5-D22）",
           "concurrency": "修订根 CAS；核实后不可变",
           "invariants": [
             "CAT-INV-002"
           ],
           "commands": [
             "declaration_profile.save_draft",
-            "declaration_profile.verify"
+            "declaration_profile.verify",
+            "declaration_profile.discard_draft"
           ],
           "events": [
             "DeclarationProfileVerified"
           ],
           "goPackage": "internal/contexts/cat/internal/domain/declaration",
           "pythonSource": "—（Python 未实现）",
-          "notes": "基线第 22.1 节 CNProductDeclarationProfile；商品编码、出口管制分类与原产地证据分别保存。 按 SKU 规格修订与编码表版本保存；核实独立于最后编辑人（S5 D-22，负责人决定 2026-11-12）。"
+          "notes": "基线第 22.1 节 CNProductDeclarationProfile；商品编码、出口管制分类与原产地证据分别保存。 按 SKU 规格修订与编码表版本保存；核实独立于最后编辑人（S5 D-22，负责人决定 2026-11-12）。 无 superseded 事件：DeclarationProfileVerified 载荷带 superseded_revision。S5R-D47：草稿可由编辑人或专业人工丢弃（declaration_profile.discard_draft，draft → discarded）；已核实档案不撤回，错误只能由核实一份更正修订取代。",
+          "eventPayloads": {
+            "DeclarationProfileVerified": [
+              "profile_id",
+              "revision",
+              "root_version",
+              "sku_id",
+              "spec_revision",
+              "code_table_version",
+              "content_hash",
+              "superseded_revision"
+            ]
+          }
         }
       ],
       "policies": [
@@ -337,7 +365,9 @@
             "POL-INV-001",
             "POL-INV-002",
             "POL-INV-003",
-            "POL-INV-004"
+            "POL-INV-004",
+            "POL-INV-006",
+            "POL-INV-007"
           ],
           "commands": [
             "config.save_draft",
@@ -352,7 +382,7 @@
           ],
           "goPackage": "internal/contexts/pol/internal/domain/config",
           "pythonSource": "foundation.py save／publish／retire；t03_config.py",
-          "notes": "kind 封闭枚举：company_profile、currency、unit、unit_conversion、fx_rate、calendar、trade_terms、payment_terms、tax_profile、tax_application、fee_category、pricing_policy、bank_account、number_sequence、document_template、quote_document_template、screening_regulation（启用的筛查名单与合规法规、复筛频率）、credit_policy（默认额度、额度来源、审批层级与金额阈值、逾期容忍天数）、legal_terms（适用法律、CISG 适用或排除、合同成立规则、争议解决；公司档案可指定租户默认；WBS S3-17，F-02）、order_document_template（外销合同／形式发票版式；WBS S3-15）。 S5（负责人决定 2026-11-12）：fx_rate 用途增加 credit 与 settlement；payment_terms 阶段增加 release_control（documents：凭单证控制付款）；credit_policy 增加 documents_secured、占用与决定有效天数及最高层级以上两人审批；新增 shipment_document_template 与 export_tax_policy；编号单据类型增加 packing_list。"
+          "notes": "kind 封闭枚举：company_profile、currency、unit、unit_conversion、fx_rate、calendar、trade_terms、payment_terms、tax_profile、tax_application、fee_category、pricing_policy、bank_account、number_sequence、document_template、quote_document_template、screening_regulation（启用的筛查名单与合规法规、复筛频率）、credit_policy（默认额度、额度来源、审批层级与金额阈值、逾期容忍天数）、legal_terms（适用法律、CISG 适用或排除、合同成立规则、争议解决；公司档案可指定租户默认；WBS S3-17，F-02）、order_document_template（外销合同／形式发票版式；WBS S3-15）。 S5（负责人决定 2026-11-12）：fx_rate 用途增加 credit 与 settlement；payment_terms 阶段增加 release_control（documents：凭单证控制付款）；credit_policy 增加 documents_secured、占用与决定有效天数及最高层级以上两人审批；新增 shipment_document_template 与 export_tax_policy；编号单据类型增加 packing_list。 S5R（2026-11-13，模拟签核 E0）：trade_terms 加可选 insurance_percent（默认 110，下限 110，D06）；export_tax_policy 的 refund_method 取 exempt_credit_refund、exempt_refund、exempt、taxable，not_applicable 只保留给旧修订读取（D14）；screening_regulation 加可选 programmes（D38）；新修订的国别严格校验（D15）；credit_policy 的 approval_tiers[].level 须是已知岗位模板代码（D30）；credit_policy、export_tax_policy、screening_regulation 的发布另需 config.publish.<kind> 能力（D30）；发布 ConfigAt v1（D23）。新字段一律 omitempty，旧修订哈希不变。"
         },
         {
           "id": "POL-AGG-FoundationSnapshot",
@@ -401,7 +431,7 @@
           ],
           "goPackage": "internal/contexts/pol/internal/domain/numbering",
           "pythonSource": "foundation.number_issue；document_counter／document_number",
-          "notes": "若采用 idp-platform-go 编号能力，POL 保留业务引用唯一与审计；待 ADR。编号在下游事务之前由 POL 分配，下游同事务绑定；下游回滚留号段空缺。"
+          "notes": "若采用 idp-platform-go 编号能力，POL 保留业务引用唯一与审计；待 ADR。编号在下游事务之前由 POL 分配，下游同事务绑定；下游回滚留号段空缺。 S5R-D16：invoice 单据类型专指商业发票，每公司每年一个计数器；形式发票（proforma_invoice）、装箱单（packing_list）已分开；其他发票类编号（贷项通知、借项通知等）须用自己的单据类型；增值税发票由税务系统编号。"
         }
       ],
       "policies": [
@@ -793,7 +823,7 @@
           ],
           "goPackage": "internal/contexts/cst/internal/domain/scenario",
           "pythonSource": "integrated_model.py；rules.py；write_admission.py；resource_budget.py",
-          "notes": "freeze 冻结场景并生成唯一快照，结果绑定冻结前场景版本。"
+          "notes": "freeze 冻结场景并生成唯一快照，结果绑定冻结前场景版本。 S5R-D24：报价成本组件随贸易术语：FCA、FOB、EXW 下主运费由买方承担，不进入我方报价成本；交货前的产地内陆运输、出口清关与 FOB 装船前费用由我方承担并计入。BRC-001 的 60.00 为 FCA 交货前的 pre_carriage。"
         },
         {
           "id": "CST-AGG-CostSnapshot",
@@ -1006,7 +1036,9 @@
             "AcceptanceRef",
             "QuoteRevisionRef",
             "AmendmentImpact",
-            "ContractFormationRef"
+            "ContractFormationRef",
+            "OrderRevisionRef",
+            "NotifyPartyRef"
           ],
           "identity": "(tenant, company, order_id)；(company, root_quote_id, slot=full_v1) 唯一",
           "concurrency": "row_version CAS；转换名额唯一约束",
@@ -1060,7 +1092,7 @@
           ],
           "goPackage": "internal/contexts/trd/internal/domain/order",
           "pythonSource": "t03_storage.py prepare_order／activate_order；t04_order_review.py；t03_order_qualification.py；t03_order_snapshot.py",
-          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。 S5（负责人决定 2026-11-12）：order.activate 在 CNX 与 STL 扩展点调用 TradeComplianceGuard v1 与 CreditGuard v1；取消、关闭与变更应用在锁定订单后事务内无锁读取 FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1（R70、R71）；STK 未启用记为 not_enabled。"
+          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。 S5（负责人决定 2026-11-12）：order.activate 在 CNX 与 STL 扩展点调用 TradeComplianceGuard v1 与 CreditGuard v1；取消、关闭与变更应用在锁定订单后事务内无锁读取 FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1（R70、R71）；STK 未启用记为 not_enabled。 S5R：发布 OrderRevisionRef v1（按（订单、修订）读取任何已提交修订：行的单价、价格基数、折扣、净额与税额，条款，Incoterm 与版本，绑定地址及国别）；新修订以 omitempty 字段封存 Incoterm 与地址国别，旧修订哈希不变，旧修订从绑定的 POL、PTY 修订推导并标 derived（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor（D33）；取消检查把 PUR 的获批处置计为已处置（D05）。"
         }
       ],
       "policies": [
@@ -1120,7 +1152,29 @@
           ],
           "goPackage": "internal/contexts/pur/internal/domain/draft",
           "pythonSource": "t04_purchase.py；t04_purchase_draft／t04_purchase_draft_line",
-          "notes": "同一订单行可多来源分配；错误草稿经 purchase.draft.void 作废并释放分配余额，原记录保留。 超采量与理由在草稿中标记，由独立的采购承诺裁决批准（S5 D-14，负责人决定 2026-11-12，取代编制时的 purchase.overbuy.approve 能力）。"
+          "notes": "同一订单行可多来源分配；错误草稿经 purchase.draft.void 作废并释放分配余额，原记录保留。 超采量与理由在草稿中标记，由独立的采购承诺裁决批准（S5 D-14，负责人决定 2026-11-12，取代编制时的 purchase.overbuy.approve 能力）。",
+          "eventPayloads": {
+            "PurchaseDraftPrepared": [
+              "draft_id",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "supplier_id",
+              "draft_hash",
+              "currency",
+              "commitment_state",
+              "order_line_ids",
+              "supply_valid_until"
+            ],
+            "PurchaseDraftVoided": [
+              "draft_id",
+              "order_id",
+              "order_revision",
+              "supplier_id",
+              "draft_hash",
+              "released_order_line_ids"
+            ]
+          }
         },
         {
           "id": "PUR-AGG-PurchaseCommitment",
@@ -1132,7 +1186,8 @@
             "ApprovalRevocation",
             "SupplierConfirmation",
             "CommitmentChange",
-            "CommitmentRevision"
+            "CommitmentRevision",
+            "CommitmentDisposition"
           ],
           "valueObjects": [
             "DraftHash",
@@ -1147,7 +1202,9 @@
           "invariants": [
             "PUR-INV-009",
             "PUR-INV-010",
-            "PUR-INV-011"
+            "PUR-INV-011",
+            "PUR-INV-012",
+            "PUR-INV-013"
           ],
           "commands": [
             "purchase.commitment.request",
@@ -1158,7 +1215,9 @@
             "purchase.commitment.change.prepare",
             "purchase.commitment.change.decide",
             "purchase.commitment.change.apply",
-            "purchase.commitment.cancel"
+            "purchase.commitment.cancel",
+            "purchase.commitment.dispose",
+            "purchase.commitment.disposition.decide"
           ],
           "events": [
             "PurchaseCommitmentApproved",
@@ -1166,11 +1225,101 @@
             "SupplierConfirmationRecorded",
             "PurchaseCommitmentRevoked",
             "PurchaseCommitmentChanged",
-            "PurchaseCommitmentCancelled"
+            "PurchaseCommitmentCancelled",
+            "PurchaseCommitmentDisposed"
           ],
           "goPackage": "internal/contexts/pur/internal/domain/commitment",
           "pythonSource": "A47 设计（未实现）",
-          "notes": "裁决时按当前数据重算并逐字段一致，否则草稿失效（A47 第 3 点）。发出取得 POL 采购单编号并登记发出证据；供应商确认是独立事实。发出后的交期、数量、价格变更经变更编制、独立裁决与应用形成承诺新修订，取消须供应商证据并释放分配（A47 第 7 点，S5 全深度）。"
+          "notes": "裁决时按当前数据重算并逐字段一致，否则草稿失效（A47 第 3 点）。发出取得 POL 采购单编号并登记发出证据；供应商确认是独立事实。发出后的交期、数量、价格变更经变更编制、独立裁决与应用形成承诺新修订，取消须供应商证据并释放分配（A47 第 7 点，S5 全深度）。 S5R（2026-11-13，模拟签核 E0）：已核实交付但未出运的承诺行可申请获批处置（purchase.commitment.dispose：return_to_supplier、write_off、hold_for_reuse），由订单审核人独立批准（purchase.commitment.disposition.decide，SM-PUR-COMMITMENT-DISPOSITION），不改承诺状态，写入 DownstreamCommitments v1 的 disposition（S5R-D05）；PurchaseCommitmentDisposed 的载荷为设计，R4 实现。纯减量变更不查供应条件有效期；有未核实交付声明时取消被拒；承诺行单位须等于订单行单位（S5R-D41）。契约：承诺修订文档 brant.purchase-commitment-revision/0.1.0；偏差种类、供应商确认结果、确认命令的 revision 参数与 sequence_ref 参数见 S5 A4、C11 报告。",
+          "eventPayloads": {
+            "PurchaseCommitmentApproved": [
+              "commitment_id",
+              "draft_id",
+              "draft_hash",
+              "order_id",
+              "order_revision",
+              "supplier_id",
+              "order_hash",
+              "valid_until",
+              "decided_by"
+            ],
+            "PurchaseCommitmentIssued": [
+              "commitment_id",
+              "draft_id",
+              "draft_hash",
+              "order_id",
+              "order_revision",
+              "supplier_id",
+              "order_hash",
+              "currency",
+              "po_number",
+              "sent_at",
+              "order_line_ids"
+            ],
+            "SupplierConfirmationRecorded": [
+              "commitment_id",
+              "draft_id",
+              "draft_hash",
+              "order_id",
+              "order_revision",
+              "supplier_id",
+              "po_number",
+              "result",
+              "received_at",
+              "commitment_status",
+              "revision"
+            ],
+            "PurchaseCommitmentRevoked": [
+              "commitment_id",
+              "draft_id",
+              "draft_hash",
+              "order_id",
+              "order_revision",
+              "supplier_id",
+              "revoked_by"
+            ],
+            "PurchaseCommitmentChanged": [
+              "commitment_id",
+              "draft_id",
+              "draft_hash",
+              "order_id",
+              "order_revision",
+              "supplier_id",
+              "order_hash",
+              "change_id",
+              "change_hash",
+              "revision",
+              "base_revision",
+              "po_number",
+              "commitment_status",
+              "fulfilled",
+              "lines",
+              "applied_by"
+            ],
+            "PurchaseCommitmentCancelled": [
+              "commitment_id",
+              "draft_id",
+              "draft_hash",
+              "order_id",
+              "order_revision",
+              "supplier_id",
+              "order_hash",
+              "po_number",
+              "revision",
+              "cancelled_by",
+              "lines"
+            ],
+            "PurchaseCommitmentDisposed": [
+              "commitment_id",
+              "disposition_id",
+              "order_id",
+              "order_line_id",
+              "kind",
+              "quantity",
+              "unit_id",
+              "decided_by"
+            ]
+          }
         },
         {
           "id": "PUR-AGG-DemandAllocation",
@@ -1200,7 +1349,7 @@
           "events": [],
           "goPackage": "internal/contexts/pur/internal/domain/allocation",
           "pythonSource": "—（Python 以唯一约束实现一行一草稿）",
-          "notes": "订单行至草稿与承诺的数量分配台账；OrderAmended 由系统消费方按（订单、订单修订）开启复核，列出超出新数量的分配、可作废草稿与受影响承诺，由授权人工处置（WF-06）。"
+          "notes": "订单行至草稿与承诺的数量分配台账；OrderAmended、OrderCancelled、OrderRemainderClosed 由系统消费方按（订单、订单修订、原因）开启复核（S5R-D39），列出超出新数量的分配、可作废草稿与受影响承诺，由授权人工处置（WF-06）。 复核条目种类 allocation、draft、commitment；影响 reduced、line_removed、specification_changed、order_cancelled、remainder_closed；处置 draft_voided、commitment_changed、commitment_cancelled、no_action，每项须理由，一次处置整个复核；不加改绑命令（S5R-D39）。复核暂不发布事实（S5R-D37）。"
         },
         {
           "id": "PUR-AGG-SupplierDelivery",
@@ -1230,7 +1379,21 @@
           ],
           "goPackage": "internal/contexts/pur/internal/domain/supplierdelivery",
           "pythonSource": "—（Python 未实现）",
-          "notes": "直发路线代替本仓收货的交付事实：供应商上报只是声明，人工核实后才计入采购结算与出运来源。"
+          "notes": "直发路线代替本仓收货的交付事实：供应商上报只是声明，人工核实后才计入采购结算与出运来源。",
+          "eventPayloads": {
+            "SupplierDeliveryVerified": [
+              "delivery_id",
+              "delivery_version",
+              "superseded_version",
+              "commitment_id",
+              "order_id",
+              "supplier_id",
+              "handover_place",
+              "handed_over_at",
+              "verified_by",
+              "lines"
+            ]
+          }
         }
       ],
       "policies": [
@@ -1451,7 +1614,44 @@
           ],
           "goPackage": "internal/contexts/qlt/internal/domain/inspection",
           "pythonSource": "—（Python 未实现）",
-          "notes": "受检对象为 PUR 承诺行或已核实交付行（InspectionSubject v1，R24）；检验人可为我方人员或外部检验机构（PTY service role inspection，R73），报告为 EVD 文件（R72，F-06）。"
+          "notes": "受检对象为 PUR 承诺行或已核实交付行（InspectionSubject v1，R24）；检验人可为我方人员或外部检验机构（PTY service role inspection，R73），报告为 EVD 文件（R72，F-06）。 S5R-D18：disposition.decide 的 concession（让步接收）须附客户同意证据。S5R-D36：检验机构按 PTY 服务角色 inspection_agency 解析，只需已核实，不要求航线。",
+          "eventPayloads": {
+            "InspectionRecorded": [
+              "inspection_id",
+              "subject_kind",
+              "subject_id",
+              "subject_line_id",
+              "subject_revision",
+              "subject_hash",
+              "order_id",
+              "order_line_id",
+              "sku_id",
+              "spec_revision",
+              "unit_id",
+              "inspected_quantity",
+              "conforming_quantity",
+              "nonconforming_quantity",
+              "inspector_kind",
+              "standard_source_id",
+              "standard_sha256",
+              "report_file_id",
+              "report_sha256",
+              "inspected_at",
+              "agency_party_id",
+              "agency_service_role_id",
+              "agency_role_revision",
+              "supersedes_inspection_id"
+            ],
+            "DispositionDecided": [
+              "inspection_id",
+              "subject_kind",
+              "subject_id",
+              "subject_line_id",
+              "unit_id",
+              "nonconforming_quantity",
+              "items"
+            ]
+          }
         },
         {
           "id": "QLT-AGG-QualityRelease",
@@ -1463,7 +1663,9 @@
           ],
           "valueObjects": [
             "ReleasedQuantity",
-            "ValidityInterval"
+            "ValidityInterval",
+            "FrozenQuantity",
+            "ConcessionFlag"
           ],
           "identity": "(tenant, company, release_id)",
           "concurrency": "放行根 FOR UPDATE（撤回）；FUL 以 QualityReleaseGuard v1 FOR SHARE 读取并自行记录消耗量",
@@ -1481,7 +1683,38 @@
           ],
           "goPackage": "internal/contexts/qlt/internal/domain/release",
           "pythonSource": "—（Python 未实现）",
-          "notes": "放行明确受检对象、规格、数量与有效期；有效期届满为派生判断；撤回冻结未出运部分，已出运部分保留（BT21）。"
+          "notes": "放行明确受检对象、规格、数量与有效期；有效期届满为派生判断；撤回冻结未出运部分，已出运部分保留（BT21）。 S5R-D18：撤回锁定放行根后经 FUL ReleaseConsumption v1（R79）读取已出运量，记录冻结量＝放行量－已出运量；可放行余量中被撤回的放行只按已出运量计入；冻结量须先复检（inspection.record 带 supersedes，重述合格量）再 quality_release.grant；获批让步的数量可放行，放行带 concession 标记，单证套与出运可见。",
+          "eventPayloads": {
+            "QualityReleased": [
+              "release_id",
+              "subject_kind",
+              "subject_id",
+              "subject_line_id",
+              "subject_revision",
+              "supplier_id",
+              "order_id",
+              "order_line_id",
+              "sku_id",
+              "spec_revision",
+              "unit_id",
+              "unit_revision",
+              "released_quantity",
+              "valid_from",
+              "valid_until",
+              "inspection_ids"
+            ],
+            "QualityReleaseRevoked": [
+              "release_id",
+              "subject_kind",
+              "subject_id",
+              "subject_line_id",
+              "order_id",
+              "order_line_id",
+              "released_quantity",
+              "unit_id",
+              "revoked_at"
+            ]
+          }
         }
       ],
       "policies": [
@@ -1489,7 +1722,8 @@
         "复检取代原结果，不累加合格量（BT08）。"
       ],
       "crossBoundary": [
-        "消费 PUR（InspectionSubject v1）、PTY（外部检验机构）、EVD（报告与标准来源）；向 FUL 发布 QualityReleaseRef v1 与 QualityReleaseGuard v1。"
+        "消费 PUR（InspectionSubject v1）、PTY（外部检验机构）、EVD（报告与标准来源）；向 FUL 发布 QualityReleaseRef v1 与 QualityReleaseGuard v1。",
+        "撤回放行时读取 FUL ReleaseConsumption v1（R79，锁定放行根后无锁读取）；检验机构经 PTY ServiceRoleRef v1 的 inspection_agency 解析（S5R-D18、D36）。"
       ],
       "consistency": "单聚合事务；放行消耗量由 FUL 记录。",
       "risks": [
@@ -1600,7 +1834,9 @@
             "QualityReleaseRef",
             "OrderLineRef",
             "SupplierDeliveryLineRef",
-            "ShipmentRoute"
+            "ShipmentRoute",
+            "EndUserPartyRef",
+            "OrderRevisionRef"
           ],
           "identity": "(tenant, company, shipment_id)",
           "concurrency": "出运根 FOR UPDATE，再锁订单履约根，再按上下文代码序 FOR SHARE 调用 CNX、PTY、PUR、QLT、STL、TRD 守卫",
@@ -1622,7 +1858,21 @@
           ],
           "goPackage": "internal/contexts/ful/internal/domain/shipment",
           "pythonSource": "—（Python 未实现）",
-          "notes": "出运准备绑定一张生效订单的修订与哈希及其行、直发交付行与质量放行；确认须本范围的有效商业条件放行并在本事务重查全部守卫（S5 D-11）；只支持供应商直发路线（D-10）。"
+          "notes": "出运准备绑定一张生效订单的修订与哈希及其行、直发交付行与质量放行；确认须本范围的有效商业条件放行并在本事务重查全部守卫（S5 D-11）；只支持供应商直发路线（D-10）。 shipment.prepare 创建 prepared（初始状态）；packing.plan、packing.record_actual、booking.record 是同状态下的版本记录，不改状态。S5R：出运可选陈述最终用户 end_user_party（PTY 引用；缺省按收货人、再按客户推导），CNX 的许可证分配与报关核对使用它（D40）；出运准备按绑定修订经 TRD OrderRevisionRef v1 读取行价与条款，FUL 自存的行价保留为核对值（D35）。",
+          "eventPayloads": {
+            "ShipmentConfirmed": [
+              "shipment_id",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "route",
+              "lines",
+              "guards_sha256",
+              "unchecked_guards",
+              "release_id",
+              "confirmed_at"
+            ]
+          }
         },
         {
           "id": "FUL-AGG-MilestonePlan",
@@ -1647,7 +1897,21 @@
           ],
           "goPackage": "internal/contexts/ful/internal/domain/milestone",
           "pythonSource": "—（Python 未实现）",
-          "notes": "节点类型区分供应商自报、内部核实与已验收；海关放行、实际离境、送达与客户验收是不同节点（CN-R07）。"
+          "notes": "节点类型区分供应商自报、内部核实与已验收；海关放行、实际离境、送达与客户验收是不同节点（CN-R07）。 无状态机：计划根只承载节点，以 row_version CAS 串行。节点类型：material_ready、production_start、production_complete、inspection、packing_complete、supplier_handover、booking_requested（已申请订舱，计划日期即截关前的申请期限；S5R-D11）、booking_confirmed、cargo_loaded、customs_release、actual_departure、arrival、delivery、customer_acceptance。订舱记录不加状态，只记录已确认的订舱（S5R-D11，有意不同于 SAP TM）。",
+          "eventPayloads": {
+            "MilestoneActualRecorded": [
+              "plan_id",
+              "plan_revision",
+              "subject_kind",
+              "subject_id",
+              "actual_seq",
+              "node_id",
+              "node_type",
+              "evidence_level",
+              "occurred_at",
+              "evidence_ids"
+            ]
+          }
         },
         {
           "id": "FUL-AGG-ExportLot",
@@ -1667,7 +1931,23 @@
           ],
           "goPackage": "internal/contexts/ful/internal/domain/exportlot",
           "pythonSource": "—（Python 未实现）",
-          "notes": "销售／交付至本次出口明细的数量金额，供报关、退税与收汇资料引用（ExportLotRef v1，R36）；不复制第二份库存。"
+          "notes": "销售／交付至本次出口明细的数量金额，供报关、退税与收汇资料引用（ExportLotRef v1，R36）；不复制第二份库存。",
+          "eventPayloads": {
+            "ExportLotRegistered": [
+              "export_lot_id",
+              "shipment_id",
+              "shipment_status",
+              "shipment_version",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "currency_id",
+              "currency_revision",
+              "lines",
+              "net_minor",
+              "registered_at"
+            ]
+          }
         },
         {
           "id": "FUL-AGG-CommercialRelease",
@@ -1701,7 +1981,39 @@
           ],
           "goPackage": "internal/contexts/ful/internal/domain/release",
           "pythonSource": "—（Python 未实现）",
-          "notes": "F29／BT13：出运（scope shipment）与正本提单、电放（scope documents）的统一闸门；评估按锁序读取 CNX、PTY、PUR、QLT、STL、TRD 守卫并记录各守卫版本；例外只覆盖付款条件，由授权人工批准并绑定订单、出运、阶段与金额；质量、筛查、合规与许可证不能被例外覆盖。"
+          "notes": "F29／BT13：出运（scope shipment）与正本提单、电放（scope documents）的统一闸门；评估按锁序读取 CNX、PTY、PUR、QLT、STL、TRD 守卫并记录各守卫版本；例外只覆盖付款条件，由授权人工批准并绑定订单、出运、阶段与金额；质量、筛查、合规与许可证不能被例外覆盖。 S5R：commercial_release.evaluate 只接受 human、ai；B0 不设系统重评估，STL 核销或 QLT 放行后由单证员（或其 AI 助手）重新评估（D29）；例外独立于该放行的评估人与订单准备人（D28），有效期不超过订单所绑定公司当时有效的 credit_policy 的 decision_validity_days，FUL 的 90 天硬上限保留为参数异常时的保护（D09）；已确认出运的单证放行细则见 FUL-INV-002（D10）。证据名：bindings.confirmation、bindings.rechecked、confirmation.rechecked、ful.shipment_confirmation、cnx.trade_compliance_guard.v1/current；C4a 改名后的证据常量 ful.shipment_facts.v1、pur.downstream_commitments.v1。",
+          "eventPayloads": {
+            "CommercialReleaseGranted": [
+              "release_id",
+              "shipment_id",
+              "scope",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "payment_order_revision",
+              "payment_order_hash",
+              "evaluation_seq",
+              "exception_seq",
+              "guards_sha256",
+              "granted_at"
+            ],
+            "DocumentsReleased": [
+              "release_id",
+              "shipment_id",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "payment_order_revision",
+              "payment_order_hash",
+              "release_kind",
+              "evidence_ids",
+              "guards_sha256",
+              "released_at",
+              "document_set_id",
+              "bill_of_lading_version",
+              "bill_of_lading_number"
+            ]
+          }
         },
         {
           "id": "FUL-AGG-ShipmentDocumentSet",
@@ -1739,7 +2051,21 @@
           ],
           "goPackage": "internal/contexts/ful/internal/domain/shipmentdocumentset",
           "pythonSource": "—（Python 未实现）",
-          "notes": "商业发票与装箱单按 POL shipment_document_template 以 shipment-text/0.1.0 渲染并取号；提单、原产地证与保险单是外部单证记录（EVD 文件）；与订单行、出运行、包装行逐项核对，差异逐项解决或确认后才能签发（BT12）。CIF／CIP 须保险单记录（F-03）。 签署或盖章件以 EVD 文件登记为已签发版本的证据，生成的未签署文件不能作为签署件（CN-AT17，同 TRD order.document.record_signed）。"
+          "notes": "商业发票与装箱单按 POL shipment_document_template 以 shipment-text/0.1.0 渲染并取号；提单、原产地证与保险单是外部单证记录（EVD 文件）；与订单行、出运行、包装行逐项核对，差异逐项解决或确认后才能签发（BT12）。CIF／CIP 须保险单记录（F-03）。 签署或盖章件以 EVD 文件登记为已签发版本的证据，生成的未签署文件不能作为签署件（CN-AT17，同 TRD order.document.record_signed）。 S5R：签发时再查原产地证适用性，未登记为 CNX 结果的原产地证为可确认差异 co_not_registered（D12）；单证按出运绑定的订单修订打印条款（OrderRevisionRef v1，D35）；打印并核对通知方（D40）；缺保险单是缺少必需单证（SHIPMENT_DOCUMENTS_UNRECONCILED），合同保险比例取 trade_terms，险别按 Incoterm 核对（D06）。",
+          "eventPayloads": {
+            "ShipmentDocumentIssued": [
+              "document_set_id",
+              "shipment_id",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "issue_seq",
+              "documents",
+              "reconciliation_sha256",
+              "acknowledged",
+              "issued_at"
+            ]
+          }
         },
         {
           "id": "FUL-AGG-OrderFulfilment",
@@ -1766,7 +2092,7 @@
           "events": [],
           "goPackage": "internal/contexts/ful/internal/domain/fulfilment",
           "pythonSource": "—（Python 未实现）",
-          "notes": "每订单一个履约根：串行化同一订单的出运确认（FUL-INV-001），保存 OrderAmended 的出运复核（WF-06）；向 TRD 发布 ShipmentFacts v1（R70）。"
+          "notes": "每订单一个履约根：串行化同一订单的出运确认（FUL-INV-001），保存 OrderAmended 的出运复核（WF-06）；向 TRD 发布 ShipmentFacts v1（R70）。 S5R：OrderAmended、OrderCancelled、OrderRemainderClosed 按（订单、订单修订、原因）开启出运复核；条目种类 shipment、packing、booking、document、release；处置 shipment_cancelled、replaced、reevaluated、no_action，每项须理由；不加改绑命令，已准备的出运作废后重新准备（D39）；复核暂不发布事实（D37）。向 QLT 发布 ReleaseConsumption v1：按放行 ID 的已出运量（R79，D18）。"
         }
       ],
       "policies": [
@@ -1775,7 +2101,8 @@
         "S5 只支持供应商直发路线；本仓发货待 STK（S6-01）。"
       ],
       "crossBoundary": [
-        "消费 TRD（ActiveOrderRef v1）、QLT、PUR（直发交付守卫）、STL（付款条件守卫）、PTY（主体筛查守卫）、CNX（贸易合规、许可证与证书）、POL（单证模板与编号）、CST（保险费组件）、EVD；向 STL、CLM、CNX 发布出运、放行与单证事实；向 TRD 发布 ShipmentFacts v1（R70，TRD 事务内无锁读取）。"
+        "消费 TRD（ActiveOrderRef v1）、QLT、PUR（直发交付守卫）、STL（付款条件守卫）、PTY（主体筛查守卫）、CNX（贸易合规、许可证与证书）、POL（单证模板与编号）、CST（保险费组件）、EVD；向 STL、CLM、CNX 发布出运、放行与单证事实；向 TRD 发布 ShipmentFacts v1（R70，TRD 事务内无锁读取）。",
+        "向 QLT 发布 ReleaseConsumption v1（R79，QLT 撤回放行时事务内无锁读取；S5R-D18）；按出运绑定的订单修订读取 TRD OrderRevisionRef v1（S5R-D35）。"
       ],
       "consistency": "出运确认、放行与单证签发在 FUL 单事务内裁决：本出运根与订单履约根 FOR UPDATE，再按上下文代码序以 FOR SHARE 调用 CNX、PTY、PUR、QLT、STL、TRD 守卫。",
       "risks": [
@@ -1796,7 +2123,8 @@
             "SettlementLine",
             "CreditNote",
             "SettlementReversal",
-            "OpeningBalance"
+            "OpeningBalance",
+            "PayableAdjustment"
           ],
           "valueObjects": [
             "ShipmentLineRef",
@@ -1810,23 +2138,73 @@
             "STL-INV-001",
             "STL-INV-008",
             "STL-INV-009",
-            "STL-INV-012"
+            "STL-INV-012",
+            "STL-INV-013"
           ],
           "commands": [
             "settlement.confirm",
             "settlement.reverse",
             "credit_note.request",
             "credit.confirm",
-            "opening_balance.record"
+            "opening_balance.record",
+            "payable_adjustment.request",
+            "payable_adjustment.confirm"
           ],
           "events": [
             "SettlementConfirmed",
             "CreditConfirmed",
-            "SettlementReversed"
+            "SettlementReversed",
+            "OpeningBalanceRecorded",
+            "PayableAdjustmentConfirmed"
           ],
           "goPackage": "internal/contexts/stl/internal/domain/settlement",
           "pythonSource": "—（Python 未实现）",
-          "notes": "销售结算单来源为 FUL 已确认出运行（R30），采购结算单来源为 PUR 已核实交付（R31）；贷项、冲销与期初余额分别记录，不改写原单。"
+          "notes": "销售结算单来源为 FUL 已确认出运行（R30），采购结算单来源为 PUR 已核实交付（R31）；贷项、冲销与期初余额分别记录，不改写原单。 S5R：期初结算单可开贷项（订单绑定可选，不进经营结果，D22）；应付只经 PUR 交付更正或 payable_adjustment 申请与独立确认变化，读取与确认采购结算单时显示 invoice_reversed（D20）；交付更正后的差额先 settlement.reverse 冲销原采购结算单、再按更正后的交付重新结算，不加补差结算单（D46）；PayableAdjustmentConfirmed 的载荷为设计，R8 实现。",
+          "eventPayloads": {
+            "SettlementConfirmed": [
+              "statement_id",
+              "statement_version",
+              "kind",
+              "counterparty_id",
+              "moved",
+              "order_id",
+              "order_revision"
+            ],
+            "CreditConfirmed": [
+              "statement_id",
+              "statement_version",
+              "credit_note_id",
+              "credit_note_version",
+              "kind",
+              "order_id",
+              "counterparty_id"
+            ],
+            "SettlementReversed": [
+              "statement_id",
+              "statement_version",
+              "kind",
+              "counterparty_id",
+              "sources",
+              "order_id",
+              "order_revision"
+            ],
+            "OpeningBalanceRecorded": [
+              "opening_id",
+              "kind",
+              "cutoff_at",
+              "source_document",
+              "counterparty_id"
+            ],
+            "PayableAdjustmentConfirmed": [
+              "statement_id",
+              "statement_version",
+              "adjustment_id",
+              "kind",
+              "amount_minor",
+              "currency",
+              "purchase_invoice_id"
+            ]
+          }
         },
         {
           "id": "STL-AGG-Application",
@@ -1856,7 +2234,27 @@
           ],
           "goPackage": "internal/contexts/stl/internal/domain/application",
           "pythonSource": "—（Python 未实现）",
-          "notes": "核销来源为资金记录或已确认贷项，目标为订单付款阶段（预收）或结算单应收应付；撤销核销形成新记录；跨币种按 STL-INV-007。"
+          "notes": "核销来源为资金记录或已确认贷项，目标为订单付款阶段（预收）或结算单应收应付；撤销核销形成新记录；跨币种按 STL-INV-007。 S5R-D19：出账资金记录可核销到已确认费用（目标种类 charge），净现金＝已核销收款－已核销采购付款－已核销费用付款；未经 STL 支付的费用列为未付。",
+          "eventPayloads": {
+            "Applied": [
+              "application_id",
+              "application_version",
+              "fund_record_id",
+              "target_kind",
+              "order_id",
+              "order_revision",
+              "stage_id"
+            ],
+            "Unapplied": [
+              "application_id",
+              "application_version",
+              "fund_record_id",
+              "target_kind",
+              "order_id",
+              "order_revision",
+              "stage_id"
+            ]
+          }
         },
         {
           "id": "STL-AGG-FundRecord",
@@ -1865,7 +2263,9 @@
           "root": "FundRecord",
           "entities": [
             "FundDifference",
-            "FxConversion"
+            "FxConversion",
+            "FundReversal",
+            "PayerVerification"
           ],
           "valueObjects": [
             "RemittedAmount",
@@ -1876,19 +2276,53 @@
           "identity": "(tenant, company, fund_record_id)",
           "concurrency": "资金根 CAS；差额处理只追加",
           "invariants": [
-            "STL-INV-006"
+            "STL-INV-006",
+            "STL-INV-014"
           ],
           "commands": [
             "fund.record",
-            "fund.resolve_difference"
+            "fund.resolve_difference",
+            "fund.reverse",
+            "fund.verify_payer"
           ],
           "events": [
             "FundRecorded",
-            "FundDifferenceResolved"
+            "FundDifferenceResolved",
+            "FundRecordReversed",
+            "FundPayerVerified"
           ],
           "goPackage": "internal/contexts/stl/internal/domain/fundrecord",
           "pythonSource": "—（Python 未实现）",
-          "notes": "银行原币入账、客户汇出额与银行费用分别记录；未解释差额待处理，经独立批准登记为我方承担的费用或折让；结汇是资金转换，不新增客户收款（CN-R10、CN-AT09）。"
+          "notes": "银行原币入账、客户汇出额与银行费用分别记录；未解释差额待处理，经独立批准登记为我方承担的费用或折让；结汇是资金转换，不新增客户收款（CN-R10、CN-AT09）。 结汇是 fund.record 的 kind=fx_conversion（带 source_fund_record_id、fx {sold_amount, bank_rate, fee}），没有单独命令。S5R：来自交易档案许可付款人的收款不是主体不一致，临时第三方付款由信用经理以 fund.verify_payer 核实（独立于资金登记人，附付款委托书或三方协议，D21）；fund.reverse 冲销任何资金记录（含期初），须无有效核销，原记录保留，冲销后银行流水键可再用（D22）。FundRecordReversed、FundPayerVerified 的载荷为设计，R7、R8 实现。",
+          "eventPayloads": {
+            "FundRecorded": [
+              "fund_record_id",
+              "fund_record_version",
+              "kind",
+              "direction",
+              "source_fund_record_id"
+            ],
+            "FundDifferenceResolved": [
+              "fund_record_id",
+              "fund_record_version",
+              "resolution",
+              "seq"
+            ],
+            "FundRecordReversed": [
+              "fund_record_id",
+              "fund_record_version",
+              "kind",
+              "direction",
+              "reason"
+            ],
+            "FundPayerVerified": [
+              "fund_record_id",
+              "fund_record_version",
+              "payer_party_id",
+              "customer_party_id",
+              "evidence_ids"
+            ]
+          }
         },
         {
           "id": "STL-AGG-OrderResult",
@@ -1902,7 +2336,8 @@
             "ForecastResult",
             "ExecutingResult",
             "ConfirmedResult",
-            "FxSettlementDifference"
+            "FxSettlementDifference",
+            "UnrealizedFxDifference"
           ],
           "identity": "(tenant, company, order_result_id)",
           "concurrency": "经营结果根 CAS；关闭快照只追加",
@@ -1920,7 +2355,23 @@
           ],
           "goPackage": "internal/contexts/stl/internal/domain/orderresult",
           "pythonSource": "—（Python 未实现）",
-          "notes": "预计、执行中与已确认经营结果与业务结算汇率差额（基线 4.5）；settled 须履约完成或短交关闭、账款结清或获批处置、成本与直接费用已确认、无未决案件并经授权人员关闭；关闭后补录费用重新打开并留痕（BT18、BT24）。"
+          "notes": "预计、执行中与已确认经营结果与业务结算汇率差额（基线 4.5）；settled 须履约完成或短交关闭、账款结清或获批处置、成本与直接费用已确认、无未决案件并经授权人员关闭；关闭后补录费用重新打开并留痕（BT18、BT24）。 S5R-D19：业务结算汇差＝已核销外币金额 ×（实现汇率－订单分析汇率），实现汇率先取复核时已有结汇记录的实际汇率（按金额加权），未结汇部分取核销日 POL settlement 汇率并标 unrealized；关闭后的结汇不重开结果。S5R-D42：已取消订单有已确认费用或获批 write_off 处置时，可以关闭为 settled 并带 cancelled 标记（收入为零，成本为沉没成本）；无费用的取消订单不生成经营结果。 S5R-D33：预计采购成本取 PUR 已发出或已确认承诺行的封存净额（PurchaseLineRef v1，R31）；尚无承诺的订单行用订单封存的核价成本 CostMinor（R32，随 S5R-D35），在那之前显示“未承诺”。",
+          "eventPayloads": {
+            "OrderResultClosed": [
+              "order_id",
+              "order_result_version",
+              "snapshot_seq",
+              "order_revision",
+              "content_sha256",
+              "claims"
+            ],
+            "OrderResultReopened": [
+              "order_id",
+              "order_result_version",
+              "snapshot_seq",
+              "reopening_seq"
+            ]
+          }
         },
         {
           "id": "STL-AGG-CustomerCredit",
@@ -1966,7 +2417,61 @@
           ],
           "goPackage": "internal/contexts/stl/internal/domain/customercredit",
           "pythonSource": "—（Python 未实现）",
-          "notes": "先占用、后生效。超额或逾期超限时 credit.reserve 不直接失败，而是生成信用决定（CreditDecision，参照 SAP 的 documented credit decision），由具备相应金额权限的信用人员放行或拒绝；额度调整经额度申请按金额分级审批。额度来源记为内部评估或中信保买方信用限额（启用信保时取二者较低）。新客户默认额度为 0；信用政策可把单证控制下的出运后付款（如见提单副本付款、电放前收款）视为有担保。 占用金额：出运后到期且不受单证控制的付款阶段（单证控制的出运后付款在 credit_policy.documents_secured 时视为有担保，S5 D-5）；风险敞口＝未结应收＋各订单 max(0，有效或已使用占用－该订单已形成应收)（S5 D-4）；审批层级取审批人所持岗位模板对应的 credit_policy 层级（S5 D-6）。"
+          "notes": "先占用、后生效。超额或逾期超限时 credit.reserve 不直接失败，而是生成信用决定（CreditDecision，参照 SAP 的 documented credit decision），由具备相应金额权限的信用人员放行或拒绝；额度调整经额度申请按金额分级审批。额度来源记为内部评估或中信保买方信用限额（启用信保时取二者较低）。新客户默认额度为 0；信用政策可把单证控制下的出运后付款（如见提单副本付款、电放前收款）视为有担保。 占用金额：出运后到期且不受单证控制的付款阶段（单证控制的出运后付款在 credit_policy.documents_secured 时视为有担保，S5 D-5）；风险敞口＝未结应收＋各订单 max(0，有效或已使用占用－该订单已形成应收)（S5 D-4）；审批层级取审批人所持岗位模板对应的 credit_policy 层级（S5 D-6）。 S5R-D08：订单修订生效（OrderAmended）时，信用消费方在客户信用根一个事务内使当前修订恰有一个已消耗占用：新修订已有有效占用（含按 B4 预先作的占用与游离占用）则消耗它，游离占用大于需要时按需要量消耗、差额释放；否则把上一修订的已消耗占用按新修订的信用部分承接（来源 carried_over，金额不大于原占用时不再检查额度）；上一修订的已消耗占用以原因 superseded 释放。S5R-D22：敞口中不同币种的应收（含期初）按 POL fx_rate 中用途为 credit 的汇率折算，缺汇率答 FX_SCOPE_MISMATCH；B2b 按占用比例折算的做法改为同一规则。",
+          "eventPayloads": {
+            "CreditLimitPublished": [
+              "party_id",
+              "request_id",
+              "limit_version"
+            ],
+            "CreditReserved": [
+              "party_id",
+              "reservation_id",
+              "reservation_version",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "basis",
+              "decision_id"
+            ],
+            "CreditReservationReleased": [
+              "party_id",
+              "reservation_id",
+              "reservation_version",
+              "order_id",
+              "order_revision"
+            ],
+            "CreditExceptionDecided": [
+              "party_id",
+              "decision_id",
+              "decision_version",
+              "status",
+              "order_id",
+              "order_revision"
+            ],
+            "CreditLimitRequested": [
+              "party_id",
+              "request_id",
+              "request_version"
+            ],
+            "CreditDecisionOpened": [
+              "party_id",
+              "decision_id",
+              "decision_version",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "reasons"
+            ],
+            "CreditReservationConsumed": [
+              "party_id",
+              "reservation_id",
+              "reservation_version",
+              "order_id",
+              "order_revision",
+              "order_hash"
+            ]
+          }
         },
         {
           "id": "STL-AGG-OrderAccount",
@@ -1988,13 +2493,14 @@
             "STL-INV-003"
           ],
           "commands": [
+            "order_account.open",
             "payment_plan_review.open",
             "payment_plan_review.settle"
           ],
           "events": [],
           "goPackage": "internal/contexts/stl/internal/domain/orderaccount",
           "pythonSource": "—（Python 未实现）",
-          "notes": "订单当前修订的付款阶段（OrderCommercialSnapshot v1，R32）与核销到各阶段的金额；付款条件满足由此派生并以守卫发布（R45）；OrderAmended 开启付款计划复核并采用新修订的阶段（WF-06）。"
+          "notes": "订单当前修订的付款阶段（OrderCommercialSnapshot v1，R32）与核销到各阶段的金额；付款条件满足由此派生并以守卫发布（R45）；OrderAmended 开启付款计划复核并采用新修订的阶段（WF-06）。 无状态机：账户根只承载余额，以 row_version CAS 串行。S5R-D02：order_account.open 是自有权限，由资金模板与系统消费方 system:inbox.stl.order_account 持有，接受 human 与 system、不接受 AI；正常由消费方在 OrderActivated 时开立，资金人员只补建。S5R-D46：付款阶段只按日历日计算；TRD 应用与 STL 迁移之间的窗口按最终一致接受（守卫答 revision_mismatch，核销答 REFERENCE_STALE，稍后重试）。"
         },
         {
           "id": "STL-AGG-Charge",
@@ -2007,7 +2513,8 @@
           "valueObjects": [
             "FeeCategoryRef",
             "AllocationBasis",
-            "Money"
+            "Money",
+            "CostComponent"
           ],
           "identity": "(tenant, company, charge_id)",
           "concurrency": "费用根 CAS；分配只追加",
@@ -2024,7 +2531,19 @@
           ],
           "goPackage": "internal/contexts/stl/internal/domain/charge",
           "pythonSource": "—（Python 未实现）",
-          "notes": "估算、待确认与已确认费用分别记录；按金额、数量或重量分配给订单或出运，按最小币值最大余数法（基线 4.5）。"
+          "notes": "估算、待确认与已确认费用分别记录；按金额、数量或重量分配给订单或出运，按最小币值最大余数法（基线 4.5）。 S5R-D24：charge.record 带 cost_component（pre_carriage、export_clearance、main_carriage、insurance、other）；FCA、FOB、EXW 订单的 main_carriage 被拒，除非标为 recharged（我方代垫、向买方收回，不进经营结果，R1）。S5R-D19：费用的已付状态由核销派生。",
+          "eventPayloads": {
+            "ChargeAllocated": [
+              "charge_id",
+              "charge_version",
+              "allocation_seq",
+              "status",
+              "basis",
+              "order_ids",
+              "shipment_ids",
+              "lines"
+            ]
+          }
         }
       ],
       "policies": [
@@ -2032,7 +2551,8 @@
         "业务台账不是法定总账；系统内核销不是行政意义的出口收汇核销（CN-R11）。"
       ],
       "crossBoundary": [
-        "消费 FUL（ShipmentLineRef v1）、PUR（PurchaseSettlementSource v1）、TRD（OrderCommercialSnapshot v1 与订单事件）、POL（ConfigGuard：credit_policy、汇率 credit／settlement 用途）、PTY、EVD、CNX；向 FUL 发布 PaymentConditionGuard v1，向 TRD 发布 CreditGuard v1，向 CNX 发布 FundRecordRef v1。"
+        "消费 FUL（ShipmentLineRef v1）、PUR（PurchaseSettlementSource v1）、TRD（OrderCommercialSnapshot v1 与订单事件）、POL（ConfigGuard：credit_policy、汇率 credit／settlement 用途）、PTY、EVD、CNX；向 FUL 发布 PaymentConditionGuard v1，向 TRD 发布 CreditGuard v1，向 CNX 发布 FundRecordRef v1。",
+        "读取 CNX PurchaseInvoiceRef v1 派生应付复核标记 invoice_reversed（R55，S5R-D20）；读取 PTY TradingProfileRef v1 的许可付款人（R43，S5R-D21）。"
       ],
       "consistency": "每命令只修改一个聚合：核销在资金记录根与目标根（按 ID 排序）FOR UPDATE 下写入新核销，余额由不可变分录派生；信用占用在信用根 FOR UPDATE 下串行。",
       "risks": [
@@ -2144,7 +2664,26 @@
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/declaration",
           "pythonSource": "—（Python 未实现）",
-          "notes": "按出口批次准备；票据、成交与法定单位及品名的映射须专业依据后确认；人工提交声明、外部收到、受理、放行、退回、改单、撤销与 unknown 分别记录，回执保存原文、映射版本与外部顺序（CN-R05、CN-R07）。"
+          "notes": "按出口批次准备；票据、成交与法定单位及品名的映射须专业依据后确认；人工提交声明、外部收到、受理、放行、退回、改单、撤销与 unknown 分别记录，回执保存原文、映射版本与外部顺序（CN-R05、CN-R07）。 S5R-D13：unknown 经查证（以海关总署可查询状态为准）可记 not_received（终态），之后同一出口批次可开启下一次报关尝试。S5R-D04：申报海关须与许可证登记的海关关别一致（一证一关）。",
+          "eventPayloads": {
+            "DeclarationReceiptRecorded": [
+              "declaration_id",
+              "export_lot_id",
+              "attempt",
+              "shipment_id",
+              "order_id",
+              "order_revision",
+              "receipt_id",
+              "receipt_no",
+              "outcome",
+              "from",
+              "version",
+              "external_sequence",
+              "mapping_version",
+              "declaration_number",
+              "exported_at"
+            ]
+          }
         },
         {
           "id": "CNX-AGG-TaxRefundCase",
@@ -2167,15 +2706,54 @@
           "commands": [
             "tax_refund_case.allocate",
             "tax_refund_case.record_result",
-            "tax_refund_case.record_opening"
+            "tax_refund_case.record_opening",
+            "tax_refund_case.rebind_policy"
           ],
           "events": [
             "TaxEvidenceAllocated",
-            "TaxRefundResultRecorded"
+            "TaxRefundResultRecorded",
+            "TaxOpeningRecorded"
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/taxrefund",
           "pythonSource": "—（Python 未实现）",
-          "notes": "预计、拟申报、已提交、核准与到账分别记录，政策版本按出口日期的 POL export_tax_policy 修订绑定（CN-AT12）；用途分配不超余额，只按外部结果释放（CN-R04、CN-R08、CN-R09）。"
+          "notes": "预计、拟申报、已提交、核准与到账分别记录，政策版本绑定有效期包含出口日期的 POL export_tax_policy 修订，与发布时间无关，重叠时取最晚发布的一条（经 POL ConfigAt v1；planned 之前出现更晚发布的覆盖修订时显示 policy_superseded，由税务专员以 tax_refund_case.rebind_policy 重新绑定；S5R-D23，CN-AT12）；用途分配不超余额，只按外部结果释放（CN-R04、CN-R08、CN-R09）。 S5R-D14：用途 export_refund 对应免抵退或免退，export_exemption 对应免税出口的资料留存；征税（taxable）批次不开案件；逾期未申报的案件经 record_result 的 converted_to_exemption 转为免税（附逾期依据）。S5R-D20：被冲蓝票已分配到 submitted 或之后的案件时，先以 record_result 的 evidence_rolled_back 登记进货凭证信息回退（附证据）。",
+          "eventPayloads": {
+            "TaxEvidenceAllocated": [
+              "case_id",
+              "export_lot_id",
+              "attempt",
+              "order_id",
+              "policy_id",
+              "policy_revision",
+              "refund_method",
+              "allocation_ids",
+              "purchase_invoice_ids"
+            ],
+            "TaxRefundResultRecorded": [
+              "case_id",
+              "result_id",
+              "export_lot_id",
+              "stage",
+              "from",
+              "policy_id",
+              "policy_revision",
+              "fund_record_id"
+            ],
+            "TaxOpeningRecorded": [
+              "opening_id",
+              "kind",
+              "cutoff_at",
+              "source_document",
+              "purchase_invoice_id",
+              "case_id",
+              "export_lot_id",
+              "position",
+              "policy_id",
+              "policy_revision",
+              "allocation_ids",
+              "purchase_invoice_ids"
+            ]
+          }
         },
         {
           "id": "CNX-AGG-PurchaseInvoice",
@@ -2206,7 +2784,23 @@
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/purchaseinvoice",
           "pythonSource": "—（Python 未实现）",
-          "notes": "原件、解析候选（人工或 AI）与人工核验分别记录；红冲、作废与替代使相关匹配待复核；受票主体与本公司不一致时待获准模式复核（CN-R06、CN-AT05、CN-AT15、CN-AT18）。"
+          "notes": "原件、解析候选（人工或 AI）与人工核验分别记录；红冲、作废与替代使相关匹配待复核；受票主体与本公司不一致时直接拒绝，供应商须重开（S5R-D21）（CN-R06、CN-AT05、CN-AT15、CN-AT18）。 S5R-D20：部分红冲按红票金额冲减蓝票，蓝票余额仍可用于退税分配；被冲蓝票已分配到已提交或之后的退税案件时，红票核实前须先登记进货凭证信息回退；向 STL 发布 PurchaseInvoiceRef v1（R55）。",
+          "eventPayloads": {
+            "PurchaseInvoiceVerified": [
+              "purchase_invoice_id",
+              "kind",
+              "colour",
+              "number",
+              "supplier_party_id",
+              "currency",
+              "lines",
+              "matches",
+              "commitment_ids",
+              "reversed_invoice_id",
+              "reversed_invoice_version",
+              "review_commitment_ids"
+            ]
+          }
         },
         {
           "id": "CNX-AGG-DocumentBundle",
@@ -2236,7 +2830,20 @@
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/documentbundle",
           "pythonSource": "—（Python 未实现）",
-          "notes": "按出口批次列出资料要求、版本、缺件、责任人与期限；附件存在不等于已核实；外部对账记录外部结果、内部关联、差异、责任与批准调整。"
+          "notes": "按出口批次列出资料要求、版本、缺件、责任人与期限；附件存在不等于已核实；外部对账记录外部结果、内部关联、差异、责任与批准调整。 外部对账主体含 credit_note（CN-AT11）。S5R-D12：document_bundle.check 核对“一份报关单对应一份原产地证书或原产地声明”。",
+          "eventPayloads": {
+            "DocumentBundleChecked": [
+              "bundle_id",
+              "export_lot_id",
+              "order_id",
+              "check_no",
+              "status",
+              "missing",
+              "unverified",
+              "verified",
+              "document_sha256"
+            ]
+          }
         },
         {
           "id": "CNX-AGG-TradeComplianceCheck",
@@ -2252,7 +2859,8 @@
             "PartyCountries",
             "ControlClassification",
             "RegulationVersion",
-            "ValidUntil"
+            "ValidUntil",
+            "RegionReview"
           ],
           "identity": "(tenant, company, check_id)；(company, order_id, order_revision) 当前结论唯一",
           "concurrency": "根 CAS；结论只追加",
@@ -2270,7 +2878,33 @@
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/tradecompliancecheck",
           "pythonSource": "—（Python 未实现）",
-          "notes": "按目的国、买方与收货方所在国、商品与最终用途核查国别禁运、制裁项目与出口管制；AI 与名单服务只产生候选，结论由授权合规人工确定；所用法规与禁运项目来自 POL screening_regulation 启用的来源，版本随核查结论保存。 国家代码取自 PTY 地址（R77），商品管制分类取自 CAT 申报档案（R39）；新的 screening_regulation 修订或新的订单修订由系统 trade_compliance.reopen 开启待核查（PL-14）。"
+          "notes": "按目的国、买方与收货方所在国、商品与最终用途核查国别禁运、制裁项目与出口管制；AI 与名单服务只产生候选，结论由授权合规人工确定；所用法规与禁运项目来自 POL screening_regulation 启用的来源，版本随核查结论保存。 国家代码取自 PTY 地址（R77），商品管制分类取自 CAT 申报档案（R39）；新的 screening_regulation 修订或新的订单修订由系统 trade_compliance.reopen 开启待核查（PL-14）。 S5R：项目名单取自绑定的 screening_regulation 修订的 programmes，评估输入的 programme_lists 废止（过渡期只接受与法规一致的值，D38）；带 regions 的项目生成发现 region_review，由合规人工按收货人地址判断（D15）；embargo 或 sanctions 的适用发现判 clear 须附种类 authorization 的例外依据证据与理由，clear 的有效期不超过例外依据的有效期（D17）；重新评估中的 blocked 结论在新决定前守卫仍答 blocked（D10）。",
+          "eventPayloads": {
+            "TradeComplianceDecided": [
+              "check_id",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "decision_id",
+              "evaluation_id",
+              "conclusion",
+              "license_required",
+              "regulation_id",
+              "regulation_revision",
+              "valid_until"
+            ],
+            "TradeComplianceReopened": [
+              "decision_id",
+              "regulation_id",
+              "regulation_revision",
+              "updated_lists",
+              "check_id",
+              "order_id",
+              "order_revision",
+              "order_hash",
+              "cause"
+            ]
+          }
         },
         {
           "id": "CNX-AGG-ExportLicense",
@@ -2286,7 +2920,9 @@
             "LicensedQuantity",
             "LicensedValue",
             "ValidityInterval",
-            "EndUser"
+            "EndUser",
+            "UsageMode",
+            "CustomsOffice"
           ],
           "identity": "(tenant, company, license_id)",
           "concurrency": "许可证根 FOR UPDATE；用量条件更新",
@@ -2304,7 +2940,39 @@
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/exportlicense",
           "pythonSource": "—（Python 未实现）",
-          "notes": "许可证的数量、金额、有效期、目的国与最终用户；按出运或出口批次分配用量。"
+          "notes": "许可证的数量、金额、有效期、目的国与最终用户；按出运或出口批次分配用量。S5R-D04：登记使用方式（single_use 一批一证：两用物项的法定方式与默认值，只允许一个有效分配、报关后不再分配；multi_use 须附证面依据）与海关关别（一证一关）；一份报关单只用一张许可证，需要两张许可证的出运按许可证分成两个以上出口批次。S5R-D03：export_license.release 的依据 basis 为 external_result 或 local_cancellation。S5R-D40：许可证核对使用出运陈述的最终用户。",
+          "eventPayloads": {
+            "ExportLicenseRegistered": [
+              "license_id",
+              "license_number",
+              "issuer",
+              "destination",
+              "end_user_party_id",
+              "unit",
+              "licensed_quantity",
+              "currency",
+              "licensed_value_minor",
+              "valid_from",
+              "valid_until",
+              "file_id",
+              "file_sha256"
+            ],
+            "ExportLicenseAllocated": [
+              "license_id",
+              "allocation_id",
+              "target_kind",
+              "target_id",
+              "target_version",
+              "attempt",
+              "order_id",
+              "order_revision",
+              "quantity",
+              "unit",
+              "value_minor",
+              "currency",
+              "lines_hash"
+            ]
+          }
         },
         {
           "id": "CNX-AGG-CertificateResult",
@@ -2317,7 +2985,8 @@
             "Issuer",
             "ApplicableObject",
             "Market",
-            "ValidityInterval"
+            "ValidityInterval",
+            "AgreementCode"
           ],
           "identity": "(tenant, company, certificate_id)",
           "concurrency": "只追加；更正形成新版本",
@@ -2332,7 +3001,21 @@
           ],
           "goPackage": "internal/contexts/cnx/internal/domain/certificate",
           "pythonSource": "—（Python 未实现）",
-          "notes": "原产地证、许可证副本、检验证书等官方结果：签发机构、适用对象（SKU 规格、出口批次或出运）、目的市场、有效期与核实人；向 FUL 发布 CertificateResultRef v1（R56）。"
+          "notes": "原产地证（certificate_of_origin）、许可证副本（license_copy）、检验证书（inspection_certificate）与优惠原产地证（preferential_certificate_of_origin，带协定代码与签发机构；子类 origin_declaration 为经核准出口商的原产地声明；S5R-D12）等官方结果：签发机构、适用对象（SKU 规格、出口批次或出运）、目的市场、有效期与核实人；向 FUL 发布 CertificateResultRef v1（R56）。 只登记外部签发的结果，不做优惠原产地判定。S5R-D47：不加撤回命令；机关撤销证书时登记一条更正修订，有效期截止到撤销日并附撤销证据。目的市场供应链合规证据（如棉花溯源）留到 R1。",
+          "eventPayloads": {
+            "CertificateRegistered": [
+              "certificate_id",
+              "revision",
+              "kind",
+              "object_kind",
+              "market",
+              "valid_from",
+              "valid_until",
+              "document_sha256",
+              "object_id",
+              "supersedes"
+            ]
+          }
         }
       ],
       "policies": [
@@ -2340,7 +3023,8 @@
         "CN-R01–CN-R15 由 CNX-INV-003—008 落实；税额与外汇结果不由 Brant 推定（CN-E01）。"
       ],
       "crossBoundary": [
-        "消费 FUL（ExportLotRef v1）、PUR（PurchaseLineRef v1）、STL（FundRecordRef v1）、CAT（DeclarationProfileRef v1）、TRD（SalesOrderRef v1）、PTY（所在国）、POL、EVD；向 TRD、FUL 发布 TradeComplianceGuard，向 FUL 发布 ExportLicenseGuard 与证书结果引用；向 STL 发布退税核准与到账对账引用。"
+        "消费 FUL（ExportLotRef v1）、PUR（PurchaseLineRef v1）、STL（FundRecordRef v1）、CAT（DeclarationProfileRef v1）、TRD（SalesOrderRef v1）、PTY（所在国）、POL、EVD；向 TRD、FUL 发布 TradeComplianceGuard，向 FUL 发布 ExportLicenseGuard 与证书结果引用；向 STL 发布退税核准与到账对账引用。",
+        "向 STL 发布 PurchaseInvoiceRef v1（R55，S5R-D20）；经 internal/reference 读取国别项目与名单（R81，S5R-D34）；经 POL ConfigAt v1 读取时点有效的出口退税政策（S5R-D23）。"
       ],
       "consistency": "单聚合事务；许可证与退税用途按根 FOR UPDATE 串行；贸易合规结论按（订单、订单修订）唯一。",
       "risks": [
@@ -4037,21 +4721,28 @@
           "from": "reserved",
           "command": "credit.consume",
           "to": "consumed",
-          "guard": "系统消费方处理 OrderActivated（PL-12）；占用未过期，订单、修订与金额一致；按事件 ID 去重",
+          "guard": "系统消费方处理 OrderActivated（PL-12）；占用未过期，订单、修订与金额一致；按事件 ID 去重；或 OrderAmended：新修订已有的有效占用（含游离占用：按需要量消耗、差额释放，S5R-D08）",
           "actor": "system"
         },
         {
           "from": "reserved",
           "command": "credit.release",
           "to": "released",
-          "guard": "订单未生效即放弃，或占用到期",
+          "guard": "订单未生效即放弃，或占用到期；或系统消费方处理 OrderClosedUnfulfilled（草稿结束）",
           "actor": "human|system"
         },
         {
           "from": "consumed",
           "command": "credit.release",
           "to": "released",
-          "guard": "系统消费方处理 OrderCancelled、OrderRemainderClosed 或 OrderClosed（PL-13）；按事件 ID 去重",
+          "guard": "系统消费方处理 OrderCancelled、OrderRemainderClosed、OrderClosed 或 OrderClosedUnfulfilled（PL-13）；按事件 ID 去重",
+          "actor": "system"
+        },
+        {
+          "from": "consumed",
+          "command": "credit.release",
+          "to": "released",
+          "guard": "原因 superseded：OrderAmended 生效时上一修订的已消耗占用被释放，新修订由消耗已有占用或承接（来源 carried_over，系统创建的已消耗占用）取得恰一个已消耗占用（S5R-D08）",
           "actor": "system"
         }
       ],
@@ -4087,7 +4778,7 @@
           "from": "pending",
           "command": "trade_compliance.decide",
           "to": "clear",
-          "guard": "授权合规人工；法规与名单版本、有效期",
+          "guard": "授权合规人工；法规与名单版本、有效期；embargo 或 sanctions 的适用发现须附 authorization 种类的例外依据证据与理由，clear 有效期不超过其有效期（INVALID_STATE /args/evidence_ids，S5R-D17）；region_review 发现须人工判断并写理由（S5R-D15）",
           "actor": "human"
         },
         {
@@ -4098,17 +4789,24 @@
           "actor": "human"
         },
         {
+          "from": "pending",
+          "command": "trade_compliance.evaluate",
+          "to": "pending",
+          "guard": "替换当前评估；评估有缺口时不能判 clear（TRADE_COMPLIANCE_EVALUATION_INCOMPLETE）",
+          "actor": "human|ai"
+        },
+        {
           "from": "clear",
           "command": "trade_compliance.reopen",
           "to": "pending",
-          "guard": "新的 screening_regulation 修订发布；结论按订单修订绑定，新订单修订另开待核查（PL-14）",
+          "guard": "系统重开：新的 screening_regulation 修订（PL-15）、国别项目名单更新 programme_updated（PL-16）或结论到期 expired；order_amended 不是转换，而是为新订单修订开启待核查并链接上一修订的核查（PL-14）",
           "actor": "system"
         },
         {
           "from": "blocked",
           "command": "trade_compliance.evaluate",
           "to": "pending",
-          "guard": "事实变化后重新核查（如取得许可证、更换收货方）",
+          "guard": "事实变化后重新核查（如取得许可证、更换收货方）；守卫在新的决定之前仍答 blocked（blocked_under_review，S5R-D10）",
           "actor": "human|ai"
         }
       ],
@@ -4266,7 +4964,7 @@
           "from": "issued",
           "command": "purchase.commitment.cancel",
           "to": "cancelled",
-          "guard": "授权人工、理由与供应商证据；释放分配",
+          "guard": "授权人工、理由与供应商证据；无未核实的交付声明（INVALID_STATE unverified_delivery_pending，S5R-D41）；释放分配",
           "actor": "human"
         },
         {
@@ -4329,7 +5027,7 @@
           "from": "draft",
           "command": "purchase.commitment.change.decide",
           "to": "approved",
-          "guard": "独立于变更编制人与申请人；重算与偏差确认",
+          "guard": "独立于变更的编制人与原承诺申请人；重算与偏差确认；只减少数量的变更不查供应条件有效期，单价沿用当前修订（S5R-D41）",
           "actor": "human"
         },
         {
@@ -4363,6 +5061,52 @@
         "applied": [
           1,
           0
+        ]
+      }
+    },
+    {
+      "id": "SM-PUR-COMMITMENT-DISPOSITION",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "object": "CommitmentDisposition",
+      "states": [
+        "requested",
+        "approved",
+        "rejected"
+      ],
+      "initial": "requested",
+      "terminal": [
+        "approved",
+        "rejected"
+      ],
+      "transitions": [
+        {
+          "from": "requested",
+          "command": "purchase.commitment.disposition.decide",
+          "to": "approved",
+          "guard": "订单审核人，独立于申请人；处置量不超过已核实交付减已出运；return_to_supplier 附退厂证据；写入 DownstreamCommitments v1 的 disposition，不改承诺状态（S5R-D05）",
+          "actor": "human"
+        },
+        {
+          "from": "requested",
+          "command": "purchase.commitment.disposition.decide",
+          "to": "rejected",
+          "guard": "理由必填",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "requested": [
+          0,
+          0
+        ],
+        "approved": [
+          0,
+          1
+        ],
+        "rejected": [
+          0,
+          2
         ]
       }
     },
@@ -4444,14 +5188,14 @@
           "from": "open",
           "command": "allocation_review.settle",
           "to": "settled",
-          "guard": "每项有处置（作废草稿、取消或变更承诺、确认无需处理）与理由",
+          "guard": "每项有处置（draft_voided、commitment_changed、commitment_cancelled、no_action）与理由；一次处置整个复核（S5R-D39）",
           "actor": "human"
         },
         {
           "from": "open",
           "command": "allocation_review.open",
           "to": "superseded",
-          "guard": "更晚的订单修订开启新复核",
+          "guard": "更晚的订单修订开启新复核；复核按（订单、订单修订、原因）唯一（S5R-D39）",
           "actor": "system"
         }
       ],
@@ -4489,7 +5233,7 @@
           "from": "recorded",
           "command": "disposition.decide",
           "to": "disposed",
-          "guard": "不合格量的处置：返工、让步、退回或报废",
+          "guard": "不合格量的处置：返工、让步、退回或报废；让步接收须附客户同意证据，获批让步的数量可放行（S5R-D18）",
           "actor": "human"
         },
         {
@@ -4540,7 +5284,7 @@
           "from": "granted",
           "command": "quality_release.revoke",
           "to": "revoked",
-          "guard": "授权人工与理由；冻结未出运部分；重复撤回无变化（QLT-INV-002）",
+          "guard": "授权人工与理由；锁定放行根后经 FUL ReleaseConsumption v1 读取已出运量，记录冻结量；重复撤回无变化（QLT-INV-002，S5R-D18）",
           "actor": "human"
         },
         {
@@ -4582,7 +5326,7 @@
           "from": "prepared",
           "command": "shipment.confirm",
           "to": "confirmed",
-          "guard": "本范围放行已授予且本事务重查全部守卫；累计不超订单行数量（FUL-INV-001、002、003）",
+          "guard": "本范围放行已授予且本事务重查全部守卫；累计不超订单行数量（FUL-INV-001、002、003）；许可证覆盖可来自出运本身或包含该行的出口批次的分配（S5R-D04）",
           "actor": "human"
         },
         {
@@ -4590,6 +5334,27 @@
           "command": "shipment.cancel",
           "to": "cancelled",
           "guard": "未确认；理由必填",
+          "actor": "human|ai"
+        },
+        {
+          "from": "prepared",
+          "command": "packing.plan",
+          "to": "prepared",
+          "guard": "装箱计划的版本记录，不改状态",
+          "actor": "human|ai"
+        },
+        {
+          "from": "prepared",
+          "command": "packing.record_actual",
+          "to": "prepared",
+          "guard": "实际装箱的版本记录，不改状态",
+          "actor": "human|ai"
+        },
+        {
+          "from": "prepared",
+          "command": "booking.record",
+          "to": "prepared",
+          "guard": "已确认订舱的版本记录，不改状态（S5R-D11：不加订舱状态）",
           "actor": "human|ai"
         }
       ],
@@ -4627,21 +5392,35 @@
           "from": "blocked",
           "command": "commercial_release.evaluate",
           "to": "granted",
-          "guard": "CNX、PTY、PUR、QLT、STL、TRD 守卫均满足",
-          "actor": "human|ai|system"
+          "guard": "CNX、PTY、PUR、QLT、STL、TRD 守卫均满足；B0 不设系统重评估（S5R-D29）",
+          "actor": "human|ai"
         },
         {
           "from": "granted",
           "command": "commercial_release.evaluate",
           "to": "blocked",
           "guard": "重新评估时任一守卫不满足",
-          "actor": "human|ai|system"
+          "actor": "human|ai"
+        },
+        {
+          "from": "blocked",
+          "command": "commercial_release.evaluate",
+          "to": "blocked",
+          "guard": "重新评估仍有守卫不满足：照记评估，版本前进",
+          "actor": "human|ai"
+        },
+        {
+          "from": "granted",
+          "command": "commercial_release.evaluate",
+          "to": "granted",
+          "guard": "重新评估全部守卫满足：照记评估，版本前进",
+          "actor": "human|ai"
         },
         {
           "from": "blocked",
           "command": "commercial_release.grant_exception",
           "to": "granted",
-          "guard": "只覆盖付款条件；授权人工绑定订单、出运、阶段与金额",
+          "guard": "只覆盖付款条件；授权人工绑定订单、出运、阶段与金额；独立于该放行的评估人与订单准备人（S5R-D28）；有效期不超过 credit_policy 的 decision_validity_days（S5R-D09）",
           "actor": "human"
         },
         {
@@ -4693,7 +5472,7 @@
           "from": "draft",
           "command": "shipment_document.issue",
           "to": "issued",
-          "guard": "差异逐项解决或确认；模板与编号经 ConfigGuard 重查（FUL-INV-004、005）",
+          "guard": "差异逐项解决或确认；模板与编号经 ConfigGuard 重查（FUL-INV-004、005）；签发时再查原产地证适用性，未登记的原产地证为可确认差异（S5R-D12）；按出运绑定的订单修订（S5R-D35）",
           "actor": "human"
         },
         {
@@ -4746,14 +5525,14 @@
           "from": "open",
           "command": "shipment_review.settle",
           "to": "settled",
-          "guard": "装箱、订舱与未签发单证逐项处置；已确认出运保留",
+          "guard": "装箱、订舱、未签发单证与未消耗放行逐项处置（shipment_cancelled、replaced、reevaluated、no_action）与理由；已确认出运保留；不加改绑命令（S5R-D39）",
           "actor": "human"
         },
         {
           "from": "open",
           "command": "shipment_review.open",
           "to": "superseded",
-          "guard": "更晚的订单修订开启新复核",
+          "guard": "更晚的订单修订开启新复核；复核按（订单、订单修订、原因）唯一（S5R-D39）",
           "actor": "system"
         }
       ],
@@ -4858,16 +5637,47 @@
       "object": "FundRecord",
       "states": [
         "recorded",
-        "difference_resolved"
+        "difference_resolved",
+        "reversed"
       ],
       "initial": "recorded",
-      "terminal": [],
+      "terminal": [
+        "reversed"
+      ],
       "transitions": [
         {
           "from": "recorded",
           "command": "fund.resolve_difference",
           "to": "difference_resolved",
           "guard": "独立于资金登记人；我方承担的银行费用或折让及依据（STL-INV-006）",
+          "actor": "human"
+        },
+        {
+          "from": "recorded",
+          "command": "fund.reverse",
+          "to": "reversed",
+          "guard": "独立于资金登记人；无有效核销（FUND_RECORD_HAS_APPLICATIONS）；原记录保留，冲销后银行流水键可再用；适用于期初（S5R-D22）",
+          "actor": "human"
+        },
+        {
+          "from": "difference_resolved",
+          "command": "fund.reverse",
+          "to": "reversed",
+          "guard": "同上",
+          "actor": "human"
+        },
+        {
+          "from": "recorded",
+          "command": "fund.verify_payer",
+          "to": "recorded",
+          "guard": "信用经理核实临时第三方付款：独立于资金登记人，附付款委托书或三方协议；之后可核销到客户应收（S5R-D21）",
+          "actor": "human"
+        },
+        {
+          "from": "difference_resolved",
+          "command": "fund.verify_payer",
+          "to": "difference_resolved",
+          "guard": "同上",
           "actor": "human"
         }
       ],
@@ -4879,6 +5689,10 @@
         "difference_resolved": [
           0,
           1
+        ],
+        "reversed": [
+          1,
+          0
         ]
       }
     },
@@ -4889,11 +5703,13 @@
       "object": "Application",
       "states": [
         "applied",
-        "unapplied"
+        "unapplied",
+        "moved"
       ],
       "initial": "applied",
       "terminal": [
-        "unapplied"
+        "unapplied",
+        "moved"
       ],
       "transitions": [
         {
@@ -4901,6 +5717,13 @@
           "command": "application.unapply",
           "to": "unapplied",
           "guard": "授权人工与理由；形成新记录，资金事实保留",
+          "actor": "human"
+        },
+        {
+          "from": "applied",
+          "command": "settlement.confirm",
+          "to": "moved",
+          "guard": "销售结算单确认时阶段核销移到应收，同时形成替代核销与余额（登记的原则 7 例外）",
           "actor": "human"
         }
       ],
@@ -4912,6 +5735,10 @@
         "unapplied": [
           0,
           1
+        ],
+        "moved": [
+          0,
+          2
         ]
       }
     },
@@ -5035,7 +5862,7 @@
           "from": "reviewed",
           "command": "order_result.close",
           "to": "settled",
-          "guard": "关闭条件全部满足；授权人员（STL-INV-011）",
+          "guard": "关闭条件全部满足；授权人员（STL-INV-011）；已取消订单有已确认费用或获批 write_off 处置时以 cancelled 标记关闭，收入为零（S5R-D42）",
           "actor": "human"
         },
         {
@@ -5081,14 +5908,14 @@
           "from": "open",
           "command": "payment_plan_review.settle",
           "to": "settled",
-          "guard": "付款阶段与信用部分的变化逐项处置",
+          "guard": "不再适配的阶段（stage_removed、stage_over_applied）与信用部分变化（credit_portion_changed）逐项处置（accepted、corrected）；仍适配的变化在账户中可见、不列为条目（S5R-D39）",
           "actor": "human"
         },
         {
           "from": "open",
           "command": "payment_plan_review.open",
           "to": "superseded",
-          "guard": "更晚的订单修订开启新复核",
+          "guard": "更晚的订单修订开启新复核；复核按（订单、订单修订）唯一",
           "actor": "system"
         }
       ],
@@ -5122,12 +5949,14 @@
         "released",
         "rejected",
         "amended",
-        "withdrawn"
+        "withdrawn",
+        "not_received"
       ],
       "initial": "draft",
       "terminal": [
         "rejected",
-        "withdrawn"
+        "withdrawn",
+        "not_received"
       ],
       "transitions": [
         {
@@ -5206,6 +6035,69 @@
           "to": "withdrawn",
           "guard": "撤销回执",
           "actor": "human"
+        },
+        {
+          "from": "submitted",
+          "command": "declaration_case.record_receipt",
+          "to": "accepted",
+          "guard": "主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果",
+          "actor": "human"
+        },
+        {
+          "from": "submitted",
+          "command": "declaration_case.record_receipt",
+          "to": "released",
+          "guard": "主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果",
+          "actor": "human"
+        },
+        {
+          "from": "unknown",
+          "command": "declaration_case.record_receipt",
+          "to": "accepted",
+          "guard": "主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果",
+          "actor": "human"
+        },
+        {
+          "from": "unknown",
+          "command": "declaration_case.record_receipt",
+          "to": "released",
+          "guard": "主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果",
+          "actor": "human"
+        },
+        {
+          "from": "received",
+          "command": "declaration_case.record_receipt",
+          "to": "released",
+          "guard": "主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果",
+          "actor": "human"
+        },
+        {
+          "from": "unknown",
+          "command": "declaration_case.record_receipt",
+          "to": "not_received",
+          "guard": "outcome not_received：人工查证并附证据（以海关总署可查询状态为准，如报关数据查询无入库记录或报关行书面确认）与理由；查到海关入库成功或更后状态时只能按回执记录；之后同一出口批次可开启下一次报关尝试（S5R-D13）",
+          "actor": "human"
+        },
+        {
+          "from": "amended",
+          "command": "declaration_case.record_receipt",
+          "to": "amended",
+          "guard": "再次改单回执；引用原项与数量",
+          "actor": "human"
+        },
+        {
+          "from": "amended",
+          "command": "declaration_case.record_receipt",
+          "to": "withdrawn",
+          "guard": "撤销回执",
+          "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "declaration_case.prepare",
+          "to": "draft",
+          "guard": "资料修订形成新的草稿版本",
+          "actor": "human|ai"
         }
       ],
       "layout": {
@@ -5248,6 +6140,10 @@
         "withdrawn": [
           3,
           0
+        ],
+        "not_received": [
+          3,
+          1
         ]
       }
     },
@@ -5279,14 +6175,21 @@
           "from": "imported",
           "command": "purchase_invoice.verify",
           "to": "rejected",
-          "guard": "重复、无效或主体不符",
+          "guard": "重复、无效或主体不符；受票主体与本公司不一致直接拒绝，供应商须重开（S5R-D21）",
           "actor": "human"
         },
         {
           "from": "verified",
           "command": "purchase_invoice.verify",
           "to": "reversed",
-          "guard": "核验红字发票时原票被冲红，相关匹配待复核",
+          "guard": "核验全额红字发票时原票被冲红，相关匹配待复核；被冲蓝票已分配到 submitted 或之后的退税案件时，须先登记进货凭证信息回退（INVALID_STATE，S5R-D20）",
+          "actor": "human"
+        },
+        {
+          "from": "verified",
+          "command": "purchase_invoice.verify",
+          "to": "verified",
+          "guard": "核验部分红字发票：按红票金额冲减蓝票余额，蓝票余额仍可用于退税分配；回退前置条件同上（S5R-D20）",
           "actor": "human"
         }
       ],
@@ -5320,19 +6223,21 @@
         "submitted",
         "approved",
         "received",
-        "rejected"
+        "rejected",
+        "converted_to_exemption"
       ],
       "initial": "expected",
       "terminal": [
         "received",
-        "rejected"
+        "rejected",
+        "converted_to_exemption"
       ],
       "transitions": [
         {
           "from": "expected",
           "command": "tax_refund_case.record_result",
           "to": "planned",
-          "guard": "拟申报；政策版本与专业复核人",
+          "guard": "拟申报；政策版本与专业复核人；planned 之后绑定的政策修订不再变化（S5R-D23）",
           "actor": "human"
         },
         {
@@ -5362,6 +6267,55 @@
           "to": "rejected",
           "guard": "外部不予核准",
           "actor": "human"
+        },
+        {
+          "from": "expected",
+          "command": "tax_refund_case.record_result",
+          "to": "expected",
+          "guard": "记录预计金额或依据说明之一；预计不是核准（S5R-D14）",
+          "actor": "human"
+        },
+        {
+          "from": "expected",
+          "command": "tax_refund_case.rebind_policy",
+          "to": "expected",
+          "guard": "读取显示 policy_superseded：更晚发布、同样覆盖出口日期的修订；税务专员重新绑定并写理由（S5R-D23）",
+          "actor": "human"
+        },
+        {
+          "from": "expected",
+          "command": "tax_refund_case.record_result",
+          "to": "converted_to_exemption",
+          "guard": "未在规定期限内申报：转为免税（export_exemption），附逾期依据（S5R-D14，R1 前实现）",
+          "actor": "human"
+        },
+        {
+          "from": "planned",
+          "command": "tax_refund_case.record_result",
+          "to": "converted_to_exemption",
+          "guard": "同上",
+          "actor": "human"
+        },
+        {
+          "from": "submitted",
+          "command": "tax_refund_case.record_result",
+          "to": "submitted",
+          "guard": "evidence_rolled_back：登记进货凭证信息回退的外部结果并附证据，之后被冲蓝票的红票方可核实（S5R-D20）",
+          "actor": "human"
+        },
+        {
+          "from": "approved",
+          "command": "tax_refund_case.record_result",
+          "to": "approved",
+          "guard": "同上",
+          "actor": "human"
+        },
+        {
+          "from": "received",
+          "command": "tax_refund_case.record_result",
+          "to": "received",
+          "guard": "同上；已到账案件的退税差额经外部对账处理",
+          "actor": "human"
         }
       ],
       "layout": {
@@ -5388,6 +6342,10 @@
         "rejected": [
           1,
           2
+        ],
+        "converted_to_exemption": [
+          2,
+          0
         ]
       }
     },
@@ -5399,11 +6357,13 @@
       "states": [
         "draft",
         "verified",
-        "superseded"
+        "superseded",
+        "discarded"
       ],
       "initial": "draft",
       "terminal": [
-        "superseded"
+        "superseded",
+        "discarded"
       ],
       "transitions": [
         {
@@ -5419,6 +6379,13 @@
           "to": "superseded",
           "guard": "核实更新修订时取代，历史申报快照不变",
           "actor": "human"
+        },
+        {
+          "from": "draft",
+          "command": "declaration_profile.discard_draft",
+          "to": "discarded",
+          "guard": "编辑人或授权专业人工丢弃草稿；已核实修订不撤回，只由更正修订取代（S5R-D47）",
+          "actor": "human"
         }
       ],
       "layout": {
@@ -5433,6 +6400,10 @@
         "superseded": [
           0,
           2
+        ],
+        "discarded": [
+          1,
+          0
         ]
       }
     }
@@ -5470,15 +6441,15 @@
       "id": "POL-INV-001",
       "context": "POL",
       "aggregate": "ConfigurationRoot",
-      "rule": "发布须授权人工且与编制人不同。",
+      "rule": "发布须授权人工且与编制人不同。credit_policy、export_tax_policy、screening_regulation 的发布另需按种类的能力权限 config.publish.credit_policy（信用经理）、config.publish.export_tax_policy（税务专员）、config.publish.screening_regulation（合规），编辑人仍可以是管理员或核价；credit_policy 的 approval_tiers[].level 须是已知岗位模板代码（credit_officer、credit_manager）（S5R-D30）。",
       "enforcement": "领域守卫＋权限",
       "positive": "他人发布成功",
-      "negative": "编制人自发布返回 INDEPENDENT_REVIEW_REQUIRED",
+      "negative": "编制人自发布返回 INDEPENDENT_REVIEW_REQUIRED；管理员发布信用政策返回 PERMISSION_DENIED；未知审批层级返回 INVALID_KNOWN_VALUE",
       "concurrency": "并发发布按 CAS",
-      "errors": "INDEPENDENT_REVIEW_REQUIRED",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED、PERMISSION_DENIED、INVALID_KNOWN_VALUE",
       "pythonEvidence": "tests/test_foundation.py",
       "ulRef": "UL-INV-15",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "POL-INV-002",
@@ -5535,6 +6506,34 @@
       "pythonEvidence": "tests/test_foundation.py",
       "ulRef": "",
       "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "POL-INV-006",
+      "context": "POL",
+      "aggregate": "ConfigurationRoot",
+      "rule": "新修订的字段校验：国别代码采用 kernel 严格校验，只接受正式分配的 ISO 3166-1 alpha-2（S5R-D15）；export_tax_policy 的 refund_method 取 exempt_credit_refund、exempt_refund、exempt、taxable，not_applicable 只保留给旧修订读取（S5R-D14）；trade_terms 的 insurance_percent 可选、默认 110、不低于 110（S5R-D06）；screening_regulation 的 programmes 按 Lists 的辖区与法律确认规则（S5R-D38）。旧修订保持可读、不改写；新字段 omitempty，旧哈希不变。",
+      "enforcement": "领域守卫",
+      "positive": "旧修订用 UK 仍可读",
+      "negative": "新修订用 UK 返回 INVALID_KNOWN_VALUE；新修订用 not_applicable 返回 INVALID_KNOWN_VALUE",
+      "concurrency": "—",
+      "errors": "INVALID_KNOWN_VALUE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
+    },
+    {
+      "id": "POL-INV-007",
+      "context": "POL",
+      "aggregate": "ConfigurationRoot",
+      "rule": "ConfigAt v1 返回某种配置在时点 T 有效的修订（有效期 valid_from 至 valid_until 包含 T，含已被取代的修订），有几条重叠时取最晚发布的一条；修订不可变，查询不加锁（S5R-D23）。",
+      "enforcement": "查询（R50）",
+      "positive": "出口后发布、有效期覆盖出口日期的修订被采用",
+      "negative": "有效期不覆盖时返回 CONFIG_NOT_ACTIVE",
+      "concurrency": "—",
+      "errors": "CONFIG_NOT_ACTIVE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "EVD-INV-001",
@@ -6100,7 +7099,7 @@
       "id": "STL-INV-002",
       "context": "STL",
       "aggregate": "Application",
-      "rule": "核销不超过来源可用余额与目标未结余额；同币种直接核销，跨币种按 STL-INV-007；撤销核销形成新记录，不抹除资金事实。",
+      "rule": "核销不超过来源可用余额与目标未结余额；同币种直接核销，跨币种按 STL-INV-007；撤销核销形成新记录，不抹除资金事实。核销目标为订单付款阶段、结算单应收应付或已确认费用（目标种类 charge，出账资金记录核销到费用，S5R-D19）。",
       "enforcement": "资金记录根与目标根按 ID 排序 FOR UPDATE＋由不可变核销分录派生余额",
       "positive": "预收 200 核销 600 应收后余 400；收 800 分别核销 400＋400（基线 4.6 S-A）",
       "negative": "超过来源可用余额返回 APPLICATION_EXCEEDS_AVAILABLE；超过目标未结返回 APPLICATION_EXCEEDS_OPEN",
@@ -6108,7 +7107,7 @@
       "errors": "APPLICATION_EXCEEDS_AVAILABLE、APPLICATION_EXCEEDS_OPEN",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-22",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "X-INV-001",
@@ -6184,15 +7183,15 @@
       "id": "TRD-INV-019",
       "context": "TRD",
       "aggregate": "SalesOrder",
-      "rule": "生效订单取消须无已确认出运且下游采购承诺与占用已解除或已有获批处置；短交关闭须已有出运、理由与授权；关闭须已确认出运量等于订单量（含获批容差）；三者均保留转换名额与历史。",
+      "rule": "生效订单取消须无已确认出运且下游采购承诺与占用已解除或已有获批处置；短交关闭须已有出运、理由与授权；关闭须已确认出运量等于订单量（含获批容差）；三者均保留转换名额与历史。为已交付未出运货物保留的需求分配视为未处置，除非 PUR 记录了获批处置（S5R-D05）；fulfilled 承诺与不超过已出运量的分配不算未处置。",
       "enforcement": "领域守卫＋FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1 在锁定订单后事务内无锁读取（R70、R71）",
-      "positive": "未出运、无承诺的订单取消",
+      "positive": "未出运、无承诺的订单取消；已交付未出运的承诺行获批处置后取消",
       "negative": "已出运订单取消返回 ORDER_HAS_SHIPMENTS；有未解除承诺返回 DOWNSTREAM_COMMITMENT_OPEN；未出完关闭返回 ORDER_NOT_FULFILLED",
       "concurrency": "取消与出运确认并发：出运先提交则取消拒绝",
       "errors": "ORDER_HAS_SHIPMENTS、DOWNSTREAM_COMMITMENT_OPEN、ORDER_NOT_FULFILLED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-21",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "TRD-INV-020",
@@ -6240,7 +7239,7 @@
       "id": "CAT-INV-002",
       "context": "CAT",
       "aggregate": "DeclarationProfile",
-      "rule": "商品申报档案（商品编码、申报名称与要素、法定单位及换算、原产地依据）按 SKU 规格版本与编码表版本保存，由授权专业人工核实；编码候选（含 AI）不能自动生效；更新不覆盖历史申报快照。",
+      "rule": "商品申报档案（商品编码、申报名称与要素、法定单位及换算、原产地依据）按 SKU 规格版本与编码表版本保存，由授权专业人工核实；编码候选（含 AI）不能自动生效；更新不覆盖历史申报快照。草稿可由编辑人或专业人工丢弃；已核实档案不撤回，只由核实更正修订取代（S5R-D47）。",
       "enforcement": "领域守卫",
       "positive": "SKU 规格 r1 绑定已核实的申报档案 v1",
       "negative": "未核实档案用于报关资料返回 DECLARATION_PROFILE_UNVERIFIED",
@@ -6248,27 +7247,27 @@
       "errors": "DECLARATION_PROFILE_UNVERIFIED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "FUL-INV-002",
       "context": "FUL",
       "aggregate": "CommercialRelease",
-      "rule": "出运确认与单证放行（正本提单、电放）须同时满足：有效质量放行（QLT 守卫）、合同付款条件满足（STL 守卫）、主体筛查 clear（PTY 守卫）、贸易合规 clear 且需要时已分配许可证（CNX 守卫）；任一不满足进入等待；付款条件例外须授权人工批准，绑定订单、出运、规则与金额；贸易合规 blocked 不能被例外覆盖。",
+      "rule": "出运确认与单证放行（正本提单、电放）须同时满足：有效质量放行（QLT 守卫）、合同付款条件满足（STL 守卫）、主体筛查 clear（PTY 守卫）、贸易合规 clear 且需要时已分配许可证（CNX 守卫）；任一不满足进入等待；付款条件例外须授权人工批准，绑定订单、出运、规则与金额；贸易合规 blocked 不能被例外覆盖。付款条件例外独立于该放行的评估人，有效期不超过订单所绑定公司当时有效的 credit_policy 的 decision_validity_days（S5R-D09、D28）。已确认出运的单证放行：付款条件按订单当前修订（S5-D36）；交易方筛查任何非 clear 都阻止，含筛查过期、名单新版本与主体修订（S5R-D10）；贸易合规在确认修订与当前修订上为 blocked 时阻止，pending 若最近决定为 blocked 也阻止（S5-D37、S5R-D10）；质量、许可证与货物事实保持确认时的判定；已取消订单不放行，已关闭订单可放行；生效批准被撤销仍拒绝。",
       "enforcement": "上游守卫（QLT、STL、PTY）",
       "positive": "质量放行、尾款到账、筛查 clear 后出运并放单",
-      "negative": "尾款未到账返回 COMMERCIAL_RELEASE_BLOCKED；放行撤回后出运返回 QUALITY_RELEASE_REQUIRED",
+      "negative": "尾款未到账返回 COMMERCIAL_RELEASE_BLOCKED；放行撤回后出运返回 QUALITY_RELEASE_REQUIRED；blocked 结论重新评估中放单返回 TRADE_COMPLIANCE_NOT_CLEAR；评估人自批例外返回 INDEPENDENT_REVIEW_REQUIRED；例外有效期超出政策天数返回 INVALID_KNOWN_VALUE",
       "concurrency": "核销撤销与放单并发按锁序裁决",
-      "errors": "COMMERCIAL_RELEASE_BLOCKED、QUALITY_RELEASE_REQUIRED、PARTY_SCREENING_NOT_CLEAR、TRADE_COMPLIANCE_NOT_CLEAR、EXPORT_LICENSE_REQUIRED",
+      "errors": "COMMERCIAL_RELEASE_BLOCKED、QUALITY_RELEASE_REQUIRED、PARTY_SCREENING_NOT_CLEAR、TRADE_COMPLIANCE_NOT_CLEAR、EXPORT_LICENSE_REQUIRED、INDEPENDENT_REVIEW_REQUIRED、INVALID_KNOWN_VALUE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-28",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-003",
       "context": "STL",
       "aggregate": "Application",
-      "rule": "付款条件满足为派生判断：按订单付款阶段与已核销到账金额（原币，未解释差额不计）判定；撤销核销、退款或退汇后重新判定；以守卫函数 PaymentConditionGuard 向 FUL 发布。 付款阶段取订单当前修订（OrderCommercialSnapshot v1）；scope shipment 要求订单确认时与出运前到期的阶段满足，scope documents 另要求单证控制的出运后阶段满足（S5 D-5）。",
+      "rule": "付款条件满足为派生判断：按订单付款阶段与已核销到账金额（原币，未解释差额不计）判定；撤销核销、退款或退汇后重新判定；以守卫函数 PaymentConditionGuard 向 FUL 发布。 付款阶段取订单当前修订（OrderCommercialSnapshot v1）；scope shipment 要求订单确认时与出运前到期的阶段满足，scope documents 另要求单证控制的出运后阶段满足（S5 D-5）。付款阶段只按日历日计算，不支持工作日（S5R-D46）。",
       "enforcement": "派生查询＋守卫函数",
       "positive": "出运前 70% 尾款 672.00 已到账并核销",
       "negative": "到账 670.00 且差额未解释：不满足",
@@ -6276,7 +7275,7 @@
       "errors": "COMMERCIAL_RELEASE_BLOCKED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-28",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "TRD-INV-022",
@@ -6310,21 +7309,21 @@
       "id": "STL-INV-004",
       "context": "STL",
       "aggregate": "CustomerCredit",
-      "rule": "信用占用在客户信用根事务中裁决：未结业务应收＋有效占用＋本次占用 ≤ 当前有效额度（额度币种；跨币种须有 credit 用途的显式汇率），且最早逾期应收不超过 POL credit_policy 的容忍天数；任一不满足时生成信用决定，放行前不形成占用；新客户默认额度为 0；占用带到期时间，过期视为释放；取消、关闭或结清后释放。",
+      "rule": "信用占用在客户信用根事务中裁决：未结业务应收＋有效占用＋本次占用 ≤ 当前有效额度（额度币种；跨币种须有 credit 用途的显式汇率），且最早逾期应收不超过 POL credit_policy 的容忍天数；任一不满足时生成信用决定，放行前不形成占用；新客户默认额度为 0；占用带到期时间，过期视为释放；取消、关闭或结清后释放。敞口中不同币种的应收（含期初）按 POL fx_rate 中用途为 credit 的汇率折算（S5R-D22）；订单修订生效时占用调整为新修订的信用部分：消耗新修订已有的有效占用或承接上一修订的占用，上一修订的已消耗占用以 superseded 释放，当前修订恰有一个已消耗占用（S5R-D08）。",
       "enforcement": "领域守卫＋根 FOR UPDATE",
-      "positive": "额度 10,000、未结 5,000、占用 4,000 成功",
+      "positive": "额度 10,000、未结 5,000、占用 4,000 成功；SIM-02：订单减到 8,280.00 后敞口按新信用部分计入",
       "negative": "未结 7,000 时占用 4,000 生成信用决定且不形成占用；最早逾期 45 天超过容忍 30 天返回 CREDIT_OVERDUE_EXCEEDED；跨币种无 credit 汇率返回 FX_SCOPE_MISMATCH",
-      "concurrency": "两笔并发占用合计超额时只有一笔成功",
+      "concurrency": "两笔并发占用合计超额时只有一笔成功；修订调整与人工 credit.release 并发按信用根锁裁决；乱序事件（先到后一修订）幂等",
       "errors": "CREDIT_LIMIT_EXCEEDED、CREDIT_OVERDUE_EXCEEDED、FX_SCOPE_MISMATCH",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-30",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "PUR-INV-008",
       "context": "PUR",
       "aggregate": "SupplierDelivery",
-      "rule": "直发路线的供应商交付按采购承诺行登记数量、交接地点与时间、证据；供应商上报只是声明，经授权人工核实后才计入采购结算与出运来源；同一承诺行累计核实交付量不超过承诺量加获批容差。",
+      "rule": "直发路线的供应商交付按采购承诺行登记数量、交接地点与时间、证据；供应商上报只是声明，经授权人工核实后才计入采购结算与出运来源；同一承诺行累计核实交付量不超过承诺量加承诺裁决中批准的超采量（S5 无另外的容差配置，S5-D19）。",
       "enforcement": "领域守卫",
       "positive": "承诺 120 件，核实交付 100 件",
       "negative": "累计核实超出承诺与容差返回 SUPPLIER_DELIVERY_EXCEEDED；未核实上报不能被出运引用",
@@ -6352,35 +7351,35 @@
       "id": "CNX-INV-001",
       "context": "CNX",
       "aggregate": "TradeComplianceCheck",
-      "rule": "贸易合规核查按订单修订记录目的国、买方与收货方所在国、商品管制分类与最终用途，以及所用法规与名单版本；结论 clear／blocked／pending 由授权合规人工确定，带有效期；订单变更改动目的国、交易方或商品，或法规版本更新时，结论对新修订不适用、须重新核查；blocked 不能由业务审批覆盖。",
+      "rule": "贸易合规核查按订单修订记录目的国、买方与收货方所在国、商品管制分类与最终用途，以及所用法规与名单版本；项目名单取自绑定的 screening_regulation 修订的 programmes（S5R-D38）；结论 clear／blocked／pending 由授权合规人工确定，带有效期；每个 OrderAmended 都为新修订开启待核查（按修订绑定），法规版本更新时重开；blocked 不能由业务审批覆盖，重新评估中的 blocked 在新决定前仍按 blocked 回答（S5R-D10）。带区域（ISO 3166-2）的项目生成发现 region_review，由合规人工按收货人地址判断（S5R-D15）。embargo 或 sanctions 的适用发现判 clear 须附例外依据（许可证、豁免或主管机关批复的 EVD 来源，种类 authorization）并写理由，clear 有效期不超过例外依据的有效期；arms_embargo 与 export_control 的适用发现判 clear 须附理由与说明货物不受控的证据（S5R-D17）。",
       "enforcement": "领域守卫",
-      "positive": "版本 v5 下核查 clear，有效期内",
-      "negative": "AI 或 system 身份确定结论返回 PERMISSION_DENIED；变更后的订单修订沿用旧结论返回 TRADE_COMPLIANCE_NOT_CLEAR",
+      "positive": "版本 v5 下核查 clear，有效期内；有许可证证据的禁运命中可 clear，有效期被封顶",
+      "negative": "AI 或 system 身份确定结论返回 PERMISSION_DENIED；变更后的订单修订沿用旧结论返回 TRADE_COMPLIANCE_NOT_CLEAR；embargo 命中无授权证据判 clear 返回 INVALID_STATE；评估有缺口判 clear 返回 TRADE_COMPLIANCE_EVALUATION_INCOMPLETE",
       "concurrency": "—",
-      "errors": "PERMISSION_DENIED、TRADE_COMPLIANCE_NOT_CLEAR",
+      "errors": "PERMISSION_DENIED、TRADE_COMPLIANCE_NOT_CLEAR、INVALID_STATE、TRADE_COMPLIANCE_EVALUATION_INCOMPLETE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-31",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "CNX-INV-002",
       "context": "CNX",
       "aggregate": "ExportLicense",
-      "rule": "需要许可证的出运须分配有效许可证：目的国与最终用户一致、在有效期内，累计分配数量与金额不超过许可额度；报关改单或撤销按外部结果释放用量，不凭本地取消恢复。",
+      "rule": "需要许可证的出运须分配有效许可证：目的国与最终用户一致（最终用户取出运陈述的 end_user_party，缺省按收货人、再按客户推导；S5R-D40）、在有效期内，累计分配数量与金额不超过许可额度；一份报关单只用一张许可证，需要两张许可证的出运按许可证分成出口批次，出运的每一行由出运本身或包含该行的出口批次的分配覆盖；许可证登记使用方式（single_use 一批一证，两用物项的法定方式与默认值：只允许一个有效分配、报关后不能再分配；multi_use 须附证面依据）与海关关别（一证一关，报关案件的申报海关须一致）（S5R-D04）；报关改单或撤销按外部结果释放用量，不凭本地取消恢复已申报用量；分配的目标在 FUL 中已取消、且 CNX 中没有覆盖该目标的已提交或之后状态的报关案件时，单证岗位人工可附理由以 basis local_cancellation 释放全部未消耗用量（S5R-D03）。",
       "enforcement": "领域守卫＋许可证根 FOR UPDATE",
-      "positive": "许可 1,000 件，分配 600＋400",
-      "negative": "再分配 1 件返回 EXPORT_LICENSE_EXCEEDED；过期返回 EXPORT_LICENSE_EXPIRED；需要许可证而未分配返回 EXPORT_LICENSE_REQUIRED",
+      "positive": "multi_use 许可 1,000 件，分配 600＋400；两证两批次的出运可确认；未报关即取消的出运凭人工释放分配",
+      "negative": "再分配 1 件返回 EXPORT_LICENSE_EXCEEDED；过期返回 EXPORT_LICENSE_EXPIRED；需要许可证而未分配返回 EXPORT_LICENSE_REQUIRED；缺一个批次的分配返回 EXPORT_LICENSE_REQUIRED；single_use 许可证第二次分配返回 INVALID_STATE；已提交报关时 local_cancellation 释放返回 INVALID_STATE；申报海关不符返回 INVALID_KNOWN_VALUE；最终用户不一致返回 EXPORT_LICENSE_EXPIRED",
       "concurrency": "两笔并发分配合计超额时只有一笔成功",
-      "errors": "EXPORT_LICENSE_EXCEEDED、EXPORT_LICENSE_EXPIRED、EXPORT_LICENSE_REQUIRED",
+      "errors": "EXPORT_LICENSE_EXCEEDED、EXPORT_LICENSE_EXPIRED、EXPORT_LICENSE_REQUIRED、INVALID_STATE、INVALID_KNOWN_VALUE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-31",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-005",
       "context": "STL",
       "aggregate": "CustomerCredit",
-      "rule": "信用决定与额度申请按 POL credit_policy 的审批层级裁决：审批人须具备覆盖超额金额（或申请额度）的层级权限，且不是该客户的销售经办或申请人；超过最高层级阈值须两名审批人；决定绑定订单、金额、原因与有效期，过期后须重新申请；额度版本保存额度来源（内部评估或中信保限额）与有效期。",
+      "rule": "信用决定与额度申请按 POL credit_policy 的审批层级裁决：审批人须具备覆盖超额金额（或申请额度）的层级权限，且不是该客户的销售经办或申请人；超过最高层级阈值须两名审批人；决定绑定订单、金额、原因与有效期，过期后须重新申请；额度版本保存额度来源（内部评估或中信保限额）与有效期。B0 不设客户与销售经办的指派：“不是该客户的销售经办”近似为“不是申请人，且不持销售经办模板”，在模板禁止组合下与精确规则效果相同；客户归属在 CRM 或 PTY 指派上线时（R1）接入（S5R-D31）。审批层级须是已知岗位模板代码（S5R-D30）。",
       "enforcement": "领域守卫＋授权策略",
       "positive": "超额 3,000 由信用经理放行（层级上限 5,000）",
       "negative": "信用专员放行超额 3,000（层级上限 1,000）返回 CREDIT_DECISION_NOT_AUTHORIZED；销售经办自行放行返回 CREDIT_DECISION_NOT_AUTHORIZED",
@@ -6388,7 +7387,7 @@
       "errors": "CREDIT_DECISION_NOT_AUTHORIZED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-30",
-      "status": "ACCEPTED（模拟评审）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "TSK-INV-003",
@@ -6478,7 +7477,7 @@
       "id": "PUR-INV-009",
       "context": "PUR",
       "aggregate": "PurchaseCommitment",
-      "rule": "采购承诺裁决须为独立人工（非草稿编制人与申请人），在承诺根与需求分配根锁定后重查订单、供应条件、主体、规格与配置守卫，按当前数据重算草稿并逐字段一致；审批有效期带时区、晚于裁决且不晚于草稿供应有效截止；与核价来源不同、成本差额为正、币种不可比或含超采时须偏差确认理由。",
+      "rule": "采购承诺裁决须为独立人工（非草稿编制人与申请人），在承诺根与需求分配根锁定后重查订单、供应条件、主体、规格与配置守卫，按当前数据重算草稿并逐字段一致；审批有效期带时区、晚于裁决且不晚于草稿供应有效截止；与核价来源不同、成本差额为正、币种不可比或含超采时须偏差确认理由。只减少数量（含整行降为零）的变更不查供应条件有效期，单价沿用当前修订；增加数量或改价仍须有效的已核实供应条件（S5R-D41）。",
       "enforcement": "领域守卫＋上游守卫（ADR-BR-004 方案 B）",
       "positive": "独立审核人重算一致并批准 600.00 草稿",
       "negative": "自审返回 INDEPENDENT_REVIEW_REQUIRED；AI 返回 PERMISSION_DENIED；重算不一致返回 PURCHASE_DRAFT_STALE；偏差无理由返回 PURCHASE_DEVIATION_UNACKNOWLEDGED；供应条件被替代返回 SUPPLY_CONDITION_NOT_CURRENT；订单审批撤销返回 ORDER_APPROVAL_REVOKED",
@@ -6486,7 +7485,7 @@
       "errors": "INDEPENDENT_REVIEW_REQUIRED、PERMISSION_DENIED、PURCHASE_DRAFT_STALE、PURCHASE_DEVIATION_UNACKNOWLEDGED、SUPPLY_CONDITION_NOT_CURRENT、SUPPLY_CONDITION_EXPIRED、ORDER_APPROVAL_REVOKED",
       "pythonEvidence": "v050/docs/T04_A46_PURCHASE_DRAFT_REPORT_V0.1.md A47 设计（未实现）",
       "ulRef": "UL-INV-20",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "PUR-INV-010",
@@ -6506,85 +7505,113 @@
       "id": "PUR-INV-011",
       "context": "PUR",
       "aggregate": "PurchaseCommitment",
-      "rule": "发出后的交期、数量或价格变更经变更编制、独立裁决（重算与偏差确认同 PUR-INV-009）与应用形成承诺新修订，须供应商重新确认；增量受需求分配余额约束；取消须授权人工、理由与供应商证据并释放分配；已核实交付量不被变更或取消抹去。",
+      "rule": "发出后的交期、数量或价格变更经变更编制、独立裁决（重算与偏差确认同 PUR-INV-009）与应用形成承诺新修订，须供应商重新确认；增量受需求分配余额约束；取消须授权人工、理由与供应商证据并释放分配；已核实交付量不被变更或取消抹去。承诺有未核实的交付声明（recorded）时取消被拒，须先核实或驳回该声明（S5R-D41）。",
       "enforcement": "领域守卫＋承诺根与需求分配根 FOR UPDATE",
       "positive": "供应商确认交期延后 5 天的变更被独立裁决并应用",
-      "negative": "绑定旧承诺修订的变更应用返回 PURCHASE_COMMITMENT_CHANGE_STALE；增量超过分配余额返回 PURCHASE_ALLOCATION_EXCEEDED；减至低于已核实交付量返回 SUPPLIER_DELIVERY_EXCEEDED",
+      "negative": "绑定旧承诺修订的变更应用返回 PURCHASE_COMMITMENT_CHANGE_STALE；增量超过分配余额返回 PURCHASE_ALLOCATION_EXCEEDED；减至低于已核实交付量返回 SUPPLIER_DELIVERY_EXCEEDED；有未核实声明时取消返回 INVALID_STATE",
       "concurrency": "两个变更同时应用只有一个成功",
-      "errors": "PURCHASE_COMMITMENT_CHANGE_STALE、PURCHASE_ALLOCATION_EXCEEDED、SUPPLIER_DELIVERY_EXCEEDED、INDEPENDENT_REVIEW_REQUIRED",
+      "errors": "PURCHASE_COMMITMENT_CHANGE_STALE、PURCHASE_ALLOCATION_EXCEEDED、SUPPLIER_DELIVERY_EXCEEDED、INDEPENDENT_REVIEW_REQUIRED、INVALID_STATE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-20",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
+    },
+    {
+      "id": "PUR-INV-012",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "rule": "承诺行的单位等于订单行的单位；B0 不支持采购单位换算（S5R-D41）。",
+      "enforcement": "领域守卫",
+      "positive": "订单行与承诺行同为 PCS",
+      "negative": "单位不同的草稿返回 UNIT_SCOPE_MISMATCH",
+      "concurrency": "—",
+      "errors": "UNIT_SCOPE_MISMATCH",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
+    },
+    {
+      "id": "PUR-INV-013",
+      "context": "PUR",
+      "aggregate": "PurchaseCommitment",
+      "rule": "已核实交付但未出运的承诺行数量可申请获批处置：return_to_supplier（退回工厂，附证据）、write_off（我方承担，进入订单经营结果的沉没成本）或 hold_for_reuse（转作后续订单使用，STK 启用前只记录）；由订单审核人独立于申请人批准；处置量不超过已核实交付减已出运量；批准后写入 DownstreamCommitments v1 的 disposition，不改承诺状态（S5R-D05）。",
+      "enforcement": "领域守卫＋承诺根 FOR UPDATE",
+      "positive": "已交付未出运的订单在获批处置后可取消",
+      "negative": "未获批时取消订单返回 DOWNSTREAM_COMMITMENT_OPEN；申请人自批返回 INDEPENDENT_REVIEW_REQUIRED；AI 申请返回 PERMISSION_DENIED",
+      "concurrency": "处置批准与出运确认并发按锁序裁决",
+      "errors": "DOWNSTREAM_COMMITMENT_OPEN、INDEPENDENT_REVIEW_REQUIRED、PERMISSION_DENIED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "QLT-INV-001",
       "context": "QLT",
       "aggregate": "QualityRelease",
-      "rule": "质量放行由我方授权质检人员决定，数量不超过受检对象有效检验的合格量减已放行量；外部检验报告只是证据；复检取代原结果，不累加合格量；放行绑定受检对象、规格版本与有效期。",
+      "rule": "质量放行由我方授权质检人员决定，数量不超过受检对象有效检验的合格量加获批让步量减已放行量；被撤回的放行只按撤回时记录的已出运量计入（S5R-D18）；外部检验报告只是证据；复检取代原结果，不累加合格量；放行绑定受检对象、规格版本与有效期；让步数量的放行带 concession 标记，让步须附客户同意证据（S5R-D18）。",
       "enforcement": "领域守卫",
-      "positive": "外部机构报告 120 件合格后由我方质检放行 120 件",
-      "negative": "放行超过合格量返回 QUALITY_RELEASE_EXCEEDS_CONFORMING；AI 或 system 放行返回 PERMISSION_DENIED",
+      "positive": "外部机构报告 120 件合格后由我方质检放行 120 件；BT21 冻结 24 件复检后再放行；获批让步数量可放行",
+      "negative": "放行超过合格量返回 QUALITY_RELEASE_EXCEEDS_CONFORMING；AI 或 system 放行返回 PERMISSION_DENIED；冻结量未复检再放行返回 QUALITY_RELEASE_EXCEEDS_CONFORMING",
       "concurrency": "—",
       "errors": "QUALITY_RELEASE_EXCEEDS_CONFORMING、PERMISSION_DENIED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "QLT-INV-002",
       "context": "QLT",
       "aggregate": "QualityRelease",
-      "rule": "撤回放行冻结未出运部分，已出运部分保留并另行处置；重复撤回不重复扣量；撤回只锁放行行 FOR UPDATE，FUL 以守卫读取。",
+      "rule": "撤回放行冻结未出运部分，已出运部分保留并另行处置；撤回锁定放行根后经 FUL ReleaseConsumption v1 读取已出运量，记录冻结量＝放行量－已出运量；FUL 的 shipment.confirm 以 FOR SHARE 调用 QLT 守卫，与撤回串行；冻结量须复检（inspection.record 带 supersedes，重述合格量）后才能再放行；重复撤回不重复扣量（S5R-D18）。",
       "enforcement": "领域守卫＋放行根 FOR UPDATE",
       "positive": "放行 200、出运 100 后撤回，剩余 100 冻结（BT21）",
       "negative": "撤回后出运返回 QUALITY_RELEASE_REQUIRED",
-      "concurrency": "撤回与出运确认并发按锁序裁决",
+      "concurrency": "撤回与出运确认并发按锁序裁决（放行根 FOR UPDATE 与守卫 FOR SHARE）",
       "errors": "QUALITY_RELEASE_REQUIRED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "FUL-INV-004",
       "context": "FUL",
       "aggregate": "ShipmentDocumentSet",
-      "rule": "商业发票、装箱单、提单记录与原产地证引用逐版本保存，并与订单行、出运行与包装行逐项核对（SKU、数量、单位、单价、金额、箱数、重量、收货人、通知方、唛头、港口）；差异逐项解决或确认后才能签发；签发版本不可变，变更形成新版本。",
+      "rule": "商业发票、装箱单、提单记录与原产地证引用逐版本保存，并与订单行、出运行与包装行逐项核对（SKU、数量、单位、单价、金额、箱数、重量、收货人、通知方、唛头、港口）；差异逐项解决或确认后才能签发；签发版本不可变，变更形成新版本。签发时再查一次原产地证适用性，过期或不再覆盖为必须解决的差异；未引用 CNX 证书结果的原产地证为可确认差异 co_not_registered（S5R-D12）；条款按出运绑定的订单修订（S5R-D35）；通知方取订单绑定的 notify 地址角色并核对（S5R-D40）。",
       "enforcement": "领域守卫＋POL ConfigGuard 与 NumberIssue（R49）",
       "positive": "四行 120 件商业发票与装箱单一致后签发",
-      "negative": "装箱单箱数合计与发票数量不一致未确认返回 SHIPMENT_DOCUMENTS_UNRECONCILED",
+      "negative": "装箱单箱数合计与发票数量不一致未确认返回 SHIPMENT_DOCUMENTS_UNRECONCILED；准备后证书过期，签发返回 SHIPMENT_DOCUMENTS_UNRECONCILED",
       "concurrency": "—",
       "errors": "SHIPMENT_DOCUMENTS_UNRECONCILED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "FUL-INV-005",
       "context": "FUL",
       "aggregate": "ShipmentDocumentSet",
-      "rule": "CIF／CIP 出运须有保险单记录：保险服务方、保单号、险别、币种、投保金额不低于合同比例（默认 110%）乘发票金额（HALF_UP）；保险费与核价保险费组件的差异显示但不阻断。",
+      "rule": "CIF／CIP 出运须有保险单记录：保险服务方、保单号、险别、币种、投保金额不低于合同比例乘发票金额（HALF_UP）；合同比例取订单绑定的 POL trade_terms 的 insurance_percent（默认 110，下限 110），单证员可在合同比例之上另报更高比例，不得低于合同比例；缺少保险单是缺少必需单证，作为必须解决的差异；险别核对：CIP 默认须 ICC(A) 或同等，CIF 最低 ICC(C)，合同另有约定时以合同为准，不符为可确认差异；保险费与核价保险费组件按整单同币种比较，只显示不阻断，部分出运时显示已出运比例；保单日期晚于装船日按 UCP 600 第 28 条 e 款处理（S5R-D06）。",
       "enforcement": "领域守卫",
       "positive": "CIF 汉堡 7,820.00 投保 8,602.00",
-      "negative": "投保金额不足或缺少保险单返回 INSURANCE_COVERAGE_INSUFFICIENT",
+      "negative": "投保金额不足返回 INSURANCE_COVERAGE_INSUFFICIENT；缺少保险单时签发返回 SHIPMENT_DOCUMENTS_UNRECONCILED；合同比例 120 % 时 115 % 的保单不足",
       "concurrency": "—",
-      "errors": "INSURANCE_COVERAGE_INSUFFICIENT",
+      "errors": "INSURANCE_COVERAGE_INSUFFICIENT、SHIPMENT_DOCUMENTS_UNRECONCILED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-006",
       "context": "STL",
       "aggregate": "FundRecord",
-      "rule": "资金记录分别保存客户汇出额、银行原币入账、银行费用与付款方，须银行凭据；未解释差额不计入付款条件与核销，经独立批准登记为我方承担的费用或折让；结汇是资金转换，不新增客户收款；付款方不符、退汇与非货款先待核实。",
+      "rule": "资金记录分别保存客户汇出额、银行原币入账、银行费用与付款方，须银行凭据；未解释差额不计入付款条件与核销，经独立批准登记为我方承担的费用或折让；结汇是资金转换，不新增客户收款；付款方不符、退汇与非货款先待核实。来自交易档案许可付款人的收款不是主体不一致；临时第三方付款经 fund.verify_payer 核实（信用经理，独立于资金登记人，附付款委托书或三方协议）后可核销到客户应收（S5R-D21）。",
       "enforcement": "领域守卫",
-      "positive": "到账 670.00、差额 2.00 经批准为我方银行费用后，阶段满足 672.00",
-      "negative": "未解释差额按足额核销返回 FUND_DIFFERENCE_UNEXPLAINED；付款方与客户不一致返回 PARTY_ENTITY_MISMATCH",
+      "positive": "到账 670.00、差额 2.00 经批准为我方银行费用后，阶段满足 672.00；许可付款人的收款可核销；临时第三方付款核实后可核销",
+      "negative": "未解释差额按足额核销返回 FUND_DIFFERENCE_UNEXPLAINED；付款方与客户不一致返回 PARTY_ENTITY_MISMATCH；登记人自核实返回 INDEPENDENT_REVIEW_REQUIRED",
       "concurrency": "—",
-      "errors": "FUND_DIFFERENCE_UNEXPLAINED、PARTY_ENTITY_MISMATCH",
+      "errors": "FUND_DIFFERENCE_UNEXPLAINED、PARTY_ENTITY_MISMATCH、INDEPENDENT_REVIEW_REQUIRED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-22",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-007",
@@ -6604,21 +7631,21 @@
       "id": "STL-INV-008",
       "context": "STL",
       "aggregate": "SettlementStatement",
-      "rule": "贷项由申请与独立确认形成，绑定订单、结算单、类型（价格折让、退货、索赔）、金额与依据；确认后的贷项作为核销来源冲减应收；贷项不改写出运数量，不自动退款，不自动调整退税资料。",
+      "rule": "贷项由申请与独立确认形成，绑定结算单、订单（期初结算单的贷项不绑定订单、不进经营结果，只冲减期初应收，S5R-D22）、类型（价格折让、退货、索赔）、金额与依据；确认后的贷项作为核销来源冲减应收；贷项不改写出运数量，不自动退款，不自动调整退税资料。结算单带税额时贷项按净额与税额比例拆分（HALF_UP，各自一次；R1 前，S5R-D46）。",
       "enforcement": "领域守卫＋独立性",
-      "positive": "折让 100.00 经信用经理确认后冲减应收",
+      "positive": "折让 100.00 经信用经理确认后冲减应收；期初应收开贷项",
       "negative": "申请人自行确认返回 INDEPENDENT_REVIEW_REQUIRED；贷项超过应收未结返回 APPLICATION_EXCEEDS_OPEN",
       "concurrency": "—",
       "errors": "INDEPENDENT_REVIEW_REQUIRED、APPLICATION_EXCEEDS_OPEN",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-009",
       "context": "STL",
       "aggregate": "SettlementStatement",
-      "rule": "结算单冲销须无有效核销并经授权人工，独立于确认人；冲销恢复来源明细的可结算状态，原单与冲销记录均保留。",
+      "rule": "结算单冲销须无有效核销并经授权人工，独立于确认人；冲销恢复来源明细的可结算状态，原单与冲销记录均保留。交付更正后的差额先冲销原采购结算单、再按更正后的交付重新结算，不加补差结算单（S5R-D46）。",
       "enforcement": "领域守卫",
       "positive": "错误结算单冲销后按正确价格重新结算",
       "negative": "已有核销的结算单冲销返回 SETTLEMENT_HAS_APPLICATIONS",
@@ -6626,91 +7653,119 @@
       "errors": "SETTLEMENT_HAS_APPLICATIONS、INDEPENDENT_REVIEW_REQUIRED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-23",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-010",
       "context": "STL",
       "aggregate": "Charge",
-      "rule": "费用标明来源、受益订单或出运、费用类别、币种、换算依据与状态（估算、待确认、已确认）；分配权重有数据依据、全部非负且合计大于零，按最小币值最大余数法分配，余数相同按稳定行 ID；负向调整先按绝对值分配再恢复符号；同一费用只归集一次。",
+      "rule": "费用标明来源、受益订单或出运、费用类别、币种、换算依据与状态（估算、待确认、已确认）；分配权重有数据依据、全部非负且合计大于零，按最小币值最大余数法分配，余数相同按稳定行 ID；负向调整先按绝对值分配再恢复符号；同一费用只归集一次。费用带成本组件 cost_component（pre_carriage、export_clearance、main_carriage、insurance、other）；费用承担随订单绑定的 Incoterm：FCA、FOB、EXW 下主运费由买方承担，不进入我方报价成本与订单直接费用，main_carriage 被拒，除非标为 recharged（我方代垫、向买方收回，不进经营结果，R1）；交货前的费用由我方承担并计入（S5R-D24）；费用的已付状态由核销派生（S5R-D19）。",
       "enforcement": "领域守卫",
       "positive": "实际运费 650 按 60／40 数量分配为 390＋260（基线 4.6）",
-      "negative": "权重合计为零返回 ALLOCATION_INVALID",
+      "negative": "权重合计为零返回 ALLOCATION_INVALID；FCA 订单记录主运费返回 INVALID_KNOWN_VALUE",
       "concurrency": "—",
-      "errors": "ALLOCATION_INVALID",
+      "errors": "ALLOCATION_INVALID、INVALID_KNOWN_VALUE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-011",
       "context": "STL",
       "aggregate": "OrderResult",
-      "rule": "订单经营结果 settled 须履约完成或批准短交关闭、业务应收应付结清或有批准处置、相关直接费用与采购成本已确认、无未决退货索赔，并由授权人员关闭；关闭快照不被覆盖，后续补录须重新打开并留痕。",
+      "rule": "订单经营结果 settled 须履约完成或批准短交关闭、业务应收应付结清或有批准处置、相关直接费用与采购成本已确认、无未决退货索赔，并由授权人员关闭；关闭快照不被覆盖，后续补录须重新打开并留痕。业务结算汇差按实际结汇汇率（复核时已有结汇记录的部分，按金额加权），未结汇部分按核销日 POL settlement 汇率并标 unrealized；关闭后的结汇不重开结果；净现金＝已核销收款－已核销采购付款－已核销费用付款，未经 STL 支付的费用列为未付（S5R-D19）。已取消订单有已确认费用或获批 write_off 处置时可关闭为 settled 并带 cancelled 标记，收入为零、成本为沉没成本；无费用的取消订单不生成经营结果（S5R-D42）。这不是会计汇兑损益。",
       "enforcement": "领域守卫",
-      "positive": "出运结清、费用确认后关闭；次月运费补录后重新打开再关闭",
+      "positive": "出运结清、费用确认后关闭；次月运费补录后重新打开再关闭；S-A：一笔美元收款加一笔结汇得出 −100.00，净现金含费用付款得出 2,250；取消订单有运费时关闭为 cancelled",
       "negative": "条件不满足关闭返回 ORDER_RESULT_NOT_SETTLED",
       "concurrency": "—",
       "errors": "ORDER_RESULT_NOT_SETTLED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "STL-INV-012",
       "context": "STL",
       "aggregate": "SettlementStatement",
-      "rule": "期初应收、应付与未核销预收预付按截止时点与来源登记，标识历史起点；同一截止与来源只登记一次，上线后不重复生成同一账款或现金。",
-      "enforcement": "唯一约束（截止时点、来源）",
+      "rule": "期初应收、应付与未核销预收预付按截止时点与来源登记，标识历史起点；同一截止与来源只登记一次，上线后不重复生成同一账款或现金。期初结算单可开贷项，期初资金记录可冲销（S5R-D22）。",
+      "enforcement": "唯一约束（种类、来源单据），与截止时点无关；CNX 为（种类、来源单据）、每张发票一个余额、每个出口一个有效案件",
       "positive": "截止日导入未结应收 7,000",
       "negative": "重复导入返回 OPENING_BALANCE_DUPLICATE",
       "concurrency": "—",
       "errors": "OPENING_BALANCE_DUPLICATE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
+    },
+    {
+      "id": "STL-INV-013",
+      "context": "STL",
+      "aggregate": "SettlementStatement",
+      "rule": "应付金额只在两种情况下变化：PUR 交付更正（数量），或 payable_adjustment.request 与独立的 payable_adjustment.confirm（价格折让或少开，引用红字发票，对采购侧作贷项，比照 STL-INV-008）；只换票不影响应付；红票事实经 CNX PurchaseInvoiceRef v1 读取，在应付与采购结算单读取中派生 invoice_reversed 标记，不另写状态，不设事件消费方（S5R-D20）。",
+      "enforcement": "领域守卫＋独立性",
+      "positive": "折让确认后应付减少；CN-AT05 红冲后应付显示 invoice_reversed",
+      "negative": "申请人自确认返回 INDEPENDENT_REVIEW_REQUIRED；调整超过应付未结返回 APPLICATION_EXCEEDS_OPEN",
+      "concurrency": "—",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED、APPLICATION_EXCEEDS_OPEN",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
+    },
+    {
+      "id": "STL-INV-014",
+      "context": "STL",
+      "aggregate": "FundRecord",
+      "rule": "资金记录（含期初）可经 fund.reverse 冲销：人工专属，独立于资金登记人，须无有效核销；原记录保留，冲销后银行流水键可再次使用（S5R-D22）。",
+      "enforcement": "领域守卫＋资金根 FOR UPDATE",
+      "positive": "期初预收冲销后可重录",
+      "negative": "仍有有效核销时冲销返回 FUND_RECORD_HAS_APPLICATIONS；登记人自冲销返回 INDEPENDENT_REVIEW_REQUIRED",
+      "concurrency": "冲销与核销并发按资金根锁裁决",
+      "errors": "FUND_RECORD_HAS_APPLICATIONS、INDEPENDENT_REVIEW_REQUIRED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "CNX-INV-003",
       "context": "CNX",
       "aggregate": "DeclarationCase",
-      "rule": "报关结果按人工路径登记：本地草稿、资料确认、人工提交声明、外部收到、受理、放行、退回、改单、撤销与 unknown 分别记录；回执保存原文、映射版本与外部版本或业务顺序，旧回执不覆盖新结果；unknown 先查证再决定是否重新提交；海关放行、实际离境、送达与客户验收不互相代替。",
+      "rule": "报关结果按人工路径登记：本地草稿、资料确认、人工提交声明、外部收到、受理、放行、退回、改单、撤销与 unknown 分别记录；回执保存原文、映射版本与外部版本或业务顺序，旧回执不覆盖新结果；unknown 先查证再决定是否重新提交；海关放行、实际离境、送达与客户验收不互相代替。unknown 查证后海关从未收到（以海关总署可查询状态为准）时记 not_received，之后同一出口批次可开启下一次报关尝试（S5R-D13）。",
       "enforcement": "领域守卫",
       "positive": "人工提交后登记放行回执原文与映射 v1",
-      "negative": "早于已登记结果的回执返回 DECLARATION_RECEIPT_STALE；unknown 未查证即重新提交返回 EXTERNAL_RESULT_UNKNOWN",
+      "negative": "早于已登记结果的回执返回 DECLARATION_RECEIPT_STALE；unknown 未查证即重新提交返回 EXTERNAL_RESULT_UNKNOWN；没有查证证据记 not_received 返回 INVALID_KNOWN_VALUE",
       "concurrency": "两份回执并发登记按案件根锁裁决",
-      "errors": "DECLARATION_RECEIPT_STALE、EXTERNAL_RESULT_UNKNOWN",
+      "errors": "DECLARATION_RECEIPT_STALE、EXTERNAL_RESULT_UNKNOWN、INVALID_KNOWN_VALUE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "CNX-INV-004",
       "context": "CNX",
       "aggregate": "TaxRefundCase",
-      "rule": "退税用途分配在用途、明细、主体、版本与单位范围内不超过凭证剩余额度；预计、拟申报、已提交、核准与到账分别记录，政策版本按出口日期绑定；申报撤回、冲减与重新使用只按外部处理结果，不凭本地取消恢复。",
+      "rule": "退税用途分配在用途、明细、主体、版本与单位范围内不超过凭证剩余额度；预计、拟申报、已提交、核准与到账分别记录，政策版本绑定有效期包含出口日期的修订，与发布时间无关（S5R-D23）；征税批次不开退税案件（S5R-D14）；申报撤回、冲减与重新使用只按外部处理结果，不凭本地取消恢复。被冲蓝票已分配到 submitted 或之后的案件时，先登记进货凭证信息回退的外部结果（S5R-D20）。",
       "enforcement": "领域守卫＋案件根 FOR UPDATE",
       "positive": "同一购进凭证 1,000 件分两批出口分配 600＋400",
-      "negative": "再分配超过剩余返回 TAX_EVIDENCE_EXCEEDED",
+      "negative": "再分配超过剩余返回 TAX_EVIDENCE_EXCEEDED；征税批次分配返回 INVALID_STATE；有效期不覆盖出口日期返回 CONFIG_NOT_ACTIVE",
       "concurrency": "两笔分配并发合计超额只有一笔成功",
-      "errors": "TAX_EVIDENCE_EXCEEDED",
+      "errors": "TAX_EVIDENCE_EXCEEDED、INVALID_STATE、CONFIG_NOT_ACTIVE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "CNX-INV-005",
       "context": "CNX",
       "aggregate": "PurchaseInvoice",
-      "rule": "购进发票按（票种、唯一标识）唯一；原件、解析候选与人工核验分别记录；红冲、作废与替代保留原票并使相关匹配待复核；受票主体与本公司不一致时不自动接受，待获准模式复核。",
+      "rule": "购进发票按（票种、唯一标识）唯一；原件、解析候选与人工核验分别记录；红冲、作废与替代保留原票并使相关匹配待复核；受票主体与本公司不一致时直接拒绝，供应商须重开（S5R-D21）；部分红冲按红票金额冲减蓝票，蓝票余额仍可用于退税分配；被冲蓝票已用于已提交的退税案件时，先登记进货凭证信息回退再核实红票（S5R-D20）。",
       "enforcement": "唯一约束＋领域守卫",
       "positive": "专票核验后匹配 120 件交付行",
-      "negative": "重复导入返回 INVOICE_DUPLICATE；受票主体不符返回 PARTY_ENTITY_MISMATCH",
+      "negative": "重复导入返回 INVOICE_DUPLICATE；受票主体不符返回 PARTY_ENTITY_MISMATCH；已申报案件的蓝票未回退时红票核实返回 INVALID_STATE",
       "concurrency": "—",
-      "errors": "INVOICE_DUPLICATE、PARTY_ENTITY_MISMATCH",
+      "errors": "INVOICE_DUPLICATE、PARTY_ENTITY_MISMATCH、INVALID_STATE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "CNX-INV-006",
@@ -6730,7 +7785,7 @@
       "id": "CNX-INV-007",
       "context": "CNX",
       "aggregate": "CertificateResult",
-      "rule": "官方证书结果登记签发机构、适用对象（SKU 规格、出口批次或出运）、目的市场、有效期与核实人；另一规格、市场或已过期的证书不能复用。",
+      "rule": "官方证书结果登记签发机构、适用对象（SKU 规格、出口批次或出运）、目的市场、有效期与核实人；另一规格、市场或已过期的证书不能复用。种类含优惠原产地证（协定代码与签发机构，子类 origin_declaration；只登记外部结果，S5R-D12）；机关撤销以更正修订截止有效期并附撤销证据，不加撤回（S5R-D47）。",
       "enforcement": "领域守卫",
       "positive": "原产地证适用于该出口批次与目的国",
       "negative": "不适用的证书被引用返回 CERTIFICATE_NOT_APPLICABLE",
@@ -6738,13 +7793,13 @@
       "errors": "CERTIFICATE_NOT_APPLICABLE",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     },
     {
       "id": "CNX-INV-008",
       "context": "CNX",
       "aggregate": "DocumentBundle",
-      "rule": "资料包按出口批次列出要求、版本、缺件、责任人与期限；附件存在不等于真实性或法定效力已核实；导出文件或任务完成不冒充专业办理成功；期限按政策配置，不从上传日期推算。",
+      "rule": "资料包按出口批次列出要求、版本、缺件、责任人与期限；附件存在不等于真实性或法定效力已核实；导出文件或任务完成不冒充专业办理成功；期限按政策配置，不从上传日期推算。一份报关单对应一份原产地证书或原产地声明（S5R-D12）。",
       "enforcement": "领域守卫",
       "positive": "缺少装箱单时列出缺件、责任人与期限",
       "negative": "未核实的附件被计为满足返回 DOCUMENT_REQUIREMENT_UNVERIFIED",
@@ -6752,7 +7807,7 @@
       "errors": "DOCUMENT_REQUIREMENT_UNVERIFIED",
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "",
-      "status": "ACCEPTED（负责人决定 2026-11-12）"
+      "status": "ACCEPTED（S5R 模拟签核 E0，2026-11-13）"
     }
   ],
   "crossContextOrchestrations": [
@@ -6816,12 +7871,12 @@
       "sequence": [
         "FUL ExportLotRegistered",
         "CNX declaration_case.prepare → declaration_case.confirm → declaration_case.record_submission（人工路径）→ declaration_case.record_receipt",
-        "CNX purchase_invoice.import → purchase_invoice.verify 并匹配",
+        "CNX purchase_invoice.import → purchase_invoice.verify 并匹配（部分红冲冲减蓝票余额；已申报蓝票先登记进货凭证信息回退，S5R-D20）",
         "STL FundRecorded",
-        "CNX tax_refund_case.allocate → tax_refund_case.record_result",
+        "CNX tax_refund_case.allocate（绑定有效期包含出口日期的政策修订，S5R-D23；征税批次不开案件，S5R-D14）→ tax_refund_case.record_result",
         "CNX document_bundle.check → external_reconciliation.resolve"
       ],
-      "failureMode": "外部结果 unknown 不盲目重申报；红冲使匹配待复核。",
+      "failureMode": "外部结果 unknown 不盲目重申报；红冲使匹配待复核。unknown 查证为 not_received 后可再次报关（S5R-D13）。",
       "idempotency": "外部版本与业务顺序核对旧回执。"
     },
     {
@@ -6829,16 +7884,16 @@
       "name": "订单变更传播",
       "owner": "TRD（变更决定）；PUR、FUL、STL（各自复核）",
       "sequence": [
-        "TRD order.amendment.prepare（读取 PUR DownstreamCommitments v1 与 FUL ShipmentFacts v1 预填影响评估；STK 未启用）",
+        "TRD order.amendment.prepare（读取 PUR DownstreamCommitments v1 与 FUL ShipmentFacts v1 预填 PUR、FUL 影响与 STL 的信用影响；付款核销影响由 STL 复核给出，S5R-D44；STK 未启用）",
         "TRD order.amendment.submit → order.amendment.decide",
         "TRD order.amendment.apply（锁定订单后事务内无锁读取 FUL 已出运量：QUANTITY_BELOW_SHIPPED）→ OrderAmended",
-        "PUR allocation_review.open（系统）→ 作废草稿、purchase.commitment.change.* 或 purchase.commitment.cancel → allocation_review.settle",
-        "FUL shipment_review.open（系统）→ 复核装箱、订舱与未签发单证 → shipment_review.settle",
-        "STL payment_plan_review.open（系统，采用新修订付款阶段）→ payment_plan_review.settle；信用部分增加时须新的占用",
+        "PUR allocation_review.open（系统；OrderAmended、OrderCancelled、OrderRemainderClosed 都开启）→ 作废草稿、purchase.commitment.change.* 或 purchase.commitment.cancel → allocation_review.settle",
+        "FUL shipment_review.open（系统；OrderAmended、OrderCancelled、OrderRemainderClosed 都开启）→ 复核装箱、订舱、未签发单证与未消耗放行 → shipment_review.settle",
+        "STL payment_plan_review.open（系统，采用新修订付款阶段）→ payment_plan_review.settle；信用占用调整为新修订的信用部分（S5R-D08），信用部分增加时须新的占用",
         "CNX trade_compliance.reopen（系统，为新订单修订开启待核查，PL-14）"
       ],
-      "failureMode": "下游已发生事实不回滚；无法自动确认影响时进入待处理并指定责任人。",
-      "idempotency": "事件 ID 去重；各下游按（订单、订单修订）只开启一次复核；更晚修订的复核取代未处置的旧复核。"
+      "failureMode": "下游已发生事实不回滚；无法自动确认影响时进入待处理并指定责任人。TRD 应用与 STL 迁移之间的窗口按最终一致接受：守卫答 revision_mismatch、核销答 REFERENCE_STALE，稍后重试，窗口长度由 S5R-D07 的延迟目标限制（S5R-D46）。",
+      "idempotency": "事件 ID 去重；PUR、FUL 按（订单、订单修订、原因）、STL 按（订单、订单修订）只开启一次复核；更晚修订的复核取代未处置的旧复核（S5R-D39）。"
     },
     {
       "id": "WF-07",
@@ -6850,11 +7905,11 @@
         "STL FundRecorded → Applied（付款条件满足）",
         "PTY 主体筛查结论 clear",
         "CNX 贸易合规 clear；需要时 export_license.allocate",
-        "FUL commercial_release.evaluate → CommercialReleaseGranted",
+        "FUL commercial_release.evaluate（人工或 AI，S5R-D29）→ CommercialReleaseGranted",
         "FUL shipment.confirm → ShipmentConfirmed",
         "FUL document_release.record（正本提单或电放）→ DocumentsReleased"
       ],
-      "failureMode": "任一守卫不满足进入等待；例外须授权人工批准并绑定规则与金额。",
+      "failureMode": "任一守卫不满足进入等待；例外须授权人工批准并绑定规则与金额。重新评估中的 blocked 合规结论在新决定前仍阻止（S5R-D10）。",
       "idempotency": "(company, shipment_id, scope) 唯一放行；重放返回原结果。"
     },
     {
@@ -6866,7 +7921,7 @@
         "STL credit.reserve（付款条件含出运后到期部分时）→ CreditReserved",
         "CNX trade_compliance.evaluate → trade_compliance.decide → TradeComplianceDecided",
         "TRD order.review.decide → order.activate（读取 STL CreditGuard 与 CNX TradeComplianceGuard）",
-        "STL credit.consume（系统消费 OrderActivated，PL-12）；订单取消或关闭后 credit.release（PL-13）"
+        "STL credit.consume（系统消费 OrderActivated，PL-12）；OrderAmended 时调整为新修订的信用部分（S5R-D08）；订单取消或关闭后 credit.release（PL-13）；OrderClosedUnfulfilled 释放草稿的占用"
       ],
       "failureMode": "信用不足须信用例外或改付款条件；合规 blocked 不能放行；占用到期后须重新占用。",
       "idempotency": "占用按 (company, order_id, order_revision) 唯一；事件 ID 去重。"
@@ -6929,7 +7984,7 @@
     {
       "component": "税价、汇率与中国配置",
       "approver": "税务／财务专业角色",
-      "evidence": "CN-D01–CN-D08 冻结结果",
+      "evidence": "CN-D01–CN-D08 冻结结果；S5R-D14 四类退（免）税方式的适用条件与资料要求（税务专业）、S5R-D21 第三方付款的外汇合规：B0 前须真实负责人确认",
       "status": "PENDING"
     },
     {
@@ -6947,19 +8002,25 @@
     {
       "component": "信用政策：审批层级、金额阈值与额度来源",
       "approver": "财务＋信用经理",
-      "evidence": "TD-AT11、TD-AT16 PG16 测试；S5 使用合成值（USD，信用专员 1,000、信用经理 5,000，超过须两人，逾期容忍 30 天）",
+      "evidence": "TD-AT11、TD-AT16 PG16 测试；S5 使用合成值（USD，信用专员 1,000、信用经理 5,000，超过须两人，逾期容忍 30 天）；S5R-D09 付款条件例外的有效期取 credit_policy 的 decision_validity_days（合成 7 天），数值 B0 前须真实负责人确认",
       "status": "PENDING"
     },
     {
       "component": "贸易合规：国别项目、制裁名单与出口管制来源",
       "approver": "法务＋合规负责人",
-      "evidence": "ADR-BR-017 裁决；S5 使用合成 CN 与 UN 项目",
+      "evidence": "ADR-BR-017 裁决；S5 使用合成 CN 与 UN 项目；S5R-D15（c）国别项目与名单来源的批准、S5R-D17 禁运例外依据的证据要求：B0 前须法务与合规的真实负责人确认（E-3）",
       "status": "PENDING"
     },
     {
       "component": "中国出口人工路径与外部结果映射",
       "approver": "报关、税务与资金专业角色",
       "evidence": "CN-AT01—CN-AT18 证据（合成资料、人工路径）；IG-13",
+      "status": "PENDING"
+    },
+    {
+      "component": "运行目标：Outbox 中继延迟与告警阈值（S5R-D07）",
+      "approver": "运维＋财务",
+      "evidence": "参考负载 16＋16 用户下 2 个分发进程 P95 ≤ 5 s、P99 ≤ 30 s 的负载证据（本机 C7 已有 10 s 的实测）；数值 B0 前确认",
       "status": "PENDING"
     }
   ],
@@ -7911,15 +8972,26 @@
       "status": "SPEC"
     },
     {
-      "id": "BT17",
+      "id": "STL-OB-01",
       "context": "STL／CNX",
       "aggregate": "SettlementStatement／TaxRefundCase",
       "command": "opening_balance.record／tax_refund_case.record_opening",
       "given": "导入未结应收应付、未核销预收与未退税资料",
       "assertion": "截止时点可对账；上线后不重建同一账款或用途（OPENING_BALANCE_DUPLICATE）",
       "class_": "Domain",
-      "source": "基线 9.3",
+      "source": "基线 24.3 CN-AT16 的配套用例（原误编为 BT17，S5R-D45）",
       "status": "SPEC"
+    },
+    {
+      "id": "BT17",
+      "context": "MFG／STK",
+      "aggregate": "CollaborationPlan／StockLedger",
+      "command": "—（条件能力 F23、F24）",
+      "given": "导入外厂材料、在制品、未完委外单及未结加工费",
+      "assertion": "截止时点可对账；上线后不重建同一库存、费用或应付",
+      "class_": "Domain",
+      "source": "基线 9.3",
+      "status": "CONDITIONAL（F23、F24）"
     },
     {
       "id": "BT18",
@@ -7938,7 +9010,7 @@
       "aggregate": "QualityRelease",
       "command": "quality_release.revoke",
       "given": "放行 200 件后 100 件已出运，再撤回放行并重放事件",
-      "assertion": "未发部分冻结；已发部分保留；重复撤回无重复扣量",
+      "assertion": "未发部分冻结；已发部分保留；重复撤回无重复扣量；撤回记录冻结量，冻结量复检后可再放行（S5R-D18）",
       "class_": "Concurrency-PG16",
       "source": "基线 9.4",
       "status": "SPEC"
@@ -8004,7 +9076,7 @@
       "aggregate": "—",
       "command": "—",
       "given": "先出运后到票，原票随后红冲",
-      "assertion": "交付事实保留；应付与退税资料分别处理影响，匹配待复核",
+      "assertion": "交付事实保留；应付读取显示 invoice_reversed 标记，应付只经交付更正或 payable_adjustment 变化；部分红冲按红票金额冲减蓝票余额；已用于已提交退税案件的蓝票先登记进货凭证信息回退；匹配待复核（S5R-D20）",
       "class_": "Integration",
       "source": "基线 24.3",
       "status": "SPEC"
@@ -8037,7 +9109,7 @@
       "aggregate": "—",
       "command": "—",
       "given": "付款方不同，或发生退汇／退款",
-      "assertion": "核实付款依据与责任；实际资金与商业调整分别记录（PARTY_ENTITY_MISMATCH 待复核）",
+      "assertion": "许可付款人的收款可核销；临时第三方付款经 fund.verify_payer 核实（信用经理，独立于资金登记人，附证据）后可核销；未核实前 PARTY_ENTITY_MISMATCH 待核；实际资金与商业调整分别记录（S5R-D21）",
       "class_": "Domain",
       "source": "基线 24.3",
       "status": "SPEC"
@@ -8081,7 +9153,7 @@
       "aggregate": "—",
       "command": "—",
       "given": "企业适用政策变化且有历史未结业务",
-      "assertion": "按有效期与专业核实结果处理，旧业务不被新配置覆盖",
+      "assertion": "退税案件绑定有效期包含出口日期的 export_tax_policy 修订，与发布时间无关；planned 之前出现更晚发布的覆盖修订时显示 policy_superseded 并可重新绑定；有效期不覆盖时 CONFIG_NOT_ACTIVE；旧业务不被新配置覆盖（S5R-D23）",
       "class_": "Domain",
       "source": "基线 24.3",
       "status": "SPEC"
@@ -8114,7 +9186,7 @@
       "aggregate": "—",
       "command": "—",
       "given": "出口主体、受票或收款主体不一致",
-      "assertion": "发现差异并转获准模式复核；不能通过外部主体字段绕过公司隔离",
+      "assertion": "受票主体不一致的购进发票直接拒绝（PARTY_ENTITY_MISMATCH，S5R-D21）；收款主体不一致按许可付款人或付款人核实处理；不能通过外部主体字段绕过公司隔离",
       "class_": "Security",
       "source": "基线 24.3",
       "status": "SPEC"
@@ -8264,6 +9336,17 @@
     "tax_refund_case.record_result",
     "tax_refund_case.record_opening",
     "certificate.register",
-    "shipment_document.record_signed"
-  ]
+    "shipment_document.record_signed",
+    "fund.reverse",
+    "fund.verify_payer",
+    "purchase.commitment.dispose",
+    "purchase.commitment.disposition.decide",
+    "payable_adjustment.request",
+    "payable_adjustment.confirm",
+    "declaration_profile.discard_draft",
+    "tax_refund_case.rebind_policy"
+  ],
+  "commandActors": {
+    "order_account.open": "human|system"
+  }
 }

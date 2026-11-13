@@ -18,7 +18,7 @@
       "tier": "Supporting",
       "conditional": false,
       "role": "维护外部企业或个人主体的公共身份、交易角色、公司级交易档案、联系人与地址的已核实版本。",
-      "scope": "Party、PartyRole（客户／供应商／物流与服务方／工厂）、TradingProfile、Contact、Address 与地址角色、ServicePartyRole；PartyScreening（主体筛查结论）。",
+      "scope": "Party、PartyRole（客户／供应商／物流与服务方／工厂）、TradingProfile、Contact、Address 与地址角色、ServicePartyRole；PartyScreening（主体筛查结论）。 S5R：地址角色 notify（通知方，D40）；交易档案的许可付款人（D21）；服务方角色种类 forwarder、carrier、insurer、inspection_agency、customs_broker（D36）。",
       "truth": "外部主体身份与角色关系；已核实主数据版本（row_version）及历史快照；主体筛查结论（名单来源与版本、结论、复核人、有效期）。",
       "aggregates": [
         "Party",
@@ -52,6 +52,38 @@
         "PartyScreeningRecorded",
         "PartyScreeningDecided",
         "PartyScreeningBlocked"
+      ],
+      "queries": [
+        {
+          "name": "pty.contact.get",
+          "route": "GET /api/brant/v1/pty/contacts/{id}",
+          "permission": "pty.read",
+          "audited": true
+        },
+        {
+          "name": "pty.party.get",
+          "route": "GET /api/brant/v1/pty/parties/{id}",
+          "permission": "pty.read",
+          "audited": true
+        },
+        {
+          "name": "pty.party_screening.get",
+          "route": "GET /api/brant/v1/pty/parties/{id}/screening",
+          "permission": "pty.read",
+          "audited": true
+        },
+        {
+          "name": "pty.trading_profile.get",
+          "route": "GET /api/brant/v1/pty/parties/{id}/trading_profile",
+          "permission": "pty.read",
+          "audited": true
+        },
+        {
+          "name": "pty.party_screening.due",
+          "route": "GET /api/brant/v1/pty/screenings/due",
+          "permission": "pty.read",
+          "audited": true
+        }
       ],
       "invariants": [
         "UL-INV-14",
@@ -89,7 +121,8 @@
         "item_code_mapping.publish",
         "sample.approve",
         "declaration_profile.save_draft",
-        "declaration_profile.verify"
+        "declaration_profile.verify",
+        "declaration_profile.discard_draft"
       ],
       "facts": [
         "SkuConfirmed",
@@ -99,11 +132,37 @@
         "SampleApproved",
         "DeclarationProfileVerified"
       ],
+      "queries": [
+        {
+          "name": "cat.declaration_profile.get",
+          "route": "GET /api/brant/v1/cat/declaration_profiles/{id}",
+          "permission": "cat.read",
+          "audited": true
+        },
+        {
+          "name": "cat.item_code_mapping.get",
+          "route": "GET /api/brant/v1/cat/item_code_mappings/{id}",
+          "permission": "cat.read",
+          "audited": true
+        },
+        {
+          "name": "cat.sku.get",
+          "route": "GET /api/brant/v1/cat/skus/{id}",
+          "permission": "cat.read",
+          "audited": true
+        },
+        {
+          "name": "cat.declaration_profile.list",
+          "route": "GET /api/brant/v1/cat/skus/{id}/declaration_profiles",
+          "permission": "cat.read",
+          "audited": true
+        }
+      ],
       "invariants": [
         "UL-INV-14"
       ],
       "boundary": "不拥有库存与资金归属，不拥有完整 PLM，不自动创建未知 SKU。",
-      "decision": "Python 把 SKU 身份放在 master、把 SKU 规格与货号映射放在 foundation 配置；Go 中统一归 CAT，避免 POL 变成万能配置表。",
+      "decision": "Python 把 SKU 身份放在 master、把 SKU 规格与货号映射放在 foundation 配置；Go 中统一归 CAT，避免 POL 变成万能配置表。 S5R（2026-11-13，模拟签核 E0）：申报档案草稿可丢弃（declaration_profile.discard_draft）；已核实档案不撤回，只由核实更正修订取代（D47）。",
       "legacy": "master kind=sku；foundation 配置类型：SKU 规格、客户／供应商货号映射",
       "stage": "S1",
       "status": "CANDIDATE"
@@ -128,9 +187,6 @@
         "config.retire",
         "foundation.snapshot",
         "number.issue",
-        "fx.convert（查询）",
-        "unit.convert（查询）",
-        "tax.preview（查询）",
         "config.discard_draft"
       ],
       "facts": [
@@ -140,13 +196,45 @@
         "FoundationSnapshotCaptured",
         "DocumentNumberIssued"
       ],
+      "queries": [
+        {
+          "name": "pol.config.get",
+          "route": "GET /api/brant/v1/pol/configs/{kind}/{id}",
+          "permission": "pol.read",
+          "audited": true
+        },
+        {
+          "name": "pol.snapshot.get",
+          "route": "GET /api/brant/v1/pol/snapshots/{id}",
+          "permission": "pol.read",
+          "audited": true
+        },
+        {
+          "name": "pol.fx.convert",
+          "route": "—（进程内查询，POL api）",
+          "permission": "—",
+          "audited": false
+        },
+        {
+          "name": "pol.unit.convert",
+          "route": "—（进程内查询，POL api）",
+          "permission": "—",
+          "audited": false
+        },
+        {
+          "name": "pol.tax.preview",
+          "route": "—（进程内查询，POL api）",
+          "permission": "—",
+          "audited": false
+        }
+      ],
       "invariants": [
         "UL-INV-12",
         "UL-INV-13",
         "UL-INV-15"
       ],
       "boundary": "不拥有交易金额真值、银行成交汇率或法定税务结论；外部机构发布的代码表（ISO 币种、UN/LOCODE、HS 编码）属于 internal/reference，不属于本上下文。",
-      "decision": "Brant 基线称 shared.foundation；为避免与 Go 技术层 internal/foundation 混名，上下文代码定为 POL。保持 Python 的独立发布与不可变修订语义。",
+      "decision": "Brant 基线称 shared.foundation；为避免与 Go 技术层 internal/foundation 混名，上下文代码定为 POL。保持 Python 的独立发布与不可变修订语义。 S5R（2026-11-13，模拟签核 E0）：credit_policy、export_tax_policy、screening_regulation 的发布另需按种类的能力权限（config.publish.<kind>），由对应专业岗位发布；credit_policy 的审批层级须是已知岗位模板代码（D30）；新修订的国别严格校验（D15）；trade_terms 加 insurance_percent（D06）；export_tax_policy 的退（免）税方式按法定四类（D14）；screening_regulation 加国别项目名单 programmes（D38）；发布 ConfigAt v1（D23）；invoice 单据类型专指商业发票（D16）。fx.convert、unit.convert、tax.preview 是进程内查询，登记在 queries。",
       "legacy": "brant_core/foundation.py、foundation_storage.py、t03_config.py；brant.foundation/0.1.0；docs/FOUNDATION_SPEC.md",
       "stage": "S1",
       "status": "CANDIDATE"
@@ -173,6 +261,20 @@
         "SourceRegistered",
         "SourceUsed",
         "FileRegistered"
+      ],
+      "queries": [
+        {
+          "name": "evd.file.get",
+          "route": "GET /api/brant/v1/evd/files/{id}",
+          "permission": "evd.read",
+          "audited": true
+        },
+        {
+          "name": "evd.source.get",
+          "route": "GET /api/brant/v1/evd/sources/{id}",
+          "permission": "evd.read",
+          "audited": true
+        }
       ],
       "invariants": [
         "UL-INV-16"
@@ -205,6 +307,14 @@
         "RfqScopeConfirmed",
         "RfqCancelled",
         "RfqClosed"
+      ],
+      "queries": [
+        {
+          "name": "inq.rfq.get",
+          "route": "GET /api/brant/v1/inq/rfqs/{id}",
+          "permission": "inq.read",
+          "audited": true
+        }
       ],
       "invariants": [
         "UL-INV-17",
@@ -260,6 +370,32 @@
         "LogisticsOfferVerified",
         "LogisticsOfferWithdrawn"
       ],
+      "queries": [
+        {
+          "name": "sup.logistics_offer.get",
+          "route": "GET /api/brant/v1/sup/logistics_offers/{id}",
+          "permission": "sup.read",
+          "audited": true
+        },
+        {
+          "name": "sup.purchase_terms.get",
+          "route": "GET /api/brant/v1/sup/purchase_terms/{id}",
+          "permission": "sup.read",
+          "audited": true
+        },
+        {
+          "name": "sup.supplier_offer.get",
+          "route": "GET /api/brant/v1/sup/supplier_offers/{id}",
+          "permission": "sup.read",
+          "audited": true
+        },
+        {
+          "name": "sup.supplier_rfq.get",
+          "route": "GET /api/brant/v1/sup/supplier_rfqs/{id}",
+          "permission": "sup.read",
+          "audited": true
+        }
+      ],
       "invariants": [
         "UL-INV-25"
       ],
@@ -305,6 +441,50 @@
         "CostSnapshotFrozen",
         "CostSourceDenied",
         "CostSnapshotSuperseded"
+      ],
+      "queries": [
+        {
+          "name": "cst.cost_evaluation.get",
+          "route": "GET /api/brant/v1/cst/cost_evaluations/{id}",
+          "permission": "cst.read",
+          "audited": true
+        },
+        {
+          "name": "cst.cost_scenario.get",
+          "route": "GET /api/brant/v1/cst/cost_scenarios/{id}",
+          "permission": "cst.read",
+          "audited": true
+        },
+        {
+          "name": "cst.cost_snapshot.get",
+          "route": "GET /api/brant/v1/cst/cost_snapshots/{id}",
+          "permission": "cst.read",
+          "audited": true
+        },
+        {
+          "name": "cst.cost_snapshot.query",
+          "route": "GET /api/brant/v1/cst/cost_snapshots/{id}/adoptability",
+          "permission": "cst.read",
+          "audited": true
+        },
+        {
+          "name": "cst.costing_context.get",
+          "route": "GET /api/brant/v1/cst/costing_contexts/{id}",
+          "permission": "cst.read",
+          "audited": true
+        },
+        {
+          "name": "cst.measurement.get",
+          "route": "GET /api/brant/v1/cst/measurements/{id}",
+          "permission": "cst.read",
+          "audited": true
+        },
+        {
+          "name": "cst.source_attestation.get",
+          "route": "GET /api/brant/v1/cst/source_attestations/{id}",
+          "permission": "cst.read",
+          "audited": true
+        }
       ],
       "invariants": [
         "UL-INV-09",
@@ -402,6 +582,116 @@
         "OrderDocumentGenerated",
         "OrderDocumentSigned"
       ],
+      "queries": [
+        {
+          "name": "trd.acceptance.get",
+          "route": "GET /api/brant/v1/trd/acceptances/{id}",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.customer_response.get",
+          "route": "GET /api/brant/v1/trd/customer_responses/{id}",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.order.get",
+          "route": "GET /api/brant/v1/trd/orders/{id}",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.order.check",
+          "route": "GET /api/brant/v1/trd/orders/{id}/check",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.order.document.get",
+          "route": "GET /api/brant/v1/trd/orders/{id}/revisions/{revision}/documents/{kind}",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.order.snapshot.get",
+          "route": "GET /api/brant/v1/trd/orders/{id}/snapshot",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.get",
+          "route": "GET /api/brant/v1/trd/quotes/{id}",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.active.get",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/active",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.approval.history",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/approvals",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.approval.check",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.commit.history",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/commits",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.document.history",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/documents",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.history",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/history",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.outbox.history",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/outbox",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.ready",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/ready",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.dispatch.preflight",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_preflight",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.dispatch.target",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_target",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.document.get",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/document",
+          "permission": "trd.read",
+          "audited": true
+        }
+      ],
       "invariants": [
         "UL-INV-01",
         "UL-INV-02",
@@ -416,7 +706,7 @@
         "UL-INV-27"
       ],
       "boundary": "不拥有成本计算（CST）、配置（POL）、主体身份（PTY）；报价 active 不等于已发送或客户已接受；订单 active 不等于采购承诺或已出运。",
-      "decision": "报价、确认与订单共享报价根冲突键、统一锁序与同事务资格重查，合并为一个上下文的多个聚合。见 ADR-BR-002。",
+      "decision": "报价、确认与订单共享报价根冲突键、统一锁序与同事务资格重查，合并为一个上下文的多个聚合。见 ADR-BR-002。 S5R（2026-11-13，模拟签核 E0）：TRD 发布 OrderRevisionRef v1，新修订封存 Incoterm 与地址国别（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor，供 STL 预计未承诺行的成本（D33）；取消检查把 PUR 记录的获批处置计为已处置（D05）；order.activate 留在销售经办（D27）。",
       "legacy": "t03_write.py、t03_storage.py、t03_query.py、t03_order_qualification.py、t03_order_snapshot.py、t03_reconciliation.py、t03_sales_terms.py、t03_trade_parties.py、t03_cost_scope.py、t04_response.py、t04_order_review.py；brant.quotation/0.1.0",
       "stage": "S3",
       "status": "CANDIDATE"
@@ -428,7 +718,7 @@
       "tier": "Core",
       "conditional": false,
       "role": "把生效外销订单行显式绑定到当前有效供应条件，形成不可变、带哈希、可审核的采购草稿；经独立采购承诺审批后登记我方承诺与供应商确认，并受控处理采购变更。",
-      "scope": "DemandAllocation、PurchaseDraft、PurchaseCommitmentApproval、PurchaseCommitment、SupplierConfirmation、PurchaseChange（承诺变更与取消）、AllocationReview（订单变更复核）、SupplierDelivery。",
+      "scope": "DemandAllocation、PurchaseDraft、PurchaseCommitmentApproval、PurchaseCommitment、SupplierConfirmation、PurchaseChange（承诺变更与取消）、AllocationReview（订单变更复核）、SupplierDelivery。 CommitmentDisposition（已交付未出运承诺行的获批处置，S5R-D05）。",
       "truth": "需求至供给的分配；采购草稿正文与哈希（commitment_state = not_committed）；采购承诺审批；我方承诺与供应商确认两项独立事实；直发路线的供应商交付（经核实的交接数量、地点、时间与证据）。",
       "aggregates": [
         "PurchaseDraft",
@@ -451,7 +741,9 @@
         "purchase.commitment.change.apply",
         "purchase.commitment.cancel",
         "allocation_review.open",
-        "allocation_review.settle"
+        "allocation_review.settle",
+        "purchase.commitment.dispose",
+        "purchase.commitment.disposition.decide"
       ],
       "facts": [
         "PurchaseDraftPrepared",
@@ -462,14 +754,77 @@
         "SupplierDeliveryVerified",
         "PurchaseCommitmentRevoked",
         "PurchaseCommitmentChanged",
-        "PurchaseCommitmentCancelled"
+        "PurchaseCommitmentCancelled",
+        "PurchaseCommitmentDisposed"
+      ],
+      "queries": [
+        {
+          "name": "pur.allocation_review.get",
+          "route": "GET /api/brant/v1/pur/allocation_reviews/{id}",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.allocation_review.list",
+          "route": "GET /api/brant/v1/pur/orders/{id}/allocation_reviews",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.demand_allocation.get",
+          "route": "GET /api/brant/v1/pur/orders/{id}/allocations",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.purchase_commitment.list",
+          "route": "GET /api/brant/v1/pur/orders/{id}/commitments",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.purchase_commitment_change.get",
+          "route": "GET /api/brant/v1/pur/purchase_commitment_changes/{id}",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.purchase_commitment.get",
+          "route": "GET /api/brant/v1/pur/purchase_commitments/{id}",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.purchase_commitment_change.list",
+          "route": "GET /api/brant/v1/pur/purchase_commitments/{id}/changes",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.supplier_delivery.list",
+          "route": "GET /api/brant/v1/pur/purchase_commitments/{id}/deliveries",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.purchase_draft.get",
+          "route": "GET /api/brant/v1/pur/purchase_drafts/{id}",
+          "permission": "pur.read",
+          "audited": true
+        },
+        {
+          "name": "pur.supplier_delivery.get",
+          "route": "GET /api/brant/v1/pur/supplier_deliveries/{id}",
+          "permission": "pur.read",
+          "audited": true
+        }
       ],
       "invariants": [
         "UL-INV-20",
         "UL-INV-32"
       ],
       "boundary": "不修改订单、成本或供应条件事实；草稿不是承诺，不发送采购单；不拥有收货与库存（STK）。",
-      "decision": "A46 已实现采购草稿；A47 采购承诺审批只有设计。供需分配（supply.plan）并入本上下文起步，混合供给启用时再评估拆分。",
+      "decision": "A46 已实现采购草稿；A47 采购承诺审批只有设计。供需分配（supply.plan）并入本上下文起步，混合供给启用时再评估拆分。 S5R（2026-11-13，模拟签核 E0）：已交付未出运的承诺行经 purchase.commitment.dispose 申请、订单审核人独立批准（purchase.commitment.disposition.decide）后，以 return_to_supplier、write_off 或 hold_for_reuse 计为已处置（D05）；纯减量变更不查供应条件有效期，有未核实交付声明时不得取消，承诺行单位须等于订单行单位（D41）；分配复核按（订单、修订、原因）开启，处置词汇 draft_voided、commitment_changed、commitment_cancelled、no_action（D39）；复核暂不发布事实，TSK 需要时加 AllocationReviewSettled（D37）。",
       "legacy": "brant_core/t04_purchase.py；docs/T04_A46_PURCHASE_DRAFT_REPORT_V0.1.md（含 A47 设计）",
       "stage": "S3",
       "status": "CANDIDATE"
@@ -497,6 +852,7 @@
         "SubcontractOrderIssued",
         "OperationProgressRecorded"
       ],
+      "queries": [],
       "invariants": [],
       "boundary": "不拥有自有车间完整制造（MRP／MES）；外厂上报完成只是来源声明，不形成合格库存或客户交付。",
       "decision": "仅在客户选择供料或工序委外组合时启用；Python 无实现。",
@@ -529,9 +885,29 @@
         "QualityReleased",
         "QualityReleaseRevoked"
       ],
+      "queries": [
+        {
+          "name": "qlt.inspection.get",
+          "route": "GET /api/brant/v1/qlt/inspections/{id}",
+          "permission": "qlt.read",
+          "audited": true
+        },
+        {
+          "name": "qlt.quality_release.get",
+          "route": "GET /api/brant/v1/qlt/quality_releases/{id}",
+          "permission": "qlt.read",
+          "audited": true
+        },
+        {
+          "name": "qlt.inspection_subject.get",
+          "route": "GET /api/brant/v1/qlt/subjects/{kind}/{id}/lines/{line_id}",
+          "permission": "qlt.read",
+          "audited": true
+        }
+      ],
       "invariants": [],
       "boundary": "检验报告不直接改写库存或交付；标准、抽样与测试按配置确认。",
-      "decision": "出运入口检查有效质量放行（FUL 消费）。",
+      "decision": "出运入口检查有效质量放行（FUL 消费）。 S5R（2026-11-13，模拟签核 E0）：撤回放行时经 FUL 的 ReleaseConsumption v1 记录冻结量，冻结量复检后再放行；获批让步（附客户同意证据）的数量可放行并带 concession 标记（D18）；检验机构按 PTY 服务角色 inspection_agency 解析，只需已核实、不要求航线（D36）。",
       "legacy": "无（产品基线 F26、第 7.5 节）",
       "stage": "S5",
       "status": "CANDIDATE"
@@ -563,6 +939,7 @@
         "ReservationPlaced",
         "ReservationReleased"
       ],
+      "queries": [],
       "invariants": [],
       "boundary": "纯成品直发不虚构本仓收发；其他模块请求业务动作，不直写库存。",
       "decision": "代码用 STK 而非 INV，避免与外贸常用的 INV（Invoice）混淆。",
@@ -615,12 +992,86 @@
         "ShipmentDocumentIssued",
         "DocumentsReleased"
       ],
+      "queries": [
+        {
+          "name": "ful.commercial_release.get",
+          "route": "GET /api/brant/v1/ful/commercial_releases/{id}",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.shipment_document_set.get",
+          "route": "GET /api/brant/v1/ful/document_sets/{id}",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.shipment_document.get",
+          "route": "GET /api/brant/v1/ful/document_sets/{id}/documents/{kind}/versions/{version}/{language}",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.insurance.get",
+          "route": "GET /api/brant/v1/ful/document_sets/{id}/insurance",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.export_lot.get",
+          "route": "GET /api/brant/v1/ful/export_lots/{id}",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.milestone_plan.get",
+          "route": "GET /api/brant/v1/ful/milestone_plans/{id}",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.order_fulfilment.get",
+          "route": "GET /api/brant/v1/ful/orders/{id}/fulfilment",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.shipment_review.list",
+          "route": "GET /api/brant/v1/ful/orders/{id}/shipment_reviews",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.shipment_review.get",
+          "route": "GET /api/brant/v1/ful/shipment_reviews/{id}",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.shipment.get",
+          "route": "GET /api/brant/v1/ful/shipments/{id}",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.booking.get",
+          "route": "GET /api/brant/v1/ful/shipments/{id}/bookings",
+          "permission": "ful.read",
+          "audited": true
+        },
+        {
+          "name": "ful.commercial_release.list",
+          "route": "GET /api/brant/v1/ful/shipments/{id}/commercial_releases",
+          "permission": "ful.read",
+          "audited": true
+        }
+      ],
       "invariants": [
         "UL-INV-21",
         "UL-INV-28"
       ],
       "boundary": "海关放行、实际离境、物流送达与客户验收是不同事实；不拥有库存（STK）与应收（STL）。",
-      "decision": "订单数量不得低于已确认出运数量；出运明细是销售结算默认来源。 S5 只支持供应商直发路线；本仓发货待 STK（S6-01）。",
+      "decision": "订单数量不得低于已确认出运数量；出运明细是销售结算默认来源。 S5 只支持供应商直发路线；本仓发货待 STK（S6-01）。 S5R（2026-11-13，模拟签核 E0）：出运确认留在跟单（D01）；commercial_release.evaluate 只接受 human、ai，shipment_review.open 只授予系统消费方（D29）；付款条件例外的有效期取 credit_policy 的 decision_validity_days（D09）；缺保险单答 SHIPMENT_DOCUMENTS_UNRECONCILED，合同保险比例取 trade_terms（D06）；签发时再查原产地证（D12）；单证与准备按出运绑定的订单修订读取 TRD（OrderRevisionRef v1，D35）；出运可陈述最终用户，单证打印并核对通知方（D40）；出运复核处置词汇 shipment_cancelled、replaced、reevaluated、no_action，不加改绑命令（D39）；复核暂不发布事实，TSK 需要时加 ShipmentReviewSettled（D37）。FUL 向 QLT 发布 ReleaseConsumption v1（D18）。",
       "legacy": "无（产品基线 F07、F25、F27）",
       "stage": "S5",
       "status": "CANDIDATE"
@@ -632,7 +1083,7 @@
       "tier": "Core",
       "conditional": false,
       "role": "维护销售／采购结算单、业务应收应付、实际收付款、预收预付、核销与撤销核销、贷项、费用分配、订单经营结果，以及银行流水与结汇等资金记录。",
-      "scope": "SettlementStatement、Receivable、Payable、FundRecord、Application（核销）、CreditNote、ChargeAllocation、OrderResult、BankTransaction、FxConversion、OrderAccount（订单付款阶段与付款条件）、Charge（费用与费用分配）、期初余额。",
+      "scope": "SettlementStatement、Receivable、Payable、FundRecord、Application（核销）、CreditNote、ChargeAllocation、OrderResult、BankTransaction、FxConversion、OrderAccount（订单付款阶段与付款条件）、Charge（费用与费用分配）、期初余额。 S5R：资金冲销（fund.reverse）、第三方付款人核实（fund.verify_payer）、应付调整（payable_adjustment.request／confirm）与订单账户补建（order_account.open）。",
       "truth": "业务结算台账与核销关系；资金记录与银行核实状态；订单经营结果；合同付款条件满足状态（以守卫函数向 FUL 发布）；客户信用额度、信用占用与信用例外。",
       "aggregates": [
         "SettlementStatement",
@@ -666,7 +1117,12 @@
         "opening_balance.record",
         "credit.consume",
         "payment_plan_review.open",
-        "payment_plan_review.settle"
+        "payment_plan_review.settle",
+        "order_account.open",
+        "fund.reverse",
+        "fund.verify_payer",
+        "payable_adjustment.request",
+        "payable_adjustment.confirm"
       ],
       "facts": [
         "SettlementConfirmed",
@@ -684,7 +1140,110 @@
         "CreditReservationConsumed",
         "CreditExceptionDecided",
         "ChargeAllocated",
-        "OrderResultReopened"
+        "OrderResultReopened",
+        "CreditLimitRequested",
+        "OpeningBalanceRecorded",
+        "FundRecordReversed",
+        "FundPayerVerified",
+        "PayableAdjustmentConfirmed"
+      ],
+      "queries": [
+        {
+          "name": "stl.application.get",
+          "route": "GET /api/brant/v1/stl/applications/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.charge.get",
+          "route": "GET /api/brant/v1/stl/charges/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.credit_decision.get",
+          "route": "GET /api/brant/v1/stl/credit_decisions/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.credit_note.get",
+          "route": "GET /api/brant/v1/stl/credit_notes/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.credit_reservation.get",
+          "route": "GET /api/brant/v1/stl/credit_reservations/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.customer_credit.get",
+          "route": "GET /api/brant/v1/stl/customers/{id}/credit",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.fund_record.get",
+          "route": "GET /api/brant/v1/stl/fund_records/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.opening_balance.list",
+          "route": "GET /api/brant/v1/stl/opening_balances",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.opening_balance.get",
+          "route": "GET /api/brant/v1/stl/opening_balances/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.order_account.get",
+          "route": "GET /api/brant/v1/stl/order_accounts/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.payment_plan_review.list",
+          "route": "GET /api/brant/v1/stl/order_accounts/{id}/payment_plan_reviews",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.order_result.get",
+          "route": "GET /api/brant/v1/stl/orders/{id}/result",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.order_settlement.get",
+          "route": "GET /api/brant/v1/stl/orders/{id}/settlement",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.payable.get",
+          "route": "GET /api/brant/v1/stl/payables/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.receivable.get",
+          "route": "GET /api/brant/v1/stl/receivables/{id}",
+          "permission": "stl.read",
+          "audited": true
+        },
+        {
+          "name": "stl.settlement_statement.get",
+          "route": "GET /api/brant/v1/stl/settlement_statements/{id}",
+          "permission": "stl.read",
+          "audited": true
+        }
       ],
       "invariants": [
         "UL-INV-22",
@@ -692,7 +1251,7 @@
         "UL-INV-30"
       ],
       "boundary": "业务台账不等于法定总账；系统内核销不是行政意义的出口收汇核销；不拥有发票开具与税务确认。",
-      "decision": "同币种直接核销；跨币种核销按 POL settlement 用途的显式汇率记录两种币种金额，业务结算汇率差额单列（STL-INV-007，负责人决定 2026-11-12，取代“首期同币种、跨币种需专项规则评审”）。",
+      "decision": "同币种直接核销；跨币种核销按 POL settlement 用途的显式汇率记录两种币种金额，业务结算汇率差额单列（STL-INV-007，负责人决定 2026-11-12，取代“首期同币种、跨币种需专项规则评审”）。 S5R（2026-11-13，模拟签核 E0）：订单账户由系统消费方在 OrderActivated 时开立，资金人员只补建（D02）；修订生效时信用占用调整为新修订的信用部分（D08）；订单汇差用实际结汇汇率、未结汇部分按核销日 settlement 汇率并标 unrealized，费用付款经核销计入净现金（D19）；红票只触发应付复核，应付经人工调整命令变化（D20）；第三方付款按许可付款人或 fund.verify_payer（D21）；期初结算单可开贷项、资金记录可冲销、跨币种敞口按 credit 汇率（D22）；费用承担随 Incoterm（D24）；取消订单有沉没成本时经营结果可以 cancelled 标记关闭（D42）；付款阶段只按日历日，修订迁移窗口按最终一致接受（D46）；TRD 不读取已核销资金（D44）；付款计划复核暂不发布事实，TSK 需要时加 PaymentPlanReviewSettled（D37）。结汇是 fund.record 的 kind=fx_conversion，没有单独命令。",
       "legacy": "无（产品基线 F08–F10、第 4.2–4.13 节）",
       "stage": "S5",
       "status": "CANDIDATE"
@@ -722,6 +1281,7 @@
         "RemedyDecided",
         "ClaimClosed"
       ],
+      "queries": [],
       "invariants": [],
       "boundary": "退货不抹去原发货，也不隐式创建补发；财务与库存仍由原模块受控维护。",
       "decision": "首发最小：客诉、退货／贷项／退款及来源关联。",
@@ -765,7 +1325,8 @@
         "tax_refund_case.record_result",
         "tax_refund_case.record_opening",
         "certificate.register",
-        "trade_compliance.reopen"
+        "trade_compliance.reopen",
+        "tax_refund_case.rebind_policy"
       ],
       "facts": [
         "PurchaseInvoiceVerified",
@@ -776,13 +1337,137 @@
         "ExportLicenseAllocated",
         "TradeComplianceReopened",
         "CertificateRegistered",
-        "TaxRefundResultRecorded"
+        "TaxRefundResultRecorded",
+        "TaxOpeningRecorded",
+        "ExportLicenseRegistered"
+      ],
+      "queries": [
+        {
+          "name": "cnx.certificate.list",
+          "route": "GET /api/brant/v1/cnx/certificates",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.certificate.get",
+          "route": "GET /api/brant/v1/cnx/certificates/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.certificate.applicability",
+          "route": "GET /api/brant/v1/cnx/certificates/{id}/applicability",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.declaration_case.list",
+          "route": "GET /api/brant/v1/cnx/declaration_cases",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.declaration_case.get",
+          "route": "GET /api/brant/v1/cnx/declaration_cases/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.document_bundle.list",
+          "route": "GET /api/brant/v1/cnx/document_bundles",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.document_bundle.get",
+          "route": "GET /api/brant/v1/cnx/document_bundles/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.export_license.list",
+          "route": "GET /api/brant/v1/cnx/export_licenses",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.export_license.get",
+          "route": "GET /api/brant/v1/cnx/export_licenses/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.trade_compliance.order_checks",
+          "route": "GET /api/brant/v1/cnx/orders/{id}/trade_compliance",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.trade_compliance.by_list",
+          "route": "GET /api/brant/v1/cnx/programme_lists/{id}/trade_compliance",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.purchase_invoice.list",
+          "route": "GET /api/brant/v1/cnx/purchase_invoices",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.purchase_invoice.get",
+          "route": "GET /api/brant/v1/cnx/purchase_invoices/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.trade_compliance.by_regulation",
+          "route": "GET /api/brant/v1/cnx/regulations/{id}/trade_compliance",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.export_license.shipment",
+          "route": "GET /api/brant/v1/cnx/shipments/{id}/export_license",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.tax_opening.list",
+          "route": "GET /api/brant/v1/cnx/tax_openings",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.tax_opening.get",
+          "route": "GET /api/brant/v1/cnx/tax_openings/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.tax_refund_case.list",
+          "route": "GET /api/brant/v1/cnx/tax_refund_cases",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.tax_refund_case.get",
+          "route": "GET /api/brant/v1/cnx/tax_refund_cases/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        },
+        {
+          "name": "cnx.trade_compliance.get",
+          "route": "GET /api/brant/v1/cnx/trade_compliance_checks/{id}",
+          "permission": "cnx.read",
+          "audited": true
+        }
       ],
       "invariants": [
         "UL-INV-31"
       ],
       "boundary": "不替代报关、开票、退税申报、银行与外汇办理的法定权威；导出文件或任务完成不冒充专业系统成功。",
-      "decision": "单上下文起步，B0 前按专业责任（发票、报关、退税）评估拆分。见 ADR-BR-009。 S5 只交付人工路径：外部结果由授权人员按原文、映射版本与外部顺序登记，专业接口在 S6-05（负责人决定 2026-11-12）。",
+      "decision": "单上下文起步，B0 前按专业责任（发票、报关、退税）评估拆分。见 ADR-BR-009。 S5 只交付人工路径：外部结果由授权人员按原文、映射版本与外部顺序登记，专业接口在 S6-05（负责人决定 2026-11-12）。 S5R（2026-11-13，模拟签核 E0）：许可证一批一证、一证一关，多证经出口批次，未报关即取消的目标可凭人工以 local_cancellation 释放分配（D03、D04）；重新评估中的 blocked 结论在新决定前仍答 blocked（D10）；全面禁运或制裁命中判 clear 须附授权文件证据（D17）；国别项目来自 screening_regulation 的 programmes，带区域的项目生成 region_review（D15、D38）；报关 unknown 可查证为 not_received（D13）；退（免）税方式按法定四类，征税批次不开案件（D14）；退税案件按出口日期所在有效期绑定政策修订（ConfigAt v1，D23）；部分红冲按红票金额冲减蓝票，已申报蓝票先登记进货凭证信息回退，受票主体不一致直接拒绝（D20、D21）；优惠原产地证作为登记种类，证书不加撤回、以更正修订截止有效期（D12、D47）。",
       "legacy": "无（产品基线第 21–24 章，CN-F01–CN-F08、CN-R01–CN-R15）",
       "stage": "S5",
       "status": "CANDIDATE"
@@ -808,6 +1493,7 @@
       "facts": [
         "OpportunityAdvanced"
       ],
+      "queries": [],
       "invariants": [],
       "boundary": "交易只保留来源关联；CRM 跟进任务不是 BusinessTask。",
       "decision": "crm.trade.bridge 只保存来源引用，不反向成为交易依赖。",
@@ -854,6 +1540,7 @@
         "TaskClosedUnfulfilled",
         "ActionReconciled"
       ],
+      "queries": [],
       "invariants": [
         "UL-INV-18",
         "UL-INV-19"
@@ -1259,7 +1946,7 @@
       "to": "FUL",
       "pattern": "Customer / Supplier",
       "fact": "生效订单可交付数量与交付条款",
-      "contract": "ActiveOrderRef v1（含贸易条款、交付要求、地址角色与付款阶段）＋OrderGuard v1",
+      "contract": "ActiveOrderRef v1（含贸易条款、交付要求、地址角色与付款阶段）＋OrderGuard v1、OrderRevisionRef v1（按（订单、修订）读取任何已提交修订：行的单价、价格基数、折扣、净额与税额，条款，Incoterm 与版本，绑定地址及国别；S5R-D35）",
       "authority": "TRD",
       "risk": "超发或绕过短交关闭",
       "contractStatus": "DESIGN",
@@ -1306,8 +1993,8 @@
       "frm": "PUR",
       "to": "STL",
       "pattern": "Customer / Supplier",
-      "fact": "采购承诺与收货或直发交付证据（采购结算来源）",
-      "contract": "PurchaseSettlementSource v1",
+      "fact": "采购承诺与收货或直发交付证据（采购结算来源）；订单承诺行的封存净额（预计采购成本）与承诺行的获批处置（write_off 计入经营结果的沉没成本）",
+      "contract": "PurchaseSettlementSource v1、PurchaseLineRef v1（订单的承诺行，经审计的查询；预计采购成本，S5R-D33；含获批处置，S5R-D42）",
       "authority": "PUR",
       "risk": "无交付证据形成应付",
       "contractStatus": "DESIGN",
@@ -1319,7 +2006,7 @@
       "to": "STL",
       "pattern": "OHS",
       "fact": "订单商业快照与付款计划（不生成应收）",
-      "contract": "OrderCommercialSnapshot v1（草稿与生效订单；付款阶段、金额与信用部分）",
+      "contract": "OrderCommercialSnapshot v1（草稿与生效订单；付款阶段、金额与信用部分）；订单行的封存核价成本 CostMinor（未承诺行的预计成本，S5R-D33）与订单修订的 Incoterm（费用承担核对，S5R-D24，经 OrderRevisionRef v1）",
       "authority": "TRD",
       "risk": "付款计划被当作应收或到账",
       "contractStatus": "DESIGN",
@@ -1367,7 +2054,7 @@
       "to": "CNX",
       "pattern": "Customer / Supplier",
       "fact": "出口批次与出运单证明细",
-      "contract": "ExportLotRef v1",
+      "contract": "ExportLotRef v1（含出口批次与出运的状态，供许可证 local_cancellation 释放核对，S5R-D03）；出运的最终用户 end_user_party（S5R-D40）",
       "authority": "FUL",
       "risk": "本地出库被当作海关出口确认",
       "contractStatus": "DESIGN",
@@ -1390,8 +2077,8 @@
       "frm": "STL",
       "to": "CNX",
       "pattern": "OHS",
-      "fact": "资金流水与核销（收汇资料关联）",
-      "contract": "FundRecordRef v1",
+      "fact": "资金流水与核销（收汇资料关联）；已确认贷项（外部对账主体 credit_note，CN-AT11）",
+      "contract": "FundRecordRef v1、CreditNoteRef v1（已确认贷项：订单、结算单、类型、金额、币种、状态）",
       "authority": "STL",
       "risk": "商业核销被称为出口收汇核销",
       "contractStatus": "DESIGN",
@@ -1405,7 +2092,7 @@
       "fact": "商品申报档案（编码与申报要素由专业人员核实）",
       "contract": "DeclarationProfileRef v1（核实的申报档案：商品编码、申报要素、法定单位、原产地依据与出口管制分类）",
       "authority": "CAT（候选）／专业核实",
-      "risk": "AI 商品编码候选被当作合规结论",
+      "risk": "AI 商品编码候选被当作合规结论；无守卫：CNX 在事务前读取，可能持有较早的已核实修订；修订不可变，可接受",
       "contractStatus": "DESIGN",
       "guardLock": false
     },
@@ -1450,8 +2137,8 @@
       "frm": "PTY",
       "to": "STL",
       "pattern": "OHS / Published Language",
-      "fact": "客户与供应商结算档案",
-      "contract": "TradingProfileRef v1",
+      "fact": "客户与供应商结算档案；许可付款人（S5R-D21）",
+      "contract": "PartyRef v1（客户身份，STL 现用）、TradingProfileRef v1（结算档案与许可付款人；S5 未用，S5R-D21 起用于付款人判断）",
       "authority": "PTY",
       "risk": "第二经营主体被隐式放行",
       "contractStatus": "DESIGN",
@@ -1462,8 +2149,8 @@
       "frm": "PTY",
       "to": "FUL",
       "pattern": "Customer／Supplier（守卫函数）",
-      "fact": "主体筛查结论；收货人与通知方身份",
-      "contract": "PartyScreeningGuard v1、PartyRef v1",
+      "fact": "主体筛查结论；收货人与通知方身份；通知方（地址角色 notify，S5R-D40）；服务方角色（货代、承运人、保险人、检验机构）",
+      "contract": "PartyScreeningGuard v1（筛查覆盖收货人与通知方，S5R-D40）、PartyRef v1、ServiceRoleRef v1（forwarder、carrier、insurer、inspection_agency；只有货代与承运人要求航线，S5R-D36）",
       "authority": "PTY",
       "risk": "筛查过期或 match 后仍放行",
       "contractStatus": "DESIGN",
@@ -1487,7 +2174,7 @@
       "to": "CNX",
       "pattern": "OHS / Published Language",
       "fact": "外销订单、订单修订与外销合同／形式发票",
-      "contract": "SalesOrderRef v1（订单修订、行、交易方与地址）、SalesContractDocumentRef v1",
+      "contract": "SalesOrderRef v1（订单修订、行、交易方与地址）、SalesContractDocumentRef v1、OrderRevisionRef v1（报关按出运绑定的订单修订读取，S5R-D35）",
       "authority": "TRD",
       "risk": "报关资料引用旧订单修订",
       "contractStatus": "DESIGN",
@@ -1522,8 +2209,8 @@
       "frm": "POL",
       "to": "FUL",
       "pattern": "OHS / Published Language",
-      "fact": "单证模板、编号规则与贸易条件配置",
-      "contract": "ConfigRef v1、ConfigGuard v1、NumberIssue v1（shipment_document_template；商业发票与装箱单编号）",
+      "fact": "单证模板、编号规则与贸易条件配置；合同保险比例（trade_terms.insurance_percent）与付款条件例外的有效期（credit_policy.decision_validity_days）",
+      "contract": "ConfigRef v1、ConfigGuard v1、NumberIssue v1（shipment_document_template；商业发票与装箱单编号）；trade_terms 与 credit_policy 经 ConfigRef v1 在事务前读取，不需守卫锁（S5R-D06、D09）；invoice 单据类型专指商业发票（S5R-D16）",
       "authority": "POL",
       "risk": "单证套用错误模板版本",
       "contractStatus": "DESIGN",
@@ -1534,8 +2221,8 @@
       "frm": "POL",
       "to": "CNX",
       "pattern": "OHS / Published Language",
-      "fact": "主体政策、出口退税办法、税价口径、申报参数与启用的合规法规配置",
-      "contract": "ConfigRef v1＋ConfigGuard v1（screening_regulation、export_tax_policy）",
+      "fact": "主体政策、出口退税办法、税价口径、申报参数与启用的合规法规配置；screening_regulation 启用的国别项目名单 programmes（S5R-D38）；某时点有效的出口退税政策修订",
+      "contract": "ConfigRef v1＋ConfigGuard v1（screening_regulation、export_tax_policy）、ConfigAt v1（某种配置在时点 T 有效的修订，含已被取代的修订；修订不可变，不加锁；S5R-D23）",
       "authority": "POL",
       "risk": "按未冻结政策判定合规",
       "contractStatus": "DESIGN",
@@ -1594,8 +2281,8 @@
       "frm": "CNX",
       "to": "STL",
       "pattern": "OHS / Published Language",
-      "fact": "退税核准与到账对账引用",
-      "contract": "TaxRefundResultRef v1",
+      "fact": "退税核准与到账对账引用；购进发票、红蓝关系与匹配的承诺行（应付复核标记 invoice_reversed）",
+      "contract": "TaxRefundResultRef v1、PurchaseInvoiceRef v1（发票、红蓝关系、匹配的承诺行与金额；无锁查询，S5R-D20）",
       "authority": "CNX",
       "risk": "退税到账重复记为客户收款",
       "contractStatus": "DESIGN",
@@ -1607,9 +2294,9 @@
       "to": "FUL",
       "pattern": "Customer／Supplier（守卫函数）",
       "fact": "贸易合规结论、许可证用量与官方证书结果引用",
-      "contract": "TradeComplianceGuard v1、ExportLicenseGuard v1、CertificateResultRef v1",
+      "contract": "TradeComplianceGuard v1（最近决定为 blocked 且尚无新决定时答 blocked，原因 blocked_under_review；S5R-D10）、ExportLicenseGuard v1（出运的每一行由出运本身的分配或包含该行的出口批次的分配覆盖；S5R-D04）、CertificateResultRef v1",
       "authority": "CNX",
-      "risk": "合规 blocked 或许可证超额后仍放行",
+      "risk": "合规 blocked 或许可证超额后仍放行；CertificateResultRef v1 是无守卫查询（证书修订不可变）；guardLock 只指 TradeComplianceGuard v1 与 ExportLicenseGuard v1",
       "contractStatus": "DESIGN",
       "guardLock": true
     },
@@ -1631,7 +2318,7 @@
       "to": "TRD",
       "pattern": "Customer／Supplier（守卫函数）",
       "fact": "贸易合规核查结论",
-      "contract": "TradeComplianceGuard v1",
+      "contract": "TradeComplianceGuard v1（最近决定为 blocked 且尚无新决定时答 blocked，S5R-D10；比现行更严，不需要 v2）",
       "authority": "CNX",
       "risk": "禁运或管制结论未 clear 仍生效订单",
       "contractStatus": "DESIGN",
@@ -1787,7 +2474,7 @@
       "to": "TRD",
       "pattern": "OHS（事务内无锁读取）",
       "fact": "订单的未处置采购草稿、承诺与需求分配",
-      "contract": "DownstreamCommitments v1",
+      "contract": "DownstreamCommitments v1（列：commitment_id、order_line_id、status（requested／approved／issued／confirmed／fulfilled）、quantity、delivered_quantity、disposition（获批处置 return_to_supplier／write_off／hold_for_reuse，未处置为空；S5R-D05））",
       "authority": "PUR",
       "risk": "有未处置承诺仍取消订单",
       "contractStatus": "DESIGN",
@@ -1811,7 +2498,7 @@
       "to": "QLT",
       "pattern": "OHS / Published Language",
       "fact": "外部检验机构（service role inspection）",
-      "contract": "PartyRef v1、ServiceRoleRef v1",
+      "contract": "PartyRef v1、ServiceRoleRef v1（inspection_agency：只需已核实，不要求航线；S5R-D36）",
       "authority": "PTY",
       "risk": "未核实机构的报告被采用",
       "contractStatus": "DESIGN",
@@ -1858,8 +2545,8 @@
       "frm": "PTY",
       "to": "CNX",
       "pattern": "OHS / Published Language",
-      "fact": "交易方与地址所在国（贸易合规核查）",
-      "contract": "PartyRef v1、AddressRoleRef v1（含国家代码）",
+      "fact": "交易方与地址所在国（贸易合规核查）；报关行（服务角色 customs_broker）",
+      "contract": "PartyRef v1、AddressRoleRef v1（含国家代码）、ServiceRoleRef v1（customs_broker；报关行须已核实，S5R-D36）",
       "authority": "PTY",
       "risk": "以自由文本地址推定所在国",
       "contractStatus": "DESIGN",
@@ -1874,6 +2561,42 @@
       "contract": "CostSnapshotRef v1",
       "authority": "CST",
       "risk": "保险费与核价组件不一致未被发现",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R79",
+      "frm": "FUL",
+      "to": "QLT",
+      "pattern": "OHS（事务内无锁读取）",
+      "fact": "按质量放行 ID 的已出运量；quality_release.revoke 锁定放行根后读取，记录冻结量＝放行量－已出运量",
+      "contract": "ReleaseConsumption v1",
+      "authority": "FUL",
+      "risk": "撤回记录的冻结量与实际出运不符；正确的前提是 shipment.confirm 以 FOR SHARE 调用 QLT 守卫，与撤回串行（S5R-D18）",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R80",
+      "frm": "REF",
+      "to": "PTY",
+      "pattern": "OHS / Published Language（平台提供方）",
+      "fact": "筛查名单内容与版本",
+      "contract": "ScreeningListVersion v1（版本与条目查询）、idp-brant.ref.screening_list_imported.v1",
+      "authority": "名单发布机关或合规数据服务商；internal/reference 受控导入",
+      "risk": "未登记的上下文读取或订阅参考数据（S5R-D34：撤销对 idp-brant.ref 的全局放行）",
+      "contractStatus": "DESIGN",
+      "guardLock": false
+    },
+    {
+      "id": "R81",
+      "frm": "REF",
+      "to": "CNX",
+      "pattern": "OHS / Published Language（平台提供方）",
+      "fact": "国别禁运与制裁项目名单、筛查名单内容与版本",
+      "contract": "CountryProgrammeVersion v1、ScreeningListVersion v1（版本查询）、idp-brant.ref.country_programmes_imported.v1",
+      "authority": "项目与名单发布机关或合规数据服务商；internal/reference 受控导入",
+      "risk": "未登记的上下文读取或订阅参考数据（S5R-D34）",
       "contractStatus": "DESIGN",
       "guardLock": false
     }
@@ -1957,7 +2680,7 @@
       "title": "BRC-001 主链：询价到采购草稿",
       "mode": "人工驱动，AI 仅生成候选",
       "purpose": "验证 INQ→SUP→CST→TRD→PUR 的事实传递与各自守卫。",
-      "given": "company.A；customer.1／contact.1；ST01 四个 SKU 共 120 PCS；supplier.A 5.00 USD 与 supplier.B 5.30 USD；直接费用 60 USD；最低毛利 25%。",
+      "given": "company.A；customer.1／contact.1；ST01 四个 SKU 共 120 PCS；supplier.A 5.00 USD 与 supplier.B 5.30 USD；直接费用 60 USD（FCA 交货前的内陆运输与出口清关，成本组件 pre_carriage；买方指定货代的主运费不计入，S5R-D24）；最低毛利 25%。",
       "steps": [
         "INQ 登记并人工核实 120 PCS 询价",
         "SUP 核实两家供应报价（MOQ 100 按款号合计）",
@@ -2062,7 +2785,7 @@
       "given": "付款计划 30% 订单时、70% 出运前；质量已放行；尾款到账 670.00，差额 2.00 未解释。",
       "steps": [
         "FUL commercial_release.evaluate",
-        "STL 核实差额为我方承担的银行费用并获批处理",
+        "STL 核实差额为我方承担的银行费用并获批处理，并把 2.00 核销到该阶段（已解释差额只经核销计入）",
         "FUL 再次评估并放行",
         "FUL shipment.confirm 与 document_release.record"
       ],
@@ -2231,7 +2954,7 @@
     {
       "id": "G4",
       "name": "受限试点上线",
-      "passCriteria": "真实客户任务、质量／人工／成本比较；严重缺陷关闭；迁移、权限、容量与恢复演练通过。",
+      "passCriteria": "真实客户任务、质量／人工／成本比较；严重缺陷关闭；迁移、权限、容量与恢复演练通过。Outbox 中继延迟（事件提交到消费方处理完成）在参考部署与参考负载（16＋16 用户）下 P95 ≤ 5 s、P99 ≤ 30 s；最老未分发事件超过 60 s 告警、超过 300 s 为事故；参考部署至少 2 个分发进程，按负载扩到 3 个；死信单独告警（S5R-D07，模拟签核 E0；数值 B0 前须运维与财务的真实负责人确认）。",
       "approverRole": "客户代表＋交付＋质量＋运维",
       "status": "NO-GO（2026-11-13，模拟评审 E0，负责人决定 E-7）：容量与恢复演练只在本机 WSL2 实测，无生产环境、无真实客户任务、无真人签核"
     },
@@ -2657,7 +3380,7 @@
       "classification": "履约",
       "fact_authority": "FUL",
       "write_owner": "FUL",
-      "consumers": "STL、CNX",
+      "consumers": "—（STL、CNX 不消费；需要时经 FUL 读取）",
       "invariant": "质量、付款条件与筛查同时满足；例外须授权人工批准",
       "forbidden": "以普通备注放行",
       "priority": "P1"
@@ -2680,7 +3403,7 @@
       "fact_authority": "外部签发机构",
       "write_owner": "CNX（结果引用与核实）",
       "consumers": "FUL",
-      "invariant": "适用对象、商品、批次、市场与有效期明确",
+      "invariant": "适用对象、商品、批次、市场与有效期明确；签发出运单证时再查一次适用性；单证套中未引用 CNX 结果的原产地证为可确认差异；种类含优惠原产地证（协定代码与签发机构）与 RCEP 原产地声明（S5R-D12）；机关撤销以更正修订截止有效期（S5R-D47）",
       "forbidden": "另一规格或市场的证书直接复用",
       "priority": "P2"
     },
@@ -2702,7 +3425,7 @@
       "fact_authority": "STL",
       "write_owner": "STL",
       "consumers": "TRD",
-      "invariant": "先占用后生效；占用在信用根事务中串行裁决",
+      "invariant": "先占用后生效；占用在信用根事务中串行裁决；订单修订生效时占用调整为新修订的信用部分，上一修订的已消耗占用以 superseded 释放（S5R-D08）",
       "forbidden": "以付款计划或口头承诺代替额度检查",
       "priority": "P1"
     },
@@ -2724,8 +3447,8 @@
       "fact_authority": "外部发证机关；CNX 登记与分配",
       "write_owner": "CNX",
       "consumers": "FUL",
-      "invariant": "累计分配不超额度；有效期内且目的国与最终用户一致",
-      "forbidden": "凭本地取消恢复已申报用量",
+      "invariant": "累计分配不超额度；有效期内且目的国与最终用户一致；一批一证（single_use，两用物项的法定方式与默认值）只允许一个有效分配、报关后不再分配，multi_use 须附证面依据；一证一关，一份报关单一张许可证，多证经出口批次（S5R-D04）",
+      "forbidden": "凭本地取消恢复已申报用量（未提交报关、目标已在 FUL 取消的分配可由人工以 local_cancellation 释放，S5R-D03）",
       "priority": "P1"
     },
     {
@@ -2746,7 +3469,7 @@
       "fact_authority": "POL（独立人工发布）",
       "write_owner": "POL",
       "consumers": "PTY、CNX、STL",
-      "invariant": "按版本与有效期使用；启用外国名单须法务批准（ADR-BR-017）",
+      "invariant": "按版本与有效期使用；启用外国名单须法务批准（ADR-BR-017）；credit_policy、export_tax_policy、screening_regulation 只由对应专业岗位发布（S5R-D30）；screening_regulation 列出启用的国别项目名单（S5R-D38）",
       "forbidden": "租户以自由字段改写审批阈值或名单启用",
       "priority": "P1"
     },
@@ -2757,7 +3480,7 @@
       "fact_authority": "名单发布机关或合规数据服务商",
       "write_owner": "internal/reference（brant_ref，受控导入）",
       "consumers": "PTY、CNX",
-      "invariant": "保存来源、版本、导入时间与哈希；新版本触发复筛",
+      "invariant": "保存来源、版本、导入时间与哈希；新版本触发复筛；PTY 以 list_updated 派生复筛；CNX 以守卫派生 pending/list_updated，并由国别项目导入事件重开；读取方须有以 REF 为上游的关系（S5R-D34）",
       "forbidden": "手工编辑名单条目",
       "priority": "P1"
     },
@@ -2779,7 +3502,7 @@
       "fact_authority": "STL",
       "write_owner": "STL",
       "consumers": "报表",
-      "invariant": "费用来源、受益对象、类别、币种与状态（估算、待确认、已确认）分别记录；分配权重有依据且按最小币值最大余数法；关闭后补录须重新打开并留痕",
+      "invariant": "费用来源、受益对象、类别、币种与状态（估算、待确认、已确认）分别记录；分配权重有依据且按最小币值最大余数法；关闭后补录须重新打开并留痕；订单汇差按实际结汇汇率、未结汇部分按核销日汇率（unrealized）；已取消订单有沉没成本时以 cancelled 标记关闭（S5R-D19、D42）",
       "forbidden": "以实时重算覆盖已关闭的经营结果快照",
       "priority": "P1"
     },
@@ -2789,7 +3512,7 @@
       "classification": "财务业务",
       "fact_authority": "STL",
       "write_owner": "STL",
-      "consumers": "CNX",
+      "consumers": "—（期初事实各自独立；CN-AT16 经 external_reconciliation 核对）",
       "invariant": "截止时点、来源与已办状态可核对；同一截止与来源只登记一次",
       "forbidden": "上线后重复生成同一账款或现金",
       "priority": "P1"
@@ -2800,11 +3523,151 @@
       "classification": "外部事实",
       "fact_authority": "外部专业系统或授权人员",
       "write_owner": "CNX",
-      "consumers": "STL",
+      "consumers": "—（期初事实各自独立；CN-AT16 经 external_reconciliation 核对）",
       "invariant": "截止时点、凭证、用途余额与已办状态可核对；不重复生成用途占用",
       "forbidden": "按本地估算恢复已申报用途",
       "priority": "P1"
     }
   ],
-  "counts": {}
+  "counts": {},
+  "platformProviders": [
+    {
+      "id": "REF",
+      "name": "参考数据",
+      "package": "internal/reference（api、lists、programmes）",
+      "schema": "brant_ref",
+      "source": "idp-brant.ref",
+      "events": [
+        "idp-brant.ref.screening_list_imported.v1",
+        "idp-brant.ref.country_programmes_imported.v1"
+      ],
+      "commands": "screening_list.import、country_programme.import（人工专属；岗位模板 capabilities，不在上下文命令目录中，S1-11）",
+      "queries": [
+        {
+          "name": "ref.country_programme_list.get",
+          "route": "GET /api/brant/v1/ref/country_programme_lists/{id}",
+          "permission": "ref.read",
+          "audited": true
+        },
+        {
+          "name": "ref.country_programme_list_version.get",
+          "route": "GET /api/brant/v1/ref/country_programme_lists/{id}/versions/{version}",
+          "permission": "ref.read",
+          "audited": true
+        },
+        {
+          "name": "ref.screening_list.get",
+          "route": "GET /api/brant/v1/ref/screening_lists/{id}",
+          "permission": "ref.read",
+          "audited": true
+        },
+        {
+          "name": "ref.screening_list_version.get",
+          "route": "GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}",
+          "permission": "ref.read",
+          "audited": true
+        }
+      ],
+      "note": "平台提供方（S5R-D34，2026-11-13 模拟签核 E0）：参考数据不是限界上下文，下游只经 internal/reference/api 读取；依赖由 relationships 中以 REF 为上游的关系登记（R80、R81），允许清单与 Inbox 订阅检查只对这些关系的下游放行 internal/reference/api 与 idp-brant.ref。"
+    }
+  ],
+  "consumers": [
+    {
+      "id": "stl.order_credit",
+      "context": "STL",
+      "systemActor": "system:inbox.stl.order_credit",
+      "subscribes": [
+        "idp-brant.trd.order_activated.v1",
+        "idp-brant.trd.order_cancelled.v1",
+        "idp-brant.trd.order_closed_unfulfilled.v1",
+        "idp-brant.trd.order_remainder_closed.v1",
+        "idp-brant.trd.order_closed.v1",
+        "idp-brant.trd.order_amended.v1"
+      ],
+      "permissions": [
+        "credit.consume",
+        "credit.release",
+        "stl.read"
+      ],
+      "failureCodes": [
+        "stl.order_event_invalid"
+      ],
+      "policies": "PL-12、PL-13；OrderAmended 时按 S5R-D08 调整占用"
+    },
+    {
+      "id": "stl.order_account",
+      "context": "STL",
+      "systemActor": "system:inbox.stl.order_account",
+      "subscribes": [
+        "idp-brant.trd.order_activated.v1",
+        "idp-brant.trd.order_amended.v1"
+      ],
+      "permissions": [
+        "order_account.open",
+        "payment_plan_review.open",
+        "stl.read"
+      ],
+      "failureCodes": [
+        "stl.order_account_not_openable",
+        "stl.payment_plan_review_not_openable"
+      ],
+      "policies": "PL-09；order_account.open 为自有权限（S5R-D02，S5 借用 payment_plan_review.open）"
+    },
+    {
+      "id": "pur.allocation_review",
+      "context": "PUR",
+      "systemActor": "system:inbox.pur.allocation_review",
+      "subscribes": [
+        "idp-brant.trd.order_amended.v1",
+        "idp-brant.trd.order_cancelled.v1",
+        "idp-brant.trd.order_remainder_closed.v1"
+      ],
+      "permissions": [
+        "allocation_review.open",
+        "pur.read"
+      ],
+      "failureCodes": [
+        "pur.allocation_review_not_openable",
+        "pur.order_event_invalid"
+      ],
+      "policies": "PL-09；allocation_review.open 只授予本消费方（S5R-D29）"
+    },
+    {
+      "id": "ful.shipment_review",
+      "context": "FUL",
+      "systemActor": "system:inbox.ful.shipment_review",
+      "subscribes": [
+        "idp-brant.trd.order_amended.v1",
+        "idp-brant.trd.order_cancelled.v1",
+        "idp-brant.trd.order_remainder_closed.v1"
+      ],
+      "permissions": [
+        "shipment_review.open",
+        "ful.read"
+      ],
+      "failureCodes": [
+        "ful.shipment_review_not_openable",
+        "ful.order_event_invalid"
+      ],
+      "policies": "PL-09；shipment_review.open 只授予本消费方（S5R-D29）"
+    },
+    {
+      "id": "cnx.trade_compliance",
+      "context": "CNX",
+      "systemActor": "system:inbox.cnx.trade_compliance",
+      "subscribes": [
+        "idp-brant.trd.order_amended.v1",
+        "idp-brant.pol.config_published.v1",
+        "idp-brant.ref.country_programmes_imported.v1"
+      ],
+      "permissions": [
+        "trade_compliance.reopen",
+        "cnx.read"
+      ],
+      "failureCodes": [
+        "见 S5 C4b-CNX 报告"
+      ],
+      "policies": "PL-14、PL-15、PL-16；idp-brant.ref 经 R81 登记（S5R-D34）"
+    }
+  ]
 }

@@ -146,7 +146,7 @@ SUP 拥有供应条件的已核实修订；CST 拥有场景、评估与冻结快
 
 ## 13 集成事件信封 {#s13}
 
-对外发布的集成事件使用统一信封；eventType 带主版本后缀，载荷只含标识与版本，不含法定标识或个人数据。机器可读 Schema 见 06 阶段 04_Integration_Event_Envelope_V0.1.schema.json。
+对外发布的集成事件使用统一信封；eventType 带主版本后缀。载荷含标识与版本，以及各聚合 eventPayloads 登记的业务值（数量、金额、期限、结论），不含法定标识、个人数据与文件内容（S5R-D43，取代“载荷只含标识与版本”）。机器可读 Schema 见 06 阶段 04_Integration_Event_Envelope_V0.1.schema.json。
 
 {{td_envelope}}
 
