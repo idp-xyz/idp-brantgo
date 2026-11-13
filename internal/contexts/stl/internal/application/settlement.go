@@ -321,18 +321,18 @@ type applyStatement struct {
 	cmd       api.Apply
 	order     *Order
 	rate      settlementRate
+	permitted int64 // S5R-D21: the customer's trading profile revision when it permits the fund's payer
 	fund      *fr.FundRecord
 	statement *settlement.Statement
 	taken     bool
 }
 
-// Prepare reads, for a cross-currency application (C8, STL-INV-007), the fund's and the statement's
-// currencies, POL's settlement rate and TRD's analysis rate of the statement's order.
+// Prepare reads, for a receivable paid by another party than its customer, whether the customer's
+// trading profile permits the payer (PTY, S5R-D21), and, for a cross-currency application (C8,
+// STL-INV-007), the fund's and the statement's currencies, POL's settlement rate and TRD's analysis
+// rate of the statement's order.
 func (h *applyStatement) Prepare(ctx context.Context) error {
-	if h.cmd.FXRate == nil {
-		return nil
-	}
-	var from, to, order string
+	var from, to, order, payer, customer string
 	err := h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
 		sc := scope(ctx)
 		f, err := postgres.LoadFund(ctx, exec, sc, h.cmd.FundRecordID, false)
@@ -343,11 +343,19 @@ func (h *applyStatement) Prepare(ctx context.Context) error {
 		if err != nil || st == nil {
 			return err
 		}
-		from, to, order = f.Currency().Code(), st.Currency().Code(), st.OrderID
+		from, to, order, payer, customer = f.Currency().Code(), st.Currency().Code(), st.OrderID, f.CounterpartyID, st.CounterpartyID
 		return nil
 	})
 	if err != nil {
 		return err
+	}
+	if h.cmd.Target.Kind == api.TargetReceivable && payer != "" && payer != customer {
+		if h.permitted, err = h.s.permittedBy(ctx, payer, customer); err != nil {
+			return err
+		}
+	}
+	if h.cmd.FXRate == nil {
+		return nil
 	}
 	if order != "" {
 		orders, err := h.s.Upstream.Orders.ResolveOrders(ctx, []string{order})
@@ -410,8 +418,13 @@ func (h *applyStatement) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	verified, err := postgres.PayerVerifications(ctx, exec, sc, f.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	x, err := fa.ApplyToStatement(fa.StatementInput{ID: c.ApplicationID, Fund: f, FundEntries: entries, Statement: st, StageID: c.Target.StageID,
-		Applied: applied, Amount: amount, FX: fx, By: fundAct(d, now, ""), Team: d.Team})
+		Applied: applied, Amount: amount, FX: fx, Payers: fa.Payers{Verified: verified, Permitted: h.permitted}, By: fundAct(d, now, ""),
+		Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -439,12 +452,12 @@ func lockApplicationRoots(ctx context.Context, exec bentopg.Executor, x *fa.Appl
 
 // receivablesOf is what customer party owes on business receivables as the credit exposure counts
 // it in the limit currency c (D-4, STL-INV-004), read under the credit root's lock: the installments
-// of its confirmed sales statements and what stands applied on them, converted at the reservation
-// rates of reservations.
-func receivablesOf(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, party string, c kernel.Currency, reservations []cc.Reservation) (cc.Receivables, error) {
+// of its confirmed sales statements (and opening receivables) and what stands applied on them, those
+// in another currency than c converted at the credit rates of rates (S5R-D22).
+func receivablesOf(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, party string, c kernel.Currency, rates cc.Rates) (cc.Receivables, error) {
 	owed, err := postgres.OwedInstallments(ctx, exec, sc, party)
 	if err != nil {
 		return cc.Receivables{}, err
 	}
-	return cc.ReceivablesOf(c, owed, reservations)
+	return cc.ReceivablesOf(c, owed, rates)
 }

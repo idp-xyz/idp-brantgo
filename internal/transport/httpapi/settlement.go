@@ -23,6 +23,7 @@ type STL interface {
 	stlapi.ResultQueries
 	stlapi.OpeningCommands
 	stlapi.OpeningQueries
+	stlapi.PayerCommands
 	stlapi.Reconciler
 	stlapi.Auditor
 }
@@ -56,6 +57,7 @@ func stlCommands(c STL) *commandSet {
 			stlapi.CommandCloseOrderResult:  reflected("", "", receiptOf[stlapi.Receipt](c.CloseOrderResult)),
 			stlapi.CommandReopenOrderResult: reflected("", "", receiptOf[stlapi.Receipt](c.ReopenOrderResult)),
 			stlapi.CommandRecordOpening:     reflected("", "", receiptOf[stlapi.Receipt](c.RecordOpening)),
+			stlapi.CommandVerifyPayer:       reflected("", "", receiptOf[stlapi.Receipt](c.VerifyPayer)),
 		}}
 }
 

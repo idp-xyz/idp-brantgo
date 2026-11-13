@@ -3,7 +3,8 @@
 //
 // STL's upstream contexts for customer credit are TRD (Context Map R32, OrderCommercialSnapshot v1,
 // through STL's own port Orders), POL (R33, ConfigRef v1 and ConfigGuard v1: credit_policy, the
-// currency, fx_rate of purpose credit), PTY (R43, the customer) and EVD (R75, the evidence of a
+// currency, fx_rate of purpose credit), PTY (R43, the customer and its trading profile's permitted
+// payers, S5R-D21) and EVD (R75, the evidence of a
 // limit). A command reads them through their api packages before STL's transaction begins (the
 // ledger's Preparer step); inside it, after STL locked the customer's CustomerCredit root FOR UPDATE
 // and the ledger locked the authority guard FOR SHARE, POL's ConfigGuard v1 re-checks every
@@ -20,7 +21,6 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
-	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
 	cc "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/customercredit"
@@ -54,12 +54,14 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGetDecision, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
 		// Funds (B2a): fund.record, fund.resolve_difference, application.apply and application.unapply
-		// are humanOnlyCommands (D-16, D-17); order_account.open adopts an order revision's stages with
-		// the permission of payment_plan_review.open, by a person or the system (SM-STL-PAYMENT-PLAN-REVIEW).
+		// are humanOnlyCommands (D-16, D-17); order_account.open is a person's or the system's, never an
+		// agent's, under its own permission (S5R-D02; commandActors order_account.open human|system).
 		authorization.HumanOnly(api.CommandRecordFund, api.CommandRecordFund),
 		authorization.HumanOnly(api.CommandResolveDifference, api.CommandResolveDifference),
 		{Command: api.CommandOpenOrderAccount, Permission: api.PermissionOpenOrderAccount,
 			ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
+		// S5R-D21: fund.verify_payer is a humanOnlyCommand (credit_manager), independent of the recorder.
+		authorization.HumanOnly(api.CommandVerifyPayer, api.CommandVerifyPayer),
 		authorization.HumanOnly(api.CommandApply, api.CommandApply),
 		authorization.HumanOnly(api.CommandUnapply, api.CommandUnapply),
 		{Command: api.CommandGetFundRecord, Permission: api.PermissionRead, ActorKinds: anyActor},
@@ -106,7 +108,7 @@ func Rules() []authorization.Rule {
 type Upstream struct {
 	Orders     Orders         // TRD OrderCommercialSnapshot v1 (R32), STL's port
 	Configs    polapi.Queries // POL ConfigRef v1 (R33)
-	Parties    ptyapi.Queries // PTY PartyRef v1 (R43)
+	Parties    Parties        // PTY PartyRef v1 and TradingProfileRef v1 (R43; S5R-D21), STL's port (payer.go)
 	Sources    evdapi.Queries // EVD SourceRef v1 (R75)
 	Shipments  Shipments      // FUL ShipmentLineRef v1 (R30), STL's port (sources.go)
 	Deliveries Deliveries     // PUR PurchaseSettlementSource v1 (R31), STL's port
@@ -279,6 +281,9 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.OpenOrderAccount:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandOpenOrderAccount, key, c
+	case api.VerifyPayer:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandVerifyPayer, key, c
 	case api.Apply:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandApply, key, c

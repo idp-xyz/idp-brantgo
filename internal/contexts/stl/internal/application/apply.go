@@ -171,13 +171,14 @@ func appEvent(typ string, x *fa.Application) action.Event {
 // order and derives the fund's available balance and the stage's open amount from the immutable
 // applications and draws under those locks (D-3), then writes the application.
 type applyFund struct {
-	s       Service
-	cmd     api.Apply
-	order   *Order
-	rate    settlementRate
-	fund    *fr.FundRecord
-	account *oa.Account
-	taken   bool
+	s         Service
+	cmd       api.Apply
+	order     *Order
+	rate      settlementRate
+	permitted int64 // S5R-D21: the customer's trading profile revision when it permits the fund's payer
+	fund      *fr.FundRecord
+	account   *oa.Account
+	taken     bool
 }
 
 func (h *applyFund) Prepare(ctx context.Context) error {
@@ -187,6 +188,9 @@ func (h *applyFund) Prepare(ctx context.Context) error {
 	}
 	if o, ok := orders[h.cmd.Target.OrderID]; ok {
 		h.order = &o
+		if h.permitted, err = h.s.permittedPayer(ctx, h.cmd.FundRecordID, o.CustomerID); err != nil {
+			return err
+		}
 	}
 	if h.cmd.FXRate == nil || h.order == nil {
 		return nil
@@ -244,8 +248,13 @@ func (h *applyFund) Apply(ctx context.Context, exec bentopg.Executor, d authoriz
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	verified, err := postgres.PayerVerifications(ctx, exec, sc, f.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	x, err := fa.Apply(fa.ApplyInput{ID: c.ApplicationID, Fund: f, FundEntries: entries, Account: a, StageID: c.Target.StageID,
-		StageApplied: stageApplied, Amount: amount, FX: fx, By: fundAct(d, now, ""), Team: d.Team})
+		StageApplied: stageApplied, Amount: amount, FX: fx, Payers: fa.Payers{Verified: verified, Permitted: h.permitted}, By: fundAct(d, now, ""),
+		Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -337,6 +346,7 @@ func (s Service) applicationReceipt(ctx context.Context, res api.Receipt) (api.A
 		out.FundRecordID, out.OrderID, out.OrderRevision, out.StageID = x.FundRecordID, x.OrderID, x.OrderRevision, x.StageID
 		out.Currency, out.AmountMinor = x.Amount.Currency().Code(), x.Amount.MinorString()
 		out.CreditNoteID, out.Conversion = x.CreditNoteID, conversionView(x.Conversion)
+		out.PayerBasis, out.PayerProfileRevision = payerBasis(x), x.PayerProfileRevision
 		out.TargetKind, out.StatementID, out.InstallmentSeq = x.TargetKind, x.StatementID, x.InstallmentSeq
 		if x.StatementID != "" {
 			st, err := postgres.LoadStatement(ctx, exec, sc, x.StatementID, false)

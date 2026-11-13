@@ -20,7 +20,7 @@ import (
 func visibleFund(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (visible, handled bool, err error) {
 	sc := scope(ctx)
 	switch command {
-	case api.CommandRecordFund, api.CommandResolveDifference:
+	case api.CommandRecordFund, api.CommandResolveDifference, api.CommandVerifyPayer:
 		f, err := postgres.LoadFund(ctx, exec, sc, id, false)
 		return err == nil && f != nil && d.Sees(f.OwnerActor, f.OwnerTeam), true, err
 	case api.CommandOpenOrderAccount, api.CommandOpenReview, api.CommandSettleReview:
@@ -36,7 +36,16 @@ func visibleFund(ctx context.Context, exec bentopg.Executor, d authorization.Dec
 func allocationView(x *fa.Application) api.AllocationView {
 	return api.AllocationView{ApplicationID: x.ID, FundRecordID: x.FundRecordID, CreditNoteID: x.CreditNoteID, TargetKind: x.TargetKind,
 		OrderID: x.OrderID, OrderRevision: x.OrderRevision, StageID: x.StageID, StatementID: x.StatementID, InstallmentSeq: x.InstallmentSeq,
-		MovedFrom: x.MovedFrom, AmountMinor: x.Amount.MinorString(), Status: x.Status, Conversion: conversionView(x.Conversion)}
+		MovedFrom: x.MovedFrom, AmountMinor: x.Amount.MinorString(), Status: x.Status, Conversion: conversionView(x.Conversion),
+		PayerBasis: payerBasis(x), PayerProfileRevision: x.PayerProfileRevision}
+}
+
+// payerBasis is x's payer basis as the reads show it (S5R-D21): customer when none is recorded.
+func payerBasis(x *fa.Application) string {
+	if x.PayerBasis == "" {
+		return api.PayerCustomer
+	}
+	return x.PayerBasis
 }
 
 // fundRef is fund record f as FundRecordRef v1 states it, with the allocations d sees.
@@ -53,6 +62,10 @@ func fundRef(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, f *fr.
 	if err != nil {
 		return api.FundRecordRef{}, err
 	}
+	verified, err := postgres.PayerVerifications(ctx, exec, sc, f.ID)
+	if err != nil {
+		return api.FundRecordRef{}, err
+	}
 	r := api.FundRecordRef{FundRecordID: f.ID, Kind: f.Kind, Direction: f.Direction, Status: f.Status, Version: f.Version,
 		CounterpartyID: f.CounterpartyID, Currency: f.Currency().Code(), CurrencyRevision: f.CurrencyRevision,
 		BankAccount:   api.ConfigRef{Kind: api.KindBankAccount, ConfigID: f.BankAccountID, Revision: f.BankAccountRevision},
@@ -61,7 +74,11 @@ func fundRef(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, f *fr.
 		ResolvedMinor: f.Resolved().MinorString(), UnexplainedMinor: f.Unexplained().MinorString(), AppliedMinor: e.Applied.MinorString(),
 		DrawnMinor: e.Drawn.MinorString(), SoldMinor: e.Sold.MinorString(), AvailableMinor: f.Available(e).MinorString(),
 		CashMinor: f.Cash(e).MinorString(), SourceFundRecordID: f.SourceID, Resolutions: []api.ResolutionView{}, Draws: []api.DrawView{},
-		Allocations: []api.AllocationView{}, RecordedBy: f.Recorded.By, RecordedAt: f.Recorded.At}
+		Allocations: []api.AllocationView{}, RecordedBy: f.Recorded.By, RecordedAt: f.Recorded.At, PayerVerifications: []api.PayerVerificationView{}}
+	for _, v := range verified {
+		r.PayerVerifications = append(r.PayerVerifications, api.PayerVerificationView{Seq: v.Seq, PayerID: v.PayerID, CustomerID: v.CustomerID,
+			EvidenceIDs: v.EvidenceIDs, Reason: v.By.Reason, VerifiedBy: v.By.By, VerifiedAt: v.By.At})
+	}
 	if x := f.FX; x != nil {
 		r.FX = &api.FXView{SoldCurrency: x.Sold.Currency().Code(), SoldMinor: x.Sold.MinorString(), BankRate: x.Rate.String(),
 			FeeMinor: x.Fee.MinorString()}
@@ -204,7 +221,8 @@ func (s Service) GetApplication(ctx context.Context, id string) (api.Application
 		v = api.ApplicationView{ApplicationID: x.ID, FundRecordID: x.FundRecordID, CreditNoteID: x.CreditNoteID, TargetKind: x.TargetKind,
 			OrderID: x.OrderID, OrderRevision: x.OrderRevision, StageID: x.StageID, StatementID: x.StatementID, InstallmentSeq: x.InstallmentSeq,
 			MovedFrom: x.MovedFrom, Currency: x.Amount.Currency().Code(), AmountMinor: x.Amount.MinorString(), Conversion: conversionView(x.Conversion),
-			Status: x.Status, Version: x.Version, AppliedBy: x.Applied.By, AppliedAt: x.Applied.At, CheckedAt: kernel.Instant(s.Clock.Now())}
+			Status: x.Status, Version: x.Version, AppliedBy: x.Applied.By, AppliedAt: x.Applied.At, PayerBasis: payerBasis(x),
+			PayerProfileRevision: x.PayerProfileRevision, CheckedAt: kernel.Instant(s.Clock.Now())}
 		v.UnappliedBy, v.UnappliedAt, v.UnapplyReason = actOf(x.Unapplied)
 		return nil
 	})

@@ -73,7 +73,7 @@ func newFundWorld(t *testing.T) *fundWorld {
 		Permissions: []string{"fund.record", "fund.resolve_difference", "application.apply", "application.unapply", "stl.read", "evd.read",
 			"pty.read", "pol.read"}, DataScope: "company"})
 	fw.system = w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorSystem, ID: "system:inbox.stl"},
-		Permissions: []string{"payment_plan_review.open", "stl.read"}, DataScope: "company"})
+		Permissions: []string{"order_account.open", "payment_plan_review.open", "stl.read"}, DataScope: "company"})
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
 	fw.stl, err = stl.New(db, stl.Upstream{Orders: fw.orders, Configs: w.c.POL, Parties: w.c.PTY, Sources: w.c.EVD,
