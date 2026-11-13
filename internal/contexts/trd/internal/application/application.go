@@ -60,7 +60,10 @@ var (
 // quote.response.verify, acceptance.invalidate, acceptance.mark_disputed, object_control.stop and
 // object_control.release; each needs the permission of its own name. The command catalog gives
 // object_control.bind to the system (TSK claims a root for a task) and the role templates give it to
-// the sales clerk, so a human or the system binds, never an AI agent (it would fence humans out). An
+// the sales clerk, so a human or the system binds, never an AI agent (it would fence humans out).
+// object_control.enter_manual and object_control.handoff complete TSK's barrier: the command catalog
+// gives them to the system and the role templates to the sales clerk and the merchandiser (S4
+// decision D-4: TSK calls TRD as the acting human), so a human or the system, never an AI agent. An
 // AI agent prepares, revises and discards drafts, edits the internal metadata and records customer
 // responses (quote.response.record: 人工或 AI; its classification is a candidate a human verifies),
 // prepares orders and requests their review (order.prepare, order.review.request: 人工或 AI（按动作权限）)
@@ -75,6 +78,8 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandUpdateMetadata, Permission: api.CommandUpdateMetadata, ActorKinds: humanOrAgent},
 		{Command: api.CommandBindControl, Permission: api.CommandBindControl, ActorKinds: humanOrSystem},
 		authorization.HumanOnly(api.CommandStopControl, api.CommandStopControl),
+		{Command: api.CommandEnterManualControl, Permission: api.CommandEnterManualControl, ActorKinds: humanOrSystem},
+		{Command: api.CommandHandoffControl, Permission: api.CommandHandoffControl, ActorKinds: humanOrSystem},
 		authorization.HumanOnly(api.CommandReleaseControl, api.CommandReleaseControl),
 		authorization.HumanOnly(api.CommandSubmitReview, api.CommandSubmitReview),
 		authorization.HumanOnly(api.CommandDecideReview, api.CommandDecideReview),
@@ -214,6 +219,12 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.StopControl:
 		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
 		return api.CommandStopControl, key, c
+	case api.EnterManualControl:
+		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
+		return api.CommandEnterManualControl, key, c
+	case api.HandoffControl:
+		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
+		return api.CommandHandoffControl, key, c
 	case api.ReleaseControl:
 		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
 		return api.CommandReleaseControl, key, c
@@ -311,9 +322,10 @@ var quoteWrites = []string{api.CommandSaveDraft, api.CommandRevise, api.CommandD
 // acceptance.invalidate, acceptance.mark_disputed) or order (the order commands) belongs to. On the write path (a replay) of a
 // quote write or one of those it also passes the root's object control as it is now (Python
 // test_committed_public_replay_and_local_replay_cannot_bypass_new_binding): a stored success is
-// never handed to a caller the binding now fences out. Reconciliation is not fenced. A replay or
-// reconciliation of a command that cited EVD sources also needs the caller to read them now
-// (sourcesRead).
+// never handed to a caller the binding now fences out. Reconciliation is not fenced, nor is the
+// replay of a control change (control.go): TSK retries its step by key after the epoch moved. A
+// replay or reconciliation of a command that cited EVD sources also needs the caller to read them
+// now (sourcesRead).
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	quoteID := id
 	switch command {
@@ -344,20 +356,11 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	}
 	if ctx.Value(writing{}) != nil && (slices.Contains(quoteWrites, command) || slices.Contains(acceptanceWrites, command) ||
 		slices.Contains(orderWrites, command)) {
-		if err = q.Control.Admit(claim(ctx), d.Epoch); err != nil {
+		if err = q.Control.Admit(fence(ctx, exec, d)); err != nil {
 			return false, err
 		}
 	}
 	return true, sourcesRead(ctx, command)
-}
-
-// claim returns the control claim the trusted adapter put into ctx, or nil.
-func claim(ctx context.Context) *quote.Claim {
-	c, ok := api.ControlFromContext(ctx)
-	if !ok {
-		return nil
-	}
-	return &quote.Claim{TaskID: c.TaskID, Epoch: c.ControlEpoch}
 }
 
 // Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
@@ -417,14 +420,14 @@ func (h *quoteCommand) visible(d authorization.Decision) bool {
 
 // admit runs the checks every quote write starts with: the root exists and the caller sees it
 // (NOT_FOUND; a new root only where create allows it), then the object control fence.
-func (h *quoteCommand) admit(ctx context.Context, d authorization.Decision, create bool) error {
+func (h *quoteCommand) admit(ctx context.Context, exec bentopg.Executor, d authorization.Decision, create bool) error {
 	if h.q == nil && create {
-		return quote.Control{State: quote.Unbound}.Admit(claim(ctx), d.Epoch)
+		return quote.Control{State: quote.Unbound}.Admit(fence(ctx, exec, d))
 	}
 	if !h.visible(d) {
 		return kernel.Reject(kernel.CodeNotFound, "/args/quote_id", "")
 	}
-	return h.q.Control.Admit(claim(ctx), d.Epoch)
+	return h.q.Control.Admit(fence(ctx, exec, d))
 }
 
 func (h *quoteCommand) save(ctx context.Context, exec bentopg.Executor, created bool, status string, events ...action.Event) (action.Outcome, error) {
@@ -472,7 +475,7 @@ func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt,
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, cmd.ExpectedVersion == 0); err != nil {
+		if err := h.admit(ctx, exec, d, cmd.ExpectedVersion == 0); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.CheckSave(h.q, h.visible(d), cmd.ExpectedVersion); err != nil {
@@ -496,7 +499,7 @@ func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt,
 func (s Service) Revise(ctx context.Context, cmd api.Revise) (api.Receipt, error) {
 	h := &quoteCommand{s: s, id: cmd.QuoteID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
@@ -527,7 +530,7 @@ func (s Service) DiscardDraft(ctx context.Context, cmd api.DiscardDraft) (api.Re
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
@@ -550,7 +553,7 @@ func (s Service) DiscardDraft(ctx context.Context, cmd api.DiscardDraft) (api.Re
 func (s Service) UpdateMetadata(ctx context.Context, cmd api.UpdateMetadata) (api.Receipt, error) {
 	h := &quoteCommand{s: s, id: cmd.QuoteID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {

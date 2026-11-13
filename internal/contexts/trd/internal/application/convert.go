@@ -176,7 +176,8 @@ func apiData(d quote.Data) api.QuoteData {
 func quoteView(q *quote.Quote) (api.QuoteView, error) {
 	v := api.QuoteView{QuoteID: q.ID, RootVersion: q.RootVersion, LastRevision: q.LastRevision, Labels: q.Labels,
 		InternalNote: q.InternalNote, Control: api.ControlView{State: string(q.Control.State), ControlEpoch: q.Control.Epoch,
-			TaskID: q.Control.TaskID, ChangedBy: q.Control.By, ChangedAt: q.Control.At}}
+			TaskID: q.Control.TaskID, InitiatorID: q.Control.Delegation.Initiator, AgentID: q.Control.Delegation.Agent,
+			ChangedBy: q.Control.By, ChangedAt: q.Control.At}}
 	if w := q.Working(); w != nil {
 		v.WorkingRevision = w.Number
 	}

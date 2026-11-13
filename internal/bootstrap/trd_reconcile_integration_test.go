@@ -250,8 +250,7 @@ func TestReconciliationObservesRecoversAndStaysAvailable(t *testing.T) {
 	}
 
 	// A task holds the root.
-	bound, err := q.c.TRD.BindControl(q.author, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.a23",
-		ExpectedControlEpoch: 0})
+	bound, err := q.bindTask(q.author, "quote.1", "task.a23", 0)
 	q.must(err)
 	for name, cmd := range map[string]trdapi.Command{"activate": activate, "record": record} {
 		if rec, err := q.c.TRD.Reconcile(q.author, cmd); err != nil || rec.State != kernel.ReconcileCommitted {

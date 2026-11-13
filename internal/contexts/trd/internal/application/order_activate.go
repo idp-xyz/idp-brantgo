@@ -311,7 +311,7 @@ func (s Service) ActivateOrder(ctx context.Context, cmd api.ActivateOrder) (api.
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		now := s.Clock.Now()

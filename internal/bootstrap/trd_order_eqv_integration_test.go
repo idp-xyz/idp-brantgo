@@ -74,7 +74,7 @@ func TestOrderApprovalRevocationRefusals(t *testing.T) {
 	q.regrant("reviewer", "company", allPermissions)
 
 	tsk := q.actorOf(kernel.ActorSystem, "tsk.1")
-	_, err := q.c.TRD.BindControl(tsk, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	_, err := q.bindTask(tsk, "quote.1", "task.1", 0)
 	q.must(err)
 	_, err = q.c.TRD.RevokeOrderApproval(q.reviewer, revoke)
 	q.want(err, trdapi.CodeObjectControlConflict)

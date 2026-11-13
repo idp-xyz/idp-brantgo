@@ -197,7 +197,7 @@ func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authori
 		}
 		return out, nil
 	}
-	if err := r.add(api.CheckObjectControl, q.Control.Admit(claim(ctx), d.Epoch)); err != nil {
+	if err := r.add(api.CheckObjectControl, q.Control.Admit(fence(ctx, exec, d))); err != nil {
 		return out, err
 	}
 	active, rev := q.Active(), judged(q, named)

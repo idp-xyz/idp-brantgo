@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -89,8 +90,23 @@ func TestOtherCommandContracts(t *testing.T) {
 		{DiscardDraft{IdempotencyKey: "k", QuoteID: "q", ExpectedVersion: 1, WorkingRevision: 1, Reason: "r"}.Validate(), "SCHEMA_INVALID /args/evidence"},
 		{UpdateMetadata{IdempotencyKey: "k", QuoteID: "q", ExpectedVersion: 1, Labels: []string{"a", "a"}}.Validate(), "SCHEMA_INVALID /args/labels/1"},
 		{BindControl{IdempotencyKey: "k", QuoteID: "q"}.Validate(), "SCHEMA_INVALID /args/task_id"},
-		{BindControl{IdempotencyKey: "k", QuoteID: "q", TaskID: "task.1"}.Validate(), "OK"},
+		{BindControl{IdempotencyKey: "k", QuoteID: "q", TaskID: "task.1"}.Validate(), "SCHEMA_INVALID /args/initiator_id"},
+		{BindControl{IdempotencyKey: "k", QuoteID: "q", TaskID: "task.1", InitiatorID: "author"}.Validate(), "SCHEMA_INVALID /args/agent_id"},
+		{BindControl{IdempotencyKey: "k", QuoteID: "q", TaskID: "task.1", InitiatorID: "author", AgentID: "author"}.Validate(),
+			"SCHEMA_INVALID /args/agent_id"},
+		{BindControl{IdempotencyKey: "k", QuoteID: "q", TaskID: "task.1", InitiatorID: "author", AgentID: "agent.1"}.Validate(), "OK"},
 		{StopControl{IdempotencyKey: "k", QuoteID: "q", Reason: "r"}.Validate(), "SCHEMA_INVALID /args/expected_control_epoch"},
+		{EnterManualControl{IdempotencyKey: "k", QuoteID: "q", Reason: "r"}.Validate(), "SCHEMA_INVALID /args/expected_control_epoch"},
+		{EnterManualControl{IdempotencyKey: "k", QuoteID: "q", ExpectedControlEpoch: 2}.Validate(), "SCHEMA_INVALID /args/reason"},
+		{EnterManualControl{IdempotencyKey: "k", QuoteID: "q", ExpectedControlEpoch: 2, Reason: "r"}.Validate(), "OK"},
+		{HandoffControl{IdempotencyKey: "k", QuoteID: "q", InitiatorID: "author", AgentID: "agent.1", Reason: "r"}.Validate(),
+			"SCHEMA_INVALID /args/expected_control_epoch"},
+		{HandoffControl{IdempotencyKey: "k", QuoteID: "q", ExpectedControlEpoch: 2, AgentID: "agent.1", Reason: "r"}.Validate(),
+			"SCHEMA_INVALID /args/initiator_id"},
+		{HandoffControl{IdempotencyKey: "k", QuoteID: "q", ExpectedControlEpoch: 2, InitiatorID: "author", AgentID: "agent.1"}.Validate(),
+			"SCHEMA_INVALID /args/reason"},
+		{HandoffControl{IdempotencyKey: "k", QuoteID: "q", ExpectedControlEpoch: 2, InitiatorID: "author", AgentID: "agent.1", Reason: "r"}.Validate(),
+			"OK"},
 		{ReleaseControl{IdempotencyKey: "k", QuoteID: "q", ExpectedControlEpoch: 1}.Validate(), "SCHEMA_INVALID /args/reason"},
 		{submit(TargetActivate, 0).Validate(), "OK"},
 		{submit(TargetReplace, 1).Validate(), "OK"},
@@ -172,9 +188,13 @@ func TestPlaceAndDeliveryContract(t *testing.T) {
 // (PYT-0195): no command a transport decodes has a member that names a task or a control epoch,
 // except object_control.bind's own task; the claim comes from the trusted adapter's context only.
 // The list holds every TRD command but BindControl, among them the three Python sends a forged
-// task through: quote.response.verify, order.prepare and order.activate.
+// task through: quote.response.verify, order.prepare and order.activate. The control changes after
+// the bind (S4 decision D-4) compare the control epoch they expect, but the task whose claim they
+// need is never theirs to name either.
 func TestTaskIdentityIsNotACommandMember(t *testing.T) {
-	for _, c := range []any{SaveDraft{}, Revise{}, DiscardDraft{}, Freeze{}, UpdateMetadata{}, StopControl{}, ReleaseControl{}, QuoteData{}, Line{}, Charge{},
+	controls := []string{"StopControl", "EnterManualControl", "HandoffControl", "ReleaseControl"}
+	for _, c := range []any{SaveDraft{}, Revise{}, DiscardDraft{}, Freeze{}, UpdateMetadata{}, StopControl{}, EnterManualControl{}, HandoffControl{},
+		ReleaseControl{}, QuoteData{}, Line{}, Charge{},
 		SubmitReview{}, DecideReview{}, RevokeApproval{}, MarginException{}, Activate{}, Replace{}, Withdraw{}, Cancel{},
 		RecordResponse{}, VerifyResponse{}, InvalidateAcceptance{}, DisputeAcceptance{},
 		PrepareOrder{}, RequestOrderReview{}, DecideOrderReview{}, ActivateOrder{}, RevokeOrderApproval{}, CancelOrder{}, CloseOrderUnfulfilled{},
@@ -182,7 +202,7 @@ func TestTaskIdentityIsNotACommandMember(t *testing.T) {
 		ty := reflect.TypeOf(c)
 		for i := range ty.NumField() {
 			name := ty.Field(i).Name
-			if strings.Contains(name, "Task") || (strings.Contains(name, "ControlEpoch") && ty.Name() != "StopControl" && ty.Name() != "ReleaseControl") {
+			if strings.Contains(name, "Task") || (strings.Contains(name, "ControlEpoch") && !slices.Contains(controls, ty.Name())) {
 				t.Errorf("%s has %s", ty.Name(), name)
 			}
 		}
@@ -200,13 +220,14 @@ func TestTaskIdentityIsNotACommandMember(t *testing.T) {
 	}
 }
 
-// Error catalog V0.1: the QuoteRoot rows with their categories (OBJECT_CONTROL_CONFLICT and
-// CONTROL_EPOCH_STALE 409, REFERENCE_STALE 409, the rest 422). Category and Reject answer for
+// Error catalog V0.1: the QuoteRoot rows with their categories (OBJECT_CONTROL_CONFLICT,
+// CONTROL_EPOCH_STALE and CONTROL_MODE_MISMATCH 409, REFERENCE_STALE 409, the rest 422). Category and Reject answer for
 // QuoteRoot's codes and the calculation's alike; the two maps share no code.
 func TestCodesHaveCatalogCategories(t *testing.T) {
 	want := map[string]kernel.Category{
 		CodeObjectControlConflict: kernel.CategoryConflict, CodeControlEpochStale: kernel.CategoryConflict,
-		CodeQuoteExpired: kernel.CategoryInvalid, CodeQuoteValidityInvalid: kernel.CategoryInvalid,
+		CodeControlModeMismatch: kernel.CategoryConflict,
+		CodeQuoteExpired:        kernel.CategoryInvalid, CodeQuoteValidityInvalid: kernel.CategoryInvalid,
 		CodeCostSnapshotMissing: kernel.CategoryInvalid, CodeBusinessHashMismatch: kernel.CategoryInvalid,
 		CodeCustomerReferenceMiss: kernel.CategoryInvalid, CodeContactReferenceMiss: kernel.CategoryInvalid,
 		CodeReferenceStale: kernel.CategoryConflict,

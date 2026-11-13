@@ -92,7 +92,7 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
