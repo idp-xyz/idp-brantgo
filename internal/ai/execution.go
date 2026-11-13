@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/adapters/model"
 	"go.idp.xyz/idp-brant/internal/ai/execution"
 	"go.idp.xyz/idp-brant/internal/ai/executionevidence"
+	"go.idp.xyz/idp-brant/internal/ai/runtime"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -65,6 +66,9 @@ type RunnerConfig struct {
 	Sources  execution.Sources            // optional
 	MaxSteps int
 	Logger   *slog.Logger
+	// Runtime is an external execution runtime (internal/ai/runtime; the EER adapter) whose
+	// operation of a stopping task must end before the stop barrier completes; nil: none.
+	Runtime runtime.Port
 }
 
 // Bundle returns the ExecutionBundle the runner of cfg runs with: the Q01 task profile over the
@@ -84,7 +88,7 @@ func (l *Layer) Runner(cfg RunnerConfig) (*execution.Runner, error) {
 	}
 	return &execution.Runner{Executor: l.Execution, Tasks: l.tasks, Gateway: l.Gateway, DB: l.ledger.DB, Evidence: l.Evidence,
 		Model: cfg.Model, Bundle: bundle, Prompt: execution.Q01Prompt, Accepts: cfg.Accepts, Sources: cfg.Sources, Scopes: cfg.Scopes,
-		Agents: cfg.Agents, MaxSteps: cfg.MaxSteps, Clock: l.Evidence.Clock, Logger: cfg.Logger}, nil
+		Agents: cfg.Agents, MaxSteps: cfg.MaxSteps, Clock: l.Evidence.Clock, Logger: cfg.Logger, Runtime: cfg.Runtime}, nil
 }
 
 // ModelCalls returns the model and tool calls of a task (ai.read), audited as ai.model_call.list,
