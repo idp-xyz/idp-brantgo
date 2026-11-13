@@ -67,6 +67,22 @@ const (
 	OrderDocumentSalesContract   = "sales_contract"
 	OrderDocumentProformaInvoice = "proforma_invoice"
 
+	// ShipmentRendererVersion is FUL's fixed renderer of commercial invoices and packing lists (WBS
+	// S5-08, S5 D-12).
+	ShipmentRendererVersion = "shipment-text/0.1.0"
+	// Document kinds of a shipment document template. A commercial invoice is numbered as an
+	// invoice (DocumentTypeInvoice), a packing list as a packing list (DocumentTypePackingList).
+	ShipmentDocumentCommercialInvoice = "commercial_invoice"
+	ShipmentDocumentPackingList       = "packing_list"
+
+	// Export tax refund methods of an export_tax_policy (CN-R08: 免、抵、退 are different results).
+	// exempt_credit_refund is 免抵退, exempt_refund is 免退; not_applicable says that no export tax
+	// refund applies to the company's exports, so CNX opens no refund case. Which one applies is the
+	// professional review's finding (CN-D02); Brant records it and computes no tax (CN-E01).
+	RefundExemptCreditRefund = "exempt_credit_refund"
+	RefundExemptRefund       = "exempt_refund"
+	RefundNotApplicable      = "not_applicable"
+
 	LimitSourceInternalAssessment = "internal_assessment"
 	LimitSourceSinosureBuyerLimit = "sinosure_buyer_limit"
 
@@ -117,6 +133,7 @@ var (
 	quoteSections  = []string{"issuer", "recipient", "identity", "lines", "totals", "terms", "delivery", "payments", "validity", "notes"}
 	cisgChoices    = []string{CISGApplies, CISGExcluded}
 	formationRules = []string{FormationArrival, FormationDispatch}
+	refundMethods  = []string{RefundExemptCreditRefund, RefundExemptRefund, RefundNotApplicable}
 
 	// governingLaw is an ISO 3166-1 alpha-2 country, optionally with an ISO 3166-2 subdivision
 	// (GB-ENG for England and Wales, US-NY for New York).
@@ -131,6 +148,18 @@ var (
 	orderOptional = map[string][]string{
 		OrderDocumentSalesContract:   {"law"},
 		OrderDocumentProformaInvoice: {"clauses", "law"},
+	}
+	// The sections of a shipment document (WBS S5-08, BT12): shipment holds the ports, vessel or
+	// flight and dates; lines a commercial invoice's goods, quantities, prices and amounts; packages
+	// a packing list's cartons, quantities per carton and net and gross weights and measurements;
+	// marks the shipping marks; terms the trade and payment terms.
+	shipmentRequired = map[string][]string{
+		ShipmentDocumentCommercialInvoice: {"seller", "buyer", "identity", "shipment", "lines", "totals", "terms", "notes"},
+		ShipmentDocumentPackingList:       {"seller", "buyer", "identity", "shipment", "packages", "totals", "marks", "notes"},
+	}
+	shipmentOptional = map[string][]string{
+		ShipmentDocumentCommercialInvoice: {"consignee", "notify", "marks", "clauses", "signatures"},
+		ShipmentDocumentPackingList:       {"consignee", "notify", "clauses", "signatures"},
 	}
 )
 
@@ -164,32 +193,40 @@ func OrderDocumentSections(kind string) (required, optional []string) {
 	return slices.Clone(orderRequired[kind]), slices.Clone(orderOptional[kind])
 }
 
+// ShipmentDocumentSections returns the sections a shipment document template of document kind kind
+// lists once each, and those it may list at most once (nil for an unknown kind).
+func ShipmentDocumentSections(kind string) (required, optional []string) {
+	return slices.Clone(shipmentRequired[kind]), slices.Clone(shipmentOptional[kind])
+}
+
 // ConfigData is the content of one configuration kind; exactly the member of the revision's kind
 // is set. Decimals are strings in their contract format, never floats. POL stores every member as
 // JSON whose names are the snake_case of the Go field names (MaxFXAgeSeconds is
 // max_fx_age_seconds), except a ConfigRef inside data, which is {"kind", "id", "revision"} as
 // everywhere in the contract; transports use the same names.
 type ConfigData struct {
-	CompanyProfile        *CompanyProfile
-	Currency              *Currency
-	Unit                  *Unit
-	UnitConversion        *UnitConversion
-	FXRate                *FXRate
-	Calendar              *Calendar
-	TradeTerms            *TradeTerms
-	PaymentTerms          *PaymentTerms
-	TaxProfile            *TaxProfile
-	TaxApplication        *TaxApplication
-	FeeCategory           *FeeCategory
-	PricingPolicy         *PricingPolicy
-	BankAccount           *BankAccount
-	NumberSequence        *NumberSequence
-	DocumentTemplate      *DocumentTemplate
-	QuoteDocumentTemplate *QuoteDocumentTemplate
-	CreditPolicy          *CreditPolicy
-	ScreeningRegulation   *ScreeningRegulation
-	LegalTerms            *LegalTerms
-	OrderDocumentTemplate *OrderDocumentTemplate
+	CompanyProfile           *CompanyProfile
+	Currency                 *Currency
+	Unit                     *Unit
+	UnitConversion           *UnitConversion
+	FXRate                   *FXRate
+	Calendar                 *Calendar
+	TradeTerms               *TradeTerms
+	PaymentTerms             *PaymentTerms
+	TaxProfile               *TaxProfile
+	TaxApplication           *TaxApplication
+	FeeCategory              *FeeCategory
+	PricingPolicy            *PricingPolicy
+	BankAccount              *BankAccount
+	NumberSequence           *NumberSequence
+	DocumentTemplate         *DocumentTemplate
+	QuoteDocumentTemplate    *QuoteDocumentTemplate
+	CreditPolicy             *CreditPolicy
+	ScreeningRegulation      *ScreeningRegulation
+	LegalTerms               *LegalTerms
+	OrderDocumentTemplate    *OrderDocumentTemplate
+	ShipmentDocumentTemplate *ShipmentDocumentTemplate
+	ExportTaxPolicy          *ExportTaxPolicy
 }
 
 // CompanyProfile is the company of the scope; its config_id is the company's ID (at most
@@ -244,7 +281,7 @@ type FXRate struct {
 	FromCurrency string // currency code
 	ToCurrency   string
 	Rate         string // kernel.FactorFormat, positive
-	Purpose      string // cost_estimate or quotation
+	Purpose      string // cost_estimate, quotation, credit or settlement
 	SourceName   string
 	ObservedAt   string // UTC timestamp, not after the revision's ValidFrom
 }
@@ -287,12 +324,17 @@ type PaymentTerms struct {
 	Calendar *ConfigRef // a calendar revision in force; required for working days
 }
 
-// PaymentStage is one stage of PaymentTerms.
+// PaymentStage is one stage of PaymentTerms. ReleaseControl documents (S5 D-5, G0 F-04) marks an
+// after_shipment stage paid against the shipping documents, which FUL releases only once it is paid
+// (PaymentConditionGuard, scope documents); STL treats it as secured, without a credit reservation,
+// where the credit policy says so (CreditPolicy.DocumentsSecured). Empty is no release control; POL
+// leaves it out of the stored data, so payment terms published before it existed keep their hash.
 type PaymentStage struct {
-	StageID string
-	Percent string // PercentFormat
-	Trigger string // order_confirmed, before_shipment, after_shipment or after_invoice
-	Days    int    // 0–3650
+	StageID        string
+	Percent        string // PercentFormat
+	Trigger        string // order_confirmed, before_shipment, after_shipment or after_invoice
+	Days           int    // 0–3650
+	ReleaseControl string // "" or documents; documents only with trigger after_shipment
 }
 
 // TaxProfile is a tax rate, the price basis amounts are quoted on and whether the tax is
@@ -357,7 +399,7 @@ type BankAccount struct {
 // NumberSequence is how document numbers of one document type are formed: Prefix, the year in
 // TimeZone, '-' and the yearly counter zero-padded to Width digits, such as QT-2026-00001.
 type NumberSequence struct {
-	DocumentType string // rfq, quote, order, purchase_order or invoice
+	DocumentType string // rfq, quote, order, purchase_order, invoice, proforma_invoice or packing_list
 	Prefix       string // ^[A-Z0-9][A-Z0-9-]{0,15}$
 	Width        int    // 4–12
 	Reset        string // annual
@@ -369,7 +411,7 @@ type NumberSequence struct {
 // other placeholder is TEMPLATE_INVALID; nothing in a template is ever evaluated.
 type DocumentTemplate struct {
 	Name         string
-	DocumentType string   // rfq, quote, order, purchase_order or invoice
+	DocumentType string   // a NumberSequence document type
 	TemplateText string   // 1–50000 characters
 	FieldNames   []string // 1–7 distinct TemplateFields
 }
@@ -399,23 +441,73 @@ type OrderDocumentTemplate struct {
 	FooterNote      string   // 0–5000 characters
 }
 
-// CreditPolicy is how customer credit is limited (ADR-BR-016): the default limit of a new customer,
-// the accepted sources of a limit, the approval levels by the largest excess each may approve
-// (above the highest, two approvers decide in STL), and how many days a payment may be overdue.
-// Amounts are AmountFormat strings with at most the currency's minor units.
-type CreditPolicy struct {
-	Name                 string
-	Currency             string // currency code, configured and in force
-	DefaultLimit         string // 0 or more
-	LimitSources         []string
-	ApprovalTiers        []CreditApprovalTier // 1–10, amounts strictly ascending
-	OverdueToleranceDays int                  // 0–3650
+// ShipmentDocumentTemplate is the layout of a shipment document — a commercial invoice (CI) or a
+// packing list (PL) — for FUL's fixed shipment-text renderer (WBS S5-08, S5 D-12; Context Map R49):
+// its kind and language, the title, the order of its sections (the kind's required ones once each,
+// its optional ones at most once), the numbered clauses (declarations) its clauses section prints,
+// and a footer note. It has no references of its own: the command that renders names the number
+// sequence (document type invoice for a CI, packing_list for a PL). A bilingual set is one template
+// per language (CN-AT17).
+type ShipmentDocumentTemplate struct {
+	Name            string
+	DocumentKind    string   // commercial_invoice or packing_list
+	Language        string   // zh-CN or en
+	RendererVersion string   // shipment-text/0.1.0
+	Title           string   // 1–2000 characters
+	Sections        []string // ShipmentDocumentSections of the kind, in rendering order
+	Clauses         []string // 1–50 clauses of 1–2000 characters when the template lists clauses; none otherwise
+	FooterNote      string   // 0–5000 characters
 }
 
-// CreditApprovalTier is one approval level and the largest credit excess it may approve.
+// CreditPolicy is how customer credit is limited (ADR-BR-016, STL-INV-004, STL-INV-005): the default
+// limit of a new customer, the accepted sources of a limit, the approval levels by the largest excess
+// each may approve, how many days a payment may be overdue, and (S5, owner decision 2026-11-12):
+//
+//   - DocumentsSecured: an after_shipment payment stage with release control documents counts as
+//     secured and needs no credit reservation (S5 D-5, G0 F-04, TRD-INV-022);
+//   - ReservationValidityDays and DecisionValidityDays: how long a credit reservation and a released
+//     credit decision stay valid after they are made (STL derives the expiry, principle 3);
+//   - TwoApproversAboveTop: an amount above the highest tier's MaxAmount (an excess, or a requested
+//     limit, STL-INV-005) is approved by two distinct approvers each holding the highest tier (S5
+//     D-6); without it nothing above the highest tier is approved (CREDIT_DECISION_NOT_AUTHORIZED
+//     in STL).
+//
+// Amounts are AmountFormat strings with at most the currency's minor units. A revision saved before
+// S5 has none of the four: POL leaves false and 0 out of the stored data, so it keeps its content
+// hash, and reads back with both validities 0, which a consumer treats as not configured (fail
+// closed); a new revision must state both validities.
+type CreditPolicy struct {
+	Name                    string
+	Currency                string // currency code, configured and in force
+	DefaultLimit            string // 0 or more
+	LimitSources            []string
+	ApprovalTiers           []CreditApprovalTier // 1–10, amounts strictly ascending
+	OverdueToleranceDays    int                  // 0–3650
+	DocumentsSecured        bool
+	ReservationValidityDays int // 1–3650
+	DecisionValidityDays    int // 1–3650
+	TwoApproversAboveTop    bool
+}
+
+// CreditApprovalTier is one approval level and the largest credit excess it may approve. STL gives
+// an approver the highest tier whose Level is one of the approver's role templates (S5 D-6).
 type CreditApprovalTier struct {
 	Level     string // identifier, such as credit_manager
 	MaxAmount string // positive
+}
+
+// ExportTaxPolicy is the export tax refund method that applies to the company's exports, as a
+// professional review verified it (CN-F01, CN-D02, CN-R08; Context Map R50): CNX binds the revision
+// in force at an export's date to the refund case it opens, so a later revision, published when the
+// applicable policy changes, never rewrites open historical business (CN-AT12; CN-R08 适用方法变化不
+// 追溯覆盖历史). Its validity is the revision's. ProfessionalReviewEvidenceID is the EVD source of
+// the professional review's conclusion, which the publication must cite among its evidence, so the
+// publisher must be able to read it (R63). Brant records the method and computes no tax (CN-E01).
+type ExportTaxPolicy struct {
+	Name                         string
+	RefundMethod                 string // exempt_credit_refund, exempt_refund or not_applicable
+	PolicyBasis                  string // the policy documents the method rests on
+	ProfessionalReviewEvidenceID string // identifier of an EVD source
 }
 
 // ScreeningRegulation is the screening lists a company enables and how often a party is screened
@@ -524,7 +616,8 @@ func (d ConfigData) validate(kind string) error {
 		KindBankAccount: d.BankAccount != nil, KindNumberSequence: d.NumberSequence != nil, KindDocumentTemplate: d.DocumentTemplate != nil,
 		KindQuoteDocumentTemplate: d.QuoteDocumentTemplate != nil, KindCreditPolicy: d.CreditPolicy != nil,
 		KindScreeningRegulation: d.ScreeningRegulation != nil, KindLegalTerms: d.LegalTerms != nil,
-		KindOrderDocumentTemplate: d.OrderDocumentTemplate != nil,
+		KindOrderDocumentTemplate: d.OrderDocumentTemplate != nil, KindShipmentDocumentTemplate: d.ShipmentDocumentTemplate != nil,
+		KindExportTaxPolicy: d.ExportTaxPolicy != nil,
 	}
 	for k, present := range members {
 		if present != (k == kind) {
@@ -572,6 +665,10 @@ func (d ConfigData) validate(kind string) error {
 		return d.LegalTerms.validate()
 	case KindOrderDocumentTemplate:
 		return d.OrderDocumentTemplate.validate()
+	case KindShipmentDocumentTemplate:
+		return d.ShipmentDocumentTemplate.validate()
+	case KindExportTaxPolicy:
+		return d.ExportTaxPolicy.validate()
 	}
 	return schema("/args/kind")
 }
@@ -683,7 +780,8 @@ func (p *PaymentTerms) validate() error {
 	for i, s := range p.Stages {
 		at := "stages/" + strconv.Itoa(i)
 		if err := first(field{at + "/stage_id", kernel.ValidIdentifier(s.StageID)}, field{at + "/percent", decimal(s.Percent, PercentFormat)},
-			field{at + "/trigger", slices.Contains(triggers, s.Trigger)}, field{at + "/days", s.Days >= 0 && s.Days <= maxPaymentDays}); err != nil {
+			field{at + "/trigger", slices.Contains(triggers, s.Trigger)}, field{at + "/days", s.Days >= 0 && s.Days <= maxPaymentDays},
+			field{at + "/release_control", slices.Contains(releaseControls, s.ReleaseControl)}); err != nil {
 			return err
 		}
 	}
@@ -785,8 +883,25 @@ func (t *OrderDocumentTemplate) validate() error {
 		field{"footer_note", utf8.ValidString(t.FooterNote) && utf8.RuneCountInString(t.FooterNote) <= maxNoteCharacters}); err != nil {
 		return err
 	}
+	return layout(need, may, t.Sections, t.Clauses)
+}
+
+func (t *ShipmentDocumentTemplate) validate() error {
+	need, may := shipmentRequired[t.DocumentKind], shipmentOptional[t.DocumentKind]
+	if err := first(field{"name", name(t.Name)}, field{"document_kind", need != nil}, field{"language", slices.Contains(languages, t.Language)},
+		field{"renderer_version", t.RendererVersion == ShipmentRendererVersion}, field{"title", nonBlank(t.Title, maxTitleCharacters)},
+		field{"footer_note", utf8.ValidString(t.FooterNote) && utf8.RuneCountInString(t.FooterNote) <= maxNoteCharacters}); err != nil {
+		return err
+	}
+	return layout(need, may, t.Sections, t.Clauses)
+}
+
+// layout checks a document template's sections and clauses: every required section once, an
+// optional one at most once, nothing else; clauses exactly when the template lists the clauses
+// section, at most MaxClauses of 1–2000 characters.
+func layout(need, may, sections, clauses []string) error {
 	seen := map[string]bool{}
-	for i, s := range t.Sections {
+	for i, s := range sections {
 		if seen[s] || (!slices.Contains(need, s) && !slices.Contains(may, s)) {
 			return schema("/args/data/sections/" + strconv.Itoa(i))
 		}
@@ -797,15 +912,20 @@ func (t *OrderDocumentTemplate) validate() error {
 			return schema("/args/data/sections")
 		}
 	}
-	if seen["clauses"] != (len(t.Clauses) > 0) || len(t.Clauses) > MaxClauses {
+	if seen["clauses"] != (len(clauses) > 0) || len(clauses) > MaxClauses {
 		return schema("/args/data/clauses")
 	}
-	for i, c := range t.Clauses {
+	for i, c := range clauses {
 		if !nonBlank(c, maxClauseChars) {
 			return schema("/args/data/clauses/" + strconv.Itoa(i))
 		}
 	}
 	return nil
+}
+
+func (p *ExportTaxPolicy) validate() error {
+	return first(field{"name", name(p.Name)}, field{"refund_method", slices.Contains(refundMethods, p.RefundMethod)},
+		field{"policy_basis", name(p.PolicyBasis)}, field{"professional_review_evidence_id", kernel.ValidIdentifier(p.ProfessionalReviewEvidenceID)})
 }
 
 func (p *CreditPolicy) validate() error {
@@ -830,7 +950,9 @@ func (p *CreditPolicy) validate() error {
 			return err
 		}
 	}
-	return first(field{"overdue_tolerance_days", p.OverdueToleranceDays >= 0 && p.OverdueToleranceDays <= maxDays})
+	return first(field{"overdue_tolerance_days", p.OverdueToleranceDays >= 0 && p.OverdueToleranceDays <= maxDays},
+		field{"reservation_validity_days", p.ReservationValidityDays >= 1 && p.ReservationValidityDays <= maxDays},
+		field{"decision_validity_days", p.DecisionValidityDays >= 1 && p.DecisionValidityDays <= maxDays})
 }
 
 // requiredRef checks a reference to a configuration of kind inside data.

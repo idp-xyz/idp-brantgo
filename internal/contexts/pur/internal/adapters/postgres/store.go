@@ -1,5 +1,5 @@
-// Package postgres stores PUR's purchase drafts and demand allocations in schema brant_pur, on the
-// executor of PUR's own transaction.
+// Package postgres stores PUR's purchase drafts, demand allocations and purchase commitments in
+// schema brant_pur, on the executor of PUR's own transaction.
 package postgres
 
 import (
@@ -245,7 +245,7 @@ func entries(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, roo
 		byKey[a.Key] = a
 		orders[i], lines[i] = a.Key.OrderID, a.Key.LineID
 	}
-	rows, err := exec.Query(ctx, `SELECT e.order_id, e.order_line_id, e.draft_id, e.quantity::text, e.taken_version,
+	rows, err := exec.Query(ctx, `SELECT e.order_id, e.order_line_id, e.draft_id, e.commitment_revision, e.quantity::text, e.taken_version,
 		coalesce(e.released_version, 0), e.released_at FROM brant_pur.allocation_entry e
 		JOIN unnest($3::text[], $4::text[]) AS k(order_id, order_line_id) ON k.order_id = e.order_id AND k.order_line_id = e.order_line_id
 		WHERE e.tenant_id = $1 AND e.company_id = $2 ORDER BY e.order_id, e.order_line_id, e.taken_version`,
@@ -259,7 +259,7 @@ func entries(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, roo
 		var e allocation.Entry
 		var q string
 		var at *time.Time
-		if err = rows.Scan(&k.OrderID, &k.LineID, &e.DraftID, &q, &e.Taken, &e.Released, &at); err != nil {
+		if err = rows.Scan(&k.OrderID, &k.LineID, &e.DraftID, &e.Revision, &q, &e.Taken, &e.Released, &at); err != nil {
 			return err
 		}
 		if e.Quantity, err = quantity(q); err != nil {
@@ -304,21 +304,25 @@ func SaveAllocations(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 				return err
 			}
 		}
-		for _, e := range a.Fresh() {
-			if _, err := exec.Exec(ctx, `INSERT INTO brant_pur.allocation_entry (tenant_id, company_id, order_id, order_line_id, draft_id,
-				quantity, taken_version) VALUES ($1, $2, $3, $4, $5, $6::numeric, $7)`,
-				string(scope.Tenant), string(scope.Company), a.Key.OrderID, a.Key.LineID, e.DraftID, decimalText(e.Quantity), e.Taken); err != nil {
-				return err
-			}
-		}
+		// Released first: a commitment revision's entry replaces the draft's effective one (one effective
+		// entry per draft and line).
 		for _, e := range a.Released() {
 			tag, err := exec.Exec(ctx, `UPDATE brant_pur.allocation_entry SET released_version = $6, released_at = $7
-				WHERE tenant_id = $1 AND company_id = $2 AND order_id = $3 AND order_line_id = $4 AND draft_id = $5 AND released_version IS NULL`,
-				string(scope.Tenant), string(scope.Company), a.Key.OrderID, a.Key.LineID, e.DraftID, e.Released, e.At)
+				WHERE tenant_id = $1 AND company_id = $2 AND order_id = $3 AND order_line_id = $4 AND draft_id = $5 AND commitment_revision = $8
+				AND released_version IS NULL`,
+				string(scope.Tenant), string(scope.Company), a.Key.OrderID, a.Key.LineID, e.DraftID, e.Released, e.At, max(e.Revision, 1))
 			if err == nil && tag.RowsAffected() != 1 {
 				err = ErrConflict
 			}
 			if err != nil {
+				return err
+			}
+		}
+		for _, e := range a.Fresh() {
+			if _, err := exec.Exec(ctx, `INSERT INTO brant_pur.allocation_entry (tenant_id, company_id, order_id, order_line_id, draft_id,
+				commitment_revision, quantity, taken_version) VALUES ($1, $2, $3, $4, $5, $6, $7::numeric, $8)`,
+				string(scope.Tenant), string(scope.Company), a.Key.OrderID, a.Key.LineID, e.DraftID, max(e.Revision, 1), decimalText(e.Quantity),
+				e.Taken); err != nil {
 				return err
 			}
 		}

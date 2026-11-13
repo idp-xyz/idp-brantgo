@@ -61,7 +61,14 @@ type picked struct {
 	cond     Condition
 	purchase kernel.Decimal
 	delivery DocDelivery
+	waivers  []string // what a commitment change records instead of refusing (Change)
 }
+
+// Waivers a commitment change's proposed revision records on a line instead of refusing it (Change).
+const (
+	WaiverMOQNotMet            = "moq_not_met"
+	WaiverOrderMultipleInvalid = "order_multiple_invalid"
+)
 
 // Prepare decides purchase.draft.prepare (PUR-INV-001 to 007, Python t04_purchase prepare and
 // _calculate) on facts in. It refuses, in this order: an order not visible (NOT_FOUND) or not
@@ -77,8 +84,8 @@ type picked struct {
 // (CAT's and POL's verdicts), one unit throughout (DEPENDENCY_NOT_SUPPORTED: no conversion in this
 // stage), quantities exact at the unit's precision and at most 10^6 (INVALID_KNOWN_VALUE) and the
 // delivery (PUR-INV-006); then one supplier and one set of terms (SUPPLIER_MISMATCH,
-// PURCHASE_TERMS_INCONSISTENT, PUR-INV-003); every overbuy marked with a reason and approved
-// (OVERBUY_NOT_APPROVED); MOQ and order multiple on the purchased quantities (MOQ_NOT_MET,
+// PURCHASE_TERMS_INCONSISTENT, PUR-INV-003); every overbuy marked with a reason
+// (OVERBUY_NOT_APPROVED; the purchase commitment decision approves it, S5 decision D-14); MOQ and order multiple on the purchased quantities (MOQ_NOT_MET,
 // ORDER_MULTIPLE_INVALID, PUR-INV-005); and a cost snapshot to compare with (COST_SNAPSHOT_MISSING,
 // REFERENCE_INVALID). It never chooses a source and never raises a quantity.
 func Prepare(req Request, in Inputs) (*Prepared, error) {
@@ -109,7 +116,11 @@ func Prepare(req Request, in Inputs) (*Prepared, error) {
 		if a == nil {
 			a = allocation.Open(key, o.OrderRevision, unit, pk.order.Quantity)
 		}
-		if err := a.Take(req.DraftID, pk.req.Quantity, o.OrderRevision, unit, pk.order.Quantity, pk.path+"/quantity"); err != nil {
+		var revision int64 = 1
+		if in.Change != nil {
+			revision = in.Change.Revision
+		}
+		if err := a.TakeAt(req.DraftID, revision, pk.req.Quantity, o.OrderRevision, unit, pk.order.Quantity, pk.path+"/quantity"); err != nil {
 			return nil, err
 		}
 		roots[key] = a
@@ -135,16 +146,12 @@ func Prepare(req Request, in Inputs) (*Prepared, error) {
 		}
 	}
 	for _, pk := range picks {
-		if ob := pk.req.Overbuy; ob != nil {
-			if strings.TrimSpace(ob.Reason) == "" {
-				return nil, fail(CodeOverbuyNotApproved, pk.path+"/overbuy/reason", "An overbuy is marked with its reason")
-			}
-			if !in.OverbuyApproved {
-				return nil, fail(CodeOverbuyNotApproved, pk.path+"/overbuy", "The preparer may not approve an overbuy")
-			}
+		if ob := pk.req.Overbuy; ob != nil && strings.TrimSpace(ob.Reason) == "" {
+			// Marked here, approved by the purchase commitment decision (S5 decision D-14).
+			return nil, fail(CodeOverbuyNotApproved, pk.path+"/overbuy/reason", "An overbuy is marked with its reason")
 		}
 	}
-	if err := checkMOQ(picks); err != nil {
+	if err := checkMOQ(picks, in.Change != nil); err != nil {
 		return nil, err
 	}
 	if o.Snapshot == nil {
@@ -255,7 +262,13 @@ func (in Inputs) judge(pk *picked, judged map[Ref]bool, out *Prepared) error {
 	if pk.purchase.Cmp(maxQuantity) > 0 {
 		return fail(kernel.CodeInvalidKnownValue, pk.path+"/quantity", "A purchase quantity is at most 1000000")
 	}
-	d, err := compareDelivery(c.Delivery, *o.Delivery, in.Now, p)
+	var d DocDelivery
+	var err error
+	if in.Change != nil {
+		d, err = changedDelivery(c.Delivery, in.Change.Dates[ol.LineID], *o.Delivery, p)
+	} else {
+		d, err = compareDelivery(c.Delivery, *o.Delivery, in.Now, p)
+	}
 	if err != nil {
 		return err
 	}
@@ -292,11 +305,13 @@ func (m MOQ) signature() string {
 
 // checkMOQ applies the MOQ of each condition line to the quantities the draft buys under the same
 // source (CST Purchase, Python purchase_groups): per SKU, or over an explicit group of RFQ lines the
-// supplier lets be ordered together; never across suppliers or drafts, and never raised.
-func checkMOQ(picks []picked) error {
+// supplier lets be ordered together; never across suppliers or drafts, and never raised. With waive
+// (a commitment change), a group below its MOQ marks each of its lines WaiverMOQNotMet instead.
+func checkMOQ(picks []picked, waive bool) error {
 	groups := map[moqKey]*moqGroup{}
 	var order []*moqGroup
-	for _, pk := range picks {
+	members := map[moqKey][]int{}
+	for i, pk := range picks {
 		m := pk.cond.MOQ
 		if m == nil {
 			continue
@@ -321,14 +336,21 @@ func checkMOQ(picks []picked) error {
 			return fail(kernel.CodeReferenceInvalid, pk.path+"/source", "Lines of one MOQ group state different rules")
 		}
 		g.quantity = g.quantity.Add(pk.purchase)
+		members[mk] = append(members[mk], i)
 	}
 	for _, g := range order {
 		min, err := decimal(g.rule.Quantity, kernel.QuantityFormat, g.first)
 		if err != nil {
 			return err
 		}
-		if g.quantity.Cmp(min) < 0 {
+		if g.quantity.Cmp(min) >= 0 {
+			continue
+		}
+		if !waive {
 			return fail(CodeMOQNotMet, g.first, fmt.Sprintf("The draft buys %s, below the MOQ %s; quantities are never raised automatically", g.quantity, min))
+		}
+		for _, i := range members[g.key] {
+			picks[i].waivers = append(picks[i].waivers, WaiverMOQNotMet)
 		}
 	}
 	return nil
@@ -394,7 +416,12 @@ func (in Inputs) document(req Request, picks []picked, out *Prepared) error {
 				return err
 			}
 			if times, err := g.qty.Quo(multiple); err != nil || !times.IsInteger() {
-				return fail(CodeOrderMultipleInvalid, at, fmt.Sprintf("The draft buys %s, not a multiple of %s; quantities are never raised automatically", g.qty, multiple))
+				if in.Change == nil {
+					return fail(CodeOrderMultipleInvalid, at, fmt.Sprintf("The draft buys %s, not a multiple of %s; quantities are never raised automatically", g.qty, multiple))
+				}
+				for _, m := range g.members {
+					m.waivers = append(m.waivers, WaiverOrderMultipleInvalid)
+				}
 			}
 		}
 		s, err := parseSchedule(g.cond, g.members[0].path+"/source")
@@ -477,10 +504,10 @@ func (in Inputs) document(req Request, picks []picked, out *Prepared) error {
 			PurchaseQuantity: text(pk.purchase), Source: docSource(pk.req.Source), SupplierItemCode: pk.cond.SupplierItemCode,
 			PriceGroupID: a.group, NetMinor: minor(a.net), TaxMinor: minor(a.tax), GrossMinor: minor(gross), CostMinor: minor(a.cost),
 			SoldCostMinor: minor(sold), OverbuyCostMinor: minor(extra), TaxProfileRef: docRef(*pk.cond.TaxProfile),
-			TaxApplicationRef: docRef(*pk.cond.TaxApplication), OrderMultiple: pk.cond.OrderMultiple, Delivery: pk.delivery}
+			TaxApplicationRef: docRef(*pk.cond.TaxApplication), OrderMultiple: pk.cond.OrderMultiple, Delivery: pk.delivery,
+			Waivers: slices.Clone(pk.waivers)}
 		if ob := pk.req.Overbuy; ob != nil {
-			line.Overbuy = &DocOverbuy{Quantity: text(ob.Quantity), Reason: ob.Reason,
-				ApprovedBy: DocActor{Kind: string(in.Preparer.Kind), ID: in.Preparer.ID}, AuthorityEpoch: in.Epoch}
+			line.Overbuy = &DocOverbuy{Quantity: text(ob.Quantity), Reason: ob.Reason}
 		}
 		if m := pk.cond.MOQ; m != nil {
 			line.MOQ = &DocMOQ{Quantity: m.Quantity, UnitRef: docRef(*m.Unit), Scope: m.Scope, GroupID: m.GroupID,

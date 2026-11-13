@@ -275,20 +275,33 @@ type Costing struct {
 
 // Inputs are the facts a preparation is judged on, each read from its owner before the transaction
 // (lookups) and re-checked inside it by the owners' guards; Allocations are the order lines'
-// DemandAllocation roots, locked FOR UPDATE inside it (new roots open there).
+// DemandAllocation roots, locked FOR UPDATE inside it (new roots open there). Change, when set,
+// prepares the proposed revision of a purchase commitment instead of a draft.
 type Inputs struct {
-	Scope           kernel.Scope
-	Now             time.Time
-	Preparer        kernel.ActorRef
-	Epoch           int64
-	OverbuyApproved bool // the preparer holds the overbuy approval permission now
-	Order           *Order
-	Supply          map[Ref]Supply
-	Parties         map[string]Party
-	Specs           map[Spec]func(path string) error
-	Configs         map[ConfigKey]Config
-	Costing         *Costing
-	Allocations     map[allocation.Key]*allocation.Allocation
+	Scope       kernel.Scope
+	Now         time.Time
+	Preparer    kernel.ActorRef
+	Epoch       int64
+	Order       *Order
+	Supply      map[Ref]Supply
+	Parties     map[string]Party
+	Specs       map[Spec]func(path string) error
+	Configs     map[ConfigKey]Config
+	Costing     *Costing
+	Allocations map[allocation.Key]*allocation.Allocation
+	Change      *Change
+}
+
+// Change is how a commitment change's proposed revision is prepared (S5-19, PUR-INV-011, A47 #7: 交期
+// 变更、取消、短收和价格调整作为后续受控动作): the draft's request with the quantities and sources the
+// change states, its allocation entries taken for commitment revision Revision, and per order line
+// the supplier's date the change states (Dates; absent: the supply condition's). Unlike a draft's
+// preparation, the change records what a draft refuses and its decision acknowledges instead: a
+// stated date that is not the condition's, one after the order's required date, one already passed
+// (the goods may be delivered), and an MOQ or order multiple the supplier agreed to waive.
+type Change struct {
+	Revision int64
+	Dates    map[string]string
 }
 
 func index(path string, i int) string { return fmt.Sprintf("%s/%d", path, i) }

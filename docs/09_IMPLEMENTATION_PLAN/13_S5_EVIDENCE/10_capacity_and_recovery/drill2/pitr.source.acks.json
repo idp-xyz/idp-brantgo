@@ -1,0 +1,11 @@
+{
+  "tenant": "drill.151521",
+  "acknowledged": 9713,
+  "present": 9713,
+  "lost": 0,
+  "first_ack_at": "2026-11-12T15:15:23.57213504Z",
+  "last_ack_at": "2026-11-12T15:17:00.62194204Z",
+  "last_present_ack_at": "2026-11-12T15:17:00.62194204Z",
+  "lost_window_s": 0,
+  "lost_before_kept": 0
+}

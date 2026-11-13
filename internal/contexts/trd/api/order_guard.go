@@ -138,7 +138,9 @@ type OrderLine struct {
 // state and row version, the quote revision it converted with the customer, currency, source RFQ,
 // cost snapshot, delivery requirement and lines of its snapshot, when and on which review it was activated, whether that approval was revoked, and
 // Code, the first reason it does not serve new downstream work now ("" when it does; the guard's
-// codes).
+// codes). Terms are the current revision's trade terms, customer addresses with their roles, payment
+// terms and payment plan with its credit portion (Context Map R27 for FUL; OrderTerms, read from what
+// TRD sealed as OrderSnapshotLookups describes).
 type ActiveOrderFact struct {
 	Binding          OrderBinding
 	Status           string
@@ -153,6 +155,7 @@ type ActiveOrderFact struct {
 	CostSnapshotRef  CostSnapshotRef // the cost snapshot the quote adopted (R21)
 	Delivery         Delivery        // the customer's delivery requirement (PUR-INV-006)
 	Lines            []OrderLine
+	Terms            OrderTerms // R27: trade terms, address roles, payment stages
 	ReviewID         string
 	ActivatedAt      time.Time
 	ApprovalRevoked  bool

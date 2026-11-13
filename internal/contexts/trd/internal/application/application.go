@@ -117,6 +117,8 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandGenerateOrderDocument, Permission: api.CommandGenerateOrderDocument, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandRecordSignedOrderDocument, api.CommandRecordSignedOrderDocument),
 		{Command: CommandGetOrderDocument, Permission: PermissionRead, ActorKinds: anyActor},
+		// The order's snapshot fact (S5 unit A2) as OrderSnapshotLookups gives it, read and audited.
+		{Command: CommandGetOrderSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
 	}, readRules()...)
 }
 
@@ -147,9 +149,12 @@ type Service struct {
 	// Calculator is the server calculation of WBS S3-02 (ServerCalculator); without one TRD
 	// freezes nothing.
 	Calculator Calculator
-	// Orders are the extension points of order.activate for STL's and CNX's guards, nil (recorded
-	// gaps) until those contexts exist (order_activate.go).
+	// Orders are STL's CreditGuard and CNX's TradeComplianceGuard as order.activate and
+	// order.amendment.apply call them (order_guards.go); a nil guard is a recorded gap, never a pass.
 	Orders OrderGuards
+	// Facts are FUL's ShipmentFacts v1 and PUR's DownstreamCommitments v1 as the active order's
+	// commands read them (order_facts.go); a nil read is a recorded gap, never a check.
+	Facts OrderFacts
 }
 
 func scope(ctx context.Context) kernel.Scope {

@@ -11,10 +11,10 @@ PUR,brant_pur,migrations/pur,idp-brant.pur,PurchaseDraft；PurchaseCommitment；
 MFG,brant_mfg,migrations/mfg,idp-brant.mfg,CollaborationPlan；SubcontractOrder,S6
 QLT,brant_qlt,migrations/qlt,idp-brant.qlt,Inspection；QualityRelease,S5
 STK,brant_stk,migrations/stk,idp-brant.stk,StockLedger；Reservation；BatchLineage,S6
-FUL,brant_ful,migrations/ful,idp-brant.ful,MilestonePlan；Shipment；ExportLot；CommercialRelease；ShipmentDocumentSet,S5
-STL,brant_stl,migrations/stl,idp-brant.stl,SettlementStatement；FundRecord；Application；OrderResult；CustomerCredit,S5
+FUL,brant_ful,migrations/ful,idp-brant.ful,MilestonePlan；Shipment；ExportLot；CommercialRelease；ShipmentDocumentSet；OrderFulfilment,S5
+STL,brant_stl,migrations/stl,idp-brant.stl,SettlementStatement；FundRecord；Application；OrderResult；CustomerCredit；OrderAccount；Charge,S5
 CLM,brant_clm,migrations/clm,idp-brant.clm,ClaimCase；ReturnRecord,S6
-CNX,brant_cnx,migrations/cnx,idp-brant.cnx,PurchaseInvoice；DeclarationCase；TaxRefundCase；DocumentBundle；TradeComplianceCheck；ExportLicense,S5
+CNX,brant_cnx,migrations/cnx,idp-brant.cnx,PurchaseInvoice；DeclarationCase；TaxRefundCase；DocumentBundle；TradeComplianceCheck；ExportLicense；CertificateResult,S5
 CRM,brant_crm,migrations/crm,idp-brant.crm,Lead；Opportunity,S6
 TSK,brant_tsk,migrations/tsk,idp-brant.tsk,BusinessTask；ActionExecution,S4
 IDP-Bento-Go,bento,Bento 框架迁移（brant-migrate 渲染）,—,Outbox；Inbox,M0（已建）

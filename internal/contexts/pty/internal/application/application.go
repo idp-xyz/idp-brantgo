@@ -122,16 +122,10 @@ func (s Service) SaveParty(ctx context.Context, cmd api.SaveParty) (api.Receipt,
 	}
 	addresses := make([]party.Address, len(cmd.Addresses))
 	for i, a := range cmd.Addresses {
-		addresses[i] = party.Address{ID: a.AddressID, Role: party.AddressRole(a.Role), Text: a.Address}
+		addresses[i] = party.Address{ID: a.AddressID, Role: party.AddressRole(a.Role), Text: a.Address, Country: a.Country}
 	}
-	// The request hash covers the business arguments in a canonical order (addresses by ID); a
-	// party saved without addresses hashes as before addresses existed.
 	return s.run(ctx, action.Command{Name: api.CommandSaveParty, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.PartyID},
-		struct {
-			ID, Name  string
-			Roles     []string
-			Addresses []party.Address `json:",omitempty"`
-		}{cmd.PartyID, cmd.Name, cmd.Roles, party.SortAddresses(addresses)}, cmd.Validate(),
+		saveArgs(cmd.PartyID, cmd.Name, cmd.Roles, addresses), cmd.Validate(),
 		&partyCommand{s: s, id: cmd.PartyID, apply: func(h *partyCommand, ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 			if err := lifecycle.CheckSave(h.record(), h.visible(d), cmd.ExpectedVersion); err != nil {
 				return action.Outcome{}, err
@@ -152,6 +146,17 @@ func (s Service) SaveParty(ctx context.Context, cmd api.SaveParty) (api.Receipt,
 			}
 			return out, err
 		}})
+}
+
+// saveArgs are the business arguments party.save_draft hashes, in a canonical order (addresses by
+// ID). A party saved without addresses hashes as before addresses existed, an address without a
+// country as before countries existed (party.Address omits an empty Country).
+func saveArgs(id, name string, roles []string, addresses []party.Address) any {
+	return struct {
+		ID, Name  string
+		Roles     []string
+		Addresses []party.Address `json:",omitempty"`
+	}{id, name, roles, party.SortAddresses(addresses)}
 }
 
 // ConfirmParty confirms a draft party on readable evidence (Python master.confirm).

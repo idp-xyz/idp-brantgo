@@ -270,7 +270,8 @@ func (b *builder) payments(r quote.Ref) ([]calc.Stage, error) {
 			return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "")
 		}
 		out = append(out, calc.Stage{StageID: s.StageID, Percent: percent})
-		b.stages[s.StageID] = quote.Stage{Trigger: s.Trigger, Days: s.Days, DayBasis: terms.DayBasis, Calendar: calendar}
+		b.stages[s.StageID] = quote.Stage{Trigger: s.Trigger, Days: s.Days, DayBasis: terms.DayBasis, Calendar: calendar,
+			ReleaseControl: s.ReleaseControl}
 	}
 	return out, nil
 }

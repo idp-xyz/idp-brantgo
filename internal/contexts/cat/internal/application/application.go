@@ -1,7 +1,7 @@
 // Package application runs CAT's commands and queries on the command ledger. SKU rules live in
-// domain/sku, item code mapping rules in domain/mapping; SQL lives in adapters/postgres.
-// Confirmations and publications read their evidence through EVD's api before CAT's transaction
-// begins (Context Map R62).
+// domain/sku, item code mapping rules in domain/mapping, declaration profile rules in
+// domain/declaration; SQL lives in adapters/postgres. Confirmations, publications and verifications
+// read their evidence through EVD's api before CAT's transaction begins (Context Map R62).
 package application
 
 import (
@@ -36,7 +36,8 @@ var (
 )
 
 // Rules is CAT's authorization policy (05 stage humanOnlyCommands: sku.confirm, sku.deactivate,
-// item_code_mapping.publish). AI agents with the grant draft SKUs and mappings.
+// item_code_mapping.publish, declaration_profile.verify). AI agents with the grant draft SKUs,
+// mappings and declaration profiles (CAT-INV-002: a candidate never takes effect by itself).
 func Rules() []authorization.Rule {
 	return []authorization.Rule{
 		{Command: api.CommandSaveSku, Permission: api.CommandSaveSku, ActorKinds: humanOrAgent},
@@ -45,17 +46,22 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandDeactivateSku, api.CommandDeactivateSku),
 		{Command: api.CommandSaveItemCodeMapping, Permission: api.CommandSaveItemCodeMapping, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandPublishItemCodeMapping, api.CommandPublishItemCodeMapping),
+		{Command: api.CommandSaveDeclarationProfile, Permission: api.CommandSaveDeclarationProfile, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandVerifyDeclarationProfile, api.CommandVerifyDeclarationProfile),
 		{Command: CommandGetSku, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetItemCodeMapping, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetDeclarationProfile, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListDeclarationProfiles, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 }
 
 // Visible reports whether d's actor sees the object a stored result names. A SKU has an owner; an
-// item code mapping belongs to the company (Python foundation_root has no owner), so the read
-// permission the ledger checks before a replay is its only restriction.
+// item code mapping and a declaration profile belong to the company (Python foundation_root has no
+// owner), so the read permission the ledger checks before a replay is their only restriction.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
-	if command == api.CommandSaveItemCodeMapping || command == api.CommandPublishItemCodeMapping {
+	switch command {
+	case api.CommandSaveItemCodeMapping, api.CommandPublishItemCodeMapping, api.CommandSaveDeclarationProfile, api.CommandVerifyDeclarationProfile:
 		return true, nil
 	}
 	scope, _ := bento.ScopeFromContext(ctx)

@@ -8,6 +8,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/allocation"
+	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/commitment"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/draft"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -16,7 +17,8 @@ import (
 
 // voidCommand runs purchase.draft.void: it locks the draft FOR UPDATE, then the DemandAllocation
 // roots of its lines in (order_id, order_line_id) order, voids the draft and releases its entries.
-// It reads nothing upstream: voiding judges PUR's own facts.
+// It reads nothing upstream: voiding judges PUR's own facts, and it only removes from what
+// DownstreamCommitments v1 shows, so it takes no order lock.
 type voidCommand struct {
 	s        Service
 	cmd      api.VoidDraft
@@ -44,8 +46,9 @@ func (h *voidCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
 }
 
 // Apply refuses, in this order: a draft the caller does not see (NOT_FOUND), a record that is not
-// intact (REFERENCE_INVALID), another version (VERSION_CONFLICT), a committed draft
-// (PURCHASE_DRAFT_COMMITTED) and a voided one (INVALID_STATE).
+// intact (REFERENCE_INVALID), another version (VERSION_CONFLICT), a committed draft — a purchase
+// commitment of it was issued (PURCHASE_DRAFT_COMMITTED, PUR-INV-010, TD-AT06) — and a voided one
+// (INVALID_STATE).
 func (h *voidCommand) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 	sc := scope(ctx)
 	dr := h.existing
@@ -55,7 +58,14 @@ func (h *voidCommand) Apply(ctx context.Context, exec bentopg.Executor, d author
 	if err := dr.Verify(sc, "/args/draft_id"); err != nil {
 		return action.Outcome{}, err
 	}
-	if err := dr.Voidable(h.cmd.ExpectedVersion); err != nil {
+	// Read after the draft's allocation roots are locked: an issue of its commitment, which locks the
+	// same roots, has committed and is seen (PUR-INV-010).
+	owners, err := postgres.CommitmentsOfDraft(ctx, exec, sc, dr.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	committed := slices.ContainsFunc(owners, func(o postgres.CommitmentOwner) bool { return commitment.IsCommitted(o.Status) })
+	if err := dr.Voidable(h.cmd.ExpectedVersion, committed); err != nil {
 		return action.Outcome{}, err
 	}
 	now := kernel.Instant(h.s.Clock.Now())

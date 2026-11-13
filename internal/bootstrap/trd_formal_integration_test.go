@@ -436,13 +436,14 @@ func TestExpiredOrRevokedApprovalLeavesNoFormalArtifacts(t *testing.T) {
 	if code(err) != trdapi.CodeApprovalRevoked {
 		t.Fatalf("a revoked approval: %s", code(err))
 	}
-	// Approvals lapsing three seconds after they are given: quote.4's is used before, quote.2's after.
+	// Approvals lapsing ten seconds after they are given: quote.4's is used before, quote.2's after.
+	// (Three seconds were too few for the activation under the race detector on a loaded host.)
 	shortly := func(id string) (trdapi.ReviewReceipt, time.Time) {
 		f := q.frozenQuote(id)
 		_, err := q.submit(q.author, id, f.RowVersion, 1, "review."+id)
 		q.must(err)
 		short := q.approval(id, f.RowVersion+1, "review."+id, f.BusinessHash, "approval."+id)
-		lapse := time.Now().Add(3 * time.Second)
+		lapse := time.Now().Add(10 * time.Second)
 		short.ExpiresAt = kernel.FormatTimestamp(lapse)
 		d, err := q.c.TRD.DecideReview(q.reviewer, short)
 		q.must(err)

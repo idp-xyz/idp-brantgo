@@ -30,6 +30,7 @@ func TestClassify(t *testing.T) {
 		"internal/common":                         {layer: layerUnknown},
 		"tests/e2e":                               {layer: layerTests},
 		"tools/spikes/consistency":                {layer: layerTool},
+		"tools/testshard":                         {layer: layerTool, part: partStdlib},
 	} {
 		if got := classify(mod, mod+"/"+path); got != want {
 			t.Errorf("classify(%s) = %+v, want %+v", path, got, want)
@@ -112,6 +113,24 @@ func TestTestSupportIsForTestFilesOnly(t *testing.T) {
 	}, nil)
 	if len(found) != 1 || found[0].rule != "testsupport" || found[0].pkg != "internal/foundation/messaging" {
 		t.Fatalf("findings = %v", found)
+	}
+}
+
+func TestShardToolUsesTheStandardLibraryOnly(t *testing.T) {
+	found := checkImports(mod, []listedPackage{
+		{ImportPath: mod + "/tools/testshard", Imports: []string{"crypto/sha256", "os/exec"}, TestImports: []string{"testing"}},
+		{ImportPath: mod + "/tools/testshard", Imports: []string{"github.com/jackc/pgx/v5"}},
+		{ImportPath: mod + "/tools/testshard", TestImports: []string{mod + "/internal/foundation/database/pgtest"}},
+		{ImportPath: mod + "/tools/testshard", XTestImports: []string{mod + "/internal/kernel"}},
+		{ImportPath: mod + "/tools/rolegen", Imports: []string{"github.com/jackc/pgx/v5"}},
+	}, nil)
+	if len(found) != 3 {
+		t.Fatalf("findings = %v", found)
+	}
+	for _, f := range found {
+		if f.rule != "stdlib" || f.pkg != "tools/testshard" {
+			t.Errorf("finding %v, want rule stdlib on tools/testshard", f)
+		}
 	}
 }
 

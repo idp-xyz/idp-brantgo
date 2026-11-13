@@ -55,38 +55,162 @@ SM-TRD-ORDER-AMENDMENT,TRD,SalesOrder,OrderAmendment,pending_approval,order.amen
 SM-TRD-ORDER-REVIEW,TRD,SalesOrder,OrderReview,open,order.review.decide,approved,人工；独立于草稿创建人与申请人；逐项确认订单准备后出现的上游风险；有效期由订单审批政策设定，与报价有效期无关,human
 SM-TRD-ORDER-REVIEW,TRD,SalesOrder,OrderReview,open,order.review.decide,rejected,拒绝后可新建请求,human
 SM-TRD-ORDER-REVIEW,TRD,SalesOrder,OrderReview,approved,order.approval.revoke,revoked,阻止新激活，不倒写已激活订单,human
-SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,unbound,object_control.bind,bound,任务认领根，CAS 取得绑定；另一任务返回 OBJECT_CONTROL_CONFLICT,system
-SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,bound,object_control.stop,stopping,TRD 在根事务内递增 control_epoch（唯一写入方）并进入 stopping，围栏立即生效；之后 TSK 记录任务控制变化,human
-SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,stopping,（屏障完成）,manual,屏障完成；submitted／unknown 已对账,system
-SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,manual,object_control.release,unbound,task.control 权限；当前 epoch；无未知在途结果,human
-SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,bound,object_control.release,unbound,绑定任务已 completed、closed_unfulfilled 或 cancelled；无在途 submitted／unknown 结果,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,unbound,object_control.bind,bound,TSK task.bind_object 认领已存在的根，CAS 取得绑定；另一任务返回 OBJECT_CONTROL_CONFLICT,system
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,bound,object_control.stop,stopping,经 TSK task.take_control 或 task.cancel，携带绑定任务的控制声明；TRD 在根事务内递增 control_epoch（唯一写入方）并进入 stopping，围栏立即生效；之后 TSK 记录任务控制变化,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,manual,object_control.stop,stopping,经 TSK task.handoff 或 task.cancel，携带当前控制声明；递增 control_epoch，人工步骤停止,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,stopping,object_control.enter_manual,manual,经 TSK task.finish_stop（接管）：屏障完成，submitted／unknown 已对账；递增 control_epoch；此后只接受携带当前声明的人工写入（AI 返回 CONTROL_MODE_MISMATCH）,system
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,stopping,object_control.handoff,bound,经 TSK task.finish_stop（交回 AI）：屏障完成；递增 control_epoch，绑定同一任务,system
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,manual,object_control.release,unbound,经 TSK task.release：task.release 权限；当前 epoch；无未知在途结果,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,bound,object_control.release,unbound,经 TSK task.release：绑定任务已 completed、closed_unfulfilled、cancelled 或 failed；无在途 submitted／unknown 结果,human
+SM-TRD-CONTROL,TRD,QuoteRoot,ObjectControl,stopping,object_control.release,unbound,经 TSK task.release：任务已取消或终止且屏障完成（S3-D11 的 stopping 释放）,human
 SM-PUR-DRAFT,PUR,PurchaseDraft,PurchaseDraft,prepared,（时钟派生）,supply_expired,供应有效截止已过；历史读取不改写,system
 SM-PUR-DRAFT,PUR,PurchaseDraft,PurchaseDraft,prepared,purchase.draft.void,voided,未形成采购承诺；授权人工与理由；释放该草稿占用的需求分配余额，保留原记录,human
 SM-PUR-DRAFT,PUR,PurchaseDraft,PurchaseDraft,supply_expired,purchase.draft.void,voided,同上,human
 SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,created,task.scope,scoping,输入范围、身份及目标有效；来源防重,system
 SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,scoping,task.scope,running,关键缺项清除；目标与动作范围已定,human|system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（进入等待）,waiting,等待输入、审批或外部结果；保存恢复条件,system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting,task.resume,running,去重、版本及内容仍适用；先重查上下文,system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（进入核验）,verifying,必需动作已有可靠结果,system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,goal.verify,completed,全部断言 satisfied；快照版本仍匹配,system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,（核验未满足）,waiting,任一断言 unsatisfied／unknown／error：记录未满足项与证据，回到等待,system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（暂停）,paused,预算、模型或工具故障、冲突,system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.resume,running,原因已处理；副作用已对账,human
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试,human
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting,task.take_control,stopping,同 running 接管；等待中的外部结果先对账,human
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.take_control,stopping,模型不可用或预算耗尽后人工接管；同 running 接管,human
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,stopping,（屏障完成）,paused,接管或交回：切换 control_mode,system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,stopping,task.cancel,cancelled,取消请求且屏障完成,human
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（拒绝或到期）,closed_unfulfilled,无未决冲突；保存原因,human|system
-SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,（不可恢复失败）,failed,已对账副作用；明确原因与后续责任,human
-SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,（OrderActivated 事件）,consumed,占用未过期；订单与金额一致,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,scoping,task.wait,waiting_input,保存缺项、责任人及恢复条件,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.wait,waiting_input,保存缺项、责任人及恢复条件,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,task.wait,waiting_input,保存缺项、责任人及恢复条件,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.wait,waiting_approval,生成绑定具体内容的审批或审批凭证请求；禁止先做副作用,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,task.wait,waiting_approval,生成绑定具体内容的审批或审批凭证请求；禁止先做副作用,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.wait,waiting_external,保存来源关联、操作状态、期限及查询方式,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_input,task.resume,running,输入、审批或外部结果到达：去重、版本及内容仍适用；先重查上下文,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_approval,task.resume,running,输入、审批或外部结果到达：去重、版本及内容仍适用；先重查上下文,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_external,task.resume,running,输入、审批或外部结果到达：去重、版本及内容仍适用；先重查上下文,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.bind_object,running,本任务的动作已创建报价根；TRD object_control.bind 取得绑定，记录 TRD 返回的 control_epoch,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.verify,verifying,必需动作已有可靠结果；无 submitted／unknown 动作,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,goal.verify,completed,全部必需断言 satisfied；快照版本仍匹配且无冲突,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,goal.verify,waiting_input,任一断言 unsatisfied：记录未满足项与证据，回到等待,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,goal.verify,waiting_external,任一断言 unknown／error：记录原因与恢复条件，回到等待,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,created,task.pause,paused,预算、模型或工具故障、冲突；记录原因、成本与恢复条件,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,scoping,task.pause,paused,预算、模型或工具故障、冲突；记录原因、成本与恢复条件,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.pause,paused,预算、模型或工具故障、冲突；记录原因、成本与恢复条件,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_input,task.pause,paused,预算、模型或工具故障、冲突；记录原因、成本与恢复条件,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_approval,task.pause,paused,预算、模型或工具故障、冲突；记录原因、成本与恢复条件,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_external,task.pause,paused,预算、模型或工具故障、冲突；记录原因、成本与恢复条件,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,task.pause,paused,预算、模型或工具故障、冲突；记录原因、成本与恢复条件,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.resume,running,原因已处理；身份与规则有效；已有副作用已对账,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.resume,waiting_input,原因已处理；回到暂停前的等待状态并重查上下文,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.resume,waiting_approval,原因已处理；回到暂停前的等待状态并重查上下文,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.resume,waiting_external,原因已处理；回到暂停前的等待状态并重查上下文,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,created,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,scoping,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_input,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_approval,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_external,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.take_control,stopping,先调用 TRD object_control.stop 取得新 control_epoch（围栏生效），再以 task_version CAS 记录；第二步失败时根保持围栏，按 action_id 重试；未绑定根时不调用 TRD，只记录控制变化,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.handoff,stopping,control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_input,task.handoff,stopping,control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_approval,task.handoff,stopping,control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_external,task.handoff,stopping,control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.handoff,stopping,control_mode=manual；交回 AI：停止领取人工步骤，TSK 不再签发控制声明,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,created,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,scoping,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_input,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_approval,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_external,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.cancel,stopping,取消请求：停止新动作；已生效的报价、订单仍由受控业务命令处理,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,stopping,task.finish_stop,paused,屏障完成：submitted／unknown 已对账；接管则 TRD 转人工并切换 control_mode=manual，交回则 TRD 交回绑定并切换 control_mode=ai,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,stopping,task.finish_stop,cancelled,取消请求且屏障完成,system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.close_unfulfilled,closed_unfulfilled,客户拒绝、报价到期且不再推进；无未决冲突；保存原因,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_input,task.close_unfulfilled,closed_unfulfilled,客户拒绝、报价到期且不再推进；无未决冲突；保存原因,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_approval,task.close_unfulfilled,closed_unfulfilled,客户拒绝、报价到期且不再推进；无未决冲突；保存原因,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_external,task.close_unfulfilled,closed_unfulfilled,客户拒绝、报价到期且不再推进；无未决冲突；保存原因,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,task.close_unfulfilled,closed_unfulfilled,客户拒绝、报价到期且不再推进；无未决冲突；保存原因,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.close_unfulfilled,closed_unfulfilled,客户拒绝、报价到期且不再推进；无未决冲突；保存原因,human|system
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,running,task.fail,failed,不可恢复失败：已对账副作用，明确原因与后续责任,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_input,task.fail,failed,不可恢复失败：已对账副作用，明确原因与后续责任,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_approval,task.fail,failed,不可恢复失败：已对账副作用，明确原因与后续责任,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,waiting_external,task.fail,failed,不可恢复失败：已对账副作用，明确原因与后续责任,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,verifying,task.fail,failed,不可恢复失败：已对账副作用，明确原因与后续责任,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.fail,failed,不可恢复失败：已对账副作用，明确原因与后续责任,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,completed,task.release,completed,任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,closed_unfulfilled,task.release,closed_unfulfilled,任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,cancelled,task.release,cancelled,任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,failed,task.release,failed,任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变,human
+SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.release,paused,control_mode=manual；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根,human
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,credit.consume,consumed,系统消费方处理 OrderActivated（PL-12）；占用未过期，订单、修订与金额一致；按事件 ID 去重,system
 SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,credit.release,released,订单未生效即放弃，或占用到期,human|system
-SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,consumed,（订单取消、关闭或结清事件）,released,按事件 ID 去重,system
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,consumed,credit.release,released,系统消费方处理 OrderCancelled、OrderRemainderClosed 或 OrderClosed（PL-13）；按事件 ID 去重,system
 SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.decide,clear,授权合规人工；法规与名单版本、有效期,human
 SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.decide,blocked,授权合规人工；理由与依据,human
-SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,clear,（订单变更或法规版本更新）,pending,目的国、交易方、商品或法规版本变化,system
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,clear,trade_compliance.reopen,pending,新的 screening_regulation 修订发布；结论按订单修订绑定，新订单修订另开待核查（PL-14）,system
 SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,blocked,trade_compliance.evaluate,pending,事实变化后重新核查（如取得许可证、更换收货方）,human|ai
 SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,credit_exception.decide,released,审批人层级覆盖超额金额且不是销售经办；超过最高阈值须两人,human
 SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,credit_exception.decide,rejected,理由必填,human
 SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,released,（决定有效期届满）,expired,未在有效期内完成占用,system
 SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,（决定有效期届满）,expired,未裁决,system
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,requested,purchase.commitment.decide,approved,独立人工；重算逐字段一致；有效期不晚于供应有效截止；偏差与超采确认（PUR-INV-009）,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,requested,purchase.commitment.decide,rejected,理由必填,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,approved,purchase.commitment.revoke,revoked,发出前；授权人工与理由,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,approved,purchase.commitment.issue,issued,审批有效、未撤销、未过期；POL 编号与发出证据（PUR-INV-010）,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,issued,purchase.supplier_confirmation.record,confirmed,供应商确认的来源证据与时间,human|ai
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,confirmed,purchase.commitment.change.apply,issued,获批变更形成承诺新修订，待供应商重新确认（PUR-INV-011）,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,issued,purchase.commitment.change.apply,issued,获批变更形成承诺新修订,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,issued,purchase.commitment.cancel,cancelled,授权人工、理由与供应商证据；释放分配,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,confirmed,purchase.commitment.cancel,cancelled,同上；已核实交付量保留,human
+SM-PUR-COMMITMENT-CHANGE,PUR,PurchaseCommitment,CommitmentChange,draft,purchase.commitment.change.decide,approved,独立于变更编制人与申请人；重算与偏差确认,human
+SM-PUR-COMMITMENT-CHANGE,PUR,PurchaseCommitment,CommitmentChange,draft,purchase.commitment.change.decide,rejected,理由必填,human
+SM-PUR-COMMITMENT-CHANGE,PUR,PurchaseCommitment,CommitmentChange,approved,purchase.commitment.change.apply,applied,承诺修订未变化（PURCHASE_COMMITMENT_CHANGE_STALE）,human
+SM-PUR-SUPPLIER-DELIVERY,PUR,SupplierDelivery,SupplierDelivery,recorded,supplier_delivery.verify,verified,授权人工核实；累计不超承诺量与获批容差（PUR-INV-008）,human
+SM-PUR-SUPPLIER-DELIVERY,PUR,SupplierDelivery,SupplierDelivery,recorded,supplier_delivery.verify,rejected,证据不足；理由必填,human
+SM-PUR-SUPPLIER-DELIVERY,PUR,SupplierDelivery,SupplierDelivery,verified,supplier_delivery.verify,superseded,核实更正版本时原版本被取代,human
+SM-PUR-ALLOCATION-REVIEW,PUR,DemandAllocation,AllocationReview,open,allocation_review.settle,settled,每项有处置（作废草稿、取消或变更承诺、确认无需处理）与理由,human
+SM-PUR-ALLOCATION-REVIEW,PUR,DemandAllocation,AllocationReview,open,allocation_review.open,superseded,更晚的订单修订开启新复核,system
+SM-QLT-INSPECTION,QLT,Inspection,Inspection,recorded,disposition.decide,disposed,不合格量的处置：返工、让步、退回或报废,human
+SM-QLT-INSPECTION,QLT,Inspection,Inspection,recorded,inspection.record,superseded,复检取代原结果，不累加合格量（BT08）,human|ai
+SM-QLT-INSPECTION,QLT,Inspection,Inspection,disposed,inspection.record,superseded,返工后复检,human|ai
+SM-QLT-RELEASE,QLT,QualityRelease,QualityRelease,granted,quality_release.revoke,revoked,授权人工与理由；冻结未出运部分；重复撤回无变化（QLT-INV-002）,human
+SM-QLT-RELEASE,QLT,QualityRelease,QualityRelease,granted,（有效期届满）,granted,派生判断：过期放行不再服务新出运,system
+SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,shipment.confirm,confirmed,本范围放行已授予且本事务重查全部守卫；累计不超订单行数量（FUL-INV-001、002、003）,human
+SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,shipment.cancel,cancelled,未确认；理由必填,human|ai
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,blocked,commercial_release.evaluate,granted,CNX、PTY、PUR、QLT、STL、TRD 守卫均满足,human|ai|system
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,commercial_release.evaluate,blocked,重新评估时任一守卫不满足,human|ai|system
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,blocked,commercial_release.grant_exception,granted,只覆盖付款条件；授权人工绑定订单、出运、阶段与金额,human
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,shipment.confirm,consumed,scope shipment；本事务重查守卫,human
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,document_release.record,consumed,scope documents；正本提单或电放；本事务重查守卫,human
+SM-FUL-DOCUMENT,FUL,ShipmentDocumentSet,ShipmentDocument,draft,shipment_document.issue,issued,差异逐项解决或确认；模板与编号经 ConfigGuard 重查（FUL-INV-004、005）,human
+SM-FUL-DOCUMENT,FUL,ShipmentDocumentSet,ShipmentDocument,issued,shipment_document.issue,superseded,签发新版本时取代旧版本,human
+SM-FUL-DOCUMENT,FUL,ShipmentDocumentSet,ShipmentDocument,draft,shipment_document.prepare,superseded,新草稿版本取代,human|ai
+SM-FUL-SHIPMENT-REVIEW,FUL,OrderFulfilment,ShipmentReview,open,shipment_review.settle,settled,装箱、订舱与未签发单证逐项处置；已确认出运保留,human
+SM-FUL-SHIPMENT-REVIEW,FUL,OrderFulfilment,ShipmentReview,open,shipment_review.open,superseded,更晚的订单修订开启新复核,system
+SM-STL-SETTLEMENT,STL,SettlementStatement,SettlementStatement,confirmed,settlement.reverse,reversed,无有效核销；独立于确认人；恢复来源明细（STL-INV-009）,human
+SM-STL-CREDIT-NOTE,STL,SettlementStatement,CreditNote,requested,credit.confirm,confirmed,独立于申请人；绑定订单、结算单、类型、金额与依据（STL-INV-008）,human
+SM-STL-CREDIT-NOTE,STL,SettlementStatement,CreditNote,requested,credit.confirm,rejected,理由必填,human
+SM-STL-FUND,STL,FundRecord,FundRecord,recorded,fund.resolve_difference,difference_resolved,独立于资金登记人；我方承担的银行费用或折让及依据（STL-INV-006）,human
+SM-STL-APPLICATION,STL,Application,Application,applied,application.unapply,unapplied,授权人工与理由；形成新记录，资金事实保留,human
+SM-STL-CREDIT-LIMIT,STL,CustomerCredit,CreditLimitRequest,requested,credit_limit.publish,published,审批人层级覆盖申请额度且独立于申请人；额度来源与有效期,human
+SM-STL-CREDIT-LIMIT,STL,CustomerCredit,CreditLimitRequest,requested,credit_limit.publish,rejected,理由必填,human
+SM-STL-CHARGE,STL,Charge,Charge,estimated,charge.record,pending,收到供应商账单或费用依据,human|ai
+SM-STL-CHARGE,STL,Charge,Charge,pending,charge.confirm,confirmed,授权人工核对账单与依据,human
+SM-STL-CHARGE,STL,Charge,Charge,estimated,charge.confirm,confirmed,同上,human
+SM-STL-ORDER-RESULT,STL,OrderResult,OrderResult,open,order_result.review,reviewed,汇总履约、账款、费用与案件状态,human|ai
+SM-STL-ORDER-RESULT,STL,OrderResult,OrderResult,reviewed,order_result.close,settled,关闭条件全部满足；授权人员（STL-INV-011）,human
+SM-STL-ORDER-RESULT,STL,OrderResult,OrderResult,settled,order_result.reopen,open,关闭后补录费用或调整；理由与留痕（BT24）,human
+SM-STL-PAYMENT-PLAN-REVIEW,STL,OrderAccount,PaymentPlanReview,open,payment_plan_review.settle,settled,付款阶段与信用部分的变化逐项处置,human
+SM-STL-PAYMENT-PLAN-REVIEW,STL,OrderAccount,PaymentPlanReview,open,payment_plan_review.open,superseded,更晚的订单修订开启新复核,system
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,draft,declaration_case.confirm,confirmed,申报档案已核实，映射有专业依据（CNX-INV-006）,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,confirmed,declaration_case.record_submission,submitted,人工提交声明与操作引用,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,submitted,declaration_case.record_receipt,unknown,超时或结果不明；先查证（CNX-INV-003）,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,submitted,declaration_case.record_receipt,received,外部收到回执原文与映射版本,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,unknown,declaration_case.record_receipt,received,查证后的外部结果,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,received,declaration_case.record_receipt,accepted,受理回执,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,accepted,declaration_case.record_receipt,released,放行回执；不等于实际离境,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,received,declaration_case.record_receipt,rejected,退回回执,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,accepted,declaration_case.record_receipt,rejected,退回回执,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,released,declaration_case.record_receipt,amended,改单回执；引用原项与数量（CN-R07）,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,released,declaration_case.record_receipt,withdrawn,撤销回执,human
+SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,imported,purchase_invoice.verify,verified,人工核验原件与候选（CNX-INV-005）,human
+SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,imported,purchase_invoice.verify,rejected,重复、无效或主体不符,human
+SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,verified,purchase_invoice.verify,reversed,核验红字发票时原票被冲红，相关匹配待复核,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,expected,tax_refund_case.record_result,planned,拟申报；政策版本与专业复核人,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,planned,tax_refund_case.record_result,submitted,外部提交引用,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,submitted,tax_refund_case.record_result,approved,核准结果原文；金额可与预计不同（CN-AT10）,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,approved,tax_refund_case.record_result,received,到账（引用 STL 资金记录）,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,submitted,tax_refund_case.record_result,rejected,外部不予核准,human
+SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,draft,declaration_profile.verify,verified,授权专业人工，独立于最后编辑人（CAT-INV-002）,human
+SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,verified,declaration_profile.verify,superseded,核实更新修订时取代，历史申报快照不变,human

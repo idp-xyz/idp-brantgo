@@ -18,8 +18,12 @@ import (
 // The active sales order suite (WBS S3-15; SM-TRD-ORDER after activation, SM-TRD-ORDER-AMENDMENT;
 // TRD-INV-016, 018, 019; TD-AT01, TD-AT02, ES-09, SIM-02 step 7; Context Map R19) on the order
 // world: "editor" (the author) prepares and submits amendments, "reviewer" decides and applies them;
-// both are humans with every permission. Python has none of this. FUL's shipments and PUR's
-// commitments are not wired in S3 (recorded as not_wired): nothing can have shipped.
+// both are humans with every permission. Python has none of this. Since S5 C4a the order's ends and
+// amendments read FUL's ShipmentFacts v1 and PUR's DownstreamCommitments v1 (nothing shipped and
+// nothing open in this world; trd_order_facts_integration_test.go ships and commits). Since S5 B4
+// apply asks STL's CreditGuard for the revision it produces when that asks more credit (the order
+// world's plan is paid before shipment: not_required) and records trade compliance as not checked
+// at apply (D-9).
 
 // amendImpact is a complete impact assessment: purchasing affected, booking open, the rest
 // unaffected.
@@ -163,7 +167,9 @@ func TestOrderAmendmentLifecycle(t *testing.T) {
 	}
 	e := v2.AmendmentCommits[0].Entries
 	if e["command"] != trdapi.CommandApplyAmendment || e["from_order_hash"] != v1.OrderHash || e["to_order_hash"] != r.OrderHash ||
-		e["fulfilment_source"] != trdapi.NotWired || e[trdapi.GuardSTLCredit] != trdapi.NotWired || e[trdapi.GuardCNXTradeCompliance] != trdapi.NotWired ||
+		e["fulfilment_source"] != trdapi.GuardFULShipments || e["shipped"] != "" || e[trdapi.GuardSTKReservations] != trdapi.NotEnabled ||
+		e[trdapi.GuardSTLCredit] != trdapi.GuardNotRequired ||
+		e[trdapi.GuardCNXTradeCompliance] != trdapi.GuardNotCheckedAtApply ||
 		e["decided_by"] != "human:reviewer" || e["prepared_by"] != "ai:agent.1,human:editor" || e["open_items"] != "booking" ||
 		e["idempotency_key"] != apply.IdempotencyKey {
 		t.Fatalf("the commit evidence %v", e)
@@ -200,7 +206,8 @@ func TestOrderAmendmentLifecycle(t *testing.T) {
 		t.Fatalf("events %v", types)
 	}
 	if amended["order_revision"] != float64(2) || amended["order_hash"] != r.OrderHash || amended["from_order_hash"] != v1.OrderHash ||
-		amended["aggregate_type"] != "SalesOrder" || amended["fulfilment_source"] != trdapi.NotWired || amended["changed_terms"] != "" {
+		amended["aggregate_type"] != "SalesOrder" || amended["fulfilment_source"] != trdapi.GuardFULShipments || amended["changed_terms"] != "" ||
+		amended["unchecked_guards"] != "" || amended["credit_guard"] != trdapi.GuardNotRequired {
 		t.Fatalf("OrderAmended %v", amended)
 	}
 	lines, _ := amended["changed_lines"].([]any)
@@ -373,11 +380,12 @@ func TestAmendmentAndCancellationHaveOneWinner(t *testing.T) {
 	}
 }
 
-// TD-AT02 and TRD-INV-019 in S3, where FUL is not built: an active order shipped nothing, so it is
-// not closed (ORDER_NOT_FULFILLED) nor closed short (INVALID_STATE: cancel it), and it is
-// cancelled, with every line's ordered and given-up quantity and the sources not wired; the
-// conversion slot stays taken, OrderGuard v1 answers ORDER_NOT_ACTIVE, and the amendments end with
-// the order (ORDER_NOT_ACTIVE). An AI agent ends nothing.
+// TD-AT02 and TRD-INV-019, unshipped half: FUL's ShipmentFacts v1 says the active order shipped
+// nothing, so it is not closed (ORDER_NOT_FULFILLED) nor closed short (INVALID_STATE: cancel it);
+// PUR lists nothing against it, so it is cancelled, with every line's ordered and given-up quantity
+// and the contracts that answered; the conversion slot stays taken, OrderGuard v1 answers
+// ORDER_NOT_ACTIVE, and the amendments end with the order (ORDER_NOT_ACTIVE). An AI agent ends
+// nothing. The shipped half is in trd_order_facts_integration_test.go.
 func TestActiveOrderEnds(t *testing.T) {
 	q := newOrderWorld(t)
 	o := q.activeOrder("quote.1")
@@ -398,7 +406,8 @@ func TestActiveOrderEnds(t *testing.T) {
 	q.must(err)
 	after := q.getOrder(o.ObjectID)
 	if c.Status != trdapi.OrderCancelled || c.RowVersion != v.RowVersion+1 || after.Closure != nil || after.End == nil ||
-		after.End.Status != trdapi.OrderCancelled || after.End.FulfilmentSource != trdapi.NotWired || after.End.DownstreamSource != trdapi.NotWired ||
+		after.End.Status != trdapi.OrderCancelled || after.End.FulfilmentSource != trdapi.GuardFULShipments ||
+		after.End.DownstreamSource != trdapi.GuardDownstream ||
 		len(after.End.Lines) != 1 || after.End.Lines[0].Ordered != "120" || after.End.Lines[0].Shipped != "0" || after.End.Lines[0].Remainder != "120" ||
 		after.End.OrderRevision != 1 || after.End.Reason != "客户撤单" {
 		t.Fatalf("cancelled: %+v %+v", c, after.End)
@@ -415,7 +424,9 @@ func TestActiveOrderEnds(t *testing.T) {
 			cancelled = ev.Payload
 		}
 	}
-	if cancelled["ended_from"] != trdapi.OrderActive || cancelled["fulfilment_source"] != trdapi.NotWired || cancelled["conversion_slot"] != "full_v1" {
+	if cancelled["ended_from"] != trdapi.OrderActive || cancelled["fulfilment_source"] != trdapi.GuardFULShipments ||
+		cancelled["downstream_source"] != trdapi.GuardDownstream || cancelled["stock_reservations"] != trdapi.NotEnabled ||
+		cancelled["downstream_settled"] != "" || cancelled["conversion_slot"] != "full_v1" {
 		t.Fatalf("OrderCancelled %v", cancelled)
 	}
 	// The slot stays taken: the quote converts no second order.

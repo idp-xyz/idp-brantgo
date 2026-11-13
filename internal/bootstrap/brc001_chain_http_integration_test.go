@@ -14,18 +14,21 @@ import (
 	"net/http/httptest"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	cstapi "go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
+	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
@@ -69,6 +72,14 @@ import (
 //   - Order (steps 16–18; Python test_t04_a38_order_review.py test_end_to_end_and_historical_replay):
 //     sales prepares order.1 (960.00) and requests its review; its own decision is
 //     REVIEWER_NOT_INDEPENDENT (TRD-INV-013), order.reviewer approves; sales activates it.
+//   - Since S5 (unit B4; S5 decision D-20, ES-11) the activation needs CNX's clear trade
+//     compliance conclusion of order.1's revision (TRD-INV-023) and STL's reservation of the 672.00
+//     due after shipment (TRD-INV-022): until each is recorded, order.check answers
+//     TRADE_COMPLIANCE_NOT_CLEAR, then CREDIT_RESERVATION_REQUIRED. Compliance imports the synthetic
+//     CN and UN country programme lists, doc.1 classifies the four SKUs and doc.2 verifies them
+//     (CAT-INV-002), compliance evaluates and concludes clear; POL publishes the E-2 credit policy,
+//     sales requests a limit of 10,000.00 USD that two credit managers publish (above the top tier,
+//     STL-INV-005), and sales reserves 672.00 within it (D-7). The commit evidence names both.
 //   - PUR (step 19; Python test_t04_a46_purchase_draft.py
 //     test_active_order_line_forms_reviewable_draft_from_effective_offer): purchaser prepares
 //     purchase.1 from supplier.A's offer over all four lines, 600.00 USD, not committed.
@@ -102,7 +113,13 @@ import (
 // the fixtures, what was not executed, and each step with its method, path, status, idempotency key,
 // object ID, row version, receipt status or refusal code, and the IDs, hashes and amounts it read.
 func TestBRC001FullChainOverHTTP(t *testing.T) {
-	b := newBRC001(t)
+	newBRC001(t).toPurchaseDraft()
+}
+
+// toPurchaseDraft is the S3-12 chain from the configuration evidence to the purchase draft of the
+// active order, read back, and the refusals of a second order and of a purchase beyond the order.
+// The S5 chain (TestBRC001OrderToSettlementOverHTTP) runs it first and continues from there.
+func (b *brc001) toPurchaseDraft() {
 	b.foundation()
 	b.front()
 	b.customerReady()
@@ -128,7 +145,17 @@ const (
 	brcVerifier      = "acceptance.verifier" // 客户确认核实人
 	brcOrderReviewer = "order.reviewer"      // 订单审核人
 	brcPurchaser     = "purchaser"           // 采购编制人
+
+	// S5 B4: the humans of the order's trade compliance and credit steps, with role templates.
+	brcDocumentation  = "doc.1"            // 单证: classifies the SKUs (documentation)
+	brcDocVerifier    = "doc.2"            // 单证: verifies the classification (documentation)
+	brcCreditManager1 = "credit.manager.1" // 信用经理 (credit_manager)
+	brcCreditManager2 = "credit.manager.2" // 信用经理 (credit_manager)
 )
+
+// brcCredit is what sales and compliance hold besides allPermissions for the S5 steps: the credit
+// limit request and the reservation (D-7), trade compliance and the programme lists.
+var brcCredit = []string{"credit_limit.request", "credit.reserve", "stl.read"}
 
 // brcLines are BRC-001's RFQ lines: ST01 red/blue × S/M.
 var brcLines = []struct{ id, sku, qty, net, purchase string }{
@@ -218,6 +245,7 @@ type brcRecord struct {
 	NotExecuted []string          `json:"not_executed"`
 	Amounts     map[string]string `json:"amounts"`
 	Steps       []brcStep         `json:"steps"`
+	Dispatches  []brcDispatch     `json:"dispatches,omitempty"` // the S5 chain's runs of the event relay
 }
 
 // brc001 drives the chain: the platform's API behind an httptest server, the local issuer, the
@@ -230,6 +258,7 @@ type brc001 struct {
 	phase  string
 	keys   int
 	record brcRecord
+	report string // the environment variable naming the record's file
 
 	from, until                                    time.Time
 	usd, pcs, zero, freight, service               map[string]any
@@ -251,7 +280,7 @@ func newBRC001(t *testing.T) *brc001 {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	from := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	b := &brc001{t: t, w: w, base: srv.URL, is: is, from: from, until: from.Add(24 * time.Hour),
+	b := &brc001{t: t, w: w, base: srv.URL, is: is, report: "BRANT_BRC001_REPORT", from: from, until: from.Add(24 * time.Hour),
 		goods: map[string]map[string]any{}, sale: map[string]map[string]any{},
 		place: map[string]any{"kind": trdapi.PlaceKind, "id": "DEHAM", "revision": 1}}
 	var version string
@@ -265,17 +294,21 @@ func newBRC001(t *testing.T) *brc001 {
 		Tenant: w.tenant, Company: "company.A",
 		Actors: map[string]string{brcSales: "销售经办", brcAdmin: "管理员（POL 草稿）", brcController: "配置与交易档案发布人（独立复核）",
 			brcCompliance: "合规（名单与主体筛查）", brcBuyer: "采购／核价经办（起草）", brcCostChecker: "核价复核（核实、评估、冻结）",
-			brcQuoteReviewer: "报价审核人", brcVerifier: "客户确认核实人", brcOrderReviewer: "订单审核人", brcPurchaser: "采购编制人"},
+			brcQuoteReviewer: "报价审核人", brcVerifier: "客户确认核实人", brcOrderReviewer: "订单审核人", brcPurchaser: "采购编制人",
+			brcDocumentation: "单证（申报要素归类）", brcDocVerifier: "单证（归类核实）", brcCreditManager1: "信用经理", brcCreditManager2: "信用经理"},
 		Fixtures: []brcFixture{
 			{What: "tenant " + w.tenant + " with company.A", How: "newWorld (pgtest.UniqueID)",
 				Why: "a tenant is the access token's brant_tenant claim; there is no business HTTP route for it"},
 			{What: "grants of the ten humans", How: "bootstrap.Platform.Provision: every permission, company data scope, team trade",
 				Why: "operator-only (cmd/brant-admin grant); no business HTTP route"},
+			{What: "role templates of doc.1, doc.2 (documentation) and credit.manager.1, credit.manager.2 (credit_manager)",
+				How: "bootstrap.Platform.AssignRoles with company data scope",
+				Why: "operator-only; STL reads the approver's tier from the credit_manager template (S5 D-6)"},
 			{What: "access tokens", How: "the test's local OIDC issuer, one token per request",
 				Why: "no real identity provider is connected before the B0 pilot gate"},
 		},
 		NotExecuted: []string{
-			"STL credit and CNX trade compliance guards: extension points not wired (order check lists them as unchecked)",
+			"STL's credit.consume of the reservation on OrderActivated (the event consumer of unit B6): the reservation stays reserved",
 			"sending the formal quote and receiving the reply through a channel: the reply is an EVD source the sales clerk registers",
 			"sending supplier RFQs: supplier_rfq.record_issued records the human sending as a fact",
 			"purchase commitment approval (Python A47): the draft stays not_committed",
@@ -285,16 +318,28 @@ func newBRC001(t *testing.T) *brc001 {
 		Amounts: map[string]string{}}
 	for _, actor := range []string{brcSales, brcAdmin, brcController, brcCompliance, brcBuyer, brcCostChecker, brcQuoteReviewer, brcVerifier,
 		brcOrderReviewer, brcPurchaser} {
-		w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: actorRef("human", actor), Permissions: allPermissions,
+		permissions := allPermissions
+		switch actor {
+		case brcSales:
+			permissions = append(slices.Clone(allPermissions), brcCredit...)
+		case brcCompliance:
+			permissions = append(slices.Clone(allPermissions), cnxCompliancePermissions...)
+		}
+		w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: actorRef("human", actor), Permissions: permissions,
 			DataScope: "company", Team: "trade"})
 	}
+	w.assign(brcDocumentation, "documentation")
+	w.assign(brcDocVerifier, "documentation")
+	w.assign(brcCreditManager1, "credit_manager")
+	w.assign(brcCreditManager2, "credit_manager")
 	t.Cleanup(b.writeRecord)
 	return b
 }
 
-// writeRecord writes the chain record to BRANT_BRC001_REPORT, when it is set.
+// writeRecord writes the chain record to the file the environment variable b.report names
+// (BRANT_BRC001_REPORT for the S3 chain), when it is set.
 func (b *brc001) writeRecord() {
-	path := os.Getenv("BRANT_BRC001_REPORT")
+	path := os.Getenv(b.report)
 	if path == "" {
 		return
 	}
@@ -818,8 +863,15 @@ func (b *brc001) order() {
 	// test_denied_without_approval_and_independent_reviewer).
 	b.refused(brcSales, "trd", trd, "order.review.decide", decide, http.StatusUnprocessableEntity, trdapi.CodeReviewerNotIndependent)
 	b.cmd(brcOrderReviewer, "trd", trd, "order.review.decide", decide)
+	// S5 B4: order.activate asks CNX's TradeComplianceGuard (TRD-INV-023), then STL's CreditGuard
+	// for the 672.00 due after shipment (TRD-INV-022); order.check names the first that refuses.
+	b.wantCheck(cnxapi.CodeTradeComplianceNotClear)
+	b.tradeCompliance()
+	b.wantCheck(stlapi.CodeCreditReservationRequired)
+	b.creditReserved()
+	b.phase = "TRD sales order"
 	check := b.get(brcSales, "/api/brant/v1/trd/orders/order.1/check?review_id=review.order.1")
-	if check["activatable"] != true || len(brcList(check["risks"])) != 0 {
+	if check["activatable"] != true || len(brcList(check["risks"])) != 0 || len(brcList(check["unchecked"])) != 0 {
 		b.t.Fatalf("order check %v", check)
 	}
 	b.fact("activatable", true, "unchecked", check["unchecked"])
@@ -827,6 +879,113 @@ func (b *brc001) order() {
 		"review_id": "review.order.1"}); r["status"] != trdapi.OrderActive || r["row_version"] != float64(4) {
 		b.t.Fatalf("order.activate %v", r)
 	}
+	o = b.get(brcSales, "/api/brant/v1/trd/orders/order.1")
+	entries := brcMap(brcDig(o, "commits", 0, "entries"))
+	if entries[trdapi.GuardSTLCredit] != stlapi.CreditCovered || entries[trdapi.EvidenceCreditReservation] != "res.order.1" ||
+		entries[trdapi.EvidenceCreditPortion] != "67200" || entries[trdapi.EvidenceCreditBasis] != stlapi.BasisWithinLimit ||
+		!strings.HasPrefix(brcStr(entries[trdapi.GuardCNXTradeCompliance]), "clear/cleared/") ||
+		entries[trdapi.EvidenceComplianceRegulation] != "screening@1" {
+		b.t.Fatalf("the activation's commit evidence %v", entries)
+	}
+	b.fact("credit_guard", entries[trdapi.GuardSTLCredit], "credit_reservation_id", entries[trdapi.EvidenceCreditReservation],
+		"credit_portion_minor", entries[trdapi.EvidenceCreditPortion], "trade_compliance", entries[trdapi.GuardCNXTradeCompliance])
+}
+
+// wantCheck requires order.check of order.1 on its review to answer code.
+func (b *brc001) wantCheck(code string) {
+	b.t.Helper()
+	check := b.get(brcSales, "/api/brant/v1/trd/orders/order.1/check?review_id=review.order.1")
+	if check["activatable"] != false || check["code"] != code {
+		b.t.Fatalf("order check: want %s, got %v", code, check)
+	}
+	b.fact("activatable", false, "code", code)
+}
+
+// tradeCompliance is ES-11 step 5 (S5-13, CNX-INV-001; D-8, D-22): compliance imports the synthetic
+// CN and UN country programme lists; documentation clerk doc.1 classifies each of the four SKUs
+// under code table CN-2026 and doc.2 verifies it (CAT-INV-002); compliance evaluates order.1 at
+// revision 1 — the destination and the buyer address's country entered on evidence (PTY recorded
+// none), the end use stated — and concludes clear.
+func (b *brc001) tradeCompliance() {
+	b.phase = "CNX trade compliance"
+	for _, code := range []string{cnProgrammeList, unProgrammeList} {
+		f := syntheticCountryProgrammes(code, "v1", "2026-11-01")
+		programmes := []any{}
+		for _, p := range f.Programmes {
+			programmes = append(programmes, map[string]any{"programme_id": p.ProgrammeID, "name": p.Name, "measure": p.Measure,
+				"countries": p.Countries, "scope": p.Scope})
+		}
+		b.cmd(brcCompliance, "ref", refapi.Contract, "country_programme.import", map[string]any{"list_code": f.ListCode, "jurisdiction": f.Jurisdiction,
+			"version": f.Version, "source_name": f.SourceName, "source_url": f.SourceURL, "published_on": f.PublishedOn, "file_sha256": f.FileSHA256,
+			"programme_count": f.ProgrammeCount, "country_count": f.CountryCount, "programmes": programmes})
+	}
+	for _, l := range brcLines {
+		id := "decl." + l.sku
+		b.cmd(brcDocumentation, "cat", catapi.Contract, catapi.CommandSaveDeclarationProfile, map[string]any{"id": id, "expected_version": 0,
+			"sku_id": l.sku, "spec_revision": 1, "code_table_version": codeTable,
+			"commodity":        map[string]any{"code": "6109100021", "basis": "合成：针织棉制 T 恤，按合成编码表归类"},
+			"declaration_name": "棉制针织T恤衫",
+			"elements":         []any{map[string]any{"name": "品名", "value": "T恤衫"}, map[string]any{"name": "成分含量", "value": "100%棉"}},
+			"legal_units":      []any{map[string]any{"unit": "件", "per_base_unit": "1", "basis": "一件即一 PCS"}},
+			"origin":           map[string]any{"country": "CN", "criterion": catapi.OriginWhollyObtained, "basis": "合成：境内生产与缝制"},
+			"export_control":   map[string]any{"status": catapi.ExportNotControlled, "basis": "合成：不在合成管制清单内"}})
+		b.cmd(brcDocVerifier, "cat", catapi.Contract, catapi.CommandVerifyDeclarationProfile, map[string]any{"id": id, "expected_version": 1,
+			"revision": 1, "evidence_ids": []string{"evidence"}, "reason": "单证专业核实（合成）"})
+	}
+	evidence := []string{"evidence"}
+	e := b.cmd(brcCompliance, "cnx", cnxapi.Contract, cnxapi.CommandEvaluate, map[string]any{"order_id": "order.1", "order_revision": 1,
+		"expected_version": 0, "regulation_id": "screening", "regulation_revision": 1, "programme_lists": []string{cnProgrammeList, unProgrammeList},
+		"code_table_version": codeTable,
+		"destination":        map[string]any{"country": syntheticClear, "reason": "客户 PO 载明的卸货国（合成）", "evidence_ids": evidence},
+		"address_countries": []any{map[string]any{"party_id": "customer.1", "address_id": "hq", "country": syntheticClear,
+			"evidence_ids": evidence}},
+		"end_use": map[string]any{"statement": "服装零售（合成）", "evidence_ids": evidence}})
+	checkID := brcStr(e["object_id"])
+	view := b.get(brcCompliance, "/api/brant/v1/cnx/trade_compliance_checks/"+checkID)
+	evaluation := brcMap(brcDig(view, "evaluations", 0))
+	if evaluation["outcome"] != cnxapi.OutcomeNoMatch || len(brcList(evaluation["lines"])) != len(brcLines) {
+		b.t.Fatalf("evaluation %v", evaluation)
+	}
+	d := b.cmd(brcCompliance, "cnx", cnxapi.Contract, cnxapi.CommandDecide, map[string]any{"check_id": checkID, "expected_version": 1,
+		"evaluation_id": evaluation["evaluation_id"], "conclusion": cnxapi.ConclusionClear, "reason": "目的国、交易方所在国与商品核查完成（合成）",
+		"license_required": false, "evidence_ids": evidence})
+	if d["status"] != cnxapi.StatusClear {
+		b.t.Fatalf("decide %v", d)
+	}
+	b.fact("check_id", checkID, "conclusion", d["status"], "order_revision", 1)
+}
+
+// creditReserved is ES-11's credit step (S5-12, STL-INV-004; D-6, D-7; A6 gap 7): POL publishes the
+// synthetic E-2 credit policy; sales requests customer.1's limit of 10,000.00 USD on the evidence
+// and two credit managers publish it (above the top tier of 5,000: two approvers); sales reserves
+// the 672.00 of order.1's revision 1 due 30 days after shipment, within the limit.
+func (b *brc001) creditReserved() {
+	b.phase = "STL credit"
+	policy := b.config("credit_policy", "credit.usd", map[string]any{"name": "E-2 synthetic credit policy", "currency": "USD", "default_limit": "0",
+		"limit_sources":          []string{polapi.LimitSourceInternalAssessment, polapi.LimitSourceSinosureBuyerLimit},
+		"approval_tiers":         []any{map[string]any{"level": "credit_officer", "max_amount": "1000"}, map[string]any{"level": "credit_manager", "max_amount": "5000"}},
+		"overdue_tolerance_days": 30, "documents_secured": true, "reservation_validity_days": 30, "decision_validity_days": 7,
+		"two_approvers_above_top": true})
+	b.cmd(brcSales, "stl", stlapi.Contract, stlapi.CommandRequestLimit, map[string]any{"request_id": "limit.1", "party_id": "customer.1",
+		"currency": b.usd, "sources": []any{map[string]any{"source": "internal_assessment", "amount": "10000.00", "evidence_ids": []string{"evidence"}}},
+		"valid_from": kernel.FormatTimestamp(b.from), "valid_until": kernel.FormatTimestamp(b.from.Add(365 * 24 * time.Hour)),
+		"credit_policy": policy, "reason": creditReason})
+	for i, m := range []string{brcCreditManager1, brcCreditManager2} {
+		b.cmd(m, "stl", stlapi.Contract, stlapi.CommandPublishLimit, map[string]any{"request_id": "limit.1", "expected_version": i + 1,
+			"decision": stlapi.DecisionPublish, "credit_policy": policy, "reason": creditReason})
+	}
+	r := b.cmd(brcSales, "stl", stlapi.Contract, stlapi.CommandReserve, map[string]any{"reservation_id": "res.order.1", "order_id": "order.1",
+		"order_revision": 1, "order_hash": b.orderHash, "credit_policy": policy})
+	if r["status"] != stlapi.ReservationReserved {
+		b.t.Fatalf("credit.reserve %v", r)
+	}
+	v := b.get(brcSales, "/api/brant/v1/stl/credit_reservations/res.order.1")
+	if v["portion_minor"] != "67200" || v["basis"] != stlapi.BasisWithinLimit || v["order_hash"] != b.orderHash {
+		b.t.Fatalf("reservation %v", v)
+	}
+	b.record.Amounts["credit_reserved_minor"] = "67200"
+	b.record.Amounts["credit_reserved"] = brcMajor(b.t, "67200") + " USD"
+	b.fact("portion_minor", v["portion_minor"], "basis", v["basis"], "exposure_minor", v["exposure_minor"])
 }
 
 // purchase is ES-01 step 19: purchaser prepares purchase.1 from supplier.A's offer over the four

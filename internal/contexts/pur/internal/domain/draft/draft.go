@@ -206,14 +206,15 @@ func (d *Draft) Answer(r Request, by kernel.ActorRef) error {
 }
 
 // Voidable decides purchase.draft.void before anything changes (SM-PUR-DRAFT, PUR-INV-007,
-// TD-AT06): the draft at expected version, not committed to the supplier (PURCHASE_DRAFT_COMMITTED;
-// commitments come with S5) and not voided already (INVALID_STATE). A supply_expired draft is voided
-// like a prepared one.
-func (d *Draft) Voidable(expected int64) error {
+// PUR-INV-010, TD-AT06): the draft at expected version, not committed to the supplier — committed
+// reports whether a purchase commitment on it was issued (PURCHASE_DRAFT_COMMITTED) — and not voided
+// already (INVALID_STATE). A supply_expired draft is voided like a prepared one; so is a draft whose
+// commitment is only requested or approved, which can then no longer be issued.
+func (d *Draft) Voidable(expected int64, committed bool) error {
 	switch {
 	case d.RowVersion != expected:
 		return fail(kernel.CodeVersionConflict, "/args/expected_version", "")
-	case d.CommitmentState != CommitmentNotCommitted:
+	case committed || d.CommitmentState != CommitmentNotCommitted:
 		return fail(CodePurchaseDraftCommitted, "/args/draft_id", "A draft that formed a purchase commitment is not voided")
 	case d.Status != StatusPrepared:
 		return fail(kernel.CodeInvalidState, "/args/draft_id", "The draft is voided already")

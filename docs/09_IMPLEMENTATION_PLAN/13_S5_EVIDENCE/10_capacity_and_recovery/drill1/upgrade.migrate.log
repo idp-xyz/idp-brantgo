@@ -1,0 +1,81 @@
+PLAN framework:000001_eventing_store               sha256:71eaecb1597bf0b2048ad80328dd03dea9aa8a8cc4f8eda571907bc9f35b4397
+PLAN brant:000001_auth_authority_guard             sha256:a2279df8c7bc3da79384aefb6764d71d5d4b6e1113979b7a4c8196c52d7cbf83
+PLAN brant:000002_auth_data_scope                  sha256:61c39696c546e2aac4cb831dd1566da1a87468747668610a6459ef815e61c960
+PLAN brant:000003_auth_roles                       sha256:84a1b083dfd74e7d284ec6f430ba5e766c44e6e023f1e1eb05aa7e06b6c16da5
+PLAN brant:000001_msg_dead_letter                  sha256:18dbeacde2b140ed957f1b2f142590053b1d4769829707e027a4641f55127caf
+PLAN brant:000001_ref_screening_lists              sha256:1d56b2dddd394bd026c54b207da1e02355970c57574fb62239ffe4f1896ad1ba
+PLAN brant:000002_ref_country_programmes           sha256:a696dab9bf26801c86691f720cbec8c371c7611997a93be8fbb58995e6ffa6ce
+PLAN brant:000001_evd_sources                      sha256:9fc29174b29bc1497a7055c5cb0774e61179c30cf2d729550986718acfc3fd63
+PLAN brant:000002_evd_business_files               sha256:7a91c5c8a006e0137f4f2280c4299b738aaca4c991baae26ad08aa65be81683a
+PLAN brant:000001_pty_parties                      sha256:60d88c4dbe9ba665e5d9b3f4384352dfbec021216642f3bdc17cd4682a50c7fd
+PLAN brant:000002_pty_party_screening              sha256:c55d4f3ea665bc0634f9b5a499199fe00b4709121a6676b1fd1bbc63b89a96b8
+PLAN brant:000003_pty_profiles                     sha256:688f243b3280ab646641e39a0ad023b5c2d1aa5c70a962f3b9a389672bb3977d
+PLAN brant:000004_pty_profile_guards               sha256:f82efee5c233d7451b2b623618db048f6695c6f8fb62b08a03d2e6b62f73a3e4
+PLAN brant:000005_pty_party_guard                  sha256:93deab3470ad7b08b106b2d2a4d0b0d63410ca7bcd9ad39f48a58eaf42f53560
+PLAN brant:000006_pty_address_country              sha256:6b3785c91f4d53bf32638cb1af6d904f5836cdf74e658748ea26bfea3185cf22
+PLAN brant:000001_cat_skus                         sha256:2a46530779bcc15121c39ff8d7408fff61a76aa607e2e5747c0115d844528ffa
+PLAN brant:000002_cat_item_code_mappings           sha256:f5c3a1fbc2ef56e840b254247c4d18f9a2dc475b13519897a3603a278c292567
+PLAN brant:000003_cat_sku_guard                    sha256:6127e55b7f13b994418040fdf63d730de47034fae1ee3147408b0ccb29be6364
+PLAN brant:000004_cat_declaration_profiles         sha256:b4a4bbb1ad62f1ef54ef2f307b9c525dd9ee85a2adc5f4da10a510e0e7e55b13
+PLAN brant:000001_pol_configuration                sha256:cdc751020762ef50fb633d3eb086791b8edf9e0f1bb317318f2a3009bfed28e7
+PLAN brant:000002_pol_config_guard                 sha256:01ddf685d6d693b7c7310965f3c1bb5bfa4b664a8f334464cff8abf739d50809
+PLAN brant:000003_pol_legal_terms                  sha256:58d35cc47b92d38f055d390a513f439dbd02fe0e848456e5050f408ecb23cef1
+PLAN brant:000004_pol_order_document_template      sha256:b907a13b3db0c87e8d4e43981db48b37f9a69c3b70303e4694d5299cf456b056
+PLAN brant:000005_pol_s5_kinds                     sha256:07ecfc362e201c62771c1ebb74029cd79d0eb684fdb7a18a98ceb3ff3c7a5c0e
+PLAN brant:000001_inq_customer_rfqs                sha256:802ed5b4f0fd787c7d30fc8d8e874965bc3d302cd3213a09af2dd4f3f902a193
+PLAN brant:000002_inq_rfq_guard                    sha256:8b8d5c9ea42759dcd0c5909315abc18cbe462d19575dc4db9c3fca87ce9363d3
+PLAN brant:000001_sup_supply_conditions            sha256:67b6b041fab781f2b98fafabf15c8edddb537236ade63240e5605747d4e6f1fa
+PLAN brant:000002_sup_supply_condition_guard       sha256:b7d275cdfa69bc2e9db7cc5fcc83e85515747f0f406d76bddf51261f29970743
+PLAN brant:000001_cst_costing_contexts             sha256:cd5e3f9eec3ade75a9e06988990ddc8c10a3423fcc93d05794ec588d46c37b3c
+PLAN brant:000002_cst_cost_scenarios               sha256:7854ae3971adf9a8dffa6a7e6703e06f2c5361a5e0b21faf4d8a49b10aded2fd
+PLAN brant:000003_cst_cost_snapshots               sha256:09dae9ab61f873403a517d54169e71140b3e052882c7859f2bca4d4f3aaea06d
+PLAN brant:000001_trd_quote_roots                  sha256:d972ad789e490e747ba2b20615f2951ffa95adeccc83436d6b46287c7a8281d3
+PLAN brant:000002_trd_quote_reviews                sha256:47cdf2d970a3a0cdc642fb12fbe058b3c2fe0eb2ada49cc1ec7cb3f2b1cadda9
+PLAN brant:000003_trd_quote_formalization          sha256:4895dee146d62bf33b8d1730b63ba2471a8c83933d83d86fc0bebfe13ff6fbc0
+PLAN brant:000004_trd_customer_acceptance          sha256:ad74b1b4890c7c88848679c1bd27058b7aeee9129e398026bf5d13eb56ded29e
+PLAN brant:000005_trd_sales_orders                 sha256:daf7a7cfbc5acc16d9cd1f210490709373dcedc015a8f59c41162961fa7705f2
+PLAN brant:000006_trd_order_amendments             sha256:ed2dd68cc415028cb5b1a8f06f910628d3662d4c66df7f0ca5aca00753e7e18d
+PLAN brant:000007_trd_order_documents              sha256:4d0b3a9bda93d3d0498324c619389772f63fd4dcb0d6784e9ee1401c0be0ec7d
+PLAN brant:000008_trd_order_state                  sha256:61cfb59c47065544c3f70fd8b9b4f479c12cddfa9b4d9672100d87aa154ae327
+PLAN brant:000001_pur_purchase_drafts              sha256:edeae3652ff3febf5003cbb4b1aca6e353661ac8f5d740364d09cd59389ff64b
+PLAN brant:000002_pur_purchase_commitments         sha256:a4ce51317d02f16cb4bcaa971b0dd21e9e96006bb0d6628e208c7b9de646b6c6
+PLAN brant:000003_pur_supplier_deliveries          sha256:e3f6016b93c4e667b2687e7efb88244b7e8e2b3860ca46d7f39ad7c1aab597a2
+PLAN brant:000004_pur_commitment_changes           sha256:f0c390674f14ac0dabc9ce8d933432d3ff18416cc92c428e1800f79376fd8b3c
+PLAN brant:000005_pur_allocation_reviews           sha256:58b0fde183abed74d02a955bac354204694947beca0d144d26ee37b6183fba8a
+PLAN brant:000001_qlt_quality                      sha256:b191ee7ce190667bf22c0024d825678cb564e61d65f749edc5c881859c034b87
+PLAN brant:000001_stl_customer_credit              sha256:81cfa7ea0392ad58b7e83d7d4e77ae86859bc9c4f18b94f3aa9bb7cf321aea7b
+PLAN brant:000002_stl_funds_applications           sha256:128aac783b380bf0110b04b5e7021e7a9169600c7391d9943e2acb50c0246bd6
+PLAN brant:000003_stl_payment_plan_review          sha256:0f4c7b42bb53c9b4ae6d6dc1abb0f868a061179677f38b8ab8d89b05cc5accbe
+PLAN brant:000004_stl_settlement_statements        sha256:055f086fbad34735cc5aa6cfa27d89c9eb37442022cf198b34d72c79399eae46
+PLAN brant:000001_cnx_trade_compliance             sha256:36ac0d635c0ca99f508b597507606ef98644f3dbec1a77f4a9363dac5a4afa4d
+PLAN brant:000002_cnx_export_licences              sha256:72d7cb00f337387960ece81d629d1f89abdd19ebf44018d48015f631255be286
+PLAN brant:000003_cnx_invoices_tax_refunds         sha256:89ba0a6b26b049f34fb625e472de3a8fd615478cd1ddcde135e87ea888fda73b
+PLAN brant:000004_cnx_declarations_bundles         sha256:9e15e5a5eb925f60197feba5420bed656080a53eb433f7d5934786af25c9d5cc
+PLAN brant:000001_ful_shipments                    sha256:254b40bbec183fc13aff4b08ade92202ea0eea3343857e2d732eb3c2853dc068
+PLAN brant:000002_ful_milestones_export_lots       sha256:9b7142a8b516802c5292092f6c93fd12d634ce113f5002495d1f35e024fc746b
+PLAN brant:000003_ful_commercial_release           sha256:18fabd4ad26834d58a311269dd717c467428964ea02a93dffdd4c18bdded501c
+PLAN brant:000004_ful_booking_documents            sha256:a78253228876f7535d56b01d2311456dcdc33ef806cd5c64be0bba2a2fb66cc0
+CONNECTED PostgreSQL 16 as brant_migrator
+APPLIED brant:000002_ref_country_programmes
+APPLIED brant:000006_pty_address_country
+APPLIED brant:000004_cat_declaration_profiles
+APPLIED brant:000005_pol_s5_kinds
+APPLIED brant:000008_trd_order_state
+APPLIED brant:000002_pur_purchase_commitments
+APPLIED brant:000003_pur_supplier_deliveries
+APPLIED brant:000004_pur_commitment_changes
+APPLIED brant:000005_pur_allocation_reviews
+APPLIED brant:000001_qlt_quality
+APPLIED brant:000001_stl_customer_credit
+APPLIED brant:000002_stl_funds_applications
+APPLIED brant:000003_stl_payment_plan_review
+APPLIED brant:000004_stl_settlement_statements
+APPLIED brant:000001_cnx_trade_compliance
+APPLIED brant:000002_cnx_export_licences
+APPLIED brant:000003_cnx_invoices_tax_refunds
+APPLIED brant:000004_cnx_declarations_bundles
+APPLIED brant:000001_ful_shipments
+APPLIED brant:000002_ful_milestones_export_lots
+APPLIED brant:000003_ful_commercial_release
+APPLIED brant:000004_ful_booking_documents
+DONE: 22 applied, 35 already recorded; Bento schema check passed

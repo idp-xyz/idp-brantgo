@@ -127,6 +127,26 @@ type Assessment struct {
 	Evidence []quote.Evidence `json:"evidence"`
 }
 
+// Prefill completes impact assessment impact with what the downstream contexts say of the order
+// (WF-06 step 1, ES-09 step 2: 读取采购承诺、出运与占用形成影响评估): every area of notes the preparer left
+// unassessed is added as open, with its note — open, because a person still assesses it; only a
+// person states an area unaffected or affected. An area the preparer assessed, or one that is not an
+// area, is left alone; a note longer than an assessment's is cut at its limit.
+func Prefill(impact []Assessment, notes map[string]string) []Assessment {
+	out := slices.Clone(impact)
+	for _, area := range areas {
+		note := strings.TrimSpace(notes[area])
+		if note == "" || slices.ContainsFunc(impact, func(x Assessment) bool { return x.Area == area }) {
+			continue
+		}
+		if r := []rune(note); len(r) > maxNote {
+			note = string(r[:maxNote-1]) + "…"
+		}
+		out = append(out, Assessment{Area: area, Status: Open, Note: note, Evidence: []quote.Evidence{}})
+	}
+	return out
+}
+
 // Limits of an amendment's content.
 const (
 	MaxEvidence = 200
@@ -339,13 +359,16 @@ func (a *Amendment) Decide(expected int64, d Decision, o Order, by kernel.ActorR
 // amendment version, the command's idempotency key, the shipments FUL confirmed and the upstream
 // facts read for the proposal, what the upstream guards answered (Upstream entries, the extension
 // points not wired among them), the quote root's control epoch and the order's row version the
-// apply commits at.
+// apply commits at. Guard, when set, judges the revision the proposal yields once it is derived —
+// STL's CreditGuard for that revision (S5 D-9) — and returns its evidence entries, which follow
+// Upstream, or its refusal.
 type Applying struct {
 	ExpectedVersion int64
 	IdempotencyKey  string
 	Fulfilment      orderrev.Fulfilment
 	Facts           orderrev.Facts
 	Upstream        []quote.Entry
+	Guard           func(next *orderrev.Revision) ([]quote.Entry, error)
 	ControlEpoch    int64
 	RowVersion      int64
 }
@@ -363,7 +386,8 @@ type Commit struct {
 // a decider no longer independent (REVIEWER_NOT_INDEPENDENT) or no longer an active human grant
 // holding order.amendment.decide and trd.read that sees the order (ORDER_APPROVAL_REQUIRED, as an
 // order approval whose reviewer lost the qualification); then whatever orderrev.Next refuses of the
-// proposal against the shipments confirmed now (QUANTITY_BELOW_SHIPPED and the rest).
+// proposal against the shipments confirmed now (QUANTITY_BELOW_SHIPPED and the rest); then whatever
+// x.Guard refuses of the revision it yields (CREDIT_RESERVATION_REQUIRED).
 func (a *Amendment) Apply(x Applying, o Order, standings quote.Standings, by kernel.ActorRef, epoch int64,
 	now time.Time) (*orderrev.Revision, *orderrev.Diff, *Commit, error) {
 	switch a.Status {
@@ -388,6 +412,13 @@ func (a *Amendment) Apply(x Applying, o Order, standings quote.Standings, by ker
 	next, d, err := orderrev.Next(o.Current, orderrev.AmendmentRef{ID: a.ID, Hash: a.Hash}, a.Content.Proposal, x.Fulfilment, x.Facts, "/proposal")
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if x.Guard != nil {
+		entries, err := x.Guard(next)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		x.Upstream = append(slices.Clone(x.Upstream), entries...)
 	}
 	at := kernel.Instant(now)
 	act := quote.Act{By: by, Epoch: epoch, At: at}
@@ -440,6 +471,23 @@ func (a *Amendment) Withdraw(expected int64, act quote.Act) error {
 	a.Version++
 	a.Changed = true
 	return nil
+}
+
+// Proposes reports whether the amendment's content is settled and may still be applied to order
+// o: it is pending approval or approved and binds o's current revision. Such an amendment proposes
+// the revision Preview derives (S5 D-9: STL reserves credit for it before it is applied).
+func (a *Amendment) Proposes(o Order) bool {
+	return (a.Status == PendingApproval || a.Status == Approved) && o.Status == orderrev.Active && !a.Stale(o)
+}
+
+// Preview derives the revision the amendment yields on o's current revision against the shipments
+// f and the upstream facts — what Apply derives when nothing it reads has changed.
+func (a *Amendment) Preview(o Order, f orderrev.Fulfilment, facts orderrev.Facts) (*orderrev.Revision, error) {
+	if err := a.bound(o); err != nil {
+		return nil, err
+	}
+	next, _, err := orderrev.Next(o.Current, orderrev.AmendmentRef{ID: a.ID, Hash: a.Hash}, a.Content.Proposal, f, facts, "/proposal")
+	return next, err
 }
 
 // Stale reports whether an open amendment (draft, pending or approved) binds a revision the order

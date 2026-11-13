@@ -20,6 +20,7 @@ import (
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
+	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
@@ -55,6 +56,8 @@ type (
 	CAT interface {
 		catapi.Commands
 		catapi.Queries
+		catapi.DeclarationCommands
+		catapi.DeclarationQueries
 		catapi.Auditor
 	}
 	INQ interface {
@@ -66,6 +69,7 @@ type (
 	REF interface {
 		refapi.Commands
 		refapi.Auditor
+		REFProgrammes
 		GetList(ctx context.Context, listCode string) (refapi.ListView, error)
 		GetListVersion(ctx context.Context, listCode, version string) (refapi.ListVersionView, error)
 		Audit(ctx context.Context) ([]kernel.AuditEntry, error)
@@ -79,16 +83,22 @@ type DeadLetterReplayer interface {
 
 // Config wires the transport.
 type Config struct {
-	EVD      EVD
-	PTY      PTY
-	CAT      CAT
-	INQ      INQ
-	POL      POL
-	REF      REF
-	SUP      SUP
-	CST      CST
-	TRD      TRD
-	PUR      PUR
+	EVD EVD
+	PTY PTY
+	CAT CAT
+	INQ INQ
+	POL POL
+	REF REF
+	SUP SUP
+	CST CST
+	TRD TRD
+	PUR PUR
+	// The S5 contexts are optional: nil leaves a context's commands and routes out, so a transport
+	// that serves or tests other contexts needs no stand-in for them. The composed process sets all.
+	QLT      QLT
+	STL      STL
+	CNX      CNX
+	FUL      FUL
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -122,6 +132,18 @@ func New(cfg Config) (http.Handler, error) {
 		refCommands(cfg.REF), supCommands(cfg.SUP), cstCommands(cfg.CST), trdCommands(cfg.TRD), purCommands(cfg.PUR)} {
 		s.contexts[set.bc] = set
 	}
+	if cfg.QLT != nil {
+		s.contexts["qlt"] = qltCommands(cfg.QLT)
+	}
+	if cfg.STL != nil {
+		s.contexts["stl"] = stlCommands(cfg.STL)
+	}
+	if cfg.CNX != nil {
+		s.contexts["cnx"] = cnxCommands(cfg.CNX)
+	}
+	if cfg.FUL != nil {
+		s.contexts["ful"] = fulCommands(cfg.FUL)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/", "no such route"))
@@ -144,6 +166,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/pty/contacts/{id}", s.authenticated(read(s, cfg.PTY.GetContact, contactView)))
 	mux.Handle("GET /api/brant/v1/cat/skus/{id}", s.authenticated(read(s, cfg.CAT.GetSku, skuView)))
 	mux.Handle("GET /api/brant/v1/cat/item_code_mappings/{id}", s.authenticated(read(s, cfg.CAT.GetItemCodeMapping, okView[catapi.ItemCodeMappingView])))
+	mux.Handle("GET /api/brant/v1/cat/declaration_profiles/{id}", s.authenticated(read(s, cfg.CAT.GetDeclarationProfile, okView[catapi.DeclarationProfileView])))
+	mux.Handle("GET /api/brant/v1/cat/skus/{id}/declaration_profiles", s.authenticated(read(s, cfg.CAT.ListDeclarationProfiles, okView[catapi.DeclarationProfileList])))
 	mux.Handle("GET /api/brant/v1/inq/rfqs/{id}", s.authenticated(read(s, cfg.INQ.GetRfq, rfqView)))
 	mux.Handle("GET /api/brant/v1/pol/configs/{kind}/{id}", s.authenticated(s.configRead))
 	mux.Handle("GET /api/brant/v1/pol/snapshots/{id}", s.authenticated(read(s, cfg.POL.GetSnapshot, snapshotView)))
@@ -175,13 +199,38 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/dispatch_target", s.authenticated(dispatchRead(s, cfg.TRD.DispatchTarget)))
 	mux.Handle("GET /api/brant/v1/trd/orders/{id}", s.authenticated(read(s, cfg.TRD.GetOrder, okView[trdapi.OrderView])))
 	mux.Handle("GET /api/brant/v1/trd/orders/{id}/check", s.authenticated(s.orderCheck))
+	mux.Handle("GET /api/brant/v1/trd/orders/{id}/snapshot", s.authenticated(read(s, cfg.TRD.GetOrderSnapshot, okView[trdapi.OrderSnapshotFact])))
 	mux.Handle("GET /api/brant/v1/trd/orders/{id}/revisions/{revision}/documents/{kind}", s.authenticated(s.orderDocument))
 	mux.Handle("GET /api/brant/v1/trd/customer_responses/{id}", s.authenticated(read(s, cfg.TRD.GetCustomerResponse, okView[trdapi.CustomerResponseView])))
 	mux.Handle("GET /api/brant/v1/trd/acceptances/{id}", s.authenticated(read(s, cfg.TRD.GetAcceptance, okView[trdapi.AcceptanceView])))
 	mux.Handle("GET /api/brant/v1/pur/purchase_drafts/{id}", s.authenticated(read(s, cfg.PUR.GetDraft, okView[purapi.DraftView])))
 	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocations", s.authenticated(s.allocations))
+	mux.Handle("GET /api/brant/v1/pur/purchase_commitments/{id}", s.authenticated(read(s, cfg.PUR.GetCommitment, okView[purapi.CommitmentView])))
+	mux.Handle("GET /api/brant/v1/pur/orders/{id}/commitments", s.authenticated(s.orderCommitments))
+	mux.Handle("GET /api/brant/v1/pur/supplier_deliveries/{id}", s.authenticated(read(s, cfg.PUR.GetDelivery, okView[purapi.DeliveryView])))
+	mux.Handle("GET /api/brant/v1/pur/purchase_commitments/{id}/deliveries", s.authenticated(read(s, cfg.PUR.GetCommitmentDeliveries, okView[purapi.CommitmentDeliveriesView])))
+	mux.Handle("GET /api/brant/v1/pur/purchase_commitment_changes/{id}", s.authenticated(read(s, cfg.PUR.GetCommitmentChange, okView[purapi.ChangeView])))
+	mux.Handle("GET /api/brant/v1/pur/purchase_commitments/{id}/changes", s.authenticated(s.commitmentChanges))
+	mux.Handle("GET /api/brant/v1/pur/allocation_reviews/{id}", s.authenticated(read(s, cfg.PUR.GetAllocationReview, okView[purapi.AllocationReviewView])))
+	mux.Handle("GET /api/brant/v1/pur/orders/{id}/allocation_reviews", s.authenticated(s.orderAllocationReviews))
+	if cfg.QLT != nil {
+		mux.Handle("GET /api/brant/v1/qlt/inspections/{id}", s.authenticated(read(s, cfg.QLT.GetInspection, okView[qltapi.InspectionView])))
+		mux.Handle("GET /api/brant/v1/qlt/quality_releases/{id}", s.authenticated(read(s, cfg.QLT.GetRelease, okView[qltapi.ReleaseView])))
+		mux.Handle("GET /api/brant/v1/qlt/subjects/{kind}/{id}/lines/{line_id}", s.authenticated(s.qualitySubject))
+	}
+	if cfg.STL != nil {
+		s.stlRoutes(mux)
+	}
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}", s.authenticated(read(s, cfg.REF.GetList, okView[refapi.ListView])))
 	mux.Handle("GET /api/brant/v1/ref/screening_lists/{id}/versions/{version}", s.authenticated(s.listVersion))
+	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}", s.authenticated(read(s, cfg.REF.GetProgrammeList, okView[refapi.ProgrammeListView])))
+	mux.Handle("GET /api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", s.authenticated(s.programmeListVersion))
+	if cfg.CNX != nil {
+		s.cnxRoutes(mux)
+	}
+	if cfg.FUL != nil {
+		s.fulRoutes(mux)
+	}
 	return s.correlated(mux), nil
 }
 

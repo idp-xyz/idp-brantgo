@@ -1,0 +1,100 @@
+{
+  "recorded_at": "2026-11-13T06:52:58+00:00",
+  "recorded_by": "S5 unit E2 (archive), Claude Code in WSL2; no database run of its own",
+  "host": {
+    "os": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "kernel": "6.18.58.1-microsoft-standard-WSL2",
+    "nproc": "20"
+  },
+  "git": {
+    "branch": "s5/e2-archive",
+    "head": "855273680951810f5e7270cc9ae7286d358959c6",
+    "s5_business": "ed1550c3f196fd1de80206c3701f19e2f2874d2d",
+    "remote": "https://github.com/idp-xyz/idp-brantgo.git"
+  },
+  "go": {
+    "toolchain": "go version go1.26.8 linux/amd64",
+    "go_mod_toolchain": "go1.26.5 (go.mod); CI runs go1.26.5"
+  },
+  "modules": [
+    "go.idp.xyz/idp-brant",
+    "github.com/cespare/xxhash/v2 v2.3.0",
+    "github.com/davecgh/go-spew v1.1.1",
+    "github.com/go-jose/go-jose/v4 v4.1.9",
+    "github.com/go-logr/logr v1.4.3",
+    "github.com/go-logr/stdr v1.2.2",
+    "github.com/google/go-cmp v0.7.0",
+    "github.com/jackc/pgpassfile v1.0.0",
+    "github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761",
+    "github.com/jackc/pgx/v5 v5.10.0",
+    "github.com/jackc/puddle/v2 v2.2.2",
+    "github.com/kr/pretty v0.3.0",
+    "github.com/kr/text v0.2.0",
+    "github.com/pmezard/go-difflib v1.0.0",
+    "github.com/stretchr/objx v0.1.0",
+    "github.com/stretchr/testify v1.11.1",
+    "go.idp.xyz/idp-bento-go v0.1.0-rc.2",
+    "go.opentelemetry.io/auto/sdk v1.2.1",
+    "go.opentelemetry.io/otel v1.44.0",
+    "go.opentelemetry.io/otel/metric v1.44.0",
+    "go.opentelemetry.io/otel/trace v1.44.0",
+    "golang.org/x/exp v0.0.0-20260727155853-b88d891fe743",
+    "golang.org/x/mod v0.38.0",
+    "golang.org/x/sync v0.22.0",
+    "golang.org/x/text v0.29.0",
+    "golang.org/x/tools v0.48.0",
+    "gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c",
+    "gopkg.in/yaml.v3 v3.0.1"
+  ],
+  "runs_in_this_folder": [
+    {
+      "files": "03_make_check.txt",
+      "by": "E2",
+      "where": "this worktree, WSL2 Ubuntu-24.04",
+      "database": "none (make check needs none)"
+    },
+    {
+      "files": "04_gate_results.md",
+      "by": "lead",
+      "when": "2026-11-12 07:42Z to 2026-11-13 (per row)",
+      "where": "lead checkout /home/tops/workspace/idp-brantgo on branch s5/business, WSL2 Ubuntu-24.04",
+      "database": "PostgreSQL 16.12 container brant-pg16, 127.0.0.1:55471"
+    },
+    {
+      "files": "05_github_actions_runs.json.txt",
+      "by": "GitHub Actions (brant-ci) on idp-xyz/idp-brantgo",
+      "database": "PostgreSQL 16 service of the workflow, migrated from empty in every run"
+    },
+    {
+      "files": "06-09",
+      "by": "unit D1",
+      "when": "2026-11-13 02:06Z (run 1) and the second run right after",
+      "where": "worktree s5-d1, WSL2 Ubuntu-24.04, Go 1.26.8 linux/amd64",
+      "database": "PostgreSQL 16.12 container brant-pg16-d1, 127.0.0.1:55910",
+      "tree": "6986dea on 4d1aa66 (the D1 commit merged as 2c7cd8a)"
+    },
+    {
+      "files": "11-13",
+      "by": "unit D2a",
+      "when": "2026-11-13 (evidence run after both unit gates)",
+      "where": "worktree s5-d2a, WSL2 Ubuntu-24.04, Go 1.26.8 linux/amd64",
+      "database": "PostgreSQL 16.12 container brant-pg16-d2a, 127.0.0.1:55920",
+      "tree": "df25a38 (d21d52d, merged as 7aedd52)"
+    },
+    {
+      "files": "14-16",
+      "by": "unit D2b",
+      "when": "2026-11-13 (evidence run on the final commit)",
+      "where": "worktree s5-d2b, WSL2 Ubuntu-24.04, Go 1.26.8 linux/amd64",
+      "database": "PostgreSQL 16.12 container brant-pg16-d2b, 127.0.0.1:55925",
+      "tree": "a78d064 (merged as f76861c)"
+    },
+    {
+      "files": "10_capacity_and_recovery/",
+      "by": "unit C7",
+      "when": "2026-11-12, about 13:10Z to 15:20Z",
+      "where": "worktree s5-c7 (wip commits of a3e5f9d), WSL2 kernel 6.18.58.1-microsoft-standard-WSL2, 20 CPUs, 64 GiB, Go 1.26.8",
+      "database": "PostgreSQL 16.12 containers brant-pg16-c7 (source, WAL archiving) and brant-pg16-c7r (restore target), untuned defaults"
+    }
+  ]
+}

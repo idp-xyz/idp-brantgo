@@ -105,13 +105,7 @@ func (h *prepareCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	}
 	in := h.in
 	in.Scope, in.Now, in.Preparer, in.Epoch, in.Allocations = sc, kernel.Instant(h.s.Clock.Now()), d.Actor, d.Epoch, h.roots
-	if slices.ContainsFunc(h.req.Lines, func(l draft.RequestLine) bool { return l.Overbuy != nil }) {
-		own, err := h.s.Ledger.Authorizer.Qualify(ctx, exec, d.Actor.ID)
-		if err != nil {
-			return action.Outcome{}, err
-		}
-		in.OverbuyApproved = own.Holds(api.PermissionApproveOverbuy)
-	}
+	// An overbuy is marked here and approved by the purchase commitment decision (S5 decision D-14).
 	p, err := draft.Prepare(h.req, in)
 	if err != nil {
 		return action.Outcome{}, err

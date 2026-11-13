@@ -8,6 +8,7 @@
 /migrations/           @idpxyz
 /deploy/               @idpxyz
 /docs/                 @idpxyz
+/tests/                @idpxyz
 /internal/contexts/evd/ @idpxyz
 /internal/contexts/pty/ @idpxyz
 /internal/contexts/cat/ @idpxyz
@@ -17,3 +18,7 @@
 /internal/contexts/sup/ @idpxyz
 /internal/contexts/trd/ @idpxyz
 /internal/contexts/pur/ @idpxyz
+/internal/contexts/qlt/ @idpxyz
+/internal/contexts/stl/ @idpxyz
+/internal/contexts/cnx/ @idpxyz
+/internal/contexts/ful/ @idpxyz

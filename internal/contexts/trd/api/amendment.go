@@ -43,10 +43,20 @@ import (
 //
 // Each locks the quote root FOR UPDATE, passes its object control, then locks the order FOR UPDATE.
 // The amendment commands take the amendment's own expected_version and leave the order's row version
-// alone, except apply, which moves it; the close commands take the order's. Shipments are FUL's and
-// open commitments PUR's and STL's, contexts S3 does not have: their answers are recorded as
-// not_wired, never as checked (so close is ORDER_NOT_FULFILLED and close_remainder INVALID_STATE
-// until FUL exists, and cancel finds nothing shipped).
+// alone, except apply, which moves it; the close commands take the order's. Since S5 (unit C4a,
+// D-1) the end of an active order and the amendment's prepare and apply read, inside their
+// transaction after the order lock and without locks, what FUL confirmed (ShipmentFacts v1:
+// ORDER_HAS_SHIPMENTS, ORDER_NOT_FULFILLED with zero tolerance (D-19), close_remainder's "something
+// shipped", QUANTITY_BELOW_SHIPPED) and, for cancel and close_remainder, what PUR lists against the
+// order (DownstreamCommitments v1: DOWNSTREAM_COMMITMENT_OPEN for a prepared draft, a commitment
+// requested, approved, issued or confirmed, or goods allocated beyond what the line shipped, each
+// without an approved disposition; a fulfilled commitment is not open). STK is not_enabled; STL's
+// credit reservations are released by STL when the order ends (PL-13). Prepare also pre-fills the
+// purchasing, quality, packing, booking and payment_plan areas a preparer left unassessed as open
+// items with the facts of PUR, FUL and STL. Since S5 (unit B4, D-9) apply asks STL's
+// CreditGuard v1 for the revision it produces when that revision asks more credit than the
+// current one (CREDIT_RESERVATION_REQUIRED at /args/amendment_id; STL reserves it beforehand from
+// OrderSnapshotFact.Proposed), and records trade compliance as GuardNotCheckedAtApply.
 //
 // Request members in snake_case: order.amendment.prepare {order_id, amendment_id, expected_version,
 // expected_order_revision, expected_order_hash, source {kind, response_id, evidence}, lines
@@ -95,11 +105,18 @@ const (
 	ImpactAffected   = "affected"
 	ImpactOpen       = "open"
 
-	// GuardFULShipments and GuardDownstream name the extension points of the active order's
-	// commands for FUL's confirmed shipments and the downstream commitments (PUR, STK, STL).
-	GuardFULShipments = "ful.shipment_confirmation.v1"
-	GuardDownstream   = "downstream.commitments.v1"
-	NotWired          = "not_wired"
+	// GuardFULShipments and GuardDownstream name, by their contracts, where the active order's
+	// commands read FUL's confirmed shipments (ShipmentFacts v1, Context Map R70) and PUR's open
+	// drafts, commitments and demand allocations (DownstreamCommitments v1, R71): the commit
+	// evidence's fulfilment_source, the end's fulfilment_source and downstream_source.
+	// GuardSTKReservations names STK's stock reservations, which TRD records as NotEnabled (S5 D-10:
+	// no stock route before STK). NotWired is the answer of a TRD assembled without a read (unit
+	// tests only; trd.New refuses it).
+	GuardFULShipments    = "ful.shipment_facts.v1"
+	GuardDownstream      = "pur.downstream_commitments.v1"
+	GuardSTKReservations = "stk.stock_reservations.v1"
+	NotWired             = "not_wired"
+	NotEnabled           = "not_enabled"
 
 	maxImpactNote = 2000
 )
@@ -528,7 +545,8 @@ type OrderAmendmentView struct {
 
 // OrderEndView is how an active order ended: the command and state, the revision it ended at, each
 // line's ordered, shipped and given-up quantity, where the shipments and downstream commitments
-// came from (not_wired in S3), who, when, why.
+// came from (GuardFULShipments, GuardDownstream; GuardNotRequired for order.close's downstream;
+// not_wired for an end recorded before S5 C4a), who, when, why.
 type OrderEndView struct {
 	Command          string
 	Status           string

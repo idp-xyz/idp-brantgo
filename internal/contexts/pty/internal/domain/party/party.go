@@ -35,11 +35,17 @@ const (
 )
 
 // Address is an address of the party with the one trade role it serves (PTY-AGG-Party entity
-// AddressRole). Its ID is unique within the party and stays the same across revisions.
+// AddressRole). Its ID is unique within the party and stays the same across revisions. Country is
+// its AddressCountry value: an ISO 3166-1 alpha-2 code, or empty when unknown (R77, S5 D-8).
+//
+// party.save_draft hashes its addresses as this structure's JSON: Country is omitted when empty, so
+// an address without a country hashes exactly as it did before countries existed and a stored
+// request replays unchanged.
 type Address struct {
-	ID   string
-	Role AddressRole
-	Text string
+	ID      string
+	Role    AddressRole
+	Text    string
+	Country string `json:",omitempty"`
 }
 
 // Party is the aggregate root. Addresses are part of its draft content, sorted by ID; a

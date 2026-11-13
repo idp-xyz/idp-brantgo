@@ -1,6 +1,7 @@
 // Package api is the contract of the CAT bounded context (catalog: tradeable SKUs and their
-// specification revisions, and the mappings of customers' and suppliers' item codes to SKUs) for
-// transports, the AI layer and the contexts downstream of CAT. It exposes no CAT domain type.
+// specification revisions, the mappings of customers' and suppliers' item codes to SKUs, and the
+// declaration profiles of specification revisions) for transports, the AI layer and the contexts
+// downstream of CAT. It exposes no CAT domain type.
 package api
 
 import (

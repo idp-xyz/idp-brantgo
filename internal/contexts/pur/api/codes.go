@@ -35,34 +35,62 @@ const (
 	CodePurchaseDraftImmutable     = "PURCHASE_DRAFT_IMMUTABLE"     // the draft ID holds another request or another preparer's draft
 	CodePurchaseDraftCommitted     = "PURCHASE_DRAFT_COMMITTED"     // 409: a committed draft is not voided
 	CodePurchaseAllocationExceeded = "PURCHASE_ALLOCATION_EXCEEDED" // 409: the line's effective allocations would exceed its demand
+
+	// Purchase commitments (S5-01; PUR-INV-009, 010).
+	CodePurchaseDraftStale              = "PURCHASE_DRAFT_STALE"              // 409: recomputed now, the draft differs field by field (A47 #3)
+	CodeIndependentReviewRequired       = "INDEPENDENT_REVIEW_REQUIRED"       // the decider prepared the draft or requested the commitment
+	CodePurchaseDeviationUnacknowledged = "PURCHASE_DEVIATION_UNACKNOWLEDGED" // a deviation of the draft is not acknowledged with a reason
+	CodePurchaseCommitmentNotApproved   = "PURCHASE_COMMITMENT_NOT_APPROVED"  // 409: no live, unrevoked approval of a qualified decider
+	CodeApprovalExpired                 = "APPROVAL_EXPIRED"                  // the approval's validity has ended
+	CodeSupplyConditionExpired          = "SUPPLY_CONDITION_EXPIRED"          // the draft's supply validity has ended
+
+	// Supplier deliveries (S5-15; PUR-INV-008). INDEPENDENT_REVIEW_REQUIRED and REFERENCE_STALE above
+	// are theirs too: the verifier recorded the claim; a version a correction superseded.
+	CodeSupplierDeliveryExceeded   = "SUPPLIER_DELIVERY_EXCEEDED"   // 409: the verified deliveries of a commitment line would exceed what it buys
+	CodeSupplierDeliveryUnverified = "SUPPLIER_DELIVERY_UNVERIFIED" // 409: a delivery no human verified; a claim never counts
+
+	// Commitment changes (S5-19; PUR-INV-011). PURCHASE_ALLOCATION_EXCEEDED, SUPPLIER_DELIVERY_EXCEEDED,
+	// INDEPENDENT_REVIEW_REQUIRED and PURCHASE_DRAFT_STALE above are theirs too: an increase beyond
+	// the line's room, a revision below the verified deliveries, a decider who prepared the change or
+	// requested the commitment, a proposed revision that no longer recomputes equal.
+	CodePurchaseCommitmentChangeStale = "PURCHASE_COMMITMENT_CHANGE_STALE" // 409: the commitment revision the change is bound to moved
 )
 
 var codes = map[string]kernel.Category{
-	CodeOrderNotActive:             kernel.CategoryInvalid,
-	CodeOrderApprovalRequired:      kernel.CategoryInvalid,
-	CodeOrderApprovalRevoked:       kernel.CategoryInvalid,
-	CodeOrderLineNotFound:          kernel.CategoryNotFound,
-	CodeReferenceStale:             kernel.CategoryConflict,
-	CodeSupplierMismatch:           kernel.CategoryInvalid,
-	CodePurchaseTermsInconsistent:  kernel.CategoryInvalid,
-	CodeSupplyScopeMismatch:        kernel.CategoryInvalid,
-	CodeSpecificationMismatch:      kernel.CategoryInvalid,
-	CodeDeliveryNotComparable:      kernel.CategoryInvalid,
-	CodeDeliveryLate:               kernel.CategoryInvalid,
-	CodeDeliveryDatePassed:         kernel.CategoryInvalid,
-	CodeDeliveryUnresolved:         kernel.CategoryInvalid,
-	CodeMOQNotMet:                  kernel.CategoryInvalid,
-	CodeOrderMultipleInvalid:       kernel.CategoryInvalid,
-	CodeOverbuyNotApproved:         kernel.CategoryInvalid,
-	CodePriceTierAmbiguous:         kernel.CategoryInvalid,
-	CodeUnsupportedPricingMode:     kernel.CategoryInvalid,
-	CodeDependencyNotSupported:     kernel.CategoryInvalid,
-	CodeTaxTreatmentUnknown:        kernel.CategoryInvalid,
-	CodeCalculationLimitExceeded:   kernel.CategoryInvalid,
-	CodeCostSnapshotMissing:        kernel.CategoryInvalid,
-	CodePurchaseDraftImmutable:     kernel.CategoryInvalid,
-	CodePurchaseDraftCommitted:     kernel.CategoryConflict,
-	CodePurchaseAllocationExceeded: kernel.CategoryConflict,
+	CodeOrderNotActive:                  kernel.CategoryInvalid,
+	CodeOrderApprovalRequired:           kernel.CategoryInvalid,
+	CodeOrderApprovalRevoked:            kernel.CategoryInvalid,
+	CodeOrderLineNotFound:               kernel.CategoryNotFound,
+	CodeReferenceStale:                  kernel.CategoryConflict,
+	CodeSupplierMismatch:                kernel.CategoryInvalid,
+	CodePurchaseTermsInconsistent:       kernel.CategoryInvalid,
+	CodeSupplyScopeMismatch:             kernel.CategoryInvalid,
+	CodeSpecificationMismatch:           kernel.CategoryInvalid,
+	CodeDeliveryNotComparable:           kernel.CategoryInvalid,
+	CodeDeliveryLate:                    kernel.CategoryInvalid,
+	CodeDeliveryDatePassed:              kernel.CategoryInvalid,
+	CodeDeliveryUnresolved:              kernel.CategoryInvalid,
+	CodeMOQNotMet:                       kernel.CategoryInvalid,
+	CodeOrderMultipleInvalid:            kernel.CategoryInvalid,
+	CodeOverbuyNotApproved:              kernel.CategoryInvalid,
+	CodePriceTierAmbiguous:              kernel.CategoryInvalid,
+	CodeUnsupportedPricingMode:          kernel.CategoryInvalid,
+	CodeDependencyNotSupported:          kernel.CategoryInvalid,
+	CodeTaxTreatmentUnknown:             kernel.CategoryInvalid,
+	CodeCalculationLimitExceeded:        kernel.CategoryInvalid,
+	CodeCostSnapshotMissing:             kernel.CategoryInvalid,
+	CodePurchaseDraftImmutable:          kernel.CategoryInvalid,
+	CodePurchaseDraftCommitted:          kernel.CategoryConflict,
+	CodePurchaseAllocationExceeded:      kernel.CategoryConflict,
+	CodePurchaseDraftStale:              kernel.CategoryConflict,
+	CodeIndependentReviewRequired:       kernel.CategoryInvalid,
+	CodePurchaseDeviationUnacknowledged: kernel.CategoryInvalid,
+	CodePurchaseCommitmentNotApproved:   kernel.CategoryConflict,
+	CodeApprovalExpired:                 kernel.CategoryInvalid,
+	CodeSupplyConditionExpired:          kernel.CategoryInvalid,
+	CodeSupplierDeliveryExceeded:        kernel.CategoryConflict,
+	CodeSupplierDeliveryUnverified:      kernel.CategoryConflict,
+	CodePurchaseCommitmentChangeStale:   kernel.CategoryConflict,
 }
 
 // Category returns the category of a code PUR declares.

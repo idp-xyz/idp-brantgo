@@ -543,3 +543,38 @@ func TestRolesDerivePermissionsAndKeepSeparationOfDuties(t *testing.T) {
 		t.Fatalf("the redefined role no longer grants merchandiser permissions: %v %v", holds, err)
 	}
 }
+
+// S5 D-6: a command reads the role templates of an actor — direct templates and those of its tenant
+// roles, sorted — in its own transaction; an actor without roles holds none.
+func TestTemplatesResolveAnActorsRoles(t *testing.T) {
+	f := newFixture(t)
+	g := authorization.Grants{}
+	templates := func(actor string) []string {
+		var out []string
+		err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			out, err = g.Templates(ctx, exec, f.scope, actor)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if got := templates(alice.ID); len(got) != 0 {
+		t.Fatalf("alice has no roles: %v", got)
+	}
+	err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+		if _, err := g.DefineRole(ctx, exec, f.scope, "credit.desk", "信用岗", []string{"credit_officer", "treasury"}, time.Now()); err != nil {
+			return err
+		}
+		_, err := g.AssignRoles(ctx, exec, f.scope, bob, []string{"credit.desk", "credit_manager"}, time.Now())
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := templates(bob.ID); len(got) != 3 || got[0] != "credit_manager" || got[1] != "credit_officer" || got[2] != "treasury" {
+		t.Fatalf("bob's templates %v", got)
+	}
+}

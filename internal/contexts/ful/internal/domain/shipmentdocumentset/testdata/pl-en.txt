@@ -1,0 +1,42 @@
+PACKING LIST
+
+Seller: SYNTHETIC Exporter Co., Ltd.
+Synthetic Road 1
+Shanghai
+Registration: SYNTHETIC-NOT-REAL | Country: CN
+
+Buyer: Synthetic Buyer GmbH
+Synthetic buyer address
+Hamburg
+
+Consignee: Synthetic Logistics KG
+Synthetic warehouse
+Hamburg port
+
+Number: PL-2026-00001
+Version: 1
+Document set: docs.1 | Shipment: shipment.1
+Order: order.1 r1
+Order SHA-256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Date: 2026-11-12T08:30:00.123456Z
+
+Booking: SHA2611001 | Vessel: SYNTHETIC STAR | Voyage: 026E | ETD: 2026-12-20
+Port of loading: CNSHA | Port of discharge: DEHAM
+
+Packages (per carton):
+1-5 | 5 ctns | S1 sku.1 Cotton shirt, red 10 PCS | N.W. 9.5 kg | G.W. 10.5 kg | 0.06 cbm
+6-7 | 2 ctns | S2 sku.2 Gift set 12 SET | N.W. 7.25 kg | G.W. 8 kg | 0.05 cbm
+
+Cartons: 7
+Quantity: 50 PCS; 24 SET
+N.W.: 62 kg | G.W.: 68.5 kg | Volume: 0.4 cbm
+
+Marks:
+SYNTHETIC BUYER
+HAMBURG
+C/NO. 1-7
+
+Signatures (this generated copy is unsigned; signed or stamped copies are recorded as evidence):
+Seller: SYNTHETIC Exporter Co., Ltd.
+
+Synthetic data. Not an actual trade. 合成数据。

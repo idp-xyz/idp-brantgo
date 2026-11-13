@@ -1,6 +1,7 @@
-// Package reference assembles Brant's reference data (screening lists, S1-11). It is not a bounded
-// context: contexts use it through package api, and it depends on the kernel and the foundation
-// only. It has a transaction owner of its own and writes only schema brant_ref.
+// Package reference assembles Brant's reference data (screening lists, S1-11; country programme
+// lists, S5 E-3). It is not a bounded context: contexts use it through package api, and it depends
+// on the kernel and the foundation only. It has a transaction owner of its own and writes only
+// schema brant_ref.
 package reference
 
 import (
@@ -20,9 +21,11 @@ type Module struct {
 }
 
 var (
-	_ api.Commands = (*Module)(nil)
-	_ api.Queries  = (*Module)(nil)
-	_ api.Auditor  = (*Module)(nil)
+	_ api.Commands          = (*Module)(nil)
+	_ api.Queries           = (*Module)(nil)
+	_ api.ProgrammeCommands = (*Module)(nil)
+	_ api.ProgrammeQueries  = (*Module)(nil)
+	_ api.Auditor           = (*Module)(nil)
 )
 
 // New wires reference data to db, a transaction owner that belongs to it alone.

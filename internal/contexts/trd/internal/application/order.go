@@ -505,7 +505,11 @@ func (s Service) ResolveActiveOrders(ctx context.Context, ids []string) (map[str
 		}
 		return nil
 	})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	// The Terms block's Incoterm and edition, after TRD's read transaction (order_snapshot.go).
+	return out, s.stateActiveTrade(ctx, out)
 }
 
 // activeOrderFact is what ActiveOrderRef v1 says of an order now.
@@ -534,18 +538,17 @@ func activeOrderFact(o *order.Order, sc kernel.Scope) api.ActiveOrderFact {
 	f.CurrencyRef = apiRef(d.Currency)
 	f.RfqRef = api.RfqRef{RfqID: d.Rfq.RfqID, RowVersion: d.Rfq.RowVersion}
 	f.CostSnapshotRef = api.CostSnapshotRef{SnapshotID: d.Snapshot.SnapshotID, ResultHash: d.Snapshot.ResultHash}
-	// The lines and delivery are the current revision's: an applied amendment changes them (S3-15).
+	// The lines, delivery and terms are the current revision's: an applied amendment changes them
+	// (S3-15).
 	r, err := o.Revision()
 	if err != nil {
 		f.Code = kernel.CodeReferenceInvalid
 		return f
 	}
 	f.Delivery = apiDelivery(r.Terms.Delivery)
-	for _, l := range r.Lines {
-		a, _ := r.LineAmounts(l.LineID)
-		f.Lines = append(f.Lines, api.OrderLine{LineID: l.LineID, RfqLineID: l.RfqLineID, Sku: api.SkuRef{SkuID: l.Sku.SkuID,
-			SpecRevision: l.Sku.SpecRevision}, Quantity: l.Quantity, UnitRef: apiRef(l.Unit), NormalizedQuantity: l.NormalizedQuantity,
-			CostUnit: l.CostUnit, UnitPrice: l.UnitPrice, NetMinor: a.NetMinor, TaxMinor: a.TaxMinor, PayableMinor: a.PayableMinor})
+	f.Lines = orderLines(r)
+	if f.Terms, err = orderTerms(snap, r); err != nil {
+		f.Code = kernel.CodeReferenceInvalid
 	}
 	return f
 }

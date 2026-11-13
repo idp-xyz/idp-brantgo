@@ -20,12 +20,17 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
+	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
+	"go.idp.xyz/idp-brant/internal/contexts/ful"
+	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/contexts/pur"
+	"go.idp.xyz/idp-brant/internal/contexts/qlt"
+	"go.idp.xyz/idp-brant/internal/contexts/stl"
 	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/contexts/trd"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -80,9 +85,12 @@ func Open(ctx context.Context, cfg Config) (*Platform, error) {
 // Close releases the connection pool.
 func (p *Platform) Close() { p.pool.Close() }
 
-// RelayConfig configures the Outbox relay that publishes to an HTTP sink.
+// RelayConfig configures the Outbox relay that publishes to an HTTP sink or to Publisher.
 type RelayConfig struct {
-	SinkURL        string
+	SinkURL string
+	// Publisher receives each event instead of an HTTP sink, such as the Dispatcher of the composed
+	// contexts (brant-worker -dispatch); SinkURL is empty then.
+	Publisher      eventing.Publisher
 	Batch          int
 	LeaseFor       time.Duration
 	PublishTimeout time.Duration
@@ -102,6 +110,10 @@ type RelayConfig struct {
 // Relay assembles the Outbox relay on a transaction owner of its own. The dead letters share it,
 // so an abandonment and its dead letter commit together.
 func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
+	publisher, err := publisherFor(cfg.SinkURL, cfg.Publisher)
+	if err != nil {
+		return messaging.Relay{}, err
+	}
 	db, err := p.newDB()
 	if err != nil {
 		return messaging.Relay{}, err
@@ -112,31 +124,38 @@ func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
 	}
 	return messaging.Relay{
 		Outbox: store, DeadLetters: messaging.DeadLetterStore{DB: db}, Alerter: cfg.Alerter, Critical: cfg.Critical,
-		Publisher: messaging.Webhook{URL: cfg.SinkURL}, Clock: bento.SystemClock{},
+		Publisher: publisher, Clock: bento.SystemClock{},
 		Batch: cfg.Batch, LeaseFor: cfg.LeaseFor, PublishTimeout: cfg.PublishTimeout,
 		MaxAttempts: cfg.MaxAttempts, MaxFailures: cfg.MaxFailures,
 		RetryBase: cfg.RetryBase, RetryMax: cfg.RetryMax, IdleWait: cfg.IdleWait, Logger: cfg.Logger,
 	}, nil
 }
 
-// ReplayConfig configures the replay of dead letters to the relay's HTTP sink.
+// ReplayConfig configures the replay of dead letters to the relay's HTTP sink or to Publisher.
 type ReplayConfig struct {
-	SinkURL        string
+	SinkURL string
+	// Publisher receives replayed events instead of an HTTP sink, such as the Dispatcher of the
+	// composed contexts; SinkURL is empty then.
+	Publisher      eventing.Publisher
 	PublishTimeout time.Duration
 }
 
 // Replayer assembles dead-letter replay on a transaction owner of its own. Its caller puts the
 // verified Principal of the operator in the context of each Replay.
 func (p *Platform) Replayer(cfg ReplayConfig) (messaging.Replayer, error) {
-	if cfg.SinkURL == "" || cfg.PublishTimeout <= 0 {
-		return messaging.Replayer{}, errors.New("bootstrap: replay needs a sink URL and a publish timeout")
+	if cfg.PublishTimeout <= 0 {
+		return messaging.Replayer{}, errors.New("bootstrap: replay needs a publish timeout")
+	}
+	publisher, err := publisherFor(cfg.SinkURL, cfg.Publisher)
+	if err != nil {
+		return messaging.Replayer{}, err
 	}
 	db, err := p.newDB()
 	if err != nil {
 		return messaging.Replayer{}, err
 	}
 	return messaging.Replayer{
-		DB: db, Publisher: messaging.Webhook{URL: cfg.SinkURL}, Clock: bento.SystemClock{}, PublishTimeout: cfg.PublishTimeout,
+		DB: db, Publisher: publisher, Clock: bento.SystemClock{}, PublishTimeout: cfg.PublishTimeout,
 	}, nil
 }
 
@@ -158,6 +177,10 @@ type Contexts struct {
 	CST *cst.Module
 	TRD *trd.Module
 	PUR *pur.Module
+	QLT *qlt.Module
+	STL *stl.Module
+	CNX *cnx.Module
+	FUL *ful.Module
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -214,15 +237,65 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
+		// STL's CreditGuard v1 (R57) and CNX's TradeComplianceGuard v1 (R58) are guard functions TRD
+		// runs with its own executor: TRD is composed before STL and CNX, which read its orders.
 		c.TRD, err = trd.New(db, trd.Upstream{Sources: c.EVD, Parties: c.PTY, Profiles: c.PTY, Skus: c.CAT, Configs: c.POL, Numbers: c.POL,
-			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST})
+			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST, Credit: trd.STLCreditGuard(), TradeCompliance: trd.CNXTradeComplianceGuard(),
+			Shipments: trd.FULShipmentFacts(), Commitments: trd.PURDownstreamCommitments()})
 	}
 	if err == nil {
 		db, err = p.newDB()
 	}
 	if err == nil {
 		c.PUR, err = pur.New(db, pur.Upstream{Orders: pur.TRDOrders(c.TRD), Supply: c.SUP, Snapshots: c.CST, Parties: c.PTY, Configs: c.POL,
-			Skus: c.CAT})
+			Numbers: c.POL, Skus: c.CAT, Sources: c.EVD})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// PUR publishes no InspectionSubject v1 yet (S5 unit A4): QLT's port to it answers
+		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup.
+		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Parties: c.PTY})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// STL's settlement statements read FUL's shipment lines and PUR's verified deliveries (R30,
+		// R31); FUL is composed after STL, so its port is bound to c.FUL by a function (D-2).
+		c.STL, err = stl.New(db, stl.Upstream{Orders: stl.TRDOrders(c.TRD), Configs: c.POL, Parties: c.PTY, Sources: c.EVD,
+			Shipments: stl.FULShipmentLines(func() fulapi.ShipmentLineLookups {
+				if c.FUL == nil {
+					return nil
+				}
+				return c.FUL
+			}), Deliveries: stl.PURSettlementSources(c.PUR)})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// CNX after PUR (S5: QLT, STL, CNX, FUL).
+		c.CNX, err = cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(c.TRD), Countries: cnx.PTYCountries(c.PTY), Profiles: cnx.CATProfiles(c.CAT),
+			Programmes: cnx.REFProgrammes(c.REF), Configs: c.POL, Sources: c.EVD,
+			// FUL's shipments and export lots (R36): FUL is composed after CNX, so its lookups are
+			// bound when CNX asks (S5 D-2).
+			Exports: cnx.FULExports(func() cnx.FULLookups { return c.FUL }, c.POL, cnx.PTYCountries(c.PTY)), Purchases: cnx.PURLines(c.PUR),
+			// STL's fund records and credit notes (R38 STL→CNX; CreditNoteRef v1 for CN-AT11, S5 C10).
+			Funds: cnx.STLFunds(c.STL), CreditNotes: cnx.STLCreditNotes(c.STL)})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// FUL last of S5: its commercial release and confirmation call CNX's and STL's guards (C1).
+		c.FUL, err = ful.New(db, ful.Upstream{Orders: ful.TRDOrders(c.TRD), Releases: ful.QLTReleases(c.QLT), Deliveries: ful.PURDeliveries(c.PUR),
+			Screening: ful.PTYScreening(), Sources: c.EVD, Compliance: ful.CNXCompliance(), Payments: ful.STLPayments(),
+			// S5-08: bookings and shipment documents; S5 C5: CNX's certificate results (R56)
+			Documents: ful.DocumentPorts(c.POL, c.PTY, c.TRD).WithCertificates(c.CNX),
+			Costs:     c.CST, // S5-16: the costing's insurance component (R78)
+		})
 	}
 	if err != nil {
 		return nil, err
@@ -297,7 +370,10 @@ type APIConfig struct {
 	AllowInsecureHTTP bool     // http:// issuer on a loopback host, for local tests only
 	// ReplaySinkURL enables dead-letter replay over the API (ADR-BR-015): the HTTP sink that
 	// receives replayed envelopes, normally the relay's sink. Empty leaves the route out.
-	ReplaySinkURL        string
+	ReplaySinkURL string
+	// ReplayDispatch enables the replay route with in-process dispatch to the subscriptions of the
+	// composed contexts instead of a sink, for deployments whose worker runs -dispatch.
+	ReplayDispatch       bool
 	ReplayPublishTimeout time.Duration
 	Logger               *slog.Logger
 }
@@ -315,10 +391,19 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
-	if cfg.ReplaySinkURL != "" {
-		replayer, err := p.Replayer(ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout})
+	tc.STL = c.STL
+	tc.CNX = c.CNX
+	tc.FUL = c.FUL
+	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {
+		rc := ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout}
+		if cfg.ReplayDispatch {
+			if rc.Publisher, err = c.Dispatcher(); err != nil {
+				return nil, err
+			}
+		}
+		replayer, err := p.Replayer(rc)
 		if err != nil {
 			return nil, err
 		}

@@ -1,0 +1,92 @@
+logical.host	08:30:10 up 1 day,  7:28,  1 user,  load average: 8.58, 7.13, 7.13; nproc 20; MemAvailable 43572 MiB
+logical.source_check_s	1.57
+logical.source.tables	197 tables, 192858 rows
+logical.source.hash_constraints	28 constraints over 5656 rows, 0 violations
+logical.source.ledger	57 70cb334ccc34f054a3ab3a725df21cc2
+logical.source.outbox	LEASED=5, PENDING=20616, PUBLISHED=2944
+logical.source.files	brant_evd.business_file 419 files 3673690 bytes 0 mismatches; brant_trd.quote_document 553 files 601155 bytes 0 mismatches; brant_trd.sales_order_document 8 files 9378 bytes 0 mismatches; brant_ful.shipment_document_rendition 32 files 29949 bytes 0 mismatches
+logical.source_bytes	155040791
+logical.dump_s	1.08
+logical.dump_bytes	13167741
+logical.target_s	2.65
+logical.restore_s	5.26
+logical.analyze_s	0.49
+logical.restored.tables	197 tables, 192858 rows
+logical.restored.hash_constraints	28 constraints over 5656 rows, 0 violations
+logical.restored.ledger	57 70cb334ccc34f054a3ab3a725df21cc2
+logical.restored.outbox	LEASED=5, PENDING=20616, PUBLISHED=2944
+logical.restored.files	brant_evd.business_file 419 files 3673690 bytes 0 mismatches; brant_trd.quote_document 553 files 601155 bytes 0 mismatches; brant_trd.sales_order_document 8 files 9378 bytes 0 mismatches; brant_ful.shipment_document_rendition 32 files 29949 bytes 0 mismatches
+logical.identical	row digests of 197 tables, migration ledger, Outbox by status and file bytes equal
+logical.migrate_again	DONE: 0 applied, 57 already recorded; Bento schema check passed
+logical.verify_s	1.97
+logical.service_s	18.10
+logical.service	Writes: 2 users for 15.0 s; 749 commands acknowledged (P95 83.2 ms), 0 errors, 0 timeouts, 0 transport errors; cycles 43 completed, 0 failed; log /home/tops/workspace/idp-brantgo/.claude/worktrees/s5-c7/bin/drill/drill1/logical.service.acks.jsonl; Outbox pending+leased 20621 before, 19381 after
+logical.rto_s	28.78 (fresh target, roles, pg_restore -j 4, analyze, checks, service check; detection and decision not included)
+logical.end.host	08:30:42 up 1 day,  7:28,  1 user,  load average: 11.04, 7.87, 7.38; nproc 20; MemAvailable 44086 MiB
+pitr.host	08:30:42 up 1 day,  7:28,  1 user,  load average: 11.04, 7.87, 7.38; nproc 20; MemAvailable 44085 MiB
+pitr.archive	archive_timeout 1min, 16 archived, 0 failed, last 000000010000000000000023
+pitr.base_backup_s	2.30
+pitr.verify_backup_s	0.54
+pitr.base_backup_bytes	196711170
+pitr.point_check_s	1.53
+pitr.point	drill.20261112T133045 at 2026-11-12T13:30:47.457603Z
+pitr.before_kill	last archived 00000001000000000000002B at 2026-11-12 13:32:10.716312+00, current 00000001000000000000002C
+pitr.killed_at	2026-11-12T13:32:27.835758Z (brant-pg16-c7 SIGKILL; its data volume counts as lost, the WAL archive and the base backup survive)
+pitr.writes	Writes: 4 users for 120.0 s; 8709 commands acknowledged (P95 83.5 ms), 508 errors, 0 timeouts, 0 transport errors; cycles 510 completed, 508 failed; log /home/tops/workspace/idp-brantgo/.claude/worktrees/s5-c7/bin/drill/drill1/pitr.acks.jsonl
+pitr.archive_after_kill	48 files, 721426080 bytes, last 00000001000000000000002B
+pitr.point.provision_s	1.24
+pitr.point.recovery_s	1.92
+pitr.point.recovery_log	recovery stopping at restore point "drill.20261112T133045", time 2026-11-12 13:30:45.823272+00;redo done at 0/26000028 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.05 s;selected new timeline ID: 2;archive recovery complete;
+pitr.point.wal_replayed_bytes	16777040 (0/250000D8 to 0/26000028)
+pitr.point.restored.tables	197 tables, 192858 rows
+pitr.point.restored.hash_constraints	28 constraints over 5656 rows, 0 violations
+pitr.point.restored.ledger	57 70cb334ccc34f054a3ab3a725df21cc2
+pitr.point.restored.outbox	LEASED=5, PENDING=20616, PUBLISHED=2944
+pitr.point.restored.files	brant_evd.business_file 419 files 3673690 bytes 0 mismatches; brant_trd.quote_document 553 files 601155 bytes 0 mismatches; brant_trd.sales_order_document 8 files 9378 bytes 0 mismatches; brant_ful.shipment_document_rendition 32 files 29949 bytes 0 mismatches
+pitr.point.identical	row digests of 197 tables, migration ledger, Outbox by status and file bytes equal
+pitr.latest.provision_s	1.36
+pitr.latest.recovery_s	2.99
+pitr.latest.recovery_log	redo done at 0/2BFFFFD0 system usage: CPU: user: 0.17 s, system: 0.07 s, elapsed: 0.41 s;last completed transaction was at log time 2026-11-12 13:32:10.707394+00;selected new timeline ID: 2;archive recovery complete;
+pitr.latest.wal_replayed_bytes	117440248 (0/250000D8 to 0/2BFFFFD0)
+pitr.latest.last_replayed_commit	2026-11-12T13:32:10.707394Z
+pitr.latest.rpo_s	17.13 (kill time - last replayed commit)
+pitr.latest.acks	{"tenant":"drill.133047","acknowledged":8709,"present":7195,"lost":1514,"first_ack_at":"2026-11-12T13:30:54.030366613Z","last_ack_at":"2026-11-12T13:32:27.93347913Z","last_present_ack_at":"2026-11-12T13:32:10.712003907Z","first_lost_ack_at":"2026-11-12T13:32:10.733164437Z","lost_window_s":17.2,"lost_before_kept":0}
+pitr.latest.restored.tables	197 tables, 238556 rows
+pitr.latest.restored.hash_constraints	28 constraints over 9038 rows, 0 violations
+pitr.latest.restored.ledger	57 70cb334ccc34f054a3ab3a725df21cc2
+pitr.latest.restored.outbox	LEASED=5, PENDING=27440, PUBLISHED=2944
+pitr.latest.restored.files	brant_evd.business_file 843 files 5680898 bytes 0 mismatches; brant_trd.quote_document 977 files 1138355 bytes 0 mismatches; brant_trd.sales_order_document 8 files 9378 bytes 0 mismatches; brant_ful.shipment_document_rendition 32 files 29949 bytes 0 mismatches
+pitr.latest.leased_at_crash	5 LEASED rows (re-claimed after their lease expires)
+pitr.latest.migrate_again	DONE: 0 applied, 57 already recorded; Bento schema check passed
+pitr.latest.verify_s	2.35
+pitr.latest.service_s	21.93
+pitr.latest.service	Writes: 2 users for 15.0 s; 710 commands acknowledged (P95 87.8 ms), 0 errors, 0 timeouts, 0 transport errors; cycles 40 completed, 0 failed; log /home/tops/workspace/idp-brantgo/.claude/worktrees/s5-c7/bin/drill/drill1/pitr.latest.service.acks.jsonl; Outbox pending+leased 27445 before, 26285 after
+pitr.latest.rto_s	29.89 (fresh volume, base backup copied, WAL replayed, promoted, checks, service check; detection and decision not included)
+pitr.source_crash_recovery_s	2.28
+pitr.source.acks	{"tenant":"drill.133047","acknowledged":8709,"present":8709,"lost":0,"first_ack_at":"2026-11-12T13:30:54.030366613Z","last_ack_at":"2026-11-12T13:32:27.93347913Z","last_present_ack_at":"2026-11-12T13:32:27.93347913Z","lost_window_s":0,"lost_before_kept":0}
+pitr.end.host	08:33:41 up 1 day,  7:31,  1 user,  load average: 9.60, 8.51, 7.70; nproc 20; MemAvailable 45820 MiB
+upgrade.host	08:33:41 up 1 day,  7:31,  1 user,  load average: 9.60, 8.51, 7.70; nproc 20; MemAvailable 45819 MiB
+upgrade.from	3b76201 S4 A0: owner decisions D-1..D-12 in the design sources
+upgrade.to	81911a8 wip: drill facts for WAL replayed and archive size
+upgrade.old_migrate	DONE: 35 applied, 0 already recorded; Bento schema check passed
+upgrade.old_migrate_s	2.20
+upgrade.seed	go test -run '.' ./internal/bootstrap/ of 3b76201: exit 0 in 456.37 s; 324 passed lines, 0 failed lines
+upgrade.dump	4703628 bytes in 0.52 s
+upgrade.before.tables	108 tables, 76306 rows
+upgrade.before.hash_constraints	15 constraints over 1409 rows, 0 violations
+upgrade.before.ledger	35 bbc622a6ae0d482f4715ed8ceb4ddedb
+upgrade.before.outbox	PENDING=9280
+upgrade.before.files	brant_evd.business_file 14 files 2254165 bytes 0 mismatches; brant_trd.quote_document 140 files 123479 bytes 0 mismatches; brant_trd.sales_order_document 6 files 6891 bytes 0 mismatches
+upgrade.restore_s	5.36
+upgrade.restored.identical	row digests of 108 tables, migration ledger, Outbox by status and file bytes equal
+upgrade.migrate_s	1.86
+upgrade.migrate	DONE: 22 applied, 35 already recorded; Bento schema check passed; applied: 000002_ref_country_programmes 000006_pty_address_country 000004_cat_declaration_profiles 000005_pol_s5_kinds 000008_trd_order_state 000002_pur_purchase_commitments 000003_pur_supplier_deliveries 000004_pur_commitment_changes 000005_pur_allocation_reviews 000001_qlt_quality 000001_stl_customer_credit 000002_stl_funds_applications 000003_stl_payment_plan_review 000004_stl_settlement_statements 000001_cnx_trade_compliance 000002_cnx_export_licences 000003_cnx_invoices_tax_refunds 000004_cnx_declarations_bundles 000001_ful_shipments 000002_ful_milestones_export_lots 000003_ful_commercial_release 000004_ful_booking_documents 
+upgrade.migrate_again	DONE: 0 applied, 57 already recorded; Bento schema check passed
+upgrade.after.tables	197 tables, 76328 rows
+upgrade.after.hash_constraints	28 constraints over 1409 rows, 0 violations
+upgrade.after.ledger	57 70cb334ccc34f054a3ab3a725df21cc2
+upgrade.after.outbox	PENDING=9280
+upgrade.after.files	brant_evd.business_file 14 files 2254165 bytes 0 mismatches; brant_trd.quote_document 140 files 123479 bytes 0 mismatches; brant_trd.sales_order_document 6 files 6891 bytes 0 mismatches; brant_ful.shipment_document_rendition 0 files 0 bytes 0 mismatches
+upgrade.rows_kept	108 tables of the S5 start: same row counts after the upgrade (the ledger grew 35 -> 57); 104 with identical row digests
+upgrade.smoke	go test -run 'TestBRC001FullChainOverHTTP|TestLoadGeneratorSmoke' ./internal/bootstrap/ ./tests/load/ on the upgraded database: exit 0 in 21.16 s; --- PASS: TestBRC001FullChainOverHTTP (3.56s);ok   go.idp.xyz/idp-brant/internal/bootstrap 3.574s;--- PASS: TestLoadGeneratorSmoke (17.41s);ok   go.idp.xyz/idp-brant/tests/load 17.415s;
+upgrade.end.host	08:41:54 up 1 day,  7:38,  1 user,  load average: 6.69, 7.99, 8.00; nproc 20; MemAvailable 45794 MiB

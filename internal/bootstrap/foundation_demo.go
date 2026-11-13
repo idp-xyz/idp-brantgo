@@ -449,9 +449,8 @@ func (d *demo) configurations(sku catapi.SkuRef) (demoRefs, error) {
 				Sections: polapi.QuoteSections(), FooterNote: "SYNTHETIC ONLY: not an offer"}}, nil)
 		},
 		func() error {
-			return d.publish(polapi.KindCreditPolicy, "credit", false, polapi.ConfigData{CreditPolicy: &polapi.CreditPolicy{
-				Name: "synthetic credit policy", Currency: "CNY", DefaultLimit: "0", LimitSources: []string{polapi.LimitSourceInternalAssessment},
-				ApprovalTiers: []polapi.CreditApprovalTier{{Level: "credit_officer", MaxAmount: "10000.00"}}, OverdueToleranceDays: 30}}, nil)
+			p := SyntheticCreditPolicy()
+			return d.publish(polapi.KindCreditPolicy, "credit", false, polapi.ConfigData{CreditPolicy: &p}, nil)
 		},
 		func() error {
 			return d.publish(polapi.KindScreeningRegulation, "screening", false, polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{
@@ -464,6 +463,19 @@ func (d *demo) configurations(sku catapi.SkuRef) (demoRefs, error) {
 		}
 	}
 	return r, nil
+}
+
+// SyntheticCreditPolicy is the synthetic credit policy of the S5 owner decision E-2 (2026-11-12),
+// matching TD-AT11, TD-AT16 and SC-09: USD; a new customer's limit 0, from internal assessment only;
+// credit_officer releases an excess up to 1,000.00 and credit_manager up to 5,000.00, two credit
+// managers above that; 30 days overdue tolerance; payments held against the shipping documents
+// secured; reservations valid 30 days and released decisions 7 days. It is test data, not a credit
+// decision: finance supplies the real values before B0 (ES-11).
+func SyntheticCreditPolicy() polapi.CreditPolicy {
+	return polapi.CreditPolicy{Name: "synthetic credit policy (S5 E-2)", Currency: "USD", DefaultLimit: "0",
+		LimitSources:         []string{polapi.LimitSourceInternalAssessment},
+		ApprovalTiers:        []polapi.CreditApprovalTier{{Level: "credit_officer", MaxAmount: "1000.00"}, {Level: "credit_manager", MaxAmount: "5000.00"}},
+		OverdueToleranceDays: 30, DocumentsSecured: true, ReservationValidityDays: 30, DecisionValidityDays: 7, TwoApproversAboveTop: true}
 }
 
 // publish is configure that stores the reference in *ref when ref is not nil.

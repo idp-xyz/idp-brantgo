@@ -1,7 +1,10 @@
 // Package api is PUR's published contract (procurement and supply allocation): purchase drafts and
 // the demand allocation of active order lines (WBS S3-10, S3-16; tactical model PUR-AGG-PurchaseDraft
-// and PUR-AGG-DemandAllocation, SM-PUR-DRAFT, PUR-INV-001 to 007; Python t04_purchase, T04 A46).
-// Commitments, supplier confirmations and supplier deliveries are S5.
+// and PUR-AGG-DemandAllocation, SM-PUR-DRAFT, PUR-INV-001 to 007; Python t04_purchase, T04 A46),
+// purchase commitments with supplier confirmations (WBS S5-01, commitment.go; PUR-INV-009, 010) and
+// supplier deliveries on the direct delivery route (WBS S5-15, delivery.go; PUR-INV-008),
+// commitment changes and cancellation (WBS S5-19, change.go; PUR-INV-011) and the allocation reviews
+// that follow an order change (WBS S5-09b, review.go; SM-PUR-ALLOCATION-REVIEW).
 //
 //	purchase.draft.prepare  human only: binds lines of an active order, whose activating order
 //	                        approval is not revoked, each with an explicitly allocated quantity, to
@@ -12,12 +15,13 @@
 //	                        split across drafts of several suppliers; their effective allocations
 //	                        never exceed the line's quantity (PURCHASE_ALLOCATION_EXCEEDED). What MOQ,
 //	                        order multiple or loss make a draft buy beyond its allocation is an
-//	                        overbuy: marked with its quantity and reason, approved through the
-//	                        preparer's permission purchase.overbuy.approve, and kept out of the cost
-//	                        of goods sold. The draft is never a commitment (not_committed).
+//	                        overbuy: marked with its quantity and reason, kept out of the cost of
+//	                        goods sold, and approved by the purchase commitment decision (S5 decision
+//	                        D-14). The draft is never a commitment (not_committed when prepared).
 //	purchase.draft.void     human only: voids a prepared (or supply_expired) draft not committed to
-//	                        the supplier, with a reason; its allocations are released, the record
-//	                        stays.
+//	                        the supplier — no purchase commitment of it was issued
+//	                        (PURCHASE_DRAFT_COMMITTED) — with a reason; its allocations are released,
+//	                        the record stays.
 //
 // Every draft binds the order at its order revision and order hash (TRD ActiveOrderRef v1, R19),
 // the supply condition revisions with their content hashes (SUP SupplyConditionRef v1, R20), the
@@ -63,10 +67,6 @@ const (
 	PermissionRead        = "pur.read"
 	PermissionAudit       = "pur.audit"
 
-	// PermissionApproveOverbuy approves an overbuy the preparer marks (PUR-INV-005). No command of
-	// its own carries it: the preparer must hold it when the draft is prepared.
-	PermissionApproveOverbuy = "purchase.overbuy.approve"
-
 	EventPurchaseDraftPrepared = "idp-brant.pur.purchase_draft_prepared.v1"
 	EventPurchaseDraftVoided   = "idp-brant.pur.purchase_draft_voided.v1"
 
@@ -79,7 +79,8 @@ const (
 	StatusSupplyExpired = "supply_expired"
 	StatusVoided        = "voided"
 
-	// CommitmentNotCommitted is every draft's commitment state in S3.
+	// CommitmentNotCommitted is the commitment state of a draft no purchase commitment was issued
+	// on (CommitmentCommitted otherwise, derived when read).
 	CommitmentNotCommitted = "not_committed"
 
 	// DocumentContract names a draft's body.
@@ -134,7 +135,8 @@ type VoidDraft struct {
 	Reason          string
 }
 
-// Command is one of PUR's commands.
+// Command is one of PUR's commands: PrepareDraft, VoidDraft, the commitment commands and the
+// supplier delivery commands.
 type Command interface{ purCommand() }
 
 func (PrepareDraft) purCommand() {}
@@ -282,15 +284,18 @@ type LineView struct {
 }
 
 // DraftView is a draft as the reads show it: what it binds, its state now (prepared,
-// supply_expired after its supply's validity ended, or voided), its document (the exact bytes
-// DraftHash covers, contract DocumentContract) with its lines and totals, who prepared it and how it
-// ended. CheckedAt is when the read decided the state.
+// supply_expired after its supply's validity ended, or voided), its commitment state now
+// (not_committed, or committed once a purchase commitment of it was issued) and the commitments of it
+// the reader sees, its document (the exact bytes DraftHash covers, contract DocumentContract) with
+// its lines and totals, who prepared it and how it ended. CheckedAt is when the read decided the
+// state.
 type DraftView struct {
 	DraftID          string
 	Status           string
 	State            string
 	RowVersion       int64
 	CommitmentState  string
+	CommitmentIDs    []string
 	OrderID          string
 	OrderRevision    int64
 	OrderHash        string
@@ -344,6 +349,10 @@ type AllocationView struct {
 type Commands interface {
 	PrepareDraft(ctx context.Context, cmd PrepareDraft) (DraftReceipt, error)
 	VoidDraft(ctx context.Context, cmd VoidDraft) (DraftReceipt, error)
+	CommitmentCommands
+	DeliveryCommands
+	ChangeCommands
+	ReviewCommands
 }
 
 // Queries is PUR's audited read side.
@@ -357,6 +366,10 @@ type Queries interface {
 	GetAllocations(ctx context.Context, orderID string) ([]AllocationView, error)
 	// Audit returns PUR's audit trail (pur.audit).
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
+	CommitmentQueries
+	DeliveryQueries
+	ChangeQueries
+	ReviewQueries
 }
 
 // Auditor records a request an inbound adapter refused before it became a command.

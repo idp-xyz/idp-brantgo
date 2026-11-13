@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +24,10 @@ func OpenAPI() ([]byte, error) {
 	sets := []*commandSet{evdCommands(struct{ EVD }{}), ptyCommands(struct{ PTY }{}), catCommands(struct{ CAT }{}),
 		inqCommands(struct{ INQ }{}), polCommands(struct{ POL }{}), refCommands(struct{ REF }{}),
 		supCommands(struct{ SUP }{}), cstCommands(struct{ CST }{}),
-		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{})}
+		trdCommands(struct{ TRD }{}), purCommands(struct{ PUR }{}), qltCommands(struct{ QLT }{})}
+	sets = append(sets, stlCommands(struct{ STL }{}))
+	sets = append(sets, cnxCommands(struct{ CNX }{}))
+	sets = append(sets, fulCommands(struct{ FUL }{}))
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -79,7 +83,7 @@ func OpenAPI() ([]byte, error) {
 			}
 		}
 	}
-	for _, r := range reads {
+	for _, r := range slices.Concat(reads, stlReads, cnxReads, fulReads) {
 		get := map[string]any{"operationId": r.id, "tags": []string{r.tag}, "summary": r.summary, "responses": readResponses()}
 		var params []any
 		for _, p := range r.params {
@@ -144,6 +148,10 @@ var reads = []readRoute{
 	{"/api/brant/v1/cat/skus/{id}", "cat.sku.get", "cat", "A SKU and its specification revisions", []string{"id"}, false},
 	{"/api/brant/v1/cat/item_code_mappings/{id}", "cat.item_code_mapping.get", "cat",
 		"An item-code mapping: the party's code, every revision with its SKU specification and publication", []string{"id"}, false},
+	{"/api/brant/v1/cat/declaration_profiles/{id}", "cat.declaration_profile.get", "cat",
+		"A declaration profile: its SKU specification revision and code table version, every revision with its classification parts and verification", []string{"id"}, false},
+	{"/api/brant/v1/cat/skus/{id}/declaration_profiles", "cat.declaration_profile.list", "cat",
+		"The declaration profiles kept for a SKU, by specification revision and code table version", []string{"id"}, false},
 	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
 	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
 	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
@@ -186,6 +194,8 @@ var reads = []readRoute{
 		"A sales order: its binding, the exact snapshot bytes (verified on read), reviews with acknowledged risks, commit evidence and closure", []string{"id"}, false},
 	{"/api/brant/v1/trd/orders/{id}/check", "trd.order.check", "trd",
 		"The checks order.activate would make now on ?review_id= (none: the source and upstream risks only); a refusal is the answer", []string{"id"}, false},
+	{"/api/brant/v1/trd/orders/{id}/snapshot", "trd.order.snapshot.get", "trd",
+		"What OrderCommercialSnapshot v1 tells STL, CNX and FUL of a draft or active order at its current revision, from what TRD sealed: binding, state, terms with address roles and the payment plan with its credit portion, lines, charges, totals, S/C and PI references and the analysis rate (code REFERENCE_INVALID when the sealed revision is not intact)", []string{"id"}, false},
 	{"/api/brant/v1/trd/orders/{id}/revisions/{revision}/documents/{kind}", "trd.order.document.get", "trd",
 		"The export sales contract (sales_contract) or proforma invoice (proforma_invoice) of an order revision: binding, signed copies and bytes (Base64), verified on read", []string{"id", "revision", "kind"}, false},
 	{"/api/brant/v1/trd/customer_responses/{id}", "trd.customer_response.get", "trd", "A customer response and its acceptances", []string{"id"}, false},
@@ -194,11 +204,37 @@ var reads = []readRoute{
 		"A purchase draft: its state now (prepared, supply_expired or voided), the exact document its hash covers, lines, totals and void; the caller's access to the order and every supply condition is re-checked", []string{"id"}, false},
 	{"/api/brant/v1/pur/orders/{id}/allocations", "pur.demand_allocation.get", "pur",
 		"The demand allocation of every drafted line of a sales order: demand, allocated, remaining and the drafts holding it", []string{"id"}, false},
+	{"/api/brant/v1/pur/purchase_commitments/{id}", "pur.purchase_commitment.get", "pur",
+		"A purchase commitment: its draft and order binding, its state now (requested, approved, expired, rejected, revoked, issued, confirmed or cancelled), the decision with its validity and acknowledged deviations, the revocation, the issue with the purchase order number and the evidence of sending, the supplier's confirmations, the revision in force with what it buys of each line and the verified deliveries (fulfilled when all are delivered), the revisions changes and the cancellation made, and the cancellation; the caller's access to the order is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/pur/orders/{id}/commitments", "pur.purchase_commitment.list", "pur",
+		"The purchase commitments of a sales order the caller sees, by commitment ID", []string{"id"}, false},
+	{"/api/brant/v1/pur/supplier_deliveries/{id}", "pur.supplier_delivery.get", "pur",
+		"A supplier delivery on the direct delivery route: its commitment, its status now, the version verified now and the one awaiting verification, and every version with its claimed and verified quantities, handover, evidence, decision and supersession; the caller's access to the order is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/pur/purchase_commitments/{id}/deliveries", "pur.supplier_delivery.list", "pur",
+		"The supplier deliveries of a purchase commitment, by delivery ID, and for each commitment line what it buys, what is verified now and what may still be verified (claims never count)", []string{"id"}, false},
+	{"/api/brant/v1/pur/purchase_commitment_changes/{id}", "pur.purchase_commitment_change.get", "pur",
+		"A purchase commitment change: the commitment revision it is bound to, its state (draft, approved, rejected or applied), the proposed revision's exact document its hash covers, lines and deviations, the reason and supplier evidence, the decision with its acknowledgements and the application; the caller's access to the order is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/pur/purchase_commitments/{id}/changes", "pur.purchase_commitment_change.list", "pur",
+		"The changes of a purchase commitment, by change ID", []string{"id"}, false},
+	{"/api/brant/v1/pur/allocation_reviews/{id}", "pur.allocation_review.get", "pur",
+		"An allocation review after an order change: the order revision, change and TRD event it follows, its state (open, settled or superseded) and responsible role, every item — an order line allocated above what the order now needs, a prepared draft holding it, an issued or confirmed commitment buying on it — with what PUR knew of it then, and each item's disposition with the voided draft, applied change or cancelled commitment it names; the caller's access to the order is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/pur/orders/{id}/allocation_reviews", "pur.allocation_review.list", "pur",
+		"The allocation reviews of a sales order, by order version", []string{"id"}, false},
+	{"/api/brant/v1/qlt/inspections/{id}", "qlt.inspection.get", "qlt",
+		"An inspection: its subject as PUR bound it, result, sampling, standard and report bindings, inspector, disposition and supersession; the caller's access to the subject and the cited sources is re-checked", []string{"id"}, false},
+	{"/api/brant/v1/qlt/quality_releases/{id}", "qlt.quality_release.get", "qlt",
+		"A quality release: its state now (granted, not_yet_valid, expired or revoked), scope, quantity, validity, the conforming and released quantities it was judged on, and its revocation", []string{"id"}, false},
+	{"/api/brant/v1/qlt/subjects/{kind}/{id}/lines/{line_id}", "qlt.inspection_subject.get", "qlt",
+		"A subject's quality standing now: what its valid inspections cover and find conforming, what was released (revoked releases included) and what may still be released", []string{"kind", "id", "line_id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}", "ref.screening_list.get", "ref", "A screening list and the versions the company imported", []string{"id"}, false},
 	{"/api/brant/v1/ref/screening_lists/{id}/versions/{version}", "ref.screening_list_version.get", "ref",
 		"One imported version of a screening list with its entries", []string{"id", "version"}, false},
+	{"/api/brant/v1/ref/country_programme_lists/{id}", "ref.country_programme_list.get", "ref",
+		"A country programme list and the versions the company imported", []string{"id"}, false},
+	{"/api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", "ref.country_programme_list_version.get", "ref",
+		"One imported version of a country programme list with its programmes", []string{"id", "version"}, false},
 	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
-		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink)", []string{"source", "event_id"}, true},
+		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink or -replay-dispatch)", []string{"source", "event_id"}, true},
 }
 
 // readQuery names the optional integer query parameters of a read.

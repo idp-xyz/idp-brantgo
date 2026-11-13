@@ -1,0 +1,362 @@
+// Package application runs STL's commands and queries on the command ledger. The customer credit
+// rules live in domain/customercredit; SQL lives in adapters/postgres.
+//
+// STL's upstream contexts for customer credit are TRD (Context Map R32, OrderCommercialSnapshot v1,
+// through STL's own port Orders), POL (R33, ConfigRef v1 and ConfigGuard v1: credit_policy, the
+// currency, fx_rate of purpose credit), PTY (R43, the customer) and EVD (R75, the evidence of a
+// limit). A command reads them through their api packages before STL's transaction begins (the
+// ledger's Preparer step); inside it, after STL locked the customer's CustomerCredit root FOR UPDATE
+// and the ledger locked the authority guard FOR SHARE, POL's ConfigGuard v1 re-checks every
+// configuration revision the command decides by, locking it FOR SHARE until STL commits (R33 guard
+// lock, ADR-BR-004 option B, ADR-BR-011). STL locks no TRD, PTY or EVD row and never calls another
+// context's transaction owner. STL publishes CreditGuard v1 (R57) for TRD (api/guard.go).
+package application
+
+import (
+	"context"
+	"errors"
+
+	"go.idp.xyz/idp-bento-go/application"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
+	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
+	cc "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/customercredit"
+	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
+	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/kernel"
+)
+
+var (
+	anyActor  = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}
+	humanOrAI = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}
+)
+
+// Rules is STL's authorization policy for customer credit. The tactical model's humanOnlyCommands
+// name credit_limit.publish and credit_exception.decide; the command catalog lets humans and AI
+// request limits and reserve and release credit (人工或 AI（按动作权限）), and the state machine has the
+// system consume (PL-12) and release (PL-13) reservations, so reserve and release admit the system
+// as well; credit.consume is the system's alone (SM-STL-CREDIT-RESERVATION). Reads need stl.read,
+// the audit trail stl.audit.
+func Rules() []authorization.Rule {
+	return []authorization.Rule{
+		{Command: api.CommandRequestLimit, Permission: api.CommandRequestLimit, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandPublishLimit, api.CommandPublishLimit),
+		{Command: api.CommandReserve, Permission: api.CommandReserve, ActorKinds: anyActor},
+		authorization.HumanOnly(api.CommandDecideException, api.CommandDecideException),
+		{Command: api.CommandRelease, Permission: api.CommandRelease, ActorKinds: anyActor},
+		{Command: api.CommandConsume, Permission: api.CommandConsume, ActorKinds: []kernel.ActorKind{kernel.ActorSystem}},
+		{Command: api.CommandGetCredit, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetReservation, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetDecision, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
+		// Funds (B2a): fund.record, fund.resolve_difference, application.apply and application.unapply
+		// are humanOnlyCommands (D-16, D-17); order_account.open adopts an order revision's stages with
+		// the permission of payment_plan_review.open, by a person or the system (SM-STL-PAYMENT-PLAN-REVIEW).
+		authorization.HumanOnly(api.CommandRecordFund, api.CommandRecordFund),
+		authorization.HumanOnly(api.CommandResolveDifference, api.CommandResolveDifference),
+		{Command: api.CommandOpenOrderAccount, Permission: api.PermissionOpenOrderAccount,
+			ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
+		authorization.HumanOnly(api.CommandApply, api.CommandApply),
+		authorization.HumanOnly(api.CommandUnapply, api.CommandUnapply),
+		{Command: api.CommandGetFundRecord, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetOrderAccount, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetApplication, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Payment plan review (C4b-STL): the system opens it (WF-06), and so may a person of
+		// treasury, whose template holds the permission; settle is a humanOnlyCommand.
+		{Command: api.CommandOpenReview, Permission: api.PermissionOpenReview, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
+		authorization.HumanOnly(api.CommandSettleReview, api.PermissionSettleReview),
+		{Command: api.CommandListReviews, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Settlement statements (B2b): settlement.confirm is a humanOnlyCommand (treasury).
+		authorization.HumanOnly(api.CommandConfirmSettlement, api.CommandConfirmSettlement),
+		{Command: api.CommandGetStatement, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetReceivable, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetPayable, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetOrderSettlement, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Credit notes and reversal (C8): credit_note.request is the sales clerk's, by a person or AI (S5 plan
+		// S5-18 "销售经办; human|ai"); credit.confirm and settlement.reverse are humanOnlyCommands (credit
+		// manager).
+		{Command: api.CommandRequestCreditNote, Permission: api.CommandRequestCreditNote, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandConfirmCredit, api.CommandConfirmCredit),
+		authorization.HumanOnly(api.CommandReverseSettlement, api.CommandReverseSettlement),
+		{Command: api.CommandGetCreditNote, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Charges and order results (C9): the credit officer records and allocates charges, by a person or AI (role
+		// template credit_officer; command catalog charge.allocate "人工或 AI"); treasury confirms charges and closes
+		// and reopens results — humanOnlyCommands charge.confirm, order_result.close, order_result.reopen — and
+		// reviews them, by a person or AI (SM-STL-ORDER-RESULT review "human|ai").
+		{Command: api.CommandRecordCharge, Permission: api.CommandRecordCharge, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandConfirmCharge, api.CommandConfirmCharge),
+		{Command: api.CommandAllocateCharge, Permission: api.CommandAllocateCharge, ActorKinds: humanOrAI},
+		{Command: api.CommandReviewOrderResult, Permission: api.CommandReviewOrderResult, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandCloseOrderResult, api.CommandCloseOrderResult),
+		authorization.HumanOnly(api.CommandReopenOrderResult, api.CommandReopenOrderResult),
+		{Command: api.CommandGetCharge, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetOrderResult, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Opening balances (C10): opening_balance.record is a humanOnlyCommand (treasury).
+		authorization.HumanOnly(api.CommandRecordOpening, api.CommandRecordOpening),
+		{Command: api.CommandGetOpening, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandOpenings, Permission: api.PermissionRead, ActorKinds: anyActor},
+	}
+}
+
+// Upstream are the contexts STL reads references from.
+type Upstream struct {
+	Orders     Orders         // TRD OrderCommercialSnapshot v1 (R32), STL's port
+	Configs    polapi.Queries // POL ConfigRef v1 (R33)
+	Parties    ptyapi.Queries // PTY PartyRef v1 (R43)
+	Sources    evdapi.Queries // EVD SourceRef v1 (R75)
+	Shipments  Shipments      // FUL ShipmentLineRef v1 (R30), STL's port (sources.go)
+	Deliveries Deliveries     // PUR PurchaseSettlementSource v1 (R31), STL's port
+}
+
+// Complete reports whether every upstream is wired.
+func (u Upstream) Complete() bool {
+	return u.Orders != nil && u.Configs != nil && u.Parties != nil && u.Sources != nil && u.Shipments != nil && u.Deliveries != nil
+}
+
+// Service runs STL's use cases.
+type Service struct {
+	Ledger   *action.Ledger
+	Clock    application.Clock
+	Upstream Upstream
+	Grants   authorization.Grants
+}
+
+func scope(ctx context.Context) kernel.Scope {
+	s, _ := bento.ScopeFromContext(ctx)
+	return s
+}
+
+// Visible reports whether d's actor sees the object a stored result names: a limit request, a
+// reservation or a decision (credit.reserve names a decision when it opened one).
+func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
+	if visible, handled, err := visibleFund(ctx, exec, d, command, id); handled {
+		return visible, err
+	}
+	switch command {
+	case api.CommandConfirmSettlement, api.CommandReverseSettlement:
+		st, err := postgres.LoadStatement(ctx, exec, scope(ctx), id, false)
+		return err == nil && st != nil && d.Sees(st.OwnerActor, st.OwnerTeam), err
+	case api.CommandRequestCreditNote, api.CommandConfirmCredit:
+		n, err := postgres.LoadCreditNote(ctx, exec, scope(ctx), id)
+		return err == nil && n != nil && d.Sees(n.OwnerActor, n.OwnerTeam), err
+	case api.CommandRecordCharge, api.CommandConfirmCharge, api.CommandAllocateCharge:
+		c, err := postgres.LoadCharge(ctx, exec, scope(ctx), id, false)
+		return err == nil && c != nil && d.Sees(c.OwnerActor, c.OwnerTeam), err
+	case api.CommandReviewOrderResult, api.CommandCloseOrderResult, api.CommandReopenOrderResult:
+		r, err := postgres.LoadResult(ctx, exec, scope(ctx), id, postgres.NoLock)
+		return err == nil && r != nil && d.Sees(r.OwnerActor, r.OwnerTeam), err
+	case api.CommandRecordOpening:
+		o, err := postgres.LoadOpening(ctx, exec, scope(ctx), id, false)
+		return err == nil && o != nil && d.Sees(o.OwnerActor, o.OwnerTeam), err
+	}
+	sc := scope(ctx)
+	var subjects []string
+	switch command {
+	case api.CommandRequestLimit, api.CommandPublishLimit:
+		subjects = []string{postgres.SubjectLimitRequest}
+	case api.CommandDecideException:
+		subjects = []string{postgres.SubjectDecision}
+	case api.CommandReserve:
+		subjects = []string{postgres.SubjectReservation, postgres.SubjectDecision}
+	default:
+		subjects = []string{postgres.SubjectReservation}
+	}
+	for _, subject := range subjects {
+		owner, team, found, err := ownerOf(ctx, exec, sc, subject, id)
+		if err != nil || found {
+			return found && d.Sees(owner, team), err
+		}
+	}
+	return false, nil
+}
+
+func ownerOf(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, subject, id string) (owner, team string, found bool, err error) {
+	switch subject {
+	case postgres.SubjectLimitRequest:
+		r, err := postgres.LoadRequest(ctx, exec, sc, id)
+		if err != nil || r == nil {
+			return "", "", false, err
+		}
+		return r.OwnerActor, r.OwnerTeam, true, nil
+	case postgres.SubjectDecision:
+		x, err := postgres.LoadDecision(ctx, exec, sc, id)
+		if err != nil || x == nil {
+			return "", "", false, err
+		}
+		return x.OwnerActor, x.OwnerTeam, true, nil
+	}
+	r, err := postgres.LoadReservation(ctx, exec, sc, id)
+	if err != nil || r == nil {
+		return "", "", false, err
+	}
+	return r.OwnerActor, r.OwnerTeam, true, nil
+}
+
+// lockSubject locks FOR UPDATE the credit root of the customer subject id belongs to; nil when
+// there is no such subject.
+func lockSubject(ctx context.Context, exec bentopg.Executor, subject, id string) (*cc.Root, error) {
+	sc := scope(ctx)
+	party, err := postgres.PartyOf(ctx, exec, sc, subject, id)
+	if err != nil || party == "" {
+		return nil, err
+	}
+	return postgres.LoadRoot(ctx, exec, sc, party, true)
+}
+
+// lockOrCreate locks the customer's credit root FOR UPDATE, creating it at version 0 first when it
+// is missing (the command moves it to 1 or rolls it back).
+func (s Service) lockOrCreate(ctx context.Context, exec bentopg.Executor, party string) (*cc.Root, error) {
+	sc := scope(ctx)
+	if err := postgres.EnsureRoot(ctx, exec, sc, party, s.Clock.Now()); err != nil {
+		return nil, err
+	}
+	return postgres.LoadRoot(ctx, exec, sc, party, true)
+}
+
+// bump moves the root to its next row version.
+func (s Service) bump(ctx context.Context, exec bentopg.Executor, root *cc.Root) error {
+	root.RowVersion++
+	return postgres.SaveRoot(ctx, exec, scope(ctx), root, s.Clock.Now())
+}
+
+// event is an Outbox event of the customer's CustomerCredit aggregate at the root's row version.
+func event(typ string, root *cc.Root, fields map[string]any) action.Event {
+	fields["party_id"] = root.PartyID
+	return action.Event{Type: typ, AggregateType: "CustomerCredit", AggregateID: root.PartyID, AggregateVersion: root.RowVersion, Fields: fields}
+}
+
+func (s Service) run(ctx context.Context, cmd action.Command, req api.Command, validation error, h action.Handler) (api.Receipt, error) {
+	if validation != nil {
+		if rej, ok := kernel.AsRejection(validation); ok {
+			if err := s.Ledger.AuditRejected(ctx, cmd.Name, cmd.ObjectID, rej.Code); err != nil {
+				return api.Receipt{}, errors.Join(validation, err)
+			}
+		}
+		return api.Receipt{}, validation
+	}
+	_, _, args := request(req)
+	hash, err := action.RequestHash(args)
+	if err != nil {
+		return api.Receipt{}, err
+	}
+	cmd.RequestHash = hash
+	res, err := s.Ledger.Execute(ctx, cmd, h)
+	return api.Receipt(res), err
+}
+
+// request returns the name, the idempotency key and the business arguments of cmd, which its
+// request hash covers: everything but the key and the expected version.
+func request(cmd api.Command) (name, key string, args any) {
+	switch c := cmd.(type) {
+	case api.RequestCreditLimit:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRequestLimit, key, c
+	case api.PublishCreditLimit:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandPublishLimit, key, c
+	case api.ReserveCredit:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandReserve, key, c
+	case api.DecideCreditException:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandDecideException, key, c
+	case api.ReleaseCredit:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRelease, key, c
+	case api.ConsumeCredit:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandConsume, key, c
+	case api.RecordFund:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRecordFund, key, c
+	case api.ResolveFundDifference:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandResolveDifference, key, c
+	case api.OpenOrderAccount:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandOpenOrderAccount, key, c
+	case api.Apply:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandApply, key, c
+	case api.Unapply:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandUnapply, key, c
+	case api.OpenPaymentPlanReview:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandOpenReview, key, c
+	case api.SettlePaymentPlanReview:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandSettleReview, key, c
+	case api.ConfirmSettlement:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandConfirmSettlement, key, c
+	case api.RequestCreditNote:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRequestCreditNote, key, c
+	case api.ConfirmCredit:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandConfirmCredit, key, c
+	case api.ReverseSettlement:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReverseSettlement, key, c
+	case api.RecordCharge:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRecordCharge, key, c
+	case api.ConfirmCharge:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandConfirmCharge, key, c
+	case api.AllocateCharge:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandAllocateCharge, key, c
+	case api.ReviewOrderResult:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReviewOrderResult, key, c
+	case api.CloseOrderResult:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandCloseOrderResult, key, c
+	case api.ReopenOrderResult:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReopenOrderResult, key, c
+	case api.RecordOpening:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandRecordOpening, key, c
+	}
+	return "", "", nil
+}
+
+// Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
+// it (api.Reconciler; contract 06, 动作对账).
+func (s Service) Reconcile(ctx context.Context, cmd api.Command) (api.Reconciliation, error) {
+	name, key, args := request(cmd)
+	if name == "" {
+		return api.Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
+	}
+	hash, err := action.RequestHash(args)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	r, err := s.Ledger.Reconcile(ctx, name, key, hash)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	out := api.Reconciliation{State: r.State, ActionID: r.ActionID, ObjectID: r.ObjectID}
+	if r.Result != nil {
+		receipt := api.Receipt(*r.Result)
+		out.Receipt = &receipt
+	}
+	return out, nil
+}
+
+// Audit returns STL's audit trail.
+func (s Service) Audit(ctx context.Context) ([]kernel.AuditEntry, error) {
+	return s.Ledger.Audit(ctx, api.CommandAudit)
+}
+
+// AuditRejected records a request an inbound adapter refused before it became a command.
+func (s Service) AuditRejected(ctx context.Context, command, objectID, code string) error {
+	return s.Ledger.AuditRejected(ctx, command, objectID, code)
+}

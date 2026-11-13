@@ -133,9 +133,10 @@ const inboxActorPrefix = "inbox."
 // InboxActor returns the actor a consumer processes events as: kind system, ID "inbox.<consumer>"
 // (written system:inbox.<consumer>). A consumer name is an identifier of at most 58 characters,
 // by convention "<bc>.<purpose>", such as "inq.party_deactivated". Events are never processed as
-// the actor who caused them; the payload names that actor for the record only. The consuming
-// context grants this actor what its handler needs, like any other actor (brant-admin grant
-// -kind system).
+// the actor who caused them; the payload names that actor for the record only. The actor is
+// granted what its handler needs, like any other actor: the permissions its subscriptions declare
+// (Subscription.Permissions) through brant-admin inbox, or by hand with brant-admin grant -kind
+// system.
 func InboxActor(consumer eventing.InboxConsumer) (kernel.ActorRef, error) {
 	if !kernel.ValidIdentifier(string(consumer)) {
 		return kernel.ActorRef{}, fmt.Errorf("messaging: invalid inbox consumer name %q", consumer)
@@ -169,8 +170,8 @@ type Consumer struct {
 }
 
 // NewConsumer returns the consumer called name of the context that owns db, with the Bento inbox
-// and the scope transactor on db. A context builds it in its module with its own DB; bootstrap
-// mounts its Receive behind the relay's sink.
+// and the scope transactor on db. The Dispatcher builds one per subscription on the subscribing
+// context's DB; behind an HTTP endpoint, Receive answers the relay's webhook.
 func NewConsumer(db *bentopg.DB, name eventing.InboxConsumer, handler EventHandler) (Consumer, error) {
 	if db == nil {
 		return Consumer{}, errors.New("messaging: consumer needs its context's DB")
@@ -210,14 +211,8 @@ func (c Consumer) Consume(ctx context.Context, envelope eventing.Envelope) (Inbo
 	if err != nil {
 		return InboxRejected, &eventRejection{code: FailureEventRejected, cause: err}
 	}
-	// The handler acts as the consumer's system actor in the event's scope, whoever sent the event
-	// or called Consume.
-	ctx, err = identity.WithPrincipal(ctx, identity.Principal{Actor: actor, Scope: scope})
-	if err != nil {
+	if ctx, err = asConsumer(ctx, actor, scope, envelope); err != nil {
 		return InboxRetry, err
-	}
-	if kernel.ValidIdentifier(envelope.CorrelationID) {
-		ctx = action.WithCorrelation(ctx, envelope.CorrelationID)
 	}
 	key := eventing.InboxKey{Consumer: c.Name, Source: envelope.Source, EventID: envelope.ID}
 	tx := c.Transactor(scope)
@@ -249,6 +244,19 @@ func (c Consumer) Consume(ctx context.Context, envelope eventing.Envelope) (Inbo
 		return c.reject(ctx, tx, key, rejection)
 	}
 	return InboxRetry, fmt.Errorf("messaging: consume %s/%s: %w", envelope.Source, envelope.ID, err)
+}
+
+// asConsumer returns ctx as a consumer's code sees it: the consumer's system actor in the event's
+// scope, whoever sent the event or called Consume, and the event's correlation ID.
+func asConsumer(ctx context.Context, actor kernel.ActorRef, scope kernel.Scope, envelope eventing.Envelope) (context.Context, error) {
+	ctx, err := identity.WithPrincipal(ctx, identity.Principal{Actor: actor, Scope: scope})
+	if err != nil {
+		return nil, err
+	}
+	if kernel.ValidIdentifier(envelope.CorrelationID) {
+		ctx = action.WithCorrelation(ctx, envelope.CorrelationID)
+	}
+	return ctx, nil
 }
 
 // reject records the handler's rejection in a transaction of its own, after the handler's

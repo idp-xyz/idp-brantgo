@@ -53,7 +53,13 @@ func valid() map[string]ConfigData {
 		KindCreditPolicy: {CreditPolicy: &CreditPolicy{Name: "credit", Currency: "CNY", DefaultLimit: "0",
 			LimitSources:         []string{LimitSourceInternalAssessment, LimitSourceSinosureBuyerLimit},
 			ApprovalTiers:        []CreditApprovalTier{{Level: "credit_officer", MaxAmount: "1000"}, {Level: "credit_manager", MaxAmount: "10000.00"}},
-			OverdueToleranceDays: 30}},
+			OverdueToleranceDays: 30, ReservationValidityDays: 30, DecisionValidityDays: 7}},
+		KindShipmentDocumentTemplate: {ShipmentDocumentTemplate: &ShipmentDocumentTemplate{Name: "commercial invoice",
+			DocumentKind: ShipmentDocumentCommercialInvoice, Language: LanguageEn, RendererVersion: ShipmentRendererVersion,
+			Title: "COMMERCIAL INVOICE", Sections: []string{"seller", "buyer", "consignee", "identity", "shipment", "lines", "totals", "terms",
+				"marks", "clauses", "notes"}, Clauses: []string{"We certify that the goods are of Chinese origin."}}},
+		KindExportTaxPolicy: {ExportTaxPolicy: &ExportTaxPolicy{Name: "synthetic export refund", RefundMethod: RefundExemptRefund,
+			PolicyBasis: "synthetic policy basis, not a tax determination", ProfessionalReviewEvidenceID: "src.tax.review"}},
 		KindOrderDocumentTemplate: {OrderDocumentTemplate: &OrderDocumentTemplate{Name: "sales contract", DocumentKind: OrderDocumentSalesContract,
 			Language: LanguageEn, RendererVersion: OrderRendererVersion, Title: "SALES CONTRACT",
 			Sections: []string{"seller", "buyer", "identity", "lines", "totals", "terms", "delivery", "payments", "clauses", "signatures", "notes"},
@@ -134,7 +140,8 @@ func TestLegalTermsContract(t *testing.T) {
 		QuoteSectionsFor("quote-text/9") != nil || !slices.Equal(QuoteSectionsFor(QuoteRendererVersion), QuoteSections()) {
 		t.Fatal(s)
 	}
-	if !KindKnown(KindLegalTerms) || !KindImplemented(KindLegalTerms) || !KindKnown(KindOrderDocumentTemplate) || len(kinds) != 20 {
+	if !KindKnown(KindLegalTerms) || !KindImplemented(KindLegalTerms) || !KindKnown(KindOrderDocumentTemplate) || kinds[18] != KindLegalTerms ||
+		kinds[19] != KindOrderDocumentTemplate {
 		t.Fatal("legal_terms and order_document_template are the nineteenth and twentieth kinds")
 	}
 }

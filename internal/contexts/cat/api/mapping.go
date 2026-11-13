@@ -46,13 +46,15 @@ const (
 
 // Codes CAT declares beyond the shared ones, with the category the error catalog V0.1 gives them.
 const (
-	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT" // 409: another mapping is published for the item code
+	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT" // 409: another mapping is published for the item code, or another declaration profile has the key
 	CodeReferenceStale      = "REFERENCE_STALE"       // 409: the specification revision is no longer current; refresh and resubmit
 )
 
 var codes = map[string]kernel.Category{
-	CodeBusinessKeyConflict: kernel.CategoryConflict,
-	CodeReferenceStale:      kernel.CategoryConflict,
+	CodeBusinessKeyConflict:          kernel.CategoryConflict,
+	CodeReferenceStale:               kernel.CategoryConflict,
+	CodeIndependentReviewRequired:    kernel.CategoryInvalid, // declaration.go
+	CodeDeclarationProfileUnverified: kernel.CategoryInvalid, // declaration.go
 }
 
 // Category returns the category of a code CAT declares.

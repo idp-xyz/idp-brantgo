@@ -484,6 +484,7 @@ func TestOrderCarriesTheLegalTermsAndRechecksThem(t *testing.T) {
 	}
 	d, err := l.c.TRD.DecideOrderReview(l.reviewer, l.decideCmd(o1.ObjectID, r.RowVersion, "review.order.1", o1.OrderHash, ack(lapsed)))
 	l.must(err)
+	l.readyToActivate(o1.ObjectID)
 	_, err = l.c.TRD.ActivateOrder(l.author, l.activateOrderCmd(o1.ObjectID, d.RowVersion, "review.order.1"))
 	l.must(err)
 	if v := l.getOrder(o1.ObjectID); v.Status != trdapi.OrderActive || v.OrderHash != o1.OrderHash ||
