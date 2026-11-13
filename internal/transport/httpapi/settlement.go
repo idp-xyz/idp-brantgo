@@ -19,6 +19,8 @@ type STL interface {
 	stlapi.SettlementQueries
 	stlapi.CreditNoteCommands
 	stlapi.CreditNoteQueries
+	stlapi.ResultCommands
+	stlapi.ResultQueries
 	stlapi.Reconciler
 	stlapi.Auditor
 }
@@ -45,6 +47,12 @@ func stlCommands(c STL) *commandSet {
 			stlapi.CommandRequestCreditNote: reflected("", "", receiptOf[stlapi.Receipt](c.RequestCreditNote)),
 			stlapi.CommandConfirmCredit:     reflected("", "", receiptOf[stlapi.Receipt](c.ConfirmCredit)),
 			stlapi.CommandReverseSettlement: reflected("", "", receiptOf[stlapi.Receipt](c.ReverseSettlement)),
+			stlapi.CommandRecordCharge:      reflected("", "", receiptOf[stlapi.Receipt](c.RecordCharge)),
+			stlapi.CommandConfirmCharge:     reflected("", "", receiptOf[stlapi.Receipt](c.ConfirmCharge)),
+			stlapi.CommandAllocateCharge:    reflected("", "", receiptOf[stlapi.Receipt](c.AllocateCharge)),
+			stlapi.CommandReviewOrderResult: reflected("", "", receiptOf[stlapi.Receipt](c.ReviewOrderResult)),
+			stlapi.CommandCloseOrderResult:  reflected("", "", receiptOf[stlapi.Receipt](c.CloseOrderResult)),
+			stlapi.CommandReopenOrderResult: reflected("", "", receiptOf[stlapi.Receipt](c.ReopenOrderResult)),
 		}}
 }
 
@@ -64,6 +72,8 @@ func (s *server) stlRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/stl/orders/{id}/settlement", s.authenticated(read(s, s.cfg.STL.GetOrderSettlement,
 		okView[stlapi.OrderSettlementView])))
 	mux.Handle("GET /api/brant/v1/stl/credit_notes/{id}", s.authenticated(read(s, s.cfg.STL.GetCreditNote, okView[stlapi.CreditNoteView])))
+	mux.Handle("GET /api/brant/v1/stl/charges/{id}", s.authenticated(read(s, s.cfg.STL.GetCharge, okView[stlapi.ChargeView])))
+	mux.Handle("GET /api/brant/v1/stl/orders/{id}/result", s.authenticated(read(s, s.cfg.STL.GetOrderResult, okView[stlapi.OrderResultView])))
 }
 
 // stlReads are STL's reads in the OpenAPI document.
@@ -92,4 +102,8 @@ var stlReads = []readRoute{
 		"An order's settlement position: each payment stage of the order account's revision with what stands prepaid, settled and paid on it, the order's receivables (settled, applied, open, overdue; a reversed statement counts nothing), net sales less effective credit notes, the purchase statement lines of the order with their payables, and its cross-currency applications with their business settlement FX differences", []string{"id"}, false},
 	{"/api/brant/v1/stl/credit_notes/{id}", "stl.credit_note.get", "stl",
 		"A credit note (CreditNoteRef v1) of a sales statement's receivable: kind (price allowance, return, claim), state (requested, confirmed, rejected), amount, what stands applied from it and its rest, whether it counts against the statement's sales, basis, evidence, requester and decider; it changes no shipped quantity, refunds nothing and adjusts no tax-refund material", []string{"id"}, false},
+	{"/api/brant/v1/stl/charges/{id}", "stl.charge.get", "stl",
+		"A charge: its source, the orders or shipments it benefits, POL fee category, currency and conversion basis, its estimate and amount, its state (estimated, pending, confirmed) with who recorded, billed and confirmed it, and every allocation (basis, data basis, weights and shares by the largest remainder) with the one that counts", []string{"id"}, false},
+	{"/api/brant/v1/stl/orders/{id}/result", "stl.order_result.get", "stl",
+		"An order's operating result in its analysis currency, derived now from its sources: forecast, executing and confirmed result (by shipment batch) with their sources and gaps, the business settlement FX difference and the net cash; the close conditions (fulfilment, receivables, payables, purchase costs, direct charges; claims not_enabled); the result's state, every immutable closing snapshot, review and reopening. Not legal profit or FX accounting", []string{"id"}, false},
 }

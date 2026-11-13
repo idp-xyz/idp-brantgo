@@ -49,6 +49,9 @@ var (
 	_ api.CreditNoteCommands = (*Module)(nil)
 	_ api.CreditNoteQueries  = (*Module)(nil)
 	_ api.CreditNoteLookups  = (*Module)(nil)
+
+	_ api.ResultCommands = (*Module)(nil)
+	_ api.ResultQueries  = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),
@@ -70,6 +73,15 @@ type (
 const (
 	OrderDraft  = application.OrderDraft
 	OrderActive = application.OrderActive
+)
+
+// The order-level halves of STL's ports to FUL and PUR (C9, the order result): FULShipmentLines and
+// PURSettlementSources implement them.
+type (
+	OrderShipments    = application.OrderShipments
+	OrderShipmentLine = application.OrderShipmentLine
+	OrderPurchases    = application.OrderPurchases
+	OrderPurchaseLine = application.OrderPurchaseLine
 )
 
 // TRDOrders is STL's port to TRD on TRD's api: OrderSnapshotLookups (OrderCommercialSnapshot v1,

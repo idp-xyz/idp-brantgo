@@ -39,10 +39,12 @@ func (t TRD) ResolveOrders(ctx context.Context, ids []string) (map[string]applic
 func orderOf(f trdapi.OrderSnapshotFact) application.Order {
 	o := application.Order{Binding: application.OrderBinding{OrderID: f.Binding.OrderID, OrderRevision: f.Binding.OrderRevision,
 		OrderHash: f.Binding.OrderHash}, Status: f.Status, Code: f.Code, CustomerID: f.CustomerRef.PartyID,
-		Currency: application.CurrencyRef{ID: f.CurrencyRef.ID, Revision: f.CurrencyRef.Revision}, CreditPortionMinor: f.CreditPortionMinor}
+		Currency: application.CurrencyRef{ID: f.CurrencyRef.ID, Revision: f.CurrencyRef.Revision}, CreditPortionMinor: f.CreditPortionMinor,
+		Ended: f.Ended, NetMinor: f.NetMinor}
 	o.Stages = stagesOf(f.Stages)
 	if a := f.AnalysisFX; a.OrderCurrency != "" {
-		o.Analysis = &application.OrderAnalysis{OrderCurrency: a.OrderCurrency, Currency: a.ComparisonCurrencyRef.ID, Rate: a.Rate}
+		o.Analysis = &application.OrderAnalysis{OrderCurrency: a.OrderCurrency, Currency: a.ComparisonCurrencyRef.ID, Rate: a.Rate,
+			CurrencyRevision: a.ComparisonCurrencyRef.Revision}
 	}
 	for _, p := range f.Proposed {
 		if p.Code != "" {

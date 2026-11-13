@@ -6,8 +6,10 @@ import (
 
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/charge"
 	cc "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/customercredit"
 	fr "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/fundrecord"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/orderresult"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/settlement"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -18,6 +20,11 @@ func TestAPICodesAreTheRulesCodes(t *testing.T) {
 	rules := maps.Clone(cc.Codes)
 	for c, cat := range settlement.Codes {
 		rules[c] = cat
+	}
+	for _, codes := range []map[string]kernel.Category{charge.Codes, orderresult.Codes} {
+		for c, cat := range codes {
+			rules[c] = cat
+		}
 	}
 	for c, cat := range fr.Codes {
 		if have, ok := rules[c]; ok && have != cat {

@@ -75,14 +75,19 @@ type Order struct {
 	CreditPortionMinor string
 	Proposed           []ProposedRevision
 	Analysis           *OrderAnalysis // TRD AnalysisFX (C8: the basis of a cross-currency application's FX difference)
+	// C9 (order result): how TRD ended the order (order.close, order.close_remainder, order.cancel, ...; "" while
+	// it is a draft or active) and the current revision's net sales in minor units of the order currency.
+	Ended    string
+	NetMinor string
 }
 
 // OrderAnalysis is the order's analysis rate (TRD AnalysisFX, baseline 4.5): one unit of OrderCurrency is Rate
 // units of Currency, the pricing policy's comparison currency ("" Rate: the same currency, exactly 1).
 type OrderAnalysis struct {
-	OrderCurrency string
-	Currency      string
-	Rate          string
+	OrderCurrency    string
+	Currency         string
+	Rate             string
+	CurrencyRevision int64 // the POL currency revision of Currency (C9: its minor units)
 }
 
 // ProposedRevision is a revision an amendment of the order proposes: the order at the revision

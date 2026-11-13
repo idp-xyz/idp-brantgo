@@ -83,6 +83,18 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandConfirmCredit, api.CommandConfirmCredit),
 		authorization.HumanOnly(api.CommandReverseSettlement, api.CommandReverseSettlement),
 		{Command: api.CommandGetCreditNote, Permission: api.PermissionRead, ActorKinds: anyActor},
+		// Charges and order results (C9): the credit officer records and allocates charges, by a person or AI (role
+		// template credit_officer; command catalog charge.allocate "人工或 AI"); treasury confirms charges and closes
+		// and reopens results — humanOnlyCommands charge.confirm, order_result.close, order_result.reopen — and
+		// reviews them, by a person or AI (SM-STL-ORDER-RESULT review "human|ai").
+		{Command: api.CommandRecordCharge, Permission: api.CommandRecordCharge, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandConfirmCharge, api.CommandConfirmCharge),
+		{Command: api.CommandAllocateCharge, Permission: api.CommandAllocateCharge, ActorKinds: humanOrAI},
+		{Command: api.CommandReviewOrderResult, Permission: api.CommandReviewOrderResult, ActorKinds: humanOrAI},
+		authorization.HumanOnly(api.CommandCloseOrderResult, api.CommandCloseOrderResult),
+		authorization.HumanOnly(api.CommandReopenOrderResult, api.CommandReopenOrderResult),
+		{Command: api.CommandGetCharge, Permission: api.PermissionRead, ActorKinds: anyActor},
+		{Command: api.CommandGetOrderResult, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -127,6 +139,12 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	case api.CommandRequestCreditNote, api.CommandConfirmCredit:
 		n, err := postgres.LoadCreditNote(ctx, exec, scope(ctx), id)
 		return err == nil && n != nil && d.Sees(n.OwnerActor, n.OwnerTeam), err
+	case api.CommandRecordCharge, api.CommandConfirmCharge, api.CommandAllocateCharge:
+		c, err := postgres.LoadCharge(ctx, exec, scope(ctx), id, false)
+		return err == nil && c != nil && d.Sees(c.OwnerActor, c.OwnerTeam), err
+	case api.CommandReviewOrderResult, api.CommandCloseOrderResult, api.CommandReopenOrderResult:
+		r, err := postgres.LoadResult(ctx, exec, scope(ctx), id, postgres.NoLock)
+		return err == nil && r != nil && d.Sees(r.OwnerActor, r.OwnerTeam), err
 	}
 	sc := scope(ctx)
 	var subjects []string
@@ -278,6 +296,24 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.ReverseSettlement:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandReverseSettlement, key, c
+	case api.RecordCharge:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandRecordCharge, key, c
+	case api.ConfirmCharge:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandConfirmCharge, key, c
+	case api.AllocateCharge:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandAllocateCharge, key, c
+	case api.ReviewOrderResult:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReviewOrderResult, key, c
+	case api.CloseOrderResult:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandCloseOrderResult, key, c
+	case api.ReopenOrderResult:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandReopenOrderResult, key, c
 	}
 	return "", "", nil
 }

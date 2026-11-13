@@ -351,6 +351,18 @@ GRANT SELECT, INSERT ON brant_stl.credit_note, brant_stl.settlement_reversal TO 
 GRANT UPDATE (status, version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason, updated_at)
     ON brant_stl.credit_note TO brant_app;
 
+-- STL charges and order results (S5-17): a charge moves estimated → pending → confirmed and names its newest
+-- allocation (trigger: what is fixed when recorded never changes); beneficiaries, allocations and their lines are
+-- only inserted; an order result moves along SM-STL-ORDER-RESULT (trigger) and its reviews, closing snapshots and
+-- reopenings are only inserted (a snapshot never changes, MD-49); nothing is deleted. FOR UPDATE on charges and
+-- FOR UPDATE / FOR SHARE on order results need the column grants.
+GRANT SELECT, INSERT ON brant_stl.charge, brant_stl.charge_beneficiary, brant_stl.charge_allocation, brant_stl.charge_allocation_line,
+    brant_stl.order_result, brant_stl.order_result_review, brant_stl.order_result_snapshot, brant_stl.order_result_reopening TO brant_app;
+GRANT UPDATE (status, version, source_kind, source_party_id, source_reference, estimate_reference, amount_minor, occurred_on, analysis_on,
+    basis, evidence_ids, billed_by_kind, billed_by_id, bill_epoch, billed_at, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at,
+    confirm_evidence_ids, confirm_reason, allocation_seq, updated_at) ON brant_stl.charge TO brant_app;
+GRANT UPDATE (status, version, updated_at) ON brant_stl.order_result TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on

@@ -34,6 +34,10 @@ const (
 
 	// Credit notes and settlement reversal (C8).
 	CodeSettlementHasApplications = "SETTLEMENT_HAS_APPLICATIONS" // 409: something stands applied on the statement (unapply first)
+
+	// Charges and order results (C9).
+	CodeAllocationInvalid     = "ALLOCATION_INVALID"       // 422: a weight negative, or the weights sum to zero (STL-INV-010)
+	CodeOrderResultNotSettled = "ORDER_RESULT_NOT_SETTLED" // 409: a close condition does not hold (STL-INV-011)
 )
 
 var codes = map[string]kernel.Category{
@@ -54,6 +58,8 @@ var codes = map[string]kernel.Category{
 	CodeCommercialReleaseBlocked:    kernel.CategoryConflict,
 	CodeSettlementSourceDuplicate:   kernel.CategoryConflict,
 	CodeSettlementHasApplications:   kernel.CategoryConflict,
+	CodeAllocationInvalid:           kernel.CategoryInvalid,
+	CodeOrderResultNotSettled:       kernel.CategoryConflict,
 }
 
 // Category returns the category of a code STL declares.
