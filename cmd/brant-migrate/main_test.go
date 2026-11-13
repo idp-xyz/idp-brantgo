@@ -98,7 +98,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000010_trd_cost_source_holds",
 		"brant:000001_pur_purchase_drafts", "brant:000002_pur_purchase_commitments", "brant:000003_pur_supplier_deliveries",
 		"brant:000004_pur_commitment_changes", "brant:000005_pur_allocation_reviews",
-		"brant:000001_qlt_quality",
+		"brant:000001_qlt_quality", "brant:000002_qlt_rerelease_concession",
 		"brant:000001_stl_customer_credit", "brant:000002_stl_funds_applications", "brant:000003_stl_payment_plan_review",
 		"brant:000004_stl_settlement_statements", "brant:000005_stl_credit_notes_reversal", "brant:000006_stl_charges_order_results",
 		"brant:000007_stl_opening_balances",
@@ -107,7 +107,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000007_cnx_refund_methods",
 		"brant:000001_ful_shipments", "brant:000002_ful_milestones_export_lots", "brant:000003_ful_commercial_release",
 		"brant:000004_ful_booking_documents", "brant:000005_ful_insurance", "brant:000006_ful_shipment_reviews",
-		"brant:000007_ful_documents_release_current_revision",
+		"brant:000007_ful_documents_release_current_revision", "brant:000008_ful_release_consumption",
 		"brant:000001_tsk_tasks", "brant:000002_tsk_action_executions", "brant:000003_tsk_goal_verifications",
 		"brant:000001_ai_delegations",
 	}

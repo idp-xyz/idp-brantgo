@@ -158,20 +158,25 @@ func releaseView(r *release.Release, now time.Time) api.ReleaseView {
 	at := kernel.Instant(now)
 	v := api.ReleaseView{ReleaseID: r.ID, Status: r.Status, State: r.State(at), RowVersion: r.RowVersion, Subject: bindingView(r.Subject),
 		Quantity: postgres.Text(r.Quantity), ValidFrom: r.ValidFrom, ValidUntil: r.ValidUntil, Conforming: postgres.Text(r.Conforming),
-		ReleasedBefore: postgres.Text(r.ReleasedBefore), InspectionIDs: slices.Clone(r.InspectionIDs), EvidenceIDs: slices.Clone(r.Evidence),
+		Conceded: postgres.Text(r.Conceded), ReleasedBefore: postgres.Text(r.ReleasedBefore), Concession: r.Concession(),
+		ConcessionQuantity: postgres.Text(r.ConcessionQuantity), InspectionIDs: slices.Clone(r.InspectionIDs), EvidenceIDs: slices.Clone(r.Evidence),
 		GrantedBy: r.Granted.By, GrantedAt: r.Granted.At, AuthorityEpoch: r.Granted.Epoch, CheckedAt: at}
 	if x := r.Revocation; x != nil {
 		v.Revocation = &api.RevocationView{Reason: x.Reason, EvidenceIDs: slices.Clone(x.Evidence), RevokedBy: x.Revoked.By,
 			RevokedAt: x.Revoked.At, AuthorityEpoch: x.Revoked.Epoch}
+		if x.Shipped != nil {
+			v.Revocation.ShippedQuantity, v.Revocation.FrozenQuantity = postgres.Text(*x.Shipped), postgres.Text(r.Frozen())
+		}
 	}
 	return v
 }
 
 // GetSubject returns a subject's quality standing now, audited as inspection_subject.get
-// (qlt.read): what its valid inspections cover and find conforming at PUR's current specification
-// of the subject, what was released at it (revoked releases included) and what may still be
-// released; records the caller does not see count without their IDs. NOT_FOUND when PUR does not
-// show the caller the subject.
+// (qlt.read): what its valid inspections cover, find conforming and accept by approved concession at
+// PUR's current specification of the subject, what its releases at it count (a revoked release in
+// full while its frozen quantity awaits a re-inspection, then what FUL shipped on it; S5R-D18), the
+// frozen quantity still awaiting one, and what may still be released; records the caller does not
+// see count without their IDs. NOT_FOUND when PUR does not show the caller the subject.
 func (s Service) GetSubject(ctx context.Context, ref api.SubjectRef) (api.SubjectView, error) {
 	if err := ref.Validate("/subject"); err != nil {
 		if auditErr := s.Ledger.AuditRejected(ctx, api.CommandGetSubject, ref.ID, kernel.CodeSchemaInvalid); auditErr != nil {
@@ -213,23 +218,21 @@ func subjectView(subject inspection.Subject, is []*inspection.Inspection, rs []*
 	at := kernel.Instant(now)
 	spec := subject.Spec()
 	covered, conforming, _ := inspection.Totals(is, spec)
-	released := release.Released(rs, spec)
-	releasable := conforming.Sub(released)
-	if releasable.Sign() < 0 {
-		releasable = kernel.Decimal{}
-	}
 	v := api.SubjectView{Subject: bindingView(subject), Inspected: postgres.Text(covered), Conforming: postgres.Text(conforming),
-		Released: postgres.Text(released), Releasable: postgres.Text(releasable), Inspections: []api.SubjectInspection{},
-		Releases: []api.SubjectRelease{}, CheckedAt: at}
+		Conceded: postgres.Text(inspection.Concessions(is, spec)), Released: postgres.Text(release.Released(rs, is, spec)),
+		Frozen: postgres.Text(release.Frozen(rs, is, spec)), Releasable: postgres.Text(release.Releasable(is, rs, spec)),
+		Inspections: []api.SubjectInspection{}, Releases: []api.SubjectRelease{}, CheckedAt: at}
 	for _, i := range is {
-		e := api.SubjectInspection{Status: i.Status, Inspected: postgres.Text(i.Inspected), Conforming: postgres.Text(i.Conforming), Counted: i.Counts(spec)}
+		e := api.SubjectInspection{Status: i.Status, Inspected: postgres.Text(i.Inspected), Conforming: postgres.Text(i.Conforming),
+			Conceded: postgres.Text(i.Conceded()), Counted: i.Counts(spec)}
 		if d.Sees(i.OwnerActor, i.OwnerTeam) {
 			e.InspectionID = i.ID
 		}
 		v.Inspections = append(v.Inspections, e)
 	}
 	for _, r := range rs {
-		e := api.SubjectRelease{Status: r.Status, State: r.State(at), Quantity: postgres.Text(r.Quantity), Counted: r.Counts(spec)}
+		e := api.SubjectRelease{Status: r.Status, State: r.State(at), Quantity: postgres.Text(r.Quantity), Counted: r.Counts(spec),
+			CountedQuantity: postgres.Text(r.Counted(is)), Frozen: postgres.Text(r.Frozen()), Thawed: r.Thawed(is), Concession: r.Concession()}
 		if d.Sees(r.OwnerActor, r.OwnerTeam) {
 			e.ReleaseID = r.ID
 		}
@@ -259,7 +262,8 @@ func (s Service) ResolveReleases(ctx context.Context, ids []string, at time.Time
 			out[ref] = api.ResolvedRelease{Ref: ref, Status: r.Status, State: r.State(at), RowVersion: r.RowVersion,
 				Scope: api.ReleaseScope{Subject: apiRef(sub.Ref), SupplierID: sub.SupplierID, OrderID: sub.OrderID, OrderLineID: sub.OrderLineID,
 					SkuID: sub.SkuID, SpecRevision: sub.SpecRevision, UnitID: sub.UnitID, UnitRevision: sub.UnitRevision},
-				Quantity: postgres.Text(r.Quantity), ValidFrom: r.ValidFrom, ValidUntil: r.ValidUntil, Code: r.Code(at)}
+				Quantity: postgres.Text(r.Quantity), ValidFrom: r.ValidFrom, ValidUntil: r.ValidUntil, Code: r.Code(at), Concession: r.Concession(),
+				ConcessionQuantity: postgres.Text(r.ConcessionQuantity)}
 		}
 		return nil
 	})

@@ -294,15 +294,16 @@ GRANT UPDATE (disposition, disposition_draft_id, disposition_change_id, disposit
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a
 -- release is inserted granted on the quantities its subject's rows give (trigger) and only revoked,
--- once; nothing is deleted; the ledger only grows. FOR UPDATE on inspections and releases needs the
--- column grants. FUL's transactions execute QualityReleaseGuard v1.
+-- once, with what FUL shipped on it (S5R-D18); nothing is deleted; the ledger only grows. FOR UPDATE
+-- on inspections and releases needs the column grants. FUL's transactions execute
+-- QualityReleaseGuard v1; QLT's revocation executes FUL's ReleaseConsumption v1, granted below.
 GRANT USAGE ON SCHEMA brant_qlt TO brant_app;
 GRANT SELECT, INSERT ON brant_qlt.inspection, brant_qlt.disposition_item, brant_qlt.quality_release, brant_qlt.action_result,
     brant_qlt.audit_event TO brant_app;
 GRANT UPDATE (status, row_version, disposed_by_kind, disposed_by_id, dispose_epoch, disposed_at, disposition_reason,
     disposition_evidence_ids, superseded_by_inspection_id, superseded_at) ON brant_qlt.inspection TO brant_app;
-GRANT UPDATE (status, row_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence_ids)
-    ON brant_qlt.quality_release TO brant_app;
+GRANT UPDATE (status, row_version, revoked_by_kind, revoked_by_id, revoke_epoch, revoked_at, revoke_reason, revoke_evidence_ids,
+    shipped_quantity, frozen_quantity) ON brant_qlt.quality_release TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_qlt.guard_quality_release_v1(text, timestamptz) TO brant_app;
 
 -- STL customer credit (S5-12a): a credit root moves its version and its count of limit versions by
@@ -451,6 +452,8 @@ GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed
               guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id, cancel_epoch, cancelled_at,
               cancel_reason) ON brant_ful.shipment TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;
+-- QLT's quality_release.revoke executes ReleaseConsumption v1 (R79, S5R-D18) inside its own transactions.
+GRANT EXECUTE ON FUNCTION brant_ful.release_consumption_v1(text) TO brant_app;
 
 -- FUL milestones and export lots (S5-03b): a shipment line's price is only inserted with its
 -- shipment; a milestone plan moves only its version, revision, counts and last revision (trigger),

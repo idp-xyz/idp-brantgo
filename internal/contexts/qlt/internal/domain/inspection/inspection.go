@@ -1,14 +1,17 @@
 // Package inspection holds QLT's Inspection aggregate (tactical model QLT-AGG-Inspection with its
-// Disposition, SM-QLT-INSPECTION, QLT-INV-001; F-06, BT08, baseline 7.5): the result of an
-// inspection of a subject, judged on what PUR, EVD and PTY said of its references before QLT's
-// transaction and on the subject's other inspections, locked in it.
+// Disposition, SM-QLT-INSPECTION, QLT-INV-001; F-06, BT08, baseline 7.5; S5R-D18, S5R-D36): the
+// result of an inspection of a subject, judged on what PUR, EVD and PTY said of its references before
+// QLT's transaction and on the subject's other inspections, locked in it.
 //
 // An inspection is recorded once and never edited. Its result is evidence of conformity, not a
 // release (F-06): only quality_release.grant releases. A re-inspection or a correction is a new
 // inspection that supersedes the one it cites and restates its result, so the conforming quantity
 // of a subject is that of its valid (not superseded) inspections and never grows by inspecting the
-// same goods again (BT08); the valid inspections of a subject never cover more than its quantity.
-// A disposition decides what happens to the whole nonconforming quantity; it releases nothing.
+// same goods again (BT08); the valid inspections of a subject never cover more than its quantity
+// (INSPECTION_QUANTITY_EXCEEDED). A disposition decides what happens to the whole nonconforming
+// quantity; it releases nothing itself, but the quantity it accepts by concession — on the
+// customer's consent, which it cites as evidence — may be released next to the conforming quantity
+// while the inspection is valid (S5R-D18, UL QLT-Disposition).
 package inspection
 
 import (
@@ -30,7 +33,6 @@ const (
 const (
 	InspectorInternal = "internal"
 	InspectorAgency   = "external_agency"
-	ServiceInspection = "inspection" // PTY's service role of an inspection agency
 
 	SamplingFull   = "full"
 	SamplingSample = "sample"
@@ -45,12 +47,16 @@ const (
 const (
 	CodeReferenceStale      = "REFERENCE_STALE"
 	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT"
+	// CodeInspectionQuantityExceeded: the subject's valid inspections would cover more than its
+	// quantity; a re-inspection supersedes the inspection of the same goods (error catalog, S5R).
+	CodeInspectionQuantityExceeded = "INSPECTION_QUANTITY_EXCEEDED"
 )
 
 // Codes are the codes of this package and their categories (error catalog V0.1).
 var Codes = map[string]kernel.Category{
-	CodeReferenceStale:      kernel.CategoryConflict,
-	CodeBusinessKeyConflict: kernel.CategoryConflict,
+	CodeReferenceStale:             kernel.CategoryConflict,
+	CodeBusinessKeyConflict:        kernel.CategoryConflict,
+	CodeInspectionQuantityExceeded: kernel.CategoryInvalid,
 }
 
 // Fail returns the rejection of code at path: a shared kernel code or one of codes.
@@ -181,11 +187,12 @@ func (i *Inspection) Valid() bool { return i.Status != StatusSuperseded }
 // Counts reports whether the result counts for a subject at spec.
 func (i *Inspection) Counts(spec Spec) bool { return i.Valid() && i.Subject.Spec() == spec }
 
-// Agency is PTY's answer for the cited service role (ServiceRoleRef v1): its role and Check, which
-// passes on PTY's verdict at a path.
+// Agency is PTY's answer for the cited service role (ServiceRoleRef v1, R73) through QLT's port:
+// whether the role is an inspection agency's (S5R-D36: inspection_agency, verified, no route
+// required) and Check, which passes on PTY's verdict on it at a path.
 type Agency struct {
-	Role  string
-	Check func(path string) error
+	InspectionAgency bool
+	Check            func(path string) error
 }
 
 // Request is an inspection.record as the rules judge it; the api checked its structure.
@@ -229,9 +236,9 @@ type Inputs struct {
 // inspector); an inspection in the future (INVALID_KNOWN_VALUE); a superseded inspection that is not
 // one of the subject's the recorder sees (REFERENCE_INVALID) or no longer valid (INVALID_STATE); an
 // inspected quantity that would make the subject's valid inspections cover more than its quantity
-// (INVALID_KNOWN_VALUE: inspect again by superseding); an agency PTY does not show or whose role is
-// not inspection (REFERENCE_INVALID) or that is not current (REFERENCE_STALE); a standard, evidence
-// or report the recorder does not read (REFERENCE_INVALID).
+// (INSPECTION_QUANTITY_EXCEEDED: inspect again by superseding); an agency PTY does not show or whose
+// role is not an inspection agency's (REFERENCE_INVALID) or that is not current (REFERENCE_STALE); a
+// standard, evidence or report the recorder does not read (REFERENCE_INVALID).
 func Record(req Request, in Inputs) (*Inspection, *Inspection, error) {
 	s := in.Subject
 	switch {
@@ -263,7 +270,7 @@ func Record(req Request, in Inputs) (*Inspection, *Inspection, error) {
 		}
 	}
 	if covered.Cmp(s.Quantity) > 0 {
-		return nil, nil, fail(kernel.CodeInvalidKnownValue, "/args/inspected_quantity",
+		return nil, nil, fail(CodeInspectionQuantityExceeded, "/args/inspected_quantity",
 			"The subject's valid inspections would cover more than its quantity; supersede the inspection of these goods instead")
 	}
 	inspector := Inspector{Kind: req.InspectorKind}
@@ -272,7 +279,7 @@ func Record(req Request, in Inputs) (*Inspection, *Inspection, error) {
 		inspector.ActorID = in.Recorder.ID
 	case InspectorAgency:
 		a := in.Agency
-		if a == nil || a.Role != ServiceInspection || req.Agency == nil {
+		if a == nil || !a.InspectionAgency || req.Agency == nil {
 			return nil, nil, fail(kernel.CodeReferenceInvalid, "/args/inspector/agency", "No inspection agency of PTY")
 		}
 		if err := a.Check("/args/inspector/agency"); err != nil {
@@ -314,7 +321,9 @@ func (i *Inspection) Answer(requestHash string, recorder kernel.ActorRef) error 
 // Decide disposes the whole nonconforming quantity of i (disposition.decide). It refuses another
 // version (VERSION_CONFLICT), an inspection that is superseded or disposed already, or has no
 // nonconforming quantity (INVALID_STATE), items that do not add up to the nonconforming quantity
-// (INVALID_KNOWN_VALUE) and evidence the decider does not read (REFERENCE_INVALID).
+// (INVALID_KNOWN_VALUE), a concession that cites no evidence of the customer's consent
+// (SCHEMA_INVALID at /args/evidence_ids, S5R-D18) and evidence the decider does not read
+// (REFERENCE_INVALID).
 func (i *Inspection) Decide(expected int64, items []Item, reason string, evidence []string, sources map[string]string, act Act) error {
 	switch {
 	case i.RowVersion != expected:
@@ -331,6 +340,9 @@ func (i *Inspection) Decide(expected int64, items []Item, reason string, evidenc
 	if !sum.Equal(i.Nonconforming) {
 		return fail(kernel.CodeInvalidKnownValue, "/args/items", "The items must dispose exactly the nonconforming quantity")
 	}
+	if ConsentRequired(items) && len(evidence) == 0 {
+		return fail(kernel.CodeSchemaInvalid, "/args/evidence_ids", ConsentReason)
+	}
 	if err := Readable(evidence, sources, "/args/evidence_ids"); err != nil {
 		return err
 	}
@@ -338,6 +350,71 @@ func (i *Inspection) Decide(expected int64, items []Item, reason string, evidenc
 	i.Status, i.RowVersion = StatusDisposed, i.RowVersion+1
 	i.Disposition = &Disposition{Items: slices.Clone(items), Reason: reason, Evidence: slices.Clone(evidence), Decided: act}
 	return nil
+}
+
+// ConsentReason is the reason of the refusal of a concession without evidence (S5R-D18).
+const ConsentReason = "A concession cites the customer's consent as evidence"
+
+// ConsentRequired reports whether a disposition of items accepts anything by concession, which must
+// cite the customer's consent as evidence (S5R-D18, UL QLT-Disposition).
+func ConsentRequired(items []Item) bool {
+	return slices.ContainsFunc(items, func(it Item) bool { return it.Action == ActionConcession })
+}
+
+// Conceded returns the quantity i's disposition accepts by concession: zero for an inspection not
+// disposed or disposed otherwise.
+func (i *Inspection) Conceded() kernel.Decimal {
+	var sum kernel.Decimal
+	if i.Disposition != nil {
+		for _, it := range i.Disposition.Items {
+			if it.Action == ActionConcession {
+				sum = sum.Add(it.Quantity)
+			}
+		}
+	}
+	return sum
+}
+
+// Concessions returns the approved concession quantity of a subject at spec: what the dispositions
+// of its valid inspections at spec accept by concession (QLT-INV-001, S5R-D18). A superseded
+// inspection's concession no longer counts: its re-inspection restates the result.
+func Concessions(inspections []*Inspection, spec Spec) kernel.Decimal {
+	var sum kernel.Decimal
+	for _, i := range inspections {
+		if i.Counts(spec) {
+			sum = sum.Add(i.Conceded())
+		}
+	}
+	return sum
+}
+
+// Reinspected reports whether every inspection among ids has been inspected again since instant at
+// (S5R-D18, QLT-INV-002 "冻结量须复检后才能再放行"): it is superseded, and the inspection that is
+// valid now at the end of its chain of supersessions was recorded at or after at. inspections are a
+// subject's inspections, superseded ones included; an ID among ids that is not one of them is not
+// reinspected, and neither is an empty list (fail closed).
+func Reinspected(inspections []*Inspection, ids []string, at time.Time) bool {
+	if len(ids) == 0 {
+		return false
+	}
+	byID := make(map[string]*Inspection, len(inspections))
+	for _, i := range inspections {
+		byID[i.ID] = i
+	}
+	at = kernel.Instant(at)
+	for _, id := range ids {
+		i, ok := byID[id]
+		if !ok || i.Valid() {
+			return false
+		}
+		for n := 0; ok && !i.Valid() && n <= len(inspections); n++ {
+			i, ok = byID[i.SupersededBy]
+		}
+		if !ok || !i.Valid() || i.Recorded.At.Before(at) {
+			return false
+		}
+	}
+	return true
 }
 
 // Readable refuses the first of ids, at path, that the actor does not read in EVD. A missing source

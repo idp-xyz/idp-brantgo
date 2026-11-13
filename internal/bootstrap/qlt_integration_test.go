@@ -29,7 +29,9 @@ import (
 // PUR's InspectionSubject v1 (R24) is planned for S5 unit A4 and not published yet, so QLT runs here
 // on an in-memory implementation of its Subjects port that answers purchase commitment lines as
 // PUR will; the composed process (bootstrap.Contexts) wires qlt.PURSubjects over PUR. EVD (R72) and PTY
-// (R73) are the real contexts.
+// (R73, through qlt.PTYAgencies) are the real contexts. FUL's ReleaseConsumption v1 (R79) reads the
+// throwaway shipments of the guard tests (shipmentConsumption); the real function is exercised with
+// FUL in qlt_rerelease_integration_test.go.
 
 // fakeSubjects answers QLT's port to PUR from memory.
 type fakeSubjects struct {
@@ -61,6 +63,36 @@ func (f *fakeSubjects) ResolveSubjects(_ context.Context, refs []qltapi.SubjectR
 	return out, nil
 }
 
+// shipmentConsumption is FUL's ReleaseConsumption v1 over the throwaway shipments of the guard tests
+// (qlt_guard_integration_test.go): what their confirmed shipments shipped under a release, read with
+// QLT's executor inside the revocation, without a lock. Before a table is set nothing shipped.
+type shipmentConsumption struct {
+	mu    sync.Mutex
+	table string
+}
+
+func (c *shipmentConsumption) read(table string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.table = table
+}
+
+func (c *shipmentConsumption) consumed(ctx context.Context, exec bentopg.Executor, releaseID string) ([]qlt.Consumed, error) {
+	c.mu.Lock()
+	table := c.table
+	c.mu.Unlock()
+	if table == "" {
+		return nil, nil
+	}
+	var shipped string
+	var n int64
+	if err := exec.QueryRow(ctx, "SELECT trim_scale(coalesce(sum(quantity), 0))::text, count(*) FROM "+table+
+		" WHERE release_id = $1 AND status = 'confirmed'", releaseID).Scan(&shipped, &n); err != nil || n == 0 {
+		return nil, err
+	}
+	return []qlt.Consumed{{UnitID: "pcs", UnitRevision: 1, Quantity: shipped, Shipments: n}}, nil
+}
+
 func hex64(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
@@ -78,6 +110,7 @@ type qltWorld struct {
 	*world
 	q        *qlt.Module
 	subjects *fakeSubjects
+	shipped  *shipmentConsumption
 	editor   context.Context // every permission, company data scope (polActors)
 	qc       context.Context // our quality inspector: role template quality_inspector, company data scope
 	agent    context.Context // an AI agent holding the QLT permissions and evd.read
@@ -91,12 +124,13 @@ func newQltWorld(t *testing.T) *qltWorld {
 	t.Helper()
 	w := newWorld(t)
 	editor, _ := w.polActors()
-	subjects := &fakeSubjects{lines: map[qltapi.SubjectRef]qlt.Subject{}}
+	subjects, shipped := &fakeSubjects{lines: map[qltapi.SubjectRef]qlt.Subject{}}, &shipmentConsumption{}
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
-	q, err := qlt.New(db, qlt.Upstream{Subjects: subjects, Sources: w.c.EVD, Parties: w.c.PTY})
+	q, err := qlt.New(db, qlt.Upstream{Subjects: subjects, Sources: w.c.EVD, Agencies: qlt.PTYAgencies(w.c.PTY), Consumption: shipped.consumed})
 	w.must(err)
-	x := &qltWorld{world: w, q: q, subjects: subjects, editor: editor, qc: w.assign("qc.1", "quality_inspector"), now: time.Now().UTC()}
+	x := &qltWorld{world: w, q: q, subjects: subjects, shipped: shipped, editor: editor, qc: w.assign("qc.1", "quality_inspector"),
+		now: time.Now().UTC()}
 	x.agent = w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: actorRef("ai", "agent.1"), DataScope: "company",
 		Permissions: []string{"inspection.record", "disposition.decide", "quality_release.grant", "quality_release.revoke", "qlt.read", "evd.read"}})
 	w.source(x.qc, "standard", "合成检验标准：AQL 2.5，一般检验水平 II")
@@ -283,8 +317,9 @@ func TestExternalAgencyReportAndReleaseByOurQC(t *testing.T) {
 		{"no such agency revision", x.qc, func(c *qltapi.RecordInspection) { c.Inspector.Agency.Revision = 2 }, kernel.CodeReferenceInvalid,
 			"/args/inspector/agency"},
 		{"no such subject", x.qc, func(c *qltapi.RecordInspection) { c.Subject.LineID = "L9" }, kernel.CodeReferenceInvalid, "/args/subject"},
+		// INSPECTION_QUANTITY_EXCEEDED (error catalog, S5R; adopted by R5) replaces INVALID_KNOWN_VALUE.
 		{"more than the subject", x.qc, func(c *qltapi.RecordInspection) { c.InspectedQuantity, c.ConformingQuantity = "51", "51" },
-			kernel.CodeInvalidKnownValue, "/args/inspected_quantity"},
+			qltapi.CodeInspectionQuantityExceeded, "/args/inspected_quantity"},
 	} {
 		cmd := x.inspection("insp.bad", line2, "50", "50", c.edit)
 		if _, err = x.q.RecordInspection(c.ctx, cmd); code(err) != c.code || path(err) != c.path {
@@ -382,7 +417,7 @@ func TestReinspectionNeverAddsBT08(t *testing.T) {
 	}
 
 	_, err = x.inspect(x.qc, "insp.extra", line, "20", "20", internal)
-	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/inspected_quantity" {
+	if code(err) != qltapi.CodeInspectionQuantityExceeded || path(err) != "/args/inspected_quantity" {
 		t.Fatalf("an extra inspection of the reworked 20: %s at %s", code(err), path(err))
 	}
 	r, err := x.inspect(x.qc, "insp.2", line, "120", "120", internal, supersedes("insp.1"))
@@ -443,6 +478,10 @@ func TestQLTRecordsAreImmutable(t *testing.T) {
 			spec_revision, unit_id, unit_revision, subject_quantity, quantity, conforming, released_before, inspection_ids, valid_from,
 			valid_until, evidence_ids, request_hash, owner_actor_id, owner_team_id, granted_by_kind, granted_by_id, grant_epoch, granted_at
 			FROM brant_qlt.quality_release WHERE release_id = 'rel.commitment.1'`,
+		// S5R-D18: a revocation records what FUL shipped; the concession quantity is the grant's.
+		`UPDATE brant_qlt.quality_release SET status = 'revoked', row_version = 2, revoked_by_kind = 'human', revoked_by_id = 'qc.1',
+			revoke_epoch = 1, revoked_at = now(), revoke_reason = 'x', revoke_evidence_ids = '{}' WHERE release_id = 'rel.commitment.1'`,
+		`UPDATE brant_qlt.quality_release SET concession_quantity = 1, conceded = 1 WHERE release_id = 'rel.commitment.1'`,
 	} {
 		// The application role holds no privilege for it, or the trigger refuses it; the schema owner
 		// is refused by the triggers.
@@ -452,6 +491,13 @@ func TestQLTRecordsAreImmutable(t *testing.T) {
 		if err := x.asOwner("company.A", sql); err == nil || !strings.Contains(err.Error(), "brant_qlt") {
 			t.Errorf("as the owner %s: %v", sql, err)
 		}
+	}
+	// The frozen quantity is the release's quantity less the shipped (QLT-INV-002, S5R-D18).
+	err := x.exec("company.A", `UPDATE brant_qlt.quality_release SET status = 'revoked', row_version = 2, revoked_by_kind = 'human',
+		revoked_by_id = 'qc.1', revoke_epoch = 1, revoked_at = now(), revoke_reason = 'x', revoke_evidence_ids = '{}', shipped_quantity = 20,
+		frozen_quantity = 99 WHERE release_id = 'rel.commitment.1'`)
+	if sqlCode(err) != "23514" {
+		t.Fatalf("a frozen quantity that is not the rest: %v", err)
 	}
 	if s := x.standing("commitment.1"); s.Conforming != "120" || s.Released != "120" {
 		t.Fatalf("after the refused edits %+v", s)
@@ -502,7 +548,7 @@ func TestSubjectCommandsSerialize(t *testing.T) {
 			switch code(err) {
 			case "OK":
 				ok++
-			case kernel.CodeInvalidKnownValue, kernel.CodeVersionConflict:
+			case qltapi.CodeInspectionQuantityExceeded, kernel.CodeVersionConflict:
 			default:
 				t.Fatalf("round %d: inspection %v", round, err)
 			}
