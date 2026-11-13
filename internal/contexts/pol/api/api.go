@@ -44,6 +44,46 @@ const (
 	CommandIssueNumber     = "number.issue"
 )
 
+// Capabilities of publication by kind (S5R-D30, POL-INV-001; role templates capabilities
+// config.publish.<kind> and principle 5). config.publish admits the command; inside it POL requires
+// the publisher to hold the capability the kind names as well, so config.publish never lets a
+// holder publish a kind that is not its own (the lead's decision of 2026-11-13 on S5R-D30):
+//
+//   - credit_policy: config.publish.credit_policy (credit_manager, exclusively);
+//   - export_tax_policy: config.publish.export_tax_policy (tax_specialist);
+//   - screening_regulation: config.publish.screening_regulation (compliance, exclusively);
+//   - every other kind: config.retire, the capability of the configuration administrator, who
+//     publishes and retires the general configurations (role template administrator, "配置发布与退役",
+//     the only template that holds it).
+//
+// A tenant role that merges administrator with a specialist template publishes both. A publisher
+// without the capability gets PERMISSION_DENIED at /args/kind. Editing is unchanged: the last editor
+// may still be an administrator or costing, and the publisher is independent of it.
+const (
+	PermissionPublishCreditPolicy        = "config.publish.credit_policy"
+	PermissionPublishExportTaxPolicy     = "config.publish.export_tax_policy"
+	PermissionPublishScreeningRegulation = "config.publish.screening_regulation"
+	// PermissionAdministerConfigs is the capability of the general kinds: config.retire.
+	PermissionAdministerConfigs = CommandRetire
+)
+
+// PublishCapability returns the capability a publisher of kind holds besides config.publish
+// (S5R-D30); "" for a kind POL does not know.
+func PublishCapability(kind string) string {
+	switch kind {
+	case KindCreditPolicy:
+		return PermissionPublishCreditPolicy
+	case KindExportTaxPolicy:
+		return PermissionPublishExportTaxPolicy
+	case KindScreeningRegulation:
+		return PermissionPublishScreeningRegulation
+	}
+	if KindKnown(kind) {
+		return PermissionAdministerConfigs
+	}
+	return ""
+}
+
 // Statuses of a configuration revision (SM-POL-REVISION), of an issued number and of a snapshot.
 const (
 	StatusWorking    = "working"
@@ -558,6 +598,11 @@ type Queries interface {
 	// LookupUnitConversion returns the unit_conversion revision a calculation adopts for one SKU at
 	// one specification revision, in force with both its units (Python foundation.unit.convert).
 	LookupUnitConversion(ctx context.Context, q UnitQuery) (QuantityConversion, error)
+	// ConfigAt answers ConfigAt v1 (S5R-D23, POL-INV-007, Context Map R50): the revision of a
+	// configuration in force by its validity at an instant, whenever it was published (configat.go).
+	// It needs no permission beyond an active grant and takes no lock: published revisions never
+	// change. Inside your own transaction, ConfigAtSQL decides the same.
+	ConfigAt(ctx context.Context, q ConfigAtQuery) (RevisionAt, error)
 	// GetSnapshot returns a FoundationSnapshot, audited as snapshot.get.
 	GetSnapshot(ctx context.Context, snapshotID string) (SnapshotView, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)

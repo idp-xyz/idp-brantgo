@@ -37,9 +37,13 @@ const DemoNotice = "SYNTHETIC ONLY: all names, addresses, exchange rates and tax
 
 // demoPermissions are what the demo's editor and reviewer do. Python grants both "*"; Brant has no
 // wildcard, so both get exactly these, and independence comes from POL-INV-001, not from grants.
+// Publication needs the capability of the kind as well (S5R-D30, polapi.PublishCapability):
+// config.retire for the general kinds, and the credit and screening capabilities for the demo's
+// credit policy and screening regulation.
 var demoPermissions = []string{
 	"source.register", "evd.read", "sku.save_draft", "sku.confirm",
 	"config.save_draft", "config.publish", "pol.read", "foundation.snapshot", "number.issue",
+	polapi.PermissionAdministerConfigs, polapi.PermissionPublishCreditPolicy, polapi.PermissionPublishScreeningRegulation,
 }
 
 // DemoConfig configures FoundationDemo.

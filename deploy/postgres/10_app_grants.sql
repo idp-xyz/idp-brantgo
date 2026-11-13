@@ -57,6 +57,8 @@ GRANT EXECUTE ON FUNCTION brant_pty.party_screening_state(text, timestamptz, boo
 -- moves its version; a working revision is edited and published, a published one only superseded
 -- (trigger); a working revision's contacts are replaced whole (trigger).
 GRANT SELECT, INSERT, DELETE ON brant_pty.party_address, brant_pty.trading_profile_contact TO brant_app;
+-- S5R-D21: a working revision's permitted payers are replaced whole (trigger).
+GRANT SELECT, INSERT, DELETE ON brant_pty.trading_profile_payer TO brant_app;
 GRANT SELECT, INSERT ON brant_pty.party_revision_address, brant_pty.service_role, brant_pty.trading_profile,
     brant_pty.trading_profile_revision TO brant_app;
 GRANT UPDATE (root_version, last_revision, updated_at) ON brant_pty.trading_profile TO brant_app;
@@ -105,6 +107,8 @@ GRANT SELECT, INSERT ON brant_pol.issued_number, brant_pol.foundation_snapshot, 
     brant_pol.action_result, brant_pol.audit_event TO brant_app;
 -- ConfigGuard v1: downstream contexts call it in their own transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_pol.guard_config_in_force_v1(text, text, bigint, timestamptz) TO brant_app;
+-- ConfigAt v1 (S5R-D23): the revision valid at an instant, read without a lock in a downstream transaction.
+GRANT EXECUTE ON FUNCTION brant_pol.config_at_v1(text, text, timestamptz) TO brant_app;
 
 -- INQ: a draft's lines and sources are replaced whole; the ledger only grows.
 GRANT USAGE ON SCHEMA brant_inq TO brant_app;

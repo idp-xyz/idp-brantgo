@@ -160,6 +160,9 @@ func (s Service) Publish(ctx context.Context, cmd api.Publish) (api.Receipt, err
 		return err
 	}}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+		if err := s.mayPublish(ctx, exec, d, cmd.Kind); err != nil {
+			return action.Outcome{}, err
+		}
 		if err := config.Check(h.root, cmd.ExpectedVersion); err != nil {
 			return action.Outcome{}, err
 		}
@@ -199,6 +202,23 @@ func (s Service) Publish(ctx context.Context, cmd api.Publish) (api.Receipt, err
 	}
 	return s.run(ctx, action.Command{Name: api.CommandPublish, IdempotencyKey: cmd.IdempotencyKey, ObjectID: api.ObjectID(cmd.Kind, cmd.ConfigID),
 		Reason: cmd.Reason}, args, cmd.Validate(), &preparedConfig{h})
+}
+
+// mayPublish requires the publisher to hold the capability kind names besides config.publish, which
+// the ledger checked (S5R-D30, POL-INV-001; api.PublishCapability): config.publish never lets a
+// specialist publish another kind, and only a specialist publishes credit, export tax and screening
+// configuration. The grant is read in POL's transaction after the ledger's authority guard, which
+// holds it FOR SHARE until the command commits.
+func (s Service) mayPublish(ctx context.Context, exec bentopg.Executor, d authorization.Decision, kind string) error {
+	capability := api.PublishCapability(kind)
+	h, err := s.Ledger.Authorizer.Qualify(ctx, exec, d.Actor.ID)
+	if err != nil {
+		return err
+	}
+	if capability == "" || !h.Holds(capability) {
+		return kernel.Reject(kernel.CodePermissionDenied, "/args/kind", "Publishing "+kind+" needs "+capability)
+	}
+	return nil
 }
 
 // preparedConfig reads upstream contexts before POL's transaction (the ledger's Preparer).
