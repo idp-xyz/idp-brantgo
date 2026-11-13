@@ -30,6 +30,7 @@ const (
 	CodeNoActiveRevision             = "NO_ACTIVE_REVISION"              // the root has no active revision to replace
 	CodeApprovalRequired             = "APPROVAL_REQUIRED"               // no approval of the revision
 	CodeApprovalRevoked              = "APPROVAL_REVOKED"                // the approval was revoked
+	CodeCostSourceDenied             = "COST_SOURCE_DENIED"              // a risk hold pauses the revision: CST denied a source of its cost snapshot (WF-03)
 	CodeApprovalExpired              = "APPROVAL_EXPIRED"                // the approval lapsed, or would outlive the quote
 	CodeApprovalStale                = "APPROVAL_STALE"                  // 409: the approval's rules or its reviewer's qualification changed
 	CodeApprovalReferenceMismatch    = "APPROVAL_REFERENCE_MISMATCH"     // the approval or exception names another revision, target or margin fact
@@ -71,6 +72,7 @@ var codes = map[string]kernel.Category{
 	CodeNoActiveRevision:             kernel.CategoryInvalid,
 	CodeApprovalRequired:             kernel.CategoryInvalid,
 	CodeApprovalRevoked:              kernel.CategoryInvalid,
+	CodeCostSourceDenied:             kernel.CategoryInvalid,
 	CodeApprovalExpired:              kernel.CategoryInvalid,
 	CodeApprovalStale:                kernel.CategoryConflict,
 	CodeApprovalReferenceMismatch:    kernel.CategoryInvalid,

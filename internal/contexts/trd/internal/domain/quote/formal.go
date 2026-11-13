@@ -42,6 +42,9 @@ const SlotFullV1 = "full_v1"
 // Causes of a risk hold and the code a use of the held revision is refused with.
 const (
 	HoldApprovalRevoked = "approval_revoked"
+	// HoldCostSourceDenied: CST denied a source the active revision's cost snapshot rests on
+	// (WF-03, PL-07; costhold.go).
+	HoldCostSourceDenied = "cost_source_denied"
 )
 
 // Entry is one named value of commit evidence.
@@ -117,13 +120,15 @@ type Closure struct {
 	Fresh       bool
 }
 
-// Hold is a risk hold on a formal revision: its cause (approval_revoked: ApprovalID), the code a use
-// of the revision is refused with, who registered it, and the root version it was registered at.
+// Hold is a risk hold on a formal revision: its cause (approval_revoked: ApprovalID;
+// cost_source_denied: Denial), the code a use of the revision is refused with, who registered it,
+// and the root version it was registered at.
 type Hold struct {
-	ID          string // cause ":" approval ID
+	ID          string // cause ":" approval ID, or cause ":" CST attestation ID
 	Revision    int64
 	Cause       string
 	ApprovalID  string
+	Denial      *CostDenial // cost_source_denied: the denial and the snapshot of the revision it names
 	Code        string
 	Registered  Act
 	RootVersion int64

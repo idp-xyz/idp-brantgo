@@ -223,6 +223,9 @@ GRANT UPDATE (base_revision, base_hash, content, amendment_hash, status, version
 -- Order documents and their signed copies (S3-15, TRD-INV-020): only inserted, for the order's
 -- current revision (trigger).
 GRANT SELECT, INSERT ON brant_trd.sales_order_document, brant_trd.sales_order_document_signature TO brant_app;
+-- TRD 000010 (S4 B3): the risk records a denied cost source leaves on active orders are only inserted
+-- (trigger); its holds go to quote_risk_hold, granted above (WF-03, decision D-9).
+GRANT SELECT, INSERT ON brant_trd.sales_order_risk TO brant_app;
 
 -- PUR: a purchase draft is inserted prepared with its lines and only voided, once (trigger); its
 -- lines never change; a DemandAllocation root moves its balance, order revision and version by one
