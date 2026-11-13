@@ -207,8 +207,12 @@ func quoteView(q *quote.Quote) (api.QuoteView, error) {
 		v.Revisions = append(v.Revisions, rv)
 	}
 	for _, h := range q.Holds {
-		v.Holds = append(v.Holds, api.HoldView{HoldID: h.ID, BusinessRevision: h.Revision, Cause: h.Cause, ApprovalID: h.ApprovalID,
-			Code: h.Code, RegisteredBy: h.Registered.By, RegisteredAt: h.Registered.At, RootVersion: h.RootVersion})
+		hv := api.HoldView{HoldID: h.ID, BusinessRevision: h.Revision, Cause: h.Cause, ApprovalID: h.ApprovalID,
+			Code: h.Code, RegisteredBy: h.Registered.By, RegisteredAt: h.Registered.At, RootVersion: h.RootVersion}
+		if d := h.Denial; d != nil {
+			hv.CostSnapshotID, hv.CostSourceID, hv.AttestationID, hv.EventID = d.SnapshotID, d.SourceID, d.AttestationID, d.EventID
+		}
+		v.Holds = append(v.Holds, hv)
 	}
 	if c := q.Slot; c != nil {
 		v.Conversion = &api.ConversionView{Slot: c.Slot, BusinessRevision: c.Revision, BusinessHash: c.BusinessHash, OrderID: c.OrderID,

@@ -60,6 +60,7 @@ const (
 	CodeNoActiveRevision             = "NO_ACTIVE_REVISION"
 	CodeApprovalRequired             = "APPROVAL_REQUIRED"
 	CodeApprovalRevoked              = "APPROVAL_REVOKED"
+	CodeCostSourceDenied             = "COST_SOURCE_DENIED"
 	CodeApprovalExpired              = "APPROVAL_EXPIRED"
 	CodeApprovalStale                = "APPROVAL_STALE"
 	CodeApprovalReferenceMismatch    = "APPROVAL_REFERENCE_MISMATCH"
@@ -97,6 +98,7 @@ var Categories = map[string]kernel.Category{
 	CodeNoActiveRevision:             kernel.CategoryInvalid,
 	CodeApprovalRequired:             kernel.CategoryInvalid,
 	CodeApprovalRevoked:              kernel.CategoryInvalid,
+	CodeCostSourceDenied:             kernel.CategoryInvalid,
 	CodeApprovalExpired:              kernel.CategoryInvalid,
 	CodeApprovalStale:                kernel.CategoryConflict,
 	CodeApprovalReferenceMismatch:    kernel.CategoryInvalid,

@@ -500,7 +500,26 @@ type OrderView struct {
 	Amendments        []OrderAmendmentView
 	AmendmentCommits  []OrderCommitView
 	End               *OrderEndView
-	Documents         []OrderDocumentView // the S/C and PI of its revisions (orderdoc.go)
+	Documents         []OrderDocumentView   // the S/C and PI of its revisions (orderdoc.go)
+	RiskRecords       []OrderRiskRecordView // what denied cost sources left on the active order (WF-03, D-9)
+}
+
+// OrderRiskRecordView is a risk recorded on an active order after it became active: CST denied a
+// source of the cost snapshot its activation names (cause cost_source_denied, code
+// COST_SOURCE_DENIED). The contract formed, so the record blocks nothing (S4 decision D-9,
+// ADR-BR-013); OrderRevision and OrderRowVersion are the order as the record found it.
+type OrderRiskRecordView struct {
+	RiskID          string
+	Cause           string
+	Code            string
+	OrderRevision   int64
+	OrderRowVersion int64
+	CostSnapshotID  string
+	CostSourceID    string
+	AttestationID   string
+	EventID         string
+	RegisteredBy    kernel.ActorRef
+	RegisteredAt    time.Time
 }
 
 // OrderReviewView is an order review. DecisionState is its state as of the read: pending (open),

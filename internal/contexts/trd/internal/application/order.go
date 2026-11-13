@@ -438,6 +438,12 @@ func orderView(o *order.Order, now time.Time) api.OrderView {
 	}
 	amendmentViews(o, &v)
 	v.Documents = documentViews(o)
+	for _, r := range o.Risks {
+		d := r.Denial
+		v.RiskRecords = append(v.RiskRecords, api.OrderRiskRecordView{RiskID: r.ID, Cause: r.Cause, Code: r.Code, OrderRevision: r.OrderRevision,
+			OrderRowVersion: r.OrderRowVersion, CostSnapshotID: d.SnapshotID, CostSourceID: d.SourceID, AttestationID: d.AttestationID,
+			EventID: d.EventID, RegisteredBy: r.Registered.By, RegisteredAt: r.Registered.At})
+	}
 	return v
 }
 

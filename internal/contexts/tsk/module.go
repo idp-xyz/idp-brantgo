@@ -10,12 +10,14 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/api"
+	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/trd"
 	"go.idp.xyz/idp-brant/internal/contexts/tsk/internal/application"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 )
 
 // Module is TSK wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -69,4 +71,12 @@ func New(db *bentopg.DB, upstream Upstream) (*Module, error) {
 		DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 		Outbox: outbox, Clock: clock, ReplayRead: api.CommandGetTask, Visible: application.Visible,
 	}}}, nil
+}
+
+// Subscriptions are TSK's Inbox consumers on its own transaction owner (repository structure §07):
+// tsk.task_progress, which has TRD's integration events v1 resume the waiting tasks they concern and
+// start the verification of the tasks whose goal they make verifiable (Context Map R18; PL-04,
+// PL-06; SM-TSK-TASK task.resume, task.verify).
+func (m *Module) Subscriptions() []messaging.Subscription {
+	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

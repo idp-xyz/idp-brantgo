@@ -124,7 +124,7 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetOrderDocument, Permission: PermissionRead, ActorKinds: anyActor},
 		// The order's snapshot fact (S5 unit A2) as OrderSnapshotLookups gives it, read and audited.
 		{Command: CommandGetOrderSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
-	}, readRules()...)
+	}, append(readRules(), costRules()...)...)
 }
 
 // Upstream are the contexts TRD reads references from.
@@ -342,7 +342,7 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 		}
 		quoteID = a.QuoteID
 	default:
-		if slices.Contains(orderWrites, command) {
+		if slices.Contains(orderWrites, command) || command == CommandRecordOrderRisk {
 			id, err := postgres.OrderQuote(ctx, exec, scope(ctx), id)
 			if err != nil || id == "" {
 				return false, err

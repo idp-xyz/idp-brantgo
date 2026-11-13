@@ -78,8 +78,9 @@ func loadFormal(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, 
 			r.Closed = cl.part
 		}
 	}
-	rows, err = exec.Query(ctx, `SELECT hold_id, revision, cause, approval_id, code, registered_by_kind, registered_by_id, register_epoch,
-		registered_at, root_version FROM brant_trd.quote_risk_hold WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3
+	rows, err = exec.Query(ctx, `SELECT hold_id, revision, cause, coalesce(approval_id, ''), code, registered_by_kind, registered_by_id,
+		register_epoch, registered_at, root_version, cost_snapshot_id, cost_source_id, attestation_id, event_id
+		FROM brant_trd.quote_risk_hold WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3
 		ORDER BY root_version, hold_id`, t, c, q.ID)
 	if err != nil {
 		return err
@@ -87,9 +88,13 @@ func loadFormal(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, 
 	q.Holds, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (*quote.Hold, error) {
 		h := &quote.Hold{}
 		var kind string
+		var snapshot, source, attestation, event *string
 		err := row.Scan(&h.ID, &h.Revision, &h.Cause, &h.ApprovalID, &h.Code, &kind, &h.Registered.By.ID, &h.Registered.Epoch,
-			&h.Registered.At, &h.RootVersion)
+			&h.Registered.At, &h.RootVersion, &snapshot, &source, &attestation, &event)
 		h.Registered.By.Kind, h.Registered.At = kernel.ActorKind(kind), kernel.Instant(h.Registered.At)
+		if attestation != nil {
+			h.Denial = &quote.CostDenial{AttestationID: *attestation, SourceID: str(source), EventID: str(event), SnapshotID: str(snapshot)}
+		}
 		return h, err
 	})
 	if err != nil {
@@ -175,11 +180,20 @@ func writeClosure(ctx context.Context, exec bentopg.Executor, t, c, id string, r
 }
 
 func writeHold(ctx context.Context, exec bentopg.Executor, t, c, id string, h *quote.Hold) error {
+	// A revoked approval's hold names the approval; a denied cost source's the denial (TRD 000010).
+	var approval, snapshot, source, attestation, event any
+	if h.ApprovalID != "" {
+		approval = h.ApprovalID
+	}
+	if d := h.Denial; d != nil {
+		snapshot, source, attestation, event = d.SnapshotID, d.SourceID, d.AttestationID, d.EventID
+	}
 	_, err := exec.Exec(ctx, `INSERT INTO brant_trd.quote_risk_hold (tenant_id, company_id, quote_id, hold_id, revision, cause, approval_id,
-		code, registered_by_kind, registered_by_id, register_epoch, registered_at, root_version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-		t, c, id, h.ID, h.Revision, h.Cause, h.ApprovalID, h.Code, string(h.Registered.By.Kind), h.Registered.By.ID, h.Registered.Epoch,
-		h.Registered.At, h.RootVersion)
+		code, registered_by_kind, registered_by_id, register_epoch, registered_at, root_version, cost_snapshot_id, cost_source_id,
+		attestation_id, event_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		t, c, id, h.ID, h.Revision, h.Cause, approval, h.Code, string(h.Registered.By.Kind), h.Registered.By.ID, h.Registered.Epoch,
+		h.Registered.At, h.RootVersion, snapshot, source, attestation, event)
 	return err
 }
 

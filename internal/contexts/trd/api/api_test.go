@@ -236,7 +236,8 @@ func TestCodesHaveCatalogCategories(t *testing.T) {
 		CodeBusinessKeyConflict: kernel.CategoryConflict, CodeQuoteActive: kernel.CategoryConflict,
 		CodeQuoteNotCurrent: kernel.CategoryConflict, CodeNoActiveRevision: kernel.CategoryInvalid,
 		CodeApprovalRequired: kernel.CategoryInvalid, CodeApprovalRevoked: kernel.CategoryInvalid,
-		CodeApprovalExpired: kernel.CategoryInvalid, CodeApprovalStale: kernel.CategoryConflict,
+		CodeCostSourceDenied: kernel.CategoryInvalid,
+		CodeApprovalExpired:  kernel.CategoryInvalid, CodeApprovalStale: kernel.CategoryConflict,
 		CodeApprovalReferenceMismatch: kernel.CategoryInvalid, CodeIndependentReviewRequired: kernel.CategoryInvalid,
 		CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 		// Formalization and conversion: both 409.

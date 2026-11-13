@@ -27,6 +27,7 @@ import (
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/facts"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/guards"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
@@ -34,6 +35,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 )
 
 // Module is TRD wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -152,4 +154,12 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 			DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 			Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetQuote, Visible: application.Visible,
 		}}}, nil
+}
+
+// Subscriptions are TRD's Inbox consumers on its own transaction owner (repository structure §07):
+// trd.cost_source_holds, which has CST's CostSourceDenied hold the active revisions resting on the
+// denied source before a contract formed on them and record a risk on the active orders (Context Map
+// R11; WF-03, PL-07, SC-04; S4 decision D-9).
+func (m *Module) Subscriptions() []messaging.Subscription {
+	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

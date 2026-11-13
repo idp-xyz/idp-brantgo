@@ -116,7 +116,8 @@ func TestContextMapCheckRefusesSubscriptionsAgainstTheMap(t *testing.T) {
 }
 
 // policyConsumers are the event-driven policies that need an Inbox consumer: S5's PL-09, PL-12,
-// PL-13 and PL-14 (event storming; S5 plan S4-06a) and S4's WF-03 and R65 (S4 plan S4-06b, c).
+// PL-13 and PL-14 (event storming; S5 plan S4-06a) and S4's WF-03, PL-04, PL-06 and R18 (S4 plan
+// S4-06b) and R65 (S4-06c).
 // Each event type needs a subscription of the consuming context, or the reason it has none yet;
 // a reason that a subscription made stale fails too, so the list shrinks as consumers arrive.
 var policyConsumers = []struct {
@@ -144,7 +145,14 @@ var policyConsumers = []struct {
 	{"MD-47 country programme list re-imported → CNX reopens the clear conclusions that used another version", "cnx", refapi.Source,
 		[]eventing.EventType{refapi.EventCountryProgrammesImported}, ""},
 	{"WF-03 CostSourceDenied → TRD registers the risk hold", "trd", cstapi.Source,
-		[]eventing.EventType{cstapi.EventCostSourceDenied}, "S4-06b (S4 plan unit B3)"},
+		[]eventing.EventType{cstapi.EventCostSourceDenied}, ""},
+	{"PL-04 QuoteActivated → TSK verifies quote_ready (R18 TRD integration events v1)", "tsk", trdapi.Source,
+		[]eventing.EventType{trdapi.EventQuoteActivated, trdapi.EventQuoteReplaced}, ""},
+	{"PL-06 OrderActivated → TSK verifies order_active (R18 TRD integration events v1)", "tsk", trdapi.Source,
+		[]eventing.EventType{trdapi.EventOrderActivated}, ""},
+	{"R18 approvals, revocations and acceptance → TSK resumes the waiting tasks", "tsk", trdapi.Source,
+		[]eventing.EventType{trdapi.EventQuoteReviewDecided, trdapi.EventQuoteApprovalRevoked, trdapi.EventAcceptanceVerified,
+			trdapi.EventOrderReviewDecided, trdapi.EventOrderApprovalRevoked}, ""},
 	{"R65 QuoteActivated, QuoteReplaced → EVD registers the formal file", "evd", trdapi.Source,
 		[]eventing.EventType{trdapi.EventQuoteActivated, trdapi.EventQuoteReplaced}, "S4-06c (S4 plan unit C4)"},
 }
