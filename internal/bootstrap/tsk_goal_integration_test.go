@@ -293,7 +293,8 @@ func TestGoalVerifyOfABoundTaskFollowsTRDsControl(t *testing.T) {
 	r = bound("task.2", "quote.2")
 	db, err := bentopg.NewDB(pgtest.AppPool(t))
 	w.must(err)
-	lossy, err := tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(stopThenLose{w.c.TRD}), Readiness: tsk.TRDReadiness(w.c.TRD)})
+	lossy, err := tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(stopThenLose{w.c.TRD}), Readiness: tsk.TRDReadiness(w.c.TRD),
+		Reconcilers: tsk.ActionReconciliation(tsk.ActionReconcilers{EVD: w.c.EVD, INQ: w.c.INQ, SUP: w.c.SUP, CST: w.c.CST, TRD: w.c.TRD})})
 	w.must(err)
 	_, err = lossy.TakeControl(w.clerk, tskapi.TakeControl{IdempotencyKey: w.key(), TaskID: "task.2", ExpectedVersion: r.RowVersion, Reason: "人工接管"})
 	if err == nil || !strings.Contains(err.Error(), "connection lost") {
