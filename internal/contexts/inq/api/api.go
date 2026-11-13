@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -36,6 +37,42 @@ const (
 	UnitPCS = "PCS"
 	// MaxLines bounds an RFQ (resource limits: 200 RFQ lines).
 	MaxLines = 200
+
+	// CodeSourceAmbiguous: a field of a line still fits several values or places of its source
+	// (error catalog SOURCE_AMBIGUOUS: 等待确认或更正); rfq.confirm_scope waits for the human to
+	// state the value and, for several places, the place verified.
+	CodeSourceAmbiguous = "SOURCE_AMBIGUOUS"
+)
+
+// The fields of a line that field locators, pending fields and verifications name (core design
+// 5.2 RFQLine: requested item, matched SKU, quantity, unit).
+const (
+	FieldRequestedItem = "requested_item"
+	FieldSkuID         = "sku_id"
+	FieldQuantity      = "quantity"
+	FieldUOM           = "uom"
+)
+
+// Fields lists the fields a field locator, a pending field or a verification may name.
+var Fields = []string{FieldRequestedItem, FieldSkuID, FieldQuantity, FieldUOM}
+
+// Why a field of a draft line is pending (AN01: 标记候选和缺项，等待用户补充). The human settles each
+// pending field on rfq.confirm_scope; the scope is not confirmed before.
+const (
+	PendingAmbiguous = "ambiguous" // several values or places fit (SOURCE_AMBIGUOUS until settled)
+	PendingConflict  = "conflict"  // the source contradicts itself (BC-AT05, CT03: matrix 120, total 118)
+	PendingMissing   = "missing"   // the source gives no value (AN01: no unit given)
+	PendingUnlocated = "unlocated" // the value stands nowhere in the source
+	PendingNoted     = "noted"     // the value's place carries a reader's note: a formula's cached value, a hidden row or column, invisible text
+)
+
+// PendingReasons lists the reasons a field may be pending for.
+var PendingReasons = []string{PendingAmbiguous, PendingConflict, PendingMissing, PendingUnlocated, PendingNoted}
+
+// Bounds of the structured parts of a line.
+const (
+	MaxLineLocators = 16 // field locators of one line
+	MaxCandidates   = 10 // candidate values of one pending field
 )
 
 // quantityPattern is the Python T01 quantity: a decimal string from 0 to 1,000,000 with at most six
@@ -52,6 +89,27 @@ type RfqLine struct {
 	RequestedItem string // the customer's own words for an item not yet mapped to a SKU
 	SourceID      string
 	Locator       string // where in the source the line is, such as "第1段，第2项"
+	// Locators place the line's fields in its source, a file extract (WBS S4-04b; BC-AT27 字段定位):
+	// the field, the place in the notation of the extract's reader and the source's own words there
+	// (原始需求值; the line's field holds the verified structured value, core design 5.2). Several
+	// locators of one field are alternative places. Left out of the request hash while empty.
+	Locators []FieldLocator `json:",omitempty"`
+	// Pending are the fields the draft leaves for the human to settle on rfq.confirm_scope.
+	Pending []PendingField `json:",omitempty"`
+}
+
+// FieldLocator places one field of a line in the line's source.
+type FieldLocator struct {
+	Field   string // requested_item, sku_id, quantity or uom
+	Locator string // text "line:col", PDF "page:line", XLSX "Sheet!B3" (the extractor version of the source defines it)
+	Quote   string // the source's own words at the locator
+}
+
+// PendingField is a field the source does not settle.
+type PendingField struct {
+	Field      string
+	Reason     string   // ambiguous, conflict, missing, unlocated or noted
+	Candidates []string `json:",omitempty"` // values the field could take, such as two SKUs for one customer style (AN01)
 }
 
 // SaveRfq creates a draft RFQ at ExpectedVersion 0 or replaces the whole draft at its current
@@ -70,11 +128,34 @@ type SaveRfq struct {
 
 // ConfirmRfqScope makes a complete draft ready. Only a human confirms, and the evidence must cover
 // every source the RFQ cites (INQ-INV-001).
+//
+// VerifiedLines are the human's line-by-line verification (core design: rfq.confirm_scope takes the
+// verified fields and forms the clarification results): for a line, the fields whose value the
+// human states, and for a field placed in several places, the locator verified. When any line of
+// the draft was proposed by an AI actor, every line must be verified (SD-07: AI output is a
+// candidate). A pending field must be verified; each verified field is recorded as a correction.
+// Left out of the request hash while empty.
 type ConfirmRfqScope struct {
 	IdempotencyKey  string
 	RfqID           string
 	ExpectedVersion int64
 	EvidenceIDs     []string
+	VerifiedLines   []LineVerification `json:",omitempty"`
+}
+
+// LineVerification is the human's verification of one draft line; no fields verifies the line as
+// it is.
+type LineVerification struct {
+	LineID string
+	Fields []VerifiedField `json:",omitempty"`
+}
+
+// VerifiedField states a field's verified value and, optionally, the one of the field's locators
+// the value was verified at.
+type VerifiedField struct {
+	Field   string
+	Value   string
+	Locator string `json:",omitempty"`
 }
 
 // CancelRfq cancels a draft or ready RFQ for a recorded reason; lines and sources stay.
@@ -125,6 +206,9 @@ func (c SaveRfq) Validate() error {
 		case l.Locator != "" && !text(l.Locator, 200):
 			return schema(p + "/locator")
 		}
+		if err := l.validateStructure(p); err != nil {
+			return err
+		}
 	}
 	if err := uniqueIDs(c.SourceIDs, 0, "/args/source_ids"); err != nil {
 		return err
@@ -140,11 +224,99 @@ func (c SaveRfq) Validate() error {
 	return nil
 }
 
+// validateStructure checks a line's field locators and pending fields.
+func (l RfqLine) validateStructure(p string) error {
+	if len(l.Locators) > MaxLineLocators {
+		return schema(p + "/locators")
+	}
+	for j, x := range l.Locators {
+		q := p + "/locators/" + strconv.Itoa(j)
+		switch {
+		case !slices.Contains(Fields, x.Field):
+			return schema(q + "/field")
+		case !text(x.Locator, 200):
+			return schema(q + "/locator")
+		case !text(x.Quote, 200):
+			return schema(q + "/quote")
+		case l.SourceID == "":
+			return schema(p + "/source_id") // a locator points into the line's source
+		}
+		for _, y := range l.Locators[:j] {
+			if y.Field == x.Field && y.Locator == x.Locator {
+				return schema(q + "/locator")
+			}
+		}
+	}
+	if len(l.Pending) > len(Fields) {
+		return schema(p + "/pending")
+	}
+	for j, x := range l.Pending {
+		q := p + "/pending/" + strconv.Itoa(j)
+		switch {
+		case !slices.Contains(Fields, x.Field) || slices.IndexFunc(l.Pending[:j], func(y PendingField) bool { return y.Field == x.Field }) >= 0:
+			return schema(q + "/field")
+		case !slices.Contains(PendingReasons, x.Reason):
+			return schema(q + "/reason")
+		case len(x.Candidates) > MaxCandidates:
+			return schema(q + "/candidates")
+		}
+		for k, c := range x.Candidates {
+			if !text(c, 200) || slices.Index(x.Candidates, c) != k {
+				return schema(q + "/candidates/" + strconv.Itoa(k))
+			}
+		}
+	}
+	return nil
+}
+
 func (c ConfirmRfqScope) Validate() error {
 	if err := head(c.IdempotencyKey, c.RfqID, c.ExpectedVersion, 1); err != nil {
 		return err
 	}
-	return uniqueIDs(c.EvidenceIDs, 1, "/args/evidence_ids")
+	if err := uniqueIDs(c.EvidenceIDs, 1, "/args/evidence_ids"); err != nil {
+		return err
+	}
+	if len(c.VerifiedLines) > MaxLines {
+		return schema("/args/verified_lines")
+	}
+	for k, v := range c.VerifiedLines {
+		p := "/args/verified_lines/" + strconv.Itoa(k)
+		if !kernel.ValidIdentifier(v.LineID) || slices.IndexFunc(c.VerifiedLines[:k], func(w LineVerification) bool { return w.LineID == v.LineID }) >= 0 {
+			return schema(p + "/line_id")
+		}
+		if len(v.Fields) > len(Fields) {
+			return schema(p + "/fields")
+		}
+		for j, f := range v.Fields {
+			q := p + "/fields/" + strconv.Itoa(j)
+			if !slices.Contains(Fields, f.Field) || slices.IndexFunc(v.Fields[:j], func(g VerifiedField) bool { return g.Field == f.Field }) >= 0 {
+				return schema(q + "/field")
+			}
+			if !validValue(f.Field, f.Value) {
+				return schema(q + "/value")
+			}
+			if f.Locator != "" && !text(f.Locator, 200) {
+				return schema(q + "/locator")
+			}
+		}
+	}
+	return nil
+}
+
+// validValue reports whether value has the shape of field's values; whether it is a valid known
+// value (a positive quantity, a confirmed SKU) is the domain's decision.
+func validValue(field, value string) bool {
+	switch field {
+	case FieldSkuID:
+		return kernel.ValidIdentifier(value)
+	case FieldQuantity:
+		return quantityPattern.MatchString(value)
+	case FieldUOM:
+		return value == UnitPCS
+	case FieldRequestedItem:
+		return text(value, 200)
+	}
+	return false
 }
 
 func (c CancelRfq) Validate() error {
@@ -224,7 +396,41 @@ type ActionReconciler interface {
 type RfqLineView struct {
 	RfqLine
 	SkuSpecRevision int64
+	// ProposedBy is the actor whose save last changed the line: a line an AI actor proposed is a
+	// candidate (SD-07) until a human verifies it. Zero for lines saved before S4.
+	ProposedBy kernel.ActorRef
+	// QuotesWithheld: the reader cannot read the line's source now, so the quotes of its locators
+	// are left out (CT16: a reference never bypasses current access).
+	QuotesWithheld bool
 }
+
+// Correction records a human's correction of a field an AI actor proposed, or the human's
+// verification of a pending field (INQ Clarification; BC-AT27 逐行修正; core design 5.2: the
+// original and the verified values are kept apart). Corrections are never changed or removed.
+type Correction struct {
+	Seq         int64
+	RowVersion  int64  // the RFQ row version the correction produced
+	Command     string // rfq.save_draft or rfq.confirm_scope
+	LineID      string
+	Field       string // requested_item, sku_id, quantity, uom, source_id or locator; "" for a removed line
+	Kind        string // changed, verified, relocated or removed
+	From        string // the value before ("" unknown)
+	To          string // the value after
+	Locator     string // the place the human verified the value at
+	Reason      string // the pending reason the correction settled
+	Candidates  []string
+	ProposedBy  kernel.ActorRef // who proposed the corrected value
+	CorrectedBy kernel.ActorRef
+	RecordedAt  time.Time
+}
+
+// Kinds of corrections.
+const (
+	CorrectionChanged   = "changed"   // the value was changed
+	CorrectionVerified  = "verified"  // the value was kept and verified, settling a pending field
+	CorrectionRelocated = "relocated" // the value was kept, its place in the source changed
+	CorrectionRemoved   = "removed"   // a line an AI actor proposed was removed
+)
 
 // Confirmation is what a ready RFQ was confirmed against: the upstream versions and the evidence.
 type Confirmation struct {
@@ -247,6 +453,8 @@ type RfqView struct {
 	SourceIDs        []string
 	UnresolvedFields []string
 	Confirmation     *Confirmation
+	// Corrections are every human correction and verification of the RFQ's lines, in order.
+	Corrections []Correction
 }
 
 // Queries is INQ's read side.

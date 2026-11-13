@@ -42,6 +42,7 @@ type (
 	EVD interface {
 		evdapi.Commands
 		evdapi.Queries
+		evdapi.ExtractQueries
 		evdapi.Reconciler
 		evdapi.ActionReconciler
 		evdapi.Auditor
@@ -162,6 +163,7 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	mux.Handle("GET /api/brant/v1/evd/sources/{id}", s.authenticated(read(s, cfg.EVD.GetSource, sourceView)))
 	mux.Handle("GET /api/brant/v1/evd/files/{id}", s.authenticated(read(s, cfg.EVD.GetFile, fileView)))
+	mux.Handle("GET /api/brant/v1/evd/sources/{id}/extract", s.authenticated(read(s, cfg.EVD.GetExtract, extractView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}", s.authenticated(read(s, cfg.PTY.GetParty, partyView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}/screening", s.authenticated(read(s, cfg.PTY.GetScreening, okView[ptyapi.ScreeningView])))
 	mux.Handle("GET /api/brant/v1/pty/screenings/due", s.authenticated(s.screeningsDue))

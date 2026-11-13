@@ -128,8 +128,7 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 	var skus, sources []string
 	sources = append(sources, cmd.SourceIDs...)
 	for _, l := range cmd.Lines {
-		content.Lines = append(content.Lines, rfq.Line{ID: l.LineID, SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM,
-			RequestedItem: l.RequestedItem, SourceID: l.SourceID, Locator: l.Locator})
+		content.Lines = append(content.Lines, domainLine(l))
 		if l.SkuID != "" {
 			skus = append(skus, l.SkuID)
 		}
@@ -151,11 +150,15 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 		}
 		if h.rfq == nil {
 			h.rfq = rfq.New(cmd.RfqID, d.Actor.ID, d.Team)
-			h.rfq.ReplaceDraft(content)
+			h.rfq.ReplaceDraft(content, d.Actor)
 			return h.outcome(""), postgres.Insert(ctx, exec, h.scope(ctx), h.rfq, s.Clock.Now())
 		}
-		h.rfq.ReplaceDraft(content)
-		return h.save(ctx, exec, true, "")
+		corrections := h.rfq.ReplaceDraft(content, d.Actor)
+		out, err := h.save(ctx, exec, true, "")
+		if err != nil {
+			return out, err
+		}
+		return out, postgres.InsertCorrections(ctx, exec, h.scope(ctx), h.rfq.ID, corrections, s.Clock.Now())
 	}
 	return s.run(ctx, action.Command{Name: api.CommandSaveRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, cmd, cmd.Validate(), &prepared{h})
 }
@@ -189,6 +192,13 @@ func (s Service) ConfirmRfqScope(ctx context.Context, cmd api.ConfirmRfqScope) (
 				}
 			}
 		}
+		for _, v := range cmd.VerifiedLines {
+			for _, f := range v.Fields {
+				if f.Field == api.FieldSkuID {
+					skus = append(skus, f.Value)
+				}
+			}
+		}
 		h.facts, err = s.facts(ctx, customer, contact, skus, sources)
 		return err
 	}
@@ -200,10 +210,23 @@ func (s Service) ConfirmRfqScope(ctx context.Context, cmd api.ConfirmRfqScope) (
 			// The draft changed after its references were read; confirming would judge stale facts.
 			return action.Outcome{}, kernel.Reject(kernel.CodeVersionConflict, "/args/expected_version", "")
 		}
-		if err := h.rfq.Confirm(cmd.EvidenceIDs, h.facts, d.Actor, d.Epoch); err != nil {
+		var verified []rfq.Verification
+		for _, v := range cmd.VerifiedLines {
+			lv := rfq.Verification{LineID: v.LineID}
+			for _, f := range v.Fields {
+				lv.Fields = append(lv.Fields, rfq.VerifiedField(f))
+			}
+			verified = append(verified, lv)
+		}
+		corrections, err := h.rfq.Confirm(cmd.EvidenceIDs, verified, h.facts, d.Actor, d.Epoch)
+		if err != nil {
 			return action.Outcome{}, err
 		}
-		return h.save(ctx, exec, true, api.EventRfqScopeConfirmed)
+		out, err := h.save(ctx, exec, true, api.EventRfqScopeConfirmed)
+		if err != nil {
+			return out, err
+		}
+		return out, postgres.InsertCorrections(ctx, exec, h.scope(ctx), h.rfq.ID, corrections, s.Clock.Now())
 	}
 	return s.run(ctx, action.Command{Name: api.CommandConfirmRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, cmd, cmd.Validate(), &prepared{h})
 }
@@ -359,9 +382,26 @@ type prepared struct{ *rfqCommand }
 
 func (p *prepared) Prepare(ctx context.Context) error { return p.prepare(ctx) }
 
-// GetRfq returns an RFQ the caller sees, audited (Python Core.get kind=rfq).
+// domainLine is the domain's form of an api line.
+func domainLine(l api.RfqLine) rfq.Line {
+	out := rfq.Line{ID: l.LineID, SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem, SourceID: l.SourceID,
+		Locator: l.Locator}
+	for _, x := range l.Locators {
+		out.Locators = append(out.Locators, rfq.FieldLocator(x))
+	}
+	for _, x := range l.Pending {
+		out.Pending = append(out.Pending, rfq.PendingField{Field: x.Field, Reason: x.Reason, Candidates: slices.Clone(x.Candidates)})
+	}
+	return out
+}
+
+// GetRfq returns an RFQ the caller sees, audited (Python Core.get kind=rfq), with its lines'
+// locators, pending fields and provenance and every correction. The quotes of a line are the
+// source's own words: after the read, EVD is asked which of the lines' sources the caller may read
+// now, and the quotes of the others are withheld (CT16; a caller without evd.read reads none).
 func (s Service) GetRfq(ctx context.Context, id string) (api.RfqView, error) {
 	var v api.RfqView
+	var quoted []string
 	err := s.Ledger.Read(ctx, CommandGetRfq, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		scope, _ := bento.ScopeFromContext(ctx)
 		r, err := postgres.Load(ctx, exec, scope, id, false)
@@ -372,18 +412,53 @@ func (s Service) GetRfq(ctx context.Context, id string) (api.RfqView, error) {
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		v = api.RfqView{RfqID: r.ID, Status: string(r.Status), RowVersion: r.RowVersion, CustomerID: r.CustomerID, ContactID: r.ContactID,
-			SourceIDs: nonNil(r.Sources), UnresolvedFields: nonNil(r.Unresolved), Lines: []api.RfqLineView{}}
+			SourceIDs: nonNil(r.Sources), UnresolvedFields: nonNil(r.Unresolved), Lines: []api.RfqLineView{}, Corrections: []api.Correction{}}
 		for _, l := range r.Lines {
-			v.Lines = append(v.Lines, api.RfqLineView{SkuSpecRevision: l.SkuSpecRevision, RfqLine: api.RfqLine{LineID: l.ID, SkuID: l.SkuID,
-				Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem, SourceID: l.SourceID, Locator: l.Locator}})
+			line := api.RfqLineView{SkuSpecRevision: l.SkuSpecRevision, ProposedBy: l.ProposedBy, RfqLine: api.RfqLine{LineID: l.ID,
+				SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem, SourceID: l.SourceID, Locator: l.Locator}}
+			for _, x := range l.Locators {
+				line.Locators = append(line.Locators, api.FieldLocator(x))
+			}
+			for _, x := range l.Pending {
+				line.Pending = append(line.Pending, api.PendingField{Field: x.Field, Reason: x.Reason, Candidates: x.Candidates})
+			}
+			if len(l.Locators) > 0 {
+				quoted = append(quoted, l.SourceID)
+			}
+			v.Lines = append(v.Lines, line)
 		}
 		if c := r.Confirmation; c != nil {
 			v.Confirmation = &api.Confirmation{CustomerRowVersion: c.CustomerVersion, ContactRowVersion: c.ContactVersion,
 				EvidenceIDs: c.Evidence, ConfirmedBy: c.By, AuthorityEpoch: c.Epoch}
 		}
-		return nil
+		corrections, err := postgres.Corrections(ctx, exec, scope, id)
+		for _, x := range corrections {
+			v.Corrections = append(v.Corrections, api.Correction{Seq: x.Seq, RowVersion: x.RowVersion, Command: x.Command, LineID: x.LineID,
+				Field: x.Field, Kind: x.Kind, From: x.From, To: x.To, Locator: x.Locator, Reason: x.Reason, Candidates: x.Candidates,
+				ProposedBy: x.ProposedBy, CorrectedBy: x.CorrectedBy, RecordedAt: x.RecordedAt})
+		}
+		return err
 	})
-	return v, err
+	if err != nil || len(quoted) == 0 {
+		return v, err
+	}
+	readable, err := s.Upstream.Sources.ResolveSources(ctx, quoted)
+	if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodePermissionDenied {
+		readable, err = nil, nil
+	}
+	if err != nil {
+		return api.RfqView{}, err
+	}
+	for i, l := range v.Lines {
+		if _, ok := readable[l.SourceID]; len(l.Locators) > 0 && !ok {
+			v.Lines[i].QuotesWithheld = true
+			v.Lines[i].Locators = slices.Clone(l.Locators)
+			for j := range v.Lines[i].Locators {
+				v.Lines[i].Locators[j].Quote = ""
+			}
+		}
+	}
+	return v, nil
 }
 
 // ResolveRfqs answers RfqRef v1 lookups of downstream contexts (api.RfqLookups): each RFQ the

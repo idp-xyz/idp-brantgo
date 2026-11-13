@@ -18247,6 +18247,10 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "file_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "id": {
                         "minLength": 1,
                         "type": "string"
@@ -18414,6 +18418,10 @@
                             "type": "string"
                           },
                           "external_message_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "file_id": {
                             "minLength": 1,
                             "type": "string"
                           },
@@ -18717,6 +18725,80 @@
           }
         },
         "summary": "A source with its content and imports",
+        "tags": [
+          "evd"
+        ]
+      }
+    },
+    "/api/brant/v1/evd/sources/{id}/extract": {
+      "get": {
+        "operationId": "evd.source.extract.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "The located form of a file_extract source (brant-extract/1) with the file and the reader that read it; the caller's access to the source and to the file is re-checked (CT16)",
         "tags": [
           "evd"
         ]
@@ -26768,6 +26850,40 @@
                       "id": {
                         "minLength": 1,
                         "type": "string"
+                      },
+                      "verified_lines": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "fields": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "field": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "locator": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "line_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
                       }
                     },
                     "required": [
@@ -26925,6 +27041,40 @@
                           "id": {
                             "minLength": 1,
                             "type": "string"
+                          },
+                          "verified_lines": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "fields": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "field": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "locator": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "line_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
                           }
                         },
                         "required": [
@@ -27111,6 +27261,51 @@
                             "locator": {
                               "minLength": 1,
                               "type": "string"
+                            },
+                            "locators": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "field": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "locator": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "pending": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "candidates": {
+                                    "items": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "field": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "type": "array"
                             },
                             "quantity": {
                               "minLength": 1,
@@ -27320,6 +27515,51 @@
                                 "locator": {
                                   "minLength": 1,
                                   "type": "string"
+                                },
+                                "locators": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "field": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "locator": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "quote": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "pending": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "candidates": {
+                                        "items": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "field": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": "array"
                                 },
                                 "quantity": {
                                   "minLength": 1,

@@ -39,8 +39,8 @@ func aiLayer(t *testing.T, c *bootstrap.Contexts) (*ai.Layer, *bentopg.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg, err := capability.Q01Registry(capability.Q01Targets{EVD: c.EVD, INQ: c.INQ, CST: c.CST, CSTScenarios: c.CST, TRD: c.TRD,
-		TRDAcceptance: c.TRD, TRDOrders: c.TRD})
+	reg, err := capability.Q01Registry(capability.Q01Targets{EVD: c.EVD, Extracts: c.EVD, INQ: c.INQ, CST: c.CST, CSTScenarios: c.CST,
+		TRD: c.TRD, TRDAcceptance: c.TRD, TRDOrders: c.TRD})
 	if err != nil {
 		t.Fatal(err)
 	}
