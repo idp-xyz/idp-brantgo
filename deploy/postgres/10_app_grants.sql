@@ -482,3 +482,11 @@ GRANT UPDATE (status, row_version, settled_by_kind, settled_by_id, settle_epoch,
 GRANT UPDATE (disposition, disposition_shipment_id, disposition_revision, disposition_ref, disposition_status, disposition_at,
               disposition_reason)
     ON brant_ful.shipment_review_item TO brant_app;
+
+-- internal/ai (brant_ai; plan S4 D-6): a delegation is revoked and an approval grant used or revoked,
+-- once each; their binding never changes and neither is deleted (triggers); the ledger only grows.
+GRANT USAGE ON SCHEMA brant_ai TO brant_app;
+GRANT SELECT, INSERT ON brant_ai.delegation, brant_ai.approval_grant, brant_ai.action_result, brant_ai.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, revoked_by_id, revoked_epoch, revoked_at, revoke_reason) ON brant_ai.delegation TO brant_app;
+GRANT UPDATE (status, row_version, used_key, used_by_id, used_epoch, used_at, revoked_by_id, revoked_epoch, revoked_at, revoke_reason)
+    ON brant_ai.approval_grant TO brant_app;

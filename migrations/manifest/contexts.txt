@@ -34,3 +34,6 @@ cnx
 # functions of PTY, PUR, QLT and TRD, and from its commercial release on those of CNX and STL
 # (R26, R27, R44, R45, R56, R59); TRD reads its ShipmentFacts v1 at run time only (R70).
 ful
+# ai (S4): internal/ai, the AI layer's delegations and approval grants (brant_ai; plan S4 D-6). It calls
+# no guard function and publishes none; its checks read brant_auth at run time only.
+ai
