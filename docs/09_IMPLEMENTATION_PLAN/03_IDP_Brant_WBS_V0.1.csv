@@ -54,22 +54,26 @@ S4-05,S4,集成,EER／BIP 适配评估与接入（ACL）,P1,S4-03,"adapters/{eer
 S4-06,S4,messaging,Inbox 分发与订阅登记,P0,M0-11,foundation/messaging Inbox,事件 ID 去重；重放；WF-03 风险传播,技术负责人,,PARTIAL
 S4-07,S4,评测,tests/ai-evaluation 与 BC-AT28 真实 AI 目标链,P0,S4-03;S4-04,评测套件与试次记录,记录全部试次、人工修正、实际成本与权威断言,AI Owner＋QA,,NOT_STARTED
 S4-08,S4,门禁,P0 退出评审（G2 证据包）,P0,S4-02;S4-06;S4-07;S3-12,G2 评审记录,适用 AT／AN／CT 有证据；未执行项逐项说明,研发＋测试＋业务,,NOT_STARTED
-S5-01,S5,PUR,采购承诺审批（A47）、承诺发出与供应商确认,P1,S3-10,PurchaseCommitment,A47 最低验收,PUR Owner,A47 设计,NOT_STARTED
-S5-02,S5,QLT,检验、处置与质量放行,P1,S5-01,internal/contexts/qlt,放行撤回后不能出运；外部检验机构与报告来源可登记，放行仍由我方授权人员决定（F-06）,QLT Owner,,NOT_STARTED
-S5-03,S5,FUL,节点、装箱、出运确认与出口批次,P1,S5-02,internal/contexts/ful,FUL-INV-001,FUL Owner,,NOT_STARTED
-S5-04,S5,STL,结算单、业务应收应付、资金记录、同币种核销,P1,S5-03,internal/contexts/stl,STL-INV-001–002,STL Owner＋财务,,NOT_STARTED
-S5-05,S5,CNX,中国最小协同（CN-M01）：发票、报关、退税资料与外部对账（人工路径）,P1,S5-03;S5-04,internal/contexts/cnx,适用 CN-AT；CN-R05、R07、R11,CNX Owner＋专业角色,,NOT_STARTED
-S5-07,S5,FUL,商业条件放行：STL 付款条件守卫、FUL 放行与例外（WF-07）,P0,S5-02;S5-03;S5-04;S1-09;S5-13;S5-15,CommercialRelease 聚合、PaymentConditionGuard,SC-08、TD-AT08；放行撤回与核销撤销的并发测试,FUL／STL Owner,—（Python 未实现）,NOT_STARTED
-S5-08,S5,FUL,订舱与出运单证套（商业发票、装箱单、提单记录、原产地证引用）,P1,S5-03,ShipmentDocumentSet 与版本核对,BT12：单证差异逐项显示，未核对不能签发,FUL Owner＋单证,—（Python 未实现）,NOT_STARTED
-S5-09,S5,跨上下文,订单变更传播：PUR、FUL、STL 复核（WF-06）,P1,S3-15;S5-01;S5-03;S5-04,OrderAmended 的下游处理,BT10：已发生事实保留；受影响承诺、装箱与付款计划可追溯,TRD／PUR／FUL／STL Owner,—（Python 未实现）,NOT_STARTED
-S5-10,S5,CAT,商品申报档案与官方证书结果（CAT DeclarationProfile、CNX DocumentBundle）,P1,S5-05,申报档案核实与证书适用性,CAT-INV-002；证书适用对象、市场与有效期核对,CAT／CNX Owner＋申报专业人员,—（Python 未实现）,NOT_STARTED
-S5-11,S5,运维,容量基准与恢复演练（G4）,P0,S5-04,阶梯负载测试、备份恢复与升级演练报告,候选目标：普通读取 P95 500 ms、业务命令 P95 800 ms、RPO 15 分钟、RTO 4 小时；按实测冻结或修订,技术负责人＋运维,—（Python 未实现）,NOT_STARTED
-S5-12,S5,STL,客户信用额度与信用占用（STL CustomerCredit、CreditGuard；TRD order.activate 接入）,P1,S3-07;S5-04,CustomerCredit 聚合、守卫函数与占用状态机,TD-AT11、SC-09；S5 之前，付款条件含出运后到期部分的订单 order.activate 返回 CREDIT_RESERVATION_REQUIRED；TD-AT16：信用决定按金额层级裁决，销售经办不能放行,STL Owner＋财务,—（Python 未实现）,NOT_STARTED
-S5-13,S5,CNX,贸易合规核查：国别禁运、制裁项目与出口管制（CNX TradeComplianceCheck、TradeComplianceGuard）,P1,S5-05;S1-09,核查聚合、结论状态机与守卫,TD-AT12；订单变更后旧结论不适用,CNX Owner＋合规负责人,—（Python 未实现）,NOT_STARTED
-S5-14,S5,CNX,出口许可证与用量台账（CNX ExportLicense）,P1,S5-13;S5-10,许可证聚合与用量分配,TD-AT13；并发分配只有一笔成功,CNX Owner＋单证,—（Python 未实现）,NOT_STARTED
-S5-15,S5,PUR,直发供应商交付（PUR SupplierDelivery）与出运引用,P1,S5-01;S5-03,SupplierDelivery 聚合与 SupplierDeliveryGuard,TD-AT14；未核实上报不计入,PUR／FUL Owner,—（Python 未实现）,NOT_STARTED
+S5-01,S5,PUR,采购承诺审批（A47）、承诺发出与供应商确认,P1,S3-10,PurchaseCommitment,A47 最低验收,PUR Owner,A47 设计,DONE_CI
+S5-02,S5,QLT,检验、处置与质量放行,P1,S5-01,internal/contexts/qlt,放行撤回后不能出运；外部检验机构与报告来源可登记，放行仍由我方授权人员决定（F-06）,QLT Owner,,DONE_CI
+S5-03,S5,FUL,节点、装箱、出运确认与出口批次,P1,S5-02,internal/contexts/ful,FUL-INV-001,FUL Owner,,DONE_CI
+S5-04,S5,STL,结算单、业务应收应付、资金记录、同币种核销,P1,S5-03,internal/contexts/stl,STL-INV-001–002,STL Owner＋财务,,DONE_CI
+S5-05,S5,CNX,中国最小协同（CN-M01）：发票、报关、退税资料与外部对账（人工路径）,P1,S5-03;S5-04,internal/contexts/cnx,CN-AT01—CN-AT18 全部（负责人决定 2026-11-12：全深度）；CN-R05、R07、R11,CNX Owner＋专业角色,,DONE_CI
+S5-07,S5,FUL,商业条件放行：STL 付款条件守卫、FUL 放行与例外（WF-07）,P0,S5-02;S5-03;S5-04;S1-09;S5-13;S5-15,CommercialRelease 聚合、PaymentConditionGuard,SC-08、TD-AT08；放行撤回与核销撤销的并发测试,FUL／STL Owner,—（Python 未实现）,DONE_CI
+S5-08,S5,FUL,订舱与出运单证套（商业发票、装箱单、提单记录、原产地证引用）,P1,S5-03,ShipmentDocumentSet 与版本核对,BT12：单证差异逐项显示，未核对不能签发,FUL Owner＋单证,—（Python 未实现）,DONE_CI
+S5-09,S5,跨上下文,订单变更传播：PUR、FUL、STL 复核（WF-06）,P1,S3-15;S5-01;S5-03;S5-04,OrderAmended 的下游处理,BT10：已发生事实保留；受影响承诺、装箱与付款计划可追溯,TRD／PUR／FUL／STL Owner,—（Python 未实现）,DONE_CI
+S5-10,S5,CAT,商品申报档案与官方证书结果（CAT DeclarationProfile、CNX DocumentBundle）,P1,S5-05,申报档案核实与证书适用性,CAT-INV-002；证书适用对象、市场与有效期核对,CAT／CNX Owner＋申报专业人员,—（Python 未实现）,DONE_CI
+S5-11,S5,运维,容量基准与恢复演练（G4）,P0,S5-04,阶梯负载测试、备份恢复与升级演练报告,候选目标：普通读取 P95 500 ms、业务命令 P95 800 ms、RPO 15 分钟、RTO 4 小时；按实测冻结或修订,技术负责人＋运维,—（Python 未实现）,DONE_LOCAL
+S5-12,S5,STL,客户信用额度与信用占用（STL CustomerCredit、CreditGuard；TRD order.activate 接入）,P1,S3-07;S5-04,CustomerCredit 聚合、守卫函数与占用状态机,TD-AT11、SC-09；接入后，付款条件含出运后到期部分而无覆盖占用的订单 order.activate 返回 CREDIT_RESERVATION_REQUIRED（S3 期间按 S3-D01 记为 not_wired）；TD-AT16：信用决定按金额层级裁决，销售经办不能放行,STL Owner＋财务,—（Python 未实现）,DONE_CI
+S5-13,S5,CNX,贸易合规核查：国别禁运、制裁项目与出口管制（CNX TradeComplianceCheck、TradeComplianceGuard）,P1,S5-05;S1-09,核查聚合、结论状态机与守卫,TD-AT12；订单变更后旧结论不适用,CNX Owner＋合规负责人,—（Python 未实现）,DONE_CI
+S5-14,S5,CNX,出口许可证与用量台账（CNX ExportLicense）,P1,S5-13;S5-10,许可证聚合与用量分配,TD-AT13；并发分配只有一笔成功,CNX Owner＋单证,—（Python 未实现）,DONE_CI
+S5-15,S5,PUR,直发供应商交付（PUR SupplierDelivery）与出运引用,P1,S5-01;S5-03,SupplierDelivery 聚合与 SupplierDeliveryGuard,TD-AT14；未核实上报不计入,PUR／FUL Owner,—（Python 未实现）,DONE_CI
 S5-06,S5,门禁,B0 客户场景与 G0、G3、G4 证据（含订单形成方式核对：PO、PI、定金、返单、部分下单）,P1,S4-08;S5-05;S5-07;S5-11,试点评审,真实客户任务与人工、质量、成本比较,客户代表＋交付,,NOT_STARTED
-S5-16,S5,FUL,CIF／CIP 投保与保险单（F-03）,P1,S5-08,出运单证套中的保险单引用与投保金额、险别,SIM-02 第 8 步可表达；保险费与核价组件一致,FUL Owner＋单证,—（Python 未实现）,NOT_STARTED
+S5-16,S5,FUL,CIF／CIP 投保与保险单（F-03）,P1,S5-08,出运单证套中的保险单引用与投保金额、险别,SIM-02 第 8 步可表达；保险费与核价组件一致,FUL Owner＋单证,—（Python 未实现）,DONE_CI
+S5-17,S5,STL,费用、费用分配与订单经营结果（Charge、charge.allocate、OrderResult）,P1,S5-04,Charge 与 OrderResult 聚合,STL-INV-010、011；BT18：发货完成不等于业务结清；BT24：关闭后补录费用重新打开且历史快照不被覆盖,STL Owner＋财务,—（Python 未实现）,DONE_CI
+S5-18,S5,STL,贷项、结算冲销与跨币种核销,P1,S5-04,credit_note.request／credit.confirm、settlement.reverse、跨币种核销规则,STL-INV-007—009；CN-AT11：贷项不自动调整退税；跨币种核销须 settlement 用途显式汇率且汇率差额单列,STL Owner＋财务,—（Python 未实现）,DONE_CI
+S5-19,S5,PUR,采购承诺变更与取消（A47 第 7 点）,P1,S5-01,承诺变更（编制、独立裁决、应用）与取消,PUR-INV-011；变更经独立裁决与供应商重新确认，取消释放分配，已核实交付量保留；BT10 承诺影响可追溯,PUR Owner,A47 设计,DONE_CI
+S5-20,S5,STL,期初业务余额与期初退税资料（STL opening_balance、CNX 期初资料）,P1,S5-04;S5-05,opening_balance.record、tax_refund_case.record_opening,STL-INV-012；BT17；CN-AT16：截止时点与来源余额可核对，上线不重复生成现金、应付或用途占用,STL／CNX Owner＋财务,—（Python 未实现）,DONE_CI
 S6-01,S6,STK,库存与外厂台账（条件）,P2,S5-03,internal/contexts/stk,并发安全出库；直发不虚构收发,STK Owner,,NOT_STARTED
 S6-02,S6,MFG,生产协同与委外（条件）,P2,S6-01,internal/contexts/mfg,材料责任与交接留证,MFG Owner,,NOT_STARTED
 S6-03,S6,CLM,售后与索赔,P2,S5-04,internal/contexts/clm,退货不抹去原发货,CLM Owner,,NOT_STARTED

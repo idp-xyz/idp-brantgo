@@ -15,51 +15,65 @@ R13,PTY,TRD,OHS / Published Language + Qualification Guard,客户、联系人、
 R14,CAT,TRD,OHS / Published Language + Qualification Guard,SKU 规格修订当前有效,SkuRef v1,CAT,技术版本已更新仍按旧版生效,DESIGN — ADR-BR-004,yes
 R15,POL,TRD,OHS / Published Language + Qualification Guard,报价用途汇率、销售税适用、付款与贸易条款、正式报价模板、编号序列、最低毛利政策,ConfigRef v1＋ConfigGuard、NumberIssue v1,POL,已退役模板或过期汇率仍用于正式化,DESIGN — ADR-BR-004,yes
 R16,EVD,TRD,OHS,客户回复来源消息与定位；正式文档字节存证,SourceRef v1、FileRef v1,EVD,来源权限撤回后仍返回成功事实,DESIGN,no
-R17,TSK,TRD,Partnership（受控命令）,对象控制绑定、停止与释放,ObjectControl commands v1,TRD（绑定状态）／TSK（任务状态）,省略 task_id 绕过服务端绑定,DESIGN,no
-R18,TRD,TSK,OHS / Published Language,quote_ready 与 order_active 目标核验查询及事实事件,GoalReadiness v1、TRD 集成事件 v1,TRD,以模型自述代替权威记录核验,DESIGN,no
+R17,TSK,TRD,Partnership（受控命令）,对象控制绑定、停止、转人工、交回与释放,ObjectControl commands v1（控制声明只由 TSK 经 internal/ai/execution 设置；停止、转人工、交回与释放须携带绑定任务的声明）,TRD（绑定状态）／TSK（任务状态）,省略 task_id 绕过服务端绑定；绕过 TSK 直接释放仍有在途结果的根,DESIGN,no
+R18,TRD,TSK,OHS / Published Language,quote_ready 与 order_active 目标核验查询、动作对账及事实事件,GoalReadiness v1、ActionReconciliation v1、TRD 集成事件 v1,TRD,以模型自述代替权威记录核验,DESIGN,no
 R19,TRD,PUR,Customer / Supplier,已生效且订单审批未撤销的订单行与商业快照,ActiveOrderRef v1,TRD,订单审批撤销后仍编制草稿,DESIGN,yes
 R20,SUP,PUR,Customer / Supplier + Qualification Guard,供应条件当前有效版本与条件行,SupplyConditionRef v1＋SupplyConditionGuard,SUP,被替代或过期条件形成草稿,DESIGN — ADR-BR-004,yes
 R21,CST,PUR,OHS,订单来源报价的成本快照（核价对照，只读，不阻断）,CostSnapshotRef v1,CST,对照结果被误用为阻断规则,DESIGN,yes
 R22,PTY,PUR,OHS / Published Language,供应商当前主数据版本,PartyRef v1＋PartyGuard v1,PTY,供应商停用后仍编制,DESIGN,yes
 R23,PUR,MFG,Customer / Supplier（条件）,委外或工序需求与材料责任,SubcontractDemand v1,PUR,工序加工量被累加为销售需求,NOT_STARTED,no
-R24,PUR,QLT,Customer / Supplier,受检对象（采购批次、供应商交付）,InspectionSubject v1,PUR,供应商自报合格被当作放行,NOT_STARTED,no
+R24,PUR,QLT,Customer / Supplier,受检对象（采购批次、供应商交付）,InspectionSubject v1,PUR,供应商自报合格被当作放行,DESIGN,no
 R25,MFG,QLT,Customer / Supplier（条件）,工序与半成品受检对象,InspectionSubject v1,MFG,外厂完成声明直接形成合格库存,NOT_STARTED,no
-R26,QLT,FUL,OHS,有效质量放行（数量、范围、有效期）,QualityReleaseRef v1,QLT,放行撤回后仍出运,NOT_STARTED,yes
-R27,TRD,FUL,Customer / Supplier,生效订单可交付数量与交付条款,ActiveOrderRef v1,TRD,超发或绕过短交关闭,NOT_STARTED,yes
+R26,QLT,FUL,OHS,有效质量放行（数量、范围、有效期）,QualityReleaseRef v1,QLT,放行撤回后仍出运,DESIGN,yes
+R27,TRD,FUL,Customer / Supplier,生效订单可交付数量与交付条款,ActiveOrderRef v1（含贸易条款、交付要求、地址角色与付款阶段）＋OrderGuard v1,TRD,超发或绕过短交关闭,DESIGN,yes
 R28,PUR,STK,Customer / Supplier（条件）,收货与外厂我方物料,ReceiptRequest v1,PUR,直发路线虚构本仓收发,NOT_STARTED,no
 R29,STK,FUL,OHS（条件）,可用库存与出库,StockAvailability v1,STK,占用与可用量重复计入,NOT_STARTED,yes
-R30,FUL,STL,Customer / Supplier,已确认出运明细（销售结算来源）,ShipmentLineRef v1,FUL,同一出运明细重复结算,NOT_STARTED,no
-R31,PUR,STL,Customer / Supplier,采购承诺与收货或直发交付证据（采购结算来源）,PurchaseSettlementSource v1,PUR,无交付证据形成应付,NOT_STARTED,no
-R32,TRD,STL,OHS,订单商业快照与付款计划（不生成应收）,OrderCommercialSnapshot v1,TRD,付款计划被当作应收或到账,NOT_STARTED,no
-R33,POL,STL,OHS / Published Language,币种、汇率、银行账户、费用分类,ConfigRef v1,POL,报价汇率被用于银行结汇,NOT_STARTED,no
+R30,FUL,STL,Customer / Supplier,已确认出运明细（销售结算来源）,ShipmentLineRef v1,FUL,同一出运明细重复结算,DESIGN,no
+R31,PUR,STL,Customer / Supplier,采购承诺与收货或直发交付证据（采购结算来源）,PurchaseSettlementSource v1,PUR,无交付证据形成应付,DESIGN,no
+R32,TRD,STL,OHS,订单商业快照与付款计划（不生成应收）,OrderCommercialSnapshot v1（草稿与生效订单；付款阶段、金额与信用部分）,TRD,付款计划被当作应收或到账,DESIGN,no
+R33,POL,STL,OHS / Published Language,币种、汇率（credit、settlement 用途）、银行账户、费用分类与信用政策,ConfigRef v1＋ConfigGuard v1（credit_policy；fx_rate 用途 credit、settlement）,POL,报价汇率被用于银行结汇,DESIGN,yes
 R34,FUL,CLM,OHS,原出运事实,ShipmentLineRef v1,FUL,退货抹去原发货,NOT_STARTED,no
 R35,CLM,STL,Customer / Supplier,经批准的贷项与退款请求,CreditRequest v1,CLM,同一退货重复贷项,NOT_STARTED,no
-R36,FUL,CNX,Customer / Supplier,出口批次与出运单证明细,ExportLotRef v1,FUL,本地出库被当作海关出口确认,NOT_STARTED,no
-R37,PUR,CNX,Customer / Supplier,采购与收货明细（购进发票匹配）,PurchaseLineRef v1,PUR,红冲作废后匹配未复核,NOT_STARTED,no
-R38,STL,CNX,OHS,资金流水与核销（收汇资料关联）,FundRecordRef v1,STL,商业核销被称为出口收汇核销,NOT_STARTED,no
-R39,CAT,CNX,OHS / Published Language,商品申报档案（编码与申报要素由专业人员核实）,DeclarationProfileRef v1,CAT（候选）／专业核实,AI 商品编码候选被当作合规结论,NOT_STARTED,no
+R36,FUL,CNX,Customer / Supplier,出口批次与出运单证明细,ExportLotRef v1,FUL,本地出库被当作海关出口确认,DESIGN,no
+R37,PUR,CNX,Customer / Supplier,采购与收货明细（购进发票匹配）,PurchaseLineRef v1,PUR,红冲作废后匹配未复核,DESIGN,no
+R38,STL,CNX,OHS,资金流水与核销（收汇资料关联）,FundRecordRef v1,STL,商业核销被称为出口收汇核销,DESIGN,no
+R39,CAT,CNX,OHS / Published Language,商品申报档案（编码与申报要素由专业人员核实）,DeclarationProfileRef v1（核实的申报档案：商品编码、申报要素、法定单位、原产地依据与出口管制分类）,CAT（候选）／专业核实,AI 商品编码候选被当作合规结论,DESIGN,no
 R40,CRM,INQ,Conformist（可选）,商机来源关联,OpportunityRef v1,CRM,交易链反向依赖 CRM,NOT_STARTED,no
 R41,STK,STL,OHS（条件）,成本层与库存流水,CostLayerRef v1,STK,成本层被报表另建余额,NOT_STARTED,no
 R42,MFG,STK,Customer / Supplier（条件）,材料交接、耗用与在制,MaterialHandover v1,STK（事实）／MFG（关联）,转移、耗用、退回与损耗混同,NOT_STARTED,no
-R43,PTY,STL,OHS / Published Language,客户与供应商结算档案,TradingProfileRef v1,PTY,第二经营主体被隐式放行,NOT_STARTED,no
-R44,PTY,FUL,Customer／Supplier（守卫函数）,主体筛查结论；收货人与通知方身份,PartyScreeningGuard v1、PartyRef v1,PTY,筛查过期或 match 后仍放行,NOT_STARTED,yes
-R45,STL,FUL,Customer／Supplier（守卫函数）,合同付款条件满足状态（如出运前尾款已到账并核销）,PaymentConditionGuard v1,STL,撤销核销或退汇后仍放单,NOT_STARTED,yes
-R46,TRD,CNX,OHS / Published Language,外销订单、订单修订与外销合同／形式发票,SalesOrderRef v1、SalesContractDocumentRef v1,TRD,报关资料引用旧订单修订,NOT_STARTED,no
+R43,PTY,STL,OHS / Published Language,客户与供应商结算档案,TradingProfileRef v1,PTY,第二经营主体被隐式放行,DESIGN,no
+R44,PTY,FUL,Customer／Supplier（守卫函数）,主体筛查结论；收货人与通知方身份,PartyScreeningGuard v1、PartyRef v1,PTY,筛查过期或 match 后仍放行,DESIGN,yes
+R45,STL,FUL,Customer／Supplier（守卫函数）,合同付款条件满足状态（如出运前尾款已到账并核销）,PaymentConditionGuard v1,STL,撤销核销或退汇后仍放单,DESIGN,yes
+R46,TRD,CNX,OHS / Published Language,外销订单、订单修订与外销合同／形式发票,SalesOrderRef v1（订单修订、行、交易方与地址）、SalesContractDocumentRef v1,TRD,报关资料引用旧订单修订,DESIGN,no
 R47,POL,INQ,OHS / Published Language,币种、单位与交易条件配置引用,ConfigRef v1,POL,草稿引用已停用配置,NOT_STARTED,no
-R48,POL,PUR,OHS / Published Language,单位、税价、贸易与付款条件配置,ConfigRef v1、ConfigGuard v1,POL,草稿采用已失效配置,NOT_STARTED,yes
-R49,POL,FUL,OHS / Published Language,单证模板、编号规则与贸易条件配置,ConfigRef v1,POL,单证套用错误模板版本,NOT_STARTED,no
-R50,POL,CNX,OHS / Published Language,主体政策、税价口径与申报参数配置,ConfigRef v1,POL,按未冻结政策判定合规,NOT_STARTED,no
+R48,POL,PUR,OHS / Published Language,单位、税价、贸易与付款条件配置,ConfigRef v1、ConfigGuard v1、NumberIssue v1（采购单编号）,POL,草稿采用已失效配置,DESIGN,yes
+R49,POL,FUL,OHS / Published Language,单证模板、编号规则与贸易条件配置,ConfigRef v1、ConfigGuard v1、NumberIssue v1（shipment_document_template；商业发票与装箱单编号）,POL,单证套用错误模板版本,DESIGN,yes
+R50,POL,CNX,OHS / Published Language,主体政策、出口退税办法、税价口径、申报参数与启用的合规法规配置,ConfigRef v1＋ConfigGuard v1（screening_regulation、export_tax_policy）,POL,按未冻结政策判定合规,DESIGN,yes
 R51,CAT,CST,OHS / Published Language,SKU 与规格修订、单位换算依据,SkuRef v1,CAT,核价引用旧规格,NOT_STARTED,no
 R52,CAT,PUR,OHS / Published Language,SKU 与规格修订,SkuRef v1＋SkuGuard v1,CAT,采购规格与订单规格不一致,NOT_STARTED,yes
 R53,EVD,SUP,OHS / Published Language,供应报价来源与附件,SourceRef v1、FileRef v1,EVD,未核实来源当作已核实报价,NOT_STARTED,no
-R54,EVD,CNX,OHS / Published Language,票据、报关与证书原件及来源,SourceRef v1、FileRef v1,EVD,附件存在被当作真实性已核实,NOT_STARTED,no
-R55,CNX,STL,OHS / Published Language,退税核准与到账对账引用,TaxRefundResultRef v1,CNX,退税到账重复记为客户收款,NOT_STARTED,no
-R56,CNX,FUL,Customer／Supplier（守卫函数）,贸易合规结论、许可证用量与官方证书结果引用,TradeComplianceGuard v1、ExportLicenseGuard v1、CertificateResultRef v1,CNX,合规 blocked 或许可证超额后仍放行,NOT_STARTED,yes
-R57,STL,TRD,Customer／Supplier（守卫函数）,客户信用占用,CreditGuard v1,STL,无占用或占用不足仍生效赊销订单,NOT_STARTED,yes
-R58,CNX,TRD,Customer／Supplier（守卫函数）,贸易合规核查结论,TradeComplianceGuard v1,CNX,禁运或管制结论未 clear 仍生效订单,NOT_STARTED,yes
-R59,PUR,FUL,Customer／Supplier（守卫函数）,直发路线的已核实供应商交付,SupplierDeliveryGuard v1,PUR,出运量超过核实交付量,NOT_STARTED,yes
+R54,EVD,CNX,OHS / Published Language,票据、报关与证书原件及来源,SourceRef v1、FileRef v1,EVD,附件存在被当作真实性已核实,DESIGN,no
+R55,CNX,STL,OHS / Published Language,退税核准与到账对账引用,TaxRefundResultRef v1,CNX,退税到账重复记为客户收款,DESIGN,no
+R56,CNX,FUL,Customer／Supplier（守卫函数）,贸易合规结论、许可证用量与官方证书结果引用,TradeComplianceGuard v1、ExportLicenseGuard v1、CertificateResultRef v1,CNX,合规 blocked 或许可证超额后仍放行,DESIGN,yes
+R57,STL,TRD,Customer／Supplier（守卫函数）,客户信用占用,CreditGuard v1,STL,无占用或占用不足仍生效赊销订单,DESIGN,yes
+R58,CNX,TRD,Customer／Supplier（守卫函数）,贸易合规核查结论,TradeComplianceGuard v1,CNX,禁运或管制结论未 clear 仍生效订单,DESIGN,yes
+R59,PUR,FUL,Customer／Supplier（守卫函数）,直发路线的已核实供应商交付,SupplierDeliveryGuard v1,PUR,出运量超过核实交付量,DESIGN,yes
 R60,POL,PTY,OHS / Published Language,启用的筛查名单与法规配置,ConfigRef v1（screening_regulation；交易档案的 payment_terms、trade_terms）,POL,用未启用或已停用的名单筛查,NOT_STARTED,no
 R61,EVD,PTY,OHS / Published Language,主体与联系人核实所依据的来源及其读取权限,SourceRef v1,EVD,无权读取来源仍核实主数据,DESIGN,no
 R62,EVD,CAT,OHS / Published Language,SKU 核实所依据的来源及其读取权限,SourceRef v1,EVD,无权读取来源仍核实 SKU,DESIGN,no
 R63,EVD,POL,OHS / Published Language,配置发布核实所依据的来源及其读取权限,SourceRef v1,EVD,发布人无权读取核实证据仍发布配置,DESIGN,no
 R64,EVD,CST,OHS / Published Language,核价上下文、测量、假设与来源核验所依据的来源及其读取权限,SourceRef v1,EVD,核价人无权读取或来源已被否认仍作为核价证据,DESIGN,no
+R65,TRD,EVD,Published Language（事件）,正式报价与订单文档的文件登记（QuoteActivated、QuoteReplaced、OrderDocumentGenerated）,TRD 集成事件 v1、FormalDocument 读取,TRD（文档字节与绑定）／EVD（文件登记）,EVD 登记的文件与 TRD 封存的字节不一致,DESIGN,no
+R66,EVD,TSK,OHS,任务动作的提交结果对账（按命令、幂等键与请求哈希）,ActionReconciliation v1,EVD（动作账本）,以模型记忆或重新执行代替对账,DESIGN,no
+R67,INQ,TSK,OHS,任务动作的提交结果对账（按命令、幂等键与请求哈希）,ActionReconciliation v1,INQ（动作账本）,以模型记忆或重新执行代替对账,DESIGN,no
+R68,SUP,TSK,OHS,任务动作的提交结果对账（按命令、幂等键与请求哈希）,ActionReconciliation v1,SUP（动作账本）,以模型记忆或重新执行代替对账,DESIGN,no
+R69,CST,TSK,OHS,任务动作的提交结果对账（按命令、幂等键与请求哈希）,ActionReconciliation v1,CST（动作账本）,以模型记忆或重新执行代替对账,DESIGN,no
+R70,FUL,TRD,OHS（事务内无锁读取）,已确认出运量（按订单行跨修订累计）；订单取消、关闭与变更应用在 TRD 自身事务中锁定订单后读取,ShipmentFacts v1,FUL,先读后写使已提交出运被漏看（取消或减量低于出运量）,DESIGN,no
+R71,PUR,TRD,OHS（事务内无锁读取）,订单的未处置采购草稿、承诺与需求分配,DownstreamCommitments v1,PUR,有未处置承诺仍取消订单,DESIGN,no
+R72,EVD,QLT,OHS / Published Language,检验报告、标准与抽样依据的来源与文件,SourceRef v1、FileRef v1,EVD,外部报告被当作放行结论,DESIGN,no
+R73,PTY,QLT,OHS / Published Language,外部检验机构（service role inspection）,PartyRef v1、ServiceRoleRef v1,PTY,未核实机构的报告被采用,DESIGN,no
+R74,EVD,FUL,OHS / Published Language,订舱确认、提单与保险单、装箱与节点证据的来源与文件,SourceRef v1、FileRef v1,EVD,附件存在被当作单证已核实,DESIGN,no
+R75,EVD,STL,OHS / Published Language,银行流水、水单、差额依据与期初来源,SourceRef v1、FileRef v1,EVD,凭截图认定到账,DESIGN,no
+R76,EVD,PUR,OHS / Published Language,采购承诺发出、供应商确认与直发交付证据,SourceRef v1、FileRef v1,EVD,无证据登记供应商确认或交付,DESIGN,no
+R77,PTY,CNX,OHS / Published Language,交易方与地址所在国（贸易合规核查）,PartyRef v1、AddressRoleRef v1（含国家代码）,PTY,以自由文本地址推定所在国,DESIGN,no
+R78,CST,FUL,OHS,订单来源报价的成本快照中的保险费组件（CIF／CIP 投保核对，只读）,CostSnapshotRef v1,CST,保险费与核价组件不一致未被发现,DESIGN,no

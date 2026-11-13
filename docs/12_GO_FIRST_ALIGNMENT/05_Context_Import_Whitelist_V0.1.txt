@@ -1,23 +1,23 @@
 # tools/dependency-check 规则由 Context Map V0.1 的 relationships 生成，不手工编辑
-# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（64 条关系）
+# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（78 条关系）
 allow internal/contexts/pty/... -> internal/contexts/{evd,pol}/api
 allow internal/contexts/cat/... -> internal/contexts/evd/api
 allow internal/contexts/pol/... -> internal/contexts/evd/api
-# evd：无已登记上游（只依赖 kernel、reference/api、foundation）
+allow internal/contexts/evd/... -> internal/contexts/trd/api
 allow internal/contexts/inq/... -> internal/contexts/{cat,crm,evd,pol,pty}/api
 allow internal/contexts/sup/... -> internal/contexts/{cat,evd,inq,pol,pty}/api
 allow internal/contexts/cst/... -> internal/contexts/{cat,evd,inq,pol,sup}/api
-allow internal/contexts/trd/... -> internal/contexts/{cat,cnx,cst,evd,inq,pol,pty,stl,tsk}/api
-allow internal/contexts/pur/... -> internal/contexts/{cat,cst,pol,pty,sup,trd}/api
+allow internal/contexts/trd/... -> internal/contexts/{cat,cnx,cst,evd,ful,inq,pol,pty,pur,stl,tsk}/api
+allow internal/contexts/pur/... -> internal/contexts/{cat,cst,evd,pol,pty,sup,trd}/api
 allow internal/contexts/mfg/... -> internal/contexts/pur/api
-allow internal/contexts/qlt/... -> internal/contexts/{mfg,pur}/api
+allow internal/contexts/qlt/... -> internal/contexts/{evd,mfg,pty,pur}/api
 allow internal/contexts/stk/... -> internal/contexts/{mfg,pur}/api
-allow internal/contexts/ful/... -> internal/contexts/{cnx,pol,pty,pur,qlt,stk,stl,trd}/api
-allow internal/contexts/stl/... -> internal/contexts/{clm,cnx,ful,pol,pty,pur,stk,trd}/api
+allow internal/contexts/ful/... -> internal/contexts/{cnx,cst,evd,pol,pty,pur,qlt,stk,stl,trd}/api
+allow internal/contexts/stl/... -> internal/contexts/{clm,cnx,evd,ful,pol,pty,pur,stk,trd}/api
 allow internal/contexts/clm/... -> internal/contexts/ful/api
-allow internal/contexts/cnx/... -> internal/contexts/{cat,evd,ful,pol,pur,stl,trd}/api
+allow internal/contexts/cnx/... -> internal/contexts/{cat,evd,ful,pol,pty,pur,stl,trd}/api
 # crm：无已登记上游（只依赖 kernel、reference/api、foundation）
-allow internal/contexts/tsk/... -> internal/contexts/trd/api
+allow internal/contexts/tsk/... -> internal/contexts/{cst,evd,inq,sup,trd}/api
 deny  internal/contexts/*/api -> internal/contexts/*/api          # api 是叶子包
 deny  internal/contexts/... -> internal/{transport,ai,processes,bootstrap}/...
 deny  internal/foundation/... -> internal/contexts/...
