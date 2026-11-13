@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -16,6 +17,8 @@ type TRD interface {
 	trdapi.Commands
 	trdapi.Queries
 	trdapi.Reconciler
+	trdapi.ActionReconciler
+	trdapi.GoalQueries
 	trdapi.Auditor
 }
 
@@ -36,7 +39,7 @@ func receiptOf[Rec, C, R any](call func(context.Context, C) (R, error)) func(con
 func trdCommands(c TRD) *commandSet {
 	// TRD's commands name their objects as Python's T03/T04 contracts do (quote_id, response_id,
 	// acceptance_id, order_id), so no member is renamed to id.
-	return &commandSet{bc: "trd", contract: trdapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
+	return &commandSet{bc: "trd", contract: trdapi.Contract, auditor: c, audit: c.Audit, reconcile: hashReconciler(c.Reconcile, c.ReconcileHash), commands: map[string]commandFunc{
 		trdapi.CommandSaveDraft:                 reflected("", "", receiptOf[trdapi.Receipt](c.SaveDraft)),
 		trdapi.CommandRevise:                    reflected("", "", receiptOf[trdapi.Receipt](c.Revise)),
 		trdapi.CommandDiscardDraft:              reflected("", "", receiptOf[trdapi.Receipt](c.DiscardDraft)),
@@ -113,7 +116,11 @@ func revisionParam(r *http.Request) (int64, error) {
 // queryInts reads the query parameters names as non-negative integers (0 when absent); any other
 // parameter, a repeated one or a malformed value is SCHEMA_INVALID.
 func queryInts(r *http.Request, names ...string) (map[string]int64, error) {
-	q := r.URL.Query()
+	return queryValues(r.URL.Query(), names...)
+}
+
+// queryValues is queryInts on the parameters q.
+func queryValues(q url.Values, names ...string) (map[string]int64, error) {
 	for k := range q {
 		if !slices.Contains(names, k) {
 			return nil, kernel.Reject(kernel.CodeSchemaInvalid, "/"+k, "unknown query parameter")
@@ -141,6 +148,41 @@ func (s *server) quoteReady(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		var v trdapi.QuoteReadiness
 		if v, err = s.cfg.TRD.QuoteReady(r.Context(), trdapi.ReadyQuery{QuoteID: r.PathValue("id"), BusinessRevision: q["business_revision"]}); err == nil {
+			writeJSON(w, http.StatusOK, okView(v))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+// goalReadiness answers GET /api/brant/v1/trd/quotes/<id>/goal_readiness?goal=quote_ready|order_active
+// [&goal_version=1][&business_revision=N][&customer_id=][&rfq_id=] (GoalReadiness v1, Context Map
+// R18; baseline 15.4): every assertion the goal requires with its answer, checks and evidence, and
+// the outcome. goal_version defaults to 1. The order_active form is the HTTP read of the root's one
+// full_v1 order (its ID, revision and hash) and whether it is active. An unsatisfied assertion is
+// the answer, not an error.
+func (s *server) goalReadiness(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	text := []string{"goal", "customer_id", "rfq_id"}
+	ints := url.Values{}
+	for k, v := range q {
+		if len(v) != 1 {
+			s.reject(w, r, kernel.Reject(kernel.CodeSchemaInvalid, "/"+k, "repeated query parameter"))
+			return
+		}
+		if !slices.Contains(text, k) {
+			ints[k] = v
+		}
+	}
+	nums, err := queryValues(ints, "goal_version", "business_revision")
+	if err == nil {
+		gq := trdapi.GoalQuery{Goal: q.Get("goal"), GoalVersion: trdapi.GoalVersion, QuoteID: r.PathValue("id"),
+			BusinessRevision: nums["business_revision"], CustomerID: q.Get("customer_id"), RfqID: q.Get("rfq_id")}
+		if q.Has("goal_version") {
+			gq.GoalVersion = nums["goal_version"]
+		}
+		var v trdapi.GoalAssessment
+		if v, err = s.cfg.TRD.GoalReadiness(r.Context(), gq); err == nil {
 			writeJSON(w, http.StatusOK, okView(v))
 			return
 		}

@@ -719,6 +719,26 @@ type Reconciler interface {
 	Reconcile(ctx context.Context, cmd Command) (Reconciliation, error)
 }
 
+// ActionReconciler is TRD's ActionReconciliation v1 (Context Map R18 TRD→TSK, S4 decision D-11):
+// reconciliation by the ledger identity of a command, for a caller that kept the request rather
+// than the command (TSK's ActionExecution, which records it before the command is sent). This is
+// Python t03_reconciliation.reconcile's own form (command, idempotency_key, request_hash).
+//
+// RequestOf returns the command name, idempotency key and request hash TRD's ledger records for cmd
+// — hashed exactly as executing it hashes it — and executes and reads nothing; a command TRD does
+// not know is SCHEMA_INVALID. ReconcileHash answers what Reconcile answers for the command that
+// hashes to requestHash: committed with the stored receipt, payload_conflict or not_committed,
+// after the same checks (trd.read, the caller's data scope now and, for quote.response.record and
+// quote.response.verify, the sources of the customer response the stored result names; X-INV-003),
+// audited the same way (action.reconcile), executing nothing and unfenced by the object control.
+// The sources another command cited are part of its request only, which a reconciliation by hash
+// does not have; they are not re-checked. An unknown command name, an invalid key or a request hash
+// that is not 64 lower-case hexadecimal digits is SCHEMA_INVALID.
+type ActionReconciler interface {
+	RequestOf(cmd Command) (kernel.ActionRequest, error)
+	ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (Reconciliation, error)
+}
+
 func head(key, id string, expected, minVersion int64) error {
 	switch {
 	case !kernel.ValidIdentifier(key):

@@ -366,24 +366,51 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 // Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
 // it (api.Reconciler; contract 06, 动作对账).
 func (s Service) Reconcile(ctx context.Context, cmd api.Command) (api.Reconciliation, error) {
+	r, err := s.RequestOf(cmd)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	ids, ofResponse := cited(cmd)
+	return s.reconcile(ctx, r, ids, ofResponse)
+}
+
+// RequestOf returns the ledger identity of cmd, hashed as executing it hashes it
+// (api.ActionReconciler; ActionReconciliation v1, Context Map R18).
+func (s Service) RequestOf(cmd api.Command) (kernel.ActionRequest, error) {
 	name, key, args := request(cmd)
 	if name == "" {
-		return api.Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
+		return kernel.ActionRequest{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
 	}
 	hash, err := action.RequestHash(args)
 	if err != nil {
-		return api.Reconciliation{}, err
+		return kernel.ActionRequest{}, err
 	}
-	if ctx, err = s.storedSources(ctx, cmd); err != nil {
-		return api.Reconciliation{}, err
-	}
-	r, err := s.Ledger.Reconcile(ctx, name, key, hash)
+	return kernel.ActionRequest{Command: name, IdempotencyKey: key, RequestHash: hash}, nil
+}
+
+// ReconcileHash reports what became of the command the ledger identity names, without executing
+// anything (api.ActionReconciler; ActionReconciliation v1, Context Map R18). Without the request,
+// the sources re-checked are those TRD stored with the result: the customer response's, for
+// quote.response.record and quote.response.verify (as Python's reconcile re-checks them).
+func (s Service) ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (api.Reconciliation, error) {
+	ofResponse := command == api.CommandRecordResponse || command == api.CommandVerifyResponse
+	return s.reconcile(ctx, kernel.ActionRequest{Command: command, IdempotencyKey: idempotencyKey, RequestHash: requestHash}, nil, ofResponse)
+}
+
+// reconcile asks EVD whether the caller reads the sources (ids, or the customer response's when
+// ofResponse) of a stored result of r, then the ledger what became of r.
+func (s Service) reconcile(ctx context.Context, r kernel.ActionRequest, ids []string, ofResponse bool) (api.Reconciliation, error) {
+	ctx, err := s.sourcesOf(ctx, r.Command, r.IdempotencyKey, ids, ofResponse)
 	if err != nil {
 		return api.Reconciliation{}, err
 	}
-	out := api.Reconciliation{State: r.State, ActionID: r.ActionID, ObjectID: r.ObjectID}
-	if r.Result != nil {
-		receipt := api.Receipt(*r.Result)
+	rec, err := s.Ledger.Reconcile(ctx, r.Command, r.IdempotencyKey, r.RequestHash)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	out := api.Reconciliation{State: rec.State, ActionID: rec.ActionID, ObjectID: rec.ObjectID}
+	if rec.Result != nil {
+		receipt := api.Receipt(*rec.Result)
 		out.Receipt = &receipt
 	}
 	return out, nil

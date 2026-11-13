@@ -24,11 +24,12 @@ type Module struct {
 }
 
 var (
-	_ api.Commands   = (*Module)(nil)
-	_ api.Queries    = (*Module)(nil)
-	_ api.Auditor    = (*Module)(nil)
-	_ api.Reconciler = (*Module)(nil)
-	_ api.RfqLookups = (*Module)(nil)
+	_ api.Commands         = (*Module)(nil)
+	_ api.Queries          = (*Module)(nil)
+	_ api.Auditor          = (*Module)(nil)
+	_ api.Reconciler       = (*Module)(nil)
+	_ api.ActionReconciler = (*Module)(nil)
+	_ api.RfqLookups       = (*Module)(nil)
 )
 
 // New wires INQ to db, a transaction owner that belongs to INQ alone, and to the queries of its

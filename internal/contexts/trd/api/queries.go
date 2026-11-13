@@ -17,7 +17,9 @@ import (
 // Readiness (QuoteReady, T03 A8 quote_ready; Context Map R18 GoalReadiness) says whether the root's
 // active revision serves the next step now: it re-checks what quote.activate checked and what the
 // order step will (TRD-INV-014) against the current state — the object control as a write by the
-// caller would meet it, the formal document's bytes, risk holds, the validity, the approval the
+// caller would meet it, the formal document's bytes, risk holds, the validity, the root's conversion
+// slot (once an order holds it, the revision serves no further conversion: CONVERSION_SLOT_CONFLICT
+// under the check conversion; S4 unit A3), the approval the
 // commit evidence names with its reviewer's (and margin exception approver's) current
 // qualification, the upstream guards of everything the revision binds (CAT, CST, INQ, POL, PTY, in
 // the freeze's order), the cost scope and sales terms bound again on the current inputs and

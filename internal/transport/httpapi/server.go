@@ -42,6 +42,8 @@ type (
 	EVD interface {
 		evdapi.Commands
 		evdapi.Queries
+		evdapi.Reconciler
+		evdapi.ActionReconciler
 		evdapi.Auditor
 	}
 	PTY interface {
@@ -64,6 +66,7 @@ type (
 		inqapi.Commands
 		inqapi.Queries
 		inqapi.Reconciler
+		inqapi.ActionReconciler
 		inqapi.Auditor
 	}
 	REF interface {
@@ -190,6 +193,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check", s.authenticated(s.approvalCheck))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/document", s.authenticated(s.formalDocument))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/ready", s.authenticated(s.quoteReady))
+	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/goal_readiness", s.authenticated(s.goalReadiness))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/history", s.authenticated(quoteHistory(s, cfg.TRD.QuoteHistory)))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/approvals", s.authenticated(quoteHistory(s, cfg.TRD.ApprovalHistory)))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/documents", s.authenticated(quoteHistory(s, cfg.TRD.DocumentHistory)))

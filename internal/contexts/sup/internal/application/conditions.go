@@ -100,23 +100,26 @@ func (j judge) document(d document, w own) error {
 
 // SaveSupplierOffer saves the whole draft revision of a supplier offer (supplier_offer.save_draft).
 func (s Service) SaveSupplierOffer(ctx context.Context, cmd api.SaveSupplierOffer) (api.Receipt, error) {
-	return s.save(ctx, cmd.IdempotencyKey, cmd.OfferID, cmd.ExpectedVersion, document{kind: api.KindSupplierOffer, offer: &cmd.Data},
+	_, _, args := request(cmd)
+	return s.save(ctx, cmd.IdempotencyKey, cmd.OfferID, cmd.ExpectedVersion, document{kind: api.KindSupplierOffer, offer: &cmd.Data}, args,
 		cmd.Validate())
 }
 
 // SavePurchaseTerms saves the whole draft revision of purchase terms (purchase_terms.save_draft).
 func (s Service) SavePurchaseTerms(ctx context.Context, cmd api.SavePurchaseTerms) (api.Receipt, error) {
-	return s.save(ctx, cmd.IdempotencyKey, cmd.TermsID, cmd.ExpectedVersion, document{kind: api.KindPurchaseTerms, terms: &cmd.Data},
+	_, _, args := request(cmd)
+	return s.save(ctx, cmd.IdempotencyKey, cmd.TermsID, cmd.ExpectedVersion, document{kind: api.KindPurchaseTerms, terms: &cmd.Data}, args,
 		cmd.Validate())
 }
 
 // SaveLogisticsOffer saves the whole draft revision of a logistics offer (logistics_offer.save_draft).
 func (s Service) SaveLogisticsOffer(ctx context.Context, cmd api.SaveLogisticsOffer) (api.Receipt, error) {
-	return s.save(ctx, cmd.IdempotencyKey, cmd.OfferID, cmd.ExpectedVersion, document{kind: api.KindLogisticsOffer, logistics: &cmd.Data},
+	_, _, args := request(cmd)
+	return s.save(ctx, cmd.IdempotencyKey, cmd.OfferID, cmd.ExpectedVersion, document{kind: api.KindLogisticsOffer, logistics: &cmd.Data}, args,
 		cmd.Validate())
 }
 
-func (s Service) save(ctx context.Context, key, id string, expected int64, doc document, validation error) (api.Receipt, error) {
+func (s Service) save(ctx context.Context, key, id string, expected int64, doc document, args any, validation error) (api.Receipt, error) {
 	var f facts
 	h := &conditionCommand{s: s, kind: doc.kind, id: id}
 	prepare := func(ctx context.Context) (err error) {
@@ -162,11 +165,6 @@ func (s Service) save(ctx context.Context, key, id string, expected int64, doc d
 		}
 		return h.outcome(rev), err
 	}
-	args := struct {
-		Kind string
-		ID   string
-		Data any
-	}{doc.kind, id, doc.member()}
 	return s.run(ctx, action.Command{Name: api.Command(doc.kind, api.ActionSaveDraft), IdempotencyKey: key, ObjectID: id}, args, validation,
 		prepared{h, prepare})
 }
@@ -189,11 +187,7 @@ func (s Service) Revise(ctx context.Context, cmd api.Revise) (api.Receipt, error
 		}
 		return h.outcome(rev), err
 	}
-	args := struct {
-		Kind, ID     string
-		BaseRevision int64
-		Reason       string
-	}{cmd.Kind, cmd.ID, cmd.BaseRevision, cmd.Reason}
+	_, _, args := request(cmd)
 	return s.run(ctx, action.Command{Name: api.Command(cmd.Kind, api.ActionRevise), IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ID,
 		Reason: cmd.Reason}, args, cmd.Validate(), h)
 }
@@ -216,11 +210,7 @@ func (s Service) DiscardDraft(ctx context.Context, cmd api.DiscardDraft) (api.Re
 		}
 		return h.outcome(rev), err
 	}
-	args := struct {
-		Kind, ID        string
-		WorkingRevision int64
-		Reason          string
-	}{cmd.Kind, cmd.ID, cmd.WorkingRevision, cmd.Reason}
+	_, _, args := request(cmd)
 	return s.run(ctx, action.Command{Name: api.Command(cmd.Kind, api.ActionDiscardDraft), IdempotencyKey: cmd.IdempotencyKey,
 		ObjectID: cmd.ID, Reason: cmd.Reason}, args, cmd.Validate(), h)
 }
@@ -309,12 +299,7 @@ func (s Service) Seal(ctx context.Context, cmd api.Seal) (api.Receipt, error) {
 		}
 		return h.outcome(active, h.event(sealEvents[cmd.Kind], active, fields)), err
 	}
-	args := struct {
-		Kind, ID           string
-		WorkingRevision    int64
-		SupersedesRevision int64
-		Evidence           []api.Evidence
-	}{cmd.Kind, cmd.ID, cmd.WorkingRevision, cmd.SupersedesRevision, cmd.Evidence}
+	_, _, args := request(cmd)
 	return s.run(ctx, action.Command{Name: api.Command(cmd.Kind, api.SealAction(cmd.Kind)), IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ID}, args, cmd.Validate(),
 		prepared{h, prepare})
 }
@@ -356,12 +341,7 @@ func (s Service) End(ctx context.Context, cmd api.End) (api.Receipt, error) {
 		}
 		return h.outcome(target, h.event(endEvents[cmd.Kind], target, map[string]any{"active_revision": active})), err
 	}
-	args := struct {
-		Kind, ID       string
-		TargetRevision int64
-		Reason         string
-		Evidence       []api.Evidence
-	}{cmd.Kind, cmd.ID, cmd.TargetRevision, cmd.Reason, cmd.Evidence}
+	_, _, args := request(cmd)
 	return s.run(ctx, action.Command{Name: api.Command(cmd.Kind, api.EndAction(cmd.Kind)), IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ID, Reason: cmd.Reason}, args,
 		cmd.Validate(), prepared{h, prepare})
 }

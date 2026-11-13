@@ -242,3 +242,19 @@ type Reconciliation struct {
 type Reconciler interface {
 	Reconcile(ctx context.Context, cmd Command) (Reconciliation, error)
 }
+
+// ActionReconciler is CST's ActionReconciliation v1 (Context Map R69 CST→TSK, S4 decision D-11):
+// reconciliation by the ledger identity of a command, for a caller that kept the request rather
+// than the command (TSK's ActionExecution, which records it before the command is sent).
+//
+// RequestOf returns the command name, idempotency key and request hash CST's ledger records for cmd
+// — hashed exactly as executing it hashes it — and executes and reads nothing; a command CST does
+// not know is SCHEMA_INVALID. ReconcileHash answers what Reconcile answers for the command that
+// hashes to requestHash: committed with the stored receipt, payload_conflict or not_committed,
+// after the same checks (cst.read and the caller's data scope now, X-INV-003), audited the same way
+// (action.reconcile), executing nothing. An unknown command name, an invalid key or a request hash
+// that is not 64 lower-case hexadecimal digits is SCHEMA_INVALID.
+type ActionReconciler interface {
+	RequestOf(cmd Command) (kernel.ActionRequest, error)
+	ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (Reconciliation, error)
+}

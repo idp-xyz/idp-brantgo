@@ -67,13 +67,11 @@ func (s Service) RegisterSource(ctx context.Context, cmd api.RegisterSource) (ap
 	}
 	reg := source.Registration{OriginID: cmd.SourceID, Kind: source.Kind(cmd.SourceKind), Text: cmd.ContentText,
 		Channel: source.Channel{Provider: cmd.Provider, AccountRef: cmd.AccountRef, ExternalMessageID: cmd.ExternalMessageID, AuthorClaim: cmd.AuthorClaim}}
-	args := cmd
-	args.IdempotencyKey = ""
-	hash, err := action.RequestHash(args)
+	r, err := s.RequestOf(cmd)
 	if err != nil {
 		return api.Receipt{}, err
 	}
-	res, err := s.Ledger.Execute(ctx, action.Command{Name: api.CommandRegisterSource, IdempotencyKey: cmd.IdempotencyKey, RequestHash: hash, ObjectID: cmd.SourceID},
+	res, err := s.Ledger.Execute(ctx, action.Command{Name: r.Command, IdempotencyKey: r.IdempotencyKey, RequestHash: r.RequestHash, ObjectID: cmd.SourceID},
 		&register{clock: s.Clock, reg: reg})
 	return api.Receipt(res), err
 }
@@ -208,13 +206,11 @@ func (s Service) RegisterFile(ctx context.Context, cmd api.RegisterFile) (api.Re
 	if err := cmd.Validate(); err != nil {
 		return api.Receipt{}, s.rejectEarly(ctx, api.CommandRegisterFile, cmd.FileID, err)
 	}
-	args := cmd
-	args.IdempotencyKey = ""
-	hash, err := action.RequestHash(args)
+	r, err := s.RequestOf(cmd)
 	if err != nil {
 		return api.Receipt{}, err
 	}
-	res, err := s.Ledger.Execute(ctx, action.Command{Name: api.CommandRegisterFile, IdempotencyKey: cmd.IdempotencyKey, RequestHash: hash, ObjectID: cmd.FileID},
+	res, err := s.Ledger.Execute(ctx, action.Command{Name: r.Command, IdempotencyKey: r.IdempotencyKey, RequestHash: r.RequestHash, ObjectID: cmd.FileID},
 		&registerFile{clock: s.Clock, cmd: cmd})
 	return api.Receipt(res), err
 }
@@ -288,4 +284,53 @@ func (s Service) GetFile(ctx context.Context, id string) (api.FileView, error) {
 		return nil
 	})
 	return v, err
+}
+
+// RequestOf returns the ledger identity of cmd: its name, its idempotency key and the hash of every
+// other member, as executing it hashes them (api.ActionReconciler; ActionReconciliation v1,
+// Context Map R66).
+func (s Service) RequestOf(cmd api.Command) (kernel.ActionRequest, error) {
+	var name, key string
+	var args any
+	switch c := cmd.(type) {
+	case api.RegisterSource:
+		name, key, c.IdempotencyKey = api.CommandRegisterSource, c.IdempotencyKey, ""
+		args = c
+	case api.RegisterFile:
+		name, key, c.IdempotencyKey = api.CommandRegisterFile, c.IdempotencyKey, ""
+		args = c
+	default:
+		return kernel.ActionRequest{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
+	}
+	hash, err := action.RequestHash(args)
+	if err != nil {
+		return kernel.ActionRequest{}, err
+	}
+	return kernel.ActionRequest{Command: name, IdempotencyKey: key, RequestHash: hash}, nil
+}
+
+// Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
+// it (api.Reconciler; contract 06, 动作对账).
+func (s Service) Reconcile(ctx context.Context, cmd api.Command) (api.Reconciliation, error) {
+	r, err := s.RequestOf(cmd)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	return s.ReconcileHash(ctx, r.Command, r.IdempotencyKey, r.RequestHash)
+}
+
+// ReconcileHash reports what became of the command the ledger identity names, without executing
+// anything (api.ActionReconciler; ActionReconciliation v1, Context Map R66): the ledger re-checks
+// evd.read and the visibility of the source or file the stored result names now.
+func (s Service) ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (api.Reconciliation, error) {
+	r, err := s.Ledger.Reconcile(ctx, command, idempotencyKey, requestHash)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	out := api.Reconciliation{State: r.State, ActionID: r.ActionID, ObjectID: r.ObjectID}
+	if r.Result != nil {
+		receipt := api.Receipt(*r.Result)
+		out.Receipt = &receipt
+	}
+	return out, nil
 }

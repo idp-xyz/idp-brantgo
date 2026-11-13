@@ -52,6 +52,8 @@ var (
 	_ api.OrderDocumentCommands = (*Module)(nil)
 	_ api.Auditor               = (*Module)(nil)
 	_ api.Reconciler            = (*Module)(nil)
+	_ api.ActionReconciler      = (*Module)(nil)
+	_ api.GoalQueries           = (*Module)(nil)
 )
 
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,
