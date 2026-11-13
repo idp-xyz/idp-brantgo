@@ -1,0 +1,1908 @@
+{
+  "tool": "tests/load",
+  "mode": "stages",
+  "label": "run3-two-workers",
+  "started_at": "2026-11-12T15:10:01Z",
+  "finished_at": "2026-11-12T15:13:33Z",
+  "tenant": "load.20261112T151001.f11d",
+  "company": "company.A",
+  "environment": {
+    "go": "go1.26.8",
+    "os_arch": "linux/amd64",
+    "kernel": "6.18.58.1-microsoft-standard-WSL2",
+    "wsl": true,
+    "nproc": 20,
+    "host_at_start": {
+      "at": "2026-11-12T15:10:01Z",
+      "uptime": "10:10:01 up 1 day,  8:59,  1 user,  load average: 4.68, 9.32, 7.46",
+      "load1": 4.68,
+      "load5": 9.32,
+      "load15": 7.46,
+      "nproc": 20,
+      "mem_free_mib": 1711,
+      "mem_available_mib": 48500,
+      "mem_total_mib": 64301,
+      "swap_used_mib": 388
+    },
+    "postgresql": "PostgreSQL 16.12 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "postgresql_settings": {
+      "archive_mode": "on",
+      "archive_timeout": "60s",
+      "checkpoint_timeout": "300s",
+      "default_transaction_isolation": "read committed",
+      "effective_cache_size": "5242888kB",
+      "fsync": "on",
+      "max_connections": "100",
+      "max_wal_size": "1024MB",
+      "shared_buffers": "163848kB",
+      "synchronous_commit": "on",
+      "wal_level": "replica",
+      "work_mem": "4096kB"
+    },
+    "api_pool": "pgxpool pool_max_conns=20",
+    "database_bytes_start": 739925015,
+    "database_bytes_end": 915938327,
+    "transport": "brant-api process on 127.0.0.1, HTTP/1.1 keep-alive, JSON",
+    "identity": "local OIDC issuer of the load generator (RS256, typ at+jwt, JWKS by discovery)"
+  },
+  "workload": "BRC-001 on one tenant and company (company.A), one customer (customer.1), one RFQ (rfq.1, 4 lines, 120 PCS) and one cost snapshot (660.00 USD). A command user repeats the order cycle: evd file.register (the customer's PO, ~3.7 KiB text), trd quote.save_draft, quote.freeze, GET quote, quote.submit_review, quote.review.decide, quote.activate (formal document and QT number), evd source.register (the customer's mail), quote.response.record, quote.response.verify, order.prepare, GET order, order.review.request, order.review.decide, cnx trade_compliance.evaluate, GET check, trade_compliance.decide, stl credit.reserve (672.00 of the shared customer credit), GET order check, trd order.activate, pur purchase.draft.prepare (600.00): 17 commands and 4 reads, as six humans (sales, quote.reviewer, acceptance.verifier, order.reviewer, compliance, purchaser). A read user issues one of 14 GET routes uniformly on the cycles completed so far. Closed loop, no think time; brant-worker -dispatch relays the Outbox to the contexts' consumers (STL consumes the reservation on OrderActivated).",
+  "setup": {
+    "seconds": 1.28,
+    "requests": 94
+  },
+  "prime": {
+    "cycles": 3,
+    "seconds": 1.87,
+    "commands": {
+      "requests": 51,
+      "ok": 51,
+      "errors": 0,
+      "timeouts": 0,
+      "transport_errors": 0,
+      "error_rate": 0,
+      "timeout_rate": 0,
+      "rps": 17.8,
+      "latency_ok": {
+        "count": 51,
+        "mean_ms": 33.23,
+        "p50_ms": 25.22,
+        "p95_ms": 76.07,
+        "p99_ms": 85.86,
+        "max_ms": 85.86
+      },
+      "by_name": {
+        "cnx trade_compliance.decide": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 18.4,
+            "p50_ms": 18.86,
+            "p95_ms": 19.5,
+            "p99_ms": 19.5,
+            "max_ms": 19.5
+          }
+        },
+        "cnx trade_compliance.evaluate": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 44.26,
+            "p50_ms": 46.72,
+            "p95_ms": 50.86,
+            "p99_ms": 50.86,
+            "max_ms": 50.86
+          }
+        },
+        "evd file.register": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 7.19,
+            "p50_ms": 6.7,
+            "p95_ms": 8.55,
+            "p99_ms": 8.55,
+            "max_ms": 8.55
+          }
+        },
+        "evd source.register": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 7.56,
+            "p50_ms": 7.69,
+            "p95_ms": 7.86,
+            "p99_ms": 7.86,
+            "max_ms": 7.86
+          }
+        },
+        "pur purchase.draft.prepare": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 62.86,
+            "p50_ms": 63.54,
+            "p95_ms": 73.8,
+            "p99_ms": 73.8,
+            "max_ms": 73.8
+          }
+        },
+        "stl credit.reserve": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 30.38,
+            "p50_ms": 30.32,
+            "p95_ms": 33.06,
+            "p99_ms": 33.06,
+            "max_ms": 33.06
+          }
+        },
+        "trd order.activate": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 47.2,
+            "p50_ms": 44.01,
+            "p95_ms": 56.03,
+            "p99_ms": 56.03,
+            "max_ms": 56.03
+          }
+        },
+        "trd order.prepare": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 24.17,
+            "p50_ms": 22.19,
+            "p95_ms": 30.31,
+            "p99_ms": 30.31,
+            "max_ms": 30.31
+          }
+        },
+        "trd order.review.decide": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 44.72,
+            "p50_ms": 45.21,
+            "p95_ms": 47.08,
+            "p99_ms": 47.08,
+            "max_ms": 47.08
+          }
+        },
+        "trd order.review.request": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 22.71,
+            "p50_ms": 22.69,
+            "p95_ms": 22.86,
+            "p99_ms": 22.86,
+            "max_ms": 22.86
+          }
+        },
+        "trd quote.activate": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 76.76,
+            "p50_ms": 76.07,
+            "p95_ms": 81.52,
+            "p99_ms": 81.52,
+            "max_ms": 81.52
+          }
+        },
+        "trd quote.freeze": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 73.82,
+            "p50_ms": 72.2,
+            "p95_ms": 85.86,
+            "p99_ms": 85.86,
+            "max_ms": 85.86
+          }
+        },
+        "trd quote.response.record": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 19.76,
+            "p50_ms": 20.53,
+            "p95_ms": 20.55,
+            "p99_ms": 20.55,
+            "max_ms": 20.55
+          }
+        },
+        "trd quote.response.verify": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 26.54,
+            "p50_ms": 26.57,
+            "p95_ms": 28.57,
+            "p99_ms": 28.57,
+            "max_ms": 28.57
+          }
+        },
+        "trd quote.review.decide": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 25.35,
+            "p50_ms": 25.22,
+            "p95_ms": 25.8,
+            "p99_ms": 25.8,
+            "max_ms": 25.8
+          }
+        },
+        "trd quote.save_draft": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 16.72,
+            "p50_ms": 16.84,
+            "p95_ms": 19.25,
+            "p99_ms": 19.25,
+            "max_ms": 19.25
+          }
+        },
+        "trd quote.submit_review": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 16.47,
+            "p50_ms": 16.22,
+            "p95_ms": 17.29,
+            "p99_ms": 17.29,
+            "max_ms": 17.29
+          }
+        }
+      }
+    },
+    "reads": {
+      "requests": 12,
+      "ok": 12,
+      "errors": 0,
+      "timeouts": 0,
+      "transport_errors": 0,
+      "error_rate": 0,
+      "timeout_rate": 0,
+      "rps": 4.19,
+      "latency_ok": {
+        "count": 12,
+        "mean_ms": 13.86,
+        "p50_ms": 7.42,
+        "p95_ms": 38.92,
+        "p99_ms": 38.92,
+        "max_ms": 38.92
+      },
+      "by_name": {
+        "GET cnx.trade_compliance_check": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 6.58,
+            "p50_ms": 6.78,
+            "p95_ms": 8.14,
+            "p99_ms": 8.14,
+            "max_ms": 8.14
+          }
+        },
+        "GET trd.order": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 7.55,
+            "p50_ms": 7.44,
+            "p95_ms": 7.8,
+            "p99_ms": 7.8,
+            "max_ms": 7.8
+          }
+        },
+        "GET trd.order.check": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 34.31,
+            "p50_ms": 34.04,
+            "p95_ms": 38.92,
+            "p99_ms": 38.92,
+            "max_ms": 38.92
+          }
+        },
+        "GET trd.quote": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 6.98,
+            "p50_ms": 7.21,
+            "p95_ms": 7.3,
+            "p99_ms": 7.3,
+            "max_ms": 7.3
+          }
+        }
+      }
+    }
+  },
+  "stages": [
+    {
+      "stage": 1,
+      "command_users": 4,
+      "read_users": 4,
+      "cycles_readable_at_start": 3,
+      "window": {
+        "from": "2026-11-12T15:10:15.63060958Z",
+        "to": "2026-11-12T15:11:05.63060958Z",
+        "seconds": 50
+      },
+      "host_before": {
+        "at": "2026-11-12T15:10:05Z",
+        "uptime": "10:10:05 up 1 day,  8:59,  1 user,  load average: 4.71, 9.25, 7.44",
+        "load1": 4.71,
+        "load5": 9.25,
+        "load15": 7.44,
+        "nproc": 20,
+        "mem_free_mib": 1649,
+        "mem_available_mib": 48441,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 388
+      },
+      "host_after": {
+        "at": "2026-11-12T15:11:11Z",
+        "uptime": "10:11:11 up 1 day,  9:00,  1 user,  load average: 8.49, 9.53, 7.66",
+        "load1": 8.49,
+        "load5": 9.53,
+        "load15": 7.66,
+        "nproc": 20,
+        "mem_free_mib": 1360,
+        "mem_available_mib": 48285,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 388
+      },
+      "commands": {
+        "requests": 4826,
+        "ok": 4826,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 96.52,
+        "latency_ok": {
+          "count": 4826,
+          "mean_ms": 37.86,
+          "p50_ms": 30.23,
+          "p95_ms": 86.5,
+          "p99_ms": 95.06,
+          "max_ms": 137.77
+        },
+        "by_name": {
+          "cnx trade_compliance.decide": {
+            "requests": 283,
+            "errors": 0,
+            "latency_ok": {
+              "count": 283,
+              "mean_ms": 21.46,
+              "p50_ms": 21.32,
+              "p95_ms": 24.08,
+              "p99_ms": 26.91,
+              "max_ms": 28.38
+            }
+          },
+          "cnx trade_compliance.evaluate": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 48.59,
+              "p50_ms": 47.88,
+              "p95_ms": 53.67,
+              "p99_ms": 57.4,
+              "max_ms": 110.47
+            }
+          },
+          "evd file.register": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 7.56,
+              "p50_ms": 7.39,
+              "p95_ms": 9.13,
+              "p99_ms": 11.5,
+              "max_ms": 18.08
+            }
+          },
+          "evd source.register": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 8.24,
+              "p50_ms": 8.06,
+              "p95_ms": 9.87,
+              "p99_ms": 11.33,
+              "max_ms": 12.69
+            }
+          },
+          "pur purchase.draft.prepare": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 69.32,
+              "p50_ms": 68.46,
+              "p95_ms": 76.1,
+              "p99_ms": 96.07,
+              "max_ms": 137.77
+            }
+          },
+          "stl credit.reserve": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 36.34,
+              "p50_ms": 35.41,
+              "p95_ms": 44.95,
+              "p99_ms": 50.3,
+              "max_ms": 54.25
+            }
+          },
+          "trd order.activate": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 51.69,
+              "p50_ms": 51.21,
+              "p95_ms": 56.67,
+              "p99_ms": 67.75,
+              "max_ms": 82.13
+            }
+          },
+          "trd order.prepare": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 24.41,
+              "p50_ms": 24.1,
+              "p95_ms": 27.83,
+              "p99_ms": 32.65,
+              "max_ms": 33.99
+            }
+          },
+          "trd order.review.decide": {
+            "requests": 283,
+            "errors": 0,
+            "latency_ok": {
+              "count": 283,
+              "mean_ms": 52.27,
+              "p50_ms": 52.04,
+              "p95_ms": 57.32,
+              "p99_ms": 64.37,
+              "max_ms": 70.09
+            }
+          },
+          "trd order.review.request": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 25.87,
+              "p50_ms": 25.52,
+              "p95_ms": 29.5,
+              "p99_ms": 33.55,
+              "max_ms": 43.11
+            }
+          },
+          "trd quote.activate": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 90.57,
+              "p50_ms": 89.4,
+              "p95_ms": 101.09,
+              "p99_ms": 107.41,
+              "max_ms": 118.77
+            }
+          },
+          "trd quote.freeze": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 80.31,
+              "p50_ms": 80.2,
+              "p95_ms": 86.3,
+              "p99_ms": 90.16,
+              "max_ms": 94.41
+            }
+          },
+          "trd quote.response.record": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 25.95,
+              "p50_ms": 25.76,
+              "p95_ms": 29.42,
+              "p99_ms": 31.4,
+              "max_ms": 33.5
+            }
+          },
+          "trd quote.response.verify": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 32.55,
+              "p50_ms": 32.34,
+              "p95_ms": 35.97,
+              "p99_ms": 39.94,
+              "max_ms": 45.24
+            }
+          },
+          "trd quote.review.decide": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 30.84,
+              "p50_ms": 30.26,
+              "p95_ms": 35.26,
+              "p99_ms": 45.11,
+              "max_ms": 51.2
+            }
+          },
+          "trd quote.save_draft": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 18.63,
+              "p50_ms": 18.46,
+              "p95_ms": 21.67,
+              "p99_ms": 24.82,
+              "max_ms": 28.17
+            }
+          },
+          "trd quote.submit_review": {
+            "requests": 284,
+            "errors": 0,
+            "latency_ok": {
+              "count": 284,
+              "mean_ms": 18.97,
+              "p50_ms": 18.62,
+              "p95_ms": 22.22,
+              "p99_ms": 28.5,
+              "max_ms": 36.41
+            }
+          }
+        }
+      },
+      "reads": {
+        "requests": 19933,
+        "ok": 19933,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 398.66,
+        "latency_ok": {
+          "count": 19933,
+          "mean_ms": 10.87,
+          "p50_ms": 7.48,
+          "p95_ms": 31.83,
+          "p99_ms": 36.32,
+          "max_ms": 107.68
+        },
+        "by_name": {
+          "GET cnx.trade_compliance_check": {
+            "requests": 1655,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1655,
+              "mean_ms": 6.2,
+              "p50_ms": 6.15,
+              "p95_ms": 7.61,
+              "p99_ms": 8.43,
+              "max_ms": 10.78
+            }
+          },
+          "GET cst.cost_snapshot": {
+            "requests": 1380,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1380,
+              "mean_ms": 31.96,
+              "p50_ms": 31.79,
+              "p95_ms": 35.73,
+              "p99_ms": 38.03,
+              "max_ms": 107.68
+            }
+          },
+          "GET evd.file": {
+            "requests": 1313,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1313,
+              "mean_ms": 4.53,
+              "p50_ms": 4.43,
+              "p95_ms": 5.75,
+              "p99_ms": 6.93,
+              "max_ms": 20.57
+            }
+          },
+          "GET inq.rfq": {
+            "requests": 1287,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1287,
+              "mean_ms": 5.13,
+              "p50_ms": 5.02,
+              "p95_ms": 6.53,
+              "p99_ms": 7.62,
+              "max_ms": 16.11
+            }
+          },
+          "GET pol.config": {
+            "requests": 1372,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1372,
+              "mean_ms": 5.18,
+              "p50_ms": 5.12,
+              "p95_ms": 6.48,
+              "p99_ms": 7.41,
+              "max_ms": 13.23
+            }
+          },
+          "GET pty.party": {
+            "requests": 1311,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1311,
+              "mean_ms": 5.8,
+              "p50_ms": 5.73,
+              "p95_ms": 7.16,
+              "p99_ms": 8.35,
+              "max_ms": 16.92
+            }
+          },
+          "GET pur.demand_allocation": {
+            "requests": 1326,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1326,
+              "mean_ms": 17.66,
+              "p50_ms": 17.49,
+              "p95_ms": 20.23,
+              "p99_ms": 22.62,
+              "max_ms": 51.36
+            }
+          },
+          "GET pur.purchase_draft": {
+            "requests": 1291,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1291,
+              "mean_ms": 26.65,
+              "p50_ms": 26.37,
+              "p95_ms": 30.12,
+              "p99_ms": 33.5,
+              "max_ms": 85.62
+            }
+          },
+          "GET stl.credit_reservation": {
+            "requests": 1342,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1342,
+              "mean_ms": 4.45,
+              "p50_ms": 4.39,
+              "p95_ms": 5.71,
+              "p99_ms": 6.89,
+              "max_ms": 12.34
+            }
+          },
+          "GET trd.order": {
+            "requests": 1618,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1618,
+              "mean_ms": 9.25,
+              "p50_ms": 9.15,
+              "p95_ms": 10.96,
+              "p99_ms": 11.88,
+              "max_ms": 22.01
+            }
+          },
+          "GET trd.order.check": {
+            "requests": 286,
+            "errors": 0,
+            "latency_ok": {
+              "count": 286,
+              "mean_ms": 36.8,
+              "p50_ms": 36.38,
+              "p95_ms": 40.83,
+              "p99_ms": 50.2,
+              "max_ms": 55.18
+            }
+          },
+          "GET trd.quote": {
+            "requests": 1644,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1644,
+              "mean_ms": 8.11,
+              "p50_ms": 8,
+              "p95_ms": 9.76,
+              "p99_ms": 11.22,
+              "max_ms": 17.44
+            }
+          },
+          "GET trd.quote.active": {
+            "requests": 1344,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1344,
+              "mean_ms": 7.92,
+              "p50_ms": 7.79,
+              "p95_ms": 9.47,
+              "p99_ms": 11.22,
+              "max_ms": 17.17
+            }
+          },
+          "GET trd.quote.document": {
+            "requests": 1382,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1382,
+              "mean_ms": 8.08,
+              "p50_ms": 7.98,
+              "p95_ms": 9.7,
+              "p99_ms": 10.97,
+              "max_ms": 13.94
+            }
+          },
+          "GET trd.quote.history": {
+            "requests": 1382,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1382,
+              "mean_ms": 7.75,
+              "p50_ms": 7.64,
+              "p95_ms": 9.28,
+              "p99_ms": 10.78,
+              "max_ms": 14.99
+            }
+          }
+        }
+      },
+      "cycles": {
+        "completed": 284,
+        "failed": 0,
+        "completed_per_second": 5.68,
+        "latency_completed": {
+          "count": 284,
+          "mean_ms": 703.81,
+          "p50_ms": 699.35,
+          "p95_ms": 741.27,
+          "p99_ms": 781.44,
+          "max_ms": 800.03
+        }
+      },
+      "api_cpu_cores": 1.38,
+      "worker_cpu_cores": 0,
+      "database": {
+        "samples": 50,
+        "api_connections_max": 8,
+        "api_active_mean": 3.4,
+        "api_active_max": 6,
+        "api_idle_in_transaction_max": 7,
+        "worker_connections_max": 2,
+        "samples_with_lock_waiters": 1,
+        "lock_waiters_max": 1,
+        "lock_waiters_mean": 0.02,
+        "longest_lock_wait_s": 0.007,
+        "ungranted_locks_max": 1,
+        "outbox_backlog_max": 99,
+        "outbox_backlog_end": 51,
+        "wait_events_of_active_api_sessions": {
+          "Client:ClientRead": 18,
+          "IO:WALSync": 41,
+          "LWLock:WALWrite": 71,
+          "Lock:transactionid": 1
+        },
+        "commits": 70499,
+        "rollbacks": 0,
+        "deadlocks": 0,
+        "conflicts": 0,
+        "temp_files": 0,
+        "blocks_read": 13413,
+        "cache_hit_ratio": 0.9974,
+        "tuples_inserted": 57689,
+        "outbox_relay_lag": {
+          "published": 4361,
+          "p50_s": 0.285,
+          "p95_s": 0.887,
+          "max_s": 3.617
+        }
+      },
+      "top_wait_events": [
+        "LWLock:WALWrite×71",
+        "IO:WALSync×41",
+        "Client:ClientRead×18",
+        "Lock:transactionid×1"
+      ]
+    },
+    {
+      "stage": 2,
+      "command_users": 8,
+      "read_users": 8,
+      "cycles_readable_at_start": 339,
+      "window": {
+        "from": "2026-11-12T15:11:26.59409442Z",
+        "to": "2026-11-12T15:12:16.59409442Z",
+        "seconds": 50
+      },
+      "host_before": {
+        "at": "2026-11-12T15:11:16Z",
+        "uptime": "10:11:16 up 1 day,  9:00,  1 user,  load average: 7.89, 9.39, 7.62",
+        "load1": 7.89,
+        "load5": 9.39,
+        "load15": 7.62,
+        "nproc": 20,
+        "mem_free_mib": 1305,
+        "mem_available_mib": 48234,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 388
+      },
+      "host_after": {
+        "at": "2026-11-12T15:12:22Z",
+        "uptime": "10:12:22 up 1 day,  9:01,  1 user,  load average: 13.69, 10.78, 8.21",
+        "load1": 13.69,
+        "load5": 10.78,
+        "load15": 8.21,
+        "nproc": 20,
+        "mem_free_mib": 1083,
+        "mem_available_mib": 48055,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 388
+      },
+      "commands": {
+        "requests": 7935,
+        "ok": 7935,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 158.7,
+        "latency_ok": {
+          "count": 7935,
+          "mean_ms": 46.11,
+          "p50_ms": 36.17,
+          "p95_ms": 104.19,
+          "p99_ms": 118.94,
+          "max_ms": 208.65
+        },
+        "by_name": {
+          "cnx trade_compliance.decide": {
+            "requests": 469,
+            "errors": 0,
+            "latency_ok": {
+              "count": 469,
+              "mean_ms": 25.9,
+              "p50_ms": 25.63,
+              "p95_ms": 30.4,
+              "p99_ms": 36.7,
+              "max_ms": 45.09
+            }
+          },
+          "cnx trade_compliance.evaluate": {
+            "requests": 468,
+            "errors": 0,
+            "latency_ok": {
+              "count": 468,
+              "mean_ms": 58.04,
+              "p50_ms": 57.32,
+              "p95_ms": 67.75,
+              "p99_ms": 80.11,
+              "max_ms": 97.51
+            }
+          },
+          "evd file.register": {
+            "requests": 469,
+            "errors": 0,
+            "latency_ok": {
+              "count": 469,
+              "mean_ms": 8.94,
+              "p50_ms": 8.72,
+              "p95_ms": 11.13,
+              "p99_ms": 13.8,
+              "max_ms": 19.09
+            }
+          },
+          "evd source.register": {
+            "requests": 465,
+            "errors": 0,
+            "latency_ok": {
+              "count": 465,
+              "mean_ms": 10.01,
+              "p50_ms": 9.77,
+              "p95_ms": 13,
+              "p99_ms": 16.1,
+              "max_ms": 17.74
+            }
+          },
+          "pur purchase.draft.prepare": {
+            "requests": 469,
+            "errors": 0,
+            "latency_ok": {
+              "count": 469,
+              "mean_ms": 82.05,
+              "p50_ms": 81.41,
+              "p95_ms": 94.44,
+              "p99_ms": 111.67,
+              "max_ms": 136.07
+            }
+          },
+          "stl credit.reserve": {
+            "requests": 470,
+            "errors": 0,
+            "latency_ok": {
+              "count": 470,
+              "mean_ms": 51.48,
+              "p50_ms": 48.74,
+              "p95_ms": 71.8,
+              "p99_ms": 87.31,
+              "max_ms": 116.02
+            }
+          },
+          "trd order.activate": {
+            "requests": 470,
+            "errors": 0,
+            "latency_ok": {
+              "count": 470,
+              "mean_ms": 63.82,
+              "p50_ms": 62.17,
+              "p95_ms": 77.7,
+              "p99_ms": 90.84,
+              "max_ms": 109.76
+            }
+          },
+          "trd order.prepare": {
+            "requests": 464,
+            "errors": 0,
+            "latency_ok": {
+              "count": 464,
+              "mean_ms": 29.38,
+              "p50_ms": 29,
+              "p95_ms": 34.26,
+              "p99_ms": 38.92,
+              "max_ms": 51.65
+            }
+          },
+          "trd order.review.decide": {
+            "requests": 464,
+            "errors": 0,
+            "latency_ok": {
+              "count": 464,
+              "mean_ms": 63.96,
+              "p50_ms": 62.04,
+              "p95_ms": 80.06,
+              "p99_ms": 89.72,
+              "max_ms": 132.16
+            }
+          },
+          "trd order.review.request": {
+            "requests": 464,
+            "errors": 0,
+            "latency_ok": {
+              "count": 464,
+              "mean_ms": 31.39,
+              "p50_ms": 30.68,
+              "p95_ms": 38.24,
+              "p99_ms": 46.75,
+              "max_ms": 54.73
+            }
+          },
+          "trd quote.activate": {
+            "requests": 465,
+            "errors": 0,
+            "latency_ok": {
+              "count": 465,
+              "mean_ms": 109.85,
+              "p50_ms": 108.29,
+              "p95_ms": 127.32,
+              "p99_ms": 142.85,
+              "max_ms": 154.76
+            }
+          },
+          "trd quote.freeze": {
+            "requests": 467,
+            "errors": 0,
+            "latency_ok": {
+              "count": 467,
+              "mean_ms": 96.6,
+              "p50_ms": 94.87,
+              "p95_ms": 109.94,
+              "p99_ms": 126.07,
+              "max_ms": 208.65
+            }
+          },
+          "trd quote.response.record": {
+            "requests": 465,
+            "errors": 0,
+            "latency_ok": {
+              "count": 465,
+              "mean_ms": 31.15,
+              "p50_ms": 30.68,
+              "p95_ms": 36.15,
+              "p99_ms": 41.5,
+              "max_ms": 72.41
+            }
+          },
+          "trd quote.response.verify": {
+            "requests": 464,
+            "errors": 0,
+            "latency_ok": {
+              "count": 464,
+              "mean_ms": 38.95,
+              "p50_ms": 38.48,
+              "p95_ms": 45.86,
+              "p99_ms": 50.92,
+              "max_ms": 95.04
+            }
+          },
+          "trd quote.review.decide": {
+            "requests": 466,
+            "errors": 0,
+            "latency_ok": {
+              "count": 466,
+              "mean_ms": 37.16,
+              "p50_ms": 36.07,
+              "p95_ms": 45.71,
+              "p99_ms": 51.44,
+              "max_ms": 99.14
+            }
+          },
+          "trd quote.save_draft": {
+            "requests": 469,
+            "errors": 0,
+            "latency_ok": {
+              "count": 469,
+              "mean_ms": 22.08,
+              "p50_ms": 21.66,
+              "p95_ms": 26.74,
+              "p99_ms": 30.41,
+              "max_ms": 44.45
+            }
+          },
+          "trd quote.submit_review": {
+            "requests": 467,
+            "errors": 0,
+            "latency_ok": {
+              "count": 467,
+              "mean_ms": 22.98,
+              "p50_ms": 22.02,
+              "p95_ms": 29.73,
+              "p99_ms": 39.53,
+              "max_ms": 51.05
+            }
+          }
+        }
+      },
+      "reads": {
+        "requests": 33455,
+        "ok": 33455,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 669.1,
+        "latency_ok": {
+          "count": 33455,
+          "mean_ms": 12.94,
+          "p50_ms": 8.85,
+          "p95_ms": 37.54,
+          "p99_ms": 43.8,
+          "max_ms": 122.33
+        },
+        "by_name": {
+          "GET cnx.trade_compliance_check": {
+            "requests": 2709,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2709,
+              "mean_ms": 7.48,
+              "p50_ms": 7.36,
+              "p95_ms": 9.6,
+              "p99_ms": 11.29,
+              "max_ms": 24.04
+            }
+          },
+          "GET cst.cost_snapshot": {
+            "requests": 2263,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2263,
+              "mean_ms": 37.91,
+              "p50_ms": 37.47,
+              "p95_ms": 43.63,
+              "p99_ms": 49.84,
+              "max_ms": 98.97
+            }
+          },
+          "GET evd.file": {
+            "requests": 2270,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2270,
+              "mean_ms": 5.32,
+              "p50_ms": 5.17,
+              "p95_ms": 7.13,
+              "p99_ms": 8.72,
+              "max_ms": 14.16
+            }
+          },
+          "GET inq.rfq": {
+            "requests": 2246,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2246,
+              "mean_ms": 6.13,
+              "p50_ms": 5.99,
+              "p95_ms": 8.02,
+              "p99_ms": 10.08,
+              "max_ms": 39.33
+            }
+          },
+          "GET pol.config": {
+            "requests": 2244,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2244,
+              "mean_ms": 6.18,
+              "p50_ms": 6.05,
+              "p95_ms": 8.06,
+              "p99_ms": 9.79,
+              "max_ms": 16.46
+            }
+          },
+          "GET pty.party": {
+            "requests": 2310,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2310,
+              "mean_ms": 6.98,
+              "p50_ms": 6.81,
+              "p95_ms": 9.07,
+              "p99_ms": 11.03,
+              "max_ms": 14.74
+            }
+          },
+          "GET pur.demand_allocation": {
+            "requests": 2299,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2299,
+              "mean_ms": 21.01,
+              "p50_ms": 20.71,
+              "p95_ms": 25.18,
+              "p99_ms": 28.07,
+              "max_ms": 46.91
+            }
+          },
+          "GET pur.purchase_draft": {
+            "requests": 2213,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2213,
+              "mean_ms": 31.48,
+              "p50_ms": 31.07,
+              "p95_ms": 36.72,
+              "p99_ms": 43.18,
+              "max_ms": 122.33
+            }
+          },
+          "GET stl.credit_reservation": {
+            "requests": 2214,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2214,
+              "mean_ms": 5.3,
+              "p50_ms": 5.15,
+              "p95_ms": 7.09,
+              "p99_ms": 8.97,
+              "max_ms": 20.85
+            }
+          },
+          "GET trd.order": {
+            "requests": 2703,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2703,
+              "mean_ms": 11.09,
+              "p50_ms": 10.84,
+              "p95_ms": 13.7,
+              "p99_ms": 16.44,
+              "max_ms": 31.46
+            }
+          },
+          "GET trd.order.check": {
+            "requests": 469,
+            "errors": 0,
+            "latency_ok": {
+              "count": 469,
+              "mean_ms": 44.4,
+              "p50_ms": 43.36,
+              "p95_ms": 52.05,
+              "p99_ms": 60.02,
+              "max_ms": 87.21
+            }
+          },
+          "GET trd.quote": {
+            "requests": 2757,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2757,
+              "mean_ms": 9.65,
+              "p50_ms": 9.44,
+              "p95_ms": 12.11,
+              "p99_ms": 14.14,
+              "max_ms": 29.63
+            }
+          },
+          "GET trd.quote.active": {
+            "requests": 2183,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2183,
+              "mean_ms": 9.45,
+              "p50_ms": 9.25,
+              "p95_ms": 11.84,
+              "p99_ms": 14.31,
+              "max_ms": 20.22
+            }
+          },
+          "GET trd.quote.document": {
+            "requests": 2277,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2277,
+              "mean_ms": 9.65,
+              "p50_ms": 9.43,
+              "p95_ms": 12,
+              "p99_ms": 14.96,
+              "max_ms": 63.72
+            }
+          },
+          "GET trd.quote.history": {
+            "requests": 2298,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2298,
+              "mean_ms": 9.33,
+              "p50_ms": 9.05,
+              "p95_ms": 11.94,
+              "p99_ms": 15.07,
+              "max_ms": 38.55
+            }
+          }
+        }
+      },
+      "cycles": {
+        "completed": 469,
+        "failed": 0,
+        "completed_per_second": 9.38,
+        "latency_completed": {
+          "count": 469,
+          "mean_ms": 856.52,
+          "p50_ms": 848.49,
+          "p95_ms": 953.66,
+          "p99_ms": 996.3,
+          "max_ms": 1033.74
+        }
+      },
+      "api_cpu_cores": 2.39,
+      "worker_cpu_cores": 0,
+      "database": {
+        "samples": 50,
+        "api_connections_max": 16,
+        "api_active_mean": 6.16,
+        "api_active_max": 13,
+        "api_idle_in_transaction_max": 14,
+        "worker_connections_max": 2,
+        "samples_with_lock_waiters": 5,
+        "lock_waiters_max": 2,
+        "lock_waiters_mean": 0.16,
+        "longest_lock_wait_s": 0.011,
+        "ungranted_locks_max": 2,
+        "outbox_backlog_max": 359,
+        "outbox_backlog_end": 355,
+        "wait_events_of_active_api_sessions": {
+          "Client:ClientRead": 50,
+          "IO:WALSync": 44,
+          "LWLock:BufferContent": 1,
+          "LWLock:WALWrite": 150,
+          "Lock:transactionid": 6
+        },
+        "commits": 116035,
+        "rollbacks": 0,
+        "deadlocks": 0,
+        "conflicts": 0,
+        "temp_files": 0,
+        "blocks_read": 36665,
+        "cache_hit_ratio": 0.9973,
+        "tuples_inserted": 95315,
+        "outbox_relay_lag": {
+          "published": 7001,
+          "p50_s": 0.276,
+          "p95_s": 7.469,
+          "max_s": 17.898
+        }
+      },
+      "top_wait_events": [
+        "LWLock:WALWrite×150",
+        "Client:ClientRead×50",
+        "IO:WALSync×44",
+        "Lock:transactionid×6",
+        "LWLock:BufferContent×1"
+      ]
+    },
+    {
+      "stage": 3,
+      "command_users": 16,
+      "read_users": 16,
+      "cycles_readable_at_start": 888,
+      "window": {
+        "from": "2026-11-12T15:12:37.354554457Z",
+        "to": "2026-11-12T15:13:27.354554457Z",
+        "seconds": 50
+      },
+      "host_before": {
+        "at": "2026-11-12T15:12:27Z",
+        "uptime": "10:12:27 up 1 day,  9:01,  1 user,  load average: 12.83, 10.65, 8.18",
+        "load1": 12.83,
+        "load5": 10.65,
+        "load15": 8.18,
+        "nproc": 20,
+        "mem_free_mib": 1475,
+        "mem_available_mib": 48451,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 388
+      },
+      "host_after": {
+        "at": "2026-11-12T15:13:33Z",
+        "uptime": "10:13:33 up 1 day,  9:02,  1 user,  load average: 18.84, 12.72, 9.05",
+        "load1": 18.84,
+        "load5": 12.72,
+        "load15": 9.05,
+        "nproc": 20,
+        "mem_free_mib": 1059,
+        "mem_available_mib": 47925,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 389
+      },
+      "commands": {
+        "requests": 9195,
+        "ok": 9195,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 183.9,
+        "latency_ok": {
+          "count": 9195,
+          "mean_ms": 80.58,
+          "p50_ms": 64.54,
+          "p95_ms": 180.4,
+          "p99_ms": 203.43,
+          "max_ms": 281.21
+        },
+        "by_name": {
+          "cnx trade_compliance.decide": {
+            "requests": 542,
+            "errors": 0,
+            "latency_ok": {
+              "count": 542,
+              "mean_ms": 49.75,
+              "p50_ms": 49.05,
+              "p95_ms": 59.76,
+              "p99_ms": 66.51,
+              "max_ms": 78.27
+            }
+          },
+          "cnx trade_compliance.evaluate": {
+            "requests": 539,
+            "errors": 0,
+            "latency_ok": {
+              "count": 539,
+              "mean_ms": 115.19,
+              "p50_ms": 113.64,
+              "p95_ms": 134.66,
+              "p99_ms": 142.45,
+              "max_ms": 158.62
+            }
+          },
+          "evd file.register": {
+            "requests": 544,
+            "errors": 0,
+            "latency_ok": {
+              "count": 544,
+              "mean_ms": 15.58,
+              "p50_ms": 15.28,
+              "p95_ms": 20.39,
+              "p99_ms": 26.25,
+              "max_ms": 31.15
+            }
+          },
+          "evd source.register": {
+            "requests": 539,
+            "errors": 0,
+            "latency_ok": {
+              "count": 539,
+              "mean_ms": 16.34,
+              "p50_ms": 16,
+              "p95_ms": 21.58,
+              "p99_ms": 24.93,
+              "max_ms": 30.03
+            }
+          },
+          "pur purchase.draft.prepare": {
+            "requests": 544,
+            "errors": 0,
+            "latency_ok": {
+              "count": 544,
+              "mean_ms": 148.08,
+              "p50_ms": 145.89,
+              "p95_ms": 173.9,
+              "p99_ms": 194.89,
+              "max_ms": 229.55
+            }
+          },
+          "stl credit.reserve": {
+            "requests": 544,
+            "errors": 0,
+            "latency_ok": {
+              "count": 544,
+              "mean_ms": 100.05,
+              "p50_ms": 96.98,
+              "p95_ms": 132.09,
+              "p99_ms": 160.12,
+              "max_ms": 208.12
+            }
+          },
+          "trd order.activate": {
+            "requests": 545,
+            "errors": 0,
+            "latency_ok": {
+              "count": 545,
+              "mean_ms": 93.83,
+              "p50_ms": 91.79,
+              "p95_ms": 113.51,
+              "p99_ms": 125.08,
+              "max_ms": 159.45
+            }
+          },
+          "trd order.prepare": {
+            "requests": 537,
+            "errors": 0,
+            "latency_ok": {
+              "count": 537,
+              "mean_ms": 48.29,
+              "p50_ms": 47.58,
+              "p95_ms": 58.01,
+              "p99_ms": 66.98,
+              "max_ms": 77.58
+            }
+          },
+          "trd order.review.decide": {
+            "requests": 538,
+            "errors": 0,
+            "latency_ok": {
+              "count": 538,
+              "mean_ms": 97.08,
+              "p50_ms": 95.7,
+              "p95_ms": 115.03,
+              "p99_ms": 128.98,
+              "max_ms": 143.09
+            }
+          },
+          "trd order.review.request": {
+            "requests": 534,
+            "errors": 0,
+            "latency_ok": {
+              "count": 534,
+              "mean_ms": 50.15,
+              "p50_ms": 49.42,
+              "p95_ms": 61.04,
+              "p99_ms": 68.83,
+              "max_ms": 82.13
+            }
+          },
+          "trd quote.activate": {
+            "requests": 539,
+            "errors": 0,
+            "latency_ok": {
+              "count": 539,
+              "mean_ms": 184.55,
+              "p50_ms": 181.21,
+              "p95_ms": 217.58,
+              "p99_ms": 240.98,
+              "max_ms": 281.21
+            }
+          },
+          "trd quote.freeze": {
+            "requests": 544,
+            "errors": 0,
+            "latency_ok": {
+              "count": 544,
+              "mean_ms": 175.95,
+              "p50_ms": 173.01,
+              "p95_ms": 202.83,
+              "p99_ms": 234.13,
+              "max_ms": 279.98
+            }
+          },
+          "trd quote.response.record": {
+            "requests": 539,
+            "errors": 0,
+            "latency_ok": {
+              "count": 539,
+              "mean_ms": 58.52,
+              "p50_ms": 57.59,
+              "p95_ms": 69.38,
+              "p99_ms": 77.31,
+              "max_ms": 92.84
+            }
+          },
+          "trd quote.response.verify": {
+            "requests": 536,
+            "errors": 0,
+            "latency_ok": {
+              "count": 536,
+              "mean_ms": 72.27,
+              "p50_ms": 70.97,
+              "p95_ms": 85.69,
+              "p99_ms": 98.09,
+              "max_ms": 105.18
+            }
+          },
+          "trd quote.review.decide": {
+            "requests": 543,
+            "errors": 0,
+            "latency_ok": {
+              "count": 543,
+              "mean_ms": 64.42,
+              "p50_ms": 63.27,
+              "p95_ms": 76.01,
+              "p99_ms": 86.41,
+              "max_ms": 97.82
+            }
+          },
+          "trd quote.save_draft": {
+            "requests": 544,
+            "errors": 0,
+            "latency_ok": {
+              "count": 544,
+              "mean_ms": 44.24,
+              "p50_ms": 43.51,
+              "p95_ms": 54.4,
+              "p99_ms": 65.18,
+              "max_ms": 92.03
+            }
+          },
+          "trd quote.submit_review": {
+            "requests": 544,
+            "errors": 0,
+            "latency_ok": {
+              "count": 544,
+              "mean_ms": 35.07,
+              "p50_ms": 34.4,
+              "p95_ms": 41.88,
+              "p99_ms": 49.17,
+              "max_ms": 98.13
+            }
+          }
+        }
+      },
+      "reads": {
+        "requests": 36059,
+        "ok": 36059,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 721.18,
+        "latency_ok": {
+          "count": 36059,
+          "mean_ms": 23.8,
+          "p50_ms": 15.09,
+          "p95_ms": 72.69,
+          "p99_ms": 84.58,
+          "max_ms": 133.96
+        },
+        "by_name": {
+          "GET cnx.trade_compliance_check": {
+            "requests": 2993,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2993,
+              "mean_ms": 13.58,
+              "p50_ms": 13.24,
+              "p95_ms": 17.68,
+              "p99_ms": 21.22,
+              "max_ms": 30.23
+            }
+          },
+          "GET cst.cost_snapshot": {
+            "requests": 2434,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2434,
+              "mean_ms": 76.73,
+              "p50_ms": 75.63,
+              "p95_ms": 90.37,
+              "p99_ms": 102.67,
+              "max_ms": 133.96
+            }
+          },
+          "GET evd.file": {
+            "requests": 2396,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2396,
+              "mean_ms": 11.08,
+              "p50_ms": 10.72,
+              "p95_ms": 15.04,
+              "p99_ms": 17.66,
+              "max_ms": 31.15
+            }
+          },
+          "GET inq.rfq": {
+            "requests": 2417,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2417,
+              "mean_ms": 11.87,
+              "p50_ms": 11.64,
+              "p95_ms": 15.5,
+              "p99_ms": 19.24,
+              "max_ms": 31.23
+            }
+          },
+          "GET pol.config": {
+            "requests": 2438,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2438,
+              "mean_ms": 12.08,
+              "p50_ms": 11.78,
+              "p95_ms": 16.21,
+              "p99_ms": 21.32,
+              "max_ms": 34.43
+            }
+          },
+          "GET pty.party": {
+            "requests": 2432,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2432,
+              "mean_ms": 12.87,
+              "p50_ms": 12.59,
+              "p95_ms": 17.28,
+              "p99_ms": 20.48,
+              "max_ms": 30.83
+            }
+          },
+          "GET pur.demand_allocation": {
+            "requests": 2390,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2390,
+              "mean_ms": 38.29,
+              "p50_ms": 37.67,
+              "p95_ms": 46.64,
+              "p99_ms": 53.87,
+              "max_ms": 71.16
+            }
+          },
+          "GET pur.purchase_draft": {
+            "requests": 2434,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2434,
+              "mean_ms": 60.5,
+              "p50_ms": 59.59,
+              "p95_ms": 72.34,
+              "p99_ms": 82.55,
+              "max_ms": 124.68
+            }
+          },
+          "GET stl.credit_reservation": {
+            "requests": 2444,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2444,
+              "mean_ms": 11.03,
+              "p50_ms": 10.77,
+              "p95_ms": 14.71,
+              "p99_ms": 17.9,
+              "max_ms": 37.85
+            }
+          },
+          "GET trd.order": {
+            "requests": 2943,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2943,
+              "mean_ms": 17.63,
+              "p50_ms": 17.25,
+              "p95_ms": 22.42,
+              "p99_ms": 26.43,
+              "max_ms": 34.86
+            }
+          },
+          "GET trd.order.check": {
+            "requests": 545,
+            "errors": 0,
+            "latency_ok": {
+              "count": 545,
+              "mean_ms": 62.11,
+              "p50_ms": 61.14,
+              "p95_ms": 75.14,
+              "p99_ms": 82.47,
+              "max_ms": 105
+            }
+          },
+          "GET trd.quote": {
+            "requests": 2995,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2995,
+              "mean_ms": 16.17,
+              "p50_ms": 15.79,
+              "p95_ms": 20.72,
+              "p99_ms": 26.33,
+              "max_ms": 37.97
+            }
+          },
+          "GET trd.quote.active": {
+            "requests": 2403,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2403,
+              "mean_ms": 16.03,
+              "p50_ms": 15.65,
+              "p95_ms": 20.89,
+              "p99_ms": 24.49,
+              "max_ms": 45.31
+            }
+          },
+          "GET trd.quote.document": {
+            "requests": 2385,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2385,
+              "mean_ms": 16.13,
+              "p50_ms": 15.76,
+              "p95_ms": 20.79,
+              "p99_ms": 24.78,
+              "max_ms": 41.19
+            }
+          },
+          "GET trd.quote.history": {
+            "requests": 2410,
+            "errors": 0,
+            "latency_ok": {
+              "count": 2410,
+              "mean_ms": 15.7,
+              "p50_ms": 15.34,
+              "p95_ms": 20.38,
+              "p99_ms": 23.9,
+              "max_ms": 45.1
+            }
+          }
+        }
+      },
+      "cycles": {
+        "completed": 544,
+        "failed": 0,
+        "completed_per_second": 10.88,
+        "latency_completed": {
+          "count": 544,
+          "mean_ms": 1482.23,
+          "p50_ms": 1465.57,
+          "p95_ms": 1648.5,
+          "p99_ms": 1740.82,
+          "max_ms": 1763.48
+        }
+      },
+      "api_cpu_cores": 2.8,
+      "worker_cpu_cores": 0,
+      "database": {
+        "samples": 50,
+        "api_connections_max": 20,
+        "api_active_mean": 7.56,
+        "api_active_max": 15,
+        "api_idle_in_transaction_max": 16,
+        "worker_connections_max": 2,
+        "samples_with_lock_waiters": 10,
+        "lock_waiters_max": 2,
+        "lock_waiters_mean": 0.28,
+        "longest_lock_wait_s": 0.039,
+        "ungranted_locks_max": 2,
+        "outbox_backlog_max": 937,
+        "outbox_backlog_end": 937,
+        "wait_events_of_active_api_sessions": {
+          "Client:ClientRead": 62,
+          "IO:WALSync": 39,
+          "LWLock:WALWrite": 186,
+          "Lock:transactionid": 8,
+          "Lock:tuple": 1
+        },
+        "commits": 128591,
+        "rollbacks": 0,
+        "deadlocks": 0,
+        "conflicts": 0,
+        "temp_files": 0,
+        "blocks_read": 90774,
+        "cache_hit_ratio": 0.9926,
+        "tuples_inserted": 107102,
+        "outbox_relay_lag": {
+          "published": 7601,
+          "p50_s": 0.765,
+          "p95_s": 9.686,
+          "max_s": 29.713
+        }
+      },
+      "top_wait_events": [
+        "LWLock:WALWrite×186",
+        "Client:ClientRead×62",
+        "IO:WALSync×39",
+        "Lock:transactionid×8",
+        "Lock:tuple×1"
+      ]
+    }
+  ],
+  "not_executed": [
+    "a front end: latencies are client-side over loopback HTTP (server plus transport), not browser end to end",
+    "a real identity provider: tokens come from the load generator's local issuer (RS256, at+jwt); each actor's token is reused for 7.5 minutes",
+    "several tenants or customers: every user works in one tenant on one customer, so the shared rows (POL quote number sequence, STL customer credit, authority guard) are contended as hard as possible",
+    "AI tasks, large reports, files above 4 KiB and external services: baseline 11.1 sets their limits apart",
+    "failures (process restart, database interruption, redelivery) during the stages: the recovery drill covers the database",
+    "a production-like host: the API, the worker, PostgreSQL (Docker) and the load generator share one WSL2 host with other work"
+  ]
+}

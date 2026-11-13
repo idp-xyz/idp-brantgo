@@ -1,0 +1,360 @@
+{
+  "tool": "tests/load",
+  "mode": "writes",
+  "started_at": "2026-11-12T13:30:47Z",
+  "finished_at": "2026-11-12T13:33:02Z",
+  "tenant": "drill.133047",
+  "company": "company.A",
+  "environment": {
+    "go": "go1.26.8",
+    "os_arch": "linux/amd64",
+    "kernel": "6.18.58.1-microsoft-standard-WSL2",
+    "wsl": true,
+    "nproc": 20,
+    "host_at_start": {
+      "at": "2026-11-12T13:30:47Z",
+      "uptime": "08:30:47 up 1 day,  7:28,  1 user,  load average: 11.27, 7.97, 7.42",
+      "load1": 11.27,
+      "load5": 7.97,
+      "load15": 7.42,
+      "nproc": 20,
+      "mem_free_mib": 1406,
+      "mem_available_mib": 44445,
+      "mem_total_mib": 64301,
+      "swap_used_mib": 376
+    },
+    "postgresql": "",
+    "api_pool": "pgxpool pool_max_conns=20",
+    "transport": "brant-api process on 127.0.0.1, HTTP/1.1 keep-alive, JSON",
+    "identity": "local OIDC issuer of the load generator (RS256, typ at+jwt, JWKS by discovery)"
+  },
+  "workload": "BRC-001 on one tenant and company (company.A), one customer (customer.1), one RFQ (rfq.1, 4 lines, 120 PCS) and one cost snapshot (660.00 USD). A command user repeats the order cycle: evd file.register (the customer's PO, ~3.7 KiB text), trd quote.save_draft, quote.freeze, GET quote, quote.submit_review, quote.review.decide, quote.activate (formal document and QT number), evd source.register (the customer's mail), quote.response.record, quote.response.verify, order.prepare, GET order, order.review.request, order.review.decide, cnx trade_compliance.evaluate, GET check, trade_compliance.decide, stl credit.reserve (672.00 of the shared customer credit), GET order check, trd order.activate, pur purchase.draft.prepare (600.00): 17 commands and 4 reads, as six humans (sales, quote.reviewer, acceptance.verifier, order.reviewer, compliance, purchaser). A read user issues one of 14 GET routes uniformly on the cycles completed so far. Closed loop, no think time; brant-worker -dispatch relays the Outbox to the contexts' consumers (STL consumes the reservation on OrderActivated).",
+  "setup": {
+    "seconds": 1.36,
+    "requests": 94
+  },
+  "prime": {
+    "cycles": 0,
+    "seconds": 0,
+    "commands": {
+      "requests": 0,
+      "ok": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "transport_errors": 0,
+      "error_rate": 0,
+      "timeout_rate": 0,
+      "rps": 0,
+      "latency_ok": {
+        "count": 0,
+        "mean_ms": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0,
+        "max_ms": 0
+      },
+      "by_name": null
+    },
+    "reads": {
+      "requests": 0,
+      "ok": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "transport_errors": 0,
+      "error_rate": 0,
+      "timeout_rate": 0,
+      "rps": 0,
+      "latency_ok": {
+        "count": 0,
+        "mean_ms": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0,
+        "max_ms": 0
+      },
+      "by_name": null
+    }
+  },
+  "writes": {
+    "users": 4,
+    "seconds": 120,
+    "ack_log": "/home/tops/workspace/idp-brantgo/.claude/worktrees/s5-c7/bin/drill/drill1/pitr.acks.jsonl",
+    "commands": {
+      "requests": 9217,
+      "ok": 8709,
+      "errors": 508,
+      "timeouts": 0,
+      "transport_errors": 0,
+      "error_rate": 0.055115547358142565,
+      "timeout_rate": 0,
+      "rps": 71.97,
+      "latency_ok": {
+        "count": 8709,
+        "mean_ms": 36.93,
+        "p50_ms": 28.75,
+        "p95_ms": 83.54,
+        "p99_ms": 94.92,
+        "max_ms": 369.56
+      },
+      "error_codes": {
+        "503 ": 508
+      },
+      "by_name": {
+        "cnx trade_compliance.decide": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 20.95,
+            "p50_ms": 20.56,
+            "p95_ms": 25.5,
+            "p99_ms": 29.29,
+            "max_ms": 35.41
+          }
+        },
+        "cnx trade_compliance.evaluate": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 47.94,
+            "p50_ms": 47.1,
+            "p95_ms": 57.14,
+            "p99_ms": 69.06,
+            "max_ms": 95.16
+          }
+        },
+        "evd file.register": {
+          "requests": 1018,
+          "errors": 504,
+          "latency_ok": {
+            "count": 514,
+            "mean_ms": 7.62,
+            "p50_ms": 7.34,
+            "p95_ms": 9.33,
+            "p99_ms": 14.11,
+            "max_ms": 42.25
+          }
+        },
+        "evd source.register": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 8.41,
+            "p50_ms": 8.03,
+            "p95_ms": 10.8,
+            "p99_ms": 14.58,
+            "max_ms": 44.59
+          }
+        },
+        "pur purchase.draft.prepare": {
+          "requests": 511,
+          "errors": 1,
+          "latency_ok": {
+            "count": 510,
+            "mean_ms": 67.98,
+            "p50_ms": 65.98,
+            "p95_ms": 78.54,
+            "p99_ms": 102.46,
+            "max_ms": 288.02
+          }
+        },
+        "stl credit.reserve": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 34.58,
+            "p50_ms": 33.58,
+            "p95_ms": 42.18,
+            "p99_ms": 53.2,
+            "max_ms": 89.93
+          }
+        },
+        "trd order.activate": {
+          "requests": 512,
+          "errors": 1,
+          "latency_ok": {
+            "count": 511,
+            "mean_ms": 50.36,
+            "p50_ms": 48.56,
+            "p95_ms": 57.14,
+            "p99_ms": 86.76,
+            "max_ms": 240.17
+          }
+        },
+        "trd order.prepare": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 23.86,
+            "p50_ms": 23.15,
+            "p95_ms": 29.87,
+            "p99_ms": 40.28,
+            "max_ms": 49.82
+          }
+        },
+        "trd order.review.decide": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 50.19,
+            "p50_ms": 49.17,
+            "p95_ms": 58.46,
+            "p99_ms": 72.9,
+            "max_ms": 100.18
+          }
+        },
+        "trd order.review.request": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 25.04,
+            "p50_ms": 24.52,
+            "p95_ms": 29.71,
+            "p99_ms": 37.23,
+            "max_ms": 67.24
+          }
+        },
+        "trd quote.activate": {
+          "requests": 513,
+          "errors": 1,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 87.62,
+            "p50_ms": 85.04,
+            "p95_ms": 99.06,
+            "p99_ms": 139.49,
+            "max_ms": 369.56
+          }
+        },
+        "trd quote.freeze": {
+          "requests": 514,
+          "errors": 0,
+          "latency_ok": {
+            "count": 514,
+            "mean_ms": 79.95,
+            "p50_ms": 77.53,
+            "p95_ms": 93.69,
+            "p99_ms": 127.09,
+            "max_ms": 299.46
+          }
+        },
+        "trd quote.response.record": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 25.57,
+            "p50_ms": 24.73,
+            "p95_ms": 30.65,
+            "p99_ms": 40.97,
+            "max_ms": 86.01
+          }
+        },
+        "trd quote.response.verify": {
+          "requests": 512,
+          "errors": 0,
+          "latency_ok": {
+            "count": 512,
+            "mean_ms": 31.59,
+            "p50_ms": 30.57,
+            "p95_ms": 37.31,
+            "p99_ms": 50.9,
+            "max_ms": 92.01
+          }
+        },
+        "trd quote.review.decide": {
+          "requests": 513,
+          "errors": 0,
+          "latency_ok": {
+            "count": 513,
+            "mean_ms": 30.07,
+            "p50_ms": 28.54,
+            "p95_ms": 35.29,
+            "p99_ms": 63.95,
+            "max_ms": 158.18
+          }
+        },
+        "trd quote.save_draft": {
+          "requests": 514,
+          "errors": 0,
+          "latency_ok": {
+            "count": 514,
+            "mean_ms": 18.07,
+            "p50_ms": 17.65,
+            "p95_ms": 22.34,
+            "p99_ms": 28.25,
+            "max_ms": 54.4
+          }
+        },
+        "trd quote.submit_review": {
+          "requests": 514,
+          "errors": 1,
+          "latency_ok": {
+            "count": 513,
+            "mean_ms": 18.22,
+            "p50_ms": 17.35,
+            "p95_ms": 22.6,
+            "p99_ms": 32.28,
+            "max_ms": 99.22
+          }
+        }
+      }
+    },
+    "cycles": {
+      "completed": 510,
+      "failed": 508,
+      "completed_per_second": 4.215,
+      "latency_completed": {
+        "count": 510,
+        "mean_ms": 687.2,
+        "p50_ms": 671.19,
+        "p95_ms": 766.4,
+        "p99_ms": 1090.06,
+        "max_ms": 1518.2
+      },
+      "failures": {
+        "evd file.register 503 ": 504,
+        "pur purchase.draft.prepare 503 ": 1,
+        "trd order.activate 503 ": 1,
+        "trd quote.activate 503 ": 1,
+        "trd quote.submit_review 503 ": 1
+      },
+      "first_errors": [
+        "2026-11-12T13:32:27.939019591Z trd quote.activate: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b19d-7829-b48b-976c56f685df\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:27.939032282Z trd quote.submit_review: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b19c-7eb6-9b61-79210a775fc6\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:27.938991552Z pur purchase.draft.prepare: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b161-7c3f-8d05-b34fd3bbb798\",\"transport_error\":\"COMMIT_UNCERTAIN\"}",
+        "2026-11-12T13:32:27.939917446Z trd order.activate: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b181-733d-bdec-09c88913d37e\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.190774724Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b29d-711e-81c2-1e16484f2874\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.190839997Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b29d-7d0a-8eb5-87e3a50adb1b\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.190905461Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b29d-79d8-bd07-4d9a057b310f\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.191154145Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b29e-75d3-ac6a-12e6d0bfcbb1\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.442526501Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b399-7a4f-b1a6-d65ed3f3451b\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.442526439Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b399-77ae-ad86-db0162ac7a1e\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.442527064Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b399-7bc8-a10c-ec3066c1fa97\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.442526489Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b399-7264-bf50-cdaac011b7a1\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.694361102Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b495-7123-b39c-a878d0faa2fa\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.694380672Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b495-79ae-a59b-f5e8ed75866e\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.694359698Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b495-729a-ba4d-97704fd90940\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.694456838Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b495-7b14-8897-29e609577009\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.945958872Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b591-727d-a3f0-6bd71dfb2b16\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.946252393Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b591-7bf3-ae0e-752ddeb70372\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.946295827Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b591-77ea-906d-d31bd68812e2\",\"transport_error\":\"UNAVAILABLE\"}",
+        "2026-11-12T13:32:28.946369015Z evd file.register: HTTP 503 : {\"correlation_id\":\"corr-01a1cff5-b591-7ac9-bc2e-bd4ddafca894\",\"transport_error\":\"UNAVAILABLE\"}"
+      ]
+    }
+  },
+  "not_executed": [
+    "a front end: latencies are client-side over loopback HTTP (server plus transport), not browser end to end",
+    "a real identity provider: tokens come from the load generator's local issuer (RS256, at+jwt); each actor's token is reused for 7.5 minutes",
+    "several tenants or customers: every user works in one tenant on one customer, so the shared rows (POL quote number sequence, STL customer credit, authority guard) are contended as hard as possible",
+    "AI tasks, large reports, files above 4 KiB and external services: baseline 11.1 sets their limits apart",
+    "failures (process restart, database interruption, redelivery) during the stages: the recovery drill covers the database",
+    "a production-like host: the API, the worker, PostgreSQL (Docker) and the load generator share one WSL2 host with other work"
+  ]
+}

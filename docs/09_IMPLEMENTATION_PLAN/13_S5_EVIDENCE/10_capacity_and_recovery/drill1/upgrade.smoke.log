@@ -1,0 +1,9 @@
+=== RUN   TestBRC001FullChainOverHTTP
+--- PASS: TestBRC001FullChainOverHTTP (3.56s)
+PASS
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	3.574s
+=== RUN   TestLoadGeneratorSmoke
+stage 1 (1 command + 1 read users): commands P95 89.3 ms, reads P95 31.4 ms, 8 cycles, load1 6.91
+--- PASS: TestLoadGeneratorSmoke (17.41s)
+PASS
+ok  	go.idp.xyz/idp-brant/tests/load	17.415s

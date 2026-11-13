@@ -1,4 +1,4 @@
-# IDP Brant · Go + DDD + Bento-Go · M0 baseline and S1 in progress
+# IDP Brant · Go + DDD + Bento-Go · S1–S3 and S5 done, S4 next
 
 **IDP Brant is one product repository and one Go module. Business code will be organized by DDD bounded context; IDP-Bento-Go stays a separate repository referenced as a Go module version.**
 
@@ -8,7 +8,7 @@
 - Repository: `github.com/idp-xyz/idp-brantgo`, public (moved from the personal account `idpxyz` to the `idp-xyz` organization on 2026-11-11; links under the old name redirect).
 - The master archive (DDD, contracts, plans, gates, ADRs) lives in `docs/` and is published with the repository. `docs/00_START_HERE/00_INDEX.html` is its entry page.
 
-M0 built the engineering baseline. S1 (master data and inquiry) is done: EVD, PTY with party screening, trading profiles, address roles and service roles, CAT with item-code mappings, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. `brant-cli foundation-demo` publishes a synthetic foundation. S2 (sourcing and costing) is done too: SUP supply conditions with SupplyConditionGuard v1, and CST costing contexts, measurements, deterministic scenario evaluation, frozen cost snapshots, source denial and AdoptabilityGuard v1; T02's 660.00 USD baseline freezes on PostgreSQL 16. S3 (quotes, acceptance, orders, purchase drafts) is done as well: TRD quotes freeze with the server calculation and a business hash, pass an independent review (with margin exceptions), are formalized with a number, document bytes and commit evidence, and become contracts when a verified acceptance arrives in time under the governing law's rule; sales orders activate after an independent review acknowledges every upstream risk and move through hashed revisions by amendment; PUR prepares purchase drafts from active order lines against a demand allocation. BRC-001 runs end to end over HTTP on PostgreSQL 16 (quote 960.00, order 960.00, purchase draft 600.00). STL credit and CNX trade compliance guards are deferred to S4–S5. The connection to a real identity provider is deferred to the B0 pilot gate. S4 (business tasks and AI-native operation) is next.
+M0 built the engineering baseline. S1 (master data and inquiry) is done: EVD, PTY with party screening, trading profiles, address roles and service roles, CAT with item-code mappings, INQ, POL (all eighteen configuration kinds and ConfigGuard) and the screening lists of reference data run on PostgreSQL 16 behind an HTTP API that accepts OIDC access tokens. Role templates with separation of duties are generated from the archive, and the candidate OpenAPI document is generated from the transport. `brant-cli foundation-demo` publishes a synthetic foundation. S2 (sourcing and costing) is done too: SUP supply conditions with SupplyConditionGuard v1, and CST costing contexts, measurements, deterministic scenario evaluation, frozen cost snapshots, source denial and AdoptabilityGuard v1; T02's 660.00 USD baseline freezes on PostgreSQL 16. S3 (quotes, acceptance, orders, purchase drafts) is done as well: TRD quotes freeze with the server calculation and a business hash, pass an independent review (with margin exceptions), are formalized with a number, document bytes and commit evidence, and become contracts when a verified acceptance arrives in time under the governing law's rule; sales orders activate after an independent review acknowledges every upstream risk and move through hashed revisions by amendment; PUR prepares purchase drafts from active order lines against a demand allocation. BRC-001 runs end to end over HTTP on PostgreSQL 16 (quote 960.00, order 960.00, purchase draft 600.00). S5 (the B0 pilot extension, run before S4 by the owner's decision) is done: four new contexts, QLT (inspections and quality releases by our own QC), STL (customer credit and CreditGuard, fund records and applications, order accounts and PaymentConditionGuard, settlement statements with business receivables and payables, credit notes, reversals and cross-currency applications, charges and the order operating result, opening balances), CNX (trade compliance and TradeComplianceGuard, export licences, customs declarations, purchase invoices, tax refund cases, certificates, document bundles and external reconciliation, all as manual paths) and FUL (shipments with the order fulfilment root, milestones, export lots, the commercial release, bookings, shipment documents and insurance); PUR purchase commitments, supplier direct deliveries and commitment changes; TRD activation and amendment behind STL's credit and CNX's trade compliance guards, and order ends and amendments on FUL's and PUR's facts; CAT declaration profiles; the Inbox dispatcher (S4-06a) carries order events to STL, CNX, PUR and FUL. BRC-001 runs over HTTP from the active order to shipment, documents, settlement, write-off and China materials (operating result 300.00 USD, 31.25 %). External professional systems are manual paths and credit, compliance, licence and tax data are synthetic; G3 and G4 are NO-GO (simulated review). The connection to a real identity provider is deferred to the B0 pilot gate. S4 (business tasks and AI-native operation) is next.
 
 ## Layout
 
@@ -39,7 +39,7 @@ internal/contexts/pol/            POL: twenty configuration kinds (S3 adds legal
 internal/contexts/cst/            CST: costing contexts and measurements in sealed revisions, the calculation rules, cost
                                   scenarios with deterministic evaluations, frozen cost snapshots (once per scenario),
                                   source attestations and denials; CostSnapshotRef lookup and AdoptabilityGuard v1
-internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working drafts, the human freeze with the server calculation
+internal/contexts/trd/            TRD (S3; S5 wiring): QuoteRoot working drafts, the human freeze with the server calculation
                                   (calc), its commercial document and business hash (Python protocol.py, golden vectors),
                                   internal metadata, the root's object control and control epoch fence; review requests,
                                   approvals with revocation and margin exceptions; activation and replacement with the
@@ -59,7 +59,7 @@ internal/contexts/trd/            TRD (S3, in progress): QuoteRoot working draft
                                   of an order revision (order-text/0.1.0 with the source quote's legal terms, POL
                                   template and number, bytes and commit evidence in one transaction, stale once the
                                   order is amended) and their signed and countersigned copies (EVD files)
-internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding active order lines to chosen supply condition
+internal/contexts/pur/            PUR (S3, S5): purchase drafts binding active order lines to chosen supply condition
                                   lines (immutable, hashed, not committed; server calculation of MOQ, multiples, tiers, tax
                                   and delivery; costing comparison), the demand allocation ledger per order line (several
                                   drafts and suppliers, never above the line's quantity), marked overbuys, purchase.draft.void;
@@ -73,7 +73,26 @@ internal/contexts/pur/            PUR (S3, in progress): purchase drafts binding
                                   revision prepared, decided independently (recomputed, deviations acknowledged) and applied
                                   while its binding holds, increases within the allocation, never below verified deliveries
                                   (short receipt = fulfilled), cancellation keeping what was verified delivered
-internal/reference/               reference data, not a context: screening lists imported under control (brant_ref)
+internal/contexts/qlt/            QLT (S5): inspections of purchase commitment lines (external agency reports as evidence,
+                                  re-inspection supersedes), dispositions, quality releases by our own QC and their
+                                  revocation; QualityReleaseGuard v1 for FUL
+internal/contexts/stl/            STL (S5): customer credit limits, reservations, decisions by tier and CreditGuard v1 for
+                                  TRD; fund records with unexplained differences, applications, order accounts and
+                                  PaymentConditionGuard v1 for FUL; settlement statements, receivables and payables;
+                                  credit notes, reversals, cross-currency applications at a settlement rate; charges,
+                                  allocations and the order operating result; opening balances; payment plan reviews;
+                                  consumers of TRD's order events
+internal/contexts/cnx/            CNX (S5): trade compliance checks and TradeComplianceGuard v1 for TRD and FUL; export
+                                  licences and ExportLicenseGuard v1; customs declarations with receipts as recorded,
+                                  purchase invoices, tax refund cases and opening refund material, certificates,
+                                  document bundles and external reconciliation (manual paths, CN-M01); consumer of order
+                                  amendments, regulation publications and programme imports
+internal/contexts/ful/            FUL (S5): shipments, packing and the order fulfilment root; ShipmentFacts v1 for TRD;
+                                  milestones and export lots (ShipmentLineRef v1, ExportLotRef v1); the commercial
+                                  release and its payment-condition exception; bookings, shipment documents rendered by
+                                  shipment-text/0.1.0 and reconciled before issue; insurance; shipment reviews
+internal/reference/               reference data, not a context: screening lists and country programme lists imported
+                                  under control (brant_ref)
 internal/transport/httpapi/       HTTP transport: command envelope, ingress limits, category-to-status mapping, OpenAPI
 internal/kernel/                  value objects shared by every context; standard library only
                                   Decimal (math/big), Money in minor units, largest-remainder allocation, tax splits,
@@ -93,10 +112,12 @@ internal/foundation/strictjson/   closed-structure request decoding (C7): 1 MiB,
 migrations/manifest/contexts.txt  order of migration directories
 migrations/auth/                  brant_auth: authority guard row per scope, local authorization projection (FORCE RLS)
 migrations/msg/                   brant_msg: dead letters of the Outbox relay (FORCE RLS)
-migrations/ref/                   brant_ref: screening list versions and entries, immutable (FORCE RLS)
-migrations/{evd,pty,cat,pol,inq,sup,cst,trd,pur}/ brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
+migrations/ref/                   brant_ref: screening and country programme list versions and entries, immutable (FORCE RLS)
+migrations/{evd,pty,cat,pol,inq,sup,cst,trd,pur,qlt,stl,cnx,ful}/ brant_<bc>: each context's tables and command ledger (FORCE RLS, immutability triggers)
 deploy/postgres/                  roles (brant_migrator, brant_app) and application grants
-scripts/dev-postgres.sh           development PostgreSQL 16 container brant-pg16 on 127.0.0.1:55471
+scripts/dev-postgres.sh           development PostgreSQL 16 container brant-pg16 on 127.0.0.1:55471 (optional WAL archiving)
+scripts/backup-restore.sh         logical, PITR and upgrade drills with consistency checks (make drill)
+tests/load/                       black-box load generator over the HTTP API with a local OIDC issuer (make load)
 contracts/openapi/                candidate OpenAPI 3.1 document, generated by tools/openapigen
 tools/dependency-check/           package rules; cross-context allowlist generated from the Context Map
 tools/rolegen/ tools/openapigen/  generators: role templates from the archive, OpenAPI from the transport
@@ -138,6 +159,8 @@ Against another PostgreSQL 16:
 4. `IDP_BRANT_POSTGRES_DSN` (as `brant_app`) and `IDP_BRANT_MIGRATOR_DSN` for the integration tests; `IDP_BRANT_POSTGRES_DSN=... go run ./cmd/brant-worker -sink https://...` to relay events, or `-dispatch` to deliver them in process to the subscriptions of the contexts (each consumer's system actor `system:inbox.<consumer>` needs `go run ./cmd/brant-admin inbox -tenant t -company c` once per company).
 
 ## Status of evidence
+
+S5, 2026-11-12 to 11-13 (before S4, by the owner's decision): every unit passed `make check` and `make integration` (CI=true) on its own PostgreSQL 16 container; after each merge into `s5/business` the lead ran `make check`, and per merge batch the migrations, `make integration` and `make race`; GitHub Actions ran on every pushed batch. The BRC-001 chain from order to settlement ran twice with identical results after normalising IDs, hashes and instants. Load, backup, PITR and upgrade drills ran on one WSL2 host only (frozen targets: reads P95 500 ms, commands P95 800 ms at ≤ 32 concurrent command users per API instance, RPO 15 min with continuous WAL archiving, RTO 4 h by PITR). The S5 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/` (12 and 13).
 
 S1, 2026-11-10: GitHub Actions runs the workflow on this repository (then the private `idpxyz/idp-brantgo`, public as `idp-xyz/idp-brantgo` since 2026-11-11); every branch passes it (formatting, vet, lint, package rules, migrations on an empty PostgreSQL 16.12, unit and integration tests without skips, race detector, spikes). `main` is a protected branch since 2026-11-11 (owner decision, once the repository was public): a change reaches it only through a pull request whose `brant-ci` check passed, for administrators too; force pushes and deletion are refused. Reviews and signed provenance are not required (G1 control C09 stays partial by that decision). The S1 report and its evidence are in `docs/09_IMPLEMENTATION_PLAN/`.
 
