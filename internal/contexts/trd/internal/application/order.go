@@ -99,11 +99,11 @@ func (h *orderCommand) Prepare(ctx context.Context) error {
 // admit runs the checks every order command starts with: the quote exists and the caller sees it,
 // and the order exists unless the command prepares it (NOT_FOUND at path: an order of a quote the
 // caller does not see is not found either), then the quote root's object control.
-func (h *orderCommand) admit(ctx context.Context, d authorization.Decision, path string) error {
+func (h *orderCommand) admit(ctx context.Context, exec bentopg.Executor, d authorization.Decision, path string) error {
 	if h.q == nil || !d.Sees(h.q.OwnerActor, h.q.OwnerTeam) || (h.o == nil && !h.preparing) {
 		return kernel.Reject(kernel.CodeNotFound, path, "")
 	}
-	return h.q.Control.Admit(claim(ctx), d.Epoch)
+	return h.q.Control.Admit(fence(ctx, exec, d))
 }
 
 // save writes the order and, when the command changed the quote root (order.prepare took its slot),
@@ -151,7 +151,7 @@ func (s Service) standings(ctx context.Context, exec bentopg.Executor, q *quote.
 func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.OrderReceipt, error) {
 	h := &orderCommand{s: s, orderID: cmd.OrderID, quoteID: cmd.QuoteID, preparing: true}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/quote_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/quote_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if h.o != nil && h.o.Source.QuoteID != h.q.ID {
@@ -186,7 +186,7 @@ func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.Or
 func (s Service) RequestOrderReview(ctx context.Context, cmd api.RequestOrderReview) (api.OrderReceipt, error) {
 	h := &orderCommand{s: s, orderID: cmd.OrderID, reviewID: cmd.ReviewID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.Check(cmd.ExpectedVersion); err != nil {
@@ -233,7 +233,7 @@ func (s Service) DecideOrderReview(ctx context.Context, cmd api.DecideOrderRevie
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.Check(cmd.ExpectedVersion); err != nil {
@@ -289,7 +289,7 @@ func (s Service) RevokeOrderApproval(ctx context.Context, cmd api.RevokeOrderApp
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		r, err := h.o.Revoke(cmd.ReviewID, quote.Act{By: d.Actor, Epoch: d.Epoch, At: s.Clock.Now(), Reason: cmd.Reason, Evidence: proofs})
@@ -327,7 +327,7 @@ func (s Service) closeOrder(ctx context.Context, name, eventType, key, id string
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.Check(expected); err != nil {

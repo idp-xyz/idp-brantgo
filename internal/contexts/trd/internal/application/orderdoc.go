@@ -79,7 +79,7 @@ func (s Service) GenerateOrderDocument(ctx context.Context, cmd api.GenerateOrde
 			if x.q, err = postgres.LoadQuote(ctx, exec, scope(ctx), x.o.Source.QuoteID, postgres.NoLock); err != nil {
 				return err
 			}
-			if err = x.admit(ctx, d, "/args/order_id"); err != nil {
+			if err = x.admit(ctx, exec, d, "/args/order_id"); err != nil {
 				return err
 			}
 			if err = x.o.CheckDocument(cmd.ExpectedOrderRevision, cmd.ExpectedOrderHash, cmd.DocumentKind); err != nil {
@@ -109,7 +109,7 @@ func (s Service) GenerateOrderDocument(ctx context.Context, cmd api.GenerateOrde
 		return nil
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.CheckDocument(cmd.ExpectedOrderRevision, cmd.ExpectedOrderHash, cmd.DocumentKind); err != nil {
@@ -250,7 +250,7 @@ func (s Service) RecordSignedOrderDocument(ctx context.Context, cmd api.RecordSi
 		return nil
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if file.FileID != cmd.FileID {

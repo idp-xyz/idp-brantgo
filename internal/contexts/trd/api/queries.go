@@ -194,7 +194,7 @@ type QuoteReadiness struct {
 	Status           string // the judged revision's status
 	ExpiresAt        time.Time
 	ApprovalID       string // the approval its commit evidence names
-	ControlState     string // unbound, bound or stopping
+	ControlState     string // unbound, bound, stopping or manual
 	CostSnapshot     *CostQualification
 	Ready            bool
 	Reasons          []Reason

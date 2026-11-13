@@ -25,10 +25,12 @@
 // until revoked; a margin below the pricing policy's minimum needs an explicit margin exception
 // besides it (TRD-INV-003, 004, 005, 007; review.go).
 //
-// The root carries its object control (SM-TRD-CONTROL, TRD-INV-015): a task binds the root
-// (object_control.bind), a human stops it (object_control.stop) or releases it
-// (object_control.release); each change increments the control epoch, and while the root is bound
-// every write must claim the binding's task and current epoch.
+// The root carries its object control (SM-TRD-CONTROL, TRD-INV-015, TSK-INV-004; control.go): a task
+// binds the root (object_control.bind); with the bound task's claim TSK stops it
+// (object_control.stop), puts it under manual control (object_control.enter_manual), hands it back
+// to the task's AI (object_control.handoff) or releases it (object_control.release); each change
+// increments the control epoch, and while the root is bound or manual every write must claim the
+// binding's task and current epoch (manual: humans only).
 //
 // Upstream facts (PTY, INQ, CAT, POL, CST, EVD) are read before TRD's transaction and judged here
 // as Facts; the freeze re-checks them inside its transaction through the upstream guards.
@@ -41,6 +43,7 @@ import "go.idp.xyz/idp-brant/internal/kernel"
 const (
 	CodeObjectControlConflict   = "OBJECT_CONTROL_CONFLICT"
 	CodeControlEpochStale       = "CONTROL_EPOCH_STALE"
+	CodeControlModeMismatch     = "CONTROL_MODE_MISMATCH"
 	CodeQuoteExpired            = "QUOTE_EXPIRED"
 	CodeQuoteValidityInvalid    = "QUOTE_VALIDITY_INVALID"
 	CodeCostSnapshotMissing     = "COST_SNAPSHOT_MISSING"
@@ -77,6 +80,7 @@ const (
 var Categories = map[string]kernel.Category{
 	CodeObjectControlConflict:   kernel.CategoryConflict,
 	CodeControlEpochStale:       kernel.CategoryConflict,
+	CodeControlModeMismatch:     kernel.CategoryConflict,
 	CodeQuoteExpired:            kernel.CategoryInvalid,
 	CodeQuoteValidityInvalid:    kernel.CategoryInvalid,
 	CodeCostSnapshotMissing:     kernel.CategoryInvalid,

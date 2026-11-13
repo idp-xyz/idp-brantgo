@@ -16,9 +16,11 @@
 // data}; quote.revise {quote_id, expected_version, base_revision}; quote.discard_draft {quote_id,
 // expected_version, working_revision, reason, evidence}; quote.freeze {quote_id, expected_version,
 // working_revision}; quote.metadata.update {quote_id, expected_version, labels, internal_note};
-// object_control.bind {quote_id, task_id, expected_control_epoch}; object_control.stop and
-// object_control.release {quote_id, expected_control_epoch, reason}. The members of data are the
-// JSON names of QuoteData's fields as documented there.
+// object_control.bind {quote_id, task_id, initiator_id, agent_id, expected_control_epoch};
+// object_control.stop, object_control.enter_manual and object_control.release {quote_id,
+// expected_control_epoch, reason}; object_control.handoff {quote_id, expected_control_epoch,
+// initiator_id, agent_id, reason} (control.go). The members of data are the JSON names of
+// QuoteData's fields as documented there.
 //
 // The freeze computes the quote's amounts on the server (WBS S3-02: internal/domain/calc) and seals
 // them in the commercial document's calculation. A frozen revision is reviewed (WBS S3-03, S3-14;
@@ -632,8 +634,8 @@ type Auditor interface {
 // Commands is TRD's command entry point for QuoteRoot. Errors are *kernel.Rejection for refusals.
 // An error that is application.ErrCommitUncertain from IDP-Bento-Go means the outcome is unknown:
 // the caller sends the same command with the same idempotency key again (or reconciles), which
-// returns the stored receipt if the command committed. A write on a root bound to a task carries the
-// task's control claim in its context (WithControl).
+// returns the stored receipt if the command committed. A write on a root bound to a task, and every
+// control change but the bind, carries the task's control claim in its context (WithControl).
 type Commands interface {
 	SaveDraft(ctx context.Context, cmd SaveDraft) (Receipt, error)
 	Revise(ctx context.Context, cmd Revise) (Receipt, error)
@@ -642,6 +644,8 @@ type Commands interface {
 	UpdateMetadata(ctx context.Context, cmd UpdateMetadata) (Receipt, error)
 	BindControl(ctx context.Context, cmd BindControl) (Receipt, error)
 	StopControl(ctx context.Context, cmd StopControl) (Receipt, error)
+	EnterManualControl(ctx context.Context, cmd EnterManualControl) (Receipt, error)
+	HandoffControl(ctx context.Context, cmd HandoffControl) (Receipt, error)
 	ReleaseControl(ctx context.Context, cmd ReleaseControl) (Receipt, error)
 	SubmitReview(ctx context.Context, cmd SubmitReview) (ReviewReceipt, error)
 	DecideReview(ctx context.Context, cmd DecideReview) (ReviewReceipt, error)
@@ -681,21 +685,23 @@ type Queries interface {
 // Command is one of TRD's commands.
 type Command interface{ trdCommand() }
 
-func (SaveDraft) trdCommand()      {}
-func (Revise) trdCommand()         {}
-func (DiscardDraft) trdCommand()   {}
-func (Freeze) trdCommand()         {}
-func (UpdateMetadata) trdCommand() {}
-func (BindControl) trdCommand()    {}
-func (StopControl) trdCommand()    {}
-func (ReleaseControl) trdCommand() {}
-func (SubmitReview) trdCommand()   {}
-func (DecideReview) trdCommand()   {}
-func (RevokeApproval) trdCommand() {}
-func (Activate) trdCommand()       {}
-func (Replace) trdCommand()        {}
-func (Withdraw) trdCommand()       {}
-func (Cancel) trdCommand()         {}
+func (SaveDraft) trdCommand()          {}
+func (Revise) trdCommand()             {}
+func (DiscardDraft) trdCommand()       {}
+func (Freeze) trdCommand()             {}
+func (UpdateMetadata) trdCommand()     {}
+func (BindControl) trdCommand()        {}
+func (StopControl) trdCommand()        {}
+func (EnterManualControl) trdCommand() {}
+func (HandoffControl) trdCommand()     {}
+func (ReleaseControl) trdCommand()     {}
+func (SubmitReview) trdCommand()       {}
+func (DecideReview) trdCommand()       {}
+func (RevokeApproval) trdCommand()     {}
+func (Activate) trdCommand()           {}
+func (Replace) trdCommand()            {}
+func (Withdraw) trdCommand()           {}
+func (Cancel) trdCommand()             {}
 
 // Reconciliation is what became of a command whose answer the caller lost.
 type Reconciliation struct {

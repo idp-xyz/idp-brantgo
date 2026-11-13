@@ -175,6 +175,8 @@ GRANT SELECT, INSERT ON brant_trd.quote_root, brant_trd.quote_revision, brant_tr
 GRANT UPDATE (root_version, last_revision, labels, internal_note, control_state, control_epoch, control_task_id,
               control_authority_epoch, control_by_kind, control_by_id, control_changed_at, updated_at)
     ON brant_trd.quote_root TO brant_app;
+-- TRD 000009 (S4 A2): a bind or handoff records the binding's delegation (decision D-5).
+GRANT UPDATE (control_initiator_id, control_initiator_epoch, control_agent_id, control_agent_epoch) ON brant_trd.quote_root TO brant_app;
 GRANT UPDATE (status, data, content_hash, contributors, saved_by_kind, saved_by_id, saved_epoch, saved_at, business_hash, commercial,
               issued_at, expires_at, frozen_by_kind, frozen_by_id, freeze_epoch, frozen_at, frozen_root_version, ended_by_kind,
               ended_by_id, end_epoch, ended_at, end_reason, end_evidence)

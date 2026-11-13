@@ -402,7 +402,7 @@ func (s Service) PrepareAmendment(ctx context.Context, cmd api.PrepareAmendment)
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := checkCited(src.Evidence, readable, "/args/source/evidence"); err != nil {
@@ -446,7 +446,7 @@ func (s Service) PrepareAmendment(ctx context.Context, cmd api.PrepareAmendment)
 func (s Service) SubmitAmendment(ctx context.Context, cmd api.SubmitAmendment) (api.AmendmentReceipt, error) {
 	h := &orderCommand{s: s, orderID: cmd.OrderID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		a, err := h.o.SubmitAmendment(cmd.AmendmentID, cmd.ExpectedVersion, d.Actor, d.Epoch, s.Clock.Now())
@@ -469,7 +469,7 @@ func (s Service) DecideAmendment(ctx context.Context, cmd api.DecideAmendment) (
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		own, err := s.Ledger.Authorizer.Qualify(ctx, exec, d.Actor.ID)
@@ -512,7 +512,7 @@ func (s Service) ApplyAmendment(ctx context.Context, cmd api.ApplyAmendment) (ap
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		now := s.Clock.Now()
@@ -593,7 +593,7 @@ func (s Service) WithdrawAmendment(ctx context.Context, cmd api.WithdrawAmendmen
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		a, err := h.o.WithdrawAmendment(cmd.AmendmentID, cmd.ExpectedVersion, quote.Act{By: d.Actor, Epoch: d.Epoch, At: s.Clock.Now(),

@@ -172,8 +172,7 @@ func TestQuoteReadyReflectsTheActiveRevisionNow(t *testing.T) {
 	}
 
 	// Object control: a root bound to a task is ready for the task's claim only.
-	bound, err := q.c.TRD.BindControl(q.author, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.goal",
-		ExpectedControlEpoch: 0})
+	bound, err := q.bindTask(q.author, "quote.1", "task.goal", 0)
 	q.must(err)
 	if r = q.readiness(q.author, "quote.1", 0); r.Ready || !slices.Equal(reasonsOf(r.Reasons), []string{"object_control:OBJECT_CONTROL_CONFLICT"}) ||
 		r.ControlState != "bound" {
@@ -184,7 +183,7 @@ func TestQuoteReadyReflectsTheActiveRevisionNow(t *testing.T) {
 	if r = q.readiness(claimed, "quote.1", 0); !r.Ready {
 		t.Fatalf("bound, with the task's claim: %+v", r)
 	}
-	_, err = q.c.TRD.ReleaseControl(q.author, trdapi.ReleaseControl{IdempotencyKey: q.key(), QuoteID: "quote.1",
+	_, err = q.c.TRD.ReleaseControl(claimed, trdapi.ReleaseControl{IdempotencyKey: q.key(), QuoteID: "quote.1",
 		ExpectedControlEpoch: bound.RowVersion, Reason: "目标核验完成"})
 	q.must(err)
 

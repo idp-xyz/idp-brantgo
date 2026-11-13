@@ -44,6 +44,8 @@ func trdCommands(c TRD) *commandSet {
 		trdapi.CommandUpdateMetadata:            reflected("", "", receiptOf[trdapi.Receipt](c.UpdateMetadata)),
 		trdapi.CommandBindControl:               reflected("", "", receiptOf[trdapi.Receipt](c.BindControl)),
 		trdapi.CommandStopControl:               reflected("", "", receiptOf[trdapi.Receipt](c.StopControl)),
+		trdapi.CommandEnterManualControl:        reflected("", "", receiptOf[trdapi.Receipt](c.EnterManualControl)),
+		trdapi.CommandHandoffControl:            reflected("", "", receiptOf[trdapi.Receipt](c.HandoffControl)),
 		trdapi.CommandReleaseControl:            reflected("", "", receiptOf[trdapi.Receipt](c.ReleaseControl)),
 		trdapi.CommandSubmitReview:              reflected("", "", receiptOf[trdapi.Receipt](c.SubmitReview)),
 		trdapi.CommandDecideReview:              reflected("", "", receiptOf[trdapi.Receipt](c.DecideReview)),

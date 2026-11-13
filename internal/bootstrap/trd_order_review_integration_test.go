@@ -203,7 +203,7 @@ func TestOrderActivationGate(t *testing.T) {
 
 	// A task bound to the quote root fences the activation (PYT-0197).
 	tsk := q.actorOf(kernel.ActorSystem, "tsk.1")
-	_, err = q.c.TRD.BindControl(tsk, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	_, err = q.bindTask(tsk, "quote.1", "task.1", 0)
 	q.must(err)
 	activate.IdempotencyKey = q.key()
 	_, err = q.c.TRD.ActivateOrder(q.author, activate)

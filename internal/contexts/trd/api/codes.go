@@ -14,6 +14,7 @@ import "go.idp.xyz/idp-brant/internal/kernel"
 const (
 	CodeObjectControlConflict = "OBJECT_CONTROL_CONFLICT"    // 409: the root is bound to another task or the write lacks the current control
 	CodeControlEpochStale     = "CONTROL_EPOCH_STALE"        // 409: the write claims an earlier control epoch
+	CodeControlModeMismatch   = "CONTROL_MODE_MISMATCH"      // 409: the root is under manual control and the writer is not a human (S4 D-3)
 	CodeQuoteExpired          = "QUOTE_EXPIRED"              // as_of ≥ expires_at
 	CodeQuoteValidityInvalid  = "QUOTE_VALIDITY_INVALID"     // the validity exceeds the pricing policy's
 	CodeCostSnapshotMissing   = "COST_SNAPSHOT_MISSING"      // no cost snapshot bound
@@ -55,6 +56,7 @@ const (
 var codes = map[string]kernel.Category{
 	CodeObjectControlConflict: kernel.CategoryConflict,
 	CodeControlEpochStale:     kernel.CategoryConflict,
+	CodeControlModeMismatch:   kernel.CategoryConflict,
 	CodeQuoteExpired:          kernel.CategoryInvalid,
 	CodeQuoteValidityInvalid:  kernel.CategoryInvalid,
 	CodeCostSnapshotMissing:   kernel.CategoryInvalid,

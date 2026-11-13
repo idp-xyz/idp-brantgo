@@ -397,7 +397,7 @@ func TestConcurrentDecisionsHaveOneWinner(t *testing.T) {
 func TestReviewCommandsPassTheObjectControl(t *testing.T) {
 	q := newTrdWorld(t)
 	f := q.frozenQuote("quote.1")
-	_, err := q.c.TRD.BindControl(q.author, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	_, err := q.bindTask(q.author, "quote.1", "task.1", 0)
 	q.must(err)
 	_, err = q.submit(q.author, "quote.1", f.RowVersion, 1, "review.1")
 	q.want(err, trdapi.CodeObjectControlConflict)
