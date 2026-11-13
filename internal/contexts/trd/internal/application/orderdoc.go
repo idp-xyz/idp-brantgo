@@ -369,7 +369,8 @@ func (s Service) GetOrderDocument(ctx context.Context, orderID string, rev int64
 		if err = orderdoc.Verify(&doc.Binding, content); err != nil {
 			return err
 		}
-		v = api.OrderDocument{OrderID: o.ID, Document: documentView(o, doc), Content: content}
+		v = api.OrderDocument{OrderID: o.ID, Document: documentView(o, doc), Content: content, OwnerActorID: root.OwnerActor,
+			OwnerTeamID: root.OwnerTeam}
 		return nil
 	})
 	return v, err

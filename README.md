@@ -21,6 +21,7 @@ cmd/brant-worker/                 Outbox relay: claim, publish to an HTTP sink o
                                   in process, settle; at least once; lag alerts and GET /metrics (S5R-D07)
 internal/bootstrap/               composition root: one connection pool, a Bento transaction owner per context and for the relay
 internal/contexts/evd/            EVD: text sources (content, origin, import) and business files, immutable; SourceRef lookup
+                                  and file extracts; consumer of TRD's formal document events, filing them as business files (R65)
 internal/contexts/pty/            PTY: parties with role sets and contacts; confirmed revisions kept; PartyRef lookup;
                                   address roles, service roles, trading profiles; party screening with positive and negative
                                   lists and PartyScreeningGuard v1; TradingProfileGuard v1 and AddressRoleGuard v1 for TRD;
