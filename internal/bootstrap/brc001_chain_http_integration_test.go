@@ -113,7 +113,13 @@ import (
 // the fixtures, what was not executed, and each step with its method, path, status, idempotency key,
 // object ID, row version, receipt status or refusal code, and the IDs, hashes and amounts it read.
 func TestBRC001FullChainOverHTTP(t *testing.T) {
-	b := newBRC001(t)
+	newBRC001(t).toPurchaseDraft()
+}
+
+// toPurchaseDraft is the S3-12 chain from the configuration evidence to the purchase draft of the
+// active order, read back, and the refusals of a second order and of a purchase beyond the order.
+// The S5 chain (TestBRC001OrderToSettlementOverHTTP) runs it first and continues from there.
+func (b *brc001) toPurchaseDraft() {
 	b.foundation()
 	b.front()
 	b.customerReady()
@@ -239,6 +245,7 @@ type brcRecord struct {
 	NotExecuted []string          `json:"not_executed"`
 	Amounts     map[string]string `json:"amounts"`
 	Steps       []brcStep         `json:"steps"`
+	Dispatches  []brcDispatch     `json:"dispatches,omitempty"` // the S5 chain's runs of the event relay
 }
 
 // brc001 drives the chain: the platform's API behind an httptest server, the local issuer, the
@@ -251,6 +258,7 @@ type brc001 struct {
 	phase  string
 	keys   int
 	record brcRecord
+	report string // the environment variable naming the record's file
 
 	from, until                                    time.Time
 	usd, pcs, zero, freight, service               map[string]any
@@ -272,7 +280,7 @@ func newBRC001(t *testing.T) *brc001 {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	from := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	b := &brc001{t: t, w: w, base: srv.URL, is: is, from: from, until: from.Add(24 * time.Hour),
+	b := &brc001{t: t, w: w, base: srv.URL, is: is, report: "BRANT_BRC001_REPORT", from: from, until: from.Add(24 * time.Hour),
 		goods: map[string]map[string]any{}, sale: map[string]map[string]any{},
 		place: map[string]any{"kind": trdapi.PlaceKind, "id": "DEHAM", "revision": 1}}
 	var version string
@@ -328,9 +336,10 @@ func newBRC001(t *testing.T) *brc001 {
 	return b
 }
 
-// writeRecord writes the chain record to BRANT_BRC001_REPORT, when it is set.
+// writeRecord writes the chain record to the file the environment variable b.report names
+// (BRANT_BRC001_REPORT for the S3 chain), when it is set.
 func (b *brc001) writeRecord() {
-	path := os.Getenv("BRANT_BRC001_REPORT")
+	path := os.Getenv(b.report)
 	if path == "" {
 		return
 	}
