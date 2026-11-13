@@ -22,6 +22,10 @@ const (
 	// the task pauses (AI-INV-003, BC-AT26). It is a transport answer (HTTP 503, retryable), not a
 	// rejection: see model.ErrUnavailable.
 	ToolUnavailable = "TOOL_UNAVAILABLE"
+	// InputProfileUnsupported: a file or a task's files exceed Q01.upload.v0.1 (type, pages, sheets,
+	// rows and columns, size, characters or attachments; baseline 14.2). Nothing is truncated: the
+	// file goes to the manual path. internal/ai/ingest returns it.
+	InputProfileUnsupported = "INPUT_PROFILE_UNSUPPORTED"
 )
 
 // categories maps each rejection code of the AI layer to the category transports answer it with.
@@ -30,6 +34,7 @@ var categories = map[string]kernel.Category{
 	GrantExpired:                kernel.CategoryForbidden,
 	BudgetExhausted:             kernel.CategoryInvalid,
 	ExecutionBundleIncompatible: kernel.CategoryConflict,
+	InputProfileUnsupported:     kernel.CategoryInvalid,
 }
 
 // Category returns the category of a rejection code of the AI layer.

@@ -214,4 +214,4 @@ M0, local runs on 2026-11-07 against the dedicated container (PostgreSQL 16.12, 
 
 ## Dependency lock qualification
 
-`go.sum` is the complete module graph from `go mod tidy`; S1 added `github.com/go-jose/go-jose/v4`, so it is no longer identical to IDP-Cargo's. CI resolves it with `GOPROXY=direct` and runs `go mod verify` and `go mod tidy -diff`. Promotion to an approved supply-chain baseline still needs review.
+`go.sum` is the complete module graph from `go mod tidy`; S1 added `github.com/go-jose/go-jose/v4`, so it is no longer identical to IDP-Cargo's. S4 added `github.com/digitorus/pdf` v0.3.0 (BSD-3-Clause, no dependencies of its own) for the PDF object layer of the restricted file extraction; only `internal/ai/ingest/pdftext` imports it (decision E-8, reviewed in the S4 A6 report). CI resolves it with `GOPROXY=direct` and runs `go mod verify` and `go mod tidy -diff`. Promotion to an approved supply-chain baseline still needs review.
