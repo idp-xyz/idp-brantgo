@@ -239,13 +239,15 @@ func TestSupplyConditionAndReferencesAreCurrent(t *testing.T) {
 			c.Check = func(p string) error { return kernel.RejectAs("CONFIG_NOT_ACTIVE", kernel.CategoryInvalid, p, "") }
 			w.in.Configs[trade] = c
 		}, "CONFIG_NOT_ACTIVE /args/lines/0/source"},
+		// S5R-D41 (PUR-INV-012 "承诺行的单位等于订单行的单位"; "单位不同的草稿返回 UNIT_SCOPE_MISMATCH"): was
+		// DEPENDENCY_NOT_SUPPORTED before S5R.
 		{"other unit", func(w *world) {
 			dz := ConfigKey{Kind: "unit", ID: "DZ", Revision: 1}
 			w.in.Configs[dz] = Config{Check: inForce, Unit: &Unit{Code: "DZ"}}
 			l := w.in.Order.Lines["L1"]
 			l.Unit = dz
 			w.in.Order.Lines["L1"] = l
-		}, "DEPENDENCY_NOT_SUPPORTED /args/lines/0/source"},
+		}, "UNIT_SCOPE_MISMATCH /args/lines/0/source"},
 		{"fractional piece", func(w *world) { w.req.Lines[0].Quantity = kernel.MustDecimal("119.5") }, "INVALID_KNOWN_VALUE /args/lines/0/quantity"},
 		{"no snapshot", func(w *world) { w.in.Order.Snapshot = nil }, "COST_SNAPSHOT_MISSING /args/order_id"},
 		{"snapshot unread", func(w *world) { w.in.Costing = nil }, "REFERENCE_INVALID /args/order_id"},

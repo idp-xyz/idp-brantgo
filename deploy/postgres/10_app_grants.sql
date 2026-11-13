@@ -283,6 +283,13 @@ GRANT UPDATE (status, row_version, settled_by_kind, settled_by_id, settle_epoch,
 GRANT UPDATE (disposition, disposition_draft_id, disposition_change_id, disposition_commitment_id, disposition_revision, disposition_at,
               disposition_reason)
     ON brant_pur.allocation_review_item TO brant_app;
+-- PUR commitment dispositions (S5R-04, S5R-D05): a disposition is inserted requested and decided once (trigger), its
+-- deferred check calls PUR's helper functions as the application role; nothing is deleted. FOR UPDATE on dispositions
+-- needs the column grants.
+GRANT SELECT, INSERT ON brant_pur.purchase_commitment_disposition TO brant_app;
+GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason, updated_at)
+    ON brant_pur.purchase_commitment_disposition TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_pur.commitment_line_disposed(text, text, text, text) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a

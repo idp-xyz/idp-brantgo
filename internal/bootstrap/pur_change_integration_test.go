@@ -498,10 +498,14 @@ func TestCommitmentChangeRacesADeliveryVerification(t *testing.T) {
 // SM-PUR-COMMITMENT issued | confirmed → cancelled ("授权人工、理由与供应商证据；释放分配"; "已核实交付量保留") and
 // PUR-INV-011 "取消须授权人工、理由与供应商证据并释放分配；已核实交付量不被变更或取消抹去": of a confirmed commitment of
 // 120 the supplier delivered 70, verified, and claims 20 more; the purchaser cancels it on the
-// supplier's evidence. The line keeps 70 — the allocation of the other 50 is released and another
-// draft may take it —, the verified delivery stays usable by FUL's guard and STL's settlement, the
-// pending claim can no longer be verified, the draft stays committed, and DownstreamCommitments v1
-// shows only the 70 allocated. PurchaseCommitmentCancelled is in the Outbox.
+// supplier's evidence. S5R-D41 (SM-PUR-COMMITMENT cancel guard, PUR-INV-011 "承诺有未核实的交付声明（recorded）时取消
+// 被拒，须先核实或驳回该声明"; changed from S5 C11, where the pending claim was left unverifiable): while the
+// claim of 20 awaits its verification the cancellation is INVALID_STATE, reason
+// unverified_delivery_pending, and the commitment database refuses it too; the purchaser's colleague
+// rejects the claim, and the cancellation passes. The line keeps 70 — the allocation of the other 50
+// is released and another draft may take it —, the verified delivery stays usable by FUL's guard and
+// STL's settlement, the draft stays committed, and DownstreamCommitments v1 shows only the 70
+// allocated. PurchaseCommitmentCancelled is in the Outbox.
 func TestCommitmentCancelReleasesTheUndeliveredAllocationAndKeepsTheVerified(t *testing.T) {
 	w := newPurWorld(t)
 	c := newPurChange(w.scenWorld, func() *pur.Module { return w.pur })
@@ -522,6 +526,24 @@ func TestCommitmentCancelReleasesTheUndeliveredAllocationAndKeepsTheVerified(t *
 	agent := w.other("cancel.agent", kernel.ActorAI, allPermissions...)
 	_, err = c.cancel(agent, "commitment.1", 4)
 	w.want(err, kernel.CodePermissionDenied)
+	_, err = c.cancel(w.author, "commitment.1", 4)
+	refusedAt(t, "a cancellation while a claim awaits its verification (S5R-D41)", err, kernel.CodeInvalidState, "/args/commitment_id")
+	if !strings.HasPrefix(reasonOf(err), "unverified_delivery_pending: ") || !strings.Contains(reasonOf(err), "delivery.2") {
+		t.Fatalf("the refusal names the pending claim: %s", reasonOf(err))
+	}
+	if status, version := c.x.p.state("commitment.1"); status != purapi.CommitmentConfirmed || version != 4 {
+		t.Fatalf("nothing moved: %s %d", status, version)
+	}
+	if err = w.purOwner(`INSERT INTO brant_pur.purchase_commitment_revision (tenant_id, company_id, commitment_id, revision, kind, order_revision,
+		order_hash, line_count, created_by_kind, created_by_id, created_epoch, created_at) SELECT tenant_id, company_id, commitment_id, 2, 'cancel',
+		order_revision, order_hash, 1, 'human', 'editor', 1, now() FROM brant_pur.purchase_commitment WHERE commitment_id = 'commitment.1'`,
+		`UPDATE brant_pur.purchase_commitment SET status = 'cancelled', revision = 2, row_version = 5, cancelled_by_kind = 'human',
+		cancelled_by_id = 'editor', cancel_epoch = 1, cancelled_at = now(), cancel_reason = 'r', cancel_evidence = '[{"locator":"x","source_id":"evidence"}]'
+		WHERE commitment_id = 'commitment.1'`); sqlCode(err) != "23000" || !strings.Contains(err.Error(), "changes only along SM-PUR-COMMITMENT") {
+		t.Fatalf("the database refuses a cancellation with a pending claim: %v", err)
+	}
+	_, err = c.x.reject(w.author, "delivery.2", 1)
+	w.must(err)
 	_, err = w.pur.CancelCommitment(w.author, purapi.CancelCommitment{IdempotencyKey: w.key(), CommitmentID: "commitment.1", ExpectedVersion: 4,
 		Reason: "合成：取消"})
 	refusedAt(t, "a cancellation without evidence", err, kernel.CodeSchemaInvalid, "/args/evidence")
@@ -559,8 +581,8 @@ func TestCommitmentCancelReleasesTheUndeliveredAllocationAndKeepsTheVerified(t *
 		s.Line.Code != kernel.CodeInvalidState {
 		t.Fatalf("settlement source after the cancellation %+v", s)
 	}
-	_, err = c.x.verify(w.author, "delivery.2", 1, "20")
-	w.want(err, kernel.CodeInvalidState)
+	_, err = c.x.verify(w.author, "delivery.2", 2, "20")
+	w.want(err, kernel.CodeInvalidState) // rejected before the cancellation: nothing awaits verification
 	_, err = c.cancel(w.author, "commitment.1", 5)
 	w.want(err, kernel.CodeInvalidState)
 	_, err = c.prepare(w.author, "change.after", "commitment.1", 2, changeLine("70", "offer.1", ""))

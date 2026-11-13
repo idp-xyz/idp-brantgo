@@ -552,6 +552,10 @@ type PurchaseDelivery struct {
 // the currency and the net, tax and gross amounts in minor units are the sealed draft's for the
 // whole PurchaseQuantity; Deliveries are the line's verified deliveries by delivery ID and
 // VerifiedQuantity their sum. Claims are not shown: they never count.
+//
+// S5R-D42 and S5R-D33 (R31, PurchaseLineRef v1 "含获批处置"): DisposedQuantity is what the line's approved
+// dispositions add up to and Dispositions are those dispositions by disposition ID — STL counts a
+// write_off as the order's sunk cost.
 type PurchaseLine struct {
 	Line             CommitmentLine
 	Currency         string
@@ -561,6 +565,8 @@ type PurchaseLine struct {
 	GrossMinor       string
 	VerifiedQuantity string
 	Deliveries       []PurchaseDelivery
+	DisposedQuantity string
+	Dispositions     []PurchaseDisposition
 }
 
 // DeliveryLookups answer the lookups of the contexts downstream of PUR's supplier deliveries: FUL

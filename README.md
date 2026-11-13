@@ -72,7 +72,10 @@ internal/contexts/pur/            PUR (S3, S5): purchase drafts binding active o
                                   for STL, PurchaseLineRef v1 for CNX; commitment changes and cancellation (S5-19): the next
                                   revision prepared, decided independently (recomputed, deviations acknowledged) and applied
                                   while its binding holds, increases within the allocation, never below verified deliveries
-                                  (short receipt = fulfilled), cancellation keeping what was verified delivered
+                                  (short receipt = fulfilled), cancellation keeping what was verified delivered;
+                                  S5R-04: dispositions of delivered goods (requested by the purchaser, approved by an
+                                  independent order reviewer) that DownstreamCommitments v1 counts as settled, decrease-only
+                                  changes without the supply condition's validity, no cancellation over a pending claim
 internal/contexts/qlt/            QLT (S5): inspections of purchase commitment lines (external agency reports as evidence,
                                   re-inspection supersedes), dispositions, quality releases by our own QC and their
                                   revocation; QualityReleaseGuard v1 for FUL
