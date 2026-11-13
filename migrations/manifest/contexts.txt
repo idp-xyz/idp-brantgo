@@ -38,3 +38,6 @@ ful
 # sup, cst (R66-R69 ActionReconciliation v1): it reads them before its transactions and calls no guard
 # function of theirs.
 tsk
+# ai (S4): internal/ai, the AI layer's delegations and approval grants (brant_ai; plan S4 D-6). It calls
+# no guard function and publishes none; its checks read brant_auth at run time only.
+ai
