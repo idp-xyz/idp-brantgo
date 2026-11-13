@@ -324,3 +324,34 @@ func TestCommitUncertainBeforeCommitIsReconciledAndRetriedOnce(t *testing.T) {
 		t.Fatalf("notes %d, results %d, events %d; want the command once", r.count("note"), r.count("action_result"), r.events())
 	}
 }
+
+// A ledger may name its reconciliations in the audit trail (ReconcileAudit): TSK's own command is
+// action.reconcile, so its reconciliations are audited apart from it (S4 unit B1). Reads and
+// refusals both carry the ledger's name; without one, ReconcileQuery.
+func TestReconcileAuditName(t *testing.T) {
+	r := newRig(t)
+	ctx := r.as(human)
+	if _, err := r.save(ctx, "k1", "n1", "hello", 0); err != nil {
+		t.Fatal(err)
+	}
+	r.ledger.ReconcileAudit = "note.reconcile"
+	audits := len(r.audit())
+	if _, err := r.reconcile(ctx, "k1", "n1", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.ledger.Reconcile(ctx, "note.save", "k1", "abc"); code(err) != kernel.CodeSchemaInvalid {
+		t.Fatalf("a malformed hash: %v", err)
+	}
+	a := r.audit()[audits:]
+	if len(a) != 2 || a[0].Command != "note.reconcile" || a[0].Outcome != "read" || a[1].Command != "note.reconcile" ||
+		a[1].Outcome != "rejected" {
+		t.Fatalf("%+v", a)
+	}
+	r.ledger.ReconcileAudit = ""
+	if _, err := r.reconcile(ctx, "k1", "n1", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if last := r.audit()[len(r.audit())-1]; last.Command != action.ReconcileQuery {
+		t.Fatalf("%+v", last)
+	}
+}

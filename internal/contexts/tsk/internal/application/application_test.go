@@ -57,9 +57,10 @@ func TestCodesAreTheCatalogs(t *testing.T) {
 }
 
 // The rules: a permission per command, named as the command (role templates V0.1); the human-only
-// rules are exactly the tactical model's humanOnlyCommands of TSK (X-INV-002); no command admits an
-// AI actor (AI-INV-004); every TSK command of the Context Map but ActionExecution's (unit B1) has a
-// rule, and none other.
+// rules are exactly the tactical model's humanOnlyCommands of TSK (X-INV-002); no command of a task's
+// lifecycle admits an AI actor (AI-INV-004), while ActionExecution's two admit a task step's
+// executor, human or AI (role templates: ai_q01_agent holds them), and no system actor; every TSK
+// command of the Context Map has a rule, and none other.
 func TestRulesFollowTheDesign(t *testing.T) {
 	var tactical struct {
 		HumanOnly []string `json:"humanOnlyCommands"`
@@ -75,11 +76,7 @@ func TestRulesFollowTheDesign(t *testing.T) {
 	var designed []string
 	for _, c := range cmap.Contexts {
 		if c.ID == "TSK" {
-			for _, cmd := range c.Commands {
-				if !strings.HasPrefix(cmd, "action.") {
-					designed = append(designed, cmd)
-				}
-			}
+			designed = append(designed, c.Commands...)
 		}
 	}
 	policy, err := authorization.NewPolicy(Rules()...)
@@ -88,15 +85,23 @@ func TestRulesFollowTheDesign(t *testing.T) {
 	}
 	var commands []string
 	for _, r := range Rules() {
-		read := r.Command == api.CommandGetTask || r.Command == api.CommandClaim || r.Command == api.CommandAudit
+		read := r.Command == api.CommandGetTask || r.Command == api.CommandClaim || r.Command == api.CommandAudit ||
+			r.Command == api.CommandGetAction || r.Command == api.CommandTaskActions
 		if read {
+			if r.Permission != api.PermissionRead && r.Command != api.CommandAudit {
+				t.Errorf("%s needs %s", r.Command, r.Permission)
+			}
 			continue
 		}
 		commands = append(commands, r.Command)
 		if r.Permission != r.Command {
 			t.Errorf("%s needs %s", r.Command, r.Permission)
 		}
-		if r.Admits(kernel.ActorAI) {
+		if strings.HasPrefix(r.Command, "action.") {
+			if !slices.Equal(r.ActorKinds, []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}) {
+				t.Errorf("%s admits %v", r.Command, r.ActorKinds)
+			}
+		} else if r.Admits(kernel.ActorAI) {
 			t.Errorf("%s admits an AI actor", r.Command)
 		}
 		humanOnly := slices.Equal(r.ActorKinds, []kernel.ActorKind{kernel.ActorHuman})
@@ -106,10 +111,10 @@ func TestRulesFollowTheDesign(t *testing.T) {
 	}
 	slices.Sort(commands)
 	slices.Sort(designed)
-	if !slices.Equal(commands, designed) || len(commands) != 15 {
+	if !slices.Equal(commands, designed) || len(commands) != 17 {
 		t.Fatalf("rules %v, Context Map %v", commands, designed)
 	}
-	for _, c := range []string{"task.transition", "task.set_state", "task.complete", "action.record_attempt"} {
+	for _, c := range []string{"task.transition", "task.set_state", "task.complete", "action.record_outcome", "action.commit"} {
 		if _, err := policy.Rule(c); err == nil {
 			t.Errorf("%s has a rule", c)
 		}

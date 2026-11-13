@@ -11,7 +11,8 @@
 // is no command that sets a state (Q01 V0.1
 // tests/test_execution.py::test_generic_transition_cannot_set_completed), and no command an AI actor
 // may issue: model output never changes a task (AI-INV-004). Every command names the task's version it saw (expected_version, VERSION_CONFLICT
-// otherwise) and moves it by one.
+// otherwise) and moves it by one. (ActionExecution's commands, action.go, record the side effects of
+// a task's steps; their executor may be the task's AI agent.)
 //
 //	task.create             human or system: a task in created, its goal and goal version, control
 //	                        mode, AI agent (mode ai), owner, target, source, deadline, budget and

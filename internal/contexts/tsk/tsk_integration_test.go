@@ -122,13 +122,14 @@ func (f *fakeTRD) ops() []string {
 
 var taskPermissions = []string{"task.create", "task.scope", "task.wait", "task.verify", "goal.verify", "task.pause", "task.resume",
 	"task.take_control", "task.handoff", "task.cancel", "task.finish_stop", "task.close_unfulfilled", "task.fail", "task.bind_object",
-	"task.release", "tsk.read", "tsk.audit"}
+	"task.release", "tsk.read", "tsk.audit", "action.record_attempt", "action.reconcile"}
 
 type world struct {
 	t      *testing.T
 	db     *bentopg.DB
 	m      *tsk.Module
 	trd    *fakeTRD
+	target *fakeTargets // the action ledgers of EVD, INQ, SUP, CST and TRD (action_integration_test.go)
 	tenant string
 	serial int
 	alice  context.Context // human owner, company data scope
@@ -145,16 +146,16 @@ func newWorld(t *testing.T) *world {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := newFake()
-	m, err := tsk.New(db, tsk.Upstream{Control: f, Readiness: f})
+	f, targets := newFake(), newTargets()
+	m, err := tsk.New(db, tsk.Upstream{Control: f, Readiness: f, Reconcilers: targets.ports()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &world{t: t, db: db, m: m, trd: f, tenant: pgtest.UniqueID(t, "tenant.")}
+	w := &world{t: t, db: db, m: m, trd: f, target: targets, tenant: pgtest.UniqueID(t, "tenant.")}
 	w.alice = w.actor("company.A", kernel.ActorHuman, "alice", authorization.DataScopeCompany, taskPermissions...)
 	w.bob = w.actor("company.A", kernel.ActorHuman, "bob", "", "tsk.read")
 	w.sys = w.actor("company.A", kernel.ActorSystem, "tsk", authorization.DataScopeCompany, taskPermissions...)
-	w.agent = w.actor("company.A", kernel.ActorAI, "agent.1", "", "tsk.read")
+	w.agent = w.actor("company.A", kernel.ActorAI, "agent.1", "", "tsk.read", "action.record_attempt", "action.reconcile")
 	w.rogue = w.actor("company.A", kernel.ActorAI, "agent.2", authorization.DataScopeCompany, taskPermissions...)
 	w.other = w.actor("company.B", kernel.ActorHuman, "alice", authorization.DataScopeCompany, taskPermissions...)
 	return w
@@ -838,7 +839,7 @@ func TestTRDRefusalsLeaveTheTaskUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plain, err := tsk.New(db, tsk.Upstream{Control: w.trd, Readiness: tsk.ReadinessNotWired()})
+	plain, err := tsk.New(db, tsk.Upstream{Control: w.trd, Readiness: tsk.ReadinessNotWired(), Reconcilers: w.target.ports()})
 	if err != nil {
 		t.Fatal(err)
 	}

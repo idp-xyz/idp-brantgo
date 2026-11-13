@@ -304,8 +304,10 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		// TSK (S4) after TRD: it calls TRD's object control (R17) and its GoalReadiness v1 (R18,
-		// not published before S4 unit A3) before its own transactions.
-		c.TSK, err = tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(c.TRD), Readiness: tsk.ReadinessNotWired()})
+		// not published before S4 unit A3) before its own transactions, and the ActionReconciliation
+		// v1 of the contexts a task step writes (R18, R66–R69; S4 unit B1).
+		c.TSK, err = tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(c.TRD), Readiness: tsk.ReadinessNotWired(),
+			Reconcilers: tsk.ActionReconciliation(tsk.ActionReconcilers{EVD: c.EVD, INQ: c.INQ, SUP: c.SUP, CST: c.CST, TRD: c.TRD})})
 	}
 	if err != nil {
 		return nil, err

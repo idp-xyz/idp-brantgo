@@ -44,8 +44,10 @@ var anyActor = []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.Acto
 // V0.1); its rule admits the actor kinds of its SM-TSK-TASK transitions (task.create: human or
 // system), and the domain checks the kind of the transition it takes. The tactical model's
 // humanOnlyCommands name task.take_control, task.release, task.handoff, task.cancel and task.fail:
-// authorization.HumanOnly. No TSK command admits an AI actor (AI-INV-004). Reads need tsk.read —
-// the claim of a task step is issued to humans and AI actors only —, the audit trail tsk.audit.
+// authorization.HumanOnly. No command of a task's lifecycle admits an AI actor (AI-INV-004); the
+// commands of ActionExecution, which record and reconcile a task step's side effect, admit its
+// executor, human or the task's AI agent (actionRules). Reads need tsk.read — the claim of a task
+// step is issued to humans and AI actors only —, the audit trail tsk.audit.
 func Rules() []authorization.Rule {
 	var rules []authorization.Rule
 	for _, c := range task.Commands() {
@@ -56,11 +58,11 @@ func Rules() []authorization.Rule {
 		}
 		rules = append(rules, authorization.Rule{Command: string(c), Permission: string(c), ActorKinds: kinds})
 	}
-	return append(rules,
+	return append(append(rules,
 		authorization.Rule{Command: api.CommandGetTask, Permission: api.PermissionRead, ActorKinds: anyActor},
 		authorization.Rule{Command: api.CommandClaim, Permission: api.PermissionRead, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 		authorization.Rule{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
-	)
+	), actionRules()...)
 }
 
 // ControlRequest is one object control command TSK sends TRD for a task (R17): Key is its
@@ -112,7 +114,8 @@ type Readiness interface {
 }
 
 // Actions counts a task's submitted and unknown actions in TSK's transaction (TSK-INV-003): the stop
-// barrier, verification, completion, release and the ends of a task wait for them.
+// barrier, verification, completion, release and the ends of a task wait for them. StoredActions
+// counts ActionExecution's (S4 unit B1).
 type Actions interface {
 	Unsettled(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, taskID string) (int, error)
 }
@@ -135,14 +138,18 @@ func (ReadinessNotWired) Assess(context.Context, Goal) (Verdict, error) {
 	return Verdict{}, api.Reject(api.CodeDependencyNotSupported, "/", "TRD's GoalReadiness v1 is not wired")
 }
 
-// Upstream are the ports TSK calls TRD through.
+// Upstream are the ports TSK calls TRD through, and the ActionReconciliation v1 ports of the
+// contexts a task step writes (R18, R66–R69).
 type Upstream struct {
-	Control   ObjectControl
-	Readiness Readiness
+	Control     ObjectControl
+	Readiness   Readiness
+	Reconcilers Reconcilers
 }
 
 // Complete reports whether every port is wired.
-func (u Upstream) Complete() bool { return u.Control != nil && u.Readiness != nil }
+func (u Upstream) Complete() bool {
+	return u.Control != nil && u.Readiness != nil && u.Reconcilers.Complete()
+}
 
 // Service runs TSK's use cases.
 type Service struct {
@@ -157,8 +164,16 @@ func scope(ctx context.Context) kernel.Scope {
 	return s
 }
 
-// Visible reports whether d's actor sees the task a stored result names.
-func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, _ string, id string) (bool, error) {
+// Visible reports whether d's actor sees the task a stored result names: the task itself, or for
+// an ActionExecution command the action's task.
+func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command string, id string) (bool, error) {
+	if command == api.CommandRecordAttempt || command == api.CommandReconcileAction {
+		e, err := postgres.LoadAction(ctx, exec, scope(ctx), id, postgres.NoLock)
+		if err != nil || e == nil {
+			return false, err
+		}
+		id = e.TaskID
+	}
 	t, err := postgres.LoadTask(ctx, exec, scope(ctx), id, postgres.NoLock)
 	return err == nil && t != nil && t.Visible(d.Actor, d.Sees), err
 }
@@ -246,7 +261,7 @@ func request(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandRelease, key, c
 	}
-	return "", "", nil
+	return actionRequest(cmd)
 }
 
 func requestHash(cmd api.Command) string {
