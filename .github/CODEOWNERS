@@ -8,6 +8,7 @@
 /migrations/           @idpxyz
 /deploy/               @idpxyz
 /docs/                 @idpxyz
+/tests/                @idpxyz
 /internal/contexts/evd/ @idpxyz
 /internal/contexts/pty/ @idpxyz
 /internal/contexts/cat/ @idpxyz

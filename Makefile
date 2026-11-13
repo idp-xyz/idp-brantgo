@@ -6,7 +6,9 @@
 #   make race         the same with the race detector
 #   make spike        the M0-10 consistency spikes, report in bin/spike-consistency.json
 #   make roles        regenerate the role templates from the archive (BC-D02)
-#   make ci           everything above
+#   make load         staged load over the HTTP API against PG_PORT (tests/load; WBS S5-11), report in bin/load/
+#   make drill        backup/restore (logical, PITR) and upgrade drills (scripts/backup-restore.sh; WBS S5-11)
+#   make ci           everything above (not load and drill)
 
 GO ?= go
 GOLANGCI_LINT_VERSION ?= v2.15.0
@@ -14,19 +16,26 @@ CONTEXT_MAP ?= docs/03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Dra
 PG_PORT ?= 55471
 export GOPRIVATE ?= go.idp.xyz
 
+# make load and make drill: stages, extra flags of tests/load, and the drill's restore target.
+LOAD_STAGES ?= 1,2,4,8,16,32
+LOAD_ARGS ?=
+RESTORE_PORT ?= $(shell expr $(PG_PORT) + 1)
+PG_CONTAINER ?= brant-pg16
+RESTORE_CONTAINER ?= $(PG_CONTAINER)-restore
+
 DB_ENV = CI=true \
 	IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
 	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable'
 
-.PHONY: check fmt fmt-check vet lint test deps allowlist roles modules db integration race spike build ci
+.PHONY: check fmt fmt-check vet lint test deps allowlist roles modules db integration race spike build ci load drill
 
 check: modules fmt-check vet lint test deps
 
 fmt:
-	gofmt -w cmd internal tools
+	gofmt -w cmd internal tools tests
 
 fmt-check:
-	@out="$$(gofmt -l cmd internal tools)"; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi
+	@out="$$(gofmt -l cmd internal tools tests)"; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi
 
 vet:
 	$(GO) vet ./...
@@ -66,5 +75,17 @@ race:
 spike:
 	@mkdir -p bin
 	$(DB_ENV) BRANT_SPIKE_REPORT=$(CURDIR)/bin/spike-consistency.json $(GO) test -tags integration -count=1 -v ./tools/spikes/consistency
+
+# The observer samples pg_stat_activity, pg_locks and the Outbox as the development superuser. Run it
+# against a database of its own: its brant-worker -dispatch relays every tenant's pending events.
+load: build
+	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
+	BRANT_LOAD_OBSERVER_DSN='postgres://postgres:dev-superuser-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
+	$(GO) run ./tests/load -bin bin -stages $(LOAD_STAGES) -out bin/load/$$(date -u +%Y%m%dT%H%M%SZ) $(LOAD_ARGS)
+
+# Needs the source container with WAL archiving (BRANT_PG_WAL_ARCHIVE=1 scripts/dev-postgres.sh).
+drill: build
+	BRANT_PG_CONTAINER=$(PG_CONTAINER) BRANT_PG_PORT=$(PG_PORT) BRANT_RESTORE_CONTAINER=$(RESTORE_CONTAINER) \
+	BRANT_RESTORE_PORT=$(RESTORE_PORT) scripts/backup-restore.sh drill
 
 ci: check db integration race spike
