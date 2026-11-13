@@ -327,4 +327,13 @@ func TestCreatedRootIsTheCommittedSaveThatMadeIt(t *testing.T) {
 	if CreatedRoot([]*Execution{made}, "trd", "quote.save_draft", "quote.2") {
 		t.Error("another root")
 	}
+	// The roots a task created, which it may have bound (S4 C3: the lost bind record): each once,
+	// sorted, without the saves that created nothing.
+	second := *made
+	second.Result = &Result{ActionID: "act-11", ObjectID: "quote.0", RowVersion: 1, Status: "working"}
+	again := *made
+	if got := CreatedRoots([]*Execution{made, &updated, &open, &other, &second, &again}, "trd", "quote.save_draft"); !slices.Equal(got,
+		[]string{"quote.0", "quote.1"}) {
+		t.Errorf("created roots %v", got)
+	}
 }

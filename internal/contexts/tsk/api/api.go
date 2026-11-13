@@ -57,6 +57,12 @@
 //	                        TRD holds the task's own root at an epoch the task never recorded (a
 //	                        control change whose record was lost), TSK learns TRD's epoch for it.
 //
+// A bind TRD committed for a task whose record of it TSK lost (task.bind_object's answer lost, the
+// task no longer running when the bind would be sent again) is learned from TRD's ledger by the
+// changes that act on the root — task.take_control, task.handoff, task.cancel and task.release ask
+// TRD what became of the bind TSK sent for the root the task may bind (ActionReconciliation, R18) —
+// and adopted at TRD's epoch; the change then proceeds as if the bind had been recorded (S4 C3).
+//
 // Request members in snake_case: task.create {task_id, goal_code, control_mode, agent_id, owner_id,
 // target {rfq_id, quote_id, customer_id}, source {kind, id}, deadline, budget {max_model_calls,
 // max_retries, max_cost {currency, minor_units, amount}}, execution_bundle {bundle_id, sha256}};

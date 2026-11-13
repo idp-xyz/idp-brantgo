@@ -321,23 +321,102 @@ func (s Service) ResumeTask(ctx context.Context, cmd api.ResumeTask) (api.TaskRe
 	return s.perform(ctx, api.CommandResume, cmd, cmd.TaskID, cmd.IdempotencyKey, cmd.Reason, cmd.Validate(), h)
 }
 
+// lostBind is a binding of the task's own that TRD holds while the task never recorded it (S4 C3;
+// C1's gap "lost bind record"): TRD's object_control.bind committed under the key TSK derives for the
+// task's bind at its recorded epoch, but task.bind_object did not commit in TSK, and the task left
+// running before the bind was sent again — a person paused, took over or cancelled it, or it was
+// closed or failed. TSK would then call TRD for no control change of the root, task.release would
+// find nothing to give back, and nobody could write or release the root.
+//
+// The control changes that act on the task's root — task.take_control, task.handoff, task.cancel and
+// task.release — therefore learn such a binding before they ask TRD for the change, as task.release
+// learns a later epoch of its binding (S4 C1-D02): for each root the task may bind (the one its
+// target names or, when it names none, one a committed quote.save_draft of the task created), they
+// ask TRD's ledger, as the caller, what became of the bind TSK would have sent for it
+// (ObjectControl.Bound, ActionReconciliation R18: executes nothing). A bind TRD committed is adopted at
+// TRD's epoch (task.Task.AdoptBinding; TSK records, TRD is the fence, TSK-INV-002), and the change then
+// proceeds exactly as if the bind had been recorded — the same keys and reasons, the same learning of
+// a later epoch. Nothing committed: the change goes on without a root, as before.
+type lostBind struct {
+	candidates []string // the roots the task may have bound, read with the task
+	quote      string   // the root TRD bound for the task, learned
+	epoch      int64    // the control epoch TRD bound it at
+}
+
+// read finds, in the task's snapshot, the roots a task without a bound root and with an AI agent may
+// have bound.
+func (l *lostBind) read(ctx context.Context, exec bentopg.Executor, t *task.Task) error {
+	l.candidates, l.quote, l.epoch = nil, "", 0
+	switch {
+	case t.Bound() || t.Agent == "":
+		return nil
+	case t.Target.QuoteID != "":
+		l.candidates = []string{t.Target.QuoteID}
+		return nil
+	}
+	list, err := postgres.TaskActions(ctx, exec, scope(ctx), t.ID)
+	l.candidates = actions.CreatedRoots(list, api.TargetTRD, trdSaveDraft)
+	return err
+}
+
+// learn asks TRD's ledger, before TSK's transaction, about the bind of each candidate root and adopts
+// in t, the task Prepare read, the first one TRD committed.
+func (l *lostBind) learn(ctx context.Context, s Service, t *task.Task, act task.Act) error {
+	for _, q := range l.candidates {
+		e, err := s.Upstream.Control.Bound(ctx, ControlRequest{Key: DeriveKey(t.ID, trdBind, t.ControlEpoch), TaskID: t.ID, QuoteID: q,
+			Initiator: t.Owner, Agent: t.Agent})
+		if err != nil {
+			return err
+		}
+		if e > 0 {
+			l.quote, l.epoch = q, e
+			return t.AdoptBinding(q, t.Target.QuoteID == "", e, act.At)
+		}
+	}
+	return nil
+}
+
+// adopt adopts the learned binding in t, the task locked in TSK's transaction at the version Prepare
+// read, checking the root against the task's actions again.
+func (l *lostBind) adopt(ctx context.Context, exec bentopg.Executor, t *task.Task, act task.Act) error {
+	if l.quote == "" {
+		return nil
+	}
+	created, err := createdRoot(ctx, exec, t, l.quote)
+	if err != nil {
+		return err
+	}
+	return t.AdoptBinding(l.quote, created, l.epoch, act.At)
+}
+
 // stopTask runs task.take_control, task.handoff or task.cancel: a bound root is stopped at TRD first
-// (object_control.stop with the task's claim; TSK-INV-002), then the task records TRD's epoch.
+// (object_control.stop with the task's claim; TSK-INV-002), then the task records TRD's epoch. A bind
+// of the task that TRD committed and the task never recorded is learned first (lostBind).
 func (s Service) stopTask(ctx context.Context, name string, req api.Command, id string, expected int64, key, reason string, validation error) (api.TaskReceipt, error) {
 	command := task.Command(name)
 	h := &controlStep{step: step{s: s, id: id, expected: expected}}
+	lost := &lostBind{}
+	h.read = lost.read
 	var epoch int64
 	h.prepare = func(ctx context.Context, t *task.Task, act task.Act, _ int) error {
 		epoch = 0
-		if err := t.CheckStop(command, act); err != nil || !t.Bound() {
+		if err := t.CheckStop(command, act); err != nil {
 			return err
+		}
+		if !t.Bound() {
+			if err := lost.learn(ctx, s, t, act); err != nil || !t.Bound() {
+				return err
+			}
 		}
 		var err error
 		epoch, err = s.Upstream.Control.Stop(ctx, ControlRequest{Key: DeriveKey(t.ID, trdStop, t.ControlEpoch), TaskID: t.ID,
 			QuoteID: t.BoundQuote(), Epoch: t.ControlEpoch, Reason: ControlReason(t.ID, t.ControlEpoch)})
 		return err
 	}
-	h.apply = func(_ context.Context, _ bentopg.Executor, t *task.Task, act task.Act) (task.Change, error) {
+	h.apply = func(ctx context.Context, exec bentopg.Executor, t *task.Task, act task.Act) (task.Change, error) {
+		if err := lost.adopt(ctx, exec, t, act); err != nil {
+			return task.Change{}, err
+		}
 		switch command {
 		case task.CmdTakeControl:
 			return t.TakeControl(reason, epoch, act)
@@ -598,11 +677,23 @@ func (s Service) BindObject(ctx context.Context, cmd api.BindObject) (api.TaskRe
 }
 
 // ReleaseObject gives a task's root back (task.release): TRD's object_control.release with the
-// task's claim first, then the task records TRD's epoch; the lifecycle does not change.
+// task's claim first, then the task records TRD's epoch; the lifecycle does not change. A bind of the
+// task that TRD committed and the task never recorded is learned first (lostBind), so the root of a
+// task that ended or was taken over before its bind was recorded can be given back.
 func (s Service) ReleaseObject(ctx context.Context, cmd api.ReleaseObject) (api.TaskReceipt, error) {
 	h := &controlStep{step: step{s: s, id: cmd.TaskID, expected: cmd.ExpectedVersion}}
+	lost := &lostBind{}
+	h.read = lost.read
 	var epoch int64
 	h.prepare = func(ctx context.Context, t *task.Task, act task.Act, unsettled int) error {
+		if !t.Bound() && len(lost.candidates) > 0 {
+			if err := t.CheckReleaseState(act); err != nil {
+				return err
+			}
+			if err := lost.learn(ctx, s, t, act); err != nil {
+				return err
+			}
+		}
 		if err := t.CheckRelease(unsettled, act); err != nil {
 			return err
 		}
@@ -612,6 +703,9 @@ func (s Service) ReleaseObject(ctx context.Context, cmd api.ReleaseObject) (api.
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, t *task.Task, act task.Act) (task.Change, error) {
+		if err := lost.adopt(ctx, exec, t, act); err != nil {
+			return task.Change{}, err
+		}
 		n, err := s.Actions.Unsettled(ctx, exec, scope(ctx), t.ID)
 		if err != nil {
 			return task.Change{}, err

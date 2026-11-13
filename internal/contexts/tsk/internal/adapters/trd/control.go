@@ -20,6 +20,9 @@ type TRD interface {
 	HandoffControl(ctx context.Context, cmd trdapi.HandoffControl) (trdapi.Receipt, error)
 	ReleaseControl(ctx context.Context, cmd trdapi.ReleaseControl) (trdapi.Receipt, error)
 	GetQuote(ctx context.Context, quoteID string) (trdapi.QuoteView, error)
+	// Reconcile tells what became of a command TSK sent, from TRD's ledger (trdapi.Reconciler;
+	// trd.read): how TSK learns a bind whose record it lost (Control.Bound).
+	Reconcile(ctx context.Context, cmd trdapi.Command) (trdapi.Reconciliation, error)
 }
 
 // Control is application.ObjectControl over TRD. Stop, enter_manual, handoff and release carry the
@@ -45,6 +48,23 @@ func (c Control) Bind(ctx context.Context, r application.ControlRequest) (int64,
 	rec, err := c.TRD.BindControl(ctx, trdapi.BindControl{IdempotencyKey: r.Key, QuoteID: r.QuoteID, TaskID: r.TaskID,
 		InitiatorID: r.Initiator, AgentID: r.Agent, ExpectedControlEpoch: q.Control.ControlEpoch})
 	return epoch(rec, err, trdapi.ControlBound)
+}
+
+// Bound asks TRD's ledger what became of the bind TSK sent as r — the same command Bind sends, whose
+// expected epoch is outside TRD's request hash — without executing anything (TRD's Reconciler, as
+// the caller: trd.read and the caller's data scope now). Committed under r.Key with that request:
+// the epoch TRD's receipt shows the root bound at. Nothing under the key, or another request under
+// it: 0. A refusal is TRD's, passed on.
+func (c Control) Bound(ctx context.Context, r application.ControlRequest) (int64, error) {
+	rec, err := c.TRD.Reconcile(ctx, trdapi.BindControl{IdempotencyKey: r.Key, QuoteID: r.QuoteID, TaskID: r.TaskID, InitiatorID: r.Initiator,
+		AgentID: r.Agent})
+	if err != nil {
+		return 0, err
+	}
+	if rec.State != kernel.ReconcileCommitted || rec.Receipt == nil {
+		return 0, nil
+	}
+	return epoch(*rec.Receipt, nil, trdapi.ControlBound)
 }
 
 // Stop fences the task out of its root (bound → stopping).

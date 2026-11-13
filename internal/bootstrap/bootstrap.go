@@ -435,6 +435,8 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	tc.STL = c.STL
 	tc.CNX = c.CNX
 	tc.FUL = c.FUL
+	tc.TSK = c.TSK
+	tc.AI = c.AI
 	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {
 		rc := ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout}
 		if cfg.ReplayDispatch {

@@ -758,16 +758,55 @@ func (t *Task) BindObject(quote string, created bool, epoch int64, act Act) (Cha
 	return t.move(CmdBindObject, Running, act, "", ChangeBind), nil
 }
 
+// AdoptBinding gives the task the binding of quote root quote that TRD's ledger shows the task's own
+// object_control.bind committed at epoch — under the key TSK derives for the bind at the task's
+// recorded epoch — when the task's record of it was lost: TRD's bind committed, task.bind_object did
+// not commit in TSK, and the task left running before the bind was sent again (S4 C3; C1's gap "lost
+// bind record"). The control change that needs the binding — task.take_control, task.handoff,
+// task.cancel or task.release — adopts it first and then proceeds from it exactly as if the bind had
+// been recorded: TSK records the epoch TRD returned, never one of its own (TSK-INV-002, MD-31). The
+// root is the one the task's target names or, when it names none, one a committed action of the task
+// created (created; SM-TSK-TASK task.bind_object "本任务的动作已创建报价根"): the roots the task may
+// bind. Only a task with an AI agent ever binds a root.
+func (t *Task) AdoptBinding(quote string, created bool, epoch int64, at time.Time) error {
+	switch {
+	case t.Bound():
+		return invalidState("A quote root is bound to the task already")
+	case t.Agent == "":
+		return invalidState("A task without an AI agent never binds a quote root")
+	case t.Target.QuoteID != "" && t.Target.QuoteID != quote:
+		return kernel.Reject(kernel.CodeReferenceInvalid, "/args/task_id", "The task targets another quote root")
+	case t.Target.QuoteID == "" && !created:
+		return kernel.Reject(kernel.CodeReferenceInvalid, "/args/task_id", "No action of the task created the quote root")
+	}
+	if err := t.recordEpoch(epoch); err != nil {
+		return err
+	}
+	t.Binding = &Binding{QuoteID: quote, State: BindingBound, Epoch: epoch, BoundAt: kernel.Instant(at)}
+	t.Target.QuoteID = quote
+	return nil
+}
+
+// CheckReleaseState decides whether the task's state lets it give a root back (task.release; human
+// only): the task ended, or is paused in manual mode. CheckRelease checks the rest.
+func (t *Task) CheckReleaseState(act Act) error {
+	if err := t.admit(CmdRelease, t.State, act); err != nil {
+		return err
+	}
+	if t.State == Paused && t.Mode != ModeManual {
+		return invalidState("Only a manual task gives its root back while paused")
+	}
+	return nil
+}
+
 // CheckRelease decides whether the task may give its root back before TRD is asked (task.release;
 // human only): the task ended, or is paused in manual mode; a root is bound; no action is submitted
 // or unknown.
 func (t *Task) CheckRelease(unsettled int, act Act) error {
-	if err := t.admit(CmdRelease, t.State, act); err != nil {
+	if err := t.CheckReleaseState(act); err != nil {
 		return err
 	}
 	switch {
-	case t.State == Paused && t.Mode != ModeManual:
-		return invalidState("Only a manual task gives its root back while paused")
 	case !t.Bound():
 		return invalidState("No quote root is bound to the task")
 	case unsettled > 0:

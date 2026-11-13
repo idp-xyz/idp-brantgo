@@ -41,6 +41,9 @@ import (
 const (
 	// Source identifies the AI layer in the ledger; it publishes no integration events.
 	Source = "idp-brant.ai"
+	// Contract names the AI layer's command contract (Context Map platformCommands AI), the envelope's
+	// contract member on POST /api/brant/v1/ai/commands/<command> (S4 unit C3).
+	Contract = "brant.ai/0.1.0"
 	// CommandAudit reads the AI layer's audit trail (permission ai.audit).
 	CommandAudit = "ai.audit"
 	// PermissionAudit reads the AI layer's audit trail (role templates compliance, administrator).

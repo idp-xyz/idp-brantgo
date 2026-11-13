@@ -21,6 +21,7 @@ package action
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -311,4 +312,17 @@ func CreatedRoot(list []*Execution, context, command, object string) bool {
 		}
 	}
 	return false
+}
+
+// CreatedRoots returns the root objects actions of list created at context with command, as
+// CreatedRoot decides it, sorted and each once.
+func CreatedRoots(list []*Execution, context, command string) []string {
+	var out []string
+	for _, e := range list {
+		if e.Result != nil && CreatedRoot([]*Execution{e}, context, command, e.Result.ObjectID) && !slices.Contains(out, e.Result.ObjectID) {
+			out = append(out, e.Result.ObjectID)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
