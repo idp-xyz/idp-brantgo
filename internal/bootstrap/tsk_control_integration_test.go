@@ -21,8 +21,8 @@ import (
 // the claim of that epoch and writes the bound root with it; a take-over stops the root at TRD first
 // — the old claim is CONTROL_EPOCH_STALE from then on — and the task records TRD's new epoch; a
 // cancelled task gives the root back through object_control.release. TRD stays the fence: TSK only
-// records what TRD answered. All actors are provisioned before any binding, since a change of access
-// in the company ends what a binding delegated (S3-D12; S4 D-5 replaces it in unit A2).
+// records what TRD answered. A binding holds while the grants of the task's owner and agent are
+// unchanged (S4 D-5).
 
 var tskPermissions = []string{"task.create", "task.scope", "task.wait", "task.verify", "goal.verify", "task.pause", "task.resume",
 	"task.take_control", "task.handoff", "task.cancel", "task.finish_stop", "task.close_unfulfilled", "task.fail", "task.bind_object",
@@ -56,11 +56,12 @@ func (w *tskWorld) task(r tskapi.TaskReceipt, err error) tskapi.TaskReceipt {
 	return r
 }
 
-// bound creates task id for the agent, scopes it and binds quote to it through TRD.
+// bound creates task id for the agent targeting quote, scopes it and binds quote to it through TRD
+// (the task's target names the root: SM-TSK-TASK task.bind_object).
 func (w *tskWorld) bound(id, quote string) tskapi.TaskReceipt {
 	w.t.Helper()
 	r := w.task(w.c.TSK.CreateTask(w.clerk, tskapi.CreateTask{IdempotencyKey: w.key(), TaskID: id, GoalCode: tskapi.GoalOrderActive,
-		ControlMode: tskapi.ModeAI, AgentID: "agent.1", Target: tskapi.Target{RfqID: "rfq.1", CustomerID: "customer.1"}}))
+		ControlMode: tskapi.ModeAI, AgentID: "agent.1", Target: tskapi.Target{RfqID: "rfq.1", CustomerID: "customer.1", QuoteID: quote}}))
 	r = w.task(w.c.TSK.ScopeTask(w.sys, tskapi.ScopeTask{IdempotencyKey: w.key(), TaskID: id, ExpectedVersion: r.RowVersion}))
 	r = w.task(w.c.TSK.ScopeTask(w.clerk, tskapi.ScopeTask{IdempotencyKey: w.key(), TaskID: id, ExpectedVersion: r.RowVersion, Note: "范围确认"}))
 	return w.task(w.c.TSK.BindObject(w.sys, tskapi.BindObject{IdempotencyKey: w.key(), TaskID: id, ExpectedVersion: r.RowVersion, QuoteID: quote}))
@@ -131,7 +132,7 @@ func TestTSKBindsAndTakesOverATRDRoot(t *testing.T) {
 
 	// Another task cannot bind a root bound to task.1: TRD's refusal, passed on.
 	o := w.task(w.c.TSK.CreateTask(w.clerk, tskapi.CreateTask{IdempotencyKey: w.key(), TaskID: "task.9", GoalCode: tskapi.GoalQuoteReady,
-		ControlMode: tskapi.ModeAI, AgentID: "agent.1"}))
+		ControlMode: tskapi.ModeAI, AgentID: "agent.1", Target: tskapi.Target{QuoteID: "quote.1"}}))
 	o = w.task(w.c.TSK.ScopeTask(w.sys, tskapi.ScopeTask{IdempotencyKey: w.key(), TaskID: "task.9", ExpectedVersion: o.RowVersion}))
 	o = w.task(w.c.TSK.ScopeTask(w.sys, tskapi.ScopeTask{IdempotencyKey: w.key(), TaskID: "task.9", ExpectedVersion: o.RowVersion}))
 	_, err = w.c.TSK.BindObject(w.sys, tskapi.BindObject{IdempotencyKey: w.key(), TaskID: "task.9", ExpectedVersion: o.RowVersion, QuoteID: "quote.1"})

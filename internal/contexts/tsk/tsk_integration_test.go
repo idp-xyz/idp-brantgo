@@ -256,9 +256,11 @@ func (w *world) running(id string, edit ...func(*api.CreateTask)) api.TaskReceip
 	return w.must(w.m.ScopeTask(w.alice, api.ScopeTask{IdempotencyKey: w.key(), TaskID: id, ExpectedVersion: r.RowVersion, Note: "范围确认"}))
 }
 
+// bound creates task id targeting quote, scopes it and binds quote to it (the target names the root:
+// SM-TSK-TASK task.bind_object; the root an action of the task created is created's case).
 func (w *world) bound(id, quote string) api.TaskReceipt {
 	w.t.Helper()
-	r := w.running(id)
+	r := w.running(id, func(c *api.CreateTask) { c.Target.QuoteID = quote })
 	return w.must(w.m.BindObject(w.sys, api.BindObject{IdempotencyKey: w.key(), TaskID: id, ExpectedVersion: r.RowVersion, QuoteID: quote}))
 }
 
@@ -316,7 +318,7 @@ func (w *world) sql(statement string) error {
 func TestTaskLifecycleThroughRegisteredCommands(t *testing.T) {
 	w := newWorld(t)
 	r := w.create("task.1", func(c *api.CreateTask) {
-		c.Target.RfqID, c.Source = "rfq.1", &api.SourceRef{Kind: api.SourceRFQ, ID: "rfq.1"}
+		c.Target.RfqID, c.Target.QuoteID, c.Source = "rfq.1", "quote.1", &api.SourceRef{Kind: api.SourceRFQ, ID: "rfq.1"}
 		c.Deadline = kernel.FormatTimestamp(time.Now().Add(72 * time.Hour))
 		c.ExecutionBundle = &api.BundleRef{BundleID: "bundle.1", SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 	})
