@@ -39,6 +39,7 @@ type fakeTRD struct {
 	hook    func(op string) // runs once after the first, not replayed, call of an operation
 	verdict tsk.Goal
 	assess  func(tsk.Goal) (string, []string)
+	full    func(tsk.Goal) (tsk.Verdict, error) // a whole assessment or a refusal (verification_integration_test.go)
 }
 
 type call struct {
@@ -99,11 +100,14 @@ func (f *fakeTRD) Assess(_ context.Context, g tsk.Goal) (verdict tsk.Verdict, er
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.verdict = g
+	if f.full != nil {
+		return f.full(g)
+	}
 	if f.assess == nil {
 		return verdict, errors.New("no assessment scripted")
 	}
-	verdict.Outcome, verdict.Unmet = f.assess(g)
-	return verdict, nil
+	outcome, unmet := f.assess(g)
+	return f.scripted(g, outcome, unmet), nil
 }
 
 func (f *fakeTRD) ops() []string {
@@ -827,7 +831,7 @@ func TestStopBarrierPaths(t *testing.T) {
 // TRD's GoalReadiness v1 answers DEPENDENCY_NOT_SUPPORTED.
 func TestTRDRefusalsLeaveTheTaskUnchanged(t *testing.T) {
 	w := newWorld(t)
-	r := w.running("task.1")
+	r := w.running("task.1", func(c *api.CreateTask) { c.Target.QuoteID = "quote.1" })
 	w.trd.fail["bind"] = kernel.RejectAs("OBJECT_CONTROL_CONFLICT", kernel.CategoryConflict, "/args/quote_id", "bound to another task")
 	_, err := w.m.BindObject(w.sys, api.BindObject{IdempotencyKey: w.key(), TaskID: "task.1", ExpectedVersion: r.RowVersion, QuoteID: "quote.1"})
 	w.want(err, "OBJECT_CONTROL_CONFLICT")

@@ -447,10 +447,12 @@ func (t *Task) Verify(unsettled int, act Act) (Change, error) {
 }
 
 // Verdict is what goal verification found: Outcome satisfied, unsatisfied, unknown or error, and
-// the codes of the required assertions that are not satisfied.
+// the codes of the required assertions that are not satisfied; Reason, when given, is the reason
+// the task records for waiting (RecordVerification names each unmet assertion with its code).
 type Verdict struct {
 	Outcome string
 	Unmet   []string
+	Reason  string
 }
 
 // Verdict outcomes (GoalReadiness v1, baseline 15.4).
@@ -493,6 +495,9 @@ func (t *Task) VerifyGoal(v Verdict, unsettled int, act Act) (Change, error) {
 		to = WaitingExternal
 	default:
 		return Change{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/", "Unknown verification outcome "+v.Outcome)
+	}
+	if v.Reason != "" && to != Completed {
+		reason = v.Reason
 	}
 	if err := t.admit(CmdVerifyGoal, to, act); err != nil {
 		return Change{}, err

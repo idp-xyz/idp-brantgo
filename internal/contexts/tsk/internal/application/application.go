@@ -62,6 +62,7 @@ func Rules() []authorization.Rule {
 		authorization.Rule{Command: api.CommandGetTask, Permission: api.PermissionRead, ActorKinds: anyActor},
 		authorization.Rule{Command: api.CommandClaim, Permission: api.PermissionRead, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 		authorization.Rule{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
+		authorization.Rule{Command: api.CommandVerifications, Permission: api.PermissionRead, ActorKinds: anyActor},
 	), actionRules()...)
 }
 
@@ -92,23 +93,26 @@ type ObjectControl interface {
 	Release(ctx context.Context, r ControlRequest) (int64, error)
 }
 
-// Goal is what goal verification asks TRD about: the task's goal at its version and its target.
+// Goal is what goal verification asks TRD about: the task's goal at its version, its target (the
+// quote root judged and the customer and RFQ it must bind) and Bound, the quote root bound to the
+// task now ("" when none), whose control TRD shows with the assessment.
 type Goal struct {
 	TaskID  string
 	Code    string
 	Version int64
 	Target  task.Target
+	Bound   string
 }
 
-// Verdict is what GoalReadiness v1 found for a goal: Outcome satisfied, unsatisfied, unknown or
-// error, and the codes of the required assertions that are not satisfied (baseline 15.4).
-type Verdict struct {
-	Outcome string
-	Unmet   []string
-}
+// Verdict is what GoalReadiness v1 found for a goal (baseline 15.4): the records judged, every
+// required assertion satisfied, unsatisfied, unknown or error with its checks and evidence, the
+// outcome and the instant judged, and for a bound root TRD's control of it (assessor
+// trd.goal_readiness.v1).
+type Verdict = task.Assessment
 
 // Readiness is TSK's port to TRD's GoalReadiness v1 (R18): the assessment of a task's goal against
-// TRD's authoritative records (baseline 15.4).
+// TRD's authoritative records (baseline 15.4) and, when Goal.Bound names a root, TRD's control of it
+// read after the assessment. A refusal is TRD's *kernel.Rejection, passed on unchanged.
 type Readiness interface {
 	Assess(ctx context.Context, g Goal) (Verdict, error)
 }

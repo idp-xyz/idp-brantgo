@@ -283,29 +283,6 @@ func (s Service) VerifyTask(ctx context.Context, cmd api.VerifyTask) (api.TaskRe
 	return s.perform(ctx, api.CommandVerify, cmd, cmd.TaskID, cmd.IdempotencyKey, "", cmd.Validate(), h)
 }
 
-// VerifyGoal verifies a verifying task's goal (goal.verify): TRD's GoalReadiness v1 assesses it
-// before TSK's transaction; the transaction records the outcome (TSK-INV-001).
-func (s Service) VerifyGoal(ctx context.Context, cmd api.VerifyGoal) (api.TaskReceipt, error) {
-	h := &controlStep{step: step{s: s, id: cmd.TaskID, expected: cmd.ExpectedVersion}}
-	var verdict Verdict
-	h.prepare = func(ctx context.Context, t *task.Task, act task.Act, _ int) error {
-		if err := t.CheckVerifyGoal(act); err != nil {
-			return err
-		}
-		var err error
-		verdict, err = s.Upstream.Readiness.Assess(ctx, Goal{TaskID: t.ID, Code: t.Goal, Version: t.GoalVersion, Target: t.Target})
-		return err
-	}
-	h.apply = func(ctx context.Context, exec bentopg.Executor, t *task.Task, act task.Act) (task.Change, error) {
-		n, err := s.Actions.Unsettled(ctx, exec, scope(ctx), t.ID)
-		if err != nil {
-			return task.Change{}, err
-		}
-		return t.VerifyGoal(task.Verdict{Outcome: verdict.Outcome, Unmet: slices.Clone(verdict.Unmet)}, n, act)
-	}
-	return s.perform(ctx, api.CommandVerifyGoal, cmd, cmd.TaskID, cmd.IdempotencyKey, "", cmd.Validate(), h)
-}
-
 // PauseTask pauses a task (task.pause); a responsible person named holds an active human grant.
 func (s Service) PauseTask(ctx context.Context, cmd api.PauseTask) (api.TaskReceipt, error) {
 	h := &step{s: s, id: cmd.TaskID, expected: cmd.ExpectedVersion,
