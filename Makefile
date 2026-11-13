@@ -4,6 +4,9 @@
 #   make db           start the development PostgreSQL 16 (brant-pg16) and migrate it
 #   make integration  unit and PostgreSQL 16 integration tests against brant-pg16
 #   make race         the same with the race detector
+#                     SHARDS=N (default 1): internal/bootstrap in N shards (tools/testshard) and the
+#                     other packages, in parallel, each shard against its own database brant_shard_k
+#                     in the container on PG_PORT (scripts/test-shards.sh; logs in bin/shards/)
 #   make spike        the M0-10 consistency spikes, report in bin/spike-consistency.json
 #   make roles        regenerate the role templates from the archive (BC-D02)
 #   make load         staged load over the HTTP API against PG_PORT (tests/load; WBS S5-11), report in bin/load/
@@ -14,6 +17,7 @@ GO ?= go
 GOLANGCI_LINT_VERSION ?= v2.15.0
 CONTEXT_MAP ?= docs/03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json
 PG_PORT ?= 55471
+SHARDS ?= 1
 export GOPRIVATE ?= go.idp.xyz
 
 # make load and make drill: stages, extra flags of tests/load, and the drill's restore target.
@@ -66,11 +70,21 @@ build:
 db:
 	BRANT_PG_PORT=$(PG_PORT) scripts/dev-postgres.sh
 
+SHARD_ENV = CI=true BRANT_PG_PORT=$(PG_PORT) GO='$(GO)'
+
 integration:
+ifeq ($(SHARDS),1)
 	$(DB_ENV) $(GO) test -tags integration -count=1 -timeout 45m ./...
+else
+	$(SHARD_ENV) scripts/test-shards.sh all integration $(SHARDS)
+endif
 
 race:
+ifeq ($(SHARDS),1)
 	$(DB_ENV) $(GO) test -tags integration -race -count=1 -timeout 60m ./...
+else
+	$(SHARD_ENV) scripts/test-shards.sh all race $(SHARDS)
+endif
 
 spike:
 	@mkdir -p bin
