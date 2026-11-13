@@ -23,7 +23,8 @@
 //	customer_ref, contact_ref, currency_ref               never changed by an amendment
 //	legal_terms_ref?, legal_terms?                        the source quote's sealed legal terms (WBS
 //	                                                      S3-17), when it sealed any; never changed
-//	terms               {trade_terms_ref, named_place_ref, payment_terms_ref, delivery}
+//	terms               {trade_terms_ref, named_place_ref, payment_terms_ref, delivery,
+//	                     notify_party_ref?}                the notify party (S5R-D40), when bound
 //	lines               [{line_id, rfq_line_id?, sku_ref, quantity, unit_ref, conversion_ref?,
 //	                      normalized_quantity, cost_unit, unit_price, price_basis_quantity,
 //	                      discount_ratio, tax {tax_application_ref, tax_profile_ref, price_basis,
@@ -31,6 +32,9 @@
 //	charges             [{charge_id, fee_category_ref, obligation_key, amount, inclusion,
 //	                      included_line_id?, tax {...}}]  in charge_id order
 //	amounts             {lines, charges, net_minor, tax_minor, payable_minor, payments}
+//	seal?               {incoterm, incoterm_edition, addresses [{address_id, country?}],
+//	                     notify_party? {address, country?}}  what POL and PTY stated (S5R-D35;
+//	                                                      seal.go); absent before S5R
 //
 // in the canonical JSON of the quote's business hash (package quote: members in code point order,
 // no whitespace, strings escaped as Python's json.dumps(ensure_ascii=False) does), with every
@@ -62,7 +66,9 @@
 //     another fee category, inclusion or tax for one, is DEPENDENCY_NOT_SUPPORTED in this first
 //     version.
 //   - Terms: the trade terms, the named place, the payment terms (the plan follows the new terms'
-//     stages) and the delivery change.
+//     stages), the delivery and the notify party (S5R-D40: bound, changed or dropped) change. The
+//     next revision seals the Incoterm of its trade terms, its customer addresses' countries and
+//     its notify party's address as POL and PTY state them (Facts.Seal; S5R-D35).
 //   - Never: the order, its scope, its source quote revision and acceptance, the issuer, the
 //     customer, the contact, the currency and the legal terms. A proposal has no member for them; another customer
 //     or currency is another contract.

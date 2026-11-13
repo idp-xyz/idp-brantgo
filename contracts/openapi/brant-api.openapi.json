@@ -62451,6 +62451,23 @@
                             ],
                             "type": "object"
                           },
+                          "notify_party_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "address_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "party_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "party_revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
                           "payment_terms_ref": {
                             "additionalProperties": false,
                             "properties": {
@@ -62952,6 +62969,23 @@
                                 "required": [
                                   "id"
                                 ],
+                                "type": "object"
+                              },
+                              "notify_party_ref": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "address_id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "party_id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "party_revision": {
+                                    "type": "integer"
+                                  }
+                                },
                                 "type": "object"
                               },
                               "payment_terms_ref": {
@@ -66398,6 +66432,23 @@
                       "business_revision": {
                         "type": "integer"
                       },
+                      "notify_party_ref": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "address_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "party_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "party_revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
                       "order_id": {
                         "minLength": 1,
                         "type": "string"
@@ -66555,6 +66606,23 @@
                           },
                           "business_revision": {
                             "type": "integer"
+                          },
+                          "notify_party_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "address_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "party_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "party_revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
                           },
                           "order_id": {
                             "minLength": 1,
