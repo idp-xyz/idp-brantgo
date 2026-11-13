@@ -46,15 +46,26 @@ import (
 // The documents release of a confirmed shipment (owner decision 2026-11-12, S5 unit C1b): evaluate,
 // grant_exception and document_release.record judge money on the order's current revision and the
 // goods as confirmed. They ask STL's PaymentConditionGuard (documents scope) on the revision and hash
-// TRD shows now, do not ask CNX, PTY, PUR or QLT again nor FUL-INV-001 but reuse what the shipment
-// release the confirmation consumed bound (ReleaseBindings.Confirmation names it; the guard evidence
-// entry ful.shipment_confirmation pins the confirming transaction's evidence), and ask TRD's
-// OrderGuard on the current binding: an active order or one ended by order.close or
-// order.close_remainder serves; a cancelled one is ORDER_NOT_ACTIVE (not reachable: an order with a
-// confirmed shipment cannot be cancelled); REFERENCE_STALE means TRD moved on during the transaction
-// (evaluate again). An exception of such a release binds the current revision
-// (ExceptionView.Order). The bindings' order and payment_condition, the guard evidence and the
-// events' payment_order_revision say which revision the payment condition was judged on.
+// TRD shows now, do not ask PUR or QLT again nor FUL-INV-001 but reuse what the shipment release the
+// confirmation consumed bound (ReleaseBindings.Confirmation names it; the guard evidence entry
+// ful.shipment_confirmation pins the confirming transaction's evidence), and ask TRD's OrderGuard on
+// the current binding: an active order or one ended by order.close or order.close_remainder serves;
+// a cancelled one is ORDER_NOT_ACTIVE (not reachable: an order with a confirmed shipment cannot be
+// cancelled); REFERENCE_STALE means TRD moved on during the transaction (evaluate again). An
+// exception of such a release binds the current revision (ExceptionView.Order). The bindings' order
+// and payment_condition, the guard evidence and the events' payment_order_revision say which
+// revision the payment condition was judged on.
+//
+// A block that appears after the confirmation still stops it (owner decision 2026-11-12 ~23:05, S5
+// unit C1c): before STL, CNX's TradeComplianceGuard is asked again on the order revision the goods
+// left under and, when the order moved on, on its current revision — TRADE_COMPLIANCE_NOT_CLEAR only
+// when compliance concluded the revision blocked (reopened and decided blocked, or the amended
+// revision decided blocked); an expired conclusion, a newer programme list version or a check
+// reopened but not concluded is no block, the confirmation's clear conclusion stands — and PTY's
+// PartyScreeningGuard on every party the shipment screened: anything but clear is
+// PARTY_SCREENING_NOT_CLEAR, as at the confirmation. Neither is ever excepted. The answers are
+// ReleaseBindings.Rechecked; the guard evidence names them (GuardTradeCompliance for the revision the
+// goods left under, GuardTradeComplianceCurrent for the current one, "screening:<party>").
 //
 // Request members in snake_case: commercial_release.evaluate {shipment_id, scope};
 // commercial_release.grant_exception {shipment_id, scope, expected_version, stage_id, currency,
@@ -283,8 +294,10 @@ type OrderBindingSeen struct {
 // ConfirmationBinding names the shipment confirmation whose verdicts a documents release of a
 // confirmed shipment reused (S5 C1b): the shipment release the confirmation consumed, its version,
 // the evaluation whose bindings the goods' guards repeat, the SHA-256 of the confirming transaction's
-// guard evidence, when it was consumed, the order revision the goods left under and the guards
-// reused.
+// guard evidence, when it was consumed, the order revision the goods left under, the guards whose
+// confirmation verdict it relies on (Reused) and, since S5 C1c, the guards it asked again
+// (Rechecked: cnx.trade_compliance_guard.v1 for a block, pty.party_screening_guard.v1 for clear).
+// Evaluations before C1c list pty.party_screening_guard.v1 under Reused and have no Rechecked.
 type ConfirmationBinding struct {
 	ReleaseID      string    `json:"release_id"`
 	ReleaseVersion int64     `json:"release_version"`
@@ -293,12 +306,49 @@ type ConfirmationBinding struct {
 	ConfirmedAt    time.Time `json:"confirmed_at"`
 	OrderRevision  int64     `json:"order_revision"`
 	Reused         []string  `json:"reused"`
+	Rechecked      []string  `json:"rechecked,omitempty"`
+}
+
+// RecheckedCompliance is what CNX's TradeComplianceGuard answered for one order revision when the
+// documents release of a confirmed shipment asked again (S5 C1c); Blocked is true for a blocked
+// conclusion, the only answer that refuses the release.
+type RecheckedCompliance struct {
+	OrderRevision      int64     `json:"order_revision"`
+	OrderHash          string    `json:"order_hash"`
+	Status             string    `json:"status"`
+	Reason             string    `json:"reason"`
+	CheckID            string    `json:"check_id"`
+	DecisionID         string    `json:"decision_id"`
+	LicenseRequired    bool      `json:"license_required"`
+	RegulationID       string    `json:"regulation_id"`
+	RegulationRevision int64     `json:"regulation_revision"`
+	ValidUntil         time.Time `json:"valid_until"`
+	Blocked            bool      `json:"blocked"`
+}
+
+// RecheckedScreening is what PTY's PartyScreeningGuard answered for one party when the documents
+// release of a confirmed shipment asked again (S5 C1c); anything but status clear refuses it.
+type RecheckedScreening struct {
+	PartyID       string `json:"party_id"`
+	Status        string `json:"status"`
+	Reason        string `json:"reason"`
+	ScreeningID   string `json:"screening_id"`
+	PartyRevision int64  `json:"party_revision"`
+}
+
+// RecheckBinding is what the documents release of a confirmed shipment asked again (S5 C1c): CNX for
+// the revision the goods left under, then the current revision when later; PTY for every party in
+// party ID order.
+type RecheckBinding struct {
+	TradeCompliance []RecheckedCompliance `json:"trade_compliance"`
+	Screenings      []RecheckedScreening  `json:"screenings"`
 }
 
 // ReleaseBindings is what an evaluation bound of each guard it ran; a guard it did not reach is
 // absent (nil or empty). With Confirmation (the documents release of a confirmed shipment, S5 C1b)
-// the goods' bindings are the ones the confirmation reused, and Order is the order's current binding
-// the payment condition and the order were judged on.
+// the goods' bindings are the ones the confirmation reused, Order is the order's current binding
+// the payment condition and the order were judged on, and Rechecked (S5 C1c) what CNX and PTY
+// answered when asked again.
 type ReleaseBindings struct {
 	TradeCompliance *ComplianceBinding   `json:"trade_compliance,omitempty"`
 	ExportLicense   *LicenseBinding      `json:"export_license,omitempty"`
@@ -308,6 +358,7 @@ type ReleaseBindings struct {
 	Payment         *PaymentBinding      `json:"payment_condition,omitempty"`
 	Order           *OrderBindingSeen    `json:"order,omitempty"`
 	Confirmation    *ConfirmationBinding `json:"confirmation,omitempty"`
+	Rechecked       *RecheckBinding      `json:"rechecked,omitempty"`
 }
 
 // EvaluationView is one evaluation of a release.

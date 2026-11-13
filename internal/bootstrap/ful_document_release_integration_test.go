@@ -118,9 +118,10 @@ func guardOf(gs []fulapi.GuardEvidence, name string) string {
 }
 
 // wantReused requires evaluation e to have judged confirmed shipment id's documents release by the
-// owner's rule: the goods' bindings are those of the evaluation its confirmation consumed, named
+// owner's rules: the goods' bindings are those of the evaluation its confirmation consumed, named
 // with the confirmation's evidence SHA-256; the payment condition and the order were judged on
-// revision; no goods guard was asked.
+// revision; PUR and QLT were not asked; CNX was asked on revision 1 (the goods left under it) and on
+// revision when later, PTY on the customer, with no block (S5 C1c).
 func (w *fulWorld) wantReused(id string, e fulapi.EvaluationView, revision int64) {
 	w.t.Helper()
 	conf := w.shipmentRelease(id)
@@ -133,10 +134,25 @@ func (w *fulWorld) wantReused(id string, e fulapi.EvaluationView, revision int64
 		b.Deliveries[0].VerifiedVersion != src.Deliveries[0].VerifiedVersion {
 		w.t.Fatalf("the reused confirmation of %s: %+v\nwant from %+v", id, b, src)
 	}
+	cnx := fulapi.GuardTradeCompliance
+	if revision > 1 {
+		cnx += " " + fulapi.GuardTradeComplianceCurrent
+	}
 	if b.Payment == nil || b.Order == nil || b.Order.OrderRevision != revision || b.Order.OrderHash != w.getOrder(w.order.ObjectID).OrderHash ||
 		guardOf(e.Guards, fulapi.GuardConfirmation) != conf.ReleaseID+"/v2/consumed/"+conf.Consumption.GuardsSHA256+"/r1" ||
-		guardNames(e.Guards) != "guards_checked_at "+fulapi.GuardConfirmation+" "+fulapi.GuardPaymentCondition+" "+fulapi.GuardOrder {
+		guardNames(e.Guards) != "guards_checked_at "+fulapi.GuardConfirmation+" "+cnx+" screening:customer.1 "+fulapi.GuardPaymentCondition+" "+
+			fulapi.GuardOrder || !strings.HasSuffix(guardOf(e.Guards, fulapi.GuardTradeCompliance), "/r1") {
 		w.t.Fatalf("the documents evaluation of %s on revision %d: %+v %+v", id, revision, b.Order, e.Guards)
+	}
+	r := b.Rechecked
+	if r == nil || len(r.TradeCompliance) != len(strings.Fields(cnx)) || r.TradeCompliance[0].OrderRevision != 1 ||
+		r.TradeCompliance[len(r.TradeCompliance)-1].OrderRevision != revision || len(r.Screenings) != 1 || r.Screenings[0].PartyID != "customer.1" {
+		w.t.Fatalf("the documents evaluation of %s asked CNX and PTY again: %+v", id, r)
+	}
+	for _, x := range r.TradeCompliance {
+		if x.Blocked {
+			w.t.Fatalf("the documents evaluation of %s found a block: %+v", id, r)
+		}
 	}
 }
 
@@ -245,7 +261,8 @@ func TestDocumentsReleaseOfAConfirmedShipmentAfterAReductionBT10(t *testing.T) {
 	if v.Order.OrderRevision != 1 || !strings.Contains(guardOf(cs, fulapi.GuardPaymentCondition), "/r2/") ||
 		!strings.HasSuffix(guardOf(cs, fulapi.GuardPaymentCondition), "/exception=1") || guardOf(cs, fulapi.GuardOrder) != "active/r2" ||
 		!strings.HasPrefix(guardOf(cs, fulapi.GuardConfirmation), w.shipmentRelease("shipment.1").ReleaseID+"/v2/consumed/") ||
-		guardOf(cs, fulapi.GuardTradeCompliance) != "" || v.Consumption.BillOfLading == nil {
+		!strings.HasPrefix(guardOf(cs, fulapi.GuardTradeCompliance), "clear/cleared/") || !strings.HasSuffix(guardOf(cs, fulapi.GuardTradeCompliance), "/r1") ||
+		!strings.HasPrefix(guardOf(cs, fulapi.GuardTradeComplianceCurrent), "clear/cleared/") || v.Consumption.BillOfLading == nil {
 		t.Fatalf("the consumption %+v", v.Consumption)
 	}
 	if ev := w.fulEventsOf(fulapi.EventDocumentsReleased); len(ev) != 1 || ev[0].Payload["order_revision"] != float64(1) ||

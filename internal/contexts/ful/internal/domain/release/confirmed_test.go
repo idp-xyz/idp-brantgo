@@ -53,7 +53,10 @@ func TestTheConfirmationIsReused(t *testing.T) {
 	}
 	if c.ReleaseID != "rls.s1" || c.ReleaseVersion != 2 || c.EvaluationSeq != 1 || c.GuardsSHA256 != r.Consumption.EntriesSHA256 ||
 		!c.ConfirmedAt.Equal(t0.Add(time.Hour)) || c.OrderRevision != 2 || !slices.Equal(c.Reused, []string{shipment.GuardTradeCompliance,
-		shipment.GuardPartyScreening, shipment.GuardSupplierDelivery, shipment.GuardQualityRelease, GuardFulfilment}) {
+		shipment.GuardSupplierDelivery, shipment.GuardQualityRelease, GuardFulfilment}) ||
+		!slices.Equal(c.Rechecked, []string{shipment.GuardTradeCompliance, shipment.GuardPartyScreening}) {
+		// S5 C1c: party screening is bound as confirmed but asked again, not reused; CNX's clear
+		// conclusion is reused and asked again for a block.
 		t.Fatalf("confirmation %+v", c)
 	}
 	if e.Name != GuardConfirmation || e.Value != "rls.s1/v2/consumed/"+r.Consumption.EntriesSHA256+"/r2" {
