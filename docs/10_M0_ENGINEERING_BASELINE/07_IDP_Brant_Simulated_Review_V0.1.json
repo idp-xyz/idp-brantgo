@@ -76,6 +76,16 @@
       "id": "R-SEC",
       "name": "安全与数据负责人（模拟）",
       "scope": "身份、数据与模型策略"
+    },
+    {
+      "id": "R-TAX",
+      "name": "税务负责人（模拟）",
+      "scope": "退（免）税方式、购进发票与出口退税政策（S5R）"
+    },
+    {
+      "id": "R-BOP",
+      "name": "业务运营负责人（模拟）",
+      "scope": "运行目标、订单处置与费用口径（S5R）"
     }
   ],
   "decisions": [
@@ -388,6 +398,1619 @@
       "decision": "ACCEPTED",
       "outcome": "产品决定（配置化）：CN-M01 为默认模式；税务办法由租户选择（外贸企业免退；生产企业免抵退属 CN-M02 条件能力）；商品申报参数与退税率按官方来源导入并保存版本；票据核验经人工或获准接口；银行渠道首期人工登记；专业系统接口在 S6；成本税额口径按 CST-INV-007；单证目录与期限按配置。客户适用性在租户开通时确认并留记录。",
       "conditions": []
+    },
+    {
+      "id": "SR-39",
+      "subject": "S5R-D01",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "出运确认留在跟单；单证员评估放行与放单；改 ES-10、ES-12",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "出运确认由谁做（shipment.confirm）",
+      "signers": [
+        "R-CA",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "B0 前（文本）",
+      "units": "R0、R1",
+      "sources": [
+        "F-N1",
+        "F-OA",
+        "F-P",
+        "S-BC",
+        "S-GI1",
+        "S-GI2"
+      ],
+      "question": "事件风暴 ES-10、ES-12 写单证员确认出运，岗位模板只给跟单（merchandiser）；实现按模板（B1a、C1；岗位模板缺口表第 3 行）。",
+      "sap": "S/4HANA 把交货过账与开票分给两个业务角色：Shipping Specialist（SAP_BR_SHIPPING_SPECIALIST）“posts goods issue for the outbound delivery”，开票是 Billing Clerk（SAP_BR_BILLING_CLERK）的事［S-GI2］［S-BC］。在一个培训练习里，同一个 Shipping Specialist 既过账发货也开票［S-GI1］，说明模板可以合并，但角色是分开的。谁出具出口单证：无公开资料。",
+      "futong": "出运明细单“根据外销订单，调取数据快速生成……作为单证部门后续办理报关、结汇单据制作的依据”，“单证部按确认的出运明细单，可以自动生成对应的报关单据”［F-N1］。出运单据带审批状态与审批日志（模块“20: 出运”），审批流由企业自设［F-OA］［F-P］。默认由哪个岗位确认出运：无公开资料。推断：业务或跟单编制并确认出运，单证在其后接手。",
+      "rules": "",
+      "decisionText": "出运确认（`shipment.confirm`）留在跟单模板：它记录“货已交承运人”的物流事实。单证员负责商业放行评估（`commercial_release.evaluate`）、单证签发与单证放行（`document_release.record`）。ES-10 第 4 步、ES-12 第 4 步的执行者改为跟单员。租户可以把两个模板合并给同一人（模板原则 2），不需要再给单证模板加 shipment.confirm。",
+      "reason": "参照系统把发货过账和单证、开票分给两个岗位：前者是实物，后者是单证与收款。Brant 已经用商业放行这个闸门把单证员放在确认之前（确认要求本范围放行已授予），所以单证员的控制不会因为由跟单确认而减弱。",
+      "alternative": "把 shipment.confirm 也给单证模板。这样两个模板都能确认出运，职责边界就模糊了。",
+      "impact": "设计源：事件风暴模型 ES-10、ES-12；岗位模板 merchandiser 的 duties 写明“出运确认（物流事实）”。代码：无。测试：无（实现已如此）。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-40",
+      "subject": "S5R-D02",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "order_account.open 设自有权限：资金与系统消费方持有，销售与 AI 不持有",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "order_account.open 的权限",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R1、R7",
+      "sources": [
+        "F-OA"
+      ],
+      "question": "设计没有建订单账户的命令，B2a 新增 `order_account.open`，借用 `payment_plan_review.open` 权限；B6b 用系统消费方在订单生效时开账户（岗位模板缺口第 5 行、负责人问题第 1 行）。",
+      "sap": "无直接对应的公开资料。推断：SAP 的客户应收随客户主数据和会计凭证存在，没有单独的“开订单账户”动作。",
+      "futong": "收款按“销售合同号”“发票号码”认领（认领金额、认领客户、认领业务员）［F-OA］；没有“订单账户”这一对象。无公开资料说明谁能建立收款归属。",
+      "rules": "",
+      "decisionText": "设 `order_account.open` 为独立权限，由资金模板（treasury）和系统消费方 `system:inbox.stl.order_account` 持有；销售类模板和 AI 身份都不持有。命令接受 human 和 system，不接受 AI。不列入人工专属清单，因为系统要用。正常情况由消费方在 OrderActivated 时开账户；只有补建时才由资金人员手工开，例如消费方上线前已生效的订单，或事件已被结清的订单。",
+      "reason": "账户是收款方的记录，由事实自动形成，人工只做补建。权限只在“补建”这一个用途上暴露给资金人员。",
+      "alternative": "继续借用 payment_plan_review.open，权限语义不清；让 application.apply 隐式建账户，违反原则 7，还得为它登记例外。",
+      "impact": "设计源：Context Map STL.commands 加 order_account.open；岗位模板 treasury 加 order_account.open；战术模型 OrderAccount 的 notes 写明创建命令；新的 capability 行。代码：STL `internal/contexts/stl/internal/application/order_accounts.go` 的权限检查改为 `order_account.open`；`brant-admin inbox` 的消费方授权；`roles_gen.go` 重生成。测试：资金人员可开、销售与 AI 被拒（PERMISSION_DENIED）、系统消费方可开。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-41",
+      "subject": "S5R-D03",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "未提交报关即取消的出运，可凭人工以 local_cancellation 释放许可证分配",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "未报关即在本地取消的出运，其许可证分配如何释放",
+      "signers": [
+        "R-CA",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前（首个客户若有两用物项）；否则 later（R1 前）",
+      "units": "R0、R9",
+      "sources": [
+        "C-LC1",
+        "C-LC2",
+        "F-OA",
+        "G-H25"
+      ],
+      "question": "B5 只在外部结果（改单或撤单回执）时释放许可证用量；一个在报关前就本地取消的出运，其分配永远不能释放（负责人问题第 3 行前半）。MD-44 只禁止“凭本地取消恢复已申报用量”。",
+      "sap": "GTS 在报关单上按申报的数量与金额“depreciate the figures from the license”［G-H25］；未发送给海关的报关单可以直接取消，开票在前端系统取消时 GTS 自动取消对应的出口报关［G-H25］。取消后许可证用量是否回补：未证实。",
+      "futong": "报关单有“许可证号”字段［F-OA］；许可证管理、出口管制：无公开资料。",
+      "rules": "两用物项出口许可证“实行‘一批一证’制和‘一证一关’制”，“每证只能报关使用一次”［C-LC1］。报关撤销后许可证用量如何处理：无公开资料；2025 年征求意见稿（未生效）写“发证机构依据海关反馈的实际清关数据核销”［C-LC2］。推断：许可证的“使用”以海关报关为界，未报关的分配只是内部预留。",
+      "decisionText": "`export_license.release` 增加第二种依据 `local_cancellation`。条件有三：分配的目标（出运或出口批次）在 FUL 中已取消；CNX 中没有覆盖该目标、处于已提交或之后状态（submitted、unknown、received、accepted、released、amended）的报关案件；释放人是人工（单证岗位）并附理由。释放全部未消耗用量。只要曾提交过报关，就仍然只按外部结果释放（MD-44 不变）。",
+      "reason": "用量是否“已申报”以海关是否收到申报为界。未申报的用量只是内部预留，取消后不释放会永久占用额度，与许可证管理的目的相反。已申报的用量仍只凭外部结果恢复。",
+      "alternative": "维持现状（额度被永久占用）；在出运取消时由系统自动释放。后者需要新的 FUL 事实和消费方，而许可证释放属于人工专属，自动释放也不符合 B5 的人工路径。",
+      "impact": "设计源：CNX-INV-002 与 MD-44 的文字（“未申报用量在本地取消后可凭人工释放”）；SM 无（许可证无状态机）；`export_license.release` 的参数契约加 `basis: external_result | local_cancellation`。代码：CNX `internal/contexts/cnx/internal/application/license.go`（读 FUL 出运或批次状态，经已有的 ExportLotRef／出运查找函数；查本上下文报关案件）；迁移放宽 `result_source` 的 CHECK。测试：本地取消、未报关时可释放；已提交报关时拒绝（INVALID_STATE）；目标未取消时拒绝；AI 被拒。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-42",
+      "subject": "S5R-D04",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "一份报关单一张许可证；多证经出口批次；许可证记录一批一证与一证一关",
+      "conditions": [
+        "S5 实现待改（R9）：B5 的许可证可按额度多次分配，与两用物项出口许可证“一批一证”不符：许可证须登记使用方式（single_use 默认）与海关关别，守卫接受出口批次的分配"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "一个出运需要两张以上许可证",
+      "signers": [
+        "R-CA",
+        "R-CNX",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋合规负责人＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "later（R1 前）（首个客户买成品，两用物项罕见）；若 B0 试点涉及许可证货物，提前到 B0 前",
+      "units": "R0、R9",
+      "sources": [
+        "C-CO3",
+        "C-LC1",
+        "G-L3"
+      ],
+      "question": "B5 规定一个分配覆盖目标的全部行，一个目标同时只能有一个分配。一个出运需要两张许可证时无法支持（负责人问题第 3 行后半）。",
+      "sap": "许可证覆盖不了的单据行被阻止，“This block can only be lifted by assigning a license”［G-L3］；一行拆用多张许可证：未证实。",
+      "futong": "无公开资料。",
+      "rules": "“一批一证”“一证一关”（令 2005 年第 29 号第十五条）［C-LC1］；海关录入指南：许可证号栏“一份报关单只允许填报一个许可证号”［C-CO3］。",
+      "decisionText": "（1）一份报关单只用一张许可证，多证经出口批次实现。需要两张许可证的出运，由跟单按许可证把出运行分成两个以上出口批次（B1b 已允许一个出运按行分多个批次），每个批次分配一张许可证、单独报关。FUL 的出运范围许可证守卫改为：出运的每一行由“出运本身的分配”或“包含该行的批次的分配”覆盖即可。现在守卫忽略批次分配，这一点要改。（2）许可证登记时记录使用方式与报关关别。`single_use`（一批一证）是两用物项出口许可证的法定方式，也是默认值：只允许一个有效分配，报关后不能再分配。`multi_use`（非一批一证）须附证面依据。许可证登记海关关别（一证一关），报关案件的申报海关须一致。（3）CNX-INV-002 的正例“许可 1,000 件，分配 600＋400”只对 multi_use 成立，文字照此改写。",
+      "reason": "中国法规规定两用物项出口许可证“一批一证”“一证一关”，报关单的许可证号栏只能填一个号码。所以“一份报关单对应一张许可证”是法定形态。Brant 的报关以出口批次为单位，分批次即可支持多证，不需要在一个分配里拆额度。B5 按额度多次分配的模型不符合一批一证，必须加上使用方式。",
+      "alternative": "同一行跨两张许可证拆分数量（报关单无法对应）；不区分使用方式（会允许一张一批一证的许可证被多次报关）。",
+      "impact": "设计源：CNX-INV-002（多证经批次；使用方式；一证一关）；R56 的 ExportLicenseGuard v1 说明；UL CNX-ExportLicense。代码：CNX `license.go` 的登记参数（`usage_mode`、`customs_office`）、分配规则与守卫 SQL（`guard_export_license_v1`）及 Go 端行覆盖检查（`Check(path, lines)`）接受批次分配；`declaration.go` 核对申报海关；迁移。测试：两证两批次的出运可确认；缺一个批次的分配时 EXPORT_LICENSE_REQUIRED；single_use 许可证第二次分配被拒；申报海关不符被拒。",
+      "realOwner": "",
+      "s5Change": "R9"
+    },
+    {
+      "id": "SR-43",
+      "subject": "S5R-D05",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "PUR 新增获批处置（退厂、我方承担、留用），TRD 取消据此判定已处置",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "订单取消时，已交付未出运货物的“获批处置”从哪里来",
+      "signers": [
+        "R-CA",
+        "R-PUR",
+        "R-BOP"
+      ],
+      "signersText": "首席架构师＋采购负责人＋运营负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R4、R3",
+      "sources": [
+        "F-OA",
+        "S-PO1",
+        "S-PO2",
+        "S-TP1"
+      ],
+      "question": "TRD-INV-019 允许“下游采购承诺与占用已解除或已有获批处置”时取消生效订单，但“获批处置”没有来源。C4b-PUR 的复核在变更之后才开启，不能在取消之前提供处置；C4a 把为已交付货物保留的分配算作未处置（负责人问题第 4 行；战术模型修订“不变量文字”中的 TRD-INV-019）。",
+      "sap": "第三方订单行在采购订单存在时不能拒绝：“It is not possible to reject a 3rd-party line item on a sales order … Delete purchase order &1 and item &2 first.”（V1544）［S-TP1］；已有收货的采购订单行须先冲销收货才能加删除标记［S-PO1］，或设“delivery completed”使未清量为零［S-PO2］。供应商已交货后的处理：未证实。",
+      "futong": "外销取消或减量时采购合同如何处理：无公开资料。公开字段有订单与采购的“终止”状态、采购退货、其它入库与“占用”模块［F-OA］。推断：已到货物可经采购退货或转入库处理。",
+      "rules": "",
+      "decisionText": "PUR 新增人工命令 `purchase.commitment.dispose`。采购对已核实交付但未出运的承诺行数量，申请处置并说明去向：`return_to_supplier`（退回工厂，附证据）、`write_off`（我方承担，进入订单经营结果的沉没成本，见 S5R-D42）或 `hold_for_reuse`（转作后续订单使用，在 STK 启用前只记录、不形成库存）。由订单审核人（order_reviewer）独立批准，独立于申请人。批准后，DownstreamCommitments v1 的 `disposition` 列写入处置种类，TRD 的取消检查把有获批处置的数量算作“已处置”。没有交付的承诺仍须先作废、变更或取消（现状不变）。",
+      "reason": "参照系统都要求先处理采购侧，再拒绝或取消销售行，不允许让已到手的货物成为没有归属的孤儿。Brant 用一个独立批准的处置把这件事显式化，与 D-14 的独立审批一致。",
+      "alternative": "订单取消后由分配复核处理（C4b-PUR）。复核在事后，取消前没有处置，TRD-INV-019 仍无来源。也不让 TRD 忽略已交付货物：那样会让为订单买的货变成孤儿。",
+      "impact": "设计源：PUR 命令与事实 `PurchaseCommitmentDisposed`；SM-PUR-COMMITMENT 加处置记录（不改承诺状态）；R71 的 disposition 取值；TRD-INV-019 文字；人工专属清单加 `purchase.commitment.dispose` 与 `purchase.commitment.disposition.decide`（或合为一条带独立批准的命令，由 R0 定名）；岗位模板 purchaser（申请）、order_reviewer（批准）。代码：PUR `internal/contexts/pur/internal/application/commitment.go` 与 `facts.go`（DownstreamCommitments 的 disposition 列），迁移；TRD `order_end.go` 的“未处置”判定读 disposition（C4a 已预留列）。测试：已交付未出运的订单在获批处置后可取消；未获批时 DOWNSTREAM_COMMITMENT_OPEN；申请人自批 INDEPENDENT_REVIEW_REQUIRED。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-44",
+      "subject": "S5R-D06",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "缺保单答 SHIPMENT_DOCUMENTS_UNRECONCILED；合同保险比例进贸易条件；险别核对",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "CIF／CIP 保险：缺保险单的错误码、合同保险比例与保险费比较",
+      "signers": [
+        "R-CA",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "B0 前（错误码与文字）；合同比例字段 later（R1 前）",
+      "units": "R0、R2、R6",
+      "sources": [
+        "F-OA",
+        "G-11",
+        "I-1",
+        "I-2",
+        "I-3",
+        "I-4"
+      ],
+      "question": "FUL-INV-005 和错误码目录写缺保险单答 INSURANCE_COVERAGE_INSUFFICIENT，计划和 C6 按 SHIPMENT_DOCUMENTS_UNRECONCILED 实现；TRD／POL 没有合同保险比例；核价保险费组件是否按部分出运分摊（负责人问题第 5 行）。",
+      "sap": "GTS 信用证处理把保险证明列为单据，但“You can create and print all the above documents … aside from the insurance certificates”［G-11］；对 CIF／CIP 保单的系统核对：未证实。",
+      "futong": "保险只出现为“保险条款”（订单与结汇）、“国际保费”（盈亏汇总）和报关的“保费”［F-OA］；按 110 % 投保的核对、缺保单或不足额的检查：无公开资料。",
+      "rules": "Incoterms 2020：CIF 默认 Institute Cargo Clauses (C)，CIP 须 (A)［I-1］［I-2］；投保金额“at least 110 percent of the invoice value and in the currency of that invoice and contract”（Trade Finance Global 转述，未读 ICC 原文）［I-3］。UCP 600 第 28 条：保单日期不晚于装运日，投保金额至少为 CIF／CIP 货值的 110 %（转载页，非 ICC 原文）［I-4］。",
+      "decisionText": "（1）缺保险单是“缺少必需单证”，答 SHIPMENT_DOCUMENTS_UNRECONCILED。这个差异必须解决，不能确认（与 C6 一致）。INSURANCE_COVERAGE_INSUFFICIENT 只用于保额不足。FUL-INV-005 和目录 note 照此改写。（2）合同保险比例：POL `trade_terms`（贸易条件配置）的修订加可选字段 `insurance_percent`（默认 110，下限 110）。订单绑定的贸易条件给出比例；单证员记录保险单时，可在合同比例之上另报更高比例，不得低于合同比例。在 R0 落实之前，暂按 C6 的“单证员给出，默认且不低于 110 %”执行。（3）保险费比较仍按整单、同币种、不分摊（D-13 选项 a），比较只作显示、不阻断，部分出运时显示“已出运比例”供人工判断。（4）险别核对：CIP 默认须 ICC(A) 或同等，CIF 最低 ICC(C)。合同另有约定时以合同为准。不符成为可确认差异。保单日期晚于装船日的处理保持 C6 的做法（UCP 600 第 28 条 e 款）。",
+      "reason": "Incoterms 2020 与 UCP 600 都以 110 % 为最低投保额；比例是合同条款，应当跟着贸易条件走。缺单和不足额是两种不同的处理：前者要补单，后者要加保。",
+      "alternative": "缺保险单在签发前用 INSURANCE_COVERAGE_INSUFFICIENT 直接拒绝。这会让“缺单”绕过差异核对的统一入口。也不按出运量分摊保险费：只是显示，分摊会造成虚假精度。",
+      "impact": "设计源：FUL-INV-005 文字；错误码目录 INSURANCE_COVERAGE_INSUFFICIENT 的 note；POL trade_terms 字段（UL）；R49 说明。代码：POL `internal/contexts/pol/api/data.go`（trade_terms 加 omitempty 字段，旧哈希不变）；FUL `internal/contexts/ful/internal/application/insurance.go` 取合同比例。测试：合同比例 120 % 时 115 % 的保单不足；缺单答 SHIPMENT_DOCUMENTS_UNRECONCILED。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-45",
+      "subject": "S5R-D07",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "中继延迟 P95 ≤ 5 s、P99 ≤ 30 s；最老未分发事件 60 s 告警；至少 2 个分发进程",
+      "conditions": [
+        "B0 前须真实负责人确认（运维与财务）：中继延迟目标（P95 ≤ 5 s、P99 ≤ 30 s）、告警阈值（60 s、300 s）与分发进程数的数值"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "事件队列（Outbox 中继）延迟目标",
+      "signers": [
+        "R-CA",
+        "R-BOP"
+      ],
+      "signersText": "首席架构师＋运营负责人",
+      "evidence": "E0",
+      "priority": "B0 前（G4 的一部分）",
+      "units": "R0、R11",
+      "sources": [
+        "F-OA"
+      ],
+      "question": "基线只把“队列积压”列为监控面，没有数值。C7 实测：一个分发进程在 8＋8 用户时积压持续增长，建议参考负载下 P95 ≤ 5 s、2—3 个分发进程（负责人问题第 6 行）。",
+      "sap": "无公开资料（未检索到 SAP 对事件或队列延迟的公开目标）。",
+      "futong": "只公开了 OpenAPI 的接口性能：“OpenAPI一般会在50ms以内响应，OpenAPI设置的最长超时时间为5s”，每秒限 10 次［F-OA］；事件或消息延迟的 SLA：无公开资料。",
+      "rules": "",
+      "decisionText": "冻结为工程目标（参考部署、参考负载 16＋16 用户）：中继延迟（事件提交到消费方处理完成）P95 ≤ 5 s、P99 ≤ 30 s；最老未分发事件年龄超过 60 s 告警，超过 300 s 为事故。参考部署至少 2 个分发进程，按负载扩到 3 个。死信不计入延迟，单独告警（ADR-BR-015）。G4 仍为 NO-GO，目标只在本机证据上成立。",
+      "reason": "Brant 的下游控制都依赖事件，例如信用消耗、订单账户、复核和 CNX 重开。延迟直接决定“窗口期”的长短（C4b-STL 的 revision_mismatch 窗口）。C7 已证明 2 个进程在峰值保持 P95 ≤ 10 s，3 个进程可达 5 s。",
+      "alternative": "不设目标；或者设 P95 ≤ 1 s。后者需要改分发模型（推送或 LISTEN/NOTIFY），超出 B0 的范围。",
+      "impact": "设计源：基线 11.1 的运维目标表、G4 核对项、运行手册。代码：`internal/foundation/messaging` 输出最老未分发事件年龄与分发延迟指标；`tests/load` 加阈值断言（只在负载目标下）。测试：负载工具在 2 个分发进程下断言 P95 ≤ 5 s（本机，非 CI）。",
+      "realOwner": "运维与财务",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-46",
+      "subject": "S5R-D08",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "修订生效时占用调整为新修订的信用部分（被替代释放＋承接），敞口随之下降",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "订单修订后的信用占用：需求变小、被后续修订替代、游离占用",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R7",
+      "sources": [
+        "F-OA",
+        "S-CM1",
+        "S-CM2",
+        "S-CM3"
+      ],
+      "question": "C4b-STL 在新修订信用需求变小时保留较大的已消耗占用直到订单结束，敞口偏高（D2b 的 SIM-02：订单减到 8,280.00，敞口仍按 16,200.00 计）；consumed → released 只在订单结束时允许；有人在应用没有要求时另行占用的“游离占用”到期前一直计入敞口（负责人问题第 7 行；战术模型 SM-STL-CREDIT-RESERVATION）。",
+      "sap": "信用敞口是未结订单、未结交货、未结发票与应收之和，“The open order value is the value of the order items which have not yet been delivered”［S-CM1］；敞口按客户信用段的更新组随单据更新［S-CM2］。订单值增加会触发再次检查，减少时不必再查［S-CM3］。推断：订单减量后未结订单值随之下降，无需人工释放；“减量即降低敞口”的原文：未证实。",
+      "futong": "客户档案有“信保额度”“已使用信保额度”“剩余信保额度”“信用账期”“收汇逾期天数”，结汇单据有“是否占用信保额度”［F-OA］；订单减量后占用是否减少：无公开资料。",
+      "rules": "",
+      "decisionText": "订单修订生效（OrderAmended）时，STL 信用消费方在客户信用根的一个事务内做三件事，结果是“当前修订恰有一个已消耗占用”：（a）新修订若已有有效占用（reserved，含按 B4 为提议修订预先作的占用与游离占用），消耗它；（b）否则把上一修订的已消耗占用按新修订的信用部分承接：金额不大于原占用时直接承接，不再做额度检查；变大的情形本来就由 D-9 在应用前要求新占用；（c）上一修订的已消耗占用以新的原因 `superseded` 释放。SM-STL-CREDIT-RESERVATION 加 `consumed —credit.release(superseded)→ released` 与“承接”的创建方式（system）。游离占用若金额大于新修订需要，按需要量消耗、差额释放。",
+      "reason": "参照系统的信用敞口来自未结订单的值，订单值降低，敞口随之降低。Brant 不做持续重算，但在修订生效这一刻把占用调整到新需求，结果相同，而且仍是事件驱动、一个聚合一个事务（D-3）。",
+      "alternative": "保留较大占用直至订单结束（现状，敞口长期偏高，会误拒其他订单）；人工释放（销售或信用人员不应在生效订单上手工改占用，B4 已拒绝）。",
+      "impact": "设计源：SM-STL-CREDIT-RESERVATION（superseded、承接）；STL-INV-004 加“订单修订生效时占用调整为新修订的信用部分”；PL-13 与 WF-06 的 STL 步骤。代码：STL `internal/contexts/stl/internal/application/order_amendments.go`、`reservation.go`、`internal/domain/customercredit`；占用表的原因 CHECK 加 `superseded`、来源加 `carried_over`（迁移）。测试：SIM-02 敞口随修订降到新信用部分；游离占用被消耗；乱序事件（先到后一修订）幂等；与人工 credit.release 并发。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-47",
+      "subject": "S5R-D09",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "付款条件例外的有效期取 credit_policy 的 decision_validity_days",
+      "conditions": [
+        "B0 前须真实负责人确认（运维与财务）：付款条件例外有效期的数值（取 credit_policy 的 decision_validity_days，现为合成值 7 天）"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "付款条件例外的有效期上限",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R6",
+      "sources": [
+        "S-CM3",
+        "S-CM4",
+        "S-CM5"
+      ],
+      "question": "C1 把付款条件例外的有效期上限取 90 天，设计没有数值（负责人问题第 8 行）。",
+      "sap": "自动信用控制的“Released documents are still unchecked”可设偏差百分比与天数：放行后在天数内、变化不超过偏差时不再冻结［S-CM4］［S-CM3］；同日修改不再检查［S-CM5］。即放行的有效期是信用控制参数，由信用管理配置。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "例外的有效期上限取订单所绑定公司当时有效的 POL credit_policy 的 `decision_validity_days`（与信用决定同一个参数，合成值 7 天）。例外到期而单证未放行，须重新批准。FUL 的硬上限 90 天保留，作为参数异常时的保护。",
+      "reason": "付款条件例外和信用例外是同一种风险决定，即“先放货或放单，后收款”。两者应由财务在同一份信用政策里设期限，不另设一个只有 FUL 知道的常数。",
+      "alternative": "固定 90 天，财务无法控制；不设上限，例外会无限期有效。",
+      "impact": "设计源：FUL-INV-002 的例外部分写明期限来源；R49 或 R33 说明 FUL 读取 credit_policy（POL→FUL，经已有 ConfigRef v1，不需要守卫锁）。代码：FUL `internal/contexts/ful/internal/domain/release/release.go`（`MaxExceptionValidity` 改为参数）、`application/release.go` 在事务前读取 credit_policy。测试：超出政策天数被拒（INVALID_KNOWN_VALUE `/args/valid_until`）；政策缺失时 fail closed。",
+      "realOwner": "运维与财务",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-48",
+      "subject": "S5R-D10",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "放单保持严格；重新评估中的 blocked 仍答 blocked（守卫 v1 函数体）",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "已确认出运的单证放行细则",
+      "signers": [
+        "R-CA",
+        "R-CNX",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋合规负责人＋资金／信用负责人（a）",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R9、R6",
+      "sources": [
+        "F-OA",
+        "G-EWM",
+        "G-H20"
+      ],
+      "question": "（a）已结束订单上生效批准被撤销时仍拒绝单证放行（C1b 保留）；（b）PTY 筛查是严格（任何非 clear 都阻止，含筛查过期与名单更新）还是只识别真实阻断（C1c）；（c）CNX 不查中间修订；（d）TradeComplianceGuard v1 在 pending 时不返回上一结论，被重新评估的 blocked 结论在窗口内被视为 pending（负责人问题第 9 行；Context Map 缺口第 14 行）。",
+      "sap": "GTS 被阻止的单据须人工“Release Block or Confirm Block”，且放行只对该笔交易有效，相同数据再筛查会再次阻止；官方名单上的业务伙伴不能放行［G-H20］；名单或伙伴地址变化时不沿用旧决定、重新筛查并可再次阻止［G-H20］；与 GTS 集成的 EWM 在发货前检查，检查失败“does not permit a goods issue posting”［G-EWM］。“批准撤销后放单”的对应：无公开资料。",
+      "futong": "无公开资料（公开资料中没有筛查与放单闸门；出运与结汇有信用证单号、装期、效期字段［F-OA］）。",
+      "rules": "",
+      "decisionText": "（a）保持拒绝：批准被撤销说明订单授权本身有争议，正本提单是最后一道控制，等撤销原因处理完（例如重新审批或批准争议处理）再放单。（b）保持严格：任何非 clear 都阻止，包括筛查过期、名单新版本和主体修订。Brant 没有自动的增量复筛，“过期”就是“不知道”，而“不知道不是 clear”是全系统的规则（A7）。运营上，单证员在放单前要求合规复筛，作为一个人工步骤写入运行手册。（c）只查确认时修订与当前修订，不查中间修订（S5-D37 已覆盖货物离港时与放单时这两个时点）。（d）在 CNX 侧修：重新评估中的 blocked 结论在新的决定之前一直按 blocked 回答。TradeComplianceGuard v1 的函数体在“最近的决定为 blocked 且尚无新决定”时返回 blocked（原因 `blocked_under_review`）。这比现在更严，TRD 生效与 FUL 放行对它的处理都不变，所以不需要 v2。",
+      "reason": "参照系统中被阻止的单据一直处于阻止状态，直到被明确放行；重新筛查不会自动解除阻止。Brant 把这条规则放在事实的权威方（CNX）。",
+      "alternative": "PTY 只识别 blocked 或 match（放宽后，过期筛查会让单证放行）；FUL 自己记住见过的阻断（重复了 CNX 的事实）；守卫 v2（为同一语义增加版本，没有必要）。",
+      "impact": "设计源：FUL-INV-002（见第 2.2 节）；SM-CNX-COMPLIANCE 的 blocked → pending 转换注明“守卫仍答 blocked 直至新决定”；R56、R58 的 TradeComplianceGuard v1 说明。代码：CNX 守卫 SQL（`guard_trade_compliance_v1`，新迁移替换函数体）。FUL 无改动，只补测试。测试：blocked → 重新评估中 → 单证放行被拒；→ clear 后放行；TRD 生效在同一窗口被拒。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-49",
+      "subject": "S5R-D11",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "不加订舱状态；加节点 booking_requested",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "订舱是否需要“已申请”状态",
+      "signers": [
+        "R-CA",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "later（R1 前）",
+      "units": "R0、R6",
+      "sources": [
+        "F-OA",
+        "G-TM1",
+        "G-TM2"
+      ],
+      "question": "C2 的订舱记录只有已确认（必须有订舱号与确认证据），没有“已申请”（负责人问题第 10 行第 1 点）。",
+      "sap": "SAP TM 的海运订舱有确认状态：“Not Sent to Carrier, Sent to Carrier, Rejected by Carrier, Confirmed by Carrier …”与部分确认［G-TM1］；流程为发送承运人、接收确认、确认订舱［G-TM2］。",
+      "futong": "出运的“订舱信息”有货代公司、提单类型、托运日期、箱型、提单号等字段［F-OA］；“已申请／已确认”之类的订舱状态：无公开资料。",
+      "rules": "",
+      "decisionText": "订舱记录不加状态，仍只记录已确认的订舱。“已申请订舱”作为节点计划的一个节点类型 `booking_requested` 加入 FUL 节点清单，与 `booking_confirmed` 配对，节点的计划日期即截关前的申请期限。",
+      "reason": "SAP TM 的订舱状态（已发送承运人、承运人确认、拒绝、部分确认）服务于与承运人的电子交换和运力计划。Brant 不做运输计划（O2C-11 PARTIAL），外部连接在 S6-05（S5-D23），订舱申请只是一个时间节点，没有下游守卫读取它。节点计划已有计划与实际、证据等级，足以跟踪“已申请未确认”。这里有意不同于 SAP。",
+      "alternative": "给 BookingRecord 加 requested → confirmed 状态机。下游没有读者，只增加一个需要维护的状态。",
+      "impact": "设计源：FUL-AGG-MilestonePlan notes 的节点清单；UL FUL-MilestonePlan。代码：FUL `internal/contexts/ful/api/milestone.go` 加 `NodeBookingRequested`。测试：节点计划接受新类型。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-50",
+      "subject": "S5R-D12",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "签发时重查原产地证；未登记原产地证为可确认差异；加优惠原产地证种类",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "原产地证与官方证书：判定时点、是否必须为 CNX 结果、证书种类",
+      "signers": [
+        "R-CA",
+        "R-CNX",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋合规负责人＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "B0 前（1、2）；later（R1 前）（3）",
+      "units": "R0、R6、R10",
+      "sources": [
+        "C-CO1",
+        "C-CO2",
+        "C-CO3",
+        "F-SINA",
+        "G-11",
+        "G-H25"
+      ],
+      "question": "C5 在单证准备时判定原产地证适用，签发时不再查；单证套里的原产地证记录可以不引用 CNX 登记的证书；证书种类只有聚合注释列出的三种，不含目的市场供应链合规证据与优惠原产地证（负责人问题第 10 行第 2—4 点）。",
+      "sap": "GTS 11.0 管理供应商长期声明并按优惠判定打印优惠单证（EUR.1、EU 原产地证等）［G-11］；GTS for HANA 登记并放行供应商长期声明［G-H25］。登记外部签发证书的做法：未证实。",
+      "futong": "只有第三方推广文章称“商业发票、装箱单、提单、产地证等外贸单证，可根据订单数据自动生成”［F-SINA］；优惠原产地证（FORM E、RCEP）管理：无公开资料。",
+      "rules": "原产地证由海关与贸促会签发，“应当在出口货物装运前或者装运时……申请”，可电子签发（海关总署令第 270 号）［C-CO1］；RCEP 原产地声明“应当由经核准出口商开具”（令第 255 号）［C-CO2］；录入指南“一份报关单对应一份原产地证书或原产地声明”［C-CO3］。",
+      "decisionText": "（1）判定时点：准备时判定，签发（`shipment_document.issue`）时再查一次。签发时证书已过期或不再覆盖，成为必须解决的差异。（2）单证套中的原产地证记录若没有引用 CNX 证书结果，成为可确认差异 `co_not_registered`，单证员须附理由确认（例如客户只要复印件）。（3）证书种类加 `preferential_certificate_of_origin`，带协定代码（如 RCEP、中国—东盟）与签发机构（海关或贸促会），只登记外部签发的结果，不做优惠原产地判定（GTC-05 的判定仍在首发以外）。RCEP 的经核准出口商原产地声明作为同一种类的子类 `origin_declaration`。目的市场供应链合规证据（如棉花溯源）留到 R1。（4）报关资料包核对“一份报关单对应一份原产地证书或原产地声明”（document_bundle.check）。",
+      "reason": "中国出口商常用的优惠原产地证由海关或贸促会签发，是外部结果。Brant 只需登记和核对，不需要计算原产地规则。签发时再查一次的成本很低，可以避免带着过期证书签发单证。",
+      "alternative": "每张原产地证都必须是 CNX 结果（客户只要复印件或由客户自办时，这一要求过严）；实现优惠原产地判定（SAP 级的配置，首个客户用不到）。",
+      "impact": "设计源：MD-40；CNX-AGG Certificate 的种类；FUL-INV-004 的核对项。代码：FUL `documents_certificate.go`（签发时重查、`co_not_registered` 差异）；CNX `certificate.go`（种类与协定代码，迁移放宽 CHECK）。测试：准备后证书过期，签发被拒；未登记原产地证可确认后签发；登记 RCEP 证书。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-51",
+      "subject": "S5R-D13",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "加 unknown → not_received（以海关总署查询为准），之后可再次报关",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "报关结果 unknown 之后“海关从未收到”的路径",
+      "signers": [
+        "R-CA",
+        "R-FUL",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人（报关）＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R10",
+      "sources": [
+        "C-CU1",
+        "C-CU2",
+        "C-SW1",
+        "F-N1",
+        "F-OA",
+        "G-H25"
+      ],
+      "question": "SM-CNX-DECLARATION 中 unknown 只能到 received。查证后确认海关从未收到申报时没有出路，案件停在 unknown（负责人问题第 11 行；C3a 决定 4）。",
+      "sap": "GTS 中未发送给海关的报关单可直接取消［G-H25］；“海关未收到”的处理：无公开资料。",
+      "futong": "“报关进程为记录报关放行日期，报关的收回情况的登记”［F-N1］；报关单有“报关单收回”“海关放行日期”字段，单据状态是内部流程状态［F-OA］；单一窗口海关侧状态跟踪：无公开资料。",
+      "rules": "单一窗口：回执由海关审单系统返回，收到“海关入库成功”即已进入审单流程；状态不一致时“请企业以海关总署查询到的状态为准……可以直接联系申报海关那边补发或重审回执”［C-SW1］。修撤单遵循“修改优先原则；确实不能修改的，予以撤销”（海关总署令第 220 号及修订）［C-CU1］，经单一窗口提交修改／撤销表［C-CU2］。无回执时避免重复申报的官方程序：未证实。",
+      "decisionText": "加转换 `unknown —declaration_case.record_receipt(outcome=not_received)→ not_received`（终态）。条件：人工；附查证证据，以海关总署可查询到的状态为准（单一窗口 FAQ 的口径），例如“报关数据查询”无入库记录的截图，或报关行的书面确认；理由必填；所引用的操作引用（submission 的操作号）在查证中未被海关接收。查到“海关入库成功”或更后的状态时，不能记 not_received，只能按查到的回执记录（unknown → received 或更后的主线状态，见第 2.2 节的乱序前跳）。进入 not_received 后，同一出口批次允许开启下一次报关尝试（attempt n＋1），与 rejected、withdrawn 一样。",
+      "reason": "CN-03 的原则是“unknown 先查证，不盲目重申报”。查证的结论必须能被记录，否则要么永远卡住，要么在 Brant 之外重申报，造成记录与事实不一致。",
+      "alternative": "unknown → confirmed 回退后同一操作重提。这会改写已提交的事实，违反原则 4。",
+      "impact": "设计源：SM-CNX-DECLARATION；CNX-INV-003 文字。代码：CNX `declaration.go` 与领域状态机，迁移放宽状态 CHECK。测试：unknown → not_received 后新尝试可提交；没有查证证据时被拒；AI 被拒。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-52",
+      "subject": "S5R-D14",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "退（免）税方式按法定四类；征税批次不开案件；逾期转免税",
+      "conditions": [
+        "B0 前须真实负责人确认（税务专业人员）：退（免）税方式四类的适用条件、资料要求与案件用途（CN-D01—08 须在 B0 前冻结）"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "退（免）税方式与退税案件用途",
+      "signers": [
+        "R-CA",
+        "R-TAX"
+      ],
+      "signersText": "首席架构师＋税务负责人",
+      "evidence": "E0",
+      "priority": "B0 前（CN-D01—08 须在 B0 前冻结）",
+      "units": "R0、R2、R10",
+      "sources": [
+        "C-TX1",
+        "F-CP",
+        "F-OA"
+      ],
+      "question": "退税方式只有 `exempt_credit_refund`、`exempt_refund`、`not_applicable` 三种，免税与征税都落在 not_applicable；用途 `export_refund`、`export_exemption` 是单元自定的封闭清单，须专业确认（负责人问题第 12 行；A3a、C3b）。",
+      "sap": "无公开资料（SAP 标准产品无中国出口退税；SAP 参照 CN-02 已列为 LOCAL）。",
+      "futong": "订单与产品行有“退税率”“退税额”，开票通知有“到票登记”“退税率”［F-OA］，“退税管理”在菜单中［F-CP］；退（免）税方式是否区分：无公开资料。",
+      "rules": "财税〔2012〕39 号：外贸企业（不具有生产能力的出口企业）适用免退税办法，计税依据为购进增值税专用发票注明的金额，应退税额＝计税依据×退税率；退税率取专用发票税率与出口退税率孰低；第六条免税（含“未在国家税务总局规定的期限内申报增值税退（免）税的出口货物劳务”）、第七条征税［C-TX1］。",
+      "decisionText": "退（免）税方式按法规的四类定义：`exempt_credit_refund`（免抵退，生产企业）、`exempt_refund`（免退，外贸企业）、`exempt`（免税）、`taxable`（征税，视同内销）。`not_applicable` 只保留给旧修订的读取（新修订不得使用）。用途保持两种：`export_refund`，对应免抵退或免退；`export_exemption`，对应免税出口的资料留存。征税的出口批次不开退税案件，CNX 在批次分配时答 INVALID_STATE 并说明原因。法规把“未在规定期限内申报退（免）税”的出口货物列入免税，所以案件要能从 export_refund 转为 export_exemption：由税务专员记录，附逾期依据，作为 `record_result` 的新结果 `converted_to_exemption`，R1 前做。首个客户是外贸企业，默认方式为免退。四类的适用条件与资料要求仍须税务专业人员在 B0 前确认（E0）。",
+      "reason": "四类是增值税出口政策的法定分类，Brant 只是把它们分开表达。外贸企业购进成品出口，适用免退税，退税额按购进发票计算；这与 CST 用可回收率计算成本（CST-INV-007）一致。",
+      "alternative": "保留 not_applicable。免税与征税的资料和会计处理不同，混为一类会让 CN-D02 无法冻结。",
+      "impact": "设计源：POL export_tax_policy 的 refund_method 取值（UL）；CN-R08 与 CN-D02 的说明；CNX-AGG TaxRefundCase 用途。代码：POL `internal/contexts/pol/api/data.go`（新取值；旧修订保持可读）；CNX `taxrefund.go`（征税批次不开案件）。测试：新修订用 not_applicable 被拒；征税批次分配被拒；免退案件照常。",
+      "realOwner": "税务专业人员",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-53",
+      "subject": "S5R-D15",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "项目可带区域、由人工复核；新修订国别严格校验；来源批准待真实负责人",
+      "conditions": [
+        "B0 前须真实负责人确认（法务与合规）：（c）国别项目、制裁名单与出口管制来源的批准（批准矩阵行保持 PENDING，E-3）"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "国别：区域级项目、POL 国别校验与国别项目来源的批准",
+      "signers": [
+        "R-CA",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋合规负责人",
+      "evidence": "E0",
+      "priority": "（a）later（R1 前）；（b）B0 前；（c）B0 前（真实负责人）",
+      "units": "R0、R2、R9",
+      "sources": [
+        "G-H20",
+        "G-H25",
+        "G-L1"
+      ],
+      "question": "（a）区域级项目（ISO 3166-2）无法表达；（b）POL 公司档案、适用法律与筛查条目的国别只校验格式；（c）批准矩阵“贸易合规：国别项目、制裁名单与出口管制来源”一行仍为 PENDING（负责人问题第 13 行；A3b G2、G4、G6）。",
+      "sap": "GTS 2025 新增按区域的禁运检查：“it is now possible to perform an embargo check not only on countries but also on regions”［G-H25］；“The embargo check can be activated at country or at region level”［G-L1］。2020 版只到国家级与“法规＋国家”组合［G-H20］。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "（a）项目保持国家级。项目可带 `regions`（ISO 3166-2 代码清单，可选），表示“该国只有这些区域受影响”。CNX 评估遇到带区域的项目时，不自动得出命中或不命中，而是生成发现 `region_review`，由合规人工按收货人地址判断。（b）新修订采用 kernel 的严格校验（只接受正式分配的 alpha-2），旧修订保持可读、不改写。（c）不在设计中决定：批准矩阵行保持 PENDING，在 B0 前由法务与合规的真实负责人确认（E-3）。",
+      "reason": "地址只到国家级，系统无法可靠判断地址是否落在受制裁区域（例如某国的某个州）。把判断交给人，并让发现可见，比系统猜测更安全。严格校验只作用于新数据，不破坏旧哈希。",
+      "alternative": "按区域自动匹配（需要地址的行政区编码，PTY 没有）；把整国当作命中（误报太多）。",
+      "impact": "设计源：REF 国别项目模型（UL）；CNX-INV-001 的发现种类；POL 的国别校验说明。代码：`internal/reference` 国别项目导入加可选 regions；CNX `evaluate.go` 加 `region_review`；POL `data.go` 的国别校验（新修订）。测试：带区域的项目产生 region_review，人工 clear 需理由；POL 新修订用 UK 被拒、旧修订可读。",
+      "realOwner": "法务与合规",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-54",
+      "subject": "S5R-D16",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "invoice 计数器专指商业发票；其他发票类编号用自己的单据类型",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "商业发票的编号计数器",
+      "signers": [
+        "R-CA",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "B0 前（文字）",
+      "units": "R0",
+      "sources": [
+        "F-OA",
+        "S-NR1",
+        "S-NR3"
+      ],
+      "question": "商业发票使用 POL 的 `invoice` 单据类型计数器，与“其他发票”共用；D-12 的意图是否为每公司每年一个商业发票计数器（负责人问题第 14 行；A3a）。",
+      "sap": "开票凭证号“is derived from the number range which is provided for the document type”，只能内部分配；不同开票类型可共用或分用号段［S-NR1］；同一开票类型内还可再按条件取不同号段区间，以满足发票编号的法定要求［S-NR3］。",
+      "futong": "外销合同、采购合同、出运发票、报关发票、结汇发票各有编号字段，单据有“编码相关信息:用来存储流水号”［F-OA］；按单据类型分设计数器：无公开资料。",
+      "rules": "",
+      "decisionText": "`invoice` 单据类型定义为“商业发票”专用，每公司每年一个计数器（D-12 的意图）。形式发票（`proforma_invoice`）、装箱单（`packing_list`）已分开。今后任何其他发票类编号（例如贷项通知、借项通知）都必须用自己的单据类型，不得复用 `invoice`。增值税发票由税务系统编号，不在 POL。",
+      "reason": "参照系统按单据类型分配号段。Brant 已经这样做，只需把 `invoice` 的含义写死，避免日后误用。",
+      "alternative": "改名为 `commercial_invoice`。语义相同，却要迁移已有号段，没有收益。",
+      "impact": "设计源：POL NumberIssue v1 的单据类型说明；UL。代码：`internal/contexts/pol/api/api.go` 的常量注释。测试：无新增。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-55",
+      "subject": "S5R-D17",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "全面禁运或制裁命中时，clear 须附授权文件证据，有效期受其封顶",
+      "conditions": [
+        "B0 前须真实负责人确认（法务）：全面禁运或制裁命中时例外依据（授权文件）的证据要求"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "禁运或制裁命中时能否判为 clear",
+      "signers": [
+        "R-CA",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R9",
+      "sources": [
+        "G-H25",
+        "G-L1",
+        "G-L2"
+      ],
+      "question": "A7 决定 4 允许合规在评估有禁运命中时仍判 clear（命中只是候选，由人工判断）。SC-09 的“普通审批不能覆盖”在 TRD 侧成立，但 CNX 内部没有额外约束（负责人问题第 15 行）。",
+      "sap": "GTS 禁运阻止可由用户人工解除，“This release cannot be revoked”，每个案例“is to be checked individually by a knowledgeable employee”［G-L2］；“The users can lift the block if a transaction proves not to be affected by the prohibitions”［G-L1］；2025 版可把放行理由与备注设为必填［G-H25］。对授权文件的要求：未证实。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "按措施区分。（1）`embargo`（全面禁运）或 `sanctions` 的适用发现：clear 须附“例外依据”证据（许可证、豁免或主管机关批复的 EVD 来源，种类 `authorization`）并写理由；没有这类证据只能判 blocked 或保持 pending。（2）`arms_embargo` 与 `export_control` 的适用发现（只覆盖受控或未分类货物）：clear 须附理由与证据，说明货物不受控（例如已核实的申报档案分类）。现在已经这样做。（3）这类 clear 的有效期不超过例外依据本身的有效期。",
+      "reason": "参照系统中，禁运阻止的单据须由有权限的合规人员显式放行，放行留痕。Brant 再加一条：全面禁运或制裁命中的放行必须有授权文件。单个合规人员凭一句理由就能放行全面禁运，对小公司是不可接受的风险。",
+      "alternative": "任何适用发现都不能判 clear（会把有许可证的合法出口也挡住）；要求两名合规人员（小公司常常只有一人）。",
+      "impact": "设计源：CNX-INV-001 加上述条件；SM-CNX-COMPLIANCE pending → clear 的守卫。代码：CNX `decide.go`（按发现的措施检查证据种类，EVD 读取已有）。测试：禁运命中无授权证据时 clear 被拒（TRADE_COMPLIANCE_NOT_CLEAR 或 INVALID_STATE，R0 定码）；有许可证证据时可 clear 且有效期被封顶。",
+      "realOwner": "法务",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-56",
+      "subject": "S5R-D18",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "FUL→QLT 读取已出运量；撤回记录冻结量；复检后再放行；让步可放行",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "质量：撤回后冻结余量的再放行与让步接收",
+      "signers": [
+        "R-CA",
+        "R-OPS"
+      ],
+      "signersText": "首席架构师（新关系）＋质量负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R5",
+      "sources": [
+        "F-OA",
+        "S-QM1",
+        "S-QM2",
+        "S-QM3"
+      ],
+      "question": "A8 把撤回的放行全额计入，QLT 不知道已出运多少，冻结的未出运数量永远不能再放行（D2b 的 BT21：冻结的 24 件再放行答 QUALITY_RELEASE_EXCEEDS_CONFORMING）；获批让步是否使货物可放行（负责人问题第 16 行；Context Map 缺口第 12 行；战术模型“模型”行的 QLT 让步）。",
+      "sap": "使用决策不能撤销，但选错代码时“you can re-open the data set and correct your mistake”；“acceptance with minor deviations”在技术上仍是接受；拒收通常把库存转入冻结［S-QM1］。冻结与非限制库存之间可用转移过账（344 为 343 的冲销）［S-QM3］；重置使用决策不回滚库存过账，变通做法是把库存重新转入检验［S-QM2］。",
+      "futong": "有“验货入库”“验货进度”“验货数量”与索赔来源［F-OA］；验货结果（让步接收）对出运的影响、放行撤回：无公开资料。",
+      "rules": "",
+      "decisionText": "（1）FUL 发布 `ReleaseConsumption v1`：按放行 ID 给出已出运量，是事务内的无锁读取，S5-D33 的反向读取模式。新增 Context Map 关系 FUL→QLT（OHS，事务内无锁读取，guardLock false）。（2）`quality_release.revoke` 锁放行根后读取消耗量，记录冻结量 = 放行量 − 已出运量。FUL 的 shipment.confirm 以 FOR SHARE 调用 QLT 守卫，与撤回串行。（3）计算可放行余量时，被撤回的放行只按已出运量计入。冻结量要再放行，须先做复检（`inspection.record` 带 supersedes，重述合格量），再 `quality_release.grant`。（4）`disposition.decide` 的 `concession`（让步接收）须附客户同意证据。获批的让步数量计入可放行量，放行带 `concession` 标记，单证套和出运可见。",
+      "reason": "参照系统中冻结的库存可以在质量部门重新决定后转为可用，让步接收的货物可以使用。Brant 的差别在于用“复检后再放行”表达这个决定，并要求客户同意的证据。这正是外贸里“客户同意让步”的通行做法。",
+      "alternative": "撤回时由质检手填已出运量（会与 FUL 的事实不一致）；冻结量不经复检直接再放行（撤回的原因可能仍在）。",
+      "impact": "设计源：Context Map 新关系 FUL→QLT（ReleaseConsumption v1）；QLT-INV-001（加让步）、QLT-INV-002（冻结量记录与再放行条件）；SM-QLT-RELEASE；SAP 参照 P2P-07。代码：FUL `internal/contexts/ful/api`（读取函数与 SQL，FUL 迁移）；QLT `internal/contexts/qlt/internal/application/release.go`、`domain/release`（冻结量列，QLT 迁移）、`inspection.go`（让步证据）。测试：BT21 冻结 24 件复检后再放行成功；未复检再放行被拒；撤回与出运确认并发；让步数量可放行。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-57",
+      "subject": "S5R-D19",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "订单汇差用实际结汇汇率，未结汇按核销日汇率；费用付款计入净现金",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "订单经营结果：结汇汇率的归属与净现金中的费用付款",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R8",
+      "sources": [
+        "F-N1",
+        "F-OA",
+        "F-P",
+        "S-CO1",
+        "S-CO2",
+        "S-FX1",
+        "S-FX2"
+      ],
+      "question": "经营结果不能把结汇记录（fx_conversion）归到订单的业务结算汇差；净现金只计已核销金额，不含费用付款（D2b 的 S-A：改为按结算汇率直接核销人民币到账才得出基线的 −100.00；净现金 2,900 而基线为 2,250）（负责人问题第 17 行；战术模型“模型”行）。",
+      "sap": "清账时按当时汇率把外币折算为本币，差额自动记为已实现汇兑损益并存于被清项［S-FX1］；银行费用在收款时随清账另记费用［S-FX2］。银行把美元换成本币的结汇：无公开资料（推断：是银行科目之间的过账，不归属发票或订单）。销售订单可归集运费等成本到获利能力段［S-CO1］［S-CO2］。",
+      "futong": "订单“盈亏汇总”含销售货值、国际运费、国际保费、出口退税、国内费用合计、“换汇成本”与“预计实现利润”［F-OA］；收款有“汇率”“银行扣费”［F-OA］；付款类型含“销售费用、其他费用”，费用可分摊到合同、出运、结汇［F-OA］［F-P］。注意：富通天下的“结汇”指结汇单据（议付单证），不是外币兑换［F-N1］；外币兑人民币的记录与汇差计算：无公开资料。",
+      "rules": "",
+      "decisionText": "（1）结汇记录已带 `source_fund_record_id`。外币收款核销到订单后，订单经营结果的业务结算汇差 = 已核销外币金额 ×（实现汇率 − 订单分析汇率）。实现汇率按以下顺序确定：（a）经营结果复核（order_result.review）时，该收款已有结汇记录的部分，用这些结汇的实际汇率，多笔结汇按金额加权；（b）尚未结汇的部分，用核销日 POL settlement 用途汇率，并标记 `unrealized`。经营结果关闭后再发生的结汇不重开结果，属于资金事项。这不是会计汇兑损益（基线 4.5、O2C-17 DEVIATION 不变）。（2）费用付款进入 STL：出账资金记录（direction out）可核销到已确认费用（新的核销目标种类 `charge`），净现金 = 已核销收款 − 已核销采购付款 − 已核销费用付款。未经 STL 支付的费用不计入净现金，并在经营结果中列为“未付”。",
+      "reason": "基线 S-A 期望用实际结汇得出订单汇差，中国外贸企业的订单盈亏也看结汇所得的人民币；Brant 已有结汇记录，只缺归属规则。未结汇部分采用核销日汇率，与参照系统“清账时按当时汇率计实现差额”的做法一致，保证结果能关闭。费用是现金流出，不计入净现金，就会与基线的经营结果定义不符。",
+      "alternative": "完全照 SAP，只按核销日汇率计算、不看结汇（会与 S-A 基线和实际所得不符）；让 fx_conversion 本身可核销（会把“资金转换”误当作客户收款，违反 CN-04）；在 C9 的规则下要求财务按结算汇率直接核销人民币（只是绕路，不是规则）。",
+      "impact": "设计源：STL-INV-011 与基线 4.5 的计算口径；SM-STL-APPLICATION 的目标种类；MD 行（订单经营结果）。代码：STL `results.go`（结汇归属）、`apply.go` 与 `internal/domain/fundrecord`（charge 目标）、`charges.go`（已付状态派生）；迁移。测试：S-A 用一笔美元收款加一笔结汇得出 −100.00；净现金含费用付款得出 2,250；部分结汇显示 unrealized。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-58",
+      "subject": "S5R-D20",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "CNX→STL 发票读取与应付复核标记；应付调整命令；部分红冲与先回退",
+      "conditions": [
+        "S5 实现待改（R10）：C3b 把部分红冲按全额冲回，与数电票“全额或部分红冲”不符：按红票金额冲减蓝票；已申报蓝票须先登记进货凭证信息回退"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "购进红字发票对应付（暂估）的影响",
+      "signers": [
+        "R-CA",
+        "R-TAX",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋税务负责人＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前（标记与 CNX 两点修正）；later（R1 前）（调整命令），若首个客户常有工厂折让，则提到 B0 前",
+      "units": "R0、R10、R8",
+      "sources": [
+        "C-TX3",
+        "C-TX4",
+        "C-TX5",
+        "S-IV1",
+        "S-IV2",
+        "S-IV3"
+      ],
+      "question": "红字发票核实后，应付只依据核实交付，不随之变化。“暂估、应付及退税资料分别处理影响”没有应付侧的命令或消费方；Context Map 没有 CNX→STL 关系（负责人问题第 18 行前半；Context Map 缺口第 3 行）。",
+      "sap": "后续借贷（subsequent credit）是发票校验中的单独凭证，价格开高时“You must enter a credit memo as a subsequent credit”［S-IV1］；冲销发票（MR8M）“posts a credit memo for the data in the invoice”［S-IV2］；收货不变。中国金税接口对负数开票要求红字信息［S-IV3］（销售侧）；采购侧红字发票：未证实。",
+      "futong": "无公开资料（公开字段中的“冲红”属于仓库入库单，不是增值税发票）。",
+      "rules": "国家税务总局公告 2024 年第 11 号：销售退回、开票有误、销售折让等“应当按照规定开具红字数电发票”；受票方已确认用途的，经对方确认《红字发票信息确认单》后开具，已抵扣的“暂依《确认单》所列增值税税额从当期进项税额中转出”［C-TX3］；可“全额或部分开具红字数电发票”［C-TX4］；已用于出口退税的，“需操作进货凭证信息回退并确认通过后”再红冲［C-TX5］。",
+      "decisionText": "（1）新增 Context Map 关系 CNX→STL（OHS，`PurchaseInvoiceRef v1`：发票、红蓝关系、匹配的承诺行与金额，无锁查询）。STL 在读取应付与确认采购结算单时显示 `invoice_reversed` 标记，由读取派生，不另写状态。（2）应付金额只在两种情况下变化：交付更正（PUR，数量变化）；或 STL 新的人工命令 `payable_adjustment.request`／`payable_adjustment.confirm`（价格折让或少开，引用红字发票，确认独立于申请人，对采购侧作贷项，比照 STL-INV-008）。（3）只换票（红冲后重开同额蓝票）不影响应付。不设事件消费方：应付的变化须人工判断原因。（4）CNX 侧按现行数电票规定修正 C3b 的两点。部分红冲：按红票金额冲减蓝票，蓝票余额仍可用于退税分配，不再整张冲回。被冲蓝票已分配到已提交（submitted 或之后）的退税案件时，红票核实前须先登记“进货凭证信息回退”的外部结果（附证据），否则核实被拒（INVALID_STATE）。",
+      "reason": "参照系统中供应商贷项是一张单独的发票校验凭证，冲减应付，收货不变。Brant 照此把“发票事实”和“应付调整”分开，红票只是触发复核的信号。数电票规定允许全额或部分红冲，用于出口退税的发票须先回退进货凭证信息再红冲，所以 CNX 的“部分红冲按全额冲回”与“直接核实红票”都要改。",
+      "alternative": "消费 purchase_invoice_verified.v1 自动调整应付（红票原因多样，自动调整会出错）；不建关系（应付侧看不到红票）。",
+      "impact": "设计源：Context Map 新关系 CNX→STL 与契约；STL 命令与事实 `PayableAdjustmentConfirmed`；人工专属清单；岗位模板（treasury 申请、credit_manager 确认，或按 R0 定）；SM-CNX-INVOICE（部分红冲、回退前置条件）；CN-AT05 断言。代码：CNX `api`（PurchaseInvoiceRef v1 查找）、`invoice.go`（部分红冲余额、回退前置）；STL `settlement.go`、`settlement_queries.go`、新的 payable adjustment 文件，迁移。测试：CN-AT05 红冲后应付显示 invoice_reversed；部分红冲后蓝票余额可分配；已申报案件的蓝票未回退时红票核实被拒；折让确认后应付减少；申请人自确认被拒。",
+      "realOwner": "",
+      "s5Change": "R10"
+    },
+    {
+      "id": "SR-59",
+      "subject": "S5R-D21",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "交易档案的许可付款人与 fund.verify_payer；发票主体不符直接拒绝",
+      "conditions": [
+        "B0 前须真实负责人确认（外汇合规）：第三方付款（许可付款人、付款人核实）的外汇合规依据与留存要求"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "第三方付款人与主体不一致的“获准模式复核”",
+      "signers": [
+        "R-CA",
+        "R-STL",
+        "R-CNX",
+        "R-TAX"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人＋合规负责人（外汇）＋税务负责人（发票）",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R2、R7",
+      "sources": [
+        "C-FX1",
+        "C-FX2",
+        "C-FX3",
+        "F-OA",
+        "S-AP1"
+      ],
+      "question": "付款人不是客户时，资金记录停在 PARTY_ENTITY_MISMATCH 待核，没有核实第三方付款依据的命令（CN-AT08）；CNX 购进发票受票主体不一致时，“获准模式复核”也没有命令（负责人问题第 18 行后半；B2a 6、C3b 9）。",
+      "sap": "“If payments are not to be made by the customer that owes the receivable in question, specify an alternative payer in the customer master record”，单据中的替代付款人优先于主数据［S-AP1］。客户侧“许可付款人清单”：未证实。",
+      "futong": "收款认领到“认领客户”与合同、发票［F-OA］；付款有“是否代垫”“代垫单位”（付款侧）［F-OA］；第三方代客户付款：无公开资料。",
+      "rules": "出口收汇核销自 2012 年 8 月 1 日取消［C-FX1］；“谁出口谁收汇”原则，符合规定的收付汇单位与进出口单位不一致时可报告并办理主体变更，银行与企业留存交易单证 5 年备查［C-FX2］；外汇局问答列出允许不一致的情形［C-FX3］。普通出口由无关境外第三方付款的一般许可：未证实。增值税专用发票购买方信息不符只能重开（推断，依增值税发票规定）。",
+      "decisionText": "（1）STL：PTY 交易档案（TradingProfile）加“许可付款人”清单（PartyRef，经档案发布）。来自许可付款人的收款不再是主体不一致。临时的第三方付款，用新的人工命令 `fund.verify_payer` 核实：信用经理执行，独立于资金登记人，附付款委托书或三方协议等证据；核实后该笔资金可核销到客户的应收。（2）CNX：购进发票的受票主体与本公司不一致时直接拒绝，不设获准模式：增值税专用发票的购买方信息必须一致，供应商须重开。PARTY_ENTITY_MISMATCH 的 note 去掉 CNX 的“待获准模式复核”。",
+      "reason": "参照系统用客户主数据中的许可付款人或替代付款人处理第三方付款；中国的外汇管理允许有真实交易背景的第三方付款，但要求留存证明材料。发票主体错误按增值税规定只能重开。",
+      "alternative": "一律拒绝第三方付款（不符合实际，CN-AT08 本来就要求可核实）；发票主体不一致也允许人工放行（违反增值税规定）。",
+      "impact": "设计源：UL PTY-TradingProfile；STL 命令 `fund.verify_payer` 与事实；STL-INV-002 或 006 加第三方付款条件；错误码 PARTY_ENTITY_MISMATCH 的 note；CN-AT08 用例。代码：PTY `profiles.go`（档案字段，omitempty）；STL `fund.go`（许可付款人判断、核实命令）；R43 读取 TradingProfileRef。测试：许可付款人的收款可核销；临时第三方付款核实后可核销；登记人自核实被拒；CNX 主体不一致被拒。",
+      "realOwner": "外汇合规",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-60",
+      "subject": "S5R-D22",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "期初可开贷项；新增 fund.reverse；跨币种敞口用 credit 汇率",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "期初：贷项、资金冲销、跨币种敞口与历史政策",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R7、R8",
+      "sources": [
+        "S-MG1",
+        "S-MG2"
+      ],
+      "question": "期初应收不能开贷项；期初资金记录不能冲销（STL 根本没有资金冲销）；期初应收币种与额度币种不同时 credit.reserve 答 FX_SCOPE_MISMATCH；POL 没有“追溯录入的历史政策修订”（负责人问题第 19 行；C10）。",
+      "sap": "迁移只带余额与未清项（“no documents will be migrated. Only balances and open items will be taken over”），迁移对象只能新建不能更新［S-MG1］；迁移的凭证可在清账应用中清账［S-MG2］。对迁移未清项开贷项或冲销：未证实。推断：迁移项就是普通会计未清项，按常规清账、贷记。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "（1）贷项可开在期初结算单上：订单绑定改为可选，期初结算单的贷项不进经营结果，只冲减期初应收。（2）新增 `fund.reverse`（人工专属，独立于资金登记人，须无有效核销，答 FUND_RECORD_HAS_APPLICATIONS），适用于全部资金记录，包括期初；SM-STL-FUND 加终态 reversed。原记录保留，冲销后银行流水键可再次使用。（3）敞口中不同币种的应收（含期初）按 POL fx_rate 中用途为 credit 的汇率折算（STL-INV-004 已写明）；缺这一汇率时仍答 FX_SCOPE_MISMATCH。B2b 用订单占用比例折算的做法改为同一规则。（4）不引入“追溯录入的历史政策修订”：期初案件按 C10 的规则绑定有效期包含出口日期的修订，S5R-D23 把这一规则推广到全部案件。",
+      "reason": "参照系统中迁移的未清项与正常未清项一样，可以贷记、冲销和清账。期初数据必然有错，没有冲销就只能留下错账。用 credit 用途汇率统一折算，符合已接受的不变量。",
+      "alternative": "期初项只能整体冲销再录（C10 现状，贷项无法表达部分折让）；按占用比例折算（期初应收没有占用）。",
+      "impact": "设计源：STL-INV-008（贷项可无订单）、STL-INV-012、SM-STL-FUND、STL-INV-004 的敞口折算说明；人工专属清单加 fund.reverse；错误码 FUND_RECORD_HAS_APPLICATIONS。代码：STL `creditnote.go`、`opening.go`、`fund.go`、`limit.go`、`reservation.go`（敞口折算），迁移。测试：期初应收开贷项；期初预收冲销后可重录；跨币种期初应收按 credit 汇率计入敞口；缺汇率时 FX_SCOPE_MISMATCH。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-61",
+      "subject": "S5R-D23",
+      "role": "R-CA",
+      "decision": "ACCEPTED_WITH_CONDITIONS",
+      "outcome": "退税案件按出口日期所在有效期绑定政策；POL 新增 ConfigAt v1",
+      "conditions": [
+        "S5 实现待改（R10）：C3b 取“出口时已发布”的政策修订，与“以出口日期界定”不符：绑定有效期包含出口日期的修订（ConfigAt v1）"
+      ],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "出口退税政策修订按出口日期所在的有效期适用",
+      "signers": [
+        "R-CA",
+        "R-TAX"
+      ],
+      "signersText": "首席架构师（新契约）＋税务负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R2、R10",
+      "sources": [
+        "C-TX1",
+        "C-TX2",
+        "F-OA"
+      ],
+      "question": "C3b 取“出口日期当时已发布”的修订，所以在出口之后才发布的修订永远不适用于已出口批次，政策必须在海关放行前录入 POL（负责人问题第 20 行第 1、3 点；CN-AT12）。ConfigGuard v1 只判定“当前”，R50 的守卫锁不能表达“某时点有效的修订”（Context Map 缺口第 7 行）。C10 的期初案件已经改用“有效期包含出口日期”。",
+      "sap": "无公开资料（无中国退税标准功能）。",
+      "futong": "退税率存于订单、产品与开票行［F-OA］；以哪个日期确定退税率：无公开资料。",
+      "rules": "财税〔2012〕39 号：退税率调整的“执行时间以货物……出口货物报关单（出口退税专用）上注明的出口日期为准”［C-TX1］；财政部 税务总局公告 2024 年第 15 号：“本公告所列产品适用的出口退税率以出口货物报关单注明的出口日期界定”［C-TX2］。",
+      "decisionText": "退税案件绑定“有效期（valid_from 至 valid_until）包含出口日期”的 export_tax_policy 修订，与发布时间无关；有几条重叠时取最晚发布的一条。POL 发布新的查询契约 `ConfigAt v1`（某种配置在时点 T 有效的修订，含已被取代的修订；不加锁，因为修订不可变），列入 R50。案件在 `planned`（拟申报）之前，若出现更晚发布、同样覆盖出口日期的修订，读取会显示 `policy_superseded`，由税务专员重新绑定（新命令或 allocate 的参数，R0 定名）；planned 之后不变。",
+      "reason": "适用税率由法规以出口日期确定，不由录入时间确定。录入滞后或政策追溯调整都是常见情形，系统不应因此拒绝正确的政策。",
+      "alternative": "维持“出口时已发布”（迫使运营抢在放行前录入，录入晚了就永久错误）；引入追溯修订的特殊标记（C10 的有效期规则已足够）。",
+      "impact": "设计源：Context Map R50 契约加 ConfigAt v1；CNX-INV（退税）与 CN-R08、CN-R09 的说明；CN-AT12 的断言改为“按有效期”。代码：POL `internal/contexts/pol/api`（ConfigAt 查询与 SQL 函数，POL 迁移）；CNX `taxrefund.go`（绑定规则，替换 `ResolveConfigs(ref, exportDate)`，与 `opening.go` 的 `taxrefund.ValidAt` 合一）。测试：出口后发布、有效期覆盖出口日期的修订被采用；planned 之后不再变化；有效期不覆盖时 CONFIG_NOT_ACTIVE。",
+      "realOwner": "",
+      "s5Change": "R10"
+    },
+    {
+      "id": "SR-62",
+      "subject": "S5R-D24",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "费用承担随 Incoterm；F 组术语下主运费不计我方成本",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "FCA／FOB 下买方指定货代的运费是否计入我方直接费用",
+      "signers": [
+        "R-CA",
+        "R-BOP",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋运营负责人＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前（文字与 BRC-001 数据）；代码校验 later（R1 前）",
+      "units": "R0、R8",
+      "sources": [
+        "F-OA",
+        "I-5",
+        "S-PR1"
+      ],
+      "question": "D1 的链在 FCA 下仍把买方指定货代的运费（60.00）记为我方直接费用，因为报价成本（660.00）含运费（ES-01）；档案的 FCA 文字与此不符（负责人问题第 20 行第 2 点）。",
+      "sap": "运费可用基于 Incoterms 的条件类型转给客户（如 KF00）［S-PR1］；F 组术语下主运费是否为卖方成本条件：无公开资料。",
+      "futong": "盈亏汇总列“国际运费”“国际保费”“国内费用合计”［F-OA］；FCA／FOB 下买方指定货代时运费是否计入：无公开资料。",
+      "rules": "ICC：FOB 适用于“the buyer is responsible for contracting and paying the carrier”，FCA 例中“the buyer bearing all transportation costs”，两者商业发票“will only cover the cost of goods and any export clearance and documentation costs”［I-5］。",
+      "decisionText": "费用的承担由订单绑定的 Incoterm 决定。FCA、FOB（以及 EXW）下，主运费由买方承担，不进入我方报价成本，也不计入订单直接费用；交货前的费用（产地内陆运输、出口清关、FOB 的装船前费用）由我方承担并计入。STL `charge.record` 加 `cost_component`（pre_carriage、export_clearance、main_carriage、insurance、other）。main_carriage 在 FCA、FOB、EXW 订单上被拒，除非标为 `recharged`（我方代垫、向买方收回，不进经营结果的费用，作为应收的附加项另行处理，R1）。BRC-001 的 60.00 重新归类为 pre_carriage，或改用 CIF 样例；由 R0 选定，并在 ES-01 写明。",
+      "reason": "Incoterms 2020 明确，FCA、FOB 下卖方只承担交货给承运人之前的费用。经营结果是管理口径，把买方的运费算成我方成本会低估毛利。",
+      "alternative": "保持现状（费用口径与贸易术语不符）；完全不校验（错误要到利润分析时才被发现）。",
+      "impact": "设计源：基线 4.5 的费用口径、ES-01 与 BRC-001 链的数据说明；CST 的报价成本组件说明（FCA 不含主运费）。代码：STL `charges.go`（成本组件与 Incoterm 核对；经 TRD 的订单事实读取 Incoterm，依赖 S5R-D35 的封存）。测试：FCA 订单记录主运费被拒；pre_carriage 计入。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-63",
+      "subject": "S5R-D25",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "documentation 模板加 number.issue（沿用 S5-D34）",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "单证岗位取号（number.issue）",
+      "signers": [
+        "R-CA",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R1",
+      "sources": [
+        "S-NR1",
+        "S-NR2"
+      ],
+      "question": "documentation 模板没有 number.issue，商业发票与装箱单须由单证员以本人身份取号（POL NumberIssue v1 以操作者身份执行），测试另行授权；另一做法是由 POL 代表上下文取号（岗位模板缺口第 1 行；C2、C6、D1）。",
+      "sap": "开票号段只能内部分配，取号由系统按单据类型完成［S-NR1］；S_NUMBER 是维护号段或改当前号的授权，显示不需授权［S-NR2］。推断：取号不需要用户授权。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "documentation 模板加 number.issue，与 S5-D34 给采购加 number.issue 一致。编号仍是正式化命令（`shipment_document.prepare` 首次准备时）的内部效果，操作者须同时持有该命令和 number.issue。AI 身份不持有 number.issue：将来若开放 AI 准备出运单证，在那时的 AI 模板里一并决定。",
+      "reason": "负责人已在 S5-D34 选择“岗位持有取号权限”，本册不重开。这里只是把同一规则推广到单证岗位，避免两个岗位两套规则。SAP 的做法更接近被放弃的方案：号段由系统按单据类型在内部分配，用户无需取号授权（S_NUMBER 只管号段维护）。因此本册把这一点列为与 SAP 不同之处，并建议负责人在下一次审视 S5-D34 时考虑“取号是正式化命令的内部效果”。",
+      "alternative": "由 POL 代上下文取号（与 S5-D34 的选择相反；会改变 TRD、PUR 已实现的取号方式）。",
+      "impact": "设计源：岗位模板 documentation。代码：`roles_gen.go` 重生成；D1、D2a、D2b、C2、C6 测试中给 doc.1 另授 number.issue 的夹具删除。测试：只持 documentation 模板的单证员可签发商业发票与装箱单。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-64",
+      "subject": "S5R-D26",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "资金、信用、税务、合规岗位加证据登记权限",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "证据登记权限（source.register、file.register）",
+      "signers": [
+        "R-CA",
+        "R-STL",
+        "R-TAX",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人＋税务负责人＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R1",
+      "sources": [],
+      "question": "treasury、credit_manager、credit_officer、tax_specialist 没有 source.register（tax_specialist 也没有 file.register），compliance 没有 source.register。依据银行水单、账单、发票与税务文书作决定的人，不能登记这些证据；D2a 的 CN-AT10 由 admin 登记税务局文书（岗位模板缺口第 2 行）。",
+      "sap": "无公开资料。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "给 treasury、credit_manager、credit_officer、tax_specialist、compliance 加 source.register 与 file.register（compliance 已有 file.register 的不重复加）。登记证据不是决定权，职责分离仍由各命令的独立性规则保证，例如资金差额的批准独立于资金登记人。",
+      "reason": "证据登记是作决定的前提。让别的岗位代为登记，反而模糊了“谁提供了证据”的审计线索。",
+      "alternative": "维持现状，由单证或管理员代登记（审计线索失真，管理员不应接触业务证据）。",
+      "impact": "设计源：岗位模板五个模板。代码：`roles_gen.go`；D1、D2a、D2b 中代登记的步骤改为本人登记。测试：资金人员登记水单并用于 fund.record。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-65",
+      "subject": "S5R-D27",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "order.activate 留在销售经办",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "订单生效（order.activate）由谁执行",
+      "signers": [
+        "R-CA",
+        "R-BOP"
+      ],
+      "signersText": "首席架构师＋运营负责人",
+      "evidence": "E0",
+      "priority": "G2 前（TRD 属 P0，S4 的 AI 路径要据此走审批凭证）",
+      "units": "R0",
+      "sources": [
+        "F-N1",
+        "F-P",
+        "S-CM6"
+      ],
+      "question": "order.activate 在销售经办模板，计划 §5 写订单审核人（岗位模板缺口第 4 行；D1 偏差 4）。",
+      "sap": "无直接对应：SAP 销售订单没有单独的“生效”命令；信用冻结由信用人员放行，放行后后续单据照常处理［S-CM6］。推断：执行与放行分属不同角色。",
+      "futong": "订单支持“编制、审批、打印、盈亏测算”，可设审批路线，“只有审批通过后，才允许打印、发邮件等方式输出报价单”［F-N1］［F-P］；审批通过后的执行人：无公开资料。",
+      "rules": "",
+      "decisionText": "保持在销售经办：审核是控制（order.review.decide，独立于准备人），生效是控制通过后的执行。生效命令自身要求有效的独立批准、信用占用与合规 clear，所以由谁按下按钮不影响控制。计划文字按实现改。",
+      "reason": "控制点在审核决定与守卫，不在执行人。把生效交给审核人，审核人就成了执行者，反而削弱编制与审核的分离（TRD 的禁止组合 sales_clerk＋order_reviewer）。",
+      "alternative": "交给订单审核人。",
+      "impact": "设计源：无（模板已如此）；S5R 报告注明计划 §5 的偏差。代码：无。测试：无。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-66",
+      "subject": "S5R-D28",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "商业放行例外独立于评估人；证书登记不加独立性",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "商业放行例外与证书登记的独立性",
+      "signers": [
+        "R-CA",
+        "R-STL",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R1、R6",
+      "sources": [
+        "F-P",
+        "S-CM7",
+        "S-CM9"
+      ],
+      "question": "commercial_release.grant_exception 与 certificate.register 没有独立性规则；quality_release.grant 不加独立性已由负责人决定（S5-D34）（岗位模板缺口第 6 行）。",
+      "sap": "订单录入与信用放行的职责分离靠角色设计与审计核对（第三方审计模板核对 VA01／VA02 与 VKM1 的授权冲突）［S-CM9］，系统内置“放行人不得为申请人”的规则：未证实；FSCM 信用额度申请可设多级审批与四眼原则［S-CM7］。",
+      "futong": "审批流可按部门、岗位设多个子流程［F-P］；职责分离规则：无公开资料。",
+      "rules": "",
+      "decisionText": "（1）`commercial_release.grant_exception` 加独立性行：独立于该放行的评估人和订单的准备人（销售）。这个权限是 credit_manager 专属，而 sales_clerk＋credit_manager 是禁止组合，所以实际约束的是评估人。（2）`certificate.register` 不加独立性，与 S5-D34 对质量放行的处理一致：证书是外部签发的结果，登记的差错由单证套核对（FUL-INV-004）与资料包核对（document_bundle.check）发现。",
+      "reason": "例外是“先放后收”的风险决定，评估人不能自己批例外。证书登记是记录外部事实，第二人复核的收益低于成本。",
+      "alternative": "证书登记也要求独立核实（每张证书多一个人工步骤）。",
+      "impact": "设计源：岗位模板 independence 加一行 `commercial_release.grant_exception`。代码：FUL `release.go` 的例外检查（评估人与当前操作者比较）。测试：评估人自批例外被拒（INDEPENDENT_REVIEW_REQUIRED）。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-67",
+      "subject": "S5R-D29",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "evaluate 只接受 human、ai；两个复核的 open 权限只给系统",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "系统操作者：商业放行评估与复核的开启",
+      "signers": [
+        "R-CA"
+      ],
+      "signersText": "首席架构师",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R1、R6",
+      "sources": [
+        "S-CM8"
+      ],
+      "question": "SM-FUL-RELEASE 的 evaluate 允许 system，但 D-18 没有这样的系统消费方，系统操作者也没有授权；shipment_review.open 与 allocation_review.open 在跟单、采购模板中，实际只有系统使用（岗位模板缺口第 7、8 行）。",
+      "sap": "信用冻结的单据“can only be manually released, not automatically”（公有云 KBA）［S-CM8］。",
+      "futong": "不适用。",
+      "rules": "",
+      "decisionText": "（1）`commercial_release.evaluate` 的 actor 改为 human|ai。B0 不设系统重评估；STL 核销或 QLT 放行后，由单证员（或其 AI 助手）重新评估。将来若加消费方，再在 D-18 列出并授权。（2）shipment_review.open、allocation_review.open 从跟单、采购模板移除，只授予系统消费方 `system:inbox.ful.*`、`system:inbox.pur.*`。漏处理的事件经死信重放（dead_letter.replay）补救。payment_plan_review.open 仍保留在 treasury，与 S5R-D02 的补建理由相同。",
+      "reason": "模板里出现人用不到的权限会误导开通。系统重评估在 B0 的数量级上没有必要。",
+      "alternative": "加一个 FUL 消费方，在 Applied 或 QualityReleased 时自动重评估（会增加一条事件链和与人工评估的竞争）。",
+      "impact": "设计源：SM-FUL-RELEASE 的 actor；岗位模板 merchandiser、purchaser。代码：`roles_gen.go`；FUL evaluate 的 actor 检查（若代码允许 system 则收紧）。测试：system 调用 evaluate 被拒；模板不再含两个 open 权限。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-68",
+      "subject": "S5R-D30",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "信用、退税、合规配置按种类授权发布；审批层级须对应岗位模板",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "POL 配置按种类发布，审批层级须对应岗位模板",
+      "signers": [
+        "R-CA",
+        "R-STL",
+        "R-TAX",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人＋税务负责人＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R1、R2",
+      "sources": [
+        "F-CRM",
+        "S-CM7"
+      ],
+      "question": "POL 的发布权限按命令而不按配置种类，任何持 config.publish 的人都能发布信用政策与出口退税政策；POL 不核对 approval_tiers 的层级是否对应岗位模板（岗位模板缺口第 9 行；A3a）。",
+      "sap": "FSCM 信用额度变更可走多级审批与四眼原则（Manage Credit Management Rules）［S-CM7］；把信用政策配置与其他配置分开授权：未证实。",
+      "futong": "“精细化组织架构与角色权限配置，实现数据严格隔离”［F-CRM］；按配置种类授权：无公开资料。",
+      "rules": "",
+      "decisionText": "（1）对三种由专业岗位负责的配置，发布另需按种类的能力权限：`config.publish.credit_policy`（credit_manager 专属）、`config.publish.export_tax_policy`（tax_specialist）、`config.publish.screening_regulation`（compliance 专属）。administrator 仍发布其余种类。独立性规则（独立于最后编辑人）不变，所以编辑人仍可以是 administrator 或 costing，发布人必须是专业岗位。（2）POL 在保存草稿与发布时校验 credit_policy 的 `approval_tiers[].level` 必须是已知岗位模板代码（credit_officer、credit_manager），未知层级答 INVALID_KNOWN_VALUE。",
+      "reason": "信用、退税、合规的参数决定风险，由专业负责人发布，这是 ES-11 热点和 CN-D02 的本意。参照系统也按对象（表或配置组）授权，而不是一把钥匙开所有配置。",
+      "alternative": "按租户自行配置授权矩阵（SAP 级的可配置性，首个客户用不到）。",
+      "impact": "设计源：岗位模板 capabilities 三行、exclusivePermissions 两行（credit_policy、screening_regulation）；POL-INV（发布）说明。代码：POL `application.go` 发布时检查种类能力（与 TRD 的毛利例外能力检查同一模式）；`config` 领域的层级校验；`roles_gen.go`。测试：administrator 发布信用政策被拒；信用经理可发布；未知层级被拒。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-69",
+      "subject": "S5R-D31",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "暂不建客户与销售经办的指派（R1 补）",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "客户与销售经办的指派",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "later（R1 前）",
+      "units": "R0",
+      "sources": [
+        "F-CRM",
+        "F-OA",
+        "S-CM7",
+        "S-PF1"
+      ],
+      "question": "没有客户与销售经办的指派，“不是该客户的销售经办”只能近似为“不是申请人，且不持销售经办模板”（岗位模板缺口第 10 行；A6 决定 6）。",
+      "sap": "伙伴功能“VE Sales Employee”“ZM Employee Responsible”把员工指派到客户［S-PF1］；信用分析员维护在客户信用段，文档化信用决定默认由其处理［S-CM7］。",
+      "futong": "客户有“业务员”，“是否公海 0:公海 1:私海”，共享类型与“业务员更换时间”，单据带“客户所属业务员”［F-OA］；“公海机制盘活客户资源”［F-CRM］。",
+      "rules": "",
+      "decisionText": "B0 不加指派，保留 A6 的近似规则，并在 STL-INV-005 写明。这个近似比“该客户的销售经办”更严：任何销售经办都不能放行信用。而 sales_clerk 与 credit_officer、credit_manager 是禁止组合，所以在模板规则下，它与精确规则的效果相同。客户归属（数据范围、业绩）在 CRM 或 PTY 的指派上线时（R1）再接入。",
+      "reason": "在单一主体、模板受限的首个客户场景里，这个近似没有漏洞；为它建指派模型，收益低。SAP（销售员伙伴功能、信用分析员）和富通天下（客户归属业务员、公海与私海）都有显式指派，所以这是有意延后，不是否定：R1 上线 CRM 归属时必须补上。",
+      "alternative": "现在就在 PTY 交易档案加 `responsible_sales`。",
+      "impact": "设计源：STL-INV-005 文字。代码：无。测试：无。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-70",
+      "subject": "S5R-D32",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "不改 ai_q01_agent；FUL 读取随将来的 AI 模板授予",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "AI 读取 FUL（ful.read）",
+      "signers": [
+        "R-CA"
+      ],
+      "signersText": "首席架构师",
+      "evidence": "E0",
+      "priority": "G2 前（与 S4 的 AI 模板一致）",
+      "units": "R0",
+      "sources": [],
+      "question": "C3a 发现 AI 代理调用 FUL 的 shipment.get 需要 ful.read（岗位模板缺口第 11 行）。",
+      "sap": "不适用（Brant 自身的 AI 授权模型）。",
+      "futong": "不适用。",
+      "rules": "",
+      "decisionText": "不改 `ai_q01_agent`（Q01 询价到订单不需要 FUL）。将来为单证或跟单场景定义 AI 模板时，读取权限随该模板的能力一起授予，读权限按任务目标最小化（AI-INV-001 默认拒绝）。",
+      "reason": "AI 的权限由委托的任务目标决定，不因为某个测试需要就扩大现有模板。",
+      "alternative": "给全部 AI 模板加全部 `<bc>.read`。",
+      "impact": "设计源：无（在 S4 的 AI 模板说明中注明）。代码：无。测试：无。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-71",
+      "subject": "S5R-D33",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "预计采购成本取 PUR 承诺行；R31 契约加 PurchaseLineRef v1",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "STL 读取 PUR 承诺作为预计采购成本",
+      "signers": [
+        "R-CA",
+        "R-STL",
+        "R-PUR"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人＋采购负责人",
+      "evidence": "E0",
+      "priority": "B0 前（文字）",
+      "units": "R0、R3",
+      "sources": [
+        "F-OA",
+        "S-CO1",
+        "S-CO2"
+      ],
+      "question": "STL 读取 PUR 承诺（预计采购成本）没有关系行；R31 的事实写“采购承诺”，契约却是 PurchaseSettlementSource v1；另一做法是由 TRD 发布封存的成本（Context Map 缺口第 2 行；C9 决定 5）。",
+      "sap": "销售订单项可作为成本与收入的承载对象，结算到获利能力段［S-CO2］，运输成本可过账到销售订单项的获利能力段［S-CO1］。以采购订单价作为销售订单预计成本：未证实。",
+      "futong": "盈亏汇总含“国内采购成本”“采购成本合计”“预计实现利润”［F-OA］。推断：订单的预计利润取采购成本数据，来源（采购合同或估价）无公开资料。",
+      "rules": "",
+      "decisionText": "采用 C9 的实现：预计采购成本取 PUR 已发出或已确认的承诺行（封存的净额），R31 的契约改为“PurchaseSettlementSource v1、PurchaseLineRef v1（订单的承诺行，经审计的查询）”。还没有承诺的订单行，预测使用订单封存的核价成本，需要 TRD 在订单事实中给出 CostMinor，随 S5R-D35 一起做；在那之前显示“未承诺”。",
+      "reason": "承诺价比报价时的核价更接近实际。参照系统的销售订单预计成本也随采购订单更新（见 SAP 栏）。",
+      "alternative": "只用 TRD 封存的成本（已下单后仍用旧价，预测失真）。",
+      "impact": "设计源：Context Map R31；STL 经营结果口径。代码：无（已实现）；TRD 订单事实加 CostMinor 随 S5R-D35。测试：已有。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-72",
+      "subject": "S5R-D34",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "参考数据登记为平台提供方，加 REF→PTY、REF→CNX，撤销全局放行",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "参考数据的 Context Map 关系",
+      "signers": [
+        "R-CA",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R1",
+      "sources": [],
+      "question": "参考数据（筛查名单、国别项目）没有 Context Map 关系，消费国别项目导入事件时，订阅检查对全部上下文放行 `idp-brant.ref`（Context Map 缺口第 4 行；C4b-CNX 决定 3）。",
+      "sap": "不适用。",
+      "futong": "不适用。",
+      "rules": "",
+      "decisionText": "在 Context Map 中把参考数据登记为平台提供方（platform provider，类似 platformCommands），新增两条关系 REF→PTY（筛查名单）与 REF→CNX（国别项目与筛查名单），模式为 OHS／Published Language，契约是名单的版本查询与导入事件。允许清单生成器为它们生成 `internal/reference/api` 的规则。订阅检查改为只对有关系的上下文放行 `idp-brant.ref`，撤销全局放行。",
+      "reason": "依赖必须显式登记，这是 Brant 的分层规则；全局放行会让任何上下文悄悄订阅参考数据。",
+      "alternative": "维持全局放行。",
+      "impact": "设计源：Context Map（参考数据条目与两条关系）；`build_archive.py` 的允许清单生成（`internal/reference/api` 规则）。代码：`internal/bootstrap/dispatch_test.go` 的 `contextMapViolations`；`tools/dependency-check/allowlist.txt` 经 `make allowlist` 重生成。测试：未登记的上下文订阅 ref 事件被拒。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-73",
+      "subject": "S5R-D35",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "TRD 发布 OrderRevisionRef v1；新修订封存 Incoterm 与地址国别",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "按修订读取 TRD：行价、条款、Incoterm 与地址国别",
+      "signers": [
+        "R-CA",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "B0 前。**与 S4 A2 高冲突，排在其后。**",
+      "units": "R0、R3、R6、R10",
+      "sources": [
+        "F-N1",
+        "F-OA",
+        "S-BL1"
+      ],
+      "question": "ActiveOrderRef v1 只给当前修订的价格，没有价格基数与折扣，所以 FUL 自存绑定修订的行价；没有按修订读取 TRD 条款的接口，FUL 单证打印当前条款（Context Map 缺口第 5 行）。另外 TRD 封存的地址没有国别，Incoterm 也未封存（战术模型“模型”行；A2、A3b）。",
+      "sap": "交货开票时数量取自交货，“the prices, however are taken from the underlying order”，由复制控制的定价类型决定重定价或原样复制［S-BL1］。推断：后续单据参照订单，已出具的单据不被订单变更改写。",
+      "futong": "订单有“变更次数”“最新变更时间”，合同可变更［F-OA］［F-N1］；单证按哪个合同版本打印：无公开资料。",
+      "rules": "",
+      "decisionText": "TRD 发布 `OrderRevisionRef v1`：按（订单、修订）读取任何已提交的修订，包括行（单价、价格基数、折扣、净额、税额）、条款、Incoterm 与版本、绑定地址及其国别。新修订封存 Incoterm 与地址国别，用 omitempty 字段，旧修订哈希不变，旧修订从绑定的 POL、PTY 修订推导并标记 `derived`。FUL 的出运准备、单证渲染与 CNX 报关改用它。FUL 自存的行价（B1b）保留为核对值。",
+      "reason": "单证与报关必须反映出运所绑定的那个修订。参照系统中，交货和开票从参照单据复制条件，后续订单变更不会改写已发生的单证。",
+      "alternative": "继续用当前修订（单证会打印出运时并不适用的条款）。",
+      "impact": "设计源：Context Map R46（TRD→CNX）、TRD→FUL 关系的契约名；TRD 封存内容（UL TRD-SalesOrder）。代码：TRD `internal/contexts/trd/api`（新查询与 SQL，或 Go 查询）、`order_snapshot.go`、`order_facts.go`、`internal/domain/orderrev`（封存字段）；FUL `document_ports.go`、`shipment.go`；CNX `ports_declarations.go`。测试：修订 1 的出运在修订 2 生效后，单证仍打印修订 1 的条款；旧修订哈希不变（黄金向量）。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-74",
+      "subject": "S5R-D36",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "R44、R77 加 ServiceRoleRef v1；服务角色种类与必填项",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "服务方角色的读取（货代、承运人、保险人、检验机构、报关行）",
+      "signers": [
+        "R-CA",
+        "R-FUL",
+        "R-OPS"
+      ],
+      "signersText": "首席架构师＋单证与物流负责人＋质量负责人",
+      "evidence": "E0",
+      "priority": "B0 前（检验机构与报关行）",
+      "units": "R0、R2、R5、R6、R10",
+      "sources": [
+        "F-OA"
+      ],
+      "question": "FUL 读取 PTY 服务方角色不在 R44（R44 只写 PartyRef）；报关代理与节点负责人没有 PTY 关系；检验机构必须是带 UN/LOCODE 航线的已确认供应商，这对检验机构来说很别扭（Context Map 缺口第 9 行；A8、C2、C3a）。",
+      "sap": "无公开资料（未检索服务方主数据的核实要求）。",
+      "futong": "订舱信息有“货代公司”“货代联系人”［F-OA］；对服务方的核实：无公开资料。",
+      "rules": "",
+      "decisionText": "R44 契约加 ServiceRoleRef v1，R77（PTY→CNX）也加，用于报关行。服务角色种类：forwarder、carrier、insurer、inspection_agency、customs_broker；只有 forwarder 与 carrier 要求航线（UN/LOCODE），其余种类只需已核实。CNX 的报关行改为读取 ServiceRoleRef，不再“按陈述记录”。节点负责人保持“操作者或 PTY 主体 ID，只校验格式”（R1 再定）。",
+      "reason": "服务方必须是经核实的主体，这是采购与单证控制的一部分；不同服务方的核实要素不同，不能都套用航线。",
+      "alternative": "维持现状（检验机构需要虚构航线，报关行未经核实）。",
+      "impact": "设计源：Context Map R44、R77；PTY ServicePartyRole 种类与必填项（UL）。代码：PTY `profiles.go` 或 service role 校验；FUL `booking.go`、`insurance.go`；QLT（检验机构解析）；CNX `declaration.go`（报关行）。测试：检验机构无航线可核实；报关行未核实被拒。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-75",
+      "subject": "S5R-D37",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "复核暂不发布事实，待 TSK 需要",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "PUR、FUL 复核是否发布事实",
+      "signers": [
+        "R-CA"
+      ],
+      "signersText": "首席架构师",
+      "evidence": "E0",
+      "priority": "later（R1 前）（或 S4 需要时）",
+      "units": "—",
+      "sources": [],
+      "question": "PUR、FUL 的复核没有事实，开启与处置不发布事件（Context Map 缺口第 11 行）。",
+      "sap": "不适用（SAP 没有对应的复核对象）。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "B0 不发布。复核经读取可见（allocation_review.get／list、shipment_review.get／list）。当 S4 的 TSK 需要以“订单变更的下游复核全部处置”为目标条件时，再加 `AllocationReviewSettled`、`ShipmentReviewSettled`、`PaymentPlanReviewSettled` 三个事实，载荷只含 ID 与版本。",
+      "reason": "事实只为有消费方的场景发布（S3-D09 的做法）。",
+      "alternative": "现在就发布（没有消费方）。",
+      "impact": "设计源：无（在 Context Map PUR、FUL、STL 的 decision 中注明“复核事实待 TSK 需要时加”）。代码：无。测试：无。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-76",
+      "subject": "S5R-D38",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "screening_regulation 加 programmes；CNX 从法规读取项目名单",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "POL screening_regulation 的国别项目名单字段",
+      "signers": [
+        "R-CA",
+        "R-CNX"
+      ],
+      "signersText": "首席架构师＋合规负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R2、R9",
+      "sources": [
+        "G-H20",
+        "G-L4"
+      ],
+      "question": "POL screening_regulation 没有国别项目名单字段，CNX 由评估输入名单，外国项目名单因此不能启用（Context Map 缺口第 13 行；A3b G1、A7 决定 1）。",
+      "sap": "GTS 的禁运与名单检查按法规（legal regulation）启用，可按国家、按“法规＋国家”及出发国与目的国组合设置［G-H20］；前端伙伴功能须映射到 GTS 伙伴功能后才参与检查［G-L4］。推断：哪些名单与项目生效是法规配置，不是每次检查的输入。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "screening_regulation 加可选字段 `programmes`（名单代码清单，与 Lists 的辖区和法律确认规则相同，ADR-BR-017；omitempty 保持旧哈希）。CNX 评估改为从绑定的法规修订读取项目名单，不再由评估输入；评估输入的 `programme_lists` 废止（过渡期内只接受与法规一致的值）。外国辖区名单的启用仍由法务确认（E-3）。",
+      "reason": "哪些名单生效是法规配置，由合规负责人发布，不应由每次评估的输入决定。",
+      "alternative": "维持评估输入（每次评估都可能漏选名单，且无法在法规层面审计）。",
+      "impact": "设计源：Context Map R50 说明；UL POL-ScreeningRegulationProfile。代码：POL `data.go`；CNX `evaluate.go`、`ports.go`。测试：法规未列的名单不参与评估；外国名单未经法律确认不能发布。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-77",
+      "subject": "S5R-D39",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "复核键（订单、修订、原因）；处置词汇写入设计；不加改绑命令",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "订单变更复核的模型：键、处置词汇与重新绑定",
+      "signers": [
+        "R-CA",
+        "R-PUR",
+        "R-FUL",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋采购负责人＋单证与物流负责人＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前（文字）",
+      "units": "R0",
+      "sources": [
+        "F-OA",
+        "S-TP1",
+        "S-TP2"
+      ],
+      "question": "复核键为（订单、修订、原因），与 D-21 的（订单、修订）不同；处置词汇没有设计；没有把已准备出运改绑到新修订的命令（战术模型修订“复核”行）。",
+      "sap": "第三方订单在采购订单建立后，销售订单的变更“will be transferred to the purchase requisition but not to the purchase order”（AFS 文档）［S-TP2］；采购订单存在时须先删除才能拒绝销售行［S-TP1］。推断：下游单据由人工逐一跟进，没有自动改写。",
+      "futong": "采购单有“订单合同变更状态”，订单有“变更次数”［F-OA］；下游复核流程：无公开资料。",
+      "rules": "",
+      "decisionText": "（1）键采用（订单、修订、原因），原因为 order_amended、order_cancelled、order_remainder_closed，理由见 C4b-PUR 决定 1。D-21 的文字随之修订，排序仍按 TRD 的 aggregate_version。（2）处置词汇按单元实现写入设计：PUR 为 `draft_voided`、`commitment_changed`、`commitment_cancelled`、`no_action`；FUL 为 `shipment_cancelled`、`replaced`、`reevaluated`、`no_action`；STL 为 `accepted`、`corrected`。每项都须理由，一次处置整个复核。（3）不加“改绑”命令：已准备的出运作废后重新准备。",
+      "reason": "订单结束事件带的是最后一次变更的修订号，没有“原因”就会漏开复核。改绑会让一张出运在两个修订之间变化，单证与放行的绑定都要重算，作废重建更简单，也更可追溯。参照系统里，交货单在订单变更后通常也是调整或删除重建，见 SAP 栏。",
+      "alternative": "一个修订一个复核、订单结束时重开或扩展（状态机更复杂）；改绑命令。",
+      "impact": "设计源：D-21 文字（S5 报告的决定行在下一版档案中注明修订）；SM-PUR-ALLOCATION-REVIEW、SM-FUL-SHIPMENT-REVIEW、SM-STL-PAYMENT-PLAN-REVIEW 的处置；WF-06 幂等键。代码：无（已实现）；契约中列出词汇。测试：已有。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-78",
+      "subject": "S5R-D40",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "PTY 加 notify 角色、订单绑定通知方；出运加最终用户",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "出运的最终用户与通知方",
+      "signers": [
+        "R-CA",
+        "R-CNX",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋合规负责人＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "B0 前（通知方）；later（R1 前）（最终用户，许可证罕见）",
+      "units": "R0、R2、R3、R6、R9",
+      "sources": [
+        "F-OA",
+        "G-L2",
+        "G-L4"
+      ],
+      "question": "FUL 的出运没有最终用户字段，CNX 不核对最终用户（许可证与报关取收货人或客户）；PTY 没有 notify 角色，订单不绑定通知方，而 FUL-INV-004 要求核对通知方（战术模型“模型”行；A2、A3b、B1a、B5、C3a）。",
+      "sap": "GTS 要求把前端单据的伙伴功能映射到 GTS，禁运的伙伴分组含“sold-to party, ship-to party, bill-to party, payer, end customer”［G-L4］；行项目可识别“the country/region of the ultimate consignee”［G-L2］。标准的通知方伙伴功能：未证实。",
+      "futong": "无公开资料（公开字段有运抵国、目的地、提单类型等，未见通知人［F-OA］）。",
+      "rules": "",
+      "decisionText": "（1）PTY 加地址角色 `notify`；订单可选绑定通知方（TRD 新修订）。FUL 单证打印并核对通知方；R44 的筛查覆盖通知方。（2）FUL 出运加可选的 `end_user_party`，由单证员陈述，附 PTY 引用。缺省时按收货人、再按客户推导（C3a 的现行规则）。CNX 的许可证分配与报关核对使用它。",
+      "reason": "通知方是提单和商业发票的常规栏位，也是筛查对象。最终用户是出口管制许可证的核对要素，应作为显式事实，而不是每次推导。",
+      "alternative": "通知方作自由文本（不能筛查）；最终用户继续推导（许可证核对依赖推导规则，不可审计）。",
+      "impact": "设计源：UL PTY 地址角色；TRD-SalesOrder 绑定；FUL-AGG-Shipment 值对象；CNX-INV-002；R44。代码：PTY（角色）；TRD（订单绑定，随 S5R-D35）；FUL `shipment.go`、单证渲染（shipment-text 模板加通知方栏位）；CNX `license.go`。测试：通知方被筛查为 blocked 时单证放行被拒；最终用户与许可证不一致时 EXPORT_LICENSE_EXPIRED（或新码）。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-79",
+      "subject": "S5R-D41",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "纯减量变更不查供应条件有效期；有未核实声明不得取消；单位须一致",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "采购承诺变更与取消的细则",
+      "signers": [
+        "R-CA",
+        "R-PUR"
+      ],
+      "signersText": "首席架构师＋采购负责人",
+      "evidence": "E0",
+      "priority": "B0 前",
+      "units": "R0、R4",
+      "sources": [
+        "F-OA",
+        "S-PO1",
+        "S-PO2"
+      ],
+      "question": "供应条件过期后的短交须重新核实供应条件（C11 决定 5）；取消时未核实的到货此后不能再核实（C11 决定 12）；单位假定承诺行与订单行一致（C9 决定 10）（战术模型“模型”行）。",
+      "sap": "已有收货的采购订单行，删除标记要等收货冲销后才能设［S-PO1］；“If the Delivery Completed indicator is set, the open purchase order quantity becomes zero”，承诺随之取消［S-PO2］。把订单量减到已收货量以下：未证实。信息记录有效期对减量变更的限制：未证实。",
+      "futong": "采购单有“终止”状态与“执行状态 1.未执行 2.执行中 9.完成 15.已终止”［F-OA］；变更与取消的规则：无公开资料。",
+      "rules": "",
+      "decisionText": "（1）只减少数量（含整行降为零）的变更不查供应条件有效期，单价沿用当前修订；增加数量或改价仍须有效的已核实供应条件。（2）承诺有未核实的交付声明（recorded）时，取消被拒（INVALID_STATE，原因 `unverified_delivery_pending`），须先核实或驳回该声明。（3）“承诺行单位 = 订单行单位”写为 PUR 不变量，B0 不支持采购单位换算。",
+      "reason": "减量不改变供应商的价格承诺，再核实供应条件只是形式。取消前处理完到货声明，才不会让已到的货在系统里消失。单位换算是 SAP 级的复杂度，首个客户的成品采购不需要。",
+      "alternative": "减量也要求有效供应条件（短交是常态，会被流程卡住）；取消时自动驳回未核实声明（丢失事实）。",
+      "impact": "设计源：PUR-INV-009／011 的变更说明；SM-PUR-COMMITMENT 取消的守卫；新增 PUR 不变量（单位）。代码：PUR `change.go`、`commitment.go`（取消守卫）、`prepare.go`（单位检查）。测试：供应条件过期后短交变更可批准与应用；有未核实声明时取消被拒；单位不同的草稿被拒。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-80",
+      "subject": "S5R-D42",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "有沉没成本的取消订单可关闭为 cancelled 经营结果",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "已取消订单的经营结果",
+      "signers": [
+        "R-CA",
+        "R-STL",
+        "R-BOP"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人＋运营负责人",
+      "evidence": "E0",
+      "priority": "later（R1 前）（或随 S5R-D05 提前到 B0 前）",
+      "units": "R0、R8",
+      "sources": [],
+      "question": "C9 规定已取消的订单从不结算经营结果（STL-INV-011 只认完成或短交关闭）；有沉没费用（样品费、已付运费、S5R-D05 的 write_off）的取消订单没有归宿（战术模型“模型”行）。",
+      "sap": "已发生成本在取消或拒绝的销售订单上如何处理：未证实（只读到结果分析为被拒行计提准备金的 KBA 症状，无结论）。",
+      "futong": "取消订单已发生费用的处理：无公开资料。",
+      "rules": "",
+      "decisionText": "已取消的订单若有已确认费用或获批的 write_off 处置，经营结果可以关闭为 `settled` 并带标记 `cancelled`：收入为零，成本为沉没成本，关闭条件是费用确认与处置完成。没有任何费用的取消订单不生成经营结果。STL-INV-011 照此扩展。",
+      "reason": "沉没成本必须有归属，否则管理报表会漏掉取消订单的损失。",
+      "alternative": "维持“从不结算”。",
+      "impact": "设计源：STL-INV-011；SM-STL-ORDER-RESULT 注明 cancelled 标记。代码：STL `results.go`（关闭条件分支）。测试：取消订单有运费时可关闭为 cancelled；无费用时没有结果。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-81",
+      "subject": "S5R-D43",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "Context Map 加 queries 与读取目录；战术模型登记事件载荷",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "读取命令与事件载荷的登记位置",
+      "signers": [
+        "R-CA"
+      ],
+      "signersText": "首席架构师",
+      "evidence": "E0",
+      "priority": "G2 前（S4 E2 也要登记 TSK、AI 的读取，宜先定位置）",
+      "units": "R0",
+      "sources": [],
+      "question": "目录补录中的大量缺口是读取（`*.get`／`*.list`）与事件载荷，档案没有登记它们的位置：命令目录只收命令，POL 的计算查询以“（查询）”后缀放在 commands 中；战术原则写“载荷只含 ID 与版本”，而 QLT、CST、TRD、B5、C5 的事件都带业务值（目录补录表；A2、A4、A8、B1a、C5）。",
+      "sap": "不适用。",
+      "futong": "不适用。",
+      "rules": "",
+      "decisionText": "（1）Context Map 每个上下文加 `queries` 数组（读取名、权限 `<bc>.read`、HTTP 路由、是否审计）。`build_archive.py` 生成 `06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/06_Query_Catalog_V0.1.csv`；POL 的“（查询）”条目迁入 queries。（2）战术模型每个聚合加 `eventPayloads`（事件 → 字段清单）。sharedEventEnvelope 的原则改为“载荷含 ID、版本，以及登记的业务值（数量、金额、期限）；不含个人信息与文件内容”。（3）R0 按第 2 节和各单元报告填入 S5 的全部读取与载荷。",
+      "reason": "读取是对外契约（OpenAPI 已有），档案应可查；载荷携带业务值已成事实，原则应如实描述，而不是每个单元各自报告“超出原则”。",
+      "alternative": "继续不登记（每个阶段都会重复报告同样的缺口）。",
+      "impact": "设计源：Context Map 结构、战术模型结构、`build_archive.py`（新 CSV、校验 queries 名与 OpenAPI 路由一致）。代码：无（可选：`tools/openapigen` 输出读取清单供核对）。测试：档案构建校验。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-82",
+      "subject": "S5R-D44",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "不加 TRD 读取已核销资金；WF-06 文字改",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "TRD 变更预填的付款计划影响",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前（文字）",
+      "units": "R0",
+      "sources": [],
+      "question": "TRD 没有已核销资金的无锁读取，变更预填的付款计划影响取自 CreditGuard（Context Map 缺口第 15 行；C4a 决定 7）。",
+      "sap": "不适用。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "不加新读取。预填只用于提示，付款计划的真实影响由 STL 的付款计划复核在应用后逐项列出（stage_over_applied 等）。WF-06 第 1 步的文字改为“预填 PUR、FUL 影响与 STL 的信用影响；付款核销影响由 STL 复核给出”。",
+      "reason": "再加一条 STL→TRD 的事务内读取会多一条双向依赖，只为一个提示，不值得。",
+      "alternative": "STL 发布 AppliedFunds v1 供 TRD 读取。",
+      "impact": "设计源：WF-06 第 1 步文字。代码：无。测试：无。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-83",
+      "subject": "S5R-D45",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "BT17 恢复为 MFG，期初用例另编号",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "BT17 的映射",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "B0 前（文字）",
+      "units": "R0、R12",
+      "sources": [],
+      "question": "基线 9.3 的 BT17 是外厂材料、在制品与委外加工（MFG），战术模型把 BT17 映射到期初命令（文本对齐表第 5 行；C10 决定 11）。",
+      "sap": "不适用。",
+      "futong": "不适用。",
+      "rules": "",
+      "decisionText": "基线是来源，战术模型改：testCatalog 中现 BT17 一行改编号为“CN-AT16（期初）”的配套用例，或新编 STL-OB-01，由 R0 选不冲突的编号；BT17 恢复为 MFG 用例，状态 CONDITIONAL（F23、F24 条件能力）。",
+      "reason": "编号必须指向基线原意，否则验收矩阵会把期初测试计作外协加工的覆盖。",
+      "alternative": "改基线（基线是外部来源，不随实现改）。",
+      "impact": "设计源：战术模型 testCatalog；验收 CSV（生成）；S5 报告引用 BT17 的地方在下一版注明。代码：测试名或注释中的 BT17 引用改为新编号（STL `opening` 测试、CNX `opening` 测试、D2b）。测试：无新增。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-84",
+      "subject": "S5R-D46",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "日历日；贷项拆税（R1）；迁移窗口接受；更正交付冲销重结",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "结算细则：工作日阶段、贷项税额、修订迁移窗口、更正交付的再结算",
+      "signers": [
+        "R-CA",
+        "R-STL"
+      ],
+      "signersText": "首席架构师＋资金／信用负责人",
+      "evidence": "E0",
+      "priority": "（1）（3）（4）B0 前（文字）；（2）later（R1 前）",
+      "units": "R0、R8",
+      "sources": [
+        "F-OA",
+        "S-PT1",
+        "S-PT2"
+      ],
+      "question": "结算单不随缩小的计划重拆，不支持工作日阶段（B2b）；贷项不拆税（C8）；TRD 应用与 STL 迁移之间的窗口答 revision_mismatch（C4b-STL）；已结算的交付行被更正后不能再结算（B2b 决定 8）（战术模型“模型”行）。",
+      "sap": "分期付款条件由多个付款条件组成，百分比合计 100 %，基准日可取过账、凭证或录入日期［S-PT1］；按工厂日历计算到期日在 FI-AR 中不起作用（KBA 症状）［S-PT2］。推断：FI-AR 付款条件按日历日。",
+      "futong": "客户有“信用账期”［F-OA］；按工作日计算：无公开资料。",
+      "rules": "",
+      "decisionText": "（1）付款阶段只按日历日计算，不支持工作日。（2）贷项在结算单带税额时按净额与税额比例拆分（HALF_UP，各自一次），B0 的出口样例不含税，所以不影响 B0，R1 前做。（3）窗口接受为最终一致：守卫答 revision_mismatch，核销答 REFERENCE_STALE，由 S5R-D07 的延迟目标限制窗口长度；运行手册写明“稍后重试”。（4）交付更正后的差额：先用 settlement.reverse 冲销原采购结算单，再按更正后的交付重新结算（C8 已有冲销）。不加“补差结算单”。",
+      "reason": "参照系统的付款条件以日历日为基础。贷项拆税是会计细节，对出口零税率业务没有影响。冲销重结是已有路径。",
+      "alternative": "工作日日历（需要节假日日历，首个客户用不到）；补差结算单（两条路径做同一件事）。",
+      "impact": "设计源：STL-INV-008（税额拆分）、基线 4.12 说明。代码：R1 前 STL `creditnote.go` 拆税。测试：含税结算单的贷项拆税（R1）。",
+      "realOwner": "",
+      "s5Change": ""
+    },
+    {
+      "id": "SR-85",
+      "subject": "S5R-D47",
+      "role": "R-CA",
+      "decision": "ACCEPTED",
+      "outcome": "CAT 加草稿丢弃；不加撤回，证书以更正修订截止有效期",
+      "conditions": [],
+      "round": "S5R",
+      "date": "2026-11-13",
+      "title": "缺少的撤回与终态：CAT 申报档案、CNX 证书",
+      "signers": [
+        "R-CA",
+        "R-CNX",
+        "R-FUL"
+      ],
+      "signersText": "首席架构师＋合规负责人＋单证与物流负责人",
+      "evidence": "E0",
+      "priority": "later（R1 前）（CAT 丢弃）；B0 前（证书更正说明）",
+      "units": "R0",
+      "sources": [
+        "S-QM1"
+      ],
+      "question": "SM-CAT-DECLARATION 没有撤回与草稿丢弃（A5）；CertificateResult 没有撤回（C5）（战术模型“状态机”行）。",
+      "sap": "QM 使用决策不能撤销，只能重新打开更正［S-QM1］。申报档案与证书的撤回：无公开资料。",
+      "futong": "无公开资料。",
+      "rules": "",
+      "decisionText": "（1）CAT：加 `declaration_profile.discard_draft`（draft → discarded，编辑人或专业人工）。不加“撤回已核实档案”：错误的档案只能由核实一份更正修订来取代，因为撤回而无替代会让依赖它的 CNX 评估和报关失去依据。（2）CNX 证书：不加撤回命令。机关撤销证书时，登记一条更正修订，把有效期截止到撤销日（C5 已支持），并要求附撤销证据。",
+      "reason": "取代比撤回更安全，下游始终有一个可用或明确过期的修订。",
+      "alternative": "加撤回状态（下游要处理“无档案”的新情形）。",
+      "impact": "设计源：SM-CAT-DECLARATION 加 discarded；CNX 证书的更正说明。代码：CAT 草稿丢弃命令；CNX 无。测试：草稿丢弃；证书更正为撤销日后，FUL 签发时（S5R-D12）报差异。",
+      "realOwner": "",
+      "s5Change": ""
     }
   ],
   "contextSignoffs": [
@@ -537,5 +2160,537 @@
   "gateOutcome": {
     "G0": "NO-GO（真实客户证据）；模拟走查完成",
     "G1": "NO-GO：设计与 ADR 已模拟签核；仍缺远程 CI 与主干保护（C04、C05、C06、C09）、OIDC（C10）、Outbox 死信实现（C13）、AI 红队（C11）"
-  }
+  },
+  "rounds": [
+    {
+      "id": "SR",
+      "date": "2026-11-10",
+      "records": "SR-01—SR-38",
+      "subject": "全部 ADR 与继承待决项、18 个上下文签核",
+      "status": "SIMULATED — AI 按角色模拟首席架构师与领域负责人的评审，证据层级 E0；不是真人签核，第 08 章签核记录不据此填写",
+      "method": "由 AI 依次扮演各角色，依据本档案、SAP 标准流程公开资料与中国外贸通行做法，对每项 ADR 与待决项、每个上下文给出接受、附条件接受或暂缓的结论；属于产品决定的直接裁决，取决于具体客户的法律与税务事实改为租户配置并由客户确认；需要真实证据的事项（真实客户样例、远程 CI、OIDC）不能由模拟评审满足。",
+      "inputs": [
+        "02–06 阶段模型与契约",
+        "04 阶段 SAP 标准流程参照",
+        "04 阶段模拟 G0 走查（SIM-01—03）",
+        "10 阶段 M0 本机实测证据"
+      ]
+    },
+    {
+      "id": "S5R",
+      "date": "2026-11-13",
+      "records": "SR-39—SR-85",
+      "subject": "S5 的待决问题与设计缺口：47 项决定 S5R-D01—S5R-D47",
+      "status": "SIMULATED — AI 模拟首席架构师与各领域负责人签核，证据层级 E0；不是任何真人或专业角色的签核。凡涉及真实数值、法规适用或法律判断之处，B0 前仍须真实负责人确认（见 realOwnerItems）。",
+      "instruction": "负责人 2026-11-13 要求以 SAP 与富通天下为参照裁决 S5 的待决问题与设计缺口，作为首席架构师与各领域负责人的模拟签核（2026-11-10 的常设指示：“我们是软件产品公司，需要你模拟首席架构师和各领域负责人签核……”）；主导者 2026-11-13 采纳全部 47 项为模拟决定（E0）。设计源由 S5R 单元 R0 修订（只改档案来源），实现由 R1—R12 承担（09 阶段 WBS S5R-01—S5R-12）。",
+      "method": "参照 SAP S/4HANA（SD、MM、LE、FI-AR／AP、FSCM 信用管理、QM）、SAP GTS 与富通天下的公开资料作出；SAP 只是流程覆盖与控制点的参照，不照搬；中国本地流程（退税、单一窗口报关、增值税发票、收汇）按中国法规与国内做法；Brant 的有意差异保留（不做总账与汇兑会计；AI 走与人相同的受控命令；首个客户是单一主体、购买成品的中国外贸公司，避免 SAP 级的可配置性）。每项记录问题、SAP 做法、富通天下做法、适用的中国法规或国际规则、决定、理由、未采纳的方案、影响、优先级与模拟签核角色。",
+      "inputs": [
+        "09 阶段 S5 执行报告 §09 的六张表（负责人问题、岗位模板、Context Map、战术模型、目录补录、文本对齐）",
+        "S5 各单元报告",
+        "负责人决定 S5-D01—S5-D40（不重开）",
+        "设计源：战术模型、Context Map、岗位模板、错误码目录、事件风暴模型、SAP 流程参照（核对基准 main e98e826）"
+      ],
+      "limits": "富通天下帮助中心需要登录，没有读到任何操作手册，公开资料（产品宣传、官方新闻、OpenAPI 字段）只说明“有哪些数据”，不说明流程；SAP Community 拒绝自动读取，SAP 做法来自 SAP 帮助、SAP Learning、GTS 用户指南、KBA 公开预览与少量第三方文章，未经 SAP 从业人员复核。“推断”是研究自己的读法，不是来源原话。",
+      "realOwnerItems": [
+        {
+          "decision": "S5R-D07",
+          "owner": "运维与财务",
+          "item": "中继延迟目标（P95 ≤ 5 s、P99 ≤ 30 s）、告警阈值（60 s、300 s）与分发进程数的数值"
+        },
+        {
+          "decision": "S5R-D09",
+          "owner": "运维与财务",
+          "item": "付款条件例外有效期的数值（取 credit_policy 的 decision_validity_days，现为合成值 7 天）"
+        },
+        {
+          "decision": "S5R-D14",
+          "owner": "税务专业人员",
+          "item": "退（免）税方式四类的适用条件、资料要求与案件用途（CN-D01—08 须在 B0 前冻结）"
+        },
+        {
+          "decision": "S5R-D15",
+          "owner": "法务与合规",
+          "item": "（c）国别项目、制裁名单与出口管制来源的批准（批准矩阵行保持 PENDING，E-3）"
+        },
+        {
+          "decision": "S5R-D17",
+          "owner": "法务",
+          "item": "全面禁运或制裁命中时例外依据（授权文件）的证据要求"
+        },
+        {
+          "decision": "S5R-D21",
+          "owner": "外汇合规",
+          "item": "第三方付款（许可付款人、付款人核实）的外汇合规依据与留存要求"
+        },
+        {
+          "decision": "S5-D24",
+          "owner": "资金／信用（财务）",
+          "item": "真实信用政策（额度、层级与阈值；S5 使用合成值），S5 已登记，S5R 不改变"
+        }
+      ],
+      "s5Changes": [
+        {
+          "decision": "S5R-D04",
+          "unit": "R9",
+          "change": "B5 的许可证可按额度多次分配，与两用物项出口许可证“一批一证”不符：许可证须登记使用方式（single_use 默认）与海关关别，守卫接受出口批次的分配"
+        },
+        {
+          "decision": "S5R-D20",
+          "unit": "R10",
+          "change": "C3b 把部分红冲按全额冲回，与数电票“全额或部分红冲”不符：按红票金额冲减蓝票；已申报蓝票须先登记进货凭证信息回退"
+        },
+        {
+          "decision": "S5R-D23",
+          "unit": "R10",
+          "change": "C3b 取“出口时已发布”的政策修订，与“以出口日期界定”不符：绑定有效期包含出口日期的修订（ConfigAt v1）"
+        }
+      ],
+      "sources": [
+        {
+          "id": "S-GI1",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/executing-basic-erp-processes-with-sap-s-4hana/executing-the-shipping-process",
+          "content": "Shipping Specialist 过账发货（练习中也开票）"
+        },
+        {
+          "id": "S-GI2",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/implementing-sap-s-4hana-cloud-public-edition-sales-fundamental-business-processes/understanding-the-sell-from-stock-process_f487b5b8-429f-4f14-bacf-39d063789bad",
+          "content": "发货由 shipping specialist 过账"
+        },
+        {
+          "id": "S-BC",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/implementing-sap-s-4hana-cloud-public-edition-professional-services/understanding-process-steps-and-business-roles-for-sales-order-processing_fa70524e-4902-4702-beff-94677bcd24ff",
+          "content": "Billing Clerk SAP_BR_BILLING_CLERK"
+        },
+        {
+          "id": "S-CM1",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_globext607_10/helpdata/en/93/74382d546011d1a7020000e829fd11/content.htm",
+          "content": "信用敞口构成（ECC SD-CM）"
+        },
+        {
+          "id": "S-CM2",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3587422",
+          "content": "FSCM 更新组 000012（公有云 KBA）"
+        },
+        {
+          "id": "S-CM3",
+          "group": "SAP",
+          "url": "https://sapinsider.org/why-do-previously-approved-sales-orders-end-up-on-the-credit-hold-list-a-second-time-and-what-can-i-do-about-it/",
+          "content": "订单增值触发再检查；放行后天数（第三方）"
+        },
+        {
+          "id": "S-CM4",
+          "group": "SAP",
+          "url": "https://masteringsap.com/?p=15871",
+          "content": "“Released documents are still unchecked”（第三方，2006）"
+        },
+        {
+          "id": "S-CM5",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3412408",
+          "content": "放行当日修改不再检查"
+        },
+        {
+          "id": "S-CM6",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_globext607_10/helpdata/en/4d/6c287efc6d44b4e10000000a42189e/content.htm",
+          "content": "信用代表放行或转交冻结单据"
+        },
+        {
+          "id": "S-CM7",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/detailing-credit-management-processes-in-accounts-receivable/executing-the-main-sap-credit-management-operations_ef834364-0d7e-455a-8c19-e285a8b7c9a4",
+          "content": "信用分析员、案例放行、额度多级审批与四眼原则"
+        },
+        {
+          "id": "S-CM8",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3523978",
+          "content": "信用冻结单据只能人工放行（公有云）"
+        },
+        {
+          "id": "S-CM9",
+          "group": "SAP",
+          "url": "https://docs.tricentis.com/livecompare-4.4/content/templates/audit/b.07_authorization_sales_and_credit_block_sod.htm",
+          "content": "订单录入与信用放行的职责分离审计模板（第三方）"
+        },
+        {
+          "id": "S-TP1",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/2361640",
+          "content": "V1544：先删除采购订单才能拒绝第三方行"
+        },
+        {
+          "id": "S-TP2",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_afs65/helpdata/en/7d/e3c76bd4d011d3bc0d00a0c92f0691/content.htm",
+          "content": "销售订单变更不传到已建的采购订单（AFS 文档）"
+        },
+        {
+          "id": "S-PO1",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3773492",
+          "content": "有收货的采购行须先冲销收货才能删除（公有云）"
+        },
+        {
+          "id": "S-PO2",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/inventory-management-and-physical-inventory-in-sap-s-4hana/applying-tolerances-and-the-delivery-completed-indicator",
+          "content": "Delivery Completed 使未清量为零"
+        },
+        {
+          "id": "S-QM1",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/applying-sap-s-4hana-quality-management/executing-a-usage-decision_ba2ea755-2e7f-47fc-9aa2-97ae90e8a5be",
+          "content": "使用决策的更正、让步接受、拒收转冻结"
+        },
+        {
+          "id": "S-QM2",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3359470",
+          "content": "重置使用决策不回滚库存过账（公有云）"
+        },
+        {
+          "id": "S-QM3",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3541016",
+          "content": "移动类型 344（冻结到非限制的冲销）"
+        },
+        {
+          "id": "S-FX1",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/customizing-core-settings-in-financial-accounting-in-sap-s4hana/managing-exchange-rate-differences",
+          "content": "清账时的已实现汇兑差额"
+        },
+        {
+          "id": "S-FX2",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_46c/helpdata/en/01/a9b9c0455711d182b40000e829fbfe/content.htm",
+          "content": "收款时的银行费用"
+        },
+        {
+          "id": "S-CO1",
+          "group": "SAP",
+          "url": "https://help.sap.com/doc/0bea4999d3a043ec8dddb9c63ce24455/3.6/en-US/c85eaf55b3295c47e10000000a44147b.html",
+          "content": "运费分摊到销售订单项的获利能力段（TM 集成）"
+        },
+        {
+          "id": "S-CO2",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_46c/helpdata/en/bc/f42c7dd435d1118b3f0060b03ca329/content.htm",
+          "content": "销售订单控制与结算规则（ECC）"
+        },
+        {
+          "id": "S-IV1",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/invoice-verification-in-sap-s-4hana/entering-subsequent-debits-credits",
+          "content": "后续借贷"
+        },
+        {
+          "id": "S-IV2",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_470/helpdata/en/cf/73c5376a23a467e10000009b38f889/content.htm",
+          "content": "发票冲销即过账贷项"
+        },
+        {
+          "id": "S-IV3",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3745981",
+          "content": "金税接口负数开票须红字信息号"
+        },
+        {
+          "id": "S-AP1",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_globext607_10/helpdata/en/01/a9b220455711d182b40000e829fbfe/content.htm",
+          "content": "替代付款人"
+        },
+        {
+          "id": "S-MG1",
+          "group": "SAP",
+          "url": "https://help.sap.com/doc/69dd0f1ef0034261ab6e617e0b2beb21/1909.000/en-US/MigrationObjects_OP_EN.pdf",
+          "content": "迁移对象：只迁余额与未清项"
+        },
+        {
+          "id": "S-MG2",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3670748",
+          "content": "迁移凭证在清账应用中清账"
+        },
+        {
+          "id": "S-PR1",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_46c/helpdata/en/dd/56172c545a11d1a7020000e829fd11/content.htm",
+          "content": "基于 Incoterms 的运费条件类型"
+        },
+        {
+          "id": "S-PF1",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3154251",
+          "content": "伙伴功能 VE、ZM"
+        },
+        {
+          "id": "S-NR1",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_46c/helpdata/en/95/f42c7dd435d1118b3f0060b03ca329/content.htm",
+          "content": "开票号段按单据类型、内部分配"
+        },
+        {
+          "id": "S-NR2",
+          "group": "SAP",
+          "url": "https://help.sap.com/saphelp_46c/helpdata/en/15/174b6e5733d1118b3f0060b03ca329/content.htm",
+          "content": "S_NUMBER 只管号段维护"
+        },
+        {
+          "id": "S-NR3",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/configuring-billing-in-sap-s-4hana-sales/getting-more-information-on-output-management-technical-information-and-basics-of-accounting-principles_bda9da6a-25a6-41b5-9371-0e2e1058a28e",
+          "content": "同一开票类型内的灵活号段"
+        },
+        {
+          "id": "S-PT1",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/customizing-core-settings-in-financial-accounting-in-sap-s4hana/configuring-payment-terms-and-cash-discounts",
+          "content": "分期付款条件、基准日"
+        },
+        {
+          "id": "S-PT2",
+          "group": "SAP",
+          "url": "https://userapps.support.sap.com/sap/support/knowledge/en/2478369",
+          "content": "按工厂日历计算到期日不起作用（症状）"
+        },
+        {
+          "id": "S-BL1",
+          "group": "SAP",
+          "url": "https://learning.sap.com/courses/configuring-billing-in-sap-s-4hana-sales/configuring-the-data-flow-for-billing-documents_eabe5328-7d28-4930-9e83-b4457507397b",
+          "content": "开票价格取自订单、定价类型"
+        },
+        {
+          "id": "G-11",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://help.sap.com/doc/69991cb6a2f74b0d94846ddc88d58546/11.0.23/en-US/loio9896a853823a2442e10000000a174cb4_EN.pdf",
+          "content": "GTS 11.0 用户指南（优惠处理、信用证单据）"
+        },
+        {
+          "id": "G-H20",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://help.sap.com/doc/d523ff9ca1fd49b5b4d9b18833031ba7/2020.008/en-US/loio418667a4b34a4a83815ccdf76e620f0f_en.pdf",
+          "content": "GTS for HANA 2020 用户指南（名单筛查、放行、禁运）"
+        },
+        {
+          "id": "G-H25",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://help.sap.com/doc/d523ff9ca1fd49b5b4d9b18833031ba7/2025.000/en-US/loio418667a4b34a4a83815ccdf76e620f0f_en.pdf",
+          "content": "GTS for HANA 2025 用户指南（许可证冲减、取消、区域禁运）"
+        },
+        {
+          "id": "G-L1",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://learning.sap.com/courses/configuring-and-using-legal-control/distinguishing-types-of-sanctions_e82d56b2-1cb9-4741-bc30-793475efb19b",
+          "content": "禁运按国家或区域；用户可解除阻止"
+        },
+        {
+          "id": "G-L2",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://learning.sap.com/courses/configuring-the-essential-functions-of-sap-global-trade-services/checking-and-releasing-documents_ed038fbc-791e-4162-99c2-737eeefa0702",
+          "content": "人工放行、不可撤销、最终收货人国别"
+        },
+        {
+          "id": "G-L3",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://learning.sap.com/courses/discovering-the-basics-of-sap-global-trade-services/managing-product-related-export-control_f56a90ac-6e81-464c-8d03-a4ad038ea489",
+          "content": "许可证未覆盖即阻止"
+        },
+        {
+          "id": "G-L4",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://learning.sap.com/courses/configuring-the-essential-functions-of-sap-global-trade-services/making-basic-mapping-settings_ffd3a92f-05cc-4415-9b4b-c54d6dfa4fcf",
+          "content": "伙伴功能映射、禁运伙伴分组"
+        },
+        {
+          "id": "G-EWM",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://help.sap.com/saphelp_ewm93/helpdata/en/32/cecb53ad377114e10000000a174cb4/content.htm",
+          "content": "EWM 发货前的 GTS 检查"
+        },
+        {
+          "id": "G-TM1",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://help.sap.com/saphelp_tm94/helpdata/en/62/a8e71895594a63886f30ac3187b6ba/content.htm",
+          "content": "订舱确认状态"
+        },
+        {
+          "id": "G-TM2",
+          "group": "SAP GTS、TM、EWM",
+          "url": "https://learning.sap.com/courses/business-processes-in-sap-s-4hana-transportation-management/creating-freight-bookings_cfd405ea-a065-45e5-8a66-ec08d0c8104d",
+          "content": "订舱流程"
+        },
+        {
+          "id": "I-1",
+          "group": "国际规则",
+          "url": "https://academy.iccwbo.org/incoterms/article/incoterms-2020-cip-or-cif/",
+          "content": "CIF 条款 C、CIP 条款 A"
+        },
+        {
+          "id": "I-2",
+          "group": "国际规则",
+          "url": "https://library.iccwbo.org/clp/clp-incoterms-2020vs2010.htm",
+          "content": "Incoterms 2020 与 2010 的保险差异"
+        },
+        {
+          "id": "I-3",
+          "group": "国际规则",
+          "url": "https://www.tradefinanceglobal.com/wp-content/uploads/2020/01/Cost__Insurance__Freight_CIF.pdf",
+          "content": "110 % 投保（第三方转述）"
+        },
+        {
+          "id": "I-4",
+          "group": "国际规则",
+          "url": "https://xuexi.huize.com/study/detal-2039.html",
+          "content": "UCP 600 第 28 条（转载，非 ICC 原文）"
+        },
+        {
+          "id": "I-5",
+          "group": "国际规则",
+          "url": "https://academy.iccwbo.org/incoterms/article/incoterms-2020-fca-or-fob/",
+          "content": "FCA、FOB 的运费承担"
+        },
+        {
+          "id": "C-SW1",
+          "group": "中国法规与官方口径",
+          "url": "https://sz.singlewindow.cn/dyckfile//news/file20230203/202302031501500574243.pdf",
+          "content": "深圳单一窗口 FAQ：回执、以海关总署查询状态为准"
+        },
+        {
+          "id": "C-CU1",
+          "group": "中国法规与官方口径",
+          "url": "https://www.hengqin.gov.cn/lab/flfg/bmgz/content/post_3643011.html",
+          "content": "海关总署令第 220 号（修订后）修撤单"
+        },
+        {
+          "id": "C-CU2",
+          "group": "中国法规与官方口径",
+          "url": "https://online.customs.gov.cn/static/pages/guides/000729001000/000729001000.html",
+          "content": "报关单修改／撤销办事指南"
+        },
+        {
+          "id": "C-TX1",
+          "group": "中国法规与官方口径",
+          "url": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5203740/content.html",
+          "content": "财税〔2012〕39 号"
+        },
+        {
+          "id": "C-TX2",
+          "group": "中国法规与官方口径",
+          "url": "https://szs.mof.gov.cn/zhengcefabu/202411/t20241115_3947628.htm",
+          "content": "财政部 税务总局公告 2024 年第 15 号"
+        },
+        {
+          "id": "C-TX3",
+          "group": "中国法规与官方口径",
+          "url": "https://jiangsu.chinatax.gov.cn/art/2024/11/25/art_8349_480232.html",
+          "content": "国家税务总局公告 2024 年第 11 号（数电票红冲）"
+        },
+        {
+          "id": "C-TX4",
+          "group": "中国法规与官方口径",
+          "url": "https://guangdong.chinatax.gov.cn/gdsw/wzjd/2024-11/25/content_9ce6fe3e561643b5b8f70c1a202f6b23.shtml",
+          "content": "广东税务解读：全额或部分红冲"
+        },
+        {
+          "id": "C-TX5",
+          "group": "中国法规与官方口径",
+          "url": "https://shanghai.chinatax.gov.cn/zcfw/rdwd/202508/t477256.html",
+          "content": "上海税务问答：已用于退税的发票先回退再红冲"
+        },
+        {
+          "id": "C-FX1",
+          "group": "中国法规与官方口径",
+          "url": "https://fgk.chinatax.gov.cn/zcfgk/c100013/c5207334/content.html",
+          "content": "外汇局公告 2012 年第 1 号（取消出口收汇核销）"
+        },
+        {
+          "id": "C-FX2",
+          "group": "中国法规与官方口径",
+          "url": "https://www.safe.gov.cn:443/hubei/file/file/20200901/20c7440b0ee24269ab5a609cf81275f9.pdf",
+          "content": "经常项目外汇业务指引（2020 年版，后有修订未读）"
+        },
+        {
+          "id": "C-FX3",
+          "group": "中国法规与官方口径",
+          "url": "https://www.safe.gov.cn/safe/file/file/20210302/cfb6624f07b24a6e8711dd26171a41eb.pdf",
+          "content": "外汇局政策问答：收付汇主体不一致的情形"
+        },
+        {
+          "id": "C-CO1",
+          "group": "中国法规与官方口径",
+          "url": "https://www.gov.cn/gongbao/2024/issue_11566/202409/content_6973184.html",
+          "content": "海关总署令第 270 号（原产地证签证）"
+        },
+        {
+          "id": "C-CO2",
+          "group": "中国法规与官方口径",
+          "url": "https://www.gov.cn/gongbao/content/2022/content_5678091.htm",
+          "content": "海关总署令第 255 号（RCEP）"
+        },
+        {
+          "id": "C-CO3",
+          "group": "中国法规与官方口径",
+          "url": "https://www.gov.cn/fuwu/2018-08/06/5311996/files/91ec67017498453cb28c8f69941879ec.pdf",
+          "content": "报关单录入指南（一单一证、许可证号一个）"
+        },
+        {
+          "id": "C-LC1",
+          "group": "中国法规与官方口径",
+          "url": "https://www.gov.cn/gongbao/content/2006/content_453196.htm",
+          "content": "商务部 海关总署令 2005 年第 29 号（一批一证、一证一关）"
+        },
+        {
+          "id": "C-LC2",
+          "group": "中国法规与官方口径",
+          "url": "https://www.tid.gov.hk/en/tradecircular/files/2025/ci8532025a.pdf",
+          "content": "2025 年修订征求意见稿（未生效）"
+        },
+        {
+          "id": "F-OA",
+          "group": "富通天下",
+          "url": "https://openapi.joinf.com/v1/（数据在 https://openapi.joinf.com/v1/assets/main.bundle.js?t=1793882543185）",
+          "content": "官方 OpenAPI 文档：出运、报关、结汇、收款、付款、费用、开票、客户的字段与状态"
+        },
+        {
+          "id": "F-N1",
+          "group": "富通天下",
+          "url": "https://www.joinf.com/news-center/news-detail/1281-001.html",
+          "content": "官方新闻（2021-05-20，宣传）：出运、单证部、报关进程、结汇单据、合同变更"
+        },
+        {
+          "id": "F-P",
+          "group": "富通天下",
+          "url": "https://www.joinf.com/product-service.html",
+          "content": "产品页（宣传）"
+        },
+        {
+          "id": "F-CP",
+          "group": "富通天下",
+          "url": "https://www.joinf.com/cloud-platform.html",
+          "content": "平台菜单（信保管理、退税管理）"
+        },
+        {
+          "id": "F-CRM",
+          "group": "富通天下",
+          "url": "https://www.joinf.com/cloud-crm.html",
+          "content": "CRM 页（权限隔离、公海）"
+        },
+        {
+          "id": "F-SINA",
+          "group": "富通天下",
+          "url": "https://t.cj.sina.com.cn/articles/view/6373259194/17be037ba00101pda8",
+          "content": "第三方推广文章（无作者）"
+        }
+      ]
+    }
+  ]
 }

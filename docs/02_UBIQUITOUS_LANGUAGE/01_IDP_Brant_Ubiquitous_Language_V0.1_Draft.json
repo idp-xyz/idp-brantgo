@@ -52,7 +52,7 @@
       "context": "PTY",
       "en": "TradingProfile",
       "cn": "公司交易档案",
-      "definition": "主体与某个内部公司之间的交易关系：结算条件、业务负责人等公司级信息。",
+      "definition": "主体与某个内部公司之间的交易关系：结算条件、业务负责人等公司级信息。可列许可付款人（经档案发布的主体引用）；来自许可付款人的收款不是主体不一致（S5R-D21）。",
       "exclusion": "不是主体身份本身；不跨公司共享。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -78,7 +78,7 @@
       "context": "PTY",
       "en": "AddressRole",
       "cn": "地址角色",
-      "definition": "主体地址在交易中的用途，如买方、收货方、付款方地址，按版本被报价引用。",
+      "definition": "主体地址在交易中的用途，如买方、收货方、付款方与通知方（notify，S5R-D40）地址，按版本被报价引用。",
       "exclusion": "不从贸易术语推导收货方或货权。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -91,7 +91,7 @@
       "context": "PTY",
       "en": "ServicePartyRole",
       "cn": "服务方角色",
-      "definition": "伙伴提供物流等服务时的角色、适用服务、起讫地点、有效期与核实证据。",
+      "definition": "伙伴提供物流等服务时的角色、适用服务、起讫地点、有效期与核实证据。种类：forwarder（货代）、carrier（承运人）、insurer（保险人）、inspection_agency（检验机构）、customs_broker（报关行）；只有货代与承运人要求航线（UN/LOCODE），其余种类只需已核实（S5R-D36）。",
       "exclusion": "不改变原 customer／supplier 角色含义；不以自由文本替代适用性检查。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -325,7 +325,7 @@
       "context": "POL",
       "en": "TradeTerms",
       "cn": "贸易条款",
-      "definition": "贸易术语版本、指定地点与卖方承担的费用范围。",
+      "definition": "贸易术语版本、指定地点与卖方承担的费用范围。可带合同保险比例 insurance_percent（默认 110，下限 110），CIF／CIP 保险单按它核对（S5R-D06）。",
       "exclusion": "不从术语字符串推导货权或同口径；FOB 与 CIF 同名不代表同口径。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -404,7 +404,7 @@
       "en": "DocumentNumberSequence",
       "cn": "单据编号序列",
       "definition": "按公司、单据类型与年度原子分配编号；同业务引用唯一，号码不回收。",
-      "exclusion": "不能以连续号证明业务完整。",
+      "exclusion": "不能以连续号证明业务完整。invoice 单据类型专指商业发票；其他发票类编号用自己的单据类型；增值税发票不由 POL 编号（S5R-D16）。",
       "rule": "",
       "status": "Approved（模拟评审）",
       "scopeType": "business",
@@ -1183,7 +1183,7 @@
       "context": "TRD",
       "en": "SalesOrder",
       "cn": "外销订单",
-      "definition": "由已成立合同（有效 Acceptance）经 order.prepare 形成的订单：draft、active、cancelled、closed_unfulfilled、closed；生效后只经订单变更修订。",
+      "definition": "由已成立合同（有效 Acceptance）经 order.prepare 形成的订单：draft、active、cancelled、closed_unfulfilled、closed；生效后只经订单变更修订。新修订封存 Incoterm 与绑定地址的国别，可选绑定通知方；按（订单、修订）经 OrderRevisionRef v1 被读取（S5R-D35、D40）。",
       "exclusion": "不是采购单或委外单；active 不等于已出运。",
       "rule": "UL-INV-08",
       "status": "Approved（模拟评审）",
@@ -1430,7 +1430,7 @@
       "context": "QLT",
       "en": "Disposition",
       "cn": "不合格处置",
-      "definition": "对不合格品的处置决定：返工、让步、退回、报废等。",
+      "definition": "对不合格品的处置决定：返工、让步、退回、报废等。让步接收须附客户同意证据（S5R-D18）。",
       "exclusion": "处置不自动生成补发或贷项。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -1443,7 +1443,7 @@
       "context": "QLT",
       "en": "QualityRelease",
       "cn": "质量放行",
-      "definition": "明确数量、范围、权限与有效性的质量放行；出运入口检查有效放行。",
+      "definition": "明确数量、范围、权限与有效性的质量放行；出运入口检查有效放行。撤回时记录冻结量（放行量减已出运量），冻结量复检后再放行；获批让步的数量可放行并带 concession 标记（S5R-D18）。",
       "exclusion": "不是海关放行，也不是商业条件放行。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -1495,7 +1495,7 @@
       "context": "FUL",
       "en": "MilestonePlan",
       "cn": "节点计划",
-      "definition": "对象、责任人、前置项与计划日期；实际日期另行记录并区分供应商自报、内部核实与已验收。",
+      "definition": "对象、责任人、前置项与计划日期；实际日期另行记录并区分供应商自报、内部核实与已验收。节点类型含 booking_requested（已申请订舱，与 booking_confirmed 配对；S5R-D11）。",
       "exclusion": "预计进度不是实际。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -1612,7 +1612,7 @@
       "context": "STL",
       "en": "CreditNote",
       "cn": "贷项",
-      "definition": "依据批准的退货、价格或索赔调整业务应收。",
+      "definition": "依据批准的退货、价格或索赔调整业务应收。期初结算单的贷项不绑定订单（S5R-D22）。",
       "exclusion": "不自动等同于已退款。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -1625,7 +1625,7 @@
       "context": "STL",
       "en": "OrderResult",
       "cn": "订单经营结果",
-      "definition": "按来源可解释的订单净销售、成本、费用与结算状态；open、reviewed、settled。",
+      "definition": "按来源可解释的订单净销售、成本、费用与结算状态；open、reviewed、settled。业务结算汇差按实际结汇汇率，未结汇部分按核销日汇率标 unrealized；已取消订单有沉没成本时以 cancelled 标记关闭（S5R-D19、D42）。",
       "exclusion": "期间费用不默认分配。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -1638,7 +1638,7 @@
       "context": "STL",
       "en": "FxConversion",
       "cn": "结汇",
-      "definition": "售出原币、银行实际汇率、到账人民币及手续费的资金转换记录。",
+      "definition": "售出原币、银行实际汇率、到账人民币及手续费的资金转换记录。订单经营结果的汇差按核销到订单的外币收款所对应结汇的实际汇率归属（S5R-D19）。",
       "exclusion": "结汇不新增客户收入，不再次核销同一应收。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -1703,7 +1703,7 @@
       "context": "CNX",
       "en": "TaxRefundCase",
       "cn": "退税案件",
-      "definition": "出口明细、购进凭证、申报资料与适用政策的匹配；预计、拟申报、已提交、核准、到账分别记录。",
+      "definition": "出口明细、购进凭证、申报资料与适用政策的匹配；预计、拟申报、已提交、核准、到账分别记录。用途 export_refund（免抵退或免退）与 export_exemption（免税出口的资料留存），征税批次不开案件，逾期未申报可转为免税（S5R-D14）；政策修订绑定有效期包含出口日期的修订，与发布时间无关（S5R-D23）。",
       "exclusion": "不把预计退税作为新增利润；不仅凭本地取消恢复用途额度。",
       "rule": "",
       "status": "Approved（模拟评审）",
@@ -2392,7 +2392,7 @@
       "context": "CNX",
       "en": "Export License",
       "cn": "出口许可证",
-      "definition": "外部机关签发的许可：编号、持有人、商品、数量与金额额度、目的国、最终用户与有效期。",
+      "definition": "外部机关签发的许可：编号、持有人、商品、数量与金额额度、目的国、最终用户与有效期。登记使用方式（single_use 一批一证，两用物项的法定方式与默认值；multi_use 须附证面依据）与海关关别（一证一关）；一份报关单只用一张许可证（S5R-D04）。",
       "exclusion": "附件存在不等于许可有效。",
       "rule": "UL-INV-31",
       "status": "Approved（模拟评审）",
@@ -2414,6 +2414,19 @@
       "legacy": "—"
     },
     {
+      "id": "CNX-CertificateResult",
+      "context": "CNX",
+      "en": "Certificate Result",
+      "cn": "官方证书结果",
+      "definition": "外部签发的官方证书登记：原产地证、许可证副本、检验证书与优惠原产地证（协定代码、签发机构；RCEP 原产地声明为其子类）；适用对象、目的市场、有效期与核实人（S5R-D12）。",
+      "exclusion": "不做优惠原产地判定；不撤回，机关撤销以更正修订截止有效期（S5R-D47）。",
+      "rule": "",
+      "status": "Approved（S5R 模拟签核 E0）",
+      "scopeType": "business",
+      "source": "CNX-INV-007；S5R-D12、D47",
+      "legacy": "—"
+    },
+    {
       "id": "PUR-SupplierDelivery",
       "context": "PUR",
       "en": "Supplier Delivery",
@@ -2427,16 +2440,42 @@
       "legacy": "—"
     },
     {
+      "id": "PUR-CommitmentDisposition",
+      "context": "PUR",
+      "en": "Commitment Disposition",
+      "cn": "承诺行获批处置",
+      "definition": "已核实交付但未出运的承诺行数量的处置去向：return_to_supplier（退回工厂）、write_off（我方承担，计入经营结果的沉没成本）、hold_for_reuse（转作后续订单使用）；采购申请、订单审核人独立批准后，订单取消把它计为已处置（S5R-D05）。",
+      "exclusion": "不改承诺状态；hold_for_reuse 在 STK 启用前只记录，不形成库存。",
+      "rule": "",
+      "status": "Approved（S5R 模拟签核 E0）",
+      "scopeType": "business",
+      "source": "S5R-D05；参照 SAP V1544",
+      "legacy": "—"
+    },
+    {
       "id": "POL-ScreeningRegulationProfile",
       "context": "POL",
       "en": "Screening Regulation Profile",
       "cn": "筛查与合规适用配置",
-      "definition": "企业启用的筛查名单、合规法规与禁运项目及复筛频率的已发布配置版本。",
+      "definition": "企业启用的筛查名单、合规法规与禁运项目及复筛频率的已发布配置版本。列出启用的国别项目名单 programmes，CNX 评估从绑定的修订读取，不再由评估输入（S5R-D38）。",
       "exclusion": "不含名单条目本身；启用外国名单须法务批准。",
       "rule": "",
       "status": "Approved（模拟评审）",
       "scopeType": "business",
       "source": "ADR-BR-017；参照 SAP GTS 法规与名单配置",
+      "legacy": "—"
+    },
+    {
+      "id": "POL-ExportTaxPolicy",
+      "context": "POL",
+      "en": "Export Tax Policy",
+      "cn": "出口退税政策",
+      "definition": "企业适用的出口退（免）税政策修订：退（免）税方式按法定四类（exempt_credit_refund 免抵退、exempt_refund 免退、exempt 免税、taxable 征税）、退税率与有效期；退税案件绑定有效期包含出口日期的修订（S5R-D14、D23）。",
+      "exclusion": "not_applicable 只保留给旧修订读取；四类的适用条件与资料要求须税务专业人员在 B0 前确认。",
+      "rule": "",
+      "status": "Approved（S5R 模拟签核 E0）",
+      "scopeType": "business",
+      "source": "S5R-D14、D23；财税〔2012〕39 号",
       "legacy": "—"
     },
     {
@@ -2463,6 +2502,19 @@
       "status": "Approved（模拟评审）",
       "scopeType": "platform",
       "source": "ADR-BR-007；ADR-BR-017",
+      "legacy": "—"
+    },
+    {
+      "id": "PLATFORM-CountryProgrammeVersion",
+      "context": "PLATFORM",
+      "en": "Country Programme Version",
+      "cn": "国别项目名单版本",
+      "definition": "受控导入 internal/reference 的国别禁运与制裁项目版本：来源、发布日期、国家与项目；项目可带区域 regions（ISO 3166-2 清单），表示只有这些区域受影响（S5R-D15）。",
+      "exclusion": "不是合规结论；带区域的项目由合规人工按地址判断（region_review）。",
+      "rule": "",
+      "status": "Approved（S5R 模拟签核 E0）",
+      "scopeType": "platform",
+      "source": "ADR-BR-017；S5R-D15、D34",
       "legacy": "—"
     },
     {
@@ -2515,6 +2567,32 @@
       "status": "Approved（模拟评审）",
       "scopeType": "business",
       "source": "参照 SAP 额度申请与审批工作流",
+      "legacy": "—"
+    },
+    {
+      "id": "STL-FundReversal",
+      "context": "STL",
+      "en": "Fund Reversal",
+      "cn": "资金冲销",
+      "definition": "对错误资金记录（含期初）的冲销：独立于资金登记人，须无有效核销；原记录保留，冲销后银行流水键可再用（S5R-D22）。",
+      "exclusion": "不是退款或退汇；退款与退汇另行登记资金记录。",
+      "rule": "",
+      "status": "Approved（S5R 模拟签核 E0）",
+      "scopeType": "business",
+      "source": "S5R-D22",
+      "legacy": "—"
+    },
+    {
+      "id": "STL-PayableAdjustment",
+      "context": "STL",
+      "en": "Payable Adjustment",
+      "cn": "应付调整",
+      "definition": "采购侧的价格折让或少开，引用红字发票，由资金申请、信用经理独立确认后冲减应付（S5R-D20）。",
+      "exclusion": "红票本身不改应付；只换票不影响应付；不设自动消费方。",
+      "rule": "",
+      "status": "Approved（S5R 模拟签核 E0）",
+      "scopeType": "business",
+      "source": "S5R-D20；参照 SAP 后续借贷",
       "legacy": "—"
     }
   ],
@@ -2734,6 +2812,30 @@
       "event": "SupplierDeliveryVerified",
       "context": "PUR",
       "rule": "授权人工核实交付证据；累计不超承诺量与容差。"
+    },
+    {
+      "command": "purchase.commitment.disposition.decide",
+      "event": "PurchaseCommitmentDisposed",
+      "context": "PUR",
+      "rule": "订单审核人独立于申请人批准承诺行处置；处置量不超过已核实交付减已出运（S5R-D05）。"
+    },
+    {
+      "command": "fund.reverse",
+      "event": "FundRecordReversed",
+      "context": "STL",
+      "rule": "人工专属，独立于资金登记人，须无有效核销（S5R-D22）。"
+    },
+    {
+      "command": "fund.verify_payer",
+      "event": "FundPayerVerified",
+      "context": "STL",
+      "rule": "信用经理核实临时第三方付款，独立于资金登记人，附证据（S5R-D21）。"
+    },
+    {
+      "command": "payable_adjustment.confirm",
+      "event": "PayableAdjustmentConfirmed",
+      "context": "STL",
+      "rule": "独立于申请人确认应付调整，引用红字发票（S5R-D20）。"
     }
   ],
   "invariants": [
@@ -3064,6 +3166,13 @@
       "owner": "CNX Domain Owner＋合规负责人",
       "outcome": "国别禁运、制裁与出口管制核查及许可证用量归 CNX（ADR-BR-014）。",
       "status": "Approved（模拟评审）"
+    },
+    {
+      "id": "SD-15",
+      "term": "参考数据",
+      "owner": "首席架构师＋合规负责人（模拟）",
+      "outcome": "参考数据是平台提供方（internal/reference），不是限界上下文；读取方须在 Context Map 登记以 REF 为上游的关系（S5R-D34，2026-11-13 模拟签核 E0）。",
+      "status": "Approved（S5R 模拟签核 E0）"
     }
   ],
   "languageDeltas": [

@@ -93,6 +93,14 @@ foot: Context Map V0.1 Draft · 2026-11-06 · 主档案 V1.0
 > [!decision] 白名单上线前的前置条件
 > 关系表是 tools/dependency-check 的唯一来源。如果实现中出现未登记的依赖，先在本表登记并签核，再修改代码；不能为了让检查通过而绕开白名单。
 
+### 平台提供方与系统消费方
+
+参考数据（internal/reference，schema brant_ref）不是限界上下文，而是平台提供方（S5R-D34，2026-11-13 模拟签核 E0）。读取筛查名单或国别项目的上下文，必须有一条以 REF 为上游的关系（R80 REF→PTY、R81 REF→CNX），Inbox 订阅检查也只对这些下游放行 idp-brant.ref。Go 的允许清单生成器只为 internal/contexts 下的上下文生成行，REF 关系不进 allowlist.txt；R1 把订阅检查与 reference/api 的导入规则收紧到这两条关系。
+
+系统消费方由 Inbox 分发器以系统操作者 system:inbox.<bc>.<purpose> 运行，权限由 brant-admin inbox 按下表授予，不用岗位模板。只由系统执行的命令（订单变更复核的开启）只授予消费方（S5R-D29）。构建器校验每个消费方只订阅其上游的事件，且不持人工专属命令。
+
+{{cm_platform}}
+
 ## 09 外部边界 {#s9}
 
 外部系统通过防腐层接入，不得把外部模型带进领域层。HOST、EER、BIP、CMI、MCP 等既有平台按各自边界复用，是否接入以实际接口证据为准。

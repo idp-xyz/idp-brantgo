@@ -291,6 +291,16 @@ PY_RENAMES = {
 
 HUMAN_ONLY = set(TD["humanOnlyCommands"])
 ROLES = load("05_TACTICAL_DDD/06_IDP_Brant_Role_Templates_V0.1.json")
+# Platform providers (S5R-D34): owners of data that are no bounded context (reference data). They may be the
+# upstream of a relationship; a context depends on them only through a registered relationship.
+PLATFORM = {p["id"]: p for p in CM.get("platformProviders", [])}
+PLATFORM_API = {"REF": "internal/reference/api"}
+# System consumers (S4-06a, S5R-D29): the system actors the Inbox dispatcher runs, with their grants.
+CONSUMERS = CM.get("consumers", [])
+OPENAPI_PATH = GO_REPO / "contracts/openapi/brant-api.openapi.json"
+OPENAPI = json.loads(OPENAPI_PATH.read_text(encoding="utf-8")) if OPENAPI_PATH.exists() else {"paths": {}}
+S5R_DECISIONS = [d for d in SIMREV["decisions"] if d.get("round") == "S5R"]
+S5R_ROUND = next((r for r in SIMREV.get("rounds", []) if r["id"] == "S5R"), {})
 
 
 def sm_actors():
@@ -299,7 +309,34 @@ def sm_actors():
         for t in sm["transitions"]:
             if not t["command"].startswith("（"):
                 actors[t["command"]].update(t["actor"].split("|"))
+    # Commands without a state machine transition whose actors are still fixed (S5R-D02: order_account.open).
+    for cmd, act in TD.get("commandActors", {}).items():
+        actors[cmd].update(act.split("|"))
     return actors
+
+
+def payload_of():
+    """Registered integration event payload fields (S5R-D43), by (context, event)."""
+    return {(c["id"], ev): fields for c in TD["contexts"] for a in c["aggregates"] for ev, fields in a.get("eventPayloads", {}).items()}
+
+
+def query_rows():
+    """Every registered read: context or platform provider, name, route, permission, audited (S5R-D43)."""
+    rows = []
+    for c in CM["contexts"] + CM.get("platformProviders", []):
+        for q in c.get("queries", []):
+            rows.append([c["id"], q["name"], q["route"], q["permission"], "是" if q["audited"] else "否"])
+    return rows
+
+
+def openapi_reads():
+    """(operationId, route) of every GET of the candidate OpenAPI document that belongs to one context or platform
+    provider; the generic audit route and healthz are not registered per owner."""
+    out = set()
+    for path, ops in OPENAPI["paths"].items():
+        if "get" in ops and path.startswith("/api/brant/v1/") and not path.startswith("/api/brant/v1/{bc}"):
+            out.add((ops["get"]["operationId"], f"GET {path}"))
+    return out
 
 
 def command_rows():
@@ -318,6 +355,8 @@ def command_rows():
                 actor = "人工或 AI（同一守卫）"
             elif act == {"system"}:
                 actor = "系统"
+            elif act == {"human", "system"}:
+                actor = "人工或系统（不接受 AI）"
             else:
                 actor = "人工或 AI（按动作权限）"
             rows.append([c["id"], cmd, actor, legacy, f"POST /api/brant/v1/{c['id'].lower()}/commands/{cmd}", c["stage"]])
@@ -361,10 +400,12 @@ def event_rows():
         for a in c["aggregates"]:
             for ev in a.get("events", []):
                 agg_of[(c["id"], ev)] = a["name"]
+    payloads = payload_of()
     rows = []
     for c in CM["contexts"]:
         for ev in c["facts"]:
-            rows.append([c["id"], ev, f"idp-brant.{c['id'].lower()}.{snake(ev)}.v1", f"idp-brant.{c['id'].lower()}", agg_of.get((c["id"], ev), "—"), c["stage"]])
+            rows.append([c["id"], ev, f"idp-brant.{c['id'].lower()}.{snake(ev)}.v1", f"idp-brant.{c['id'].lower()}", agg_of.get((c["id"], ev), "—"), c["stage"],
+                         "、".join(payloads.get((c["id"], ev), [])) or "—"])
     return rows
 
 
@@ -374,15 +415,19 @@ def whitelist_lines():
         ups[r["to"]].add(r["frm"])
     lines = [
         "# tools/dependency-check 规则由 Context Map V0.1 的 relationships 生成，不手工编辑",
-        f"# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（{len(CM['relationships'])} 条关系）",
+        f"# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（{len(CM['relationships'])} 条关系，其中以平台提供方为上游的 "
+        f"{sum(1 for r in CM['relationships'] if r['frm'] in PLATFORM)} 条）",
     ]
     for c in CM["contexts"]:
-        u = sorted(ups.get(c["id"], []))
+        u = sorted(x for x in ups.get(c["id"], []) if x in CTX)
+        p = sorted(x for x in ups.get(c["id"], []) if x in PLATFORM)
         target = "{" + ",".join(x.lower() for x in u) + "}" if len(u) > 1 else (u[0].lower() if u else "")
         if u:
             lines.append(f"allow internal/contexts/{c['id'].lower()}/... -> internal/contexts/{target}/api")
-        else:
-            lines.append(f"# {c['id'].lower()}：无已登记上游（只依赖 kernel、reference/api、foundation）")
+        for x in p:
+            lines.append(f"allow internal/contexts/{c['id'].lower()}/... -> {PLATFORM_API[x]}            # 平台提供方 {x}（S5R-D34）")
+        if not u and not p:
+            lines.append(f"# {c['id'].lower()}：无已登记上游（只依赖 kernel 与 foundation）")
     lines += [
         "deny  internal/contexts/*/api -> internal/contexts/*/api          # api 是叶子包",
         "deny  internal/contexts/... -> internal/{transport,ai,processes,bootstrap}/...",
@@ -515,7 +560,20 @@ def inc_role_templates(a):
     out += table(["禁止合并的岗位", "规则"], [[Raw(" ＋ ".join(held[c]["name"] for c in f["templates"])), f["rule"]] for f in ROLES["forbiddenCombinations"]], "compact")
     out += table(["专属权限", "唯一岗位", "规则"], [[code(e["permission"]), held[e["template"]]["name"], e["rule"]] for e in ROLES["exclusivePermissions"]], "compact")
     out += table(["命令", "须独立于", "上下文", "状态"], [[code(i["command"]), i["independentOf"], Raw(chip(i["context"])), tag(i["state"])] for i in ROLES["independence"]], "compact")
+    out += table(["系统操作者（不用岗位模板）", "上下文", "权限（brant-admin inbox 授予）"],
+                 [[code(c["systemActor"]), Raw(chip(c["context"])), Raw(codes(c["permissions"]))] for c in CONSUMERS], "compact")
     return out
+
+
+def inc_cm_platform(a):
+    out = [table(["平台提供方", "名称", "包", "schema", "事件", "命令", "说明"],
+                 [[Raw(chip(p["id"])), p["name"], code(p["package"]), code(p["schema"]), Raw(codes(p["events"])), p["commands"], p["note"]] for p in CM.get("platformProviders", [])], "compact")]
+    rels = [r for r in CM["relationships"] if r["frm"] in PLATFORM]
+    out.append(table(["关系", "上游", "下游", "契约"], [[r["id"], Raw(chip(r["frm"])), Raw(chip(r["to"])), r["contract"]] for r in rels], "compact"))
+    out.append(table(["消费方", "上下文", "系统操作者", "订阅", "权限", "失败码", "策略"],
+                     [[code(c["id"]), Raw(chip(c["context"])), code(c["systemActor"]), Raw(codes(c["subscribes"])), Raw(codes(c["permissions"])), "、".join(c["failureCodes"]), c["policies"]]
+                      for c in CONSUMERS], "compact"))
+    return "".join(out)
 
 
 def inc_cm_external(a):
@@ -616,15 +674,46 @@ def inc_sim_g0(a):
 
 def inc_sim_review(a):
     out = [table(["角色", "名称", "评审范围"], [[r["id"], r["name"], r["scope"]] for r in SIMREV["roles"]], "compact")]
-    cnt = Counter(d["decision"] for d in SIMREV["decisions"])
-    out.append(f"<h3>ADR 与待决项裁决（{len(SIMREV['decisions'])} 项：" + "、".join(f"{SIMREV['decisionKinds'][k]} {v}" for k, v in cnt.items()) + "）</h3>")
+    first = [d for d in SIMREV["decisions"] if "round" not in d]
+    cnt = Counter(d["decision"] for d in first)
+    out.append(f"<h3>ADR 与待决项裁决（{len(first)} 项：" + "、".join(f"{SIMREV['decisionKinds'][k]} {v}" for k, v in cnt.items()) + "）</h3>")
     tid = "sim-dec"
-    rows = [[d["id"], d["subject"], d["role"], tag(SIMREV["decisionKinds"][d["decision"]], DEC_KIND[d["decision"]]), d["outcome"], "；".join(d["conditions"]) or "—"] for d in SIMREV["decisions"]]
+    rows = [[d["id"], d["subject"], d["role"], tag(SIMREV["decisionKinds"][d["decision"]], DEC_KIND[d["decision"]]), d["outcome"], "；".join(d["conditions"]) or "—"] for d in first]
     out.append(filter_bar(tid, "按编号、角色或结论过滤", len(rows)) + table(["记录", "对象", "角色", "结论", "裁决", "条件"], rows, "compact", tid))
     out.append("<h3>上下文签核</h3>")
     out.append(table(["上下文", "角色", "结论", "范围", "条件"], [[Raw(chip(x["context"])), x["role"], tag(SIMREV["decisionKinds"][x["decision"]], DEC_KIND[x["decision"]]), x["scope"], "；".join(x["conditions"]) or "—"] for x in SIMREV["contextSignoffs"]], "compact"))
     out.append("<h3>门禁结论</h3>")
     out.append(table(["门禁", "结论"], [[k, v] for k, v in SIMREV["gateOutcome"].items()], "compact"))
+    return "".join(out)
+
+
+def inc_s5r_review(a):
+    r = S5R_ROUND
+    roles = {x["id"]: x["name"] for x in SIMREV["roles"]}
+    out = [table(["项目", "内容"], [["日期", r["date"]], ["记录", r["records"]], ["对象", r["subject"]], ["状态", r["status"]], ["来由", r["instruction"]],
+                                   ["方法", r["method"]], ["输入", "；".join(r["inputs"])], ["研究的限制", r["limits"]]], "compact")]
+    cnt = Counter(d["decision"] for d in S5R_DECISIONS)
+    out.append(f"<h3>决定（{len(S5R_DECISIONS)} 项：" + "、".join(f"{SIMREV['decisionKinds'][k]} {v}" for k, v in cnt.items()) + "）</h3>")
+    tid = "s5r-dec"
+    rows = [[d["subject"], d["id"], d["title"], tag(SIMREV["decisionKinds"][d["decision"]], DEC_KIND[d["decision"]]), d["outcome"],
+             "＋".join(roles[x].replace("（模拟）", "") for x in d["signers"]), d["priority"], d["units"], "、".join(d["sources"]) or "—", "；".join(d["conditions"]) or "—"]
+            for d in S5R_DECISIONS]
+    out.append(filter_bar(tid, "按编号、主题、角色、单元或来源过滤", len(rows))
+               + table(["决定", "记录", "主题", "结论", "决定（摘要）", "模拟签核", "优先级", "实现单元", "来源", "条件"], rows, "compact", tid))
+    out.append("<h3>B0 前须真实负责人确认的事项</h3>")
+    out.append(table(["决定", "真实负责人", "须确认的内容"], [[x["decision"], x["owner"], x["item"]] for x in r["realOwnerItems"]], "compact"))
+    out.append("<h3>要求改动 S5 实现的决定</h3>")
+    out.append(table(["决定", "实现单元", "S5 现状与改动"], [[x["decision"], x["unit"], x["change"]] for x in r["s5Changes"]], "compact"))
+    out.append("<h3>逐项记录</h3>")
+    for d in S5R_DECISIONS:
+        items = [["问题", d["question"]], ["SAP 做法", d["sap"] or "—"], ["富通天下做法", d["futong"] or "—"]]
+        if d["rules"]:
+            items.append(["中国法规或国际规则", d["rules"]])
+        items += [["决定", d["decisionText"]], ["理由", d["reason"]], ["未采纳", d["alternative"] or "—"], ["影响", d["impact"]],
+                  ["优先级", d["priority"]], ["模拟签核（E0）", d["signersText"]], ["条件", "；".join(d["conditions"]) or "—"]]
+        out.append(f'<h4 id="{attr(d["subject"].lower())}">{e(d["subject"])} · {e(d["title"])}</h4>' + table(["项目", "内容"], items, "compact"))
+    out.append("<h3>来源</h3>")
+    out.append(table(["编号", "分组", "网址", "内容"], [[s["id"], s["group"], s["url"], s["content"]] for s in r["sources"]], "compact"))
     return "".join(out)
 
 
@@ -665,6 +754,7 @@ def inc_td_aggregates(a):
             + dd("内部实体", "、".join(g["entities"]) or "—") + dd("值对象", "、".join(g["valueObjects"]) or "—")
             + dd("身份", g["identity"]) + dd("并发", g["concurrency"]) + dd("不变量", "、".join(g["invariants"]) or "—")
             + dd("命令", Raw(codes(g["commands"]))) + dd("领域事件", "、".join(g["events"]) or "—")
+            + (dd("事件载荷（S5R-D43）", "；".join(f"{ev}：{'、'.join(f)}" for ev, f in g["eventPayloads"].items())) if g.get("eventPayloads") else "")
             + dd("Go 包（目标）", Raw(code(g["goPackage"]))) + dd("Python 来源", g["pythonSource"]) + dd("说明", g["notes"] or "—") + "</dl></div>"
         )
     pol = c.get("policies") or []
@@ -739,8 +829,14 @@ def inc_ec_commands(a):
 
 def inc_ec_events(a):
     tid = "ec-evt"
-    rows = [[Raw(chip(r[0])), r[1], code(r[2]), code(r[3]), r[4], r[5]] for r in event_rows()]
-    return filter_bar(tid, "按上下文或事件过滤", len(rows)) + table(["上下文", "事件", "eventType", "source", "聚合", "阶段"], rows, "compact", tid)
+    rows = [[Raw(chip(r[0])), r[1], code(r[2]), code(r[3]), r[4], r[5], r[6]] for r in event_rows()]
+    return filter_bar(tid, "按上下文、事件或载荷字段过滤", len(rows)) + table(["上下文", "事件", "eventType", "source", "聚合", "阶段", "登记的载荷字段（S5R-D43）"], rows, "compact", tid)
+
+
+def inc_ec_queries(a):
+    tid = "ec-qry"
+    rows = [[Raw(chip(r[0])), code(r[1]), code(r[2]), code(r[3]), r[4]] for r in query_rows()]
+    return filter_bar(tid, "按上下文、读取名或路由过滤", len(rows)) + table(["上下文", "读取（operationId）", "路由", "权限", "审计"], rows, "compact", tid)
 
 
 def inc_ec_errors(a):
@@ -865,9 +961,10 @@ def inc_g1_controls(a):
 
 def inc_adr_register(a):
     grp = [g for g in a.get("group", "").split(",") if g]
+    ex = [g for g in a.get("exclude", "").split(",") if g]
     ids = [i for i in a.get("ids", "").split(",") if i]
     rows = [[x["id"], x["group"], x["title"], x["decision"], x["owner"], tag(x["status"]), x["stage"]] for x in ADR["adrs"]
-            if (not grp or x["group"] in grp) and (not ids or x["id"] in ids)]
+            if (not grp or x["group"] in grp) and x["group"] not in ex and (not ids or x["id"] in ids)]
     return table(["编号", "分组", "主题", "决策", "负责人", "状态", "阶段"], rows, "compact")
 
 
@@ -1190,7 +1287,14 @@ def export_csvs() -> None:
               ["test_id", "context", "aggregate", "command", "given", "assertion", "class", "source", "status"],
               [[t["id"], t["context"], t["aggregate"], t["command"], t["given"], t["assertion"], t["class_"], t["source"], t["status"]] for t in TD["testCatalog"]])
     write_csv("06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/01_Command_Catalog_V0.1.csv", ["context", "command", "actor", "python_equivalent", "candidate_http_route", "stage"], command_rows())
-    write_csv("06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/02_Event_Catalog_V0.1.csv", ["context", "event", "event_type", "source", "aggregate", "stage"], event_rows())
+    write_csv("06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/02_Event_Catalog_V0.1.csv", ["context", "event", "event_type", "source", "aggregate", "stage", "payload_fields"], event_rows())
+    write_csv("06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/06_Query_Catalog_V0.1.csv", ["owner", "query", "route", "permission", "audited"], query_rows())
+    write_csv("10_M0_ENGINEERING_BASELINE/09_IDP_Brant_S5R_Decisions_V0.1.csv",
+              ["decision", "record", "title", "conclusion", "summary", "signers", "evidence", "priority", "units", "sources", "conditions", "real_owner", "s5_change",
+               "question", "sap", "futong", "rules", "decision_text", "reason", "alternative", "impact"],
+              [[d["subject"], d["id"], d["title"], d["decision"], d["outcome"], "；".join(d["signers"]), d["evidence"], d["priority"], d["units"], "；".join(d["sources"]),
+                "；".join(d["conditions"]), d["realOwner"], d["s5Change"], d["question"], d["sap"], d["futong"], d["rules"], d["decisionText"], d["reason"],
+                d["alternative"], d["impact"]] for d in S5R_DECISIONS])
     write_csv("06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/03_Error_Catalog_V0.1.csv", ERRORS["columns"], ERRORS["codes"])
     platform_schemas = [
         ["IDP-Bento-Go", "bento", "Bento 框架迁移（brant-migrate 渲染）", "—", "Outbox；Inbox", "M0（已建）"],
@@ -1220,7 +1324,7 @@ def export_csvs() -> None:
             "task": {"type": "object", "additionalProperties": False, "required": ["taskId", "controlEpoch"], "properties": {"taskId": {"type": "string"}, "controlEpoch": {"type": "integer", "minimum": 0}}},
             "evidenceRefs": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
             "payloadHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-            "payload": {"type": "object", "description": "只含标识与版本，不含法定标识或个人数据；按 eventType 另有封闭 schema"},
+            "payload": {"type": "object", "description": "含标识、版本与战术模型 eventPayloads 登记的业务值（数量、金额、期限、结论）；不含法定标识、个人数据与文件内容；按 eventType 另有封闭 schema（S5R-D43）"},
         },
     }
     p = DOCS / "06_ENGINEERING_CONTRACTS/02_CONTRACT_CATALOG/04_Integration_Event_Envelope_V0.1.schema.json"
@@ -1289,7 +1393,8 @@ def counts() -> dict:
         "relationships": len(CM["relationships"]), "factAuthority": len(CM["factAuthority"]), "strategicAdrs": len(CM["adrs"]),
         "eventStormingScenarios": len(ES["scenarios"]), "aggregates": sum(len(c["aggregates"]) for c in TD["contexts"]),
         "stateMachines": len(TD["stateMachines"]), "invariantRegister": len(TD["invariantRegister"]), "referenceTests": len(TD["testCatalog"]),
-        "commands": len(command_rows()), "events": len(event_rows()), "errorCodes": len(ERRORS["codes"]),
+        "commands": len(command_rows()), "events": len(event_rows()), "errorCodes": len(ERRORS["codes"]), "queries": len(query_rows()),
+        "consumers": len(CONSUMERS), "s5rDecisions": len(S5R_DECISIONS),
         "pythonSourceModules": PYSUM["sourceModules"], "pythonSourceLines": PYSUM["sourceLines"], "pythonUniqueTests": PYSUM["testMethodsStatic"],
         "pythonUnittestRerun": RERUN.get("summary", ""), "goTestsPorted": sum(1 for r in _mapping_rows() if r["go_status"] == "PORTED"), "wbsTasks": len(WBS["tasks"]), "adrs": len(ADR["adrs"]),
         "g1Controls": len(G1["controls"]),
@@ -1375,7 +1480,8 @@ def validate(pages: list[str]) -> list[dict]:
     check("UL 词条上下文均已登记", [t["id"] for t in UL["terms"] if t["context"] not in ids | {"PLATFORM", "AI", "KERNEL"}])
     check("UL 词条规则引用存在", [t["id"] for t in UL["terms"] if t["rule"] and t["rule"] not in ul_inv])
     check("UL 命令上下文均已登记", [c["command"] for c in UL["commands"] if c["context"] not in ids])
-    check("关系两端均为已登记上下文", [r["id"] for r in CM["relationships"] if r["frm"] not in ids or r["to"] not in ids], f"{len(CM['relationships'])} 条关系")
+    check("关系两端均为已登记上下文（上游可为平台提供方）", [r["id"] for r in CM["relationships"] if r["frm"] not in ids | set(PLATFORM) or r["to"] not in ids],
+          f"{len(CM['relationships'])} 条关系，平台提供方 {len(PLATFORM)} 个")
     check("关系无重复（上游、下游）", [k for k, n in Counter((r["frm"], r["to"]) for r in CM["relationships"]).items() if n > 1])
     check("上下文引用的 UL 不变量存在", [f"{c['id']}:{i}" for c in CM["contexts"] for i in c["invariants"] if i not in ul_inv])
     check("子域覆盖全部上下文", sorted(ids - {c for s in CM["subdomains"] for c in s["contexts"]}))
@@ -1393,8 +1499,33 @@ def validate(pages: list[str]) -> list[dict]:
     granted = {p for t in ROLES["templates"] for p in t["permissions"]}
     declared = {c["permission"] for c in ROLES["capabilities"]}
     codes_ = {t["code"] for t in ROLES["templates"]}
-    check("岗位模板覆盖全部命令", sorted(commands - granted), f"{len(ROLES['templates'])} 个岗位模板，{len(commands)} 条命令")
-    check("岗位模板的权限均为已登记命令或能力权限", sorted(granted - commands - declared))
+    consumed = {p for c in CONSUMERS for p in c["permissions"]}
+    check("岗位模板或系统消费方覆盖全部命令", sorted(commands - granted - consumed),
+          f"{len(ROLES['templates'])} 个岗位模板，{len(CONSUMERS)} 个系统消费方，{len(commands)} 条命令")
+    check("岗位模板与系统消费方的权限均为已登记命令或能力权限", sorted((granted | consumed) - commands - declared))
+    bad = []
+    rel_up = defaultdict(set)
+    for r in CM["relationships"]:
+        rel_up[r["to"]].add(r["frm"])
+    for c in CONSUMERS:
+        if c["context"] not in ids or not c["systemActor"].startswith(f"system:inbox.{c['context'].lower()}.") or c["systemActor"] != f"system:inbox.{c['id']}":
+            bad.append(f"{c['id']}: 上下文或系统操作者")
+        for ev in c["subscribes"]:
+            src = ev.split(".")[1].upper()
+            if src not in rel_up[c["context"]]:
+                bad.append(f"{c['id']}: 订阅 {ev} 但 {src} 不是 {c['context']} 的上游")
+        bad += [f"{c['id']}: 人工专属 {p}" for p in c["permissions"] if p in HUMAN_ONLY]
+    check("系统消费方只订阅其上游的事件且不持人工专属命令（S5R-D29、D34）", bad, f"{len(CONSUMERS)} 个系统消费方")
+    reg_q = {(q[1], q[2]) for q in query_rows() if q[2].startswith("GET ")}
+    api_q = openapi_reads()
+    bad = [f"未登记 {n} {r}" for n, r in sorted(api_q - reg_q)] + [f"OpenAPI 无 {n} {r}" for n, r in sorted(reg_q - api_q)]
+    bad += [f"{q[0]}: {q[1]} 权限 {q[3]}" for q in query_rows() if q[2].startswith("GET ") and q[3] != f"{q[2].split('/')[4]}.read"]
+    bad += [f"{q[0]}: {q[1]} 不属于本上下文" for q in query_rows() if q[2].startswith("GET ") and q[2].split("/")[4] != q[0].lower()]
+    bad += [f"{k}: 重复" for k, n in Counter(q[1] for q in query_rows()).items() if n > 1]
+    check("读取目录与 OpenAPI 候选的读取路由一致（S5R-D43）", bad, f"{len(query_rows())} 条读取，OpenAPI {len(api_q)} 条 GET")
+    check("聚合的事件载荷只登记本聚合的事件（S5R-D43）",
+          [f"{g['id']}:{ev}" for c in TD["contexts"] for g in c["aggregates"] for ev in g.get("eventPayloads", {}) if ev not in g.get("events", [])],
+          f"{sum(len(g.get('eventPayloads', {})) for c in TD['contexts'] for g in c['aggregates'])} 个事件的载荷")
     check("岗位禁止组合引用已登记模板且无模板自相冲突",
           [str(f["templates"]) for f in ROLES["forbiddenCombinations"] if not set(f["templates"]) <= codes_]
           + [t["code"] for t in ROLES["templates"] for f in ROLES["forbiddenCombinations"] if f["templates"][0] == t["code"] and f["templates"][1] == t["code"]])
@@ -1471,6 +1602,24 @@ def validate(pages: list[str]) -> list[dict]:
     bad += [f"{x['id']}: 模拟评审 {sim_status[x['id']]} 与状态 {x['status']} 不一致" for x in ADR["adrs"]
             if (sim_status[x["id"]] in ("ACCEPTED", "ACCEPTED_WITH_CONDITIONS")) != x["status"].startswith("ACCEPTED")]
     check("模拟评审覆盖全部 ADR 与上下文且状态一致", bad, f"{len(SIMREV['decisions'])} 项裁决，{len(SIMREV['contextSignoffs'])} 个上下文")
+    # S5R (2026-11-13): 47 simulated decisions, each with simulated signers, sources from the round's list, evidence E0,
+    # and a condition exactly when a real owner must confirm it before B0 or it changes the S5 implementation.
+    src_ids = {s["id"] for s in S5R_ROUND.get("sources", [])}
+    subjects = [d["subject"] for d in S5R_DECISIONS]
+    bad = [] if subjects == [f"S5R-D{i:02d}" for i in range(1, len(subjects) + 1)] else ["编号不连续"]
+    for d in S5R_DECISIONS:
+        bad += [f"{d['subject']}: 签核角色 {x}" for x in d["signers"] if x not in role_ids]
+        bad += [f"{d['subject']}: 来源 {x}" for x in d["sources"] if x not in src_ids]
+        if d["evidence"] != "E0" or "R-CA" not in d["signers"]:
+            bad.append(f"{d['subject']}: 证据层级或首席架构师")
+        if bool(d["conditions"]) != bool(d["realOwner"] or d["s5Change"]) or (d["decision"] == "ACCEPTED_WITH_CONDITIONS") != bool(d["conditions"]):
+            bad.append(f"{d['subject']}: 条件与真实负责人或 S5 改动不一致")
+    bad += [f"{x['decision']}: 不是 S5R 决定" for x in S5R_ROUND.get("realOwnerItems", []) + S5R_ROUND.get("s5Changes", [])
+            if x["decision"].startswith("S5R-") and x["decision"] not in subjects]
+    bad += [f"{x['id']}: ADR 登记缺少真实负责人或 S5 改动的标注" for x in ADR["adrs"] if x["id"].startswith("S5R-")
+            and any(d["subject"] == x["id"] and (d["realOwner"] or d["s5Change"]) for d in S5R_DECISIONS) and "；" not in x["status"]]
+    check("S5R 模拟签核：编号连续、签核角色与来源已登记、证据 E0、条件与真实负责人和 S5 改动一致", bad,
+          f"{len(S5R_DECISIONS)} 项决定，{len(src_ids)} 个来源，{len(S5R_ROUND.get('realOwnerItems', []))} 项待真实负责人确认")
     reg_status = {x["id"]: x["status"] for x in ADR["adrs"]}
     check("战略 ADR 状态与 ADR 登记一致", [f"{x['id']}: {x['status']}≠{reg_status[x['id']]}" for x in CM["adrs"] if x["id"] in reg_status and not x["status"].startswith(reg_status[x["id"]])])
     mapping = _mapping_rows()
@@ -1570,6 +1719,7 @@ def main() -> int:
     report = {
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "builder": "00_START_HERE/tools/build_archive.py",
         "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；"
+                 "读取目录与 OpenAPI 候选的读取路由一致、系统消费方只订阅上游事件、S5R 模拟签核的签核角色与来源已登记；"
                  "M0 与 S1 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
         "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE、07_S2_EVIDENCE、09_S3_EVIDENCE、13_S5_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
         "result": "PASS" if not failed else "FAIL", "checks": results, "counts": counts(),
