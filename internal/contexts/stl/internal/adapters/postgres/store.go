@@ -494,7 +494,7 @@ const reservationColumns = `reservation_id, party_id, order_id, order_revision, 
 	secured_minor::text, limit_currency, limit_minor_units, exposure_minor::text, fx_id, fx_revision, fx_hash, basis, coalesce(decision_id, ''),
 	policy_id, policy_revision, policy_hash, status, version, expires_at, owner_actor_id, coalesce(owner_team_id, ''), reserved_by_kind,
 	reserved_by_id, reserve_epoch, reserved_at, consumed_by_kind, consumed_by_id, consume_epoch, consumed_at, activated_at, released_by_kind,
-	released_by_id, release_epoch, released_at, release_reason`
+	released_by_id, release_epoch, released_at, release_reason, coalesce(carried_from, ''), coalesce(release_cause, '')`
 
 func scanReservation(row pgx.Row) (*cc.Reservation, error) {
 	var r cc.Reservation
@@ -508,7 +508,7 @@ func scanReservation(row pgx.Row) (*cc.Reservation, error) {
 	err := row.Scan(&r.ID, &r.PartyID, &r.Binding.OrderID, &r.Binding.OrderRevision, &r.Binding.OrderHash, &code, &units, &amount, &secured,
 		&limitCode, &limitUnits, &exposure, &fxID, &fxRev, &fxHash, &r.Basis, &r.DecisionID, &r.Policy.ID, &r.Policy.Revision, &r.Policy.Hash,
 		&r.Status, &r.Version, &r.ExpiresAt, &r.OwnerActor, &r.OwnerTeam, &rKind, &r.Reserved.By.ID, &r.Reserved.Epoch, &r.Reserved.At,
-		&cKind, &cID, &cEpoch, &cAt, &activated, &lKind, &lID, &lEpoch, &lAt, &lReason)
+		&cKind, &cID, &cEpoch, &cAt, &activated, &lKind, &lID, &lEpoch, &lAt, &lReason, &r.CarriedFrom, &r.ReleaseCause)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +568,8 @@ func LoadReservations(ctx context.Context, exec bentopg.Executor, sc kernel.Scop
 	})
 }
 
-// InsertReservation stores a new reservation.
+// InsertReservation stores a new reservation: reserved, or consumed when the system carries an
+// earlier order revision's over (S5R-D08, carried_from).
 func InsertReservation(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, r *cc.Reservation) error {
 	t, c := ts(sc)
 	fxID, fxRev, fxHash := useArgs(r.FX)
@@ -576,17 +577,23 @@ func InsertReservation(ctx context.Context, exec bentopg.Executor, sc kernel.Sco
 	if r.DecisionID != "" {
 		decision = &r.DecisionID
 	}
+	cKind, cID, cEpoch, cAt, _ := actArgs(r.Consumed)
+	var activated *time.Time
+	if r.Consumed != nil {
+		activated = &r.ActivatedAt
+	}
 	oc, lc := r.Amount.Currency(), r.Exposure.Currency()
 	_, err := exec.Exec(ctx, `INSERT INTO brant_stl.credit_reservation (tenant_id, company_id, reservation_id, party_id, order_id, order_revision,
 		order_hash, currency, minor_units, amount_minor, secured_minor, limit_currency, limit_minor_units, exposure_minor, fx_id, fx_revision,
 		fx_hash, basis, decision_id, policy_id, policy_revision, policy_hash, status, version, expires_at, owner_actor_id, owner_team_id,
-		reserved_by_kind, reserved_by_id, reserve_epoch, reserved_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text::numeric,
+		reserved_by_kind, reserved_by_id, reserve_epoch, reserved_at, consumed_by_kind, consumed_by_id, consume_epoch, consumed_at, activated_at,
+		carried_from) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text::numeric,
 		$11::text::numeric, $12, $13, $14::text::numeric, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, nullif($27, ''), $28, $29,
-		$30, $31)`,
+		$30, $31, $32, $33, $34, $35, $36, nullif($37, ''))`,
 		t, c, r.ID, r.PartyID, r.Binding.OrderID, r.Binding.OrderRevision, r.Binding.OrderHash, oc.Code(), oc.MinorUnits(), r.Amount.MinorString(),
 		r.Secured.MinorString(), lc.Code(), lc.MinorUnits(), r.Exposure.MinorString(), fxID, fxRev, fxHash, r.Basis, decision, r.Policy.ID,
 		r.Policy.Revision, r.Policy.Hash, r.Status, r.Version, r.ExpiresAt, r.OwnerActor, r.OwnerTeam, string(r.Reserved.By.Kind), r.Reserved.By.ID,
-		r.Reserved.Epoch, r.Reserved.At)
+		r.Reserved.Epoch, r.Reserved.At, cKind, cID, cEpoch, cAt, activated, r.CarriedFrom)
 	return err
 }
 
@@ -601,8 +608,9 @@ func UpdateReservation(ctx context.Context, exec bentopg.Executor, sc kernel.Sco
 	}
 	tag, err := exec.Exec(ctx, `UPDATE brant_stl.credit_reservation SET status = $4, version = $5, consumed_by_kind = $6, consumed_by_id = $7,
 		consume_epoch = $8, consumed_at = $9, activated_at = $10, released_by_kind = $11, released_by_id = $12, release_epoch = $13,
-		released_at = $14, release_reason = $15 WHERE tenant_id = $1 AND company_id = $2 AND reservation_id = $3 AND version = $16`,
-		t, c, r.ID, r.Status, r.Version, cKind, cID, cEpoch, cAt, activated, lKind, lID, lEpoch, lAt, lReason, from)
+		released_at = $14, release_reason = $15, release_cause = nullif($17, '') WHERE tenant_id = $1 AND company_id = $2 AND reservation_id = $3
+		AND version = $16`,
+		t, c, r.ID, r.Status, r.Version, cKind, cID, cEpoch, cAt, activated, lKind, lID, lEpoch, lAt, lReason, from, r.ReleaseCause)
 	if err == nil && tag.RowsAffected() != 1 {
 		err = ErrConflict
 	}

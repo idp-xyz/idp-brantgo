@@ -55,11 +55,16 @@ var (
 
 	_ api.OpeningCommands = (*Module)(nil)
 	_ api.OpeningQueries  = (*Module)(nil)
+
+	_ api.PayerCommands = (*Module)(nil)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),
-// POL's configurations (R33), PTY's parties (R43) and EVD's sources (R75).
+// POL's configurations (R33), PTY's parties and trading profiles (R43) and EVD's sources (R75).
 type Upstream = application.Upstream
+
+// Parties is STL's port to PTY (R43): PartyRef v1 and TradingProfileRef v1 (S5R-D21).
+type Parties = application.Parties
 
 // The port to TRD (OrderCommercialSnapshot v1) and what passes through it.
 type (

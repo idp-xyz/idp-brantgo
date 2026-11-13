@@ -1704,7 +1704,8 @@ func (s *s5sc) amendment(id string, rev int64, hash string, quantities map[strin
 // every consumer, once: PUR opens an allocation review (L4: 48 held by commitment.1, target 36), FUL
 // a shipment review (shipment.2, bound to revision 1: its shipment, packing and release items), STL a
 // payment plan review (the account moved to revision 2: P1 259.20 with 288.00 applied, P2 604.80) and
-// CNX a pending check for revision 2; STL's credit consumer changes nothing. Each responsible role
+// CNX a pending check for revision 2; STL's credit consumer carries the reservation over to revision 2 at
+// 604.80 and releases revision 1's as superseded (S5R-D08). Each responsible role
 // settles its review on what it did: the purchaser changes commitment.1 (L4 → 36; the order reviewer
 // decides it independently, the purchaser applies it) and settles commitment_changed; compliance
 // concludes revision 2 clear; the merchandiser cancels shipment.2, prepares shipment.3 of L3 at
@@ -1717,7 +1718,7 @@ func (s *s5sc) amendment(id string, rev int64, hash string, quantities map[strin
 func TestS5SCBT10OrderChangeAfterPartialShipmentOverHTTP(t *testing.T) {
 	s := newS5SC(t, s5scMeta{ID: "BT10", Title: "部分出运后减量 (BT10): PUR, FUL, STL and CNX each review the amendment; what shipped stays",
 		Design: []string{"BT10", "WF-06", "PL-09", "PL-14", "D-9", "D-18", "D-21", "TRD-INV-016", "TRD-INV-018", "PUR-INV-011", "SM-PUR-ALLOCATION-REVIEW",
-			"SM-FUL-SHIPMENT-REVIEW", "SM-STL-PAYMENT-PLAN-REVIEW"},
+			"SM-FUL-SHIPMENT-REVIEW", "SM-STL-PAYMENT-PLAN-REVIEW", "S5R-D08"},
 		RestsOn: []string{"C4a", "C4b-PUR", "C4b-FUL", "C4b-STL", "C4b-CNX", "C11", "D1"},
 		UnitTests: []string{"TestAllocationReviewFollowsAReducedOrderBT10 (C4b-PUR)", "TestShipmentReviewFollowsAReducedOrderBT10 (C4b-FUL)",
 			"TestAmendedOrderMovesItsAccountThroughTheRelay (C4b-STL)", "TestOrderAmendedOpensOnePendingCheckPerRevision (C4b-CNX)",
@@ -1793,7 +1794,18 @@ func TestS5SCBT10OrderChangeAfterPartialShipmentOverHTTP(t *testing.T) {
 	s.want("order_amended_consumers", strings.Join(consumers, "; "), "cnx.trade_compliance ← "+trdapi.EventOrderAmended+"; ful.shipment_review ← "+
 		trdapi.EventOrderAmended+"; pur.allocation_review ← "+trdapi.EventOrderAmended+"; stl.order_account ← "+trdapi.EventOrderAmended+
 		"; stl.order_credit ← "+trdapi.EventOrderAmended)
-	s.want("reservation_after_amendment", s.reservation()["status"], stlapi.ReservationConsumed)
+	// S5R-D08 (S5 kept res.order.1 consumed here until the order ended): the credit follows revision 2 — res.order.1
+	// is released as superseded and carried over at revision 2's credit portion 604.80.
+	r1 := s.reservation()
+	s.want("reservation_after_amendment", fmt.Sprint(r1["status"], " ", r1["release_cause"]), stlapi.ReservationReleased+" "+stlapi.CauseSuperseded)
+	var carried []string
+	for _, r := range brcList(s.get(brcCreditOfficer, "/api/brant/v1/stl/customers/customer.1/credit")["reservations"]) {
+		if brcDig(r, "order_id") == "order.1" && brcDig(r, "status") != stlapi.ReservationReleased {
+			carried = append(carried, fmt.Sprint("r", brcDig(r, "order_revision"), " ", brcDig(r, "status"), " ", brcDig(r, "basis"), " from ",
+				brcDig(r, "carried_from"), " ", brcDig(r, "portion_minor")))
+		}
+	}
+	s.want("reservation_carried_over", strings.Join(carried, "; "), "r2 consumed carried_over from res.order.1 60480")
 
 	s.phase = "BT10: the reviews"
 	pr := brcMap(brcDig(s.get(brcPurchaser, "/api/brant/v1/pur/orders/order.1/allocation_reviews"), "allocation_reviews", 0))
@@ -1955,7 +1967,8 @@ func (s *s5sc) decideException(id, reason string) map[string]any {
 // order is activated on the reservation and the purchaser drafts 1,000 PCS. The customer reduces
 // both styles by 10 % (450 + 450 = 8,280.00): the amendment is applied (credit not increased); the
 // relay opens PUR's allocation review (the draft and both lines held 50 above the target), STL's
-// payment plan review (credit portion 9,200.00 → 8,280.00) and CNX's pending check of revision 2.
+// payment plan review (credit portion 9,200.00 → 8,280.00) and CNX's pending check of revision 2; STL's
+// credit consumer carries the reservation over to revision 2 at 8,280.00 (S5R-D08: exposure 15,280.00).
 // The purchaser voids the draft (PurchaseDraftVoided), drafts 900 and settles the review
 // draft_voided; treasury accepts the portion change; compliance concludes revision 2 clear. The 900
 // are committed, inspected and released; the factory delivers 850 (450 + 400), verified, and the
@@ -1972,7 +1985,7 @@ func (s *s5sc) decideException(id, reason string) map[string]any {
 func TestS5SCSIM02VariantOverHTTP(t *testing.T) {
 	s := newS5SC(t, s5scMeta{ID: "SIM-02", Title: "SIM-02 变体: CIF Hamburg 1,000 × 9.20, O/A 60, −10 %, insurance 110 %, 850 of 900, close_remainder 50",
 		Design: []string{"SIM-02", "WF-06", "ES-09", "F-03", "FUL-INV-005", "PUR-INV-008", "PUR-INV-011", "STL-INV-004", "D-9", "D-13", "D-14",
-			"D-18", "D-19"},
+			"D-18", "D-19", "S5R-D08"},
 		RestsOn: []string{"C6", "C11", "C4a", "C4b-PUR", "C4b-STL", "C4b-CNX", "C10", "A6", "B6", "D1"},
 		UnitTests: []string{"TestCommitmentShortReceiptSIM02 (C11)", "TestInsuranceOnTheCIFInvoiceSIM02Step8 (C6)", "TestAllocationReviewFollowsAReducedOrderBT10 (C4b-PUR)",
 			"TestAmendedOrderMovesItsAccountThroughTheRelay (C4b-STL)"},
@@ -2076,14 +2089,16 @@ func TestS5SCSIM02VariantOverHTTP(t *testing.T) {
 	var stlItems, stlDispositions []any
 	for _, it := range brcList(sr["items"]) {
 		stlItems = append(stlItems, fmt.Sprint(brcDig(it, "kind"), " ", brcDig(it, "from_minor"), "→", brcDig(it, "to_minor")))
-		stlDispositions = append(stlDispositions, map[string]any{"seq": brcDig(it, "seq"), "disposition": "accepted", "note": "减量后信用占用随订单结束释放"})
+		stlDispositions = append(stlDispositions, map[string]any{"seq": brcDig(it, "seq"), "disposition": "accepted", "note": "减量后信用占用随修订降为 8,280.00（S5R-D08）"})
 	}
 	s.want("stl_review", fmt.Sprint(stlItems), "[credit_portion_changed 920000→828000]")
 	acc := s.get(brcTreasury, "/api/brant/v1/stl/order_accounts/"+d.order())
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandSettleReview, map[string]any{"order_id": d.order(), "order_revision": 2,
 		"expected_version": acc["version"], "reason": "付款计划影响已复核", "items": stlDispositions})
 	s.clear(d, false)
-	s.want("exposure_after_amendment", s.exposure(brcCreditOfficer), "1620000")
+	// S5R-D08 (simulated sign-off E0; S5 recorded 1620000 here: the 9,200.00 stayed until the order ended): the
+	// amendment carries the credit over at revision 2's 8,280.00, so the exposure is 7,000.00 + 8,280.00.
+	s.want("exposure_after_amendment", s.exposure(brcCreditOfficer), "1528000")
 
 	s.phase = "SIM-02 step 9: 850 of 900"
 	s.commit(d, "purchase.sim.2")

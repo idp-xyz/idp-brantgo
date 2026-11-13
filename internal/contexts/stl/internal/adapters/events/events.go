@@ -7,8 +7,10 @@
 // 与订单事件"; WBS S5-12c): OrderActivated has the order revision's credit reservation consumed (event
 // storming PL-12), and the end of an order — OrderCancelled, OrderClosedUnfulfilled,
 // OrderRemainderClosed, OrderClosed — has every reservation the order still holds released (PL-13;
-// WF-08 step 5; SM-STL-CREDIT-RESERVATION). OrderAmended that names the reservation covering the new
-// revision has it consumed and the earlier revisions' reservations released (D-9, WF-06; unit C4b).
+// WF-08 step 5; SM-STL-CREDIT-RESERVATION). OrderAmended moves the order's credit to the new revision:
+// the reservation that covers it consumed — the one the event names (D-9, WF-06; unit C4b), the
+// revision's own, or the earlier revision's carried over at the new credit portion — and the earlier
+// revisions' reservations released as superseded (S5R-D08).
 //
 // stl.order_account opens the order account of an activated order at the activated revision (S5
 // plan D-4, D-18; STL-AGG-OrderAccount; unit B6b), so that PaymentConditionGuard v1 (R45) judges every
@@ -65,17 +67,19 @@ var (
 // system:inbox.stl.order_account, which brant-admin inbox grants OrderAccountPermissions.
 const OrderAccounts eventing.InboxConsumer = "stl.order_account"
 
-// OrderAccountPermissions are what order_account.open and payment_plan_review.open need (both
-// payment_plan_review.open), and stl.read for the command ledger's stored-result read.
+// OrderAccountPermissions are what order_account.open (its own permission, S5R-D02) and
+// payment_plan_review.open need, and stl.read for the command ledger's stored-result read (Context Map
+// consumers: stl.order_account).
 func OrderAccountPermissions() []string {
-	return []string{api.PermissionOpenOrderAccount, api.PermissionRead}
+	return []string{api.PermissionOpenOrderAccount, api.PermissionOpenReview, api.PermissionRead}
 }
 
 // Credit is what stl.order_credit asks of STL's application; application.Service implements it.
 type Credit interface {
 	ConsumeOnActivation(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
 	ReleaseOnOrderEnd(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
-	ConsumeOnAmendment(ctx context.Context, exec bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error)
+	PrepareCredit(ctx context.Context, e application.OrderEvent) (application.CreditBasis, error)
+	ConsumeOnAmendment(ctx context.Context, exec bentopg.Executor, e application.OrderEvent, b application.CreditBasis) (application.CreditEffect, error)
 }
 
 // Accounts is what stl.order_account asks of STL's application; application.Service implements it.
@@ -100,6 +104,7 @@ func Subscriptions(db *bentopg.DB, app Application) []messaging.Subscription {
 		EventTypes:  slices.Concat(activationEvents, endEvents, amendmentEvents),
 		DB:          db,
 		Permissions: OrderCreditPermissions(),
+		Prepare:     OrderCreditPrepare(app),
 		Handler:     OrderCreditHandler(app),
 	}, {
 		Consumer:    OrderAccounts,
@@ -157,6 +162,23 @@ func OrderAccountHandler(accounts Accounts) messaging.EventFunc {
 	}
 }
 
+// OrderCreditPrepare reads, before the consumer's transaction, what an OrderAmended that names no
+// reservation needs to move the order's credit to the amended revision (application.PrepareCredit,
+// S5R-D08: TRD's order and the POL revisions of its reservations); the other order events need
+// nothing. A payload that is not a SalesOrder event's is refused for good; a failed read is retried.
+func OrderCreditPrepare(credit Credit) func(ctx context.Context, envelope eventing.Envelope) (any, error) {
+	return func(ctx context.Context, envelope eventing.Envelope) (any, error) {
+		if !slices.Contains(amendmentEvents, envelope.Type) {
+			return nil, nil
+		}
+		event, err := orderEvent(envelope)
+		if err != nil {
+			return nil, messaging.RejectEvent(FailureOrderEventInvalid, err)
+		}
+		return credit.PrepareCredit(ctx, event)
+	}
+}
+
 // OrderCreditHandler applies one of TRD's order events to the order's credit reservations.
 //
 // The event is refused for good (messaging.RejectEvent: dead letter and alert at once, ADR-BR-015)
@@ -180,7 +202,11 @@ func OrderCreditHandler(credit Credit) messaging.EventFunc {
 		case slices.Contains(endEvents, e.Envelope.Type):
 			_, err = credit.ReleaseOnOrderEnd(ctx, e.Exec, event)
 		case slices.Contains(amendmentEvents, e.Envelope.Type):
-			_, err = credit.ConsumeOnAmendment(ctx, e.Exec, event)
+			basis, ok := e.Prepared.(application.CreditBasis)
+			if !ok {
+				return fmt.Errorf("stl: %s delivered an amendment without its prepared credit basis", OrderCredit)
+			}
+			_, err = credit.ConsumeOnAmendment(ctx, e.Exec, event, basis)
 		default:
 			// The Dispatcher delivers subscribed types only.
 			return messaging.RejectEvent(FailureOrderEventInvalid, fmt.Errorf("stl: %s is not an order event %s handles", e.Envelope.Type, OrderCredit))

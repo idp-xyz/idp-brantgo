@@ -36,6 +36,7 @@ type StatementInput struct {
 	Applied     map[int]kernel.Money
 	Amount      kernel.Money
 	FX          *FXInput
+	Payers      Payers // S5R-D21: what lets another payer than a receivable's customer pay
 	By          fundrecord.Act
 	Team        string
 }
@@ -118,9 +119,16 @@ func ApplyToStatement(in StatementInput) (*Application, error) {
 	case f.Currency() != st.Currency() && in.FX == nil:
 		return nil, fundrecord.Reject(fundrecord.CodeFXScopeMismatch, "/args/fx_rate",
 			"The fund is in "+f.Currency().Code()+", the statement in "+st.Currency().Code()+": cross-currency write-off needs a settlement rate")
-	case f.CounterpartyID != st.CounterpartyID:
+	case target == TargetPayable && f.CounterpartyID != st.CounterpartyID:
 		return nil, fundrecord.Reject(fundrecord.CodePartyEntityMismatch, "/args/fund_record_id",
 			"The fund's party "+f.CounterpartyID+" is not the statement's "+st.CounterpartyID)
+	}
+	payer, profile := PayerCustomer, int64(0)
+	if target == TargetReceivable {
+		var err error
+		if payer, profile, err = payerOf(f, st.CounterpartyID, in.Payers); err != nil {
+			return nil, err
+		}
 	}
 	inst, err := installment(st, in.StageID, in.Applied)
 	if err != nil {
@@ -144,7 +152,8 @@ func ApplyToStatement(in StatementInput) (*Application, error) {
 		return nil, err
 	}
 	x := &Application{ID: in.ID, FundRecordID: f.ID, TargetKind: target, StatementID: st.ID, InstallmentSeq: inst.Seq, Amount: amount,
-		Conversion: conv, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team, Applied: in.By}
+		Conversion: conv, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team, Applied: in.By, PayerBasis: payer,
+		PayerProfileRevision: profile}
 	if target == TargetReceivable {
 		x.OrderID, x.OrderRevision, x.StageID = st.OrderID, st.OrderRevision, inst.StageID
 	}
@@ -196,11 +205,13 @@ func MoveToReceivable(st *settlement.Statement, standing []Application, newID fu
 			}
 			m.Replacement = &Application{ID: newID(), FundRecordID: from.FundRecordID, TargetKind: TargetReceivable, OrderID: st.OrderID,
 				OrderRevision: st.OrderRevision, StageID: inst.StageID, StatementID: st.ID, InstallmentSeq: inst.Seq, MovedFrom: from.ID,
-				Amount: part, Conversion: moved, Status: StatusApplied, Version: 1, OwnerActor: by.By.ID, OwnerTeam: team, Applied: by}
+				Amount: part, Conversion: moved, Status: StatusApplied, Version: 1, OwnerActor: by.By.ID, OwnerTeam: team, Applied: by,
+				PayerBasis: from.PayerBasis, PayerProfileRevision: from.PayerProfileRevision} // S5R-D21: the payer keeps its basis
 			if rest, _ := from.Amount.Sub(part); rest.Sign() > 0 {
 				m.Remainder = &Application{ID: newID(), FundRecordID: from.FundRecordID, TargetKind: TargetOrderStage, OrderID: from.OrderID,
 					OrderRevision: from.OrderRevision, StageID: from.StageID, MovedFrom: from.ID, Amount: rest, Conversion: kept, Status: StatusApplied,
-					Version: 1, OwnerActor: by.By.ID, OwnerTeam: team, Applied: by}
+					Version: 1, OwnerActor: by.By.ID, OwnerTeam: team, Applied: by, PayerBasis: from.PayerBasis,
+					PayerProfileRevision: from.PayerProfileRevision}
 			}
 			from.Status, from.Version = StatusMoved, from.Version+1
 			out = append(out, m)

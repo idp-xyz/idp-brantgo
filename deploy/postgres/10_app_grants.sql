@@ -377,6 +377,12 @@ GRANT UPDATE (status, version, updated_at) ON brant_stl.order_result TO brant_ap
 GRANT SELECT, INSERT ON brant_stl.opening_balance TO brant_app;
 GRANT UPDATE (status, updated_at) ON brant_stl.opening_balance TO brant_app;
 
+-- STL credit and third-party payers (S5R-07; S5R-D08, S5R-D21): the system also inserts a reservation consumed when
+-- it carries an earlier order revision's over, and a release states its cause (trigger); payer verifications are only
+-- inserted, each moving its receipt's version by one (triggers); nothing is deleted.
+GRANT UPDATE (release_cause) ON brant_stl.credit_reservation TO brant_app;
+GRANT SELECT, INSERT ON brant_stl.fund_payer_verification TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on

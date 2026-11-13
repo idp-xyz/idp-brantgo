@@ -24,13 +24,35 @@ func amended(fields map[string]any) messaging.Event {
 	return orderEnvelope(trdapi.EventOrderAmended, f)
 }
 
+// prepared runs the subscription's Prepare step on e, as the dispatcher does before the handler.
+func prepared(t *testing.T, sub messaging.Subscription, e messaging.Event) messaging.Event {
+	t.Helper()
+	basis, err := sub.Prepare(context.Background(), e.Envelope)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	e.Prepared = basis
+	return e
+}
+
 // stl.order_credit hands ConsumeOnAmendment the new binding, the apply instant, the guard's value
-// and the reservation the event names (none for not_increased / not_required).
+// and the reservation the event names (none for not_increased / not_required), with the credit basis
+// its Prepare step read (S5R-D08: PrepareCredit; the other order events prepare nothing).
 func TestOrderAmendedReachesTheCreditConsumer(t *testing.T) {
 	c := &credit{}
-	h := OrderCreditHandler(c)
-	if err := h(context.Background(), amended(nil)); err != nil {
+	sub := Subscriptions(nil, c)[0]
+	h := sub.Handler
+	if err := h(context.Background(), prepared(t, sub, amended(nil))); err != nil {
 		t.Fatal(err)
+	}
+	if len(c.creditPrepared) != 1 || len(c.creditBases) != 1 || c.creditBases[0].Order.Binding.OrderRevision != 7 {
+		t.Fatalf("prepared %+v %+v", c.creditPrepared, c.creditBases)
+	}
+	if err := h(context.Background(), amended(nil)); err == nil || errors.Is(err, messaging.ErrEventRejected) {
+		t.Fatalf("an amendment without its prepared basis is retried: %v", err)
+	}
+	if basis, err := sub.Prepare(context.Background(), activated(nil).Envelope); basis != nil || err != nil || len(c.creditPrepared) != 1 {
+		t.Fatalf("an activation prepares nothing: %v %v", basis, err)
 	}
 	if len(c.amended) != 1 || len(c.consumed) != 0 || len(c.released) != 0 {
 		t.Fatalf("routed %+v %+v %+v", c.amended, c.consumed, c.released)
@@ -41,7 +63,7 @@ func TestOrderAmendedReachesTheCreditConsumer(t *testing.T) {
 		got.CreditReservationID != "res.2" || !got.ActivatedAt.IsZero() {
 		t.Fatalf("event %+v", got)
 	}
-	if err := h(context.Background(), amended(map[string]any{"credit_guard": "not_increased", "credit_reservation_id": ""})); err != nil ||
+	if err := h(context.Background(), prepared(t, sub, amended(map[string]any{"credit_guard": "not_increased", "credit_reservation_id": ""}))); err != nil ||
 		c.amended[1].CreditReservationID != "" || c.amended[1].CreditGuard != "not_increased" {
 		t.Fatalf("not increased: %+v %v", c.amended, err)
 	}
@@ -58,14 +80,23 @@ func TestOrderAmendedReachesTheCreditConsumer(t *testing.T) {
 	if len(c.amended) != 2 {
 		t.Fatalf("the application saw a malformed amendment: %+v", c.amended)
 	}
+	if _, err := sub.Prepare(context.Background(), amended(map[string]any{"applied_at": "yesterday"}).Envelope); !errors.Is(err, messaging.ErrEventRejected) {
+		t.Fatalf("malformed amendment in prepare: %v", err)
+	}
+	ready := amended(nil)
+	ready.Prepared = application.CreditBasis{}
 	mismatch := &credit{err: &application.CreditMismatch{Code: application.FailureReservationReleased, Detail: "res.2"}}
-	if err := OrderCreditHandler(mismatch)(context.Background(), amended(nil)); !errors.Is(err, messaging.ErrEventRejected) {
+	if err := OrderCreditHandler(mismatch)(context.Background(), ready); !errors.Is(err, messaging.ErrEventRejected) {
 		t.Fatalf("mismatch: %v", err)
 	}
 	denied := kernel.Reject(kernel.CodePermissionDenied, "/", "")
-	if err := OrderCreditHandler(&credit{err: denied})(context.Background(), amended(nil)); !errors.Is(err, denied) ||
+	if err := OrderCreditHandler(&credit{err: denied})(context.Background(), ready); !errors.Is(err, denied) ||
 		errors.Is(err, messaging.ErrEventRejected) {
 		t.Fatalf("denied: %v", err)
+	}
+	cause := errors.New("TRD unreachable")
+	if _, err := Subscriptions(nil, &credit{prepareErr: cause})[0].Prepare(context.Background(), amended(nil).Envelope); !errors.Is(err, cause) {
+		t.Fatalf("a failed read is retried: %v", err)
 	}
 }
 

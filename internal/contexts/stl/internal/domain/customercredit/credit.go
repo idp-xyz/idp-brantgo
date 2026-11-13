@@ -26,6 +26,9 @@ const (
 	BasisWithinLimit      = "within_limit"
 	BasisCreditDecision   = "credit_decision"
 	BasisDocumentsSecured = "documents_secured"
+	// BasisCarriedOver: the system carried an earlier order revision's reservation over to an amended
+	// revision at its credit portion, no larger, without a limit check (S5R-D08).
+	BasisCarriedOver = "carried_over"
 
 	SourceInternalAssessment = "internal_assessment"
 	SourceSinosureBuyerLimit = "sinosure_buyer_limit"
@@ -337,27 +340,30 @@ func (d *Decision) Covers(b Binding, portion kernel.Money, v Verdict, t time.Tim
 // Reservation is a CreditReservation (SM-STL-CREDIT-RESERVATION): the credit portion of one order
 // revision held against the customer's limit; reserved → consumed (system, on activation) →
 // released (system, on the order's end), or reserved → released. A reserved reservation expires
-// (derived) at ExpiresAt.
+// (derived) at ExpiresAt. One the system carried over from an earlier revision (S5R-D08, CarriedFrom)
+// starts consumed. ReleaseCause says why it was released (empty for releases before S5R-D08).
 type Reservation struct {
-	ID          string
-	PartyID     string
-	Binding     Binding
-	Amount      kernel.Money // the portion, order currency
-	Secured     kernel.Money // document-controlled stages treated as secured, order currency
-	Exposure    kernel.Money // the portion in the limit currency
-	FX          *ConfigUse
-	Basis       string
-	DecisionID  string
-	Policy      ConfigUse
-	Status      string
-	Version     int64
-	ExpiresAt   time.Time
-	OwnerActor  string
-	OwnerTeam   string
-	Reserved    Act
-	Consumed    *Act
-	ActivatedAt time.Time
-	Released    *Act
+	ID           string
+	PartyID      string
+	Binding      Binding
+	Amount       kernel.Money // the portion, order currency
+	Secured      kernel.Money // document-controlled stages treated as secured, order currency
+	Exposure     kernel.Money // the portion in the limit currency
+	FX           *ConfigUse
+	Basis        string
+	DecisionID   string
+	Policy       ConfigUse
+	Status       string
+	Version      int64
+	ExpiresAt    time.Time
+	OwnerActor   string
+	OwnerTeam    string
+	Reserved     Act
+	Consumed     *Act
+	ActivatedAt  time.Time
+	Released     *Act
+	CarriedFrom  string
+	ReleaseCause string
 }
 
 // Live reports whether r holds credit at t: consumed, or reserved and not expired.
@@ -393,16 +399,21 @@ func (r *Reservation) Consume(b Binding, activatedAt time.Time, act Act) error {
 	return nil
 }
 
-// Release releases r at act: a reserved reservation by anyone allowed to (the order not active, or
-// r expired: application's check), a consumed one only by the system when its order ends (PL-13).
-func (r *Reservation) Release(act Act) error {
+// Release releases r at act for cause (S5R-D08: abandoned, expired, order_ended or superseded): a
+// reserved reservation by anyone allowed to (the order not active, or r expired: application's
+// check), a consumed one only by the system when its order ends (PL-13) or a later revision
+// supersedes it; those two causes are the system's.
+func (r *Reservation) Release(act Act, cause string) error {
+	system := act.By.Kind == kernel.ActorSystem
 	switch {
 	case r.Status == ReservationReleased:
 		return state("/args/reservation_id", "The reservation is released")
-	case r.Status == ReservationConsumed && act.By.Kind != kernel.ActorSystem:
+	case r.Status == ReservationConsumed && !system:
 		return state("/args/reservation_id", "A consumed reservation is released when its order ends")
+	case !slices.Contains(ReleaseCauses(), cause), (cause == CauseOrderEnded || cause == CauseSuperseded) && !system:
+		return invalid("/args/cause", "A person's or agent's release is abandoned or expired")
 	}
-	r.Status, r.Released = ReservationReleased, &act
+	r.Status, r.Released, r.ReleaseCause = ReservationReleased, &act, cause
 	r.Version++
 	return nil
 }

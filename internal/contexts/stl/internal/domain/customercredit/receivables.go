@@ -1,6 +1,7 @@
 package customercredit
 
 import (
+	"slices"
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -31,28 +32,24 @@ func credit(trigger string) bool {
 	return trigger == TriggerAfterShipment || trigger == TriggerAfterInvoice
 }
 
-// converter converts an order's amounts into the limit currency c at the rate its reservation was
-// made at: the reservation's portion and its exposure in the limit currency (the latest revision's
-// reservation of the order that has a portion), HALF_UP to c's minor units. An amount already in c
-// is kept; zero converts to zero; an amount in another currency without such a reservation is
-// FX_SCOPE_MISMATCH (the exposure fails closed).
+// Rates are the exchange rates of purpose credit (POL fx_rate, purpose credit) the exposure converts
+// receivables in another currency than the limit's with, keyed by the currency code each converts
+// from (S5R-D22, STL-INV-004: "敞口中不同币种的应收（含期初）按 POL fx_rate 中用途为 credit 的汇率折算").
+// Every rate converts into the limit currency.
+type Rates map[string]kernel.ExchangeRate
+
+// RatesPath is where a missing credit rate is refused: credit.reserve names the rates for the
+// exposure in exposure_fx_rates (the order's own fx_rate converts receivables in its currency too).
+const RatesPath = "/args/exposure_fx_rates"
+
+// converter converts amounts into the limit currency c at the credit rate of their currency,
+// HALF_UP to c's minor units once (S5R-D22; it replaces S5 B2b's conversion at the rate of the
+// order's reservation, which an opening receivable does not have). An amount already in c is kept;
+// zero converts to zero; an amount in another currency without a rate is FX_SCOPE_MISMATCH (the
+// exposure fails closed).
 type converter struct {
 	c     kernel.Currency
-	rates map[string]*Reservation
-}
-
-func newConverter(c kernel.Currency, reservations []Reservation) converter {
-	cv := converter{c: c, rates: map[string]*Reservation{}}
-	for i := range reservations {
-		r := &reservations[i]
-		if r.Amount.Currency().IsZero() || r.Amount.Sign() <= 0 || r.Exposure.Currency() != c {
-			continue
-		}
-		if cur, ok := cv.rates[r.Binding.OrderID]; !ok || r.Binding.OrderRevision > cur.Binding.OrderRevision {
-			cv.rates[r.Binding.OrderID] = r
-		}
-	}
-	return cv
+	rates Rates
 }
 
 func (cv converter) convert(order string, m kernel.Money) (kernel.Money, error) {
@@ -62,30 +59,53 @@ func (cv converter) convert(order string, m kernel.Money) (kernel.Money, error) 
 	if m.Sign() == 0 {
 		return kernel.NewMoney(cv.c, 0)
 	}
-	r, ok := cv.rates[order]
-	if !ok || r.Amount.Currency() != m.Currency() {
-		return kernel.Money{}, Reject(CodeFXScopeMismatch, "/args/credit_policy",
-			"The receivables of order "+order+" are in "+m.Currency().Code()+", the limit in "+cv.c.Code()+", and no credit rate of the order converts them")
+	x, ok := cv.rates[m.Currency().Code()]
+	if !ok || x.From() != m.Currency() || x.To() != cv.c {
+		what := "The receivables of order " + order
+		if order == "" {
+			what = "An opening receivable"
+		}
+		return kernel.Money{}, Reject(CodeFXScopeMismatch, RatesPath, what+" is in "+m.Currency().Code()+", the limit in "+cv.c.Code()+
+			": name an fx_rate of purpose credit from "+m.Currency().Code()+" into "+cv.c.Code())
 	}
-	rate, err := r.Exposure.Decimal().Quo(r.Amount.Decimal())
-	if err != nil {
-		return kernel.Money{}, err
+	return x.Convert(m)
+}
+
+// Unconverted returns, in code order, the currencies of owed other than c that have an amount the
+// exposure counts (an open amount, or a credit stage's amount) and no rate in rates converts: the
+// exposure cannot be stated without them.
+func Unconverted(c kernel.Currency, owed []OwedInstallment, rates Rates) []string {
+	var out []string
+	for _, o := range owed {
+		cur := o.Amount.Currency()
+		open, err := o.Amount.Sub(o.Applied)
+		if cur == c || (err == nil && open.Sign() <= 0 && (!credit(o.Trigger) || o.Amount.Sign() == 0)) {
+			continue
+		}
+		if x, ok := rates[cur.Code()]; ok && x.From() == cur && x.To() == c {
+			continue
+		}
+		if !slices.Contains(out, cur.Code()) {
+			out = append(out, cur.Code())
+		}
 	}
-	return kernel.RoundMoney(cv.c, m.Decimal().Mul(rate))
+	slices.Sort(out)
+	return out
 }
 
 // ReceivablesOf is what a customer owes on owed, its business receivables' installments, as the
 // exposure of D-4 counts it in the limit currency c: the open amounts, per order what was formed on
 // its credit stages (FormedBy; FormedDocumentsBy for document-controlled ones), and the due date of
-// the earliest installment still open. Amounts in another currency than c convert at the order's
-// reservation rate (converter).
-func ReceivablesOf(c kernel.Currency, owed []OwedInstallment, reservations []Reservation) (Receivables, error) {
+// the earliest installment still open. Amounts in another currency than c — an order's receivables
+// in its currency or an opening receivable in its own — convert at the credit rate of their currency
+// in rates (S5R-D22), else FX_SCOPE_MISMATCH.
+func ReceivablesOf(c kernel.Currency, owed []OwedInstallment, rates Rates) (Receivables, error) {
 	out := Receivables{FormedBy: map[string]kernel.Money{}, FormedDocumentsBy: map[string]kernel.Money{}}
 	var err error
 	if out.Open, err = kernel.NewMoney(c, 0); err != nil {
 		return Receivables{}, err
 	}
-	cv := newConverter(c, reservations)
+	cv := converter{c: c, rates: rates}
 	add := func(into map[string]kernel.Money, order string, m kernel.Money) error {
 		x, err := cv.convert(order, m)
 		if err != nil {
