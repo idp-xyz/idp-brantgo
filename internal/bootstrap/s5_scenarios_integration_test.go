@@ -155,10 +155,10 @@ func (s *s5sc) evaluate(scope string) (map[string]any, map[string]any) {
 	return r, s.releaseEvaluation(brcStr(r["object_id"]))
 }
 
-// fund has treasury record a receipt of customer.1 on bank.usd, its advice registered by doc.1.
+// fund has treasury record a receipt of customer.1 on bank.usd on the advice it registers (S5R-D26).
 func (s *s5sc) fund(id, received, remitted, reference, advice string) map[string]any {
 	s.t.Helper()
-	s.source(brcDocumentation, "bank."+id, advice)
+	s.source(brcTreasury, "bank."+id, advice)
 	args := map[string]any{"fund_record_id": id, "kind": stlapi.FundReceipt, "counterparty_id": "customer.1",
 		"currency": cfgRef("currency", "USD", 1), "bank_account": s.bank, "received_amount": received, "value_date": now(),
 		"bank_reference": reference, "evidence_ids": []string{"bank." + id}}
@@ -792,7 +792,7 @@ func TestS5SCCrossCurrencyWriteOffAtTheSettlementRateOverHTTP(t *testing.T) {
 	settle, credit := rate("fx.cny.usd", polapi.PurposeSettlement), rate("fx.cny.usd.credit", polapi.PurposeCredit)
 
 	s.phase = "STL: the CNY receipt"
-	s.source(brcDocumentation, "bank.cny.p2", "合成银行收款通知：customer.1 以人民币支付 P2，入账 CNY 4,620.00，MT103-BRC-CNY。")
+	s.source(brcTreasury, "bank.cny.p2", "合成银行收款通知：customer.1 以人民币支付 P2，入账 CNY 4,620.00，MT103-BRC-CNY。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": "fund.cny.p2", "kind": stlapi.FundReceipt,
 		"counterparty_id": "customer.1", "currency": cny, "bank_account": bank, "received_amount": "4620.00", "value_date": now(),
 		"bank_reference": "MT103-BRC-CNY", "evidence_ids": []string{"bank.cny.p2"}})
@@ -911,7 +911,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 	s.refused(brcTreasury, "stl", stlapi.Contract, stlapi.CommandCloseOrderResult, map[string]any{"order_id": "order.1",
 		"expected_version": r["row_version"], "reason": "订单已关闭"}, http.StatusConflict, stlapi.CodeOrderResultNotSettled)
 	s.want("close_with_estimated_freight", s.unmet(), "/conditions/direct_charges")
-	s.source(brcMerchandiser, "freight.bill", "合成货代账单：provider.1 海运费 60.00 USD，order.1 / shipment.1。")
+	s.source(brcTreasury, "freight.bill", "合成货代账单：provider.1 海运费 60.00 USD，order.1 / shipment.1。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight.brc", "expected_version": 1,
 		"evidence_ids": []string{"freight.bill"}})
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandAllocateCharge, s.allocateCharge("freight.brc", 2))
@@ -926,7 +926,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 	s.phase = "BT24: next month's freight"
 	month := time.Now().UTC().AddDate(0, 1, 0)
 	late := time.Date(month.Year(), month.Month(), 5, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
-	s.source(brcMerchandiser, "freight.bill.late", "合成货代补充账单：provider.1 次月港杂费 20.00 USD，order.1 / shipment.1，BILL-NEXT。")
+	s.source(brcTreasury, "freight.bill.late", "合成货代补充账单：provider.1 次月港杂费 20.00 USD，order.1 / shipment.1，BILL-NEXT。")
 	r = s.recordCharge("freight.late", "pending", "20.00", late, map[string]any{"kind": "supplier_bill", "party_id": "provider.1",
 		"reference": "BILL-NEXT"}, []string{"freight.bill.late"}, "次月补入：provider.1 账单 BILL-NEXT 20.00 USD")
 	s.want("late_freight", fmt.Sprint(r["status"], " occurred ", late), "pending occurred "+late)
@@ -1189,11 +1189,11 @@ func TestS5SCBT21RevocationAfterPartialShipmentOverHTTP(t *testing.T) {
 }
 
 // openingReceivable has treasury record C10's opening receivable of customer.1 at the cutoff (a
-// prior order's statement, open at go-live), on the legacy ledger's extract registered by doc.1.
+// prior order's statement, open at go-live), on the legacy ledger's extract treasury registers (S5R-D26).
 func (s *s5sc) openingReceivable(id, document, amount string, dueDays int) map[string]any {
 	s.t.Helper()
 	s.phase = "STL opening balance"
-	s.source(brcDocumentation, "ledger."+id, "合成旧系统应收余额表：customer.1 "+document+" 未结 "+amount+" USD（切换日）。")
+	s.source(brcTreasury, "ledger."+id, "合成旧系统应收余额表：customer.1 "+document+" 未结 "+amount+" USD（切换日）。")
 	cutoff := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
 	return s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordOpening, map[string]any{"opening_id": id, "kind": stlapi.OpeningReceivable,
 		"cutoff_at": kernel.FormatTimestamp(cutoff), "source": map[string]any{"document": document,
@@ -1334,7 +1334,7 @@ func (s *s5sc) payPurchase(d *s5scDeal, currency string, account map[string]any,
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmSettlement, map[string]any{"statement_id": id, "kind": stlapi.StatementPurchase,
 		"sources": sources, "evidence_ids": []string{"supplier.ack." + d.id}})
 	v := s.get(brcTreasury, "/api/brant/v1/stl/payables/"+id)
-	s.source(brcDocumentation, "bank.pay."+d.id, "合成银行付款回单：向 "+d.supplierID()+" 付款 "+amount+" "+currency+"。")
+	s.source(brcTreasury, "bank.pay."+d.id, "合成银行付款回单：向 "+d.supplierID()+" 付款 "+amount+" "+currency+"。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": "fund.pay." + d.id, "kind": stlapi.FundPayment,
 		"counterparty_id": d.supplierID(), "currency": s.money(currency), "bank_account": account, "received_amount": amount, "value_date": now(),
 		"bank_reference": "TT-PAY-" + strings.ToUpper(d.id), "evidence_ids": []string{"bank.pay." + d.id}})
@@ -1353,7 +1353,7 @@ func (s *s5sc) freightOf(d *s5scDeal, currency, amount string) {
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money(currency),
 		"conversion": map[string]any{"kind": "same_currency"}, "amount": amount, "occurred_on": today(), "analysis_on": today(),
 		"basis": "provider.1 海运报价 log." + d.id})
-	s.source(brcMerchandiser, "freight.bill."+d.id, "合成货代账单：provider.1 海运费 "+amount+" "+currency+"，"+d.order()+"。")
+	s.source(brcTreasury, "freight.bill."+d.id, "合成货代账单：provider.1 海运费 "+amount+" "+currency+"，"+d.order()+"。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 1,
 		"evidence_ids": []string{"freight.bill." + d.id}})
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandAllocateCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 2,
@@ -1661,7 +1661,7 @@ func TestS5SCSABaseline46OverHTTP(t *testing.T) {
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money("CNY"),
 		"conversion": map[string]any{"kind": "same_currency"}, "amount": "500.00", "occurred_on": today(), "analysis_on": today(),
 		"basis": "provider.1 海运报价 log.sa：预计 CNY 500.00"})
-	s.source(brcMerchandiser, "freight.bill.sa", "合成货代账单 BILL-SA：provider.1 海运费 CNY 650.00，shipment.60 与 shipment.40。")
+	s.source(brcTreasury, "freight.bill.sa", "合成货代账单 BILL-SA：provider.1 海运费 CNY 650.00，shipment.60 与 shipment.40。")
 	r := s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.sa", "expected_version": 1,
 		"status": "pending", "source": map[string]any{"kind": "supplier_bill", "party_id": "provider.1", "reference": "BILL-SA"}, "amount": "650.00",
 		"occurred_on": today(), "analysis_on": today(), "basis": "货代账单 BILL-SA", "evidence_ids": []string{"freight.bill.sa"}})

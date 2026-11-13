@@ -38,8 +38,8 @@ import (
 // publishes shipment-text/0.1.0 templates of the commercial invoice and the packing list in en and
 // zh-CN, the number sequences ci.seq (document type invoice, CI-) and pl.seq (packing_list, PL-),
 // and the order world's company profile company.A is the seller. "docs.1" holds the documentation
-// role template plus number.issue (the template lacks it: a design gap reported), "merch.1" the
-// merchandiser's; "agent.docs" is an AI agent with the document and booking permissions.
+// role template alone (S5R-D25: it holds number.issue; S5 granted it besides the template),
+// "merch.1" the merchandiser's; "agent.docs" is an AI agent with the document and booking permissions.
 
 type fulDocWorld struct {
 	*fulWorld
@@ -57,7 +57,7 @@ func newFulDocWorld(t *testing.T) *fulDocWorld {
 		t.Fatal("no documentation role template")
 	}
 	w.docs = w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: actorRef("human", "docs.1"), DataScope: "company",
-		Permissions: append(slices.Clone(tpl.Permissions), "number.issue")})
+		Permissions: slices.Clone(tpl.Permissions)})
 	w.agentDocs = w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: actorRef("ai", "agent.docs"), DataScope: "company",
 		Permissions: []string{fulapi.CommandRecordBooking, fulapi.CommandPrepareShipmentDocument, fulapi.CommandIssueShipmentDocuments,
 			fulapi.CommandRecordSignedShipmentDocument, "ful.read", "evd.read", "pty.read", "pol.read", "trd.read", "number.issue"}})
@@ -750,7 +750,7 @@ func (w *fulWorld) docFixture() *docFixture {
 		w.t.Fatal("no documentation role template")
 	}
 	f := &docFixture{ctx: w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: actorRef("human", "docs.fixture"), DataScope: "company",
-		Permissions: append(slices.Clone(tpl.Permissions), "number.issue")})}
+		Permissions: slices.Clone(tpl.Permissions)})}
 	ed, rv := w.author, w.reviewer
 	template := func(id, kind, title string, sections []string) polapi.ConfigRef {
 		return w.configure(ed, rv, polapi.KindShipmentDocumentTemplate, id, 0, w.win.from, time.Time{}, polapi.ConfigData{

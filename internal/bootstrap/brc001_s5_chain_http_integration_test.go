@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
-	"go.idp.xyz/idp-brant/internal/bootstrap"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
@@ -26,7 +25,6 @@ import (
 	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
-	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -214,9 +212,6 @@ func newBRC001S5(t *testing.T) *brcS5 {
 		brcFixture{What: "role templates of merchandiser (merchandiser), qc (quality_inspector), treasury (treasury), tax.officer " +
 			"(tax_specialist) and credit.officer (credit_officer)", How: "bootstrap.Platform.AssignRoles with company data scope",
 			Why: "operator-only; no business HTTP route"},
-		brcFixture{What: "number.issue for doc.1 besides the documentation template",
-			How: "bootstrap.Platform.Provision with the documentation template's permissions plus number.issue",
-			Why: "POL NumberIssue v1 numbers the commercial invoice and the packing list as the acting human; the documentation template lacks number.issue (C2's reported gap)"},
 		brcFixture{What: "the Inbox actors of every consumer the composed contexts subscribe",
 			How: "bootstrap.Platform.ProvisionInbox (as brant-admin inbox)", Why: "operator-only; a consumer's commands run as system:inbox.<consumer>"},
 		brcFixture{What: "the event relay", How: "bootstrap.Platform.Relay publishing to messaging.Dispatcher of Contexts.Subscriptions (brant-worker " +
@@ -231,12 +226,8 @@ func newBRC001S5(t *testing.T) *brcS5 {
 	b.w.assign(brcTreasury, "treasury")
 	b.w.assign(brcTaxOfficer, "tax_specialist")
 	b.w.assign(brcCreditOfficer, "credit_officer")
-	tpl, ok := authorization.TemplateByCode("documentation")
-	if !ok {
-		t.Fatal("no documentation role template")
-	}
-	b.w.provision(bootstrap.Grant{Scope: b.w.scope("company.A"), Actor: actorRef("human", brcDocumentation),
-		Permissions: append(slices.Clone(tpl.Permissions), "number.issue"), DataScope: "company"})
+	// doc.1 numbers the commercial invoice and the packing list with the documentation template
+	// alone (S5R-D25: the template holds number.issue; S5 granted it besides the template).
 	c := &brcS5{brc001: b, ctx: context.Background()}
 	c.subs = b.w.c.Subscriptions()
 	c.events = newOrderEvents(t, c.subs...)
@@ -462,7 +453,7 @@ func (c *brcS5) configurations() {
 			"time_zone": "Asia/Shanghai"})
 	}
 	c.ciSeq, c.plSeq = sequence("ci.seq", polapi.DocumentTypeInvoice, "CI-"), sequence("pl.seq", polapi.DocumentTypePackingList, "PL-")
-	c.source(brcAdmin, "tax.review", "合成专业复核记录：出口退税方式按合成政策“免抵退”登记，仅供测试，不构成税务意见。")
+	c.source(brcTaxOfficer, "tax.review", "合成专业复核记录：出口退税方式按合成政策“免抵退”登记，仅供测试，不构成税务意见。")
 	// The publication cites the professional review the policy names (POL), besides the
 	// configuration evidence.
 	c.cmd(brcAdmin, "pol", polapi.Contract, "config.save_draft", map[string]any{"kind": polapi.KindExportTaxPolicy, "id": "export.tax",
@@ -483,7 +474,7 @@ func (c *brcS5) configurations() {
 // to P1; the shipment's payment condition is satisfied.
 func (c *brcS5) receiptP1() {
 	c.step(7, "STL receipt of P1 and its application")
-	c.source(brcDocumentation, "bank.p1", "合成银行收款通知：customer.1 汇入 288.00 USD（P1 预付 30%），MT103-BRC-P1。")
+	c.source(brcTreasury, "bank.p1", "合成银行收款通知：customer.1 汇入 288.00 USD（P1 预付 30%），MT103-BRC-P1。")
 	r := c.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": "fund.p1", "kind": stlapi.FundReceipt,
 		"counterparty_id": "customer.1", "currency": cfgRef("currency", "USD", 1), "bank_account": c.bank, "received_amount": "288.00",
 		"remitted_amount": "288.00", "value_date": now(), "bank_reference": "MT103-BRC-P1", "evidence_ids": []string{"bank.p1"}})
@@ -952,7 +943,7 @@ func installmentsView(v map[string]any) []string {
 // collection is §5 step 20 (CN-AT07 shape, CN-R10, STL-INV-006, D-16).
 func (c *brcS5) collection() {
 	c.step(20, "STL collection of P2 with a bank charge")
-	c.source(brcDocumentation, "bank.p2", "合成银行收款通知：customer.1 汇出 672.00 USD，入账 670.00 USD，差额 2.00 未说明，MT103-BRC-P2。")
+	c.source(brcTreasury, "bank.p2", "合成银行收款通知：customer.1 汇出 672.00 USD，入账 670.00 USD，差额 2.00 未说明，MT103-BRC-P2。")
 	r := c.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": "fund.p2", "kind": stlapi.FundReceipt,
 		"counterparty_id": "customer.1", "currency": cfgRef("currency", "USD", 1), "bank_account": c.bank, "received_amount": "670.00",
 		"remitted_amount": "672.00", "value_date": now(), "bank_reference": "MT103-BRC-P2", "evidence_ids": []string{"bank.p2"}})
@@ -1002,7 +993,7 @@ func (c *brcS5) payable() {
 		c.t.Fatalf("payable %v", v)
 	}
 	c.fact("amount_minor", v["amount_minor"], "open_minor", v["open_minor"])
-	c.source(brcDocumentation, "bank.pay", "合成银行付款回单：向 supplier.A 付款 600.00 USD，TT-BRC-PAY-1。")
+	c.source(brcTreasury, "bank.pay", "合成银行付款回单：向 supplier.A 付款 600.00 USD，TT-BRC-PAY-1。")
 	c.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": "fund.pay.1", "kind": stlapi.FundPayment,
 		"counterparty_id": "supplier.A", "currency": cfgRef("currency", "USD", 1), "bank_account": c.bank, "received_amount": "600.00",
 		"value_date": now(), "bank_reference": "TT-BRC-PAY-1", "evidence_ids": []string{"bank.pay"}})
@@ -1183,7 +1174,7 @@ func (c *brcS5) charge() {
 	if r["status"] != "estimated" {
 		c.t.Fatalf("charge.record %v", r)
 	}
-	c.source(brcMerchandiser, "freight.bill", "合成货代账单：provider.1 海运费 60.00 USD，order.1 / shipment.1。")
+	c.source(brcTreasury, "freight.bill", "合成货代账单：provider.1 海运费 60.00 USD，order.1 / shipment.1。")
 	r = c.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight.brc", "expected_version": 1,
 		"evidence_ids": []string{"freight.bill"}})
 	if r["status"] != "confirmed" {

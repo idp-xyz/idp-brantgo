@@ -39,7 +39,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestImportRules(t *testing.T) {
-	allow := map[[2]string]bool{{"trd", "cst"}: true}
+	allow := map[[2]string]bool{{"trd", "cst"}: true, {"cnx", "ref"}: true}
 	for _, tc := range []struct {
 		from, imp, rule string
 	}{
@@ -70,6 +70,13 @@ func TestImportRules(t *testing.T) {
 		{"internal/transport/http", mod + "/internal/contexts/trd/internal/domain", "D6"},
 		{"internal/transport/http", mod + "/internal/reference/api", ""},
 		{"internal/transport/http", mod + "/internal/reference/internal/lists", "D6"},
+		// S5R-D34: a context reaches reference data only through a registered relationship (REF→CNX here).
+		{"internal/contexts/cnx/internal/application", mod + "/internal/reference/api", ""},
+		{"internal/contexts/cnx/internal/application", mod + "/internal/reference/internal/lists", "D1"},
+		{"internal/contexts/stl/internal/application", mod + "/internal/reference/api", "D1"},
+		{"internal/contexts/trd", mod + "/internal/reference/api", "D1"},
+		{"internal/reference/internal/application", mod + "/internal/reference/api", ""},
+		{"internal/bootstrap", mod + "/internal/reference/api", ""},
 		{"cmd/brant-worker", mod + "/internal/bootstrap", ""},
 		{"cmd/brant-worker", mod + "/internal/foundation/messaging", "entry"},
 		{"cmd/brant-worker", "github.com/jackc/pgx/v5", ""},
@@ -157,12 +164,20 @@ func TestDocsHoldNoGoCode(t *testing.T) {
 func TestGeneratedAllowlistCoversPresentContextsOnly(t *testing.T) {
 	var doc contextMapDoc
 	if err := json.Unmarshal([]byte(`{"version":"0.1-draft","relationships":[
-		{"frm":"PTY","to":"INQ"},{"frm":"CAT","to":"INQ"},{"frm":"CST","to":"TRD"},{"frm":"TRD","to":"PUR"},{"frm":"PUR","to":"TRD"}]}`), &doc); err != nil {
+		{"frm":"PTY","to":"INQ"},{"frm":"CAT","to":"INQ"},{"frm":"CST","to":"TRD"},{"frm":"TRD","to":"PUR"},{"frm":"PUR","to":"TRD"},
+		{"frm":"REF","to":"PTY"},{"frm":"REF","to":"CAT"},{"frm":"XYZ","to":"TRD"}],"platformProviders":[{"id":"REF"},{"id":"XYZ"}]}`), &doc); err != nil {
 		t.Fatal(err)
 	}
-	lines := generate(doc, []string{"pty", "inq", "trd", "pur"})
-	if got := strings.Join(lines, ";"); got != "inq pty;pur trd;trd pur" {
+	// S5R-D34: REF is a registered platform provider the repository holds, so PTY (present) gets
+	// "pty ref" and CAT (absent) nothing; XYZ is registered but not held.
+	lines := generate(doc, []string{"pty", "inq", "trd", "pur"}, []string{"ref"})
+	if got := strings.Join(lines, ";"); got != "inq pty;pty ref;pur trd;trd pur" {
 		t.Fatalf("allowlist = %q", got)
+	}
+	// An upstream the Context Map does not register as a platform provider gives no line.
+	doc.PlatformProviders = nil
+	if got := strings.Join(generate(doc, []string{"pty", "inq", "trd", "pur"}, []string{"ref"}), ";"); got != "inq pty;pur trd;trd pur" {
+		t.Fatalf("allowlist without platform providers = %q", got)
 	}
 	allow, err := parseAllowlist("# header\n" + strings.Join(lines, "\n") + "\n")
 	if err != nil || !allow[[2]string{"inq", "pty"}] || allow[[2]string{"pty", "inq"}] {
@@ -187,9 +202,19 @@ func TestArchiveContextMapIsReadable(t *testing.T) {
 		t.Fatal("no relationships decoded from the Context Map")
 	}
 	all := []string{"pty", "cat", "pol", "evd", "inq", "sup", "cst", "trd", "pur", "mfg", "qlt", "stk", "ful", "stl", "clm", "cnx", "crm", "tsk"}
-	lines := generate(doc, all)
+	lines := generate(doc, all, []string{referenceProvider})
 	if len(lines) == 0 || !contains(lines, "trd cst") || contains(lines, "cst trd") {
 		t.Fatalf("allowlist for all contexts = %v", lines)
+	}
+	// S5R-D34: reference data is the upstream of PTY (R80) and CNX (R81) only.
+	var ref []string
+	for _, l := range lines {
+		if strings.HasSuffix(l, " "+referenceProvider) {
+			ref = append(ref, l)
+		}
+	}
+	if strings.Join(ref, ";") != "cnx ref;pty ref" {
+		t.Fatalf("reference data lines %v, want cnx ref and pty ref (R80, R81)", ref)
 	}
 }
 

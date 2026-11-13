@@ -111,8 +111,8 @@ func activated(fields map[string]any) messaging.Event {
 // system:inbox.stl.order_credit with credit.consume, credit.release and stl.read. The second
 // consumer, stl.order_account (D-4, D-18, units B6b and C4b), takes OrderActivated and OrderAmended
 // (PL-09, the payment plan review), reads TRD and POL in its Prepare step, and its actor
-// system:inbox.stl.order_account holds payment_plan_review.open (also order_account.open's
-// permission) and stl.read.
+// system:inbox.stl.order_account holds order_account.open (S5R-D02), payment_plan_review.open and
+// stl.read.
 func TestOrderCreditSubscription(t *testing.T) {
 	subs := Subscriptions(nil, &credit{})
 	if len(subs) != 2 {
@@ -133,7 +133,7 @@ func TestOrderCreditSubscription(t *testing.T) {
 	if err != nil || len(grants) != 2 || grants[0].Actor != (kernel.ActorRef{Kind: kernel.ActorSystem, ID: "inbox.stl.order_credit"}) ||
 		!slices.Equal(grants[0].Permissions, []string{"credit.consume", "credit.release", "stl.read"}) ||
 		grants[1].Actor != (kernel.ActorRef{Kind: kernel.ActorSystem, ID: "inbox.stl.order_account"}) ||
-		!slices.Equal(grants[1].Permissions, []string{"payment_plan_review.open", "stl.read"}) {
+		!slices.Equal(grants[1].Permissions, []string{"order_account.open", "payment_plan_review.open", "stl.read"}) {
 		t.Fatalf("grants %+v %v", grants, err)
 	}
 	// The declared types are not the handler's own slices: a caller cannot change what it routes.

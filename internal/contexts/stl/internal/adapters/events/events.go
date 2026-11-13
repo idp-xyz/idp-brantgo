@@ -65,10 +65,12 @@ var (
 // system:inbox.stl.order_account, which brant-admin inbox grants OrderAccountPermissions.
 const OrderAccounts eventing.InboxConsumer = "stl.order_account"
 
-// OrderAccountPermissions are what order_account.open and payment_plan_review.open need (both
-// payment_plan_review.open), and stl.read for the command ledger's stored-result read.
+// OrderAccountPermissions are what the consumer's commands need: order_account.open, its own
+// permission (S5R-D02: the system consumer and treasury hold it, the Context Map's consumers entry
+// stl.order_account), payment_plan_review.open for the review an amendment opens (which S5's
+// order_account.open also asked for), and stl.read for the command ledger's stored-result read.
 func OrderAccountPermissions() []string {
-	return []string{api.PermissionOpenOrderAccount, api.PermissionRead}
+	return []string{api.CommandOpenOrderAccount, api.PermissionOpenReview, api.PermissionRead}
 }
 
 // Credit is what stl.order_credit asks of STL's application; application.Service implements it.
