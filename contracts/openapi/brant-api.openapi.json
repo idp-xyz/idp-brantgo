@@ -699,6 +699,27 @@
             },
             "type": "array"
           },
+          "programmes": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "jurisdiction": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "legal_confirmation_evidence_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "list_code": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
           "rescreen_interval_days": {
             "type": "integer"
           }
@@ -882,6 +903,10 @@
             "type": "string"
           },
           "incoterm": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "insurance_percent": {
             "minLength": 1,
             "type": "string"
           },
@@ -30878,6 +30903,13 @@
                         ],
                         "type": "object"
                       },
+                      "permitted_payers": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
                       "trade_terms": {
                         "additionalProperties": false,
                         "properties": {
@@ -38783,6 +38815,13 @@
                             "programme_id": {
                               "minLength": 1,
                               "type": "string"
+                            },
+                            "regions": {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "type": "array"
                             },
                             "scope": {
                               "minLength": 1,

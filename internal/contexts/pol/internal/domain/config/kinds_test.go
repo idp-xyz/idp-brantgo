@@ -187,7 +187,10 @@ func TestCreditTiersAscendAndFitTheCurrency(t *testing.T) {
 		{credit("0", officer, CreditApprovalTier{Level: "credit_officer", MaxAmount: "2000"}), "INVALID_KNOWN_VALUE /args/data/approval_tiers/1/level"},
 		{credit("0", CreditApprovalTier{Level: "x", MaxAmount: "0"}), "INVALID_KNOWN_VALUE /args/data/approval_tiers/0/max_amount"},
 		{credit("0.001", officer), "INVALID_KNOWN_VALUE /args/data/default_limit"},
-		{credit("0", CreditApprovalTier{Level: "x", MaxAmount: "1.005"}), "INVALID_KNOWN_VALUE /args/data/approval_tiers/0/max_amount"},
+		{credit("0", CreditApprovalTier{Level: "credit_officer", MaxAmount: "1.005"}), "INVALID_KNOWN_VALUE /args/data/approval_tiers/0/max_amount"},
+		// S5R-D30: a level is a role template that decides credit.
+		{credit("0", CreditApprovalTier{Level: "x", MaxAmount: "1000"}), "INVALID_KNOWN_VALUE /args/data/approval_tiers/0/level"},
+		{credit("0", officer, CreditApprovalTier{Level: "administrator", MaxAmount: "5000"}), "INVALID_KNOWN_VALUE /args/data/approval_tiers/1/level"},
 	} {
 		err := Validate("credit", c.content)
 		if err == nil {

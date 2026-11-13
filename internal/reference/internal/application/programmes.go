@@ -41,7 +41,8 @@ func (s Service) ImportCountryProgrammes(ctx context.Context, cmd api.ImportCoun
 	list := canonicalProgrammes(cmd.Programmes)
 	args.Programmes = make([]api.CountryProgramme, len(list))
 	for i, p := range list {
-		args.Programmes[i] = api.CountryProgramme{ProgrammeID: p.ID, Name: p.Name, Measure: p.Measure, Countries: p.Countries, Scope: p.Scope}
+		args.Programmes[i] = api.CountryProgramme{ProgrammeID: p.ID, Name: p.Name, Measure: p.Measure, Countries: p.Countries, Scope: p.Scope,
+			Regions: p.Regions}
 	}
 	hash, err := action.RequestHash(args)
 	if err != nil {
@@ -56,7 +57,7 @@ func (s Service) ImportCountryProgrammes(ctx context.Context, cmd api.ImportCoun
 func canonicalProgrammes(in []api.CountryProgramme) []programmes.Programme {
 	out := make([]programmes.Programme, len(in))
 	for i, p := range in {
-		out[i] = programmes.NewProgramme(p.ProgrammeID, p.Name, p.Measure, p.Countries, p.Scope)
+		out[i] = programmes.NewProgramme(p.ProgrammeID, p.Name, p.Measure, p.Countries, p.Scope).WithRegions(p.Regions)
 	}
 	slices.SortFunc(out, func(a, b programmes.Programme) int { return cmp.Compare(a.ID, b.ID) })
 	return out
@@ -231,5 +232,6 @@ func programmeView(p programmes.Programme) api.Programme {
 	if countries == nil {
 		countries = []string{}
 	}
-	return api.Programme{ProgrammeID: p.ID, Name: p.Name, Measure: p.Measure, Countries: countries, Scope: p.Scope, ContentHash: p.Hash}
+	return api.Programme{ProgrammeID: p.ID, Name: p.Name, Measure: p.Measure, Countries: countries, Scope: p.Scope,
+		Regions: slices.Clone(p.Regions), ContentHash: p.Hash}
 }

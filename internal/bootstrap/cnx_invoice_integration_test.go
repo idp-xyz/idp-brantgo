@@ -596,9 +596,10 @@ func TestCNAT12CaseBindsThePolicyInForceAtTheExportDate(t *testing.T) {
 	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/policy_id" {
 		t.Fatalf("no such policy: %s %s", code(err), path(err))
 	}
-	// A policy without a refund method admits the exemption purpose only.
-	review3 := w.source(w.author, "tax.review.3", "合成专业复核结论三：不适用退税（仅供测试）")
-	_, err = w.saveConfig(w.author, polapi.KindExportTaxPolicy, "export.none", 0, w.win.from, time.Time{}, exportTax(polapi.RefundNotApplicable, review3))
+	// A policy without a refund method (exempt, 免税; S5R-D14: a new revision does not state
+	// not_applicable) admits the exemption purpose only.
+	review3 := w.source(w.author, "tax.review.3", "合成专业复核结论三：免税，不退税（仅供测试）")
+	_, err = w.saveConfig(w.author, polapi.KindExportTaxPolicy, "export.none", 0, w.win.from, time.Time{}, exportTax(polapi.RefundExempt, review3))
 	w.must(err)
 	_, err = w.c.POL.Publish(w.reviewer, polapi.Publish{IdempotencyKey: w.key(), Kind: polapi.KindExportTaxPolicy, ConfigID: "export.none",
 		ExpectedVersion: 1, Revision: 1, EvidenceIDs: []string{review3}, Reason: "核实合成政策"})
@@ -607,7 +608,7 @@ func TestCNAT12CaseBindsThePolicyInForceAtTheExportDate(t *testing.T) {
 	_, err = w.cnx.AllocateTaxEvidence(w.tax, cnxapi.AllocateTaxEvidence{IdempotencyKey: w.key(), ExportLotID: "lot.y", PolicyID: "export.none",
 		Allocations: []cnxapi.EvidenceAllocation{alloc("t6", "y1", inv.PurchaseInvoiceID, cnxapi.PurposeExportRefund, "1")}})
 	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/allocations/0/purpose" {
-		t.Fatalf("refund under not_applicable: %s %s", code(err), path(err))
+		t.Fatalf("refund under exempt: %s %s", code(err), path(err))
 	}
 }
 

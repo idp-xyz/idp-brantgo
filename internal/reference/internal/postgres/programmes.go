@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -86,7 +87,8 @@ func ProgrammeVersions(ctx context.Context, exec bentopg.Executor, scope kernel.
 }
 
 // InsertProgrammeVersion stores a version and its programmes; the programmes go in one statement,
-// as arrays (a programme's countries as one comma-separated element).
+// as arrays (a programme's countries, and its regions, as one comma-separated element; no regions
+// are NULL).
 func InsertProgrammeVersion(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, v *programmes.Version, list []programmes.Programme) error {
 	_, err := exec.Exec(ctx, `INSERT INTO brant_ref.country_programme_list_version (tenant_id, company_id, list_code, version,
 		source_name, source_url, published_on, file_sha256, content_hash, programme_count, country_count, import_seq, imported_by_kind,
@@ -97,29 +99,26 @@ func InsertProgrammeVersion(ctx context.Context, exec bentopg.Executor, scope ke
 		return err
 	}
 	n := len(list)
-	ids, names, measures, countries, scopes, hashes := make([]string, n), make([]string, n), make([]string, n), make([]string, n),
-		make([]string, n), make([]string, n)
+	ids, names, measures, countries, scopes, regions, hashes := make([]string, n), make([]string, n), make([]string, n), make([]string, n),
+		make([]string, n), make([]string, n), make([]string, n)
 	for i, p := range list {
 		ids[i], names[i], measures[i], scopes[i], hashes[i] = p.ID, p.Name, p.Measure, p.Scope, p.Hash
-		for j, c := range p.Countries {
-			if j > 0 {
-				countries[i] += ","
-			}
-			countries[i] += c
-		}
+		countries[i], regions[i] = strings.Join(p.Countries, ","), strings.Join(p.Regions, ",")
 	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_ref.country_programme (tenant_id, company_id, list_code, version, programme_id, name,
-		measure, countries, scope, content_hash)
-		SELECT $1, $2, $3, $4, u.id, u.name, u.measure, string_to_array(u.countries, ','), nullif(u.scope, ''), u.hash
-		FROM unnest($5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[]) AS u(id, name, measure, countries, scope, hash)`,
-		args(scope, v.ListCode, v.Version, ids, names, measures, countries, scopes, hashes)...)
+		measure, countries, scope, regions, content_hash)
+		SELECT $1, $2, $3, $4, u.id, u.name, u.measure, string_to_array(u.countries, ','), nullif(u.scope, ''),
+		string_to_array(nullif(u.regions, ''), ','), u.hash
+		FROM unnest($5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[])
+		AS u(id, name, measure, countries, scope, regions, hash)`,
+		args(scope, v.ListCode, v.Version, ids, names, measures, countries, scopes, regions, hashes)...)
 	return err
 }
 
-const programmeColumns = `p.programme_id, p.name, p.measure, p.countries, coalesce(p.scope, ''), p.content_hash`
+const programmeColumns = `p.programme_id, p.name, p.measure, p.countries, coalesce(p.scope, ''), p.regions, p.content_hash`
 
 func scanProgramme(row pgx.Row, p *programmes.Programme) error {
-	return row.Scan(&p.ID, &p.Name, &p.Measure, &p.Countries, &p.Scope, &p.Hash)
+	return row.Scan(&p.ID, &p.Name, &p.Measure, &p.Countries, &p.Scope, &p.Regions, &p.Hash)
 }
 
 // ProgrammesOf returns the programmes of one version, ordered by programme ID.
@@ -190,7 +189,7 @@ func ProgrammesNaming(ctx context.Context, exec bentopg.Executor, scope kernel.S
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ProgrammeHit, error) {
 		var h ProgrammeHit
 		err := row.Scan(&h.ListCode, &h.Version, &h.Country, &h.Programme.ID, &h.Programme.Name, &h.Programme.Measure,
-			&h.Programme.Countries, &h.Programme.Scope, &h.Programme.Hash)
+			&h.Programme.Countries, &h.Programme.Scope, &h.Programme.Regions, &h.Programme.Hash)
 		return h, err
 	})
 }

@@ -448,6 +448,39 @@ func InForce(rev *Revision, at time.Time) error {
 	return nil
 }
 
+// At returns the revision of one configuration that applies at instant at by its validity (ConfigAt
+// v1, S5R-D23, POL-INV-007), or nil: among revisions, every revision of the configuration, the one
+// published last of those ever published whose validity contains at. A retirement ends the
+// configuration: once a revision is retired, at or before at, no revision published before that
+// retirement applies at at, so an older superseded revision does not come back; one published after
+// it does. Publication time is otherwise no condition: a revision published after at applies to it
+// when its validity covers it (财税〔2012〕39号: the export date decides). brant_pol.config_at_v1
+// (migrations/pol/000006) decides the same in SQL.
+func At(revisions []*Revision, at time.Time) *Revision {
+	var retiredAt time.Time // the latest retirement at or before at
+	for _, r := range revisions {
+		if r.Status == Retired && !r.EndedAt.After(at) && r.EndedAt.After(retiredAt) {
+			retiredAt = r.EndedAt
+		}
+	}
+	var applies *Revision
+	for _, r := range revisions {
+		p := r.Publication
+		switch {
+		case p == nil || (r.Status != Active && r.Status != Superseded && r.Status != Retired):
+			continue
+		case !retiredAt.IsZero() && !p.At.After(retiredAt):
+			continue
+		case !r.Content.Validity().Contains(at):
+			continue
+		}
+		if applies == nil || p.At.After(applies.Publication.At) || (p.At.Equal(applies.Publication.At) && r.Number > applies.Number) {
+			applies = r
+		}
+	}
+	return applies
+}
+
 // FXUse is one use of an exchange rate: converting From into To for Purpose at instant At, with
 // observations no older than MaxAge when MaxAge is positive.
 type FXUse struct {

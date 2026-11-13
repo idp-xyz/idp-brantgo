@@ -411,6 +411,7 @@ func ptyCommands(c PTY) *commandSet {
 			for _, r := range a.ContactRefs {
 				cmd.ContactRefs = append(cmd.ContactRefs, ptyapi.PinnedContact(r))
 			}
+			cmd.PermittedPayers = a.PermittedPayers
 			return cmd, err
 		}, c.SaveTradingProfile),
 		ptyapi.CommandPublishTradingProfile: handle(func(key string, a publishRevision) (ptyapi.PublishTradingProfile, error) {
@@ -468,6 +469,7 @@ type saveTradingProfile struct {
 		ContactID  string `json:"id"`
 		RowVersion int64  `json:"row_version"`
 	} `json:"contact_refs"`
+	PermittedPayers []string `json:"permitted_payers"` // S5R-D21
 }
 
 // publishRevision publishes one revision of a versioned root on evidence (trading profiles, item

@@ -1025,7 +1025,7 @@ func TestCNATSuite11AllowanceAfterExport(t *testing.T) {
 // TestCNAT12CaseBindsThePolicyInForceAtTheExportDate, TestExportTaxPolicyChangeKeepsTheRevisionOfOldExports): shipment.1
 // goes into two lots. lot.a is released by customs and its case binds export.tax revision 1
 // (exempt_credit_refund) with E1. The professional review changes the company's method: admin drafts
-// revision 2 (not_applicable, exemption only) and config.reviewer publishes it on the new review. lot.b,
+// revision 2 (exempt, exemption only; S5R-D14) and config.reviewer publishes it on the new review. lot.b,
 // released after that, binds revision 2: export_refund is refused (INVALID_KNOWN_VALUE), the exemption
 // is allocated. lot.a's open case keeps revision 1 and takes E2 for export_refund — the old business
 // is not overwritten by the new configuration.
@@ -1041,10 +1041,11 @@ func TestCNATSuite12PolicyChangeWithOpenHistoricalBusiness(t *testing.T) {
 	caseA := brcStr(ra["object_id"])
 	c.phaseOf("the policy changes")
 	cfg := c.get(brcAdmin, "/api/brant/v1/pol/configs/export_tax_policy/export.tax")
-	c.source(brcAdmin, "tax.review.2", "合成专业复核记录（第二次）：自本日起企业适用方法改为“不适用退税（仅免税）”，仅供测试。")
+	// S5R-D14: the method without a refund is exempt (免税); POL refuses not_applicable on a new revision.
+	c.source(brcAdmin, "tax.review.2", "合成专业复核记录（第二次）：自本日起企业适用方法改为“免税（不退税）”，仅供测试。")
 	c.ok(brcAdmin, "pol", polapi.Contract, "config.save_draft", map[string]any{"kind": polapi.KindExportTaxPolicy, "id": "export.tax",
 		"expected_version": cfg["root_version"], "valid_from": now(), "data": map[string]any{"name": "synthetic export tax policy (changed)",
-			"refund_method": polapi.RefundNotApplicable, "policy_basis": "合成政策依据（变更，测试用）", "professional_review_evidence_id": "tax.review.2"}})
+			"refund_method": polapi.RefundExempt, "policy_basis": "合成政策依据（变更，测试用）", "professional_review_evidence_id": "tax.review.2"}})
 	cfg = c.get(brcAdmin, "/api/brant/v1/pol/configs/export_tax_policy/export.tax")
 	c.ok(brcController, "pol", polapi.Contract, "config.publish", map[string]any{"kind": polapi.KindExportTaxPolicy, "id": "export.tax",
 		"expected_version": cfg["root_version"], "revision": 2, "evidence_ids": []string{"evidence", "tax.review.2"}, "reason": "按第二次专业复核变更适用方法"})
@@ -1061,10 +1062,10 @@ func TestCNATSuite12PolicyChangeWithOpenHistoricalBusiness(t *testing.T) {
 	c.allocate("lot.a", cnatAlloc("alloc.a.E2", "E2", c.invoiceID, "36"))
 	a, b := c.get(brcTaxOfficer, "/api/brant/v1/cnx/tax_refund_cases/"+caseA), c.get(brcTaxOfficer, "/api/brant/v1/cnx/tax_refund_cases/"+brcStr(rb["object_id"]))
 	if brcDig(a, "policy", "revision") != float64(1) || brcDig(a, "policy", "refund_method") != polapi.RefundExemptCreditRefund || len(brcList(a["allocations"])) != 2 ||
-		brcDig(b, "policy", "revision") != float64(2) || brcDig(b, "policy", "refund_method") != polapi.RefundNotApplicable {
+		brcDig(b, "policy", "revision") != float64(2) || brcDig(b, "policy", "refund_method") != polapi.RefundExempt {
 		c.t.Fatalf("cases: lot.a %v, lot.b %v", a["policy"], b["policy"])
 	}
-	c.observe("政策变化: export.tax revision 2 (not_applicable) published on its professional review while lot.a's case is open under revision 1 (exempt_credit_refund)")
+	c.observe("政策变化: export.tax revision 2 (exempt) published on its professional review while lot.a's case is open under revision 1 (exempt_credit_refund)")
 	c.observe("旧业务不被覆盖: lot.a's case keeps revision 1 and takes E2 for export_refund after the change; lot.b, exported after it, binds revision 2: export_refund → %s, export_exemption allocated",
 		kernel.CodeInvalidKnownValue)
 }

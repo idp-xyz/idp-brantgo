@@ -125,6 +125,9 @@ func TestAllocationRefusals(t *testing.T) {
 		{newCase("a", MethodExemptRefund), of("pin.2"), "INVALID_STATE /args/allocations/0/purchase_invoice_id"},
 		{newCase("a", MethodExemptRefund), of("pin.3"), "INVALID_STATE /args/allocations/0/purchase_invoice_id"},
 		{newCase("a", MethodNotApplicable), in("t1", "x1", ExportRefund, "1"), "INVALID_KNOWN_VALUE /args/allocations/0/purpose"},
+		// S5R-D14: export_refund serves 免抵退 and 免退 only.
+		{newCase("a", MethodExempt), in("t1", "x1", ExportRefund, "1"), "INVALID_KNOWN_VALUE /args/allocations/0/purpose"},
+		{newCase("a", MethodTaxable), in("t1", "x1", ExportRefund, "1"), "INVALID_KNOWN_VALUE /args/allocations/0/purpose"},
 		{newCase("a", MethodExemptRefund), of("pin.4"), "INVALID_KNOWN_VALUE /args/allocations/0/quantity"},
 	} {
 		if _, err := w.allocate(c.c, nil, lot("x1", "600"), c.a); code(err) != c.want {

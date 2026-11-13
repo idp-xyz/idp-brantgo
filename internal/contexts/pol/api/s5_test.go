@@ -75,7 +75,11 @@ func TestS5Contracts(t *testing.T) {
 		{KindExportTaxPolicy, func(*ConfigData) {}, "OK"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundExemptCreditRefund }, "OK"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundNotApplicable }, "OK"},
-		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = "exempt" }, "SCHEMA_INVALID /args/data/refund_method"},
+		// S5R-D14: exempt and taxable are refund methods; not_applicable passes the contract and POL's
+		// rules refuse it on a new revision (POL-INV-006, config.Validate).
+		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundExempt }, "OK"},
+		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundTaxable }, "OK"},
+		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = "exempt-refund" }, "SCHEMA_INVALID /args/data/refund_method"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.PolicyBasis = "" }, "SCHEMA_INVALID /args/data/policy_basis"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.ProfessionalReviewEvidenceID = "" },
 			"SCHEMA_INVALID /args/data/professional_review_evidence_id"},
