@@ -15,14 +15,14 @@ import (
 // Tax refund cases, their allocations and results (migrations/cnx/000003_cnx_invoices_tax_refunds.sql).
 
 const caseColumns = `case_id, export_lot_id, attempt, order_id, exported_at, policy_id, policy_revision, policy_hash, refund_method,
-	policy_valid_from, policy_valid_until, status, row_version, opened_by_kind, opened_by_id, authority_epoch, opened_at`
+	policy_valid_from, policy_valid_until, status, row_version, opened_by_kind, opened_by_id, authority_epoch, opened_at, opening`
 
 func scanCase(row pgx.Row) (*tr.Case, error) {
 	var c tr.Case
 	var kind string
 	var until *time.Time
 	err := row.Scan(&c.ID, &c.ExportLotID, &c.Attempt, &c.OrderID, &c.ExportedAt, &c.Policy.PolicyID, &c.Policy.Revision, &c.Policy.ContentHash,
-		&c.Policy.RefundMethod, &c.Policy.ValidFrom, &until, &c.Status, &c.RowVersion, &kind, &c.OpenedBy.ID, &c.Epoch, &c.OpenedAt)
+		&c.Policy.RefundMethod, &c.Policy.ValidFrom, &until, &c.Status, &c.RowVersion, &kind, &c.OpenedBy.ID, &c.Epoch, &c.OpenedAt, &c.Opening)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -68,20 +68,24 @@ func Cases(ctx context.Context, exec bentopg.Executor, scope kernel.Scope) ([]*t
 	return out, rows.Err()
 }
 
-// InsertCase opens a case at row version 1.
+// InsertCase opens a case at row version 1: expected, or an opening case (C10) in its position.
 func InsertCase(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c *tr.Case) error {
 	var until *time.Time
 	if !c.Policy.ValidUntil.IsZero() {
 		u := kernel.Instant(c.Policy.ValidUntil)
 		until = &u
 	}
+	status := c.Status
+	if !c.Opening {
+		status = tr.Expected
+	}
 	_, err := exec.Exec(ctx, `INSERT INTO brant_cnx.tax_refund_case (tenant_id, company_id, case_id, export_lot_id, attempt, order_id, exported_at,
 		policy_id, policy_revision, policy_hash, refund_method, policy_valid_from, policy_valid_until, status, row_version, opened_by_kind,
-		opened_by_id, authority_epoch, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'expected', 1, $14, $15, $16, $17, $17)`,
+		opened_by_id, authority_epoch, opened_at, updated_at, opening)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1, $15, $16, $17, $18, $18, $19)`,
 		scoped(scope, c.ID, c.ExportLotID, c.Attempt, c.OrderID, kernel.Instant(c.ExportedAt), c.Policy.PolicyID, c.Policy.Revision,
-			c.Policy.ContentHash, c.Policy.RefundMethod, kernel.Instant(c.Policy.ValidFrom), until, string(c.OpenedBy.Kind), c.OpenedBy.ID,
-			c.Epoch, kernel.Instant(c.OpenedAt))...)
+			c.Policy.ContentHash, c.Policy.RefundMethod, kernel.Instant(c.Policy.ValidFrom), until, status, string(c.OpenedBy.Kind), c.OpenedBy.ID,
+			c.Epoch, kernel.Instant(c.OpenedAt), c.Opening)...)
 	return err
 }
 
@@ -137,14 +141,16 @@ func InvoiceLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 
 const counts = `brant_cnx.tax_evidence_counts(a.tenant_id, a.company_id, a.allocation_id, a.case_id)`
 
-// UsedEvidence returns what counting allocations of every case take of each invoice line and
-// purpose of keys.
+// UsedEvidence returns what counting allocations of every case and the opening consumption (C10: what
+// declarations finished before the cutoff consumed) take of each invoice line and purpose of keys.
 func UsedEvidence(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, keys []tr.LineKey) (map[tr.LineKey]kernel.Decimal, error) {
 	out := map[tr.LineKey]kernel.Decimal{}
 	for _, k := range keys {
 		var q string
-		if err := exec.QueryRow(ctx, `SELECT coalesce(trim_scale(sum(a.quantity)), 0)::text FROM brant_cnx.tax_evidence_allocation a
-			WHERE a.tenant_id = $1 AND a.company_id = $2 AND a.purchase_invoice_id = $3 AND a.line_no = $4 AND a.purpose = $5 AND `+counts,
+		if err := exec.QueryRow(ctx, `SELECT trim_scale((SELECT coalesce(sum(a.quantity), 0) FROM brant_cnx.tax_evidence_allocation a
+			WHERE a.tenant_id = $1 AND a.company_id = $2 AND a.purchase_invoice_id = $3 AND a.line_no = $4 AND a.purpose = $5 AND `+counts+`)
+			+ (SELECT coalesce(sum(o.consumed), 0) FROM brant_cnx.tax_evidence_opening o WHERE o.tenant_id = $1 AND o.company_id = $2
+			AND o.purchase_invoice_id = $3 AND o.line_no = $4 AND o.purpose = $5))::text`,
 			scoped(scope, k.InvoiceID, k.LineNo, k.Purpose)...).Scan(&q); err != nil {
 			return nil, err
 		}

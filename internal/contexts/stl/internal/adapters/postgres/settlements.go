@@ -40,11 +40,12 @@ func InsertStatement(ctx context.Context, exec bentopg.Executor, sc kernel.Scope
 	}
 	if _, err := exec.Exec(ctx, `INSERT INTO brant_stl.settlement_statement (tenant_id, company_id, statement_id, kind, status, version,
 		counterparty_id, order_id, order_revision, order_hash, shipped_at, currency, minor_units, net_minor, tax_minor, amount_minor, evidence_ids,
-		owner_actor_id, owner_team_id, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7,
-		$8, $9, $10, $11, $12, $13, $14::text::numeric, $15::text::numeric, $16::text::numeric, $17, $18, $19, $20, $21, $22, $23, $23)`,
+		owner_actor_id, owner_team_id, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at, updated_at, opening) VALUES ($1, $2, $3, $4,
+		$5, $6, $7, $8, $9, $10, $11, $12, $13, $14::text::numeric, $15::text::numeric, $16::text::numeric, $17, $18, $19, $20, $21, $22, $23, $23,
+		$24)`,
 		t, c, s.ID, s.Kind, s.Status, s.Version, s.CounterpartyID, optText(s.OrderID), optInt64(s.OrderRevision), optText(s.OrderHash), shipped,
 		cur.Code(), int16(cur.MinorUnits()), s.Net.MinorString(), s.Tax.MinorString(), s.Amount.MinorString(), evidence, s.OwnerActor,
-		team(s.OwnerTeam), kind, id, epoch, at); err != nil {
+		team(s.OwnerTeam), kind, id, epoch, at, s.Opening); err != nil {
 		return err
 	}
 	for _, l := range s.Lines {
@@ -78,7 +79,7 @@ func InsertStatement(ctx context.Context, exec bentopg.Executor, sc kernel.Scope
 
 const statementColumns = `statement_id, kind, status, version, counterparty_id, coalesce(order_id, ''), coalesce(order_revision, 0),
 	coalesce(order_hash, ''), shipped_at, currency, minor_units, net_minor::text, tax_minor::text, amount_minor::text, evidence_ids, owner_actor_id,
-	coalesce(owner_team_id, ''), confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at`
+	coalesce(owner_team_id, ''), confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at, opening`
 
 func scanStatement(row pgx.Row) (*settlement.Statement, error) {
 	var s settlement.Statement
@@ -88,7 +89,7 @@ func scanStatement(row pgx.Row) (*settlement.Statement, error) {
 	var epoch int64
 	var at time.Time
 	err := row.Scan(&s.ID, &s.Kind, &s.Status, &s.Version, &s.CounterpartyID, &s.OrderID, &s.OrderRevision, &s.OrderHash, &shipped, &code, &units,
-		&net, &tax, &amount, &s.EvidenceIDs, &s.OwnerActor, &s.OwnerTeam, &kind, &by, &epoch, &at)
+		&net, &tax, &amount, &s.EvidenceIDs, &s.OwnerActor, &s.OwnerTeam, &kind, &by, &epoch, &at, &s.Opening)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -370,7 +371,8 @@ func SaveMoved(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, x *f
 // applied on each (the credit exposure's receivables, D-4).
 func OwedInstallments(ctx context.Context, exec bentopg.Executor, sc kernel.Scope, party string) ([]cc.OwedInstallment, error) {
 	t, c := ts(sc)
-	rows, err := exec.Query(ctx, `SELECT s.order_id, s.currency, s.minor_units, coalesce(i.stage_trigger, ''), coalesce(i.release_control, ''),
+	// An opening receivable (C10) binds no order: "" counts as open and forms no order's credit stage.
+	rows, err := exec.Query(ctx, `SELECT coalesce(s.order_id, ''), s.currency, s.minor_units, coalesce(i.stage_trigger, ''), coalesce(i.release_control, ''),
 		i.amount_minor::text, (SELECT coalesce(sum(a.amount_minor), 0) FROM brant_stl.application a WHERE a.tenant_id = i.tenant_id
 			AND a.company_id = i.company_id AND a.statement_id = i.statement_id AND a.installment_seq = i.seq AND a.status = 'applied')::text, i.due_at
 		FROM brant_stl.settlement_statement s JOIN brant_stl.settlement_installment i ON i.tenant_id = s.tenant_id AND i.company_id = s.company_id

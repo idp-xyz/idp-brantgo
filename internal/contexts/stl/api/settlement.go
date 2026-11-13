@@ -236,6 +236,7 @@ type StatementView struct {
 	CreditNotes    []CreditNoteRef // C8: its credit notes the caller sees
 	CreditedMinor  string          // C8: Σ its effective credit notes
 	Reversal       *ReversalView   // C8: when reversed
+	OpeningID      string          // C10: an opening statement's opening item (no lines, no order; opening.go)
 	ConfirmedBy    kernel.ActorRef
 	ConfirmedAt    time.Time
 	CheckedAt      time.Time

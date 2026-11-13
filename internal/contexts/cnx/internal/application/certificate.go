@@ -50,7 +50,7 @@ func certificateRequest(cmd api.Command) (name, key string, args any) {
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandRegisterCertificate, key, c
 	}
-	return "", "", nil
+	return openingRequest(cmd)
 }
 
 // visibleCertificate is Visible's part for certificates, which are company-wide like licences.

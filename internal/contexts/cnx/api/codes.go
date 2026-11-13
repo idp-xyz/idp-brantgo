@@ -66,6 +66,7 @@ var codes = map[string]kernel.Category{
 	CodeExternalResultUnknown:         kernel.CategoryConflict,
 	CodeDocumentRequirementUnverified: kernel.CategoryConflict,
 	CodeCertificateNotApplicable:      kernel.CategoryConflict,
+	CodeOpeningBalanceDuplicate:       kernel.CategoryConflict, // C10 (opening.go)
 }
 
 // Category returns the category of a code CNX declares.

@@ -363,6 +363,11 @@ GRANT UPDATE (status, version, source_kind, source_party_id, source_reference, e
     confirm_evidence_ids, confirm_reason, allocation_seq, updated_at) ON brant_stl.charge TO brant_app;
 GRANT UPDATE (status, version, updated_at) ON brant_stl.order_result TO brant_app;
 
+-- STL opening balances (S5-20): an opening item is only inserted with the opening statement or fund record its command
+-- writes, and moves recorded → reversed with its reversed statement (trigger); nothing is deleted.
+GRANT SELECT, INSERT ON brant_stl.opening_balance TO brant_app;
+GRANT UPDATE (status, updated_at) ON brant_stl.opening_balance TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on
@@ -415,6 +420,11 @@ GRANT UPDATE (status, checks, reconciliations, row_version, updated_at) ON brant
 -- the revision trigger's lock need); revisions are only inserted; nothing is deleted.
 GRANT SELECT, INSERT ON brant_cnx.certificate_result, brant_cnx.certificate_revision TO brant_app;
 GRANT UPDATE (issuer, number, current_revision, row_version, updated_at) ON brant_cnx.certificate_result TO brant_app;
+
+-- CNX opening refund material (S5-20): opening items and the opening consumption of invoice lines are only inserted
+-- (triggers; the consumption trigger locks the invoice FOR UPDATE through the invoice's column grant above); a
+-- reconciliation of a credit note keeps what STL stated of it in its own columns.
+GRANT SELECT, INSERT ON brant_cnx.tax_opening, brant_cnx.tax_evidence_opening TO brant_app;
 
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses

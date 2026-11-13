@@ -11,6 +11,7 @@ import (
 	fr "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/fundrecord"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/orderresult"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/settlement"
+	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -199,5 +200,36 @@ func TestBasisOfAConversion(t *testing.T) {
 		if b := basisOf(c.o, c.source, c.target); b != nil {
 			t.Errorf("%s: %+v", name, b)
 		}
+	}
+}
+
+// opening_balance.record is a humanOnlyCommand (treasury; S5 C10); its reads need stl.read; its request hash
+// covers everything but the key.
+func TestActorKindsOfOpeningBalances(t *testing.T) {
+	policy, err := authorization.NewPolicy(Rules()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := policy.Rule(api.CommandRecordOpening)
+	if err != nil || r.Permission != api.CommandRecordOpening || len(r.ActorKinds) != 1 || !r.Admits(kernel.ActorHuman) || r.Admits(kernel.ActorAI) ||
+		r.Admits(kernel.ActorSystem) {
+		t.Fatalf("%+v %v", r, err)
+	}
+	for _, c := range []string{api.CommandGetOpening, api.CommandOpenings} {
+		if r, err := policy.Rule(c); err != nil || r.Permission != api.PermissionRead {
+			t.Errorf("%s: %+v, %v", c, r, err)
+		}
+	}
+	a := api.RecordOpening{IdempotencyKey: "k1", OpeningID: "ob.1", OpeningKind: api.OpeningReceivable}
+	b := a
+	b.IdempotencyKey = "k2"
+	name, key, x := request(a)
+	_, _, y := request(b)
+	hx, err := action.RequestHash(x)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hy, _ := action.RequestHash(y); name != api.CommandRecordOpening || key != "k1" || hx != hy {
+		t.Fatalf("%s %s %s %s", name, key, hx, hy)
 	}
 }

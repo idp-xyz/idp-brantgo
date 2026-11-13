@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
@@ -252,6 +253,12 @@ type resolveReconciliation struct {
 	sources  map[string]evdapi.SourceRef
 	funds    map[string]FundRecord
 	bundle   *db.Bundle
+
+	// A credit_note subject (S5 C10, CN-AT11): what STL states of it, the bundle's lot as FUL states it, and the
+	// credit note as the reconciliation records it.
+	notes map[string]CreditNote
+	lot   *Export
+	link  *api.CreditNoteLink
 }
 
 func (h *resolveReconciliation) Prepare(ctx context.Context) error {
@@ -268,7 +275,88 @@ func (h *resolveReconciliation) Prepare(ctx context.Context) error {
 	if h.cmd.Subject.Kind == api.SubjectFundRecord {
 		h.funds, err = h.s.Upstream.Funds.ResolveFundRecords(ctx, []string{h.cmd.Subject.ID})
 	}
+	if err != nil || h.cmd.Subject.Kind != api.SubjectCreditNote {
+		return err
+	}
+	return h.creditNote(ctx)
+}
+
+// creditNote reads, for a credit_note subject, the credit note (STL, port CreditNotes) and the bundle's export lot
+// with its lines' FUL shipment lines (FUL, port Exports), before CNX's transaction (S5 C10).
+func (h *resolveReconciliation) creditNote(ctx context.Context) error {
+	var err error
+	h.lot, h.link = nil, nil
+	if h.notes, err = h.s.Upstream.CreditNotes.ResolveCreditNotes(ctx, []string{h.cmd.Subject.ID}); err != nil {
+		return err
+	}
+	var lot string
+	if err = h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		b, err := postgres.LoadBundle(ctx, exec, scope(ctx), h.cmd.BundleID, postgres.NoLock)
+		if b != nil {
+			lot = b.ExportLotID
+		}
+		return err
+	}); err != nil || lot == "" {
+		return err
+	}
+	ref := ExportRef{Kind: api.TargetExportLot, ID: lot}
+	exports, err := h.s.Upstream.Exports.ResolveExports(ctx, []ExportRef{ref})
+	if x, ok := exports[ref]; ok && err == nil {
+		h.lot = &x
+	}
 	return err
+}
+
+// creditNoteSubject checks a credit_note subject of bundle b: STL resolves the credit note for the caller
+// (REFERENCE_INVALID), it counts — confirmed on a standing statement (INVALID_STATE) — and its statement settles a
+// line of the bundle's export lot (REFERENCE_INVALID). It keeps what STL stated for the reconciliation.
+func (h *resolveReconciliation) creditNoteSubject(b *db.Bundle) error {
+	const path = "/args/subject/id"
+	n, ok := h.notes[h.cmd.Subject.ID]
+	switch {
+	case !ok:
+		return kernel.Reject(kernel.CodeReferenceInvalid, path, "STL resolves no such credit note")
+	case !n.Effective:
+		return kernel.Reject(kernel.CodeInvalidState, path, "The credit note is "+n.Status+" on a "+n.StatementStatus+
+			" statement: only a confirmed credit note's impact is recorded")
+	case h.lot == nil || h.lot.Ref.ID != b.ExportLotID || h.lot.Code != "":
+		return kernel.Reject(kernel.CodeReferenceInvalid, path, "FUL resolves no intact export lot of the bundle")
+	}
+	link := &api.CreditNoteLink{CreditNoteID: n.ID, CreditKind: n.Kind, Version: n.Version, StatementID: n.StatementID, OrderID: n.OrderID,
+		Currency: n.Currency, AmountMinor: n.AmountMinor, LotLineIDs: []string{}}
+	for _, l := range h.lot.Lines {
+		if slices.Contains(n.Sources, ShipmentLineKey{ShipmentID: l.ShipmentID, LineID: l.ShipmentLineID}) {
+			link.LotLineIDs = append(link.LotLineIDs, l.LineID)
+		}
+	}
+	if len(link.LotLineIDs) == 0 {
+		return kernel.Reject(kernel.CodeReferenceInvalid, path, "The credit note's statement settles no line of the bundle's export lot")
+	}
+	h.link = link
+	return nil
+}
+
+// creditNoteAmount checks that a credit_note subject is reconciled in the credit note's currency and that the
+// internal value is the credit note's amount, as STL states it (INVALID_KNOWN_VALUE): CNX records the impact, it
+// neither restates nor recomputes the credit note.
+func (h *resolveReconciliation) creditNoteAmount(r *db.Reconciliation, c kernel.Currency) error {
+	l := h.link
+	if c.Code() != l.Currency {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/currency", "The credit note is in "+l.Currency)
+	}
+	amount, err := kernel.ParseMinor(c, l.AmountMinor)
+	if err != nil {
+		return err
+	}
+	if r.Internal.Cmp(amount.Decimal()) != 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/internal/value", "STL states credit note "+l.CreditNoteID+" at "+amount.String())
+	}
+	detail, err := json.Marshal(l)
+	if err != nil {
+		return err
+	}
+	r.SubjectVersion, r.SubjectDetail = l.Version, string(detail)
+	return nil
 }
 
 func (h *resolveReconciliation) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -320,6 +408,11 @@ func (h *resolveReconciliation) Apply(ctx context.Context, exec bentopg.Executor
 			}
 			*x.to = m.Decimal()
 		}
+		if h.link != nil {
+			if err = h.creditNoteAmount(r, kc); err != nil {
+				return action.Outcome{}, err
+			}
+		}
 	} else {
 		r.External, _ = kernel.ParseDecimal(cmd.External.Value, kernel.QuantityFormat)
 		r.Internal, _ = kernel.ParseDecimal(cmd.Internal.Value, kernel.QuantityFormat)
@@ -365,6 +458,8 @@ func (h *resolveReconciliation) subject(ctx context.Context, exec bentopg.Execut
 		if _, ok := h.funds[s.ID]; ok {
 			return nil
 		}
+	case api.SubjectCreditNote:
+		return h.creditNoteSubject(b)
 	case api.SubjectDocument:
 		checks, err := postgres.BundleChecks(ctx, exec, sc, b.ID)
 		if err != nil {

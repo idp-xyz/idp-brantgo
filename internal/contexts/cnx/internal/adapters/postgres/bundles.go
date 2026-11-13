@@ -141,11 +141,12 @@ func InsertReconciliation(ctx context.Context, exec bentopg.Executor, scope kern
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.external_reconciliation (tenant_id, company_id, reconciliation_id, bundle_id, reconciliation_no,
 		subject_kind, subject_id, measure, unit, external_value, internal_value, difference, external_source, internal_source, responsibility_kind,
 		responsibility_party_id, responsibility_note, adjustment, adjustment_note, evidence, reason, resolved_by_kind, resolved_by_id,
-		authority_epoch, resolved_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14, $15,
-		nullif($16, ''), $17, $18, nullif($19, ''), $20, $21, $22, $23, $24, $25)`,
+		authority_epoch, resolved_at, subject_version, subject_detail) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric,
+		$12::numeric, $13, $14, $15, nullif($16, ''), $17, $18, nullif($19, ''), $20, $21, $22, $23, $24, $25, nullif($26, 0), nullif($27, ''))`,
 		scoped(scope, r.ID, r.BundleID, r.No, r.SubjectKind, r.SubjectID, r.Measure, r.Unit, r.External.String(), r.Internal.String(),
 			r.Difference.String(), r.ExternalSource, r.InternalSource, r.ResponsibilityKind, r.ResponsibilityPartyID, r.ResponsibilityNote,
-			r.Adjustment, r.AdjustmentNote, string(b), r.Reason, string(r.By.Kind), r.By.ID, r.Epoch, kernel.Instant(r.At))...)
+			r.Adjustment, r.AdjustmentNote, string(b), r.Reason, string(r.By.Kind), r.By.ID, r.Epoch, kernel.Instant(r.At), r.SubjectVersion,
+			r.SubjectDetail)...)
 	return err
 }
 
@@ -154,7 +155,7 @@ func Reconciliations(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 	rows, err := exec.Query(ctx, `SELECT reconciliation_id, reconciliation_no, subject_kind, subject_id, measure, unit, external_value::text,
 		internal_value::text, difference::text, external_source, internal_source, responsibility_kind, coalesce(responsibility_party_id, ''),
 		responsibility_note, adjustment, coalesce(adjustment_note, ''), evidence, reason, resolved_by_kind, resolved_by_id, authority_epoch,
-		resolved_at FROM brant_cnx.external_reconciliation WHERE tenant_id = $1 AND company_id = $2 AND bundle_id = $3 ORDER BY reconciliation_no`,
+		resolved_at, coalesce(subject_version, 0), coalesce(subject_detail, '') FROM brant_cnx.external_reconciliation WHERE tenant_id = $1 AND company_id = $2 AND bundle_id = $3 ORDER BY reconciliation_no`,
 		scoped(scope, id)...)
 	if err != nil {
 		return nil, err
@@ -166,7 +167,7 @@ func Reconciliations(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 		var external, internal, difference, evidence, kind string
 		if err := rows.Scan(&r.ID, &r.No, &r.SubjectKind, &r.SubjectID, &r.Measure, &r.Unit, &external, &internal, &difference, &r.ExternalSource,
 			&r.InternalSource, &r.ResponsibilityKind, &r.ResponsibilityPartyID, &r.ResponsibilityNote, &r.Adjustment, &r.AdjustmentNote, &evidence,
-			&r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At); err != nil {
+			&r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At, &r.SubjectVersion, &r.SubjectDetail); err != nil {
 			return nil, err
 		}
 		for _, x := range []struct {

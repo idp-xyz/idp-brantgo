@@ -24,7 +24,8 @@ import (
 const CodeTaxEvidenceExceeded = "TAX_EVIDENCE_EXCEEDED"
 
 // Categories are the categories of the domain's own codes.
-var Categories = map[string]kernel.Category{CodeTaxEvidenceExceeded: kernel.CategoryConflict}
+var Categories = map[string]kernel.Category{CodeTaxEvidenceExceeded: kernel.CategoryConflict,
+	CodeOpeningBalanceDuplicate: kernel.CategoryConflict}
 
 func exceeded(path, reason string) *kernel.Rejection {
 	return kernel.RejectAs(CodeTaxEvidenceExceeded, Categories[CodeTaxEvidenceExceeded], path, reason)
@@ -102,6 +103,7 @@ type Case struct {
 	OpenedBy    kernel.ActorRef
 	Epoch       int64
 	OpenedAt    time.Time
+	Opening     bool // an opening case (S5 C10, opening.go): opened in its position at the cutoff
 }
 
 // CheckVersion compares the caller's expected row version with c's.
@@ -235,6 +237,13 @@ func Allocate(x Context, in []AllocateInput) ([]*Allocation, error) {
 	if c.Status != Expected && c.Status != Planned {
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/export_lot_id", "The tax refund case is "+c.Status)
 	}
+	return allocate(x, in)
+}
+
+// allocate is Allocate's judgement of the allocations, whatever the case's state (an opening case takes its
+// allocations when it opens, in its position: opening.go).
+func allocate(x Context, in []AllocateInput) ([]*Allocation, error) {
+	c := x.Case
 	byID := map[string]*Allocation{}
 	exportUsed := map[[2]string]kernel.Decimal{}
 	for _, a := range x.Allocations {

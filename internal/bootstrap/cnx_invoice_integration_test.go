@@ -96,7 +96,7 @@ func newInvoiceWorldDelivered(t *testing.T, delivered string) *invoiceWorld {
 	w.must(err)
 	w.cnx, err = cnx.New(db, cnx.Upstream{Orders: fixedOrders{}, Countries: cnx.PTYCountries(w.c.PTY), Profiles: fixedProfiles{},
 		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: w.ful, Purchases: cnx.PURLines(w.pur),
-		Funds: cnx.STLFunds(w.c.STL)})
+		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL)})
 	w.must(err)
 	doc := w.assign("doc.c3a", "documentation")
 	w.declare = declarer{t: t, cnx: w.cnx, doc: doc, key: w.key, evidence: w.source(doc, "customs.receipt.c3a", "合成报关单放行回执（测试数据）")}

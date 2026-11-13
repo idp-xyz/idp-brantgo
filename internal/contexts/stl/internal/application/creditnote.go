@@ -281,6 +281,9 @@ func (h *reverseSettlement) Apply(ctx context.Context, exec bentopg.Executor, d 
 	if err = postgres.SaveReversal(ctx, exec, sc, st, r); err != nil {
 		return action.Outcome{}, err
 	}
+	if err = reverseOpening(ctx, exec, st, now); err != nil { // C10: an opening statement's item is reversed with it
+		return action.Outcome{}, err
+	}
 	sources := make([]map[string]any, 0, len(st.Lines))
 	for _, l := range st.Lines {
 		sources = append(sources, map[string]any{"source_kind": l.Source.Kind, "source_id": l.Source.ID, "source_line_id": l.Source.LineID,

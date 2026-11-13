@@ -55,6 +55,9 @@ var (
 	_ api.CertificateCommands = (*Module)(nil)
 	_ api.CertificateQueries  = (*Module)(nil)
 	_ api.CertificateLookups  = (*Module)(nil)
+
+	_ api.TaxOpeningCommands = (*Module)(nil)
+	_ api.TaxOpeningQueries  = (*Module)(nil)
 )
 
 // Upstream are the contracts of CNX's upstreams: TRD's orders (R46), PTY's address countries
@@ -89,6 +92,8 @@ type (
 	PurchaseLine    = application.PurchaseLine
 	Funds           = application.Funds
 	FundRecord      = application.FundRecord
+	CreditNotes     = application.CreditNotes
+	CreditNote      = application.CreditNote
 	// What CAT's declaration profiles say for a declaration (S5 C3a): the verified revision and its
 	// content, through the port Profiles.
 	DeclarationProfiles = application.DeclarationProfiles
@@ -112,6 +117,12 @@ func PURLines(lines purapi.DeliveryLookups) PurchaseLines { return upstream.PUR{
 // STLFunds is CNX's port to STL on STL's FundRecordLookups (FundRecordRef v1, R38): the fund
 // records a received tax refund rests on.
 func STLFunds(funds stlapi.FundRecordLookups) Funds { return upstream.STL{Funds: funds} }
+
+// STLCreditNotes is CNX's port to STL on STL's CreditNoteLookups (CreditNoteRef v1, on R38; S5 C10): the credit
+// notes whose impact external_reconciliation.resolve records (CN-AT11).
+func STLCreditNotes(notes stlapi.CreditNoteLookups) CreditNotes {
+	return upstream.STLCredits{Notes: notes}
+}
 
 // FULLookups is what CNX's port to FUL reads: FUL's export lot and shipment line lookups
 // (ExportLotRef v1, R36) and its shipment read; *ful.Module implements it.
