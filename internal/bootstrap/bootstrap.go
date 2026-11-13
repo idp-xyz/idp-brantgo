@@ -106,6 +106,9 @@ type RelayConfig struct {
 	// Critical marks revocation, repudiation and risk event types; nil means
 	// messaging.CriticalEventType.
 	Critical func(eventing.EventType) bool
+	// Metrics counts the relay's deliveries, latency, failures and dead letters (S5R-D07); nil
+	// counts nothing. See NewRelayMetrics.
+	Metrics *messaging.RelayMetrics
 }
 
 // Relay assembles the Outbox relay on a transaction owner of its own. The dead letters share it,
@@ -128,7 +131,7 @@ func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
 		Publisher: publisher, Clock: bento.SystemClock{},
 		Batch: cfg.Batch, LeaseFor: cfg.LeaseFor, PublishTimeout: cfg.PublishTimeout,
 		MaxAttempts: cfg.MaxAttempts, MaxFailures: cfg.MaxFailures,
-		RetryBase: cfg.RetryBase, RetryMax: cfg.RetryMax, IdleWait: cfg.IdleWait, Logger: cfg.Logger,
+		RetryBase: cfg.RetryBase, RetryMax: cfg.RetryMax, IdleWait: cfg.IdleWait, Logger: cfg.Logger, Metrics: cfg.Metrics,
 	}, nil
 }
 

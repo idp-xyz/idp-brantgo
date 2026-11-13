@@ -8,7 +8,11 @@
 //     read users issue ordinary reads of what the cycles wrote. Each stage reports P50/P95/P99,
 //     error and timeout rates of reads and commands apart, cycles per second, and what PostgreSQL
 //     showed: the API's connections, lock waiters, ungranted locks, transaction counters, the
-//     Outbox backlog and the relay's lag;
+//     Outbox backlog, the oldest undelivered event and the relay's lag, which the workers' own
+//     metrics cross-check. The run then checks every stage against the targets (thresholds.go:
+//     S5R-D07's relay latency and lag alert up to the reference load with the reference 2 dispatch
+//     workers, S5-11's read and command P95 up to the API capacity bound); with -assert a missed
+//     target fails the run;
 //   - in writes mode, runs command users for a fixed time and appends every acknowledged command
 //     to a log, which the recovery drill (scripts/backup-restore.sh) compares with a restored
 //     database in acks mode to measure what a restore lost.
@@ -17,6 +21,7 @@
 //
 //	go run ./tests/load -bin bin -dsn "$IDP_BRANT_POSTGRES_DSN" -observer-dsn postgres://postgres:...@127.0.0.1:55850/brant \
 //	    -stages 1,2,4,8,16,32 -warmup 10s -measure 50s -out bin/load/run1
+//	go run ./tests/load ... -stages 4,8,16 -workers 2 -assert      # S5R-D07 at the reference load
 //	go run ./tests/load -mode writes -vus 4 -duration 3m -tenant drill.1 -ack-log bin/drill/acks.jsonl ...
 //	go run ./tests/load -mode acks -dsn <restored database> -tenant drill.1 -ack-log bin/drill/acks.jsonl
 package main
@@ -52,12 +57,13 @@ type config struct {
 	pause, timeout     time.Duration
 	prime              int
 	drain              time.Duration
-	worker             bool
+	workers            int
 	poolMax            int
 	vus                int
 	duration           time.Duration
 	ackLog             string
 	tenant             string
+	th                 thresholds
 }
 
 func main() {
@@ -111,7 +117,16 @@ func parseFlags(args []string) (config, error) {
 	fs.IntVar(&cfg.prime, "prime", 3, "order cycles run one after another before the first stage")
 	fs.DurationVar(&cfg.drain, "drain", 10*time.Minute, "after the last stage, how long the relay may take to empty the Outbox before the "+
 		"processes stop (needs the worker and the observer); 0 skips the drain")
-	fs.BoolVar(&cfg.worker, "worker", true, "run brant-worker -dispatch beside the API")
+	worker := fs.Bool("worker", true, "run brant-worker -dispatch beside the API; false runs none, whatever -workers says")
+	fs.IntVar(&cfg.workers, "workers", referenceWorkers, "brant-worker -dispatch processes beside the API (S5R-D07: the reference deployment runs 2, scaled to 3)")
+	fs.BoolVar(&cfg.th.assert, "assert", false, "fail the run when a stage misses a target it applies to (thresholds.go)")
+	fs.DurationVar(&cfg.th.relayP95, "relay-p95", defaultRelayP95, "S5R-D07 relay latency P95 target, up to the reference load")
+	fs.DurationVar(&cfg.th.relayP99, "relay-p99", defaultRelayP99, "S5R-D07 relay latency P99 target, up to the reference load")
+	fs.DurationVar(&cfg.th.alert, "lag-alert", defaultLagAlert, "S5R-D07 alert threshold the oldest undelivered event must stay below, up to the reference load")
+	fs.DurationVar(&cfg.th.readP95, "read-p95", defaultReadP95, "S5-11 read latency P95 target, up to -api-users")
+	fs.DurationVar(&cfg.th.commandP95, "command-p95", defaultCommandP95, "S5-11 command latency P95 target, up to -api-users")
+	fs.IntVar(&cfg.th.referenceUsers, "reference-users", defaultReferenceUsers, "command users of the reference load (S5R-D07: 16 command + 16 read users)")
+	fs.IntVar(&cfg.th.apiUsers, "api-users", defaultAPIUsers, "command users per API instance the read and command targets hold up to (S5-11)")
 	fs.IntVar(&cfg.poolMax, "api-pool-max", 0, "pool_max_conns of the API's pool; 0 keeps pgxpool's default, max(4, CPUs)")
 	fs.IntVar(&cfg.vus, "vus", 4, "writes mode: command users")
 	fs.DurationVar(&cfg.duration, "duration", 3*time.Minute, "writes mode: how long the users write")
@@ -119,6 +134,9 @@ func parseFlags(args []string) (config, error) {
 	fs.StringVar(&cfg.tenant, "tenant", "", "tenant ID; empty draws a fresh one")
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
+	}
+	if !*worker {
+		cfg.workers = 0
 	}
 	for _, s := range strings.Split(stages, ",") {
 		n, err := strconv.Atoi(strings.TrimSpace(s))
@@ -136,6 +154,13 @@ func parseFlags(args []string) (config, error) {
 		return cfg, fmt.Errorf("%s mode needs -ack-log", cfg.mode)
 	case cfg.mode == "acks" && cfg.tenant == "":
 		return cfg, errors.New("acks mode needs the -tenant of the writes run")
+	case cfg.workers < 0:
+		return cfg, errors.New("-workers must not be negative")
+	case cfg.th.assert && cfg.workers > 0 && cfg.observer == "":
+		return cfg, errors.New("-assert needs -observer-dsn to measure the relay")
+	case cfg.th.relayP95 <= 0 || cfg.th.relayP99 < cfg.th.relayP95 || cfg.th.alert <= 0 || cfg.th.readP95 <= 0 || cfg.th.commandP95 <= 0 ||
+		cfg.th.referenceUsers < 1 || cfg.th.apiUsers < 1:
+		return cfg, errors.New("the targets must be positive, -relay-p99 at least -relay-p95, and -reference-users and -api-users at least 1")
 	}
 	if cfg.tenant == "" {
 		cfg.tenant = fmt.Sprintf("load.%s.%04x", time.Now().UTC().Format("20060102T150405"), rand.IntN(1<<16))
@@ -145,19 +170,22 @@ func parseFlags(args []string) (config, error) {
 
 // env is a running system under test.
 type env struct {
-	cfg    config
-	is     *issuer
-	api    *proc
-	worker *proc
-	c      *client
-	obs    *observer
-	w      *world
-	pool   *pool
-	rec    *recorder
+	cfg     config
+	is      *issuer
+	api     *proc
+	workers []*proc
+	metrics []string // each worker's GET /metrics URL
+	c       *client
+	obs     *observer
+	w       *world
+	pool    *pool
+	rec     *recorder
 }
 
 func (e *env) close() {
-	_ = e.worker.stop() // SIGTERM ends both; how they exit is in their logs
+	for _, w := range e.workers {
+		_ = w.stop() // SIGTERM ends them; how they exit is in their logs
+	}
 	_ = e.api.stop()
 	if e.obs != nil {
 		e.obs.close()
@@ -193,6 +221,10 @@ func run(ctx context.Context, cfg config) (*Report, error) {
 		err = e.staged(ctx, rep)
 		if err == nil {
 			e.drain(ctx, rep)
+		}
+		rep.Thresholds = evaluate(cfg.th, len(e.workers), e.obs != nil, rep.Stages)
+		if err == nil && cfg.th.assert && rep.Thresholds.Failed > 0 {
+			err = fmt.Errorf("%d threshold checks failed (see thresholds in report.json and summary.md)", rep.Thresholds.Failed)
 		}
 	}
 	rep.FinishedAt = time.Now().UTC().Format(time.RFC3339)
@@ -234,15 +266,25 @@ func (e *env) start(ctx context.Context, rep *Report) error {
 	if err = waitHealthy(ctx, base, e.api); err != nil {
 		return err
 	}
-	if cfg.worker {
+	rep.Workers = cfg.workers
+	if cfg.workers > 0 {
 		workerDSN, err := withParams(cfg.dsn, map[string]string{"application_name": appWorker})
 		if err != nil {
 			return err
 		}
-		e.worker, err = startProc(cfg.bin, "brant-worker", filepath.Join(cfg.out, "brant-worker.log"),
-			[]string{"IDP_BRANT_POSTGRES_DSN=" + workerDSN}, "-dispatch")
-		if err != nil {
-			return err
+		for k := 1; k <= cfg.workers; k++ {
+			mport, err := freePort()
+			if err != nil {
+				return err
+			}
+			addr := "127.0.0.1:" + strconv.Itoa(mport)
+			w, err := startProc(cfg.bin, "brant-worker", filepath.Join(cfg.out, fmt.Sprintf("brant-worker-%d.log", k)),
+				[]string{"IDP_BRANT_POSTGRES_DSN=" + workerDSN}, "-dispatch", "-metrics-listen", addr)
+			if err != nil {
+				return err
+			}
+			e.workers = append(e.workers, w)
+			e.metrics = append(e.metrics, "http://"+addr+"/metrics")
 		}
 	}
 	transport := &http.Transport{MaxIdleConns: 4096, MaxIdleConnsPerHost: 4096, IdleConnTimeout: 90 * time.Second, DisableCompression: true}
@@ -390,14 +432,29 @@ func (e *env) stage(ctx context.Context, index, users int) (StageReport, error) 
 	from := time.Now().Add(e.cfg.warmup)
 	to := from.Add(e.cfg.measure)
 	sleepUntil(ctx, from)
-	before, apiCPU, workerCPU := e.counters(ctx), e.api.cpuSeconds(), e.worker.cpuSecondsOrZero()
+	// The window is timed on the monotonic clock, but published_at and recorded_at are wall-clock
+	// readings, and a WSL2 host steps its wall clock forward by seconds now and then. The database
+	// windows are therefore bounded by the wall clock read at the window's edges, not by from + measure.
+	wallFrom := time.Now()
+	// The workers first: the database counters can wait behind the observer's probes on a busy host.
+	relayBefore, scrapeErrs := scrapeWorkers(ctx, e.metrics)
+	scrapedFrom := time.Now()
+	before, apiCPU, workerCPU := e.counters(ctx), e.api.cpuSeconds(), e.workerCPU()
 	sleepUntil(ctx, to)
-	after, apiCPU2, workerCPU2 := e.counters(ctx), e.api.cpuSeconds(), e.worker.cpuSecondsOrZero()
+	wallTo := time.Now()
+	relayAfter, scrapeErrs2 := scrapeWorkers(ctx, e.metrics)
+	scrapedTo := time.Now()
+	after, apiCPU2, workerCPU2 := e.counters(ctx), e.api.cpuSeconds(), e.workerCPU()
+	if len(e.metrics) > 0 {
+		st.WorkerRelay = workerWindow(relayBefore, relayAfter, len(e.metrics), scrapeErrs+scrapeErrs2, e.cfg.th)
+		st.WorkerRelay.Seconds = round(scrapedTo.Sub(scrapedFrom).Seconds(), 3)
+	}
 	st.HostAfter = hostState()
 	cancel()
 	wg.Wait()
 	samples := e.rec.take()
-	st.Window = Window{From: from.UTC().Format(time.RFC3339Nano), To: to.UTC().Format(time.RFC3339Nano), Seconds: to.Sub(from).Seconds()}
+	st.Window = Window{From: wallFrom.UTC().Format(time.RFC3339Nano), To: wallTo.UTC().Format(time.RFC3339Nano), Seconds: to.Sub(from).Seconds(),
+		ClockStepS: round(wallTo.Round(0).Sub(wallFrom.Round(0)).Seconds()-wallTo.Sub(wallFrom).Seconds(), 3)}
 	st.Commands = aggregate(samples, classCommand, from, to)
 	st.Reads = aggregate(samples, classRead, from, to)
 	st.Cycles = cycleStats(log, from, to)
@@ -406,7 +463,7 @@ func (e *env) stage(ctx context.Context, index, users int) (StageReport, error) 
 	st.WorkerCores = round((workerCPU2-workerCPU)/secs, 2)
 	if sampler != nil {
 		probes, errs := sampler.finish()
-		lag, err := e.obs.relayLag(ctx, from, to)
+		lag, err := e.obs.relayLag(ctx, wallFrom.Round(0), wallTo.Round(0))
 		if err != nil {
 			errs++
 		}
@@ -416,11 +473,13 @@ func (e *env) stage(ctx context.Context, index, users int) (StageReport, error) 
 	return st, ctx.Err()
 }
 
-func (p *proc) cpuSecondsOrZero() float64 {
-	if p == nil {
-		return 0
+// workerCPU is the CPU time every worker has used so far.
+func (e *env) workerCPU() float64 {
+	var sum float64
+	for _, w := range e.workers {
+		sum += w.cpuSeconds()
 	}
-	return p.cpuSeconds()
+	return sum
 }
 
 func (e *env) counters(ctx context.Context) dbCounters {
@@ -501,7 +560,7 @@ func (e *env) writes(ctx context.Context, rep *Report) error {
 // event of the run's tenant, so that the next run starts on an empty backlog; it reports how long
 // that took.
 func (e *env) drain(ctx context.Context, rep *Report) {
-	if e.worker == nil || e.obs == nil || e.cfg.drain <= 0 {
+	if len(e.workers) == 0 || e.obs == nil || e.cfg.drain <= 0 {
 		return
 	}
 	start := time.Now()

@@ -49,6 +49,7 @@ type probe struct {
 	workerConns, lockWaiters, ungranted int
 	longestLockWait                     float64 // seconds a session has waited on a lock, at most
 	outboxPending, outboxLeased         int
+	oldestUndelivered                   float64        // seconds the oldest PENDING or LEASED event has waited (S5R-D07)
 	waits                               map[string]int // wait_event_type:wait_event of active API sessions
 }
 
@@ -94,8 +95,9 @@ func (o *observer) probe(ctx context.Context) (probe, error) {
 	if err = o.pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE NOT granted`).Scan(&p.ungranted); err != nil {
 		return p, fmt.Errorf("pg_locks: %w", err)
 	}
-	if err = o.pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status = 'PENDING'), count(*) FILTER (WHERE status = 'LEASED')
-		FROM bento.outbox WHERE status IN ('PENDING', 'LEASED')`).Scan(&p.outboxPending, &p.outboxLeased); err != nil {
+	if err = o.pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status = 'PENDING'), count(*) FILTER (WHERE status = 'LEASED'),
+		coalesce(extract(epoch FROM clock_timestamp() - min(recorded_at)), 0)::float8
+		FROM bento.outbox WHERE status IN ('PENDING', 'LEASED')`).Scan(&p.outboxPending, &p.outboxLeased, &p.oldestUndelivered); err != nil {
 		return p, fmt.Errorf("bento.outbox: %w", err)
 	}
 	return p, nil
@@ -122,22 +124,24 @@ func (o *observer) counters(ctx context.Context) (dbCounters, error) {
 }
 
 // relayLag is the Outbox relay's delay (published_at − recorded_at) of the events published in
-// [from, to).
+// [from, to): S5R-D07's relay latency, from the event's commit until every consumer processed it.
+// Abandoned events (dead letters) have no published_at and do not count.
 func (o *observer) relayLag(ctx context.Context, from, to time.Time) (RelayLag, error) {
 	var l RelayLag
-	var p50, p95, mx *float64
+	var p50, p95, p99, mx *float64
 	err := o.pool.QueryRow(ctx, `SELECT count(*),
 		percentile_disc(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM published_at - recorded_at))::float8,
 		percentile_disc(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM published_at - recorded_at))::float8,
+		percentile_disc(0.99) WITHIN GROUP (ORDER BY extract(epoch FROM published_at - recorded_at))::float8,
 		max(extract(epoch FROM published_at - recorded_at))::float8
-		FROM bento.outbox WHERE published_at >= $1 AND published_at < $2`, from, to).Scan(&l.Published, &p50, &p95, &mx)
+		FROM bento.outbox WHERE published_at >= $1 AND published_at < $2`, from, to).Scan(&l.Published, &p50, &p95, &p99, &mx)
 	if err != nil {
 		return l, err
 	}
 	for _, v := range []struct {
 		dst *float64
 		src *float64
-	}{{&l.P50, p50}, {&l.P95, p95}, {&l.Max, mx}} {
+	}{{&l.P50, p50}, {&l.P95, p95}, {&l.P99, p99}, {&l.Max, mx}} {
 		if v.src != nil {
 			*v.dst = math.Round(*v.src*1000) / 1000
 		}
@@ -150,35 +154,39 @@ type RelayLag struct {
 	Published int64   `json:"published"`
 	P50       float64 `json:"p50_s"`
 	P95       float64 `json:"p95_s"`
+	P99       float64 `json:"p99_s"`
 	Max       float64 `json:"max_s"`
 }
 
 // DBStats is what the observer saw during a stage window.
 type DBStats struct {
-	Samples           int            `json:"samples"`
-	APIConnsMax       int            `json:"api_connections_max"`
-	APIActiveMean     float64        `json:"api_active_mean"`
-	APIActiveMax      int            `json:"api_active_max"`
-	APIIdleInTxMax    int            `json:"api_idle_in_transaction_max"`
-	WorkerConnsMax    int            `json:"worker_connections_max"`
-	LockWaitSamples   int            `json:"samples_with_lock_waiters"`
-	LockWaitersMax    int            `json:"lock_waiters_max"`
-	LockWaitersMean   float64        `json:"lock_waiters_mean"`
-	LongestLockWaitS  float64        `json:"longest_lock_wait_s"`
-	UngrantedMax      int            `json:"ungranted_locks_max"`
-	OutboxBacklogMax  int            `json:"outbox_backlog_max"`
-	OutboxBacklogEnd  int            `json:"outbox_backlog_end"`
-	WaitEvents        map[string]int `json:"wait_events_of_active_api_sessions"`
-	Commits           int64          `json:"commits"`
-	Rollbacks         int64          `json:"rollbacks"`
-	Deadlocks         int64          `json:"deadlocks"`
-	Conflicts         int64          `json:"conflicts"`
-	TempFiles         int64          `json:"temp_files"`
-	BlocksRead        int64          `json:"blocks_read"`
-	CacheHitRatio     float64        `json:"cache_hit_ratio"`
-	TuplesInserted    int64          `json:"tuples_inserted"`
-	RelayLag          RelayLag       `json:"outbox_relay_lag"`
-	ObservationErrors int            `json:"observation_errors,omitempty"`
+	Samples          int     `json:"samples"`
+	APIConnsMax      int     `json:"api_connections_max"`
+	APIActiveMean    float64 `json:"api_active_mean"`
+	APIActiveMax     int     `json:"api_active_max"`
+	APIIdleInTxMax   int     `json:"api_idle_in_transaction_max"`
+	WorkerConnsMax   int     `json:"worker_connections_max"`
+	LockWaitSamples  int     `json:"samples_with_lock_waiters"`
+	LockWaitersMax   int     `json:"lock_waiters_max"`
+	LockWaitersMean  float64 `json:"lock_waiters_mean"`
+	LongestLockWaitS float64 `json:"longest_lock_wait_s"`
+	UngrantedMax     int     `json:"ungranted_locks_max"`
+	OutboxBacklogMax int     `json:"outbox_backlog_max"`
+	OutboxBacklogEnd int     `json:"outbox_backlog_end"`
+	// OldestUndeliveredMaxS is the largest age of the oldest undelivered event the samples saw
+	// (S5R-D07 alerts at 60 s).
+	OldestUndeliveredMaxS float64        `json:"oldest_undelivered_max_s"`
+	WaitEvents            map[string]int `json:"wait_events_of_active_api_sessions"`
+	Commits               int64          `json:"commits"`
+	Rollbacks             int64          `json:"rollbacks"`
+	Deadlocks             int64          `json:"deadlocks"`
+	Conflicts             int64          `json:"conflicts"`
+	TempFiles             int64          `json:"temp_files"`
+	BlocksRead            int64          `json:"blocks_read"`
+	CacheHitRatio         float64        `json:"cache_hit_ratio"`
+	TuplesInserted        int64          `json:"tuples_inserted"`
+	RelayLag              RelayLag       `json:"outbox_relay_lag"`
+	ObservationErrors     int            `json:"observation_errors,omitempty"`
 }
 
 // sampler probes every interval until stopped and keeps the probes.
@@ -251,6 +259,7 @@ func summarizeProbes(probes []probe, errs int, from, to time.Time, before, after
 		backlog := p.outboxPending + p.outboxLeased
 		d.OutboxBacklogMax = max(d.OutboxBacklogMax, backlog)
 		d.OutboxBacklogEnd = backlog
+		d.OldestUndeliveredMaxS = math.Max(d.OldestUndeliveredMaxS, math.Round(p.oldestUndelivered*1000)/1000)
 		for k, v := range p.waits {
 			d.WaitEvents[k] += v
 		}

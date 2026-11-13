@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -38,8 +39,9 @@ import (
 //
 // The relay's publish timeout bounds one Publish, all consumers together.
 type Dispatcher struct {
-	subs   []Subscription
-	routes map[routeKey][]route
+	subs    []Subscription
+	routes  map[routeKey][]route
+	metrics *RelayMetrics
 }
 
 var _ eventing.Publisher = (*Dispatcher)(nil)
@@ -104,6 +106,10 @@ func newDispatcher(subs []Subscription, build func(Subscription) (route, error))
 	return d, nil
 }
 
+// SetMetrics makes d count each consumer's outcome and time per delivery in m (S5R-D07); nil
+// counts nothing. Call it before the first Publish.
+func (d *Dispatcher) SetMetrics(m *RelayMetrics) { d.metrics = m }
+
 // Subscriptions returns the subscriptions d delivers to, in order.
 func (d *Dispatcher) Subscriptions() []Subscription { return slices.Clone(d.subs) }
 
@@ -128,7 +134,9 @@ func (d *Dispatcher) Publish(ctx context.Context, envelope eventing.Envelope) er
 			retry = append(retry, err)
 			break
 		}
+		start := time.Now()
 		outcome, err := r.deliver(ctx, envelope)
+		d.metrics.consumed(r.sub.Consumer, outcome, time.Since(start))
 		switch outcome {
 		case InboxProcessed, InboxDuplicate:
 		case InboxRejected:
