@@ -44,7 +44,9 @@ func TestEvaluateContract(t *testing.T) {
 		{func(c *Evaluate) { c.ExpectedVersion = -1 }, "SCHEMA_INVALID /args/expected_version"},
 		{func(c *Evaluate) { c.RegulationID = strings.Repeat("r", 41) }, "SCHEMA_INVALID /args/regulation_id"},
 		{func(c *Evaluate) { c.RegulationRevision = 0 }, "SCHEMA_INVALID /args/regulation_revision"},
-		{func(c *Evaluate) { c.ProgrammeLists = nil }, "SCHEMA_INVALID /args/programme_lists"},
+		// S5R-D38: the lists come from the regulation revision; programme_lists is optional.
+		{func(c *Evaluate) { c.ProgrammeLists = nil }, "OK"},
+		{func(c *Evaluate) { c.ProgrammeLists = make([]string, MaxProgrammeLists+1) }, "SCHEMA_INVALID /args/programme_lists"},
 		{func(c *Evaluate) { c.ProgrammeLists = []string{"a", "a"} }, "SCHEMA_INVALID /args/programme_lists/1"},
 		{func(c *Evaluate) { c.ProgrammeLists = []string{strings.Repeat("l", 33)} }, "SCHEMA_INVALID /args/programme_lists/0"},
 		{func(c *Evaluate) { c.CodeTableVersion = "" }, "SCHEMA_INVALID /args/code_table_version"},
@@ -92,6 +94,31 @@ func TestDecideContract(t *testing.T) {
 		{func(c *Decide) { c.EvaluationID = "" }, "SCHEMA_INVALID /args/evaluation_id"},
 		{func(c *Decide) { c.Reason = "" }, "SCHEMA_INVALID /args/reason"},
 		{func(c *Decide) { c.EvidenceIDs = []string{"bad id"} }, "SCHEMA_INVALID /args/evidence_ids/0"},
+		// S5R-D17: authorizations name the decision's own evidence, clear only.
+		{func(c *Decide) {
+			c.EvidenceIDs = []string{"lic.1"}
+			c.Authorizations = []Authorization{{EvidenceID: "lic.1", Kind: AuthorizationLicense, ValidUntil: "2027-01-01T00:00:00Z"}}
+		}, "OK"},
+		{func(c *Decide) {
+			c.Authorizations = []Authorization{{EvidenceID: "lic.1", Kind: AuthorizationLicense, ValidUntil: "2027-01-01T00:00:00Z"}}
+		}, "SCHEMA_INVALID /args/authorizations/0/evidence_id"},
+		{func(c *Decide) {
+			c.EvidenceIDs = []string{"lic.1"}
+			c.Authorizations = []Authorization{{EvidenceID: "lic.1", Kind: AuthorizationExemption, ValidUntil: "2027-01-01T00:00:00Z"},
+				{EvidenceID: "lic.1", Kind: AuthorizationAuthorityApproval, ValidUntil: "2027-01-01T00:00:00Z"}}
+		}, "SCHEMA_INVALID /args/authorizations/1/evidence_id"},
+		{func(c *Decide) {
+			c.EvidenceIDs = []string{"lic.1"}
+			c.Authorizations = []Authorization{{EvidenceID: "lic.1", Kind: "waiver", ValidUntil: "2027-01-01T00:00:00Z"}}
+		}, "SCHEMA_INVALID /args/authorizations/0/kind"},
+		{func(c *Decide) {
+			c.EvidenceIDs = []string{"lic.1"}
+			c.Authorizations = []Authorization{{EvidenceID: "lic.1", Kind: AuthorizationLicense, ValidUntil: "2027-01-01"}}
+		}, "SCHEMA_INVALID /args/authorizations/0/valid_until"},
+		{func(c *Decide) {
+			c.Conclusion, c.LicenseRequired, c.EvidenceIDs = ConclusionBlocked, nil, []string{"lic.1"}
+			c.Authorizations = []Authorization{{EvidenceID: "lic.1", Kind: AuthorizationLicense, ValidUntil: "2027-01-01T00:00:00Z"}}
+		}, "SCHEMA_INVALID /args/authorizations"},
 	} {
 		cmd := valid()
 		c.edit(&cmd)
@@ -146,6 +173,8 @@ func TestCodesFollowTheCatalog(t *testing.T) {
 		"DECLARATION_MAPPING_UNVERIFIED": kernel.CategoryInvalid, "EXTERNAL_RESULT_UNKNOWN": kernel.CategoryConflict,
 		"DOCUMENT_REQUIREMENT_UNVERIFIED": kernel.CategoryConflict, "CERTIFICATE_NOT_APPLICABLE": kernel.CategoryConflict,
 		"OPENING_BALANCE_DUPLICATE": kernel.CategoryConflict,
+		// S5R (R9): CNX-INV-001's evaluation gaps, CNX-INV-002's goods mismatch.
+		"TRADE_COMPLIANCE_EVALUATION_INCOMPLETE": kernel.CategoryInvalid, "EXPORT_LICENSE_GOODS_MISMATCH": kernel.CategoryConflict,
 	}
 	got := Codes()
 	if len(got) != len(want) {
@@ -194,6 +223,9 @@ func TestTradeComplianceGuardVerdicts(t *testing.T) {
 		{guardRow(true, StatusClear, ReasonCleared, "tcc.1", "tcd.1", true, &reg, &rev, &until, nil), "OK", ReasonCleared},
 		{guardRow(false, StatusPending, ReasonOrderRevised, "", "", false, nil, nil, nil, &notClear), "TRADE_COMPLIANCE_NOT_CLEAR /args/order_id", ReasonOrderRevised},
 		{guardRow(false, StatusBlocked, ReasonBlocked, "tcc.1", "tcd.2", false, &reg, &rev, nil, &notClear), "TRADE_COMPLIANCE_NOT_CLEAR /args/order_id", ReasonBlocked},
+		// S5R-D10: a blocked conclusion under re-evaluation still answers blocked.
+		{guardRow(false, StatusBlocked, ReasonBlockedUnderReview, "tcc.1", "tcd.2", false, &reg, &rev, nil, &notClear),
+			"TRADE_COMPLIANCE_NOT_CLEAR /args/order_id", ReasonBlockedUnderReview},
 		{guardRow(false, StatusExpired, ReasonExpired, "tcc.1", "tcd.1", true, &reg, &rev, &until, &notClear), "TRADE_COMPLIANCE_NOT_CLEAR /args/order_id", ReasonExpired},
 		{guardRow(true, StatusClear, ReasonCleared, "tcc.1", "tcd.1", false, &reg, &rev, &until, &notClear), "TRADE_COMPLIANCE_NOT_CLEAR /args/order_id", ReasonCleared},
 	} {

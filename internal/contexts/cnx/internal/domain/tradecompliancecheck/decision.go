@@ -2,6 +2,8 @@ package tradecompliancecheck
 
 import (
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -14,10 +16,25 @@ type RegulationRef struct {
 	ContentHash string
 }
 
+// Kinds of an authorization (S5R-D17: 许可证、豁免或主管机关批复).
+const (
+	AuthorizationLicense           = "license"
+	AuthorizationExemption         = "exemption"
+	AuthorizationAuthorityApproval = "authority_approval"
+)
+
+// Authorization is an EVD source a clear decision names as the authorization an embargo or
+// sanctions finding is cleared on, of Kind, valid until ValidUntil (S5R-D17).
+type Authorization struct {
+	Evidence
+	Kind       string    `json:"kind"`
+	ValidUntil time.Time `json:"valid_until"`
+}
+
 // Decision is a human compliance conclusion on one evaluation (trade_compliance.decide,
 // CNX-INV-001): clear or blocked with the reason, the evidence, whether the goods need an export
-// licence (clear only), the regulation revision it follows and, for clear, how long it stays valid.
-// Decisions are only appended.
+// licence (clear only), the regulation revision it follows and, for clear, how long it stays valid
+// and the authorizations it rests on (S5R-D17). Decisions are only appended.
 type Decision struct {
 	ID              string
 	CheckID         string
@@ -28,6 +45,7 @@ type Decision struct {
 	Regulation      RegulationRef
 	ValidUntil      time.Time // zero for blocked: it never lapses
 	Evidence        []Evidence
+	Authorizations  []Authorization
 	By              kernel.ActorRef
 	Epoch           int64
 	At              time.Time
@@ -41,6 +59,7 @@ type DecideInput struct {
 	Reason          string
 	LicenseRequired bool
 	Evidence        []Evidence
+	Authorizations  []Authorization
 	By              kernel.ActorRef
 	Epoch           int64
 	At              time.Time
@@ -51,9 +70,15 @@ type DecideInput struct {
 // the evaluation decided must be the current one (REFERENCE_STALE: the evaluator looked at another);
 // a check that is not pending is INVALID_STATE. Clear needs complete facts: a line without a
 // verified declaration profile is DECLARATION_PROFILE_UNVERIFIED (CAT-INV-002), any other missing
-// fact INVALID_STATE; and an evaluation older than the regulation's rescreen interval, or past the
-// regulation's validity, no longer supports a conclusion (REFERENCE_STALE). Blocked needs nothing
-// but a reason: compliance may block on incomplete facts.
+// fact TRADE_COMPLIANCE_EVALUATION_INCOMPLETE (S5R; it was INVALID_STATE); and an evaluation older
+// than the regulation's rescreen interval, or past the regulation's validity, no longer supports a
+// conclusion (REFERENCE_STALE). S5R-D17: an applying embargo or sanctions finding is cleared only on
+// at least one authorization valid at the decision (INVALID_STATE /args/evidence_ids; one already
+// lapsed is INVALID_STATE at its valid_until), an applying arms_embargo, export_control or
+// controlled_goods finding only with evidence that the goods are not controlled (INVALID_STATE
+// /args/evidence_ids), and the clear conclusion's validity never passes the earliest authorization.
+// A region_review finding is the officer's judgement, recorded with the reason every decision gives
+// (S5R-D15). Blocked needs nothing but a reason: compliance may block on incomplete facts.
 func Decide(c *Check, ev *Evaluation, in DecideInput) (*Decision, error) {
 	switch {
 	case !in.By.IsHuman():
@@ -84,7 +109,7 @@ func Decide(c *Check, ev *Evaluation, in DecideInput) (*Decision, error) {
 	}
 	if len(ev.Gaps) > 0 {
 		g := ev.Gaps[0]
-		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/evaluation_id", "The evaluation is incomplete: "+g.Kind+" "+g.Ref)
+		return nil, reject(CodeEvaluationIncomplete, "/args/evaluation_id", "The evaluation is incomplete: "+g.Kind+" "+g.Ref)
 	}
 	until, err := kernel.ParseTimestamp(ev.ValidUntil)
 	if err != nil {
@@ -93,8 +118,50 @@ func Decide(c *Check, ev *Evaluation, in DecideInput) (*Decision, error) {
 	if !until.After(d.At) {
 		return nil, reject(CodeReferenceStale, "/args/evaluation_id", "The evaluation is older than the regulation's rescreen interval")
 	}
-	d.LicenseRequired, d.ValidUntil = in.LicenseRequired, until
+	if until, err = authorized(ev, in, d.At, until); err != nil {
+		return nil, err
+	}
+	d.LicenseRequired, d.ValidUntil, d.Authorizations = in.LicenseRequired, until, sortedAuthorizations(in.Authorizations)
 	return d, nil
+}
+
+// authorized applies S5R-D17 to a clear decision at at on ev: the applying findings it clears need
+// an authorization (embargo, sanctions) or evidence (arms_embargo, export_control, controlled
+// goods), and the conclusion's validity until is capped by every authorization's.
+func authorized(ev *Evaluation, in DecideInput, at, until time.Time) (time.Time, error) {
+	for i, a := range in.Authorizations {
+		if !a.ValidUntil.After(at) {
+			return until, kernel.Reject(kernel.CodeInvalidState, "/args/authorizations/"+strconv.Itoa(i)+"/valid_until", "The authorization has lapsed")
+		}
+		if a.ValidUntil.Before(until) {
+			until = kernel.Instant(a.ValidUntil)
+		}
+	}
+	for _, f := range ev.Findings {
+		if !f.Applies {
+			continue
+		}
+		switch {
+		case f.Kind == FindingProgramme && (f.Measure == MeasureEmbargo || f.Measure == MeasureSanctions):
+			if len(in.Authorizations) == 0 {
+				return until, kernel.Reject(kernel.CodeInvalidState, "/args/evidence_ids", "Programme "+f.ProgrammeID+" ("+f.Measure+
+					") applies: clear it on an authorization (a licence, an exemption or the authority's approval)")
+			}
+		case len(in.Evidence) == 0:
+			return until, kernel.Reject(kernel.CodeInvalidState, "/args/evidence_ids", "A "+f.Kind+" finding applies: clear it with evidence"+
+				" that the goods are not controlled")
+		}
+	}
+	return until, nil
+}
+
+func sortedAuthorizations(as []Authorization) []Authorization {
+	out := slices.Clone(as)
+	slices.SortFunc(out, func(a, b Authorization) int { return strings.Compare(a.SourceID, b.SourceID) })
+	for i := range out {
+		out[i].ValidUntil = kernel.Instant(out[i].ValidUntil)
+	}
+	return out
 }
 
 // Causes of a reopening (trade_compliance.reopen).

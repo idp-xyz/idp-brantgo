@@ -399,6 +399,11 @@ GRANT UPDATE (row_version, updated_at) ON brant_cnx.export_license TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.export_license_outstanding(text, text, text) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.export_license_state(text, timestamptz, boolean) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.guard_export_license_v1(text, timestamptz) TO brant_app;
+-- S5R-D03/D04 (cnx 000008): whether a target or a licence was declared, an allocation's outstanding
+-- quantity (the commands' reads and the allocation and release triggers).
+GRANT EXECUTE ON FUNCTION brant_cnx.export_target_declared(text, text, text, text) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_license_declared(text, text, text) TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cnx.export_allocation_outstanding(text, text, text) TO brant_app;
 
 -- CNX purchase invoices and tax refund cases: an invoice keeps its import and is decided and
 -- reversed once, a case keeps its binding and follows SM-CNX-TAXCASE (triggers; the column grants

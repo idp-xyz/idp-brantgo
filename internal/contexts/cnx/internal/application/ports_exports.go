@@ -37,10 +37,14 @@ const (
 	ShipmentPrepared    = "prepared"
 	ExportLotRegistered = "registered"
 	ExportLotCancelled  = "cancelled"
+	// ShipmentCancelled: a shipment FUL cancelled (S5R-D03, a licence's local_cancellation release).
+	ShipmentCancelled = "cancelled"
 )
 
 // Export is what FUL says of a shipment or export lot: its state and version, the order revision
-// (and hash) it ships, its destination country, the end user party, its lines and its value.
+// (and hash) it ships, its destination country, the end user party and where it comes from
+// (EndUserSource, S5R-D40: stated — the end user the shipment states — else consignee, else
+// customer), its lines and its value.
 type Export struct {
 	Ref            ExportRef
 	Status         string
@@ -50,6 +54,7 @@ type Export struct {
 	OrderHash      string
 	Destination    string
 	EndUserPartyID string
+	EndUserSource  string
 	Lines          []ExportLine
 	Value          kernel.Money
 	Code           string

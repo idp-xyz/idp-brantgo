@@ -58,7 +58,11 @@ func (s Service) GetLicense(ctx context.Context, licenseID string) (api.LicenseV
 			Destination: l.Destination, EndUser: api.EndUser{PartyID: l.EndUserPartyID, Name: l.EndUserName}, ValidFrom: l.Validity.From,
 			ValidUntil: l.Validity.Until, File: api.LicenseFileView{FileID: l.FileID, ContentSHA256: l.FileSHA256}, Status: el.Registered,
 			State: l.State(now), RowVersion: l.RowVersion, Usage: usage, Allocations: []api.AllocationView{}, RegisteredBy: l.RegisteredBy,
-			RegisteredAt: l.RegisteredAt, AuthorityEpoch: l.Epoch, CheckedAt: now}
+			RegisteredAt: l.RegisteredAt, AuthorityEpoch: l.Epoch, CheckedAt: now, UsageMode: l.UsageMode, UsageEvidence: []api.EvidenceView{},
+			CustomsOffice: l.CustomsOffice}
+		for _, e := range l.UsageEvidence {
+			v.UsageEvidence = append(v.UsageEvidence, api.EvidenceView{SourceID: e.SourceID, ContentSHA256: e.ContentSHA256})
+		}
 		for _, a := range allocations {
 			v.Allocations = append(v.Allocations, allocationView(a, releases))
 		}
@@ -81,19 +85,21 @@ func goodsView(g el.Goods) api.LicensedGoods {
 func allocationView(a *el.Allocation, releases []*el.Release) api.AllocationView {
 	q, val, _ := a.Outstanding()
 	t := a.Target
-	v := api.AllocationView{AllocationID: a.ID, TargetKind: t.Kind, TargetID: t.ID, TargetVersion: t.Version, Attempt: a.Attempt,
+	v := api.AllocationView{AllocationID: a.ID, TargetKind: t.Kind, TargetID: t.ID, ShipmentID: t.ShipmentID, EndUserSource: t.EndUserSource,
+		TargetVersion: t.Version, Attempt: a.Attempt,
 		OrderID: t.OrderID, OrderRevision: t.OrderRevision, Destination: t.Destination, EndUserPartyID: t.EndUserPartyID,
 		Lines: []api.AllocationLineView{}, LinesHash: a.LinesHash, Quantity: a.Quantity.String(), ValueMinor: a.Value.MinorString(),
 		OutstandingQuantity: q.String(), OutstandingValueMinor: val.MinorString(), Status: a.Status(), AllocatedBy: a.By,
 		AllocatedAt: a.At, AuthorityEpoch: a.Epoch, Releases: []api.ReleaseView{}}
 	for _, l := range t.Lines {
-		v.Lines = append(v.Lines, api.AllocationLineView{LineID: l.LineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision, Quantity: l.Quantity.String()})
+		v.Lines = append(v.Lines, api.AllocationLineView{LineID: l.LineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision, Quantity: l.Quantity.String(),
+			ShipmentLineID: l.ShipmentLineID})
 	}
 	for _, r := range releases {
 		if r.AllocationID != a.ID {
 			continue
 		}
-		rv := api.ReleaseView{ReleaseID: r.ID, Kind: r.Kind, Source: r.Source, ReceiptID: r.ReceiptID, DeclarationNumber: r.DeclarationNumber, ReceiptText: r.ReceiptText,
+		rv := api.ReleaseView{ReleaseID: r.ID, Basis: r.Basis, TargetVersion: r.TargetVersion, Kind: r.Kind, Source: r.Source, ReceiptID: r.ReceiptID, DeclarationNumber: r.DeclarationNumber, ReceiptText: r.ReceiptText,
 			ReceivedAt: r.ReceivedAt, Evidence: []api.EvidenceView{}, Quantity: r.Quantity.String(), ValueMinor: r.Value.MinorString(),
 			Reason: r.Reason, ReleasedBy: r.By, ReleasedAt: r.At, AuthorityEpoch: r.Epoch}
 		for _, e := range r.Evidence {
@@ -125,8 +131,8 @@ func (s Service) Licenses(ctx context.Context) ([]api.LicenseSummary, error) {
 				return err
 			}
 			out = append(out, api.LicenseSummary{LicenseID: l.ID, LicenseNumber: l.Number, Issuer: l.Issuer, Destination: l.Destination,
-				EndUserID: l.EndUserPartyID, ValidFrom: l.Validity.From, ValidUntil: l.Validity.Until, State: l.State(now), RowVersion: l.RowVersion,
-				Usage: usage, CheckedAt: now})
+				EndUserID: l.EndUserPartyID, ValidFrom: l.Validity.From, ValidUntil: l.Validity.Until, UsageMode: l.UsageMode,
+				CustomsOffice: l.CustomsOffice, State: l.State(now), RowVersion: l.RowVersion, Usage: usage, CheckedAt: now})
 		}
 		return nil
 	})

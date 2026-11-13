@@ -11,6 +11,9 @@ import "go.idp.xyz/idp-brant/internal/kernel"
 const (
 	// TradeComplianceGuard v1's refusal: no valid clear conclusion covers the order revision.
 	CodeTradeComplianceNotClear = "TRADE_COMPLIANCE_NOT_CLEAR"
+	// A clear conclusion asked on an evaluation with a gap — an unknown country, a missing programme
+	// list, no end use (S5R registered it, replacing INVALID_STATE; CNX-INV-001, SM-CNX-COMPLIANCE).
+	CodeTradeComplianceEvaluationIncomplete = "TRADE_COMPLIANCE_EVALUATION_INCOMPLETE"
 	// The order is neither a draft nor active: it ended.
 	CodeOrderNotActive = "ORDER_NOT_ACTIVE"
 	// A line has no declaration profile an authorized professional verified (CAT-INV-002).
@@ -21,9 +24,11 @@ const (
 	CodeExportLicenseRequired = "EXPORT_LICENSE_REQUIRED"
 	// An allocation would take Σ allocated quantity or value above the licensed one (CNX-INV-002).
 	CodeExportLicenseExceeded = "EXPORT_LICENSE_EXCEEDED"
-	// The licence is outside its validity, or its destination, end user or goods are not the
-	// target's.
+	// The licence is outside its validity, or its destination or end user is not the target's.
 	CodeExportLicenseExpired = "EXPORT_LICENSE_EXPIRED"
+	// The licence does not cover the target's goods: another SKU specification, commodity code or
+	// unit (S5R registered it, replacing B5's EXPORT_LICENSE_EXPIRED; CNX-INV-002).
+	CodeExportLicenseGoodsMismatch = "EXPORT_LICENSE_GOODS_MISMATCH"
 	// The licence number of the issuer, or the allocation ID, is taken.
 	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT"
 	// A purchase invoice of the same kind and number is imported and not rejected (CNX-INV-005).
@@ -50,13 +55,17 @@ const (
 )
 
 var codes = map[string]kernel.Category{
-	CodeTradeComplianceNotClear:       kernel.CategoryConflict,
-	CodeOrderNotActive:                kernel.CategoryInvalid,
-	CodeDeclarationProfileUnverified:  kernel.CategoryInvalid,
-	CodeReferenceStale:                kernel.CategoryConflict,
-	CodeExportLicenseRequired:         kernel.CategoryConflict,
-	CodeExportLicenseExceeded:         kernel.CategoryConflict,
-	CodeExportLicenseExpired:          kernel.CategoryConflict,
+	CodeTradeComplianceNotClear: kernel.CategoryConflict,
+	// S5R-D17, CNX-INV-001 (R9).
+	CodeTradeComplianceEvaluationIncomplete: kernel.CategoryInvalid,
+	CodeOrderNotActive:                      kernel.CategoryInvalid,
+	CodeDeclarationProfileUnverified:        kernel.CategoryInvalid,
+	CodeReferenceStale:                      kernel.CategoryConflict,
+	CodeExportLicenseRequired:               kernel.CategoryConflict,
+	CodeExportLicenseExceeded:               kernel.CategoryConflict,
+	CodeExportLicenseExpired:                kernel.CategoryConflict,
+	// S5R-D04, CNX-INV-002 (R9).
+	CodeExportLicenseGoodsMismatch:    kernel.CategoryConflict,
 	CodeBusinessKeyConflict:           kernel.CategoryConflict,
 	CodeInvoiceDuplicate:              kernel.CategoryConflict,
 	CodeTaxEvidenceExceeded:           kernel.CategoryConflict,

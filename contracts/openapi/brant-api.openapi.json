@@ -3654,6 +3654,10 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "customs_office": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "declaration_id": {
                         "minLength": 1,
                         "type": "string"
@@ -3847,6 +3851,10 @@
                     "additionalProperties": false,
                     "properties": {
                       "code_table_version": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "customs_office": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -5588,6 +5596,10 @@
                         ],
                         "type": "object"
                       },
+                      "customs_office": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "destination": {
                         "minLength": 1,
                         "type": "string"
@@ -5670,6 +5682,17 @@
                         "type": "string"
                       },
                       "unit": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "usage_evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "usage_mode": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -5834,6 +5857,10 @@
                         ],
                         "type": "object"
                       },
+                      "customs_office": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "destination": {
                         "minLength": 1,
                         "type": "string"
@@ -5916,6 +5943,17 @@
                         "type": "string"
                       },
                       "unit": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "usage_evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "usage_mode": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -6055,6 +6093,10 @@
                     "additionalProperties": false,
                     "properties": {
                       "allocation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "basis": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -6255,6 +6297,10 @@
                     "additionalProperties": false,
                     "properties": {
                       "allocation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "basis": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -9574,6 +9620,27 @@
                   "args": {
                     "additionalProperties": false,
                     "properties": {
+                      "authorizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "evidence_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "valid_until": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
                       "check_id": {
                         "minLength": 1,
                         "type": "string"
@@ -9743,6 +9810,27 @@
                   "args": {
                     "additionalProperties": false,
                     "properties": {
+                      "authorizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "evidence_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "valid_until": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
                       "check_id": {
                         "minLength": 1,
                         "type": "string"

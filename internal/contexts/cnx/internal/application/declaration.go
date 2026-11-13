@@ -87,7 +87,9 @@ func declarationEvidence(sources map[string]evdapi.SourceRef, ids []string, path
 // (REFERENCE_INVALID), a cancelled lot (INVALID_STATE); an order TRD does not show or whose sealed
 // revision is not intact (REFERENCE_INVALID), an order TRD moved to another revision or hash than
 // the lot ships (REFERENCE_STALE, R46's risk "报关资料引用旧订单修订"); then the item mapping
-// (dcl.Prepare). Nothing is published.
+// (dcl.Prepare); then, S5R-D04, the licence covering the lot held FOR SHARE: a customs_office other
+// than its (INVALID_KNOWN_VALUE), a single_use licence of the whole shipment another lot's
+// declaration uses (INVALID_STATE). Nothing is published.
 type prepareDeclaration struct {
 	s           Service
 	cmd         api.PrepareDeclaration
@@ -232,6 +234,15 @@ func (h *prepareDeclaration) Apply(ctx context.Context, exec bentopg.Executor, d
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	shipmentID := ""
+	if len(x.Lines) > 0 {
+		shipmentID = x.Lines[0].ShipmentID
+	}
+	// S5R-D04 (license_office.go): the customs office of the licence covering the lot.
+	if err = declarationLicense(ctx, exec, sc, cmd.DeclarationID, cmd.ExportLotID, shipmentID, cmd.CustomsOffice, "/args/customs_office",
+		lotPath); err != nil {
+		return action.Outcome{}, err
+	}
 	now := kernel.Instant(h.s.Clock.Now())
 	if revise {
 		c.Version++
@@ -254,7 +265,8 @@ func (h *prepareDeclaration) Apply(ctx context.Context, exec bentopg.Executor, d
 			OrderRevision: x.OrderRevision, Currency: x.Value.Currency().Code(), ValueMinor: x.Value.MinorString()},
 		Order:            dcl.DocOrder{OrderID: o.Binding.OrderID, OrderRevision: o.Binding.OrderRevision, OrderHash: o.Binding.OrderHash, Status: o.Status},
 		CodeTableVersion: cmd.CodeTableVersion, Mapping: mapping, Items: dcl.DocItems(items),
-		PreparedBy: dcl.DocActor{Kind: string(d.Actor.Kind), ID: d.Actor.ID}, AuthorityEpoch: d.Epoch, PreparedAt: kernel.FormatTimestamp(now)}
+		PreparedBy: dcl.DocActor{Kind: string(d.Actor.Kind), ID: d.Actor.ID}, AuthorityEpoch: d.Epoch, PreparedAt: kernel.FormatTimestamp(now),
+		CustomsOffice: cmd.CustomsOffice}
 	for _, sd := range o.Documents {
 		doc.Order.Documents = append(doc.Order.Documents, dcl.DocSalesRecord{Kind: sd.Kind, Number: sd.Number, OrderRevision: sd.OrderRevision,
 			DocumentSHA256: sd.DocumentSHA256, Current: sd.Current, Signatures: sd.Signatures})
@@ -291,7 +303,9 @@ func (s Service) PrepareDeclaration(ctx context.Context, cmd api.PrepareDeclarat
 // (EVD). In the transaction, after the case FOR UPDATE: NOT_FOUND, VERSION_CONFLICT, then
 // dcl.CheckConfirm (INVALID_STATE, REFERENCE_STALE, DECLARATION_MAPPING_UNVERIFIED), a line whose
 // profile CAT verified anew or no longer answers verified (REFERENCE_STALE: prepare again), the
-// evidence (REFERENCE_INVALID). Nothing is published.
+// evidence (REFERENCE_INVALID), then, S5R-D04, the licence covering the lot held FOR SHARE: the
+// version names another customs office (INVALID_KNOWN_VALUE /args/version), a single_use licence of
+// the whole shipment another lot's declaration uses (INVALID_STATE). Nothing is published.
 type confirmDeclaration struct {
 	s           Service
 	cmd         api.ConfirmDeclaration
@@ -373,6 +387,11 @@ func (h *confirmDeclaration) Apply(ctx context.Context, exec bentopg.Executor, d
 	}
 	evidence, err := declarationEvidence(h.sources, cmd.EvidenceIDs, "/args/evidence_ids")
 	if err != nil {
+		return action.Outcome{}, err
+	}
+	// S5R-D04 (license_office.go): the version handed over names the licence's customs office.
+	if err = declarationLicense(ctx, exec, sc, c.ID, c.ExportLotID, c.ShipmentID, v.CustomsOffice, "/args/version",
+		"/args/declaration_id"); err != nil {
 		return action.Outcome{}, err
 	}
 	now := kernel.Instant(h.s.Clock.Now())

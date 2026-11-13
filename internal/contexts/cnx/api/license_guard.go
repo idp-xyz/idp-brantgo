@@ -36,8 +36,22 @@ import (
 // remains outstanding (decimal in unit, minor units of currency); lines_hash covers the shipment
 // lines the allocation was made for (LinesHash).
 //
+// S5R-D04 (one licence per declaration; the same signature and columns, v1): every line of the
+// shipment is covered by the shipment's own allocation or by the allocation of the export lot that
+// holds it. When the shipment's own allocation has nothing outstanding (or there is none) and its
+// export lots hold allocations, those cover it together: the guard locks their licences FOR SHARE
+// in licence ID order, then their allocations in allocation ID order, and answers allocated with
+// reason lots_allocated when each has all its quantity outstanding on a licence valid at p_at —
+// license_id and allocation_id list them comma-separated (allocation ID order), quantity and
+// value_minor sum what is outstanding when the licences share unit and currency (NULL otherwise),
+// valid_until is the earliest and lines_hash covers the shipment lines the lots' lines come from
+// (the lot lines of one shipment line summed) — or required/released, required/quantity_exceeded
+// (one released in part) or expired/expired with EXPORT_LICENSE_REQUIRED.
+//
 // The guard cannot see FUL's lines, so the caller passes them to Check: they must be the lines the
-// allocation covers (same hash) and their quantity no more than what is outstanding. A caller locks
+// allocation covers (same hash) and their quantity no more than what is outstanding; for
+// lots_allocated, the shipment's lines must hash to what the lots' allocations cover together
+// (otherwise lines_not_covered: a lot without an allocation, or lines changed). A caller locks
 // its own aggregate roots FOR UPDATE first and calls the guard among the upstream guards in context
 // code order (CNX first: CNX, PTY, PUR, QLT, STL, TRD; ADR-BR-011), after
 // TradeComplianceGuard v1:
@@ -69,6 +83,10 @@ const (
 	LicenseReasonExpired          = "expired"
 	LicenseReasonLinesChanged     = "lines_changed"
 	LicenseReasonQuantityExceeded = "quantity_exceeded"
+	// S5R-D04: the allocations of the shipment's export lots cover it together; a line no lot
+	// allocation covers.
+	LicenseReasonLotsAllocated   = "lots_allocated"
+	LicenseReasonLinesNotCovered = "lines_not_covered"
 )
 
 // ExportLicenseGuardArgs returns the arguments of ExportLicenseGuardSQL for shipmentID at at.
@@ -150,12 +168,19 @@ func ScanExportLicenseGuard(shipmentID string, scan func(dest ...any) error) (Ex
 // Check returns nil when the allocation covers lines — the guard says covered without a code,
 // lines hash to the allocation's LinesHash and their quantity is no more than what is outstanding —
 // and EXPORT_LICENSE_REQUIRED (409) at path of the caller's request otherwise, with the status and
-// reason.
+// reason. For lots_allocated (S5R-D04) the lines must hash to what the export lots' allocations
+// cover together; the guard already checked that each holds all its quantity.
 func (v ExportLicenseVerdict) Check(path string, lines []ShipmentLine) error {
 	if !v.Covered || v.Code != "" {
 		return Reject(CodeExportLicenseRequired, path, "Export licence "+v.Status+": "+v.Reason)
 	}
 	hash, err := LinesHash(lines)
+	if v.Reason == LicenseReasonLotsAllocated {
+		if err != nil || hash != v.LinesHash {
+			return Reject(CodeExportLicenseRequired, path, "Export licence "+v.Status+": "+LicenseReasonLinesNotCovered)
+		}
+		return nil
+	}
 	if err != nil || hash != v.LinesHash {
 		return Reject(CodeExportLicenseRequired, path, "Export licence "+v.Status+": "+LicenseReasonLinesChanged)
 	}

@@ -133,8 +133,10 @@ func (s *s5sc) dealFoundation(t s5scTenant) {
 		"renderer_version": polapi.QuoteRendererVersion, "title": "Quotation", "sections": polapi.QuoteSections(), "footer_note": "合成测试，不构成要约"})
 	b.seq = b.config("number_sequence", "quote.seq", map[string]any{"document_type": polapi.DocumentTypeQuote, "prefix": "QT-", "width": 5,
 		"reset": polapi.ResetAnnual, "time_zone": "Asia/Shanghai"})
+	// S5R-D38: the regulation enables the country programme lists CNX evaluates against.
 	b.config("screening_regulation", "screening", map[string]any{"lists": []any{map[string]any{"list_code": "cn.uel", "jurisdiction": polapi.JurisdictionCN}},
-		"rescreen_interval_days": 30})
+		"rescreen_interval_days": 30, "programmes": []any{map[string]any{"list_code": cnProgrammeList, "jurisdiction": polapi.JurisdictionCN},
+			map[string]any{"list_code": unProgrammeList, "jurisdiction": polapi.JurisdictionUN}}})
 	if t.calc != "USD" {
 		// The quotation rate is observed a minute ago: the pricing policy allows it 3,600 s at the freeze.
 		at := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)

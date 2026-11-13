@@ -1417,6 +1417,9 @@ func TestS5SCSBCreditNoteOverHTTP(t *testing.T) {
 func (s *s5sc) registerLicence(number, quantity, value string, skus []string, from, until time.Time) string {
 	s.t.Helper()
 	s.fileOf(brcDocumentation, "licence."+number, "licence-"+number+".txt", "合成出口许可证扫描件："+number+"（测试数据，非真实许可证）。")
+	// S5R-D04: TD-AT13's 600 + 500 on one licence is a multi_use licence (CNX-INV-002 positive), stated on
+	// the licence face's evidence; every licence names its customs office (一证一关).
+	s.source(brcDocumentation, "licence.face."+number, "合成许可证证面："+number+" 非一批一证（测试数据）。")
 	var specs []any
 	for _, sku := range skus {
 		specs = append(specs, map[string]any{"sku_id": sku, "spec_revision": 1})
@@ -1425,7 +1428,8 @@ func (s *s5sc) registerLicence(number, quantity, value string, skus []string, fr
 		"issuer": "合成发证机关（测试）", "holder": "合成企业", "goods": map[string]any{"sku_specs": specs}, "licensed_quantity": quantity,
 		"unit": "PCS", "currency": map[string]any{"id": "USD", "revision": 1}, "licensed_value": value, "destination": syntheticClear,
 		"end_user": map[string]any{"party_id": "customer.1", "name": "customer.1"}, "valid_from": kernel.FormatTimestamp(from),
-		"valid_until": kernel.FormatTimestamp(until), "file_id": "licence." + number})
+		"valid_until": kernel.FormatTimestamp(until), "file_id": "licence." + number, "usage_mode": cnxapi.UsageMultiUse,
+		"usage_evidence_ids": []string{"licence.face." + number}, "customs_office": "2248"})
 	return brcStr(r["object_id"])
 }
 
