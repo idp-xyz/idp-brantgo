@@ -12,6 +12,9 @@
 #   make load         staged load over the HTTP API against PG_PORT (tests/load; WBS S5-11), report in bin/load/
 #   make drill        backup/restore (logical, PITR) and upgrade drills (scripts/backup-restore.sh; WBS S5-11)
 #   make ci           everything above (not load and drill)
+#   make eer-live     live runs against a running EER (decision E-2; never in CI): the EER adapter's
+#                     live tests and the stop barrier of a task on PostgreSQL 16 at PG_PORT; EER and
+#                     its credentials come from the environment (internal/ai/adapters/eer/eerlive)
 
 GO ?= go
 GOLANGCI_LINT_VERSION ?= v2.15.0
@@ -31,7 +34,7 @@ DB_ENV = CI=true \
 	IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
 	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable'
 
-.PHONY: check fmt fmt-check vet lint test deps allowlist roles modules db integration race spike build ci load drill
+.PHONY: check fmt fmt-check vet lint test deps allowlist roles modules db integration race spike build ci load drill eer-live
 
 check: modules fmt-check vet lint test deps
 
@@ -104,3 +107,13 @@ drill: build
 	BRANT_RESTORE_PORT=$(RESTORE_PORT) scripts/backup-restore.sh drill
 
 ci: check db integration race spike
+
+# Live EER runs: refused under CI=true; a missing EER setting fails them (never a skip).
+eer-live:
+	@if [ "$$CI" = "true" ]; then echo "make eer-live never runs under CI=true"; exit 2; fi
+	$(GO) vet -tags eerlive ./internal/ai/adapters/eer/...
+	$(GO) vet -tags 'integration eerlive' ./internal/bootstrap/
+	$(GO) test -tags eerlive -count=1 -v ./internal/ai/adapters/eer/
+	IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
+	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
+	$(GO) test -tags 'integration eerlive' -count=1 -v -run '^TestEERLive' ./internal/bootstrap/

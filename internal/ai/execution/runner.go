@@ -21,6 +21,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/executionevidence"
 	"go.idp.xyz/idp-brant/internal/ai/gateway"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
+	"go.idp.xyz/idp-brant/internal/ai/runtime"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	tskapi "go.idp.xyz/idp-brant/internal/contexts/tsk/api"
@@ -83,6 +84,11 @@ type Sources interface {
 //   - a stopping task of its agent (a take-over, a hand-back, a cancellation) has its stop barrier
 //     completed: open actions reconciled, then task.finish_stop;
 //   - a running task without an active delegation is paused for its owner (AN04).
+//
+// With an external runtime (Runtime, e.g. EER; WBS S4-05), the stop barrier of a task also waits
+// until the runtime's operation of the task (runtime.OperationOf) has ended: the runner asks the
+// runtime to cancel it and finishes the stop only once the runtime shows it ended or never had it
+// (runtime.Barrier; IG-10).
 type Runner struct {
 	Executor    Executor
 	Tasks       RunnerTasks
@@ -95,8 +101,9 @@ type Runner struct {
 	Accepts     []string // SHA-256s of earlier bundles this runtime still runs (baseline 17.3)
 	Sources     Sources  // optional: the source text of an evd_source task goes into the facts
 	Scopes      []kernel.Scope
-	Agents      []string // AI actor IDs the runner acts as
-	MaxSteps    int      // model turns per task and pass (default 8)
+	Agents      []string     // AI actor IDs the runner acts as
+	MaxSteps    int          // model turns per task and pass (default 8)
+	Runtime     runtime.Port // optional external runtime (EER) holding operations of the tasks; nil: none (S4)
 	Clock       application.Clock
 	Logger      *slog.Logger
 	ref         executionevidence.Ref
@@ -723,12 +730,28 @@ func (t *turn) finish() error {
 	return t.verifyGoal()
 }
 
+// RuntimeStopReason is the reason the runner gives an external runtime when it cancels the
+// operation of a stopping task (no task ID, scope or person: the operation ID correlates).
+const RuntimeStopReason = "IDP Brant stop barrier: the task is stopping (take-over, hand-back or cancellation); " +
+	"the runtime takes no further step of this operation"
+
 // finishStop completes the stop barrier of a stopping task of the runner's agent — a take-over, a
 // hand-back or a cancellation (SM-TSK-TASK task.finish_stop, system): the agent reconciles the task's
 // open actions with their targets first (action.reconcile admits the task's agent in any state),
 // then RunnerActor finishes the stop, which TSK refuses (EXTERNAL_RESULT_UNKNOWN) while an action is
 // still open; the next pass tries again, or a person reconciles.
 func (t *turn) finishStop() error {
+	if t.r.Runtime != nil {
+		// The runtime half of the barrier first: the runtime takes no further step of the task.
+		st, err := runtime.Barrier(t.system, t.r.Runtime, runtime.OperationOf(t.scope, t.view.TaskID), RuntimeStopReason)
+		if err != nil {
+			return fmt.Errorf("the stop barrier cannot settle the runtime's operation: %w", err)
+		}
+		if !st.Settled {
+			t.res.Skipped = "the stop barrier waits for the runtime's operation to end (" + string(st.Operation.State) + ")"
+			return nil
+		}
+	}
 	if _, err := t.r.Executor.Recover(t.agent, t.view.TaskID); err != nil {
 		if _, ok := kernel.AsRejection(err); !ok {
 			return err
