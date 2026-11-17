@@ -100,6 +100,14 @@ const (
 	CommandCancelOrder           = "order.cancel"
 	CommandCloseOrderUnfulfilled = "order.close_unfulfilled"
 
+	// ObjectQuote and ObjectOrder are the object types an AI agent's approval grant names (S4
+	// decision D-7, AI-INV-002): order.prepare binds the quote at its business revision,
+	// order.review.request the order at its expected version. Human or AI, as the command catalog
+	// says; an AI agent only through the AI layer's gateway with a grant used for exactly the call,
+	// which TRD's ledger checks whatever the transport (S4 unit F1).
+	ObjectQuote = "trd.quote"
+	ObjectOrder = "trd.order"
+
 	EventOrderPrepared = "idp-brant.trd.order_prepared.v1"
 	// EventOrderReviewRequested is the tactical model's OrderReviewRequested; the event catalog V0.1
 	// does not list it yet.
@@ -195,7 +203,8 @@ var orderCodes = map[string]kernel.Category{
 
 // PrepareOrder converts formal revision BusinessRevision of quote QuoteID, at BusinessHash, accepted
 // by acceptance AcceptanceID, into sales order OrderID (Python order.prepare, with the order ID
-// named rather than derived and the slot always full_v1). Human or AI.
+// named rather than derived and the slot always full_v1). Human or AI; an AI agent with an approval
+// grant (D-7, ObjectQuote at BusinessRevision).
 type PrepareOrder struct {
 	IdempotencyKey   string
 	OrderID          string
@@ -212,7 +221,7 @@ type PrepareOrder struct {
 }
 
 // RequestOrderReview opens review ReviewID of draft order OrderID (Python order.review.request).
-// Human or AI.
+// Human or AI; an AI agent with an approval grant (D-7, ObjectOrder at ExpectedVersion).
 type RequestOrderReview struct {
 	IdempotencyKey  string
 	OrderID         string

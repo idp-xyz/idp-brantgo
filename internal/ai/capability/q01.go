@@ -133,7 +133,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		SideEffect: Draft, Risk: RiskMedium, Approval: ApprovalNone,
 		Summary: "Save the working revision of a quote draft; a human freezes, reviews and activates it."},
 		func(c trdapi.SaveDraft) ObjectRef {
-			return ObjectRef{Type: "trd.quote", ID: c.QuoteID, Version: c.ExpectedVersion}
+			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.ExpectedVersion}
 		},
 		func(ctx context.Context, c trdapi.SaveDraft) (trdapi.Receipt, error) {
 			if t.TRD == nil {
@@ -145,7 +145,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		SideEffect: Draft, Risk: RiskMedium, Approval: ApprovalNone,
 		Summary: "Copy a frozen quote revision into a new working revision."},
 		func(c trdapi.Revise) ObjectRef {
-			return ObjectRef{Type: "trd.quote", ID: c.QuoteID, Version: c.ExpectedVersion}
+			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.ExpectedVersion}
 		},
 		func(ctx context.Context, c trdapi.Revise) (trdapi.Receipt, error) {
 			if t.TRD == nil {
@@ -157,7 +157,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		SideEffect: Draft, Risk: RiskLow, Approval: ApprovalNone,
 		Summary: "Update a quote's internal labels and note; never its business content."},
 		func(c trdapi.UpdateMetadata) ObjectRef {
-			return ObjectRef{Type: "trd.quote", ID: c.QuoteID, Version: c.ExpectedVersion}
+			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.ExpectedVersion}
 		},
 		func(ctx context.Context, c trdapi.UpdateMetadata) (trdapi.Receipt, error) {
 			if t.TRD == nil {
@@ -169,7 +169,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		SideEffect: Draft, Risk: RiskMedium, Approval: ApprovalNone,
 		Summary: "Record a customer's response to an active quote revision as received; a human verifies an acceptance."},
 		func(c trdapi.RecordResponse) ObjectRef {
-			return ObjectRef{Type: "trd.quote", ID: c.QuoteID, Version: c.BusinessRevision}
+			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.BusinessRevision}
 		},
 		func(ctx context.Context, c trdapi.RecordResponse) (trdapi.ResponseReceipt, error) {
 			if t.TRDAcceptance == nil {
@@ -181,7 +181,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		SideEffect: Submit, Risk: RiskHigh, Approval: ApprovalGrant,
 		Summary: "Prepare a draft sales order from a verified acceptance of an active quote revision; needs a human's approval grant for exactly this request."},
 		func(c trdapi.PrepareOrder) ObjectRef {
-			return ObjectRef{Type: "trd.quote", ID: c.QuoteID, Version: c.BusinessRevision}
+			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.BusinessRevision}
 		},
 		func(ctx context.Context, c trdapi.PrepareOrder) (trdapi.OrderReceipt, error) {
 			if t.TRDOrders == nil {
@@ -193,7 +193,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		SideEffect: Submit, Risk: RiskHigh, Approval: ApprovalGrant,
 		Summary: "Open the review of a draft sales order; needs a human's approval grant for exactly this request."},
 		func(c trdapi.RequestOrderReview) ObjectRef {
-			return ObjectRef{Type: "trd.order", ID: c.OrderID, Version: c.ExpectedVersion}
+			return ObjectRef{Type: trdapi.ObjectOrder, ID: c.OrderID, Version: c.ExpectedVersion}
 		},
 		func(ctx context.Context, c trdapi.RequestOrderReview) (trdapi.OrderReceipt, error) {
 			if t.TRDOrders == nil {

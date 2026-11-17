@@ -48,10 +48,31 @@ func TestPolicyRejectsInvalidRules(t *testing.T) {
 		"unknown kind":      {{Command: "a", Permission: "p", ActorKinds: []kernel.ActorKind{"robot"}}},
 		"bad permission":    {HumanOnly("a", "")},
 		"empty command":     {HumanOnly("", "p")},
+		"grant without AI":  {{Command: "a", Permission: "p", ActorKinds: []kernel.ActorKind{kernel.ActorHuman}, AIApprovalGrant: true}},
 	} {
 		if _, err := NewPolicy(rules...); !errors.Is(err, ErrInvalidPolicy) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// S4 decision D-7 (unit F1): a command that needs an approval grant from AI actors admits people and
+// AI actors; the policy keeps the flag, which foundation/action enforces with foundation/aigrant.
+func TestHumanOrGrantedAIAdmitsBothAndNeedsTheGrantFromAI(t *testing.T) {
+	p, err := NewPolicy(HumanOrGrantedAI("order.prepare", "order.prepare"), quotePolicy[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI} {
+		if r, err := p.Admit(principal(kind, "someone"), "order.prepare"); err != nil || !r.AIApprovalGrant || r.Permission != "order.prepare" {
+			t.Errorf("%s: %+v, %v", kind, r, err)
+		}
+	}
+	if _, err := p.Admit(principal(kernel.ActorSystem, "system:x"), "order.prepare"); !errors.Is(err, ErrActorKindDenied) {
+		t.Errorf("system: %v", err)
+	}
+	if r, _ := p.Rule("quote.save_draft"); r.AIApprovalGrant {
+		t.Error("a plain rule needs no approval grant")
 	}
 }
 

@@ -1,12 +1,14 @@
 package codes
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -62,6 +64,16 @@ func TestCodesMatchTheErrorCatalog(t *testing.T) {
 	}
 	if _, ok := Category(ToolUnavailable); ok {
 		t.Error("TOOL_UNAVAILABLE is a transport answer, not a rejection")
+	}
+}
+
+// S4 unit F1: the GRANT_INVALID a context's ledger answers for a mismatched approval-grant proof
+// (foundation/aigrant) is this layer's code with this layer's category.
+func TestTheLedgersGrantInvalidIsTheLayers(t *testing.T) {
+	rej, ok := kernel.AsRejection(aigrant.Check(aigrant.With(context.Background(), aigrant.Proof{}),
+		aigrant.Call{Actor: kernel.ActorRef{Kind: kernel.ActorAI, ID: "agent.1"}}))
+	if c, _ := Category(GrantInvalid); !ok || aigrant.CodeGrantInvalid != GrantInvalid || rej.Code != GrantInvalid || rej.Category != c {
+		t.Fatalf("aigrant answers %+v", rej)
 	}
 }
 

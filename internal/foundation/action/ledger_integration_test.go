@@ -16,6 +16,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
@@ -82,6 +83,7 @@ GRANT SELECT, INSERT, UPDATE ON {{schema}}.note TO {{app}}`
 	policy, err := authorization.NewPolicy(
 		authorization.Rule{Command: "note.save", Permission: "note.save", ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 		authorization.HumanOnly("note.approve", "note.approve"),
+		authorization.HumanOrGrantedAI("note.submit", "note.save"),
 		authorization.Rule{Command: "note.get", Permission: "note.read", ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 	)
 	if err != nil {
@@ -290,6 +292,97 @@ func TestRevocationBlocksReplayAndIsAudited(t *testing.T) {
 	}
 	if a := r.audit(); a[len(a)-1].Code != kernel.CodePermissionDenied {
 		t.Fatalf("last audit %+v", a[len(a)-1])
+	}
+}
+
+// submit runs note.submit, a command that needs an approval grant from AI actors (D-7), on note id
+// at version expected.
+func (r *rig) submit(ctx context.Context, key, id, body string, expected int64) (action.Result, error) {
+	return r.ledger.Execute(ctx, r.submitCmd(key, id, body, expected), &saveNote{r: r, id: id, body: body, expected: expected})
+}
+
+func (r *rig) submitCmd(key, id, body string, expected int64) action.Command {
+	hash, err := action.RequestHash(struct{ ID, Body string }{id, body})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return action.Command{Name: "note.submit", IdempotencyKey: key, RequestHash: hash, ObjectID: id,
+		GrantObject: action.GrantObject{Type: "tnote.note", ID: id, Version: expected}}
+}
+
+// S4 decision D-7, AI-INV-002 (unit F1): a command whose rule needs an approval grant from AI
+// actors runs for an AI actor only with the AI layer's proof of a grant used for exactly the call
+// (scope, actor, command, request hash, object and version, key). Without one it is
+// PERMISSION_DENIED, with another call's GRANT_INVALID — before the database decides anything, a
+// stored result included, and audited; nothing is written. A person needs none.
+func TestAnAIActorNeedsTheProofOfAnApprovalGrant(t *testing.T) {
+	r := newRig(t)
+	if _, err := r.submit(r.as(robot), "k1", "n1", "hello", 0); code(err) != kernel.CodePermissionDenied {
+		t.Fatalf("no proof: %v", err)
+	}
+	if r.count("action_result") != 0 || r.count("note") != 0 || r.events() != 0 {
+		t.Fatal("a refused call wrote")
+	}
+	cmd := r.submitCmd("k1", "n1", "hello", 0)
+	proof := aigrant.Proof{GrantID: "grant.1", Scope: r.scope, Agent: robot.ID, Command: cmd.Name, RequestHash: cmd.RequestHash,
+		Object: cmd.GrantObject, Key: cmd.IdempotencyKey}
+	granted := aigrant.With(r.as(robot), proof)
+	res, err := r.submit(granted, "k1", "n1", "hello", 0)
+	if err != nil || res.Replayed || res.RowVersion != 1 {
+		t.Fatalf("with the proof %+v, %v", res, err)
+	}
+	again, err := r.submit(granted, "k1", "n1", "hello", 0)
+	if err != nil || !again.Replayed || again.ActionID != res.ActionID {
+		t.Fatalf("the same key with the proof %+v, %v", again, err)
+	}
+	if _, err = r.submit(r.as(robot), "k1", "n1", "hello", 0); code(err) != kernel.CodePermissionDenied {
+		t.Fatalf("the stored result without the proof: %v", err)
+	}
+	for name, c := range map[string]struct {
+		ctx         context.Context
+		key, body   string
+		expected    int64
+		changeProof func(p *aigrant.Proof)
+	}{
+		"another request hash":   {ctx: granted, key: "k1", body: "changed"},
+		"another key":            {ctx: granted, key: "k2", body: "hello"},
+		"another object version": {ctx: granted, key: "k1", body: "hello", expected: 1},
+		"another agent":          {key: "k1", body: "hello", changeProof: func(p *aigrant.Proof) { p.Agent = "ai.2" }},
+		"another scope":          {key: "k1", body: "hello", changeProof: func(p *aigrant.Proof) { p.Scope.Company = "company.other" }},
+		"another command":        {key: "k1", body: "hello", changeProof: func(p *aigrant.Proof) { p.Command = "note.save" }},
+	} {
+		ctx := c.ctx
+		if c.changeProof != nil {
+			p := proof
+			c.changeProof(&p)
+			ctx = aigrant.With(r.as(robot), p)
+		}
+		if _, err = r.submit(ctx, c.key, "n1", c.body, c.expected); code(err) != aigrant.CodeGrantInvalid {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err = r.submit(r.as(human), "k3", "n2", "by hand", 0); err != nil {
+		t.Fatalf("a person needs no proof: %v", err)
+	}
+	var refused []string
+	for _, e := range r.audit() {
+		if e.Outcome == "rejected" {
+			refused = append(refused, e.Actor.ID+" "+e.Code)
+		}
+	}
+	if len(refused) != 8 || refused[0] != "ai.1 PERMISSION_DENIED" || refused[1] != "ai.1 PERMISSION_DENIED" || refused[2] != "ai.1 GRANT_INVALID" {
+		t.Fatalf("audited refusals %v", refused)
+	}
+	if r.count("action_result") != 2 || r.count("note") != 2 {
+		t.Fatalf("results %d, notes %d", r.count("action_result"), r.count("note"))
+	}
+	// A context that names no object for such a command is misconfigured: refused for everyone.
+	bare := r.submitCmd("k4", "n3", "x", 0)
+	bare.GrantObject = action.GrantObject{}
+	if _, err = r.ledger.Execute(r.as(human), bare, &saveNote{r: r, id: "n3", body: "x"}); err == nil {
+		t.Fatal("a command needing a grant without its object ran")
+	} else if _, ok := kernel.AsRejection(err); ok {
+		t.Fatalf("a misconfiguration is not a rejection: %v", err)
 	}
 }
 

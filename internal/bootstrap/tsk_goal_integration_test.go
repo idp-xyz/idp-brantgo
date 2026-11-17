@@ -225,7 +225,8 @@ func TestGoalVerifyRecordsAManualCompletionAfterATakeOver(t *testing.T) {
 	if r.Status != tskapi.StatePaused || r.ControlMode != tskapi.ModeManual || r.ControlEpoch != 3 {
 		t.Fatalf("%+v", r)
 	}
-	_, err := w.c.TRD.PrepareOrder(old, w.prepareCmd("order.quote.1", acc))
+	// The old agent's order.prepare, even with an approval grant (D-7), meets the fence.
+	_, err := newGrantedAI(w.trdWorld).prepare(old, w.prepareCmd("order.quote.1", acc))
 	w.want(err, trdapi.CodeControlEpochStale)
 	_, err = w.c.TSK.Claim(w.agent, "task.1")
 	w.want(err, tskapi.CodeControlModeMismatch)
