@@ -62,28 +62,31 @@ type Screening interface {
 // commitment, supplier, sales order line, SKU specification and unit), the verified quantity and
 // Code — "" when the version is the verified one, else PUR's refusal (SUPPLIER_DELIVERY_UNVERIFIED,
 // REFERENCE_STALE). Known is false in a guard verdict for a delivery, version or line PUR does not
-// have.
+// have. LineVerifiedQuantity and LineDisposedQuantity are what the commitment line adds up to now:
+// its verified deliveries and its approved dispositions (SupplierDeliveryGuard v2, S5R-D05).
 type DeliveryLine struct {
-	Ref              api.DeliveryLineRef
-	Known            bool
-	Status           string
-	VerifiedVersion  int64
-	CommitmentID     string
-	SupplierID       string
-	OrderID          string
-	OrderLineID      string
-	SkuID            string
-	SpecRevision     int64
-	UnitID           string
-	UnitRevision     int64
-	VerifiedQuantity string
-	Code             string
+	Ref                  api.DeliveryLineRef
+	Known                bool
+	Status               string
+	VerifiedVersion      int64
+	CommitmentID         string
+	SupplierID           string
+	OrderID              string
+	OrderLineID          string
+	SkuID                string
+	SpecRevision         int64
+	UnitID               string
+	UnitRevision         int64
+	VerifiedQuantity     string
+	LineVerifiedQuantity string
+	LineDisposedQuantity string
+	Code                 string
 }
 
 // Deliveries is FUL's port to PUR's supplier deliveries (R59): ResolveDeliveryLines before FUL's
-// transaction (only lines the caller reads), GuardDeliveryLine — SupplierDeliveryGuard v1,
-// brant_pur.guard_supplier_delivery_v1(delivery_id, line_id, version), which locks the delivery
-// FOR SHARE — with FUL's executor inside it.
+// transaction (only lines the caller reads), GuardDeliveryLine — SupplierDeliveryGuard v2,
+// brant_pur.guard_supplier_delivery_v2(delivery_id, line_id, version), which locks the line's
+// commitment root FOR SHARE — with FUL's executor inside it.
 type Deliveries interface {
 	ResolveDeliveryLines(ctx context.Context, refs []api.DeliveryLineRef) (map[api.DeliveryLineRef]DeliveryLine, error)
 	GuardDeliveryLine(ctx context.Context, exec bentopg.Executor, ref api.DeliveryLineRef) (DeliveryLine, error)
@@ -162,14 +165,20 @@ func deliveryScope(l DeliveryLine) shipment.Scope {
 		SpecRevision: l.SpecRevision, UnitID: l.UnitID, UnitRevision: l.UnitRevision}
 }
 
+// lineTotals is what PUR stated of the commitment line; a total FUL cannot read is zero, so nothing
+// more ships of it.
+func lineTotals(l DeliveryLine) shipment.CommitmentLineTotals {
+	return shipment.CommitmentLineTotals{Verified: decimal(l.LineVerifiedQuantity), Disposed: decimal(l.LineDisposedQuantity)}
+}
+
 func deliveryFact(l DeliveryLine) shipment.DeliveryFact {
 	return shipment.DeliveryFact{Ref: shipment.DeliveryRef{DeliveryID: l.Ref.DeliveryID, LineID: l.Ref.LineID}, Version: l.Ref.Version,
-		Status: l.Status, Code: l.Code, Scope: deliveryScope(l), Verified: decimal(l.VerifiedQuantity)}
+		Status: l.Status, Code: l.Code, Scope: deliveryScope(l), Verified: decimal(l.VerifiedQuantity), Line: lineTotals(l)}
 }
 
 func deliveryVerdict(l DeliveryLine) shipment.DeliveryVerdict {
 	return shipment.DeliveryVerdict{Known: l.Known, Status: l.Status, VerifiedVersion: l.VerifiedVersion, Scope: deliveryScope(l),
-		Verified: decimal(l.VerifiedQuantity), Code: l.Code}
+		Verified: decimal(l.VerifiedQuantity), Line: lineTotals(l), Code: l.Code}
 }
 
 func orderVerdict(v trdapi.OrderVerdict) shipment.OrderVerdict {

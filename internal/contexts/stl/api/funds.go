@@ -507,6 +507,10 @@ type FundRecordRef struct {
 	Reversal *FundReversalView
 }
 
+// Reversed reports whether fund.reverse reversed the record (S5R-D22): it is no evidence of money
+// received or paid any more, and CNX links it to nothing new.
+func (f FundRecordRef) Reversed() bool { return f.Status == FundReversed }
+
 // FundRecordView is a fund record as fund_record.get shows it, as of CheckedAt.
 type FundRecordView struct {
 	FundRecordRef

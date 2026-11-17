@@ -2,6 +2,7 @@ package shipment
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,7 +21,7 @@ const (
 	GuardTradeCompliance   = "cnx.trade_compliance_guard.v1"
 	GuardExportLicense     = "cnx.export_license_guard.v1"
 	GuardPartyScreening    = "pty.party_screening_guard.v1"
-	GuardSupplierDelivery  = "pur.supplier_delivery_guard.v1"
+	GuardSupplierDelivery  = "pur.supplier_delivery_guard.v2"
 	GuardQualityRelease    = "qlt.quality_release_guard.v1"
 	GuardPaymentCondition  = "stl.payment_condition_guard.v1"
 	GuardOrder             = "trd.order_guard.v1"
@@ -67,6 +68,33 @@ type DeliveryUse struct {
 	Version  int64
 	Quantity kernel.Decimal
 	Line     int
+}
+
+// CommitmentLineUse is what the shipment's lines ship together of one purchase commitment line, over
+// every delivery of it they name; Line is the index of the first line that names it.
+type CommitmentLineUse struct {
+	Ref      CommitmentLine
+	Quantity kernel.Decimal
+	Line     int
+}
+
+// CommitmentLines returns what the shipment ships of each purchase commitment line, in commitment
+// and order line ID order.
+func (s *Shipment) CommitmentLines() []CommitmentLineUse {
+	var out []CommitmentLineUse
+	for i, l := range s.Lines {
+		ref := CommitmentLine{CommitmentID: l.CommitmentID, OrderLineID: l.OrderLineID}
+		at := slices.IndexFunc(out, func(u CommitmentLineUse) bool { return u.Ref == ref })
+		if at < 0 {
+			out = append(out, CommitmentLineUse{Ref: ref, Line: i})
+			at = len(out) - 1
+		}
+		out[at].Quantity = out[at].Quantity.Add(l.Quantity)
+	}
+	slices.SortFunc(out, func(a, b CommitmentLineUse) int {
+		return cmp.Or(cmp.Compare(a.Ref.CommitmentID, b.Ref.CommitmentID), cmp.Compare(a.Ref.OrderLineID, b.Ref.OrderLineID))
+	})
+	return out
 }
 
 // ReleaseUse is what the shipment's lines ship together under one quality release.
@@ -192,17 +220,28 @@ func (s *Shipment) CheckScreening(id string, v ScreeningVerdict) (Entry, error) 
 		"Party "+id+role+" screening is "+v.Status+": "+v.Reason)
 }
 
-// DeliveryVerdict is PUR's SupplierDeliveryGuard v1 on a delivery line at the version the shipment
+// DeliveryVerdict is PUR's SupplierDeliveryGuard v2 on a delivery line at the version the shipment
 // binds: Known false for a delivery, version or line PUR does not have; otherwise the version's
-// status, the version verified now, what the line is of, the verified quantity, and Code — "" when
-// the version bound is the verified one.
+// status, the version verified now, what the line is of, the verified quantity, what its purchase
+// commitment line adds up to (S5R-D05), and Code — "" when the version bound is the verified one.
 type DeliveryVerdict struct {
 	Known           bool
 	Status          string
 	VerifiedVersion int64
 	Scope           Scope
 	Verified        kernel.Decimal
+	Line            CommitmentLineTotals
 	Code            string
+}
+
+// CheckCommitmentLine judges what the shipment ships of purchase commitment line u.Ref, with what
+// FUL's confirmed shipments shipped of it before, against what SupplierDeliveryGuard v2 stated of it
+// in the same transaction: more than verified less disposed is SUPPLIER_DELIVERY_INSUFFICIENT at the
+// quantity of the first line that ships it (FUL-INV-003, S5R-D05).
+func (s *Shipment) CheckCommitmentLine(u CommitmentLineUse, t CommitmentLineTotals, before kernel.Decimal) (Entry, error) {
+	e := Entry{Name: "supplier_commitment_line:" + u.Ref.CommitmentID + "/" + u.Ref.OrderLineID,
+		Value: "verified=" + t.Verified.String() + "/disposed=" + t.Disposed.String()}
+	return e, WithinCommitmentLine(u.Ref, before, u.Quantity, t, StoredLinePath(u.Line, "quantity"))
 }
 
 // CheckDelivery judges PUR's verdict on a delivery line the shipment ships from, and what the

@@ -99,8 +99,8 @@ func paymentVerdict(v stlapi.PaymentVerdict) release.PaymentVerdict {
 // scope in context code order (ADR-BR-011, FUL-INV-002, D-11), each keeping its rows FOR SHARE until
 // the transaction ends: CNX TradeComplianceGuard v1 on the order revision the shipment binds and,
 // when its clear conclusion says a licence is required, ExportLicenseGuard v1 on the shipment's
-// lines (R56); PTY PartyScreeningGuard v1 on every party (R44); PUR SupplierDeliveryGuard v1 on
-// every delivery line (R59, FUL-INV-003); QLT QualityReleaseGuard v1 on every release (R26); STL
+// lines (R56); PTY PartyScreeningGuard v1 on every party (R44); PUR SupplierDeliveryGuard v2 on
+// every delivery line, then the commitment lines' totals it stated (R59, FUL-INV-003, S5R-D05); QLT QualityReleaseGuard v1 on every release (R26); STL
 // PaymentConditionGuard v1 for the scope (R45), which a live exception of rel may cover; TRD
 // OrderGuard v1 (R27); then FUL-INV-001. The quantities are judged on what FUL's confirmed shipments
 // consumed besides this one. Every guard runs; the first refusal in this order decides. rel may be
@@ -145,16 +145,33 @@ func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.
 			PartyRevision: p.PartyRevision})
 	}
 	before := sh.Before(consumed)
+	totals := map[shipment.CommitmentLine]shipment.CommitmentLineTotals{}
 	for _, u := range sh.Deliveries() {
 		l, err := s.Upstream.Deliveries.GuardDeliveryLine(ctx, exec, api.DeliveryLineRef{DeliveryID: u.Ref.DeliveryID, LineID: u.Ref.LineID,
 			Version: u.Version})
 		if err != nil {
 			return nil, err
 		}
-		e, refused := sh.CheckDelivery(u, deliveryVerdict(l), before.Deliveries[u.Ref])
+		v := deliveryVerdict(l)
+		e, refused := sh.CheckDelivery(u, v, before.Deliveries[u.Ref])
 		j.entries = append(j.entries, e)
 		j.bindings.Deliveries = append(j.bindings.Deliveries, release.DeliveryBinding{DeliveryID: u.Ref.DeliveryID, LineID: u.Ref.LineID,
 			Version: u.Version, Status: l.Status, VerifiedVersion: l.VerifiedVersion, Verified: l.VerifiedQuantity})
+		if err = j.note(shipment.GuardSupplierDelivery, refused); err != nil {
+			return nil, err
+		}
+		if v.Known && v.Code == "" {
+			// The guard holds the commitment root now: a later answer for the same line states the same totals.
+			totals[shipment.CommitmentLine{CommitmentID: v.Scope.CommitmentID, OrderLineID: v.Scope.OrderLineID}] = v.Line
+		}
+	}
+	for _, u := range sh.CommitmentLines() {
+		t, ok := totals[u.Ref]
+		if !ok {
+			continue // every delivery line of it was refused above
+		}
+		e, refused := sh.CheckCommitmentLine(u, t, before.CommitmentLines[u.Ref])
+		j.entries = append(j.entries, e)
 		if err = j.note(shipment.GuardSupplierDelivery, refused); err != nil {
 			return nil, err
 		}

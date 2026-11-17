@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
@@ -160,7 +161,8 @@ func requirementViews(rs []db.Requirement) []api.RequirementView {
 				ExportedAt: d.ExportedAt, CustomsReleased: d.Exported}
 		}
 		for _, f := range r.FundRecords {
-			v.FundRecords = append(v.FundRecords, api.FundLink(f))
+			v.FundRecords = append(v.FundRecords, api.FundLink{FundRecordID: f.FundRecordID, Kind: f.Kind, Direction: f.Direction, Currency: f.Currency,
+				ReceivedMinor: f.ReceivedMinor, Label: f.Label})
 		}
 		v.Certificates = certificateLinks(r.Certificates)
 		out = append(out, v)
@@ -226,7 +228,37 @@ func (s Service) GetBundle(ctx context.Context, id string) (api.BundleView, erro
 		}
 		return nil
 	})
-	return v, err
+	if err != nil {
+		return v, err
+	}
+	return v, s.markReversedFunds(ctx, &v)
+}
+
+// markReversedFunds shows, on every fund record the bundle's checks link, whether STL's FundRecordRef
+// v1 shows it reversed now (S5R-D22), asked after the read's transaction.
+func (s Service) markReversedFunds(ctx context.Context, v *api.BundleView) error {
+	var ids []string
+	for _, c := range v.Checks {
+		for _, r := range c.Requirements {
+			for _, f := range r.FundRecords {
+				if !slices.Contains(ids, f.FundRecordID) {
+					ids = append(ids, f.FundRecordID)
+				}
+			}
+		}
+	}
+	reversed, err := s.reversedFunds(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for _, c := range v.Checks {
+		for _, r := range c.Requirements {
+			for i := range r.FundRecords {
+				r.FundRecords[i].Reversed = reversed[r.FundRecords[i].FundRecordID]
+			}
+		}
+	}
+	return nil
 }
 
 // Bundles returns the company's document bundles, newest first (document_bundle.list, cnx.read).

@@ -44,8 +44,9 @@ func inputs() Inputs {
 				PartyRevision: 1, AddressID: "ap"}}},
 		Releases: map[string]ReleaseFact{"rel.1": {ID: "rel.1", State: "granted", SubjectKind: SubjectCommitmentLine, Scope: scopeOf("commitment.1"),
 			Quantity: dec("600")}},
-		Deliveries: map[DeliveryRef]DeliveryFact{ref1: {Ref: ref1, Version: 1, Status: "verified", Scope: scopeOf("commitment.1"), Verified: dec("800")}},
-		Preparer:   merch, Epoch: 7, Team: "trade", Now: now,
+		Deliveries: map[DeliveryRef]DeliveryFact{ref1: {Ref: ref1, Version: 1, Status: "verified", Scope: scopeOf("commitment.1"), Verified: dec("800"),
+			Line: CommitmentLineTotals{Verified: dec("800")}}},
+		Preparer: merch, Epoch: 7, Team: "trade", Now: now,
 	}
 }
 

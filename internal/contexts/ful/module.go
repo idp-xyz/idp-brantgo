@@ -96,7 +96,7 @@ func QLTReleases(releases qltapi.ReleaseLookups) Releases { return upstream.QLT{
 func PTYScreening() Screening { return upstream.PTY{} }
 
 // PURDeliveries is the port to PUR over its supplier delivery lookup (ResolveDeliveryLines) and
-// SupplierDeliveryGuard v1 (R59).
+// SupplierDeliveryGuard v2 (R59, S5R-D05).
 func PURDeliveries(deliveries purapi.DeliveryLookups) Deliveries {
 	return upstream.PUR{Deliveries: deliveries}
 }

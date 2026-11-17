@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
@@ -232,6 +233,19 @@ func (s Service) GetTaxCase(ctx context.Context, caseID string) (api.TaxCaseView
 			ApprovedLessExpectedMinor: minorText(a.ApprovedLessExpected), ReceivedLessApprovedMinor: minorText(a.ReceivedLessApproved)}
 		return nil
 	})
+	if err != nil {
+		return v, err
+	}
+	var ids []string
+	for _, r := range v.Results {
+		if r.FundRecordID != "" && !slices.Contains(ids, r.FundRecordID) {
+			ids = append(ids, r.FundRecordID)
+		}
+	}
+	reversed, err := s.reversedFunds(ctx, ids) // S5R-D22, after the read's transaction
+	for i := range v.Results {
+		v.Results[i].FundRecordReversed = reversed[v.Results[i].FundRecordID]
+	}
 	return v, err
 }
 

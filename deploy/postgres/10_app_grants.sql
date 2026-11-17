@@ -303,6 +303,9 @@ GRANT SELECT, INSERT ON brant_pur.purchase_commitment_disposition TO brant_app;
 GRANT UPDATE (status, row_version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision, decision_reason, updated_at)
     ON brant_pur.purchase_commitment_disposition TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_pur.commitment_line_disposed(text, text, text, text) TO brant_app;
+-- PUR SupplierDeliveryGuard v2 (S5R R13, S5R-D05; R59 beside v1): FUL's transactions execute it; it holds the
+-- commitment root FOR SHARE as the schema owner.
+GRANT EXECUTE ON FUNCTION brant_pur.guard_supplier_delivery_v2(text, text, bigint) TO brant_app;
 
 -- QLT: an inspection is inserted recorded and changes only by its disposition and its supersession,
 -- once each (trigger); disposition items are written with the disposition and never change; a

@@ -109,7 +109,7 @@ const (
 	GuardExportLicense     = "cnx.export_license_guard.v1"
 	GuardPaymentCondition  = "stl.payment_condition_guard.v1"
 	GuardPartyScreening    = "pty.party_screening_guard.v1"
-	GuardSupplierDelivery  = "pur.supplier_delivery_guard.v1"
+	GuardSupplierDelivery  = "pur.supplier_delivery_guard.v2"
 	GuardQualityRelease    = "qlt.quality_release_guard.v1"
 	GuardOrder             = "trd.order_guard.v1"
 	NotWired               = "not_wired"
@@ -136,7 +136,7 @@ const (
 )
 
 // DeliveryLineRef names a line of a PUR supplier delivery at a version of the delivery, as PUR's
-// SupplierDeliveryGuard v1 takes it (R59): LineID is the order line the delivery line's commitment
+// SupplierDeliveryGuard v1 and v2 take it (R59): LineID is the order line the delivery line's commitment
 // line buys, Version the delivery's verified version the shipment ships from.
 type DeliveryLineRef struct {
 	DeliveryID string
