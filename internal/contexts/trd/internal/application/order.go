@@ -193,8 +193,8 @@ func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.Or
 			"quote_expires_at": kernel.FormatTimestamp(src.ExpiresAt), "conversion_slot": o.Slot,
 			"customer_party_id": a.Customer.PartyID, "customer_revision": a.Customer.Revision}))
 	}
-	res, err := s.run(ctx, action.Command{Name: api.CommandPrepareOrder, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID},
-		cmd, cmd.Validate(), h)
+	res, err := s.run(ctx, action.Command{Name: api.CommandPrepareOrder, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID,
+		GrantObject: action.GrantObject{Type: api.ObjectQuote, ID: cmd.QuoteID, Version: cmd.BusinessRevision}}, cmd, cmd.Validate(), h)
 	if err != nil {
 		return api.OrderReceipt{}, err
 	}
@@ -218,8 +218,8 @@ func (s Service) RequestOrderReview(ctx context.Context, cmd api.RequestOrderRev
 		return h.save(ctx, exec, string(r.Status), h.event(api.EventOrderReviewRequested, map[string]any{"review_id": r.ID,
 			"review_status": string(r.Status)}))
 	}
-	res, err := s.run(ctx, action.Command{Name: api.CommandRequestOrderReview, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID},
-		cmd, cmd.Validate(), h)
+	res, err := s.run(ctx, action.Command{Name: api.CommandRequestOrderReview, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID,
+		GrantObject: action.GrantObject{Type: api.ObjectOrder, ID: cmd.OrderID, Version: cmd.ExpectedVersion}}, cmd, cmd.Validate(), h)
 	if err != nil {
 		return api.OrderReceipt{}, err
 	}

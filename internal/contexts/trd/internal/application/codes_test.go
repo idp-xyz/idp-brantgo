@@ -138,6 +138,17 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 	if !slices.Equal(amendment.Areas(), api.ImpactAreas()) {
 		t.Error("impact areas differ")
 	}
+	// S4 decision D-7 (unit F1): exactly order.prepare and order.review.request need an approval
+	// grant from an AI actor (the AI layer's capability.Q01 says the same).
+	var granted []string
+	for _, r := range Rules() {
+		if r.AIApprovalGrant {
+			granted = append(granted, r.Command)
+		}
+	}
+	if slices.Sort(granted); !slices.Equal(granted, []string{api.CommandPrepareOrder, api.CommandRequestOrderReview}) {
+		t.Errorf("commands needing an approval grant from AI actors: %v", granted)
+	}
 	// The order documents' kinds and signed copies are the api's.
 	if orderdoc.KindSalesContract != api.DocumentSalesContract || orderdoc.KindProformaInvoice != api.DocumentProformaInvoice ||
 		orderdoc.Signed != api.SignatureSigned || orderdoc.Countersigned != api.SignatureCountersigned {

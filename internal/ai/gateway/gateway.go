@@ -31,6 +31,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/codes"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -75,11 +76,21 @@ type Admitted struct {
 	Key   string
 	Grant *approvalgrant.Grant // the grant the call used, for a capability that needs one
 	Epoch int64                // the scope's authority epoch the admission saw
+	// proof is what the owning context's ledger checks for a capability that needs a grant (S4
+	// unit F1): minted by Admit from the grant record as used, never from the exported fields, so
+	// an Admitted built or changed elsewhere proves nothing it was not admitted for.
+	proof *aigrant.Proof
 }
 
 // Run executes the call at the owning context with the Principal and claims of ctx (the executor
-// adds the task's control claim, trdapi.WithControl). Errors are the context's.
+// adds the task's control claim, trdapi.WithControl). For a capability that needs an approval grant
+// it adds the proof of the grant's use (foundation/aigrant), which the owning context's ledger
+// requires of an AI actor (D-7, AI-INV-002) and which binds the scope, the agent, the command, the
+// request hash, the object and version, and the key. Errors are the context's.
 func (a Admitted) Run(ctx context.Context) (capability.Result, error) {
+	if a.proof != nil {
+		ctx = aigrant.With(ctx, *a.proof)
+	}
 	return a.Capability.Run(ctx, a.Capability.WithKey(a.Command, a.Key))
 }
 
@@ -153,7 +164,7 @@ func (g Gateway) Decode(ctx context.Context, b Binding, call model.ToolCall) (Ca
 // this step and, for a capability that needs one, uses the approval grant b names for exactly this
 // call (approvalgrant.Service.Use: GRANT_INVALID when b names none, or a forged, foreign, used,
 // revoked or mismatched one; GRANT_EXPIRED). The same call admitted again with the same key is the
-// same use.
+// same use. The admitted call carries the proof of that use to the owning context (Run).
 func (g Gateway) Admit(ctx context.Context, b Binding, call Call, key string) (Admitted, error) {
 	p, err := identity.FromContext(ctx)
 	if err != nil {
@@ -188,6 +199,9 @@ func (g Gateway) Admit(ctx context.Context, b Binding, call Call, key string) (A
 		return Admitted{}, err // audited by Use
 	}
 	out.Grant, out.Delegation, out.Epoch = &grant, auth.Delegation, auth.Epoch
+	out.proof = &aigrant.Proof{GrantID: grant.GrantID, Scope: p.Scope, Agent: grant.UsedByID, Command: grant.Command,
+		RequestHash: grant.RequestHash, Object: aigrant.Object{Type: grant.ObjectType, ID: grant.ObjectID, Version: grant.ObjectVersion},
+		Key: grant.UsedKey}
 	return out, nil
 }
 

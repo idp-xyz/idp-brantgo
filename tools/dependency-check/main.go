@@ -6,6 +6,8 @@
 //   - CODEOWNERS covering every bounded context and the kernel (AC7);
 //   - no Go code inside the master archive under docs/ (AC10);
 //   - test-support packages (pgtest) imported from test files only;
+//   - restricted packages (the AI layer's approval-grant proof, foundation/aigrant) imported outside
+//     test files only by the packages named for them;
 //   - tools that run before or around the test suite (tools/testshard) importing the standard
 //     library only.
 //
@@ -177,6 +179,13 @@ const (
 // testSupport lists packages that exist for tests and may be imported from test files only.
 var testSupport = []string{"internal/foundation/database/pgtest"}
 
+// restricted lists packages that, outside test files, only the named packages may import. The
+// proof that an approval grant was used for an AI actor's call (S4 decision D-7, unit F1) is minted
+// by the AI layer's gateway and checked by the command ledger; no transport or context may set it.
+var restricted = map[string][]string{
+	"internal/foundation/aigrant": {"internal/ai/gateway", "internal/foundation/action"},
+}
+
 // stdlibTools lists tools that import the standard library only, test files included.
 var stdlibTools = []string{"tools/testshard"}
 
@@ -282,6 +291,11 @@ func checkImports(module string, pkgs []listedPackage, allow map[[2]string]bool)
 					if !test && from.layer != layerTool {
 						out = append(out, finding{"testsupport", name, "imports " + strings.TrimPrefix(imp, module+"/") + ", which only test files may import"})
 					}
+					continue
+				}
+				if allowed, ok := restricted[strings.TrimPrefix(imp, module+"/")]; ok && !test && !slices.Contains(allowed, name) {
+					out = append(out, finding{"restricted", name, "imports " + strings.TrimPrefix(imp, module+"/") +
+						", which outside test files only " + strings.Join(allowed, ", ") + " may import"})
 					continue
 				}
 				if f, bad := judge(module, from, imp, allow); bad {

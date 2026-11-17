@@ -123,6 +123,31 @@ func TestTestSupportIsForTestFilesOnly(t *testing.T) {
 	}
 }
 
+// S4 unit F1 (D-7): the approval-grant proof is minted by the AI layer's gateway and read by the
+// command ledger; a transport or a context importing it is a finding, a test file is not.
+func TestRestrictedPackagesHaveTheirImportersOnly(t *testing.T) {
+	proof := mod + "/internal/foundation/aigrant"
+	found := checkImports(mod, []listedPackage{
+		{ImportPath: mod + "/internal/ai/gateway", Imports: []string{proof}},
+		{ImportPath: mod + "/internal/foundation/action", Imports: []string{proof}},
+		{ImportPath: mod + "/internal/bootstrap", TestImports: []string{proof}},
+		{ImportPath: mod + "/internal/foundation/aigrant", XTestImports: []string{proof}},
+		{ImportPath: mod + "/internal/transport/httpapi", Imports: []string{proof}},
+		{ImportPath: mod + "/internal/ai/execution", Imports: []string{proof}},
+		{ImportPath: mod + "/internal/contexts/trd/internal/application", Imports: []string{proof}},
+	}, nil)
+	var got []string
+	for _, f := range found {
+		if f.rule != "restricted" {
+			t.Errorf("finding %v", f)
+		}
+		got = append(got, f.pkg)
+	}
+	if fmt.Sprint(got) != "[internal/ai/execution internal/contexts/trd/internal/application internal/transport/httpapi]" {
+		t.Fatalf("findings = %v", found)
+	}
+}
+
 func TestShardToolUsesTheStandardLibraryOnly(t *testing.T) {
 	found := checkImports(mod, []listedPackage{
 		{ImportPath: mod + "/tools/testshard", Imports: []string{"crypto/sha256", "os/exec"}, TestImports: []string{"testing"}},

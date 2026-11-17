@@ -22,6 +22,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/gateway"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
@@ -88,6 +89,7 @@ type call struct {
 	scope   kernel.Scope
 	key     string
 	cmd     any
+	proof   *aigrant.Proof // the approval grant's proof the call carried (S4 unit F1)
 }
 
 type recorder struct {
@@ -100,9 +102,13 @@ func (r *recorder) record(ctx context.Context, command, key string, cmd any) err
 	if err != nil {
 		return err
 	}
+	c := call{command: command, actor: p.Actor, scope: p.Scope, key: key, cmd: cmd}
+	if proof, ok := aigrant.From(ctx); ok {
+		c.proof = &proof
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.calls = append(r.calls, call{command: command, actor: p.Actor, scope: p.Scope, key: key, cmd: cmd})
+	r.calls = append(r.calls, c)
 	return nil
 }
 
@@ -679,6 +685,14 @@ func TestApprovalGrantBindsOneCall(t *testing.T) {
 	}
 	if res, err := a.Run(f.as(agent)); err != nil || res.ObjectID != "order.1" {
 		t.Fatalf("run %+v, %v", res, err)
+	}
+	// S4 unit F1: the call reaches its context with the proof of exactly this use, which the
+	// context's ledger checks (foundation/aigrant).
+	calls := f.rec.all()
+	want := aigrant.Proof{GrantID: "grant.1", Scope: f.scope, Agent: agent.ID, Command: cmdPrepare, RequestHash: c.RequestHash,
+		Object: aigrant.Object{Type: "prb.quote", ID: "quote.1", Version: 2}, Key: "intent.1"}
+	if last := calls[len(calls)-1]; last.proof == nil || *last.proof != want {
+		t.Fatalf("the proof %+v, want %+v", last.proof, want)
 	}
 	// The same call again (a resend after an uncertain outcome) is the same use; any other is not.
 	again, err := f.layer.Gateway.Admit(f.as(agent), b, c, "intent.1")

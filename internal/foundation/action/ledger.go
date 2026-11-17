@@ -1,6 +1,7 @@
 // Package action runs the write commands and audited reads of a bounded context in the order the
 // engineering contracts fix (Python Core.execute): contract and structure, current identity and
-// permission, a stored result of the same idempotency key, then the context's own checks. One
+// permission (for an AI actor, with the approval grant a command may need: S4 decision D-7,
+// foundation/aigrant), a stored result of the same idempotency key, then the context's own checks. One
 // successful command commits its business change, its action result, its audit entry and its
 // Outbox events in one transaction; a rejected command leaves only a rejection audit entry.
 //
@@ -21,6 +22,7 @@ import (
 	"go.idp.xyz/idp-bento-go/application"
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
@@ -34,7 +36,14 @@ type Command struct {
 	RequestHash    string // RequestHash of the business arguments
 	ObjectID       string // the object the request names, for the audit trail
 	Reason         string // the reason a cancelling or closing command records in the audit trail
+	// GrantObject is the object and version an approval grant binds, for a command whose rule
+	// needs one from AI actors (authorization.Rule.AIApprovalGrant; S4 decision D-7): the owning
+	// context names it, as the AI layer's capability does (capability.ObjectRef).
+	GrantObject GrantObject
 }
+
+// GrantObject is the object and version of a command an approval grant binds (aigrant.Object).
+type GrantObject = aigrant.Object
 
 // Event is an integration event a command publishes through the Outbox. Its payload carries
 // identifiers and versions only (contract C4).
@@ -206,8 +215,21 @@ func (l *Ledger) execute(ctx context.Context, p identity.Principal, cmd Command,
 	if !kernel.ValidIdentifier(cmd.IdempotencyKey) || !hashPattern.MatchString(cmd.RequestHash) || cmd.Name == "" {
 		return Result{}, kernel.Reject(kernel.CodeSchemaInvalid, "/idempotency_key", "")
 	}
-	if _, err := l.Authorizer.Policy.Admit(p, cmd.Name); err != nil {
+	rule, err := l.Authorizer.Policy.Admit(p, cmd.Name)
+	if err != nil {
 		return Result{}, denied(err)
+	}
+	if rule.AIApprovalGrant {
+		// S4 decision D-7, AI-INV-002 (unit F1): an AI actor's call carries the gateway's proof of an
+		// approval grant used for exactly this call, whatever the transport; a stored result is no
+		// exception, so this comes before the replay.
+		if cmd.GrantObject == (GrantObject{}) {
+			return Result{}, fmt.Errorf("action: %s needs an approval grant from AI actors and names no object", cmd.Name)
+		}
+		if err = aigrant.Check(ctx, aigrant.Call{Scope: p.Scope, Actor: p.Actor, Command: cmd.Name, RequestHash: cmd.RequestHash,
+			Key: cmd.IdempotencyKey, Object: cmd.GrantObject}); err != nil {
+			return Result{}, err
+		}
 	}
 	if prep, ok := h.(Preparer); ok {
 		var res Result

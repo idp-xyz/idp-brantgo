@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"go.idp.xyz/idp-brant/internal/ai/adapters/model"
+	"go.idp.xyz/idp-brant/internal/ai/approvalgrant"
 	"go.idp.xyz/idp-brant/internal/ai/capability"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
+	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -97,6 +99,49 @@ func TestToolsFollowTheDelegation(t *testing.T) {
 	}
 	if err = (model.Request{Messages: []model.Message{{Role: model.RoleUser}}, Tools: tools}).Validate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// grantProbe stands for a command that needs an approval grant, such as order.prepare.
+type grantProbe struct {
+	IdempotencyKey string
+	ProbeID        string
+}
+
+type grantProbeReceipt struct {
+	ActionID   string
+	ObjectID   string
+	RowVersion int64
+	Status     string
+	Replayed   bool
+}
+
+// S4 unit F1 (D-7): the proof of an approval grant's use reaches the owning context only from an
+// admission (Admit after approvalgrant.Service.Use, covered by the composed tests); an Admitted
+// built elsewhere — naming a grant or not — runs without one, so its target refuses an AI actor.
+func TestOnlyAnAdmissionCarriesTheGrantProof(t *testing.T) {
+	var seen []bool
+	c, err := capability.Define(capability.Spec{Command: "probe.prepare", Context: "prb", Contract: "brant.probe/0.1.0", Version: 1,
+		SideEffect: capability.Submit, Risk: capability.RiskHigh, Approval: capability.ApprovalGrant, Summary: "prepare a probe"},
+		func(p grantProbe) capability.ObjectRef { return capability.ObjectRef{Type: "prb.probe", ID: p.ProbeID} },
+		func(ctx context.Context, p grantProbe) (grantProbeReceipt, error) {
+			_, ok := aigrant.From(ctx)
+			seen = append(seen, ok)
+			return grantProbeReceipt{ActionID: "act-1", ObjectID: p.ProbeID, RowVersion: 1, Status: "draft"}, nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := Call{Capability: c, Command: grantProbe{ProbeID: "probe.1"}, Object: capability.ObjectRef{Type: "prb.probe", ID: "probe.1"}}
+	forged := &approvalgrant.Grant{GrantID: "grant.1", Command: "probe.prepare", ObjectType: "prb.probe", ObjectID: "probe.1",
+		Status: approvalgrant.StatusUsed, UsedKey: "k1", UsedByID: "actor.1"}
+	for _, a := range []Admitted{{Call: call, Key: "k1"}, {Call: call, Key: "k1", Grant: forged}} {
+		if _, err = a.Run(agentContext(t, kernel.ActorAI)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(seen) != 2 || seen[0] || seen[1] {
+		t.Fatalf("a hand-built admission carried a proof: %v", seen)
 	}
 }
 

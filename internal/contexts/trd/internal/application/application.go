@@ -67,8 +67,11 @@ var (
 // AI agent prepares, revises and discards drafts, edits the internal metadata and records customer
 // responses (quote.response.record: 人工或 AI; its classification is a candidate a human verifies),
 // prepares orders and requests their review (order.prepare, order.review.request: 人工或 AI（按动作权限）)
-// through the same command path. order.review.decide, order.activate, order.approval.revoke,
-// order.cancel and order.close_unfulfilled are human only (humanOnlyCommands).
+// through the same command path, but only with an approval grant a person issued for exactly the
+// call (S4 decision D-7, AI-INV-002): the ledger refuses an AI actor's call without the AI layer's
+// proof of the grant's use, whatever the transport (S4 unit F1). order.review.decide,
+// order.activate, order.approval.revoke, order.cancel and order.close_unfulfilled are human only
+// (humanOnlyCommands).
 func Rules() []authorization.Rule {
 	return append([]authorization.Rule{
 		{Command: api.CommandSaveDraft, Permission: api.CommandSaveDraft, ActorKinds: humanOrAgent},
@@ -99,8 +102,8 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandDisputeAcceptance, api.CommandDisputeAcceptance),
 		{Command: CommandGetResponse, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetAcceptance, Permission: PermissionRead, ActorKinds: anyActor},
-		{Command: api.CommandPrepareOrder, Permission: api.CommandPrepareOrder, ActorKinds: humanOrAgent},
-		{Command: api.CommandRequestOrderReview, Permission: api.CommandRequestOrderReview, ActorKinds: humanOrAgent},
+		authorization.HumanOrGrantedAI(api.CommandPrepareOrder, api.CommandPrepareOrder),
+		authorization.HumanOrGrantedAI(api.CommandRequestOrderReview, api.CommandRequestOrderReview),
 		authorization.HumanOnly(api.CommandDecideOrderReview, api.CommandDecideOrderReview),
 		authorization.HumanOnly(api.CommandActivateOrder, api.CommandActivateOrder),
 		authorization.HumanOnly(api.CommandRevokeOrderApproval, api.CommandRevokeOrderApproval),
