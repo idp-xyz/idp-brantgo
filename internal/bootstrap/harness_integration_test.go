@@ -153,12 +153,25 @@ func actorRef(kind, id string) kernel.ActorRef {
 	return kernel.ActorRef{Kind: kernel.ActorKind(kind), ID: id}
 }
 
-// exec runs sql as the application role in company's scope.
-func (w *world) exec(company, sql string) error {
-	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
+// helperDB opens the application role's database for one statement of a test helper and returns it
+// with the function that closes its pool; the helper defers it. pgtest closes a pool only when the
+// test ends, so a helper that left its pool open held one connection per call until then, and a
+// test with many reads needed more than the 100 connections of a stock PostgreSQL 16, which is what
+// each CI job runs against (TestGoalReadinessJudgesQuoteReady: SQLSTATE 53300 there).
+func (w *world) helperDB() (*bentopg.DB, func()) {
+	w.t.Helper()
+	pool := pgtest.AppPool(w.t)
+	db, err := bentopg.NewDB(pool)
 	if err != nil {
 		w.t.Fatal(err)
 	}
+	return db, pool.Close
+}
+
+// exec runs sql as the application role in company's scope.
+func (w *world) exec(company, sql string) error {
+	db, done := w.helperDB()
+	defer done()
 	return bento.ScopeTransactor{DB: db, Scope: w.scope(company)}.WithinTransaction(context.Background(), func(ctx context.Context) error {
 		exec, err := db.RequireExecutor(ctx)
 		if err != nil {
@@ -177,10 +190,8 @@ type event struct {
 // events returns the Outbox events of source in company, oldest first.
 func (w *world) events(company, source string) []event {
 	w.t.Helper()
-	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
-	if err != nil {
-		w.t.Fatal(err)
-	}
+	db, done := w.helperDB()
+	defer done()
 	q, err := db.ReadExecutor(context.Background())
 	if err != nil {
 		w.t.Fatal(err)
@@ -204,12 +215,10 @@ func (w *world) events(company, source string) []event {
 // RLS.
 func (w *world) count(company, table string) int {
 	w.t.Helper()
-	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
-	if err != nil {
-		w.t.Fatal(err)
-	}
+	db, done := w.helperDB()
+	defer done()
 	var n int
-	err = bento.ScopeTransactor{DB: db, Scope: w.scope(company)}.WithinTransaction(context.Background(), func(ctx context.Context) error {
+	err := bento.ScopeTransactor{DB: db, Scope: w.scope(company)}.WithinTransaction(context.Background(), func(ctx context.Context) error {
 		exec, err := db.RequireExecutor(ctx)
 		if err != nil {
 			return err

@@ -13,10 +13,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
-	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/kernel"
-
-	bentopg "go.idp.xyz/idp-bento-go/postgres"
 )
 
 // The read side of TRD (WBS S3-09; X-INV-003) on the TRD world: "editor" (the author) drafts,
@@ -45,8 +42,8 @@ func reasonsOf(rs []trdapi.Reason) []string {
 // scalar runs a query of one text value as the application role in company.A's scope.
 func (q *trdWorld) scalar(sql string) string {
 	q.t.Helper()
-	db, err := bentopg.NewDB(pgtest.AppPool(q.t))
-	q.must(err)
+	db, done := q.helperDB()
+	defer done()
 	var v string
 	q.must(bento.ScopeTransactor{DB: db, Scope: q.scope("company.A")}.WithinTransaction(context.Background(), func(ctx context.Context) error {
 		exec, err := db.RequireExecutor(ctx)
