@@ -20,7 +20,7 @@ import (
 )
 
 // Opening refund material (S5 unit C10, WBS S5-20; CNX-AGG-TaxRefundCase value object OpeningPosition, CNX-INV-004;
-// MD-51; baseline 11.2; CN-R09; CN-AT16 CNX half, BT17). Upstreams, read before CNX's transaction: EVD (R54, the
+// MD-51; baseline 11.2; CN-R09; CN-AT16 CNX half, STL-OB-01). Upstreams, read before CNX's transaction: EVD (R54, the
 // evidence of the item and of an opening case's position) and POL (R50: the export_tax_policy revision ConfigAt v1
 // answers for an opening case's export date, policyAt as tax_refund_case.allocate binds it (S5R-D23), and the currency revision of its
 // position's amount). In the transaction CNX locks, for an opening case, the export's latest case FOR UPDATE (a

@@ -100,7 +100,7 @@ import (
 //     value against the CI value.
 //   - 25 (TRD-INV-019, PL-13): merchandiser closes order.1 (shipped 120 = 120); the consumer releases
 //     the reservation: exposure 0.
-//   - 26 (STL-INV-010): credit.officer records provider.1's freight of 60.00 USD as estimated,
+//   - 26 (STL-INV-010): credit.officer records provider.1's pre_carriage of 60.00 USD as estimated (S5R-D24),
 //     treasury confirms it on the forwarder's bill, credit.officer allocates it to the order.
 //   - 27 (STL-INV-011, BT18): treasury reviews and closes the order result: confirmed 960.00 − 600.00 −
 //     60.00 = 300.00 (31.25 %), equal to the quote's calculation; CLM recorded not_enabled.
@@ -1171,11 +1171,11 @@ func (c *brcS5) charge() {
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": "order.1"}}, "fee_category": c.freight, "currency": c.usd,
 		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": "60.00", "occurred_on": today(),
 		"analysis_on": today(),
-		"basis":       "provider.1 海运报价 log.1：F1 60.00 USD"})
+		"basis":       "provider.1 交货前内陆运费报价 log.1：F1 60.00 USD（pre_carriage）"})
 	if r["status"] != "estimated" {
 		c.t.Fatalf("charge.record %v", r)
 	}
-	c.source(brcTreasury, "freight.bill", "合成货代账单：provider.1 海运费 60.00 USD，order.1 / shipment.1。")
+	c.source(brcTreasury, "freight.bill", "合成货代账单：provider.1 交货前内陆运费 60.00 USD（pre_carriage），order.1 / shipment.1。")
 	r = c.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight.brc", "expected_version": 1,
 		"evidence_ids": []string{"freight.bill"}})
 	if r["status"] != "confirmed" {

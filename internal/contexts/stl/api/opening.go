@@ -10,7 +10,7 @@ import (
 )
 
 // Opening balances (S5 unit C10, WBS S5-20; tactical model STL-AGG-SettlementStatement entity OpeningBalance,
-// value object Cutoff; STL-INV-012; Context Map MD-50, R75 期初来源; baseline 11.2 期初、防重、切换; BT17, CN-AT16 STL
+// value object Cutoff; STL-INV-012; Context Map MD-50, R75 期初来源; baseline 11.2 期初、防重、切换; STL-OB-01, CN-AT16 STL
 // half; S5 plan D-3, D-4).
 //
 //	opening_balance.record  human only (treasury): registers one item the books held at the cutoff instant cutoff_at,

@@ -19,7 +19,7 @@ import (
 )
 
 // STL opening balances (S5 unit C10, WBS S5-20; tactical model STL-AGG-SettlementStatement entity OpeningBalance,
-// value object Cutoff; STL-INV-012; Context Map MD-50, R75; baseline 11.2 期初、防重、切换; BT17, CN-AT16 STL half;
+// value object Cutoff; STL-INV-012; Context Map MD-50, R75; baseline 11.2 期初、防重、切换; STL-OB-01, CN-AT16 STL half;
 // SC-09's "未结 7,000" seed for D2) on PostgreSQL 16. Python V0.50 has no STL, so the tests cite design IDs only.
 //
 // The opening world is the credit world (E-2's synthetic credit policy, customer.1 with a 10,000.00 USD limit when
@@ -262,12 +262,12 @@ func TestCNAT16OpeningBalancesReconcileAtTheCutoff(t *testing.T) {
 	}
 }
 
-// BT17 (期初与切换: 上线后不重建同一账款): the opening receivable AR-2026-0042 (7,000.00) is settled after go-live by a
+// STL-OB-01 (期初与切换: 上线后不重建同一账款): the opening receivable AR-2026-0042 (7,000.00) is settled after go-live by a
 // receipt of 7,000.00. Recording it again — the same cutoff or a later one — is OPENING_BALANCE_DUPLICATE: no second
 // receivable arises for it, and the exposure stays 0.00. Only once it is reversed (settlement.reverse by a credit
 // manager, after its application is unapplied: STL-INV-009) is its item reversed and may a corrected one be
 // recorded — and then exactly one stands.
-func TestBT17NoSecondReceivableForAnOpeningItemSettledAfterGoLive(t *testing.T) {
+func TestSTLOB01NoSecondReceivableForAnOpeningItemSettledAfterGoLive(t *testing.T) {
 	ow := newOpeningWorld(t)
 	ow.limit()
 	ow.record(ow.statementItem("ob.42", stlapi.OpeningReceivable, "AR-2026-0042", "7000.00", "7000.00", "7000.00", 10))

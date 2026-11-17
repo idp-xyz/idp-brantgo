@@ -9,7 +9,7 @@ import (
 )
 
 // Opening balances (S5 unit C10, WBS S5-20; tactical model STL-AGG-SettlementStatement entity OpeningBalance,
-// value object Cutoff; STL-INV-012; Context Map MD-50; baseline 11.2 期初、防重、切换; BT17, CN-AT16 STL half).
+// value object Cutoff; STL-INV-012; Context Map MD-50; baseline 11.2 期初、防重、切换; STL-OB-01, CN-AT16 STL half).
 //
 // An opening item states what the books held at a cutoff instant, from a source document: an open receivable or
 // payable of a party — an opening statement, a sales or purchase statement marked opening without lines (no
@@ -17,7 +17,7 @@ import (
 // prepayment, an opening fund record (a receipt from a customer or a payment to a supplier; fundrecord.Record's
 // rules). The item keeps the source document's whole amount and the amount open at the cutoff: the difference
 // was settled before it. A source document stands once per kind whatever the cutoff (OPENING_BALANCE_DUPLICATE):
-// recorded twice, or at a later cutoff again, it would form a second receivable, payable or cash (BT17).
+// recorded twice, or at a later cutoff again, it would form a second receivable, payable or cash (STL-OB-01).
 
 // Kinds and states of an opening item.
 const (
