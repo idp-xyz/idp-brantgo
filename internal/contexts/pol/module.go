@@ -23,9 +23,10 @@ type Module struct {
 }
 
 var (
-	_ api.Commands = (*Module)(nil)
-	_ api.Queries  = (*Module)(nil)
-	_ api.Auditor  = (*Module)(nil)
+	_ api.Commands       = (*Module)(nil)
+	_ api.Queries        = (*Module)(nil)
+	_ api.InForceQueries = (*Module)(nil)
+	_ api.Auditor        = (*Module)(nil)
 )
 
 // New wires POL to db, a transaction owner that belongs to POL alone, and to EVD's queries for the

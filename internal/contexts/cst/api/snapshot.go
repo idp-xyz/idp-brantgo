@@ -226,6 +226,41 @@ type AttestationView struct {
 	AttestedAt     time.Time
 }
 
+// MaxRfqSnapshots bounds one list of the cost snapshots of an RFQ.
+const MaxRfqSnapshots = 32
+
+// RfqSnapshot is one cost snapshot whose frozen costing-context revision binds an RFQ. It is the
+// identity a quote's CostSnapshotRef names, and whether the snapshot may be adopted now. The
+// snapshot document, the normalized input and the component graph are not in it.
+type RfqSnapshot struct {
+	SnapshotID      string
+	ResultHash      string
+	ScenarioID      string
+	ContextID       string
+	ContextRevision int64
+	RfqID           string
+	RfqRowVersion   int64
+	Currency        string
+	TotalMinor      string
+	Adoptability    string // adoptable, denied, superseded or not_current
+}
+
+// RfqSnapshotList is the cost snapshots of one RFQ that the caller sees. Truncated is set when more
+// than MaxRfqSnapshots are visible.
+type RfqSnapshotList struct {
+	RfqID     string
+	Snapshots []RfqSnapshot
+	Truncated bool
+}
+
+// RfqSnapshotQueries is the audited read of the cost snapshots of an RFQ (cst.read).
+type RfqSnapshotQueries interface {
+	// SnapshotsOfRfq returns the snapshots whose frozen costing-context revision binds rfqID,
+	// audited as cost_snapshot.list. A snapshot outside the caller's data scope is absent. An id
+	// that is not an identifier is SCHEMA_INVALID.
+	SnapshotsOfRfq(ctx context.Context, rfqID string) (RfqSnapshotList, error)
+}
+
 // SnapshotQueries is CST's audited read side of snapshots and attestations. Every read re-checks the
 // caller's permission and data scope (X-INV-003): a snapshot of a scenario the caller does not see
 // is NOT_FOUND, one with an input or source the caller no longer reads PERMISSION_DENIED (Python

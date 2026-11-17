@@ -119,6 +119,35 @@ func (fakeEVD) RequestOf(cmd evdapi.Command) (kernel.ActionRequest, error) {
 
 func executor(f *fakeTSK) Executor { return Executor{Tasks: f, Requests: Requests{EVD: fakeEVD{}}} }
 
+// A committed intent is replayed from TSK's record and nothing is sent. An open intent is
+// reconciled with the target first; when that settles it as committed, the same replay is returned.
+// An intent that is not committed is not a replay (S4 G1, AN05, F1: the command ledger is not entered).
+func TestSettledReplaysOnlyACommittedIntent(t *testing.T) {
+	f := newFake("", 0)
+	e := executor(f)
+	if _, ok, err := e.Settled(context.Background(), "task.1", "intent.missing"); err != nil || ok {
+		t.Fatalf("missing %+v %v", ok, err)
+	}
+	id := tskapi.ActionIDOf("intent.1")
+	f.actions[id] = &tskapi.ActionView{ActionID: id, TaskID: "task.1", BusinessIntentID: "intent.1", State: tskapi.ActionCommitted,
+		Attempts: 1, Result: &tskapi.TargetReceipt{ActionID: "trd.1", ObjectID: "order.1", RowVersion: 1, Status: "draft"}}
+	rc, ok, err := e.Settled(context.Background(), "task.1", "intent.1")
+	if err != nil || !ok || !rc.Replayed || rc.Stage != Verified || rc.Stored.ObjectID != "order.1" || len(f.log) != 0 {
+		t.Fatalf("committed %+v %v log %v", rc, err, f.log)
+	}
+	f.actions[id].State = tskapi.ActionSubmitted
+	f.committed[id] = true
+	rc, ok, err = e.Settled(context.Background(), "task.1", "intent.1")
+	if err != nil || !ok || !rc.Replayed || f.log[len(f.log)-1] != "reconcile" {
+		t.Fatalf("open intent %+v %v log %v", rc, err, f.log)
+	}
+	f.committed[id] = false
+	f.actions[id].State = tskapi.ActionSubmitted
+	if _, ok, err = e.Settled(context.Background(), "task.1", "intent.1"); err != nil || ok {
+		t.Fatalf("not committed %v %v", ok, err)
+	}
+}
+
 func step(send func(ctx context.Context, cmd any) (capability.Result, error)) Step {
 	return Step{TaskID: "task.1", BusinessIntentID: "intent.1", Context: tskapi.TargetEVD,
 		Command: evdapi.RegisterSource{SourceID: "src.1", SourceKind: evdapi.KindManualText, ContentText: "x"}, Send: send}

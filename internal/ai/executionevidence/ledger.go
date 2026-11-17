@@ -33,6 +33,12 @@ const (
 	StateFailed      = "failed"
 	StateUnavailable = "unavailable"
 	StateUnknown     = "unknown"
+	// StateWaiting is a tool call that did not run because it waits for a person's approval grant
+	// (S4 G1, D1 finding 5). It is not a refusal: CodeWaitingApproval names the wait, and a refusal
+	// stays state failed with its own code.
+	StateWaiting = "waiting"
+	// CodeWaitingApproval is the ledger code of StateWaiting. It is not an error-catalog rejection.
+	CodeWaitingApproval = "WAITING_APPROVAL"
 )
 
 // Reservation asks for one model or tool call of a task before it is made. Retry marks a call that
@@ -334,7 +340,7 @@ func (l Ledger) Settle(ctx context.Context, callID string, o Outcome) (Call, err
 func (o Outcome) check() error {
 	bad := func(what string) error { return fmt.Errorf("%w: outcome: %s", ErrInvalid, what) }
 	switch o.State {
-	case StateSucceeded, StateFailed, StateUnavailable:
+	case StateSucceeded, StateFailed, StateUnavailable, StateWaiting:
 		if o.Cost == nil {
 			return bad("a known outcome has a known cost")
 		}
@@ -347,6 +353,9 @@ func (o Outcome) check() error {
 	}
 	if (o.State == StateFailed || o.State == StateUnavailable) && o.Code == "" {
 		return bad("a failed or unavailable call has a code")
+	}
+	if o.State == StateWaiting && o.Code != CodeWaitingApproval {
+		return bad("a wait is " + CodeWaitingApproval)
 	}
 	if o.Cost != nil && o.Cost.Sign() < 0 {
 		return bad("negative cost")

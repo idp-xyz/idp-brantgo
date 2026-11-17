@@ -40,6 +40,8 @@ const (
 	CommandGetSnapshot    = "cost_snapshot.get"
 	CommandQuerySnapshot  = "cost_snapshot.query"
 	CommandGetAttestation = "source_attestation.get"
+	// CommandListSnapshots is the audited read of the cost snapshots of one RFQ (S4 G1).
+	CommandListSnapshots = "cost_snapshot.list"
 )
 
 // snapshotRules: freezing and attesting are human only (05 stage humanOnlyCommands); the reads need
@@ -51,6 +53,7 @@ func snapshotRules() []authorization.Rule {
 		{Command: CommandGetSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandQuerySnapshot, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetAttestation, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListSnapshots, Permission: PermissionRead, ActorKinds: anyActor},
 	}
 }
 
@@ -458,6 +461,42 @@ func adoptability(ctx context.Context, exec bentopg.Executor, ref api.CostSnapsh
 		return api.Adoptability{}, errors.New("cst: the adoptability guard does not know a snapshot CST just read")
 	}
 	return api.Adoptability{Status: v.Status, Code: v.Code, Input: v.Input, CheckedAt: kernel.Instant(at)}, nil
+}
+
+// SnapshotsOfRfq returns the cost snapshots of rfqID the caller sees, audited as cost_snapshot.list.
+// The document, the normalized input and the component graph are not read. Adoptability is the
+// guard's verdict now, the same one a quote freeze would see.
+func (s Service) SnapshotsOfRfq(ctx context.Context, rfqID string) (api.RfqSnapshotList, error) {
+	var out api.RfqSnapshotList
+	err := s.Ledger.Read(ctx, CommandListSnapshots, rfqID, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		if !kernel.ValidIdentifier(rfqID) {
+			return kernel.Reject(kernel.CodeSchemaInvalid, "/args/RfqID", "")
+		}
+		rows, err := postgres.SnapshotsOfRfq(ctx, exec, scope(ctx), rfqID, api.MaxSnapshotLookup)
+		if err != nil {
+			return err
+		}
+		at := kernel.Instant(s.Clock.Now())
+		out = api.RfqSnapshotList{RfqID: rfqID, Snapshots: []api.RfqSnapshot{}}
+		for _, row := range rows {
+			if !d.Sees(row.OwnerActor, row.OwnerTeam) {
+				continue
+			}
+			if len(out.Snapshots) == api.MaxRfqSnapshots {
+				out.Truncated = true
+				break
+			}
+			a, err := adoptability(ctx, exec, api.CostSnapshotRef{SnapshotID: row.SnapshotID, ResultHash: row.ResultHash}, at)
+			if err != nil {
+				return err
+			}
+			out.Snapshots = append(out.Snapshots, api.RfqSnapshot{SnapshotID: row.SnapshotID, ResultHash: row.ResultHash,
+				ScenarioID: row.ScenarioID, ContextID: row.ContextID, ContextRevision: row.ContextRevision, RfqID: row.RfqID,
+				RfqRowVersion: row.RfqRowVersion, Currency: row.Currency, TotalMinor: row.TotalMinor, Adoptability: a.Status})
+		}
+		return nil
+	})
+	return out, err
 }
 
 // GetAttestation returns an attestation the caller sees, audited.

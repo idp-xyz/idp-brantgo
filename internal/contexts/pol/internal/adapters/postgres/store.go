@@ -362,3 +362,26 @@ func LoadSnapshot(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 	})
 	return &s, err
 }
+
+// ConfigInForce is one active revision whose validity contains at. The revision's data is not read.
+type ConfigInForce struct {
+	ID       string
+	Revision int64
+}
+
+// ConfigsInForce returns the active revisions of kind in force at at, in id order, at most limit.
+// It never reads the revision body.
+func ConfigsInForce(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, kind string, at time.Time, limit int) ([]ConfigInForce, error) {
+	rows, err := exec.Query(ctx, `SELECT config_id, revision FROM brant_pol.config_revision
+		WHERE tenant_id = $1 AND company_id = $2 AND kind = $3 AND status = 'active'
+			AND valid_from <= $4 AND (valid_until IS NULL OR valid_until > $4)
+		ORDER BY config_id
+		LIMIT $5`, string(scope.Tenant), string(scope.Company), kind, at, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ConfigInForce, error) {
+		var c ConfigInForce
+		return c, row.Scan(&c.ID, &c.Revision)
+	})
+}

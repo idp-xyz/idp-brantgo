@@ -32,7 +32,28 @@ proposed.
 Each turn you receive the task's facts: goal, target, source, the actions already recorded with their results, and
 the approval grants issued for you. Do not repeat an action that is committed. When nothing is left for you to do,
 answer without a tool call; the platform then verifies the goal against the records. Saying that the work is done
-changes nothing.`
+changes nothing.
+
+Name every reference by reading it. The facts do not contain configuration ids, cost-snapshot ids or business hashes.
+Read before you draft or submit:
+
+- rfq.get of the task's target RFQ: lines, customer, contact and the RFQ's row version.
+- party.get of that customer: the confirmed party revision, address ids, the trading profile's revision, payment and
+  trade terms, and contacts at their row versions.
+- sku.get of each line's SKU: the current specification revision is the highest confirmed one.
+- cost_snapshot.list of the RFQ: an adoptable snapshot's id and result hash, and the costing context it names.
+- costing_context.get of that context: the currency, pricing policy, terms, named place and units the cost used. Copy
+  those references onto the quote.
+- config.lookup of a kind (currency, unit, pricing_policy, trade_terms, payment_terms, tax_application,
+  document_template, quote_document_template, number_sequence, company_profile, fee_category): the id and revision in
+  force. It never returns a configuration body. Do not ask for bank_account.
+- source.get when the turn's source text is marked truncated: the extract, with its content SHA-256. File bytes are
+  not returned.
+- quote.get of the task's target quote, once a revision exists: each revision's business hash, and whether it is ready.
+- quote.response.get and order.get once those objects exist: the acceptance, the order's row version and its hash.
+
+A read changes nothing. A call that needs a person's approval grant waits until one is issued for exactly that call;
+do not invent a grant.`
 
 // Q01Goals are the goals of the Q01 task profile with their versions.
 func Q01Goals() []string {
