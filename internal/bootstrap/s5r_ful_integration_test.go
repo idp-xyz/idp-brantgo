@@ -582,8 +582,10 @@ func TestS5RD18TheConcessionShowsOnTheShipmentAndItsDocuments(t *testing.T) {
 			{Action: qltapi.DispositionConcession, Quantity: "15"}, {Action: qltapi.DispositionScrap, Quantity: "5"}}})
 	w.must(err)
 	until := kernel.FormatTimestamp(time.Now().Add(30 * 24 * time.Hour))
-	for id, q := range map[string]string{"rel.c1": "100", "rel.c2": "15"} {
-		_, err = w.qlt.GrantRelease(w.qc, qltapi.GrantRelease{IdempotencyKey: w.key(), ReleaseID: id, Subject: ref, Quantity: q, ValidUntil: until})
+	// In this order: a release counts the conforming quantity before the conceded one, so rel.c1 takes
+	// the 100 conforming and rel.c2, granted after it, is the conceded 15.
+	for _, r := range []struct{ id, quantity string }{{"rel.c1", "100"}, {"rel.c2", "15"}} {
+		_, err = w.qlt.GrantRelease(w.qc, qltapi.GrantRelease{IdempotencyKey: w.key(), ReleaseID: r.id, Subject: ref, Quantity: r.quantity, ValidUntil: until})
 		w.must(err)
 	}
 	d := w.delivered("commitment.c", "115")
