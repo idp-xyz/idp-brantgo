@@ -223,7 +223,11 @@ type agentPhase struct {
 	anyVersion bool
 }
 
-// runAgent runs phase p on the trial's task and returns the last task view it read.
+// runAgent runs phase p on the trial's task and returns the last task view it read. The scripted
+// suite writes p.steps, which name server values the harness already knows. The live suite does
+// not: the worker is the live model, and the phase uses the read tools (rfq.get, cost_snapshot.list,
+// config.lookup, and the others) to find those references. The live arm is not executed here when
+// IDP_BRANT_MODEL_API_KEY is unset.
 func (t *trial) runAgent(ctx context.Context, p agentPhase) (map[string]any, error) {
 	rec := PhaseRecord{Name: p.name, ScriptSteps: len(p.steps), StartedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	before, err := t.modelCalls(ctx)

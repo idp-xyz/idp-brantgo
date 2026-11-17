@@ -189,7 +189,7 @@ func TestMoneyAndOutcomes(t *testing.T) {
 // goal code, its expected outcome, a flow and a grader; names are unique.
 func TestTheFixedSet(t *testing.T) {
 	names := familyNames()
-	if len(names) != 12 || names[0] != "normal" {
+	if len(names) != 13 || names[0] != "normal" || names[len(names)-1] != "reads" {
 		t.Fatal(names)
 	}
 	seen := map[string]bool{}
@@ -216,7 +216,7 @@ func TestFlags(t *testing.T) {
 	t.Setenv("IDP_BRANT_MIGRATOR_DSN", "")
 	base := []string{"-dsn", "postgres://a", "-migrator-dsn", "postgres://m"}
 	cfg, err := parseFlags(base)
-	if err != nil || cfg.suite != suiteScripted || cfg.trials != 5 || len(cfg.families) != 12 {
+	if err != nil || cfg.suite != suiteScripted || cfg.trials != 5 || len(cfg.families) != 13 {
 		t.Fatal(cfg, err)
 	}
 	if _, err = parseFlags([]string{"-trials", "1"}); err == nil {

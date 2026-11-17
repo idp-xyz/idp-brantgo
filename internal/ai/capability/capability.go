@@ -74,13 +74,22 @@ type Spec struct {
 	// Tenants limits the capability to these tenants; empty means every tenant (UL AI-Capability:
 	// 适用租户).
 	Tenants []kernel.TenantID
+	// Perm is the permission the owning context requires when that is not the command name.
+	// Empty means Command. A read uses the context's read permission (inq.read, trd.read, …):
+	// the role templates grant those, not one permission per query (A5's gap 9).
+	Perm string
 	// Summary describes the tool to the model.
 	Summary string
 }
 
-// Permission is the permission the owning context's rule requires for the command; for every
-// command an AI may call it is the command name.
-func (s Spec) Permission() string { return s.Command }
+// Permission is the permission the owning context's rule requires. A write's is its command
+// name; a read's is the context's read permission (Perm).
+func (s Spec) Permission() string {
+	if s.Perm != "" {
+		return s.Perm
+	}
+	return s.Command
+}
 
 // AppliesTo reports whether the capability is available to tenant.
 func (s Spec) AppliesTo(tenant kernel.TenantID) bool {
@@ -214,6 +223,11 @@ func checkSpec(s Spec) error {
 		// P0 keeps a content-bound human approval before every step towards an effective quote or
 		// order (baseline 8.7, decision D-7).
 		return bad("a submit capability needs an approval grant")
+	case s.SideEffect == Read && s.Approval != ApprovalNone:
+		// D-7: a read is autonomous. It never waits for, carries or uses an approval grant.
+		return bad("a read never carries an approval grant")
+	case s.Perm != "" && (!commandName.MatchString(s.Perm) || IsHumanOnly(s.Perm)):
+		return bad("permission")
 	case strings.TrimSpace(s.Summary) == "":
 		return bad("summary")
 	}

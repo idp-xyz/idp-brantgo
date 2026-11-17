@@ -25,6 +25,19 @@ type Q01Targets struct {
 	TRD           trdapi.Commands
 	TRDAcceptance trdapi.AcceptanceCommands
 	TRDOrders     trdapi.OrderCommands
+	// The reads (S4 G1). Each field is the owning context's api query the read calls; nil refuses
+	// the read with errNoTarget instead of panicking, as the command targets do. The interfaces
+	// are the methods the reads use, which the context modules implement.
+	INQReads    rfqReads
+	CSTReads    contextReads
+	CSTLists    snapshotReads
+	POLLists    configReads
+	CATReads    skuReads
+	PTYReads    partyReads
+	PTYProfiles profileReads
+	TRDReads    tradingReads
+	EVDReads    sourceReads
+	EVDExtracts extractReads
 }
 
 // errNoTarget is the error of a capability whose context was not given.
@@ -36,8 +49,12 @@ var errNoTarget = errors.New("capability: the context of this capability is not 
 // recording — autonomous under a delegation; order preparation and order review requests — each
 // with a human-issued approval grant. Every other command is refused (default deny); the
 // human-only commands (rfq.confirm_scope, quote.freeze, quote.submit_review, quote.activate,
-// quote.response.verify, order.activate, ...) can never be added. Reads are not capabilities yet:
-// the agent runner (unit C2) adds the ones it needs.
+//
+//	quote.response.verify, order.activate, ...) can never be added. The reads a Q01 draft has to
+//
+// name — the RFQ, the RFQ's cost snapshots, the configurations in force, the SKUs, the customer
+// and its trading profile, the quote, the response, the order and the source — are capabilities
+// of class read (S4 G1, decision D-7). They are not actions in TSK.
 func Q01(t Q01Targets) ([]Capability, error) {
 	var out []Capability
 	var errs []error
@@ -201,6 +218,11 @@ func Q01(t Q01Targets) ([]Capability, error) {
 			}
 			return t.TRDOrders.RequestOrderReview(ctx, c)
 		}))
+	reads, err := readCapabilities(t)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, reads...)
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}

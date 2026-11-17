@@ -39,9 +39,10 @@ var (
 	_ api.ScenarioQueries   = (*Module)(nil)
 	_ api.EvaluationLookups = (*Module)(nil)
 
-	_ api.SnapshotCommands = (*Module)(nil)
-	_ api.SnapshotQueries  = (*Module)(nil)
-	_ api.SnapshotLookups  = (*Module)(nil)
+	_ api.SnapshotCommands   = (*Module)(nil)
+	_ api.SnapshotQueries    = (*Module)(nil)
+	_ api.SnapshotLookups    = (*Module)(nil)
+	_ api.RfqSnapshotQueries = (*Module)(nil)
 
 	// S5-16: the snapshot's components by cost category for FUL (R78).
 	_ api.ComponentLookups = (*Module)(nil)

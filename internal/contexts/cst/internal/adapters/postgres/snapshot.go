@@ -73,6 +73,43 @@ func SnapshotOfScenario(ctx context.Context, exec bentopg.Executor, scope kernel
 		WHERE tenant_id = $1 AND company_id = $2 AND scenario_id = $3`, string(scope.Tenant), string(scope.Company), id))
 }
 
+// RfqSnapshotRow is one cost snapshot bound to an RFQ, without its document or component graph.
+type RfqSnapshotRow struct {
+	SnapshotID      string
+	ResultHash      string
+	ScenarioID      string
+	ContextID       string
+	ContextRevision int64
+	RfqID           string
+	RfqRowVersion   int64
+	Currency        string
+	TotalMinor      string
+	OwnerActor      string
+	OwnerTeam       string
+}
+
+// SnapshotsOfRfq returns the snapshots whose frozen costing-context revision binds rfqID, oldest
+// first, at most limit rows. The document and the component graph are not read.
+func SnapshotsOfRfq(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, rfqID string, limit int) ([]RfqSnapshotRow, error) {
+	rows, err := exec.Query(ctx, `SELECT s.snapshot_id, s.result_hash, s.scenario_id, s.context_id, s.context_revision,
+		r.rfq_id, coalesce(r.rfq_row_version, 0), s.currency, s.total_minor::text, s.owner_actor_id, coalesce(s.owner_team_id, '')
+		FROM brant_cst.cost_snapshot s
+		JOIN brant_cst.costing_context_revision r
+			ON r.tenant_id = s.tenant_id AND r.company_id = s.company_id
+			AND r.context_id = s.context_id AND r.revision = s.context_revision
+		WHERE s.tenant_id = $1 AND s.company_id = $2 AND r.rfq_id = $3
+		ORDER BY s.frozen_at, s.snapshot_id
+		LIMIT $4`, string(scope.Tenant), string(scope.Company), rfqID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (RfqSnapshotRow, error) {
+		var s RfqSnapshotRow
+		return s, row.Scan(&s.SnapshotID, &s.ResultHash, &s.ScenarioID, &s.ContextID, &s.ContextRevision,
+			&s.RfqID, &s.RfqRowVersion, &s.Currency, &s.TotalMinor, &s.OwnerActor, &s.OwnerTeam)
+	})
+}
+
 func oneSnapshot(rows pgx.Rows, err error) (*snapshot.Snapshot, error) {
 	if err != nil {
 		return nil, err

@@ -14,6 +14,35 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
+// ConfigsInForce returns the revisions of kind in force now, audited as config.lookup (S4 G1). The
+// revision body is never read. bank_account is refused: its content is pol.read_sensitive, which an
+// agent read does not return even as an account number.
+func (s Service) ConfigsInForce(ctx context.Context, kind string) (api.ConfigsInForce, error) {
+	var out api.ConfigsInForce
+	err := s.Ledger.Read(ctx, CommandLookupConfig, kind, func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		switch {
+		case kind == api.KindBankAccount:
+			return kernel.Reject(kernel.CodePermissionDenied, "/args/Kind", "a bank account is pol.read_sensitive content, which this read never returns")
+		case !api.KindKnown(kind):
+			return kernel.Reject(kernel.CodeSchemaInvalid, "/args/Kind", "")
+		}
+		rows, err := postgres.ConfigsInForce(ctx, exec, scope(ctx), kind, kernel.Instant(s.Clock.Now()), api.MaxConfigsInForce+1)
+		if err != nil {
+			return err
+		}
+		out = api.ConfigsInForce{Kind: kind, Configs: []api.ConfigInForce{}}
+		for _, row := range rows {
+			if len(out.Configs) == api.MaxConfigsInForce {
+				out.Truncated = true
+				break
+			}
+			out.Configs = append(out.Configs, api.ConfigInForce{ID: row.ID, Revision: row.Revision})
+		}
+		return nil
+	})
+	return out, err
+}
+
 // GetConfig returns a configuration and all its revisions, audited (Python foundation_get). Bank
 // account revisions are filtered and masked (accounts).
 func (s Service) GetConfig(ctx context.Context, kind, id string) (api.ConfigView, error) {

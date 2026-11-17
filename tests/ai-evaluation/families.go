@@ -26,8 +26,10 @@ type family struct {
 	bundleSHA string
 	// approve decides whether the owner approves a proposal of command; nil approves every one.
 	approve func(t *trial, command string) bool
-	run     func(ctx context.Context, t *trial) error
-	grade   func(ctx context.Context, t *trial)
+	// capabilities, when set, is the delegation instead of clerkCapabilities.
+	capabilities []string
+	run          func(ctx context.Context, t *trial) error
+	grade        func(ctx context.Context, t *trial)
 }
 
 var fixedSet = []*family{
@@ -47,9 +49,9 @@ var fixedSet = []*family{
 		goal: "the owner revokes the agent's delegation while the task waits for an approval grant", goalCode: "order_active",
 		expected: "the runner pauses the task (conflict, PERMISSION_DENIED) for the owner; no order exists; no approval grant is used",
 		run:      runAN04, grade: gradeAN04},
-	{name: "an05", design: []string{"AN05", "CT11", "BC-AT18", "TSK-INV-003", "X-INV-001"},
+	{name: "an05", design: []string{"AN05", "CT11", "BC-AT18", "TSK-INV-003", "X-INV-001", "F1"},
 		goal: "the agent's worker is killed (SIGKILL) after its order.prepare committed; a new worker repeats the call", goalCode: "order_active",
-		expected: "exactly one order and one committed order.prepare action; the repeat is the same intent and replays; the task completes (ai_with_required_review)",
+		expected: "exactly one order and one committed order.prepare; the repeat replays with no second approval grant and no second wait; the task completes (ai_with_required_review)",
 		run:      runAN05, grade: gradeAN05},
 	{name: "an06", design: []string{"AN06", "SM-TSK-TASK waiting_approval"},
 		goal: "brant-api and the agent's worker stop while the task waits for approval; a duplicate customer reply arrives; both restart", goalCode: "order_active",
@@ -82,6 +84,19 @@ var fixedSet = []*family{
 		goal: "the task names an ExecutionBundle the runner does not run", goalCode: "order_active", bundleSHA: strings.Repeat("0", 64),
 		expected: "paused (conflict) with EXECUTION_BUNDLE_INCOMPATIBLE before any model call",
 		run:      runCT14, grade: gradeCT14},
+	{name: "reads", design: []string{"S4-03", "D-7", "G1", "AI-INV-001", "X-INV-003"},
+		goal:     "the scripted model is offered the Q01 reads, calls them, and is refused a read outside its delegation and a read of an object it cannot see",
+		goalCode: "quote_ready",
+		expected: "delegated reads succeed, are hashed in the ledger and are not TSK actions; an undelegated read and a foreign object are refused; bank_account is refused; the bundle lists the reads",
+		run:      runReads, grade: gradeReads},
+}
+
+func init() {
+	for _, f := range fixedSet {
+		if f.name == "reads" {
+			f.capabilities = readDelegation
+		}
+	}
 }
 
 func familyNames() []string {
@@ -170,6 +185,8 @@ func gradeNormal(ctx context.Context, t *trial) {
 	t.assertPayable(ctx, "96000")
 	t.assert("approval grants issued by the owner", "2", fmt.Sprint(t.approval))
 	t.assert("committed order.prepare actions", "1", fmt.Sprint(t.countActions(ctx, "order.prepare")))
+	t.assert("approval waits recorded as waiting", "2", fmt.Sprint(t.countToolState(ctx, "waiting", "WAITING_APPROVAL")))
+	t.assert("no approval wait recorded as GRANT_INVALID", "0", fmt.Sprint(t.refusedTools(ctx, "GRANT_INVALID")))
 	// The agent's lines match the truth: the owner verifies each as it stands and states no field.
 	t.assert("INQ corrections", "0", fmt.Sprint(len(t.rec.Corrections)))
 }
@@ -402,8 +419,7 @@ func runAN05(ctx context.Context, t *trial) error {
 	}
 	extra := t.approval - before - 1
 	t.rec.Authority["approvals_requested_again_after_restart"] = extra
-	t.note("the repeated order.prepare after the restart asked for %d further approval grant(s) although its intent had committed "+
-		"(the runner looks for an issued grant before the executor finds the committed intent)", extra)
+	t.note("the repeated order.prepare after the restart asked for %d further approval grant(s); a committed intent replays with no new grant", extra)
 	if err := t.activateOrder(ctx); err != nil {
 		return err
 	}
@@ -418,6 +434,20 @@ func gradeAN05(ctx context.Context, t *trial) {
 		killed = killed || p.Killed
 	}
 	t.assert("worker killed after the commit", "true", fmt.Sprint(killed))
+	t.assert("no second approval grant for the replayed prepare", "0", fmt.Sprint(t.rec.Authority["approvals_requested_again_after_restart"]))
+	if g, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/delegations/"+delegationID+"/approval_grants"); err == nil {
+		used, issued := 0, 0
+		for _, x := range list(g["approval_grants"]) {
+			switch str(dig(x, "status")) {
+			case "used":
+				used++
+			case "issued":
+				issued++
+			}
+		}
+		t.assert("approval grants used", "2", fmt.Sprint(used))
+		t.assert("approval grants left issued", "0", fmt.Sprint(issued))
+	}
 	a, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/tsk/tasks/"+taskID+"/actions")
 	if err == nil {
 		for _, x := range list(a["actions"]) {
@@ -706,6 +736,21 @@ func gradeAN09(ctx context.Context, t *trial) {
 	t.assert("RFQ unchanged by the refused calls (row version)", "1", fmt.Sprint(num(r["row_version"]))+codeOf(err))
 }
 
+// countToolState counts tool calls the ledger records in state with code.
+func (t *trial) countToolState(ctx context.Context, state, code string) int {
+	mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls")
+	if err != nil {
+		return -1
+	}
+	n := 0
+	for _, x := range list(mc["calls"]) {
+		if str(dig(x, "kind")) == "tool" && str(dig(x, "state")) == state && str(dig(x, "code")) == code {
+			n++
+		}
+	}
+	return n
+}
+
 // refusedTools counts the task's tool calls the ledger records as failed with code.
 func (t *trial) refusedTools(ctx context.Context, code string) int {
 	mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls")
@@ -848,4 +893,89 @@ func gradeCT14(ctx context.Context, t *trial) {
 	t.assert("TSK pause cause", "conflict", str(dig(v, "pause", "cause")))
 	t.assert("pause reason", "true", fmt.Sprint(strings.Contains(str(dig(v, "pause", "reason")), "EXECUTION_BUNDLE_INCOMPATIBLE")))
 	t.assert("model calls", "0", fmt.Sprint(t.rec.Cost.ModelCalls))
+}
+
+// runReads exercises the read tools with the scripted model. The model cannot use what it read;
+// the records show that the reads were offered, admitted, hashed and that a read outside the
+// delegation or of an object the context does not return is refused.
+func runReads(ctx context.Context, t *trial) error {
+	// The reads run while the task is still running, before draftRFQ's "done" verifies the goal.
+	// A later phase would find the task already waiting_input, and the runner would not call the model.
+	return t.draftRFQ(ctx, brcAgentLines(),
+		turn(
+			call{"rfq.get", map[string]any{"RfqID": rfqID}},
+			call{"party.get", map[string]any{"PartyID": "customer.1"}},
+			call{"sku.get", map[string]any{"SkuID": brcLines[0].sku}},
+			call{"config.lookup", map[string]any{"Kind": "currency"}},
+			call{"source.get", map[string]any{"SourceID": sourceID}},
+			call{"cost_snapshot.list", map[string]any{"RfqID": rfqID}},
+		),
+		turn(
+			call{"order.get", map[string]any{"OrderID": orderID}},
+			call{"rfq.get", map[string]any{"RfqID": "rfq.other-tenant"}},
+			call{"config.lookup", map[string]any{"Kind": "bank_account"}},
+		))
+}
+
+func gradeReads(ctx context.Context, t *trial) {
+	v, err := t.task(ctx)
+	if err == nil {
+		t.assert("TSK lifecycle", "waiting_input", str(v["lifecycle"]))
+	}
+	mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls")
+	if err != nil {
+		t.assert("model calls readable", "ok", codeOf(err))
+		return
+	}
+	okRead := map[string]bool{}
+	for _, x := range list(mc["calls"]) {
+		if str(dig(x, "kind")) != "tool" {
+			continue
+		}
+		cmd, state, code := str(dig(x, "tool_command")), str(dig(x, "state")), str(dig(x, "code"))
+		switch cmd {
+		case "rfq.get", "party.get", "sku.get", "source.get", "cost_snapshot.list":
+			if state == "succeeded" && len(str(dig(x, "input_sha256"))) == 64 && len(str(dig(x, "output_sha256"))) == 64 && code == "" {
+				okRead[cmd] = true
+			}
+		case "config.lookup":
+			if state == "succeeded" && code == "" {
+				okRead["config.lookup"] = true
+			}
+			if state == "failed" && code == "PERMISSION_DENIED" {
+				okRead["bank_account"] = true
+			}
+		case "order.get":
+			if state == "failed" && code == "GRANT_INVALID" {
+				okRead["undelegated"] = true
+			}
+		}
+		if cmd == "rfq.get" && state == "failed" && code == "NOT_FOUND" {
+			okRead["foreign"] = true
+		}
+	}
+	for _, name := range []string{"rfq.get", "party.get", "sku.get", "source.get", "cost_snapshot.list", "config.lookup", "bank_account", "undelegated", "foreign"} {
+		t.assert("read "+name, "true", fmt.Sprint(okRead[name]))
+	}
+	a, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/tsk/tasks/"+taskID+"/actions")
+	if err == nil {
+		for _, x := range list(a["actions"]) {
+			cmd := str(dig(x, "target", "command"))
+			if cmd == "rfq.get" || cmd == "source.get" || cmd == "party.get" {
+				t.assert("read is not a TSK action", "none", cmd)
+			}
+		}
+	}
+	b, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/execution_bundles/"+t.env.bundle.BundleID+"/"+t.env.bundle.SHA256)
+	if err != nil {
+		t.assert("bundle readable", "ok", codeOf(err))
+		return
+	}
+	var offered int
+	for _, tool := range list(dig(b, "bundle", "tools")) {
+		if str(dig(tool, "side_effect")) == "read" {
+			offered++
+		}
+	}
+	t.assert("bundle lists the ten reads", "10", fmt.Sprint(offered))
 }

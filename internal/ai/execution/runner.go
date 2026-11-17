@@ -618,11 +618,17 @@ func (t *turn) toolCall(call model.ToolCall, toolDel map[string]policy.Delegatio
 		switch {
 		case runErr == nil:
 		case errors.Is(runErr, errWaiting):
-			o.State, o.Code = executionevidence.StateFailed, codes.GrantInvalid
+			// A wait is not a refusal (D1 finding 5): the call did not run, and it is not GRANT_INVALID.
+			o.State, o.Code = executionevidence.StateWaiting, executionevidence.CodeWaitingApproval
 		case errors.Is(runErr, model.ErrUnavailable):
 			o.State, o.Code = executionevidence.StateUnavailable, codes.ToolUnavailable
 		default:
 			o.State, o.Code = executionevidence.StateFailed, errorCode(runErr)
+		}
+		if t.isRead(call.Name) {
+			// A read is recorded as hashes, never as the records it returned (E-6).
+			o.InputSHA256 = executionevidence.SHA256Hex(call.Arguments)
+			o.OutputSHA256 = executionevidence.SHA256Hex([]byte(answer))
 		}
 		if o.ActionID != "" && !kernel.ValidIdentifier(o.ActionID) {
 			o.ActionID = ""
@@ -649,6 +655,42 @@ func (t *turn) toolCall(call model.ToolCall, toolDel map[string]policy.Delegatio
 // errWaiting ends a turn whose task now waits for a person.
 var errWaiting = errors.New("execution: the task waits")
 
+// isRead reports whether name is a registered read. An unregistered name is not.
+func (t *turn) isRead(name string) bool {
+	if t.r.Gateway.Registry == nil {
+		return false
+	}
+	c, err := t.r.Gateway.Registry.Lookup(t.scope.Tenant, name, "/command")
+	return err == nil && c.SideEffect == capability.Read
+}
+
+// readCall admits and runs a read. The answer is the bounded projection; the ledger keeps its
+// hashes. There is no TSK action and no approval grant.
+func (t *turn) readCall(b gateway.Binding, c gateway.Call) (string, Receipt, error) {
+	admitted, err := t.r.Gateway.Admit(t.agent, b, c, "rd.1")
+	if err != nil {
+		return refusal(err), Receipt{}, err
+	}
+	res, err := admitted.Run(t.agent)
+	if err != nil {
+		return refusal(err), Receipt{}, err
+	}
+	body := map[string]any{"ok": true, "read": c.Capability.Command, "result": res.Detail}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return "", Receipt{}, err
+	}
+	if len(raw) > capability.MaxReadBytes {
+		body["result"] = map[string]any{"object_id": res.ObjectID, "truncated": true,
+			"omitted": "the result exceeded 16384 bytes and was left out"}
+		raw, err = json.Marshal(body)
+		if err != nil {
+			return "", Receipt{}, err
+		}
+	}
+	return string(raw), Receipt{}, nil
+}
+
 func (t *turn) runTool(call model.ToolCall, toolDel map[string]policy.Delegation) (string, Receipt, error) {
 	d, ok := toolDel[call.Name]
 	if !ok {
@@ -659,7 +701,22 @@ func (t *turn) runTool(call model.ToolCall, toolDel map[string]policy.Delegation
 	if err != nil {
 		return refusal(err), Receipt{}, err
 	}
+	if c.Capability.SideEffect == capability.Read {
+		// A read changes nothing, so it is not an ActionExecution (TSK-INV-003, D-2). The gateway
+		// still admits it: the delegation and both grants, and never an approval grant.
+		return t.readCall(b, c)
+	}
 	if c.NeedsGrant() {
+		// Settle the intent with its target before asking for a grant (D1 finding 2, AN05). A
+		// committed intent replays from TSK's record of the target's ledger; nothing is sent and no
+		// new grant is used. An intent the target has not committed still needs its grant.
+		intent := IntentOf(t.view.TaskID, c.Capability.Command, c.Object.ID, c.RequestHash)
+		if rcpt, ok, err := t.r.Executor.Settled(t.agent, t.view.TaskID, intent); err != nil {
+			return "", Receipt{}, err
+		} else if ok {
+			t.res.Receipts = append(t.res.Receipts, rcpt)
+			return answerOf(rcpt), rcpt, nil
+		}
 		g, err := t.r.grantFor(t.agent, t.scope, d, c)
 		if err != nil {
 			return "", Receipt{}, err
@@ -841,15 +898,17 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 		Version  int64  `json:"object_version"`
 	}
 	f := struct {
-		TaskID         string            `json:"task_id"`
-		Goal           string            `json:"goal"`
-		Target         tskapi.Target     `json:"target"`
-		Source         *tskapi.SourceRef `json:"source,omitempty"`
-		SourceText     string            `json:"source_text,omitempty"`
-		BoundQuote     string            `json:"bound_quote,omitempty"`
-		Actions        []actionFact      `json:"actions"`
-		ApprovalGrants []grantFact       `json:"approval_grants,omitempty"`
-		Rules          string            `json:"rules"`
+		TaskID          string            `json:"task_id"`
+		Goal            string            `json:"goal"`
+		Target          tskapi.Target     `json:"target"`
+		Source          *tskapi.SourceRef `json:"source,omitempty"`
+		SourceText      string            `json:"source_text,omitempty"`
+		SourceTruncated bool              `json:"source_truncated,omitempty"`
+		SourceSHA256    string            `json:"source_sha256,omitempty"`
+		BoundQuote      string            `json:"bound_quote,omitempty"`
+		Actions         []actionFact      `json:"actions"`
+		ApprovalGrants  []grantFact       `json:"approval_grants,omitempty"`
+		Rules           string            `json:"rules"`
 	}{TaskID: v.TaskID, Goal: v.GoalCode, Target: v.Target, Source: v.Source,
 		Rules: "Use only the tools offered; their arguments are the fields of the command. Scope, actor, task, epoch and grants are the platform's. " +
 			"Drafts are reviewed and made effective by people. Answer without a tool call when nothing is left for you to do; the platform then verifies the goal."}
@@ -873,7 +932,14 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 	if t.r.Sources != nil && v.Source != nil && v.Source.Kind == tskapi.SourceEVD {
 		src, err := t.r.Sources.GetSource(t.agent, v.Source.ID)
 		if err == nil {
-			f.SourceText = src.ContentText
+			// The full extract is source.get. The fact carries a bounded excerpt so a turn stays
+			// within what one model call can hold (S4 G1).
+			text, cut := clipRunes(src.ContentText, 2000)
+			f.SourceText = text
+			if cut {
+				f.SourceTruncated = true
+				f.SourceSHA256 = src.ContentSHA256
+			}
 		} else if _, ok := kernel.AsRejection(err); !ok {
 			return "", err
 		}
@@ -962,8 +1028,13 @@ func hashJSON(v any) string {
 }
 
 func bounded(s string, max int) string {
+	text, _ := clipRunes(s, max)
+	return text
+}
+
+func clipRunes(s string, max int) (string, bool) {
 	if utf8.RuneCountInString(s) <= max {
-		return s
+		return s, false
 	}
-	return string([]rune(s)[:max])
+	return string([]rune(s)[:max]), true
 }

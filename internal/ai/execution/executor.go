@@ -329,6 +329,45 @@ func (e Executor) reconcile(ctx context.Context, task, actionID string, version 
 		TaskID: task, ActionID: actionID})
 }
 
+// Settled asks what became of the business intent of a task-bound command, and reconciles an open
+// intent with its target first (baseline 17.2). A committed intent returns the receipt TSK stored
+// from the target's ledger and ok; nothing is sent. An intent TSK does not have, or that the target
+// has not committed, returns ok false.
+//
+// A committed action is not asked of the target again: TSK refuses action.reconcile on a final
+// action because that record is already the target's answer. The replay therefore never enters the
+// target's command ledger. An AI actor's call still reaches that ledger only with the proof of a
+// used approval grant, and a stored result is no exception there (S4 F1): this path does not call it.
+func (e Executor) Settled(ctx context.Context, taskID, intentID string) (Receipt, bool, error) {
+	if !kernel.ValidIdentifier(taskID) || !kernel.ValidIdentifier(intentID) {
+		return Receipt{}, false, nil
+	}
+	id := tskapi.ActionIDOf(intentID)
+	a, err := e.Tasks.GetAction(ctx, id)
+	if err != nil {
+		if rej, ok := kernel.AsRejection(err); ok && rej.Code == kernel.CodeNotFound {
+			return Receipt{}, false, nil
+		}
+		return Receipt{}, false, err
+	}
+	if a.TaskID != "" && a.TaskID != taskID {
+		return Receipt{}, false, nil
+	}
+	if a.State == tskapi.ActionSubmitted || a.State == tskapi.ActionUnknown {
+		if _, err = e.reconcile(ctx, taskID, id, a.Version); err != nil {
+			return Receipt{}, false, err
+		}
+		if a, err = e.Tasks.GetAction(ctx, id); err != nil {
+			return Receipt{}, false, err
+		}
+	}
+	if a.State != tskapi.ActionCommitted || a.Result == nil {
+		return Receipt{}, false, nil
+	}
+	return Receipt{Stage: Verified, TaskID: taskID, BusinessIntentID: a.BusinessIntentID, ActionID: id,
+		Attempt: a.Attempts, Target: a.Target, Stored: a.Result, Replayed: true}, true, nil
+}
+
 // Recover reconciles every submitted or unknown action of a task with its target (baseline 17.2:
 // a restarted executor first learns what became of what was in flight; AI-INV-003 恢复前核查已有副作用)
 // and returns the actions as they are afterwards.

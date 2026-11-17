@@ -29,6 +29,7 @@ import (
 // Read commands and permissions.
 const (
 	CommandGetConfig        = "config.get"
+	CommandLookupConfig     = "config.lookup"
 	CommandGetSnapshot      = "snapshot.get"
 	CommandAudit            = "pol.audit"
 	CommandReadSensitive    = "config.read_sensitive"
@@ -56,6 +57,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandIssueNumber, Permission: api.CommandIssueNumber, ActorKinds: humanOrAgent},
 		{Command: api.CommandCaptureSnapshot, Permission: api.CommandCaptureSnapshot, ActorKinds: humanOrAgent},
 		{Command: CommandGetConfig, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandLookupConfig, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 		{Command: CommandReadSensitive, Permission: PermissionReadSensitive, ActorKinds: humanOrProcess},

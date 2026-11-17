@@ -19,13 +19,19 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
+// q01Targets are the Q01 capabilities over the contexts' commands and reads (S4 G1).
+func q01Targets(c *Contexts) capability.Q01Targets {
+	return capability.Q01Targets{EVD: c.EVD, Extracts: c.EVD, INQ: c.INQ, CST: c.CST, CSTScenarios: c.CST, TRD: c.TRD,
+		TRDAcceptance: c.TRD, TRDOrders: c.TRD, INQReads: c.INQ, CSTReads: c.CST, CSTLists: c.CST, POLLists: c.POL,
+		CATReads: c.CAT, PTYReads: c.PTY, PTYProfiles: c.PTY, TRDReads: c.TRD, EVDReads: c.EVD, EVDExtracts: c.EVD}
+}
+
 // newAI assembles the AI layer (internal/ai; ADR-BR-003: not a bounded context) on db, a
 // transaction owner of its own: the Q01 capabilities over the contexts' api (decision D-7), and the
 // execution entry of task-bound steps over TSK and the request identities of the contexts a task
 // step writes (S4 unit C2; decision D-2).
 func newAI(db *bentopg.DB, c *Contexts) (*ai.Layer, error) {
-	reg, err := capability.Q01Registry(capability.Q01Targets{EVD: c.EVD, Extracts: c.EVD, INQ: c.INQ, CST: c.CST, CSTScenarios: c.CST, TRD: c.TRD,
-		TRDAcceptance: c.TRD, TRDOrders: c.TRD})
+	reg, err := capability.Q01Registry(q01Targets(c))
 	if err != nil {
 		return nil, err
 	}

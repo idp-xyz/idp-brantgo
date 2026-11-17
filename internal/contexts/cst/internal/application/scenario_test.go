@@ -103,7 +103,7 @@ func TestSnapshotRulesAndRequestHash(t *testing.T) {
 			t.Errorf("%s: %+v", c, r)
 		}
 	}
-	for _, c := range []string{CommandGetSnapshot, CommandQuerySnapshot, CommandGetAttestation} {
+	for _, c := range []string{CommandGetSnapshot, CommandQuerySnapshot, CommandGetAttestation, CommandListSnapshots} {
 		if rules[c].Permission != PermissionRead {
 			t.Errorf("%s: %+v", c, rules[c])
 		}

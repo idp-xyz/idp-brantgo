@@ -578,6 +578,31 @@ type SnapshotView struct {
 	Entries     []SnapshotEntry
 }
 
+// MaxConfigsInForce bounds one lookup of the configurations of a kind that are in force.
+const MaxConfigsInForce = 40
+
+// ConfigInForce is one published revision in force now. The configuration body is not in it: a
+// lookup by kind never returns pol.read_sensitive content, and it does not return any other kind's
+// body either.
+type ConfigInForce struct {
+	ID       string
+	Revision int64
+}
+
+// ConfigsInForce is the answer of a lookup by kind.
+type ConfigsInForce struct {
+	Kind      string
+	Configs   []ConfigInForce
+	Truncated bool
+}
+
+// InForceQueries is the audited lookup of configurations in force (pol.read).
+type InForceQueries interface {
+	// ConfigsInForce returns the active revisions of kind whose validity contains now, audited as
+	// config.lookup. Kind bank_account is PERMISSION_DENIED. An unknown kind is SCHEMA_INVALID.
+	ConfigsInForce(ctx context.Context, kind string) (ConfigsInForce, error)
+}
+
 // Queries is POL's read side.
 type Queries interface {
 	// GetConfig returns a configuration and its revisions, audited as config.get. Bank accounts

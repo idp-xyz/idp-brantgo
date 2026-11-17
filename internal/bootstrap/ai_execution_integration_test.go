@@ -440,6 +440,23 @@ func TestAgentRunnerWaitsForAnApprovalGrant(t *testing.T) {
 	if actions, err := w.c.TSK.TaskActions(w.clerk, "task.order"); err != nil || len(actions) != 0 {
 		t.Fatalf("actions %+v %v", actions, err)
 	}
+	calls, callErr := w.c.AI.ModelCalls(w.clerk, "task.order")
+	w.must(callErr)
+	var waits int
+	for _, c := range calls {
+		if c.Kind == executionevidence.KindTool && c.ToolCommand == trdapi.CommandPrepareOrder {
+			if c.State != executionevidence.StateWaiting || c.Code != executionevidence.CodeWaitingApproval {
+				t.Fatalf("an approval wait is %s %s, not a failure", c.State, c.Code)
+			}
+			waits++
+		}
+		if c.State == executionevidence.StateFailed && c.Code == "GRANT_INVALID" {
+			t.Fatalf("the wait was recorded as a refusal: %+v", c)
+		}
+	}
+	if waits != 1 {
+		t.Fatalf("waits %d in %+v", waits, calls)
+	}
 	if res = w.turnOn(r, "task.order"); res.ModelCalls != 0 || res.Skipped != "still waiting for the approval grant" {
 		t.Fatalf("turn %+v", res)
 	}
@@ -772,5 +789,129 @@ func TestWorkerAgentModeRunsTheRunner(t *testing.T) {
 	calls := w.ledger("task.worker")
 	if len(calls) != 1 || calls[0].ModelReturned != "scripted-q01-v1" || *calls[0].OutputTokens != 3 {
 		t.Fatalf("ledger %+v", calls)
+	}
+}
+
+// AN05, D1 finding 2, F1: after order.prepare has committed, the runner repeats the call without
+// waiting for another approval grant and without using one. The replay is TSK's stored receipt.
+// Sending the same key to TRD as the agent, with no proof, is still PERMISSION_DENIED: a stored
+// result is no exception at the command ledger.
+func TestAgentRunnerReplaysACommittedIntentWithoutASecondGrant(t *testing.T) {
+	w := newAgentWorld(t, true)
+	_, acc := w.accepted("quote.1")
+	prepare := map[string]any{"OrderID": "order.replay", "QuoteID": acc.QuoteID, "BusinessRevision": acc.BusinessRevision,
+		"BusinessHash": acc.BusinessHash, "AcceptanceID": acc.ObjectID}
+	m := model.NewScripted("scripted-q01-v1", calls(tc("c1", trdapi.CommandPrepareOrder, prepare)),
+		calls(tc("c2", trdapi.CommandPrepareOrder, prepare)), calls(tc("c3", trdapi.CommandPrepareOrder, prepare)), done("订单草稿已在。"))
+	r := w.runner(m)
+	w.aiTask("task.replay", tskapi.GoalOrderActive, tskapi.Target{QuoteID: "quote.1", CustomerID: "customer.1"}, budgetOf(10, 2), bundleRef(r),
+		trdapi.CommandPrepareOrder)
+	res := w.turnOn(r, "task.replay")
+	if res.Waiting != tskapi.WaitApproval {
+		t.Fatalf("first turn %+v", res)
+	}
+	hash := strings.TrimPrefix(w.taskView("task.replay").Wait.Items[1], "request_hash ")
+	_, err := w.c.AI.IssueApprovalGrant(w.clerk, approvalgrantIssue(w, "grant.replay", "del.task.replay", trdapi.CommandPrepareOrder, hash, "quote.1",
+		acc.BusinessRevision))
+	w.must(err)
+	res = w.turnOn(r, "task.replay")
+	if res.Waiting != "" || len(res.Receipts) < 2 || !res.Receipts[len(res.Receipts)-1].Replayed {
+		t.Fatalf("replay turn %+v", res)
+	}
+	grants, err := w.c.AI.ApprovalGrantsOf(w.clerk, "del.task.replay")
+	w.must(err)
+	if len(grants) != 1 || grants[0].Status != "used" || grants[0].GrantID != "grant.replay" {
+		t.Fatalf("grants %+v", grants)
+	}
+	var replayed, waited int
+	for _, c := range w.ledger("task.replay") {
+		if c.Kind != executionevidence.KindTool || c.ToolCommand != trdapi.CommandPrepareOrder {
+			continue
+		}
+		switch c.State {
+		case executionevidence.StateWaiting:
+			waited++
+		case executionevidence.StateSucceeded:
+			replayed++
+		default:
+			t.Fatalf("prepare call %s %s", c.State, c.Code)
+		}
+	}
+	if waited != 1 || replayed != 2 {
+		t.Fatalf("waited %d replayed %d", waited, replayed)
+	}
+	actionID := res.Receipts[0].ActionID
+	_, err = w.c.TRD.PrepareOrder(w.agent, trdapi.PrepareOrder{IdempotencyKey: actionID, OrderID: "order.replay", QuoteID: acc.QuoteID,
+		BusinessRevision: acc.BusinessRevision, BusinessHash: acc.BusinessHash, AcceptanceID: acc.ObjectID})
+	w.want(err, kernel.CodePermissionDenied)
+	if o := w.getOrder("order.replay"); o.Status != trdapi.OrderDraft || o.RowVersion != 1 {
+		t.Fatalf("order %+v", o)
+	}
+}
+
+// A scripted model reads through the gateway. The read is audited by the owning context, counted
+// and hashed in the ledger, and it is not a TSK action. A read the delegation does not list is
+// refused, and a read of an object the context does not return (another tenant's object is the
+// same answer: NOT_FOUND, no content) is refused.
+func TestAgentRunnerReadsThroughTheGateway(t *testing.T) {
+	w := newAgentWorld(t, false)
+	_, err := w.c.EVD.RegisterSource(w.clerk, evdapi.RegisterSource{IdempotencyKey: w.key(), SourceID: "src.read",
+		SourceKind: evdapi.KindManualText, ContentText: "合成询价：120件 sku.1，请报价。"})
+	w.must(err)
+	m := model.NewScripted("scripted-q01-v1", calls(
+		tc("c1", capability.ReadSource, map[string]any{"SourceID": "src.read"}),
+		tc("c2", capability.ReadRfq, map[string]any{"RfqID": "rfq.other-tenant"}),
+		tc("c3", capability.ReadOrder, map[string]any{"OrderID": "order.none"}),
+	), done("读完了。"))
+	r := w.runner(m)
+	w.aiTask("task.read", tskapi.GoalQuoteReady, tskapi.Target{RfqID: "rfq.1", CustomerID: "customer.1"}, budgetOf(10, 2), bundleRef(r),
+		capability.ReadSource, capability.ReadRfq)
+	res := w.turnOn(r, "task.read")
+	if res.Waiting != "" || res.Paused != "" {
+		t.Fatalf("turn %+v", res)
+	}
+	actions, err := w.c.TSK.TaskActions(w.clerk, "task.read")
+	w.must(err)
+	if len(actions) != 0 {
+		t.Fatalf("a read was recorded as an action: %+v", actions)
+	}
+	var sourceRead, foreign, undelegated bool
+	for _, c := range w.ledger("task.read") {
+		if c.Kind != executionevidence.KindTool {
+			continue
+		}
+		switch c.ToolCommand {
+		case capability.ReadSource:
+			sourceRead = c.State == executionevidence.StateSucceeded && len(c.InputSHA256) == 64 && len(c.OutputSHA256) == 64 && c.ActionID == ""
+		case capability.ReadRfq:
+			foreign = c.State == executionevidence.StateFailed && c.Code == kernel.CodeNotFound
+		case capability.ReadOrder:
+			undelegated = c.State == executionevidence.StateFailed && c.Code == "GRANT_INVALID"
+		}
+	}
+	if !sourceRead || !foreign || !undelegated {
+		t.Fatalf("ledger %+v", w.ledger("task.read"))
+	}
+	audit, err := w.c.EVD.Audit(w.clerk)
+	w.must(err)
+	var audited bool
+	for _, e := range audit {
+		if e.Command == capability.ReadSource && e.ObjectID == "src.read" && e.Outcome == "read" && e.Actor.ID == agentID {
+			audited = true
+		}
+	}
+	if !audited {
+		t.Fatalf("EVD did not audit the read: %+v", audit)
+	}
+	b, err := w.c.AI.ExecutionBundle(w.clerk, r.Ref())
+	w.must(err)
+	var offered bool
+	for _, tool := range b.Tools {
+		if tool.Command == capability.ReadSource && tool.SideEffect == "read" && tool.Approval == "none" {
+			offered = true
+		}
+	}
+	if !offered {
+		t.Fatal("the bundle does not offer the read")
 	}
 }

@@ -300,13 +300,29 @@ func TestQ01IsTheAgentTemplate(t *testing.T) {
 		}
 		writes = append(writes, p)
 	}
-	if got := reg.Commands(); !slices.Equal(got, writes) {
-		t.Fatalf("Q01 capabilities %v, template writes %v", got, writes)
+	var gotWrites, gotReads []string
+	for _, c := range reg.Capabilities() {
+		if c.SideEffect == Read {
+			gotReads = append(gotReads, c.Command)
+			continue
+		}
+		gotWrites = append(gotWrites, c.Command)
+	}
+	if !slices.Equal(gotWrites, writes) {
+		t.Fatalf("Q01 writes %v, template writes %v", gotWrites, writes)
+	}
+	if len(gotReads) == 0 {
+		t.Fatal("Q01 registers no read")
 	}
 	var granted []string
 	for _, c := range reg.Capabilities() {
 		if c.Approval == ApprovalGrant {
 			granted = append(granted, c.Command)
+		}
+		if c.SideEffect == Read {
+			if c.Approval != ApprovalNone || !strings.HasSuffix(c.Permission(), ".read") || IsHumanOnly(c.Command) {
+				t.Errorf("%s: a read never carries a grant, permission %s", c.Command, c.Permission())
+			}
 		}
 		if !slices.Contains(tpl.Permissions, c.Permission()) || IsHumanOnly(c.Command) {
 			t.Errorf("%s: permission %s", c.Command, c.Permission())
