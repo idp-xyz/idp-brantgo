@@ -8,7 +8,7 @@ import (
 )
 
 // Opening refund material (S5 unit C10, WBS S5-20; OpeningPosition; CNX-INV-004; MD-51; CN-R09; CN-AT16 CNX half,
-// BT17). Synthetic vectors: CN-E01 forbids invented refund arithmetic, so only quantities are judged.
+// STL-OB-01). Synthetic vectors: CN-E01 forbids invented refund arithmetic, so only quantities are judged.
 
 // CN-AT16 (未退税资料导入; 截止、来源余额可核对): declarations finished before the cutoff consumed 600 of the 1,000 PCS
 // invoice line for export_refund. The remaining 400 is all a later allocation may take (TAX_EVIDENCE_EXCEEDED for

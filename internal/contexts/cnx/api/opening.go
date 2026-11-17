@@ -12,7 +12,7 @@ import (
 
 // Opening refund material (S5 unit C10, WBS S5-20; tactical model CNX-AGG-TaxRefundCase value object
 // OpeningPosition, SM-CNX-TAXCASE, CNX-INV-004; Context Map MD-51; baseline 11.2 期初、防重、切换, CN-R04, CN-R08, CN-R09,
-// CN-E01; CN-AT16 CNX half, BT17).
+// CN-E01; CN-AT16 CNX half, STL-OB-01).
 //
 //	tax_refund_case.record_opening  human only (tax specialist): registers one item of the refund material the books
 //	                                held at the cutoff instant cutoff_at, from source_document (its reference in the

@@ -886,7 +886,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 
 	s.phase = "BT18: shipped, not settled"
 	r := s.recordCharge("freight.brc", "estimated", "60.00", today(), map[string]any{"kind": "logistics_offer", "party_id": "provider.1",
-		"reference": "log.1"}, nil, "provider.1 海运报价 log.1：F1 60.00 USD")
+		"reference": "log.1"}, nil, "provider.1 交货前内陆运费报价 log.1：F1 60.00 USD（pre_carriage）")
 	s.want("freight_recorded", r["status"], "estimated")
 	r = s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandReviewOrderResult, map[string]any{"order_id": "order.1", "expected_version": 0,
 		"note": "出运完成后复核：应收、采购与运费尚未结清（合成）"})
@@ -912,7 +912,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 	s.refused(brcTreasury, "stl", stlapi.Contract, stlapi.CommandCloseOrderResult, map[string]any{"order_id": "order.1",
 		"expected_version": r["row_version"], "reason": "订单已关闭"}, http.StatusConflict, stlapi.CodeOrderResultNotSettled)
 	s.want("close_with_estimated_freight", s.unmet(), "/conditions/direct_charges")
-	s.source(brcTreasury, "freight.bill", "合成货代账单：provider.1 海运费 60.00 USD，order.1 / shipment.1。")
+	s.source(brcTreasury, "freight.bill", "合成货代账单：provider.1 交货前内陆运费 60.00 USD（pre_carriage），order.1 / shipment.1。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight.brc", "expected_version": 1,
 		"evidence_ids": []string{"freight.bill"}})
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandAllocateCharge, s.allocateCharge("freight.brc", 2))
@@ -1353,8 +1353,8 @@ func (s *s5sc) freightOf(d *s5scDeal, currency, amount string) {
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "log." + d.id},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money(currency),
 		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": amount, "occurred_on": today(),
-		"analysis_on": today(), "basis": "provider.1 海运报价 log." + d.id})
-	s.source(brcTreasury, "freight.bill."+d.id, "合成货代账单：provider.1 海运费 "+amount+" "+currency+"，"+d.order()+"。")
+		"analysis_on": today(), "basis": "provider.1 交货前内陆运费报价 log." + d.id})
+	s.source(brcTreasury, "freight.bill."+d.id, "合成货代账单：provider.1 交货前内陆运费 "+amount+" "+currency+"，"+d.order()+"。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 1,
 		"evidence_ids": []string{"freight.bill." + d.id}})
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandAllocateCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 2,
@@ -1665,8 +1665,8 @@ func TestS5SCSABaseline46OverHTTP(t *testing.T) {
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "log.sa"},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money("CNY"),
 		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": "500.00", "occurred_on": today(),
-		"analysis_on": today(), "basis": "provider.1 海运报价 log.sa：预计 CNY 500.00"})
-	s.source(brcTreasury, "freight.bill.sa", "合成货代账单 BILL-SA：provider.1 海运费 CNY 650.00，shipment.60 与 shipment.40。")
+		"analysis_on": today(), "basis": "provider.1 交货前内陆运费报价 log.sa：预计 CNY 500.00"})
+	s.source(brcTreasury, "freight.bill.sa", "合成货代账单 BILL-SA：provider.1 交货前内陆运费 CNY 650.00（pre_carriage），shipment.60 与 shipment.40。")
 	r := s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.sa", "expected_version": 1,
 		"status": "pending", "source": map[string]any{"kind": "supplier_bill", "party_id": "provider.1", "reference": "BILL-SA"}, "amount": "650.00",
 		"occurred_on": today(), "analysis_on": today(), "basis": "货代账单 BILL-SA", "evidence_ids": []string{"freight.bill.sa"}})
@@ -2015,7 +2015,8 @@ func (s *s5sc) decideException(id, reason string) map[string]any {
 // purchaser's short-receipt change to 850 (order reviewer's decision) makes the commitment fulfilled.
 // The merchandiser packs, books and ships 850; doc.1 prepares the CIF commercial invoice (7,820.00)
 // and the packing list: issuing without the insurance policy is SHIPMENT_DOCUMENTS_UNRECONCILED at
-// /insurance_policy, a policy insuring 8,601.99 is INSURANCE_COVERAGE_INSUFFICIENT (110 % of 7,820.00
+// /insurance_policy (S5R-D06: a missing policy is that code; INSURANCE_COVERAGE_INSUFFICIENT is the
+// short cover only), a policy insuring 8,601.99 is INSURANCE_COVERAGE_INSUFFICIENT (110 % of 7,820.00
 // = 8,602.00), the policy of 8,602.00 is recorded and the set issued. Treasury confirms the
 // receivable of 7,820.00; the merchandiser closes the remainder of 50 (order.close_remainder,
 // OrderRemainderClosed), and STL's consumer releases the reservation: the exposure is the opening
@@ -2025,7 +2026,7 @@ func (s *s5sc) decideException(id, reason string) map[string]any {
 func TestS5SCSIM02VariantOverHTTP(t *testing.T) {
 	s := newS5SC(t, s5scMeta{ID: "SIM-02", Title: "SIM-02 变体: CIF Hamburg 1,000 × 9.20, O/A 60, −10 %, insurance 110 %, 850 of 900, close_remainder 50",
 		Design: []string{"SIM-02", "WF-06", "ES-09", "F-03", "FUL-INV-005", "PUR-INV-008", "PUR-INV-011", "STL-INV-004", "D-9", "D-13", "D-14",
-			"D-18", "D-19", "S5R-D08"},
+			"D-18", "D-19", "S5R-D06", "S5R-D08"},
 		RestsOn: []string{"C6", "C11", "C4a", "C4b-PUR", "C4b-STL", "C4b-CNX", "C10", "A6", "B6", "D1"},
 		UnitTests: []string{"TestCommitmentShortReceiptSIM02 (C11)", "TestInsuranceOnTheCIFInvoiceSIM02Step8 (C6)", "TestAllocationReviewFollowsAReducedOrderBT10 (C4b-PUR)",
 			"TestAmendedOrderMovesItsAccountThroughTheRelay (C4b-STL)"},

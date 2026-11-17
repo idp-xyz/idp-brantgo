@@ -8,7 +8,7 @@ import (
 )
 
 // Opening refund material (S5 unit C10, WBS S5-20; tactical model CNX-AGG-TaxRefundCase value object
-// OpeningPosition; Context Map MD-51; baseline 11.2; CN-R04, CN-R09; CN-AT16 CNX half, BT17).
+// OpeningPosition; Context Map MD-51; baseline 11.2; CN-R04, CN-R09; CN-AT16 CNX half, STL-OB-01).
 //
 // An invoice balance states what refund declarations finished before the cutoff consumed of a verified blue
 // invoice's lines, per purpose: that consumption counts next to the cases' allocations for ever — an external

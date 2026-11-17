@@ -18,7 +18,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// Opening balances (S5 unit C10, WBS S5-20; STL-INV-012; MD-50; baseline 11.2; BT17, CN-AT16 STL half).
+// Opening balances (S5 unit C10, WBS S5-20; STL-INV-012; MD-50; baseline 11.2; STL-OB-01, CN-AT16 STL half).
 //
 // opening_balance.record (human only, treasury) reads before STL's transaction the counterparty (PTY, R43), the
 // evidence (EVD, R75: the source document's 期初来源) and the currency — and for a prepayment the company's bank

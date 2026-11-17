@@ -102,6 +102,16 @@ var cnatCatalog = map[string]cnatMeta{
 	"CN-AT18": {"AI读取票据／报关资料后误匹配", "显示来源与差异；候选须核实后进入相同业务命令，模型不能直接过账。",
 		[]string{"C3b (AI imports candidates; verify human only)", "C3a (AI prepares declarations; confirm human only)"},
 		[]string{"TestCNAT18CandidatesAreVerifiedByAHuman", "TestDeclarationHumanOnlyCommandsRefuseAnAIActor"}},
+	// S5R variants (R12). Same evidence writer; the id is not one of baseline §24.3's eighteen.
+	"S5R-D20": {"S5R-D20 部分红冲、先回退、应付复核", "部分红冲冲减蓝票余额；已提交案件的蓝票未回退时红票核实被拒；应付显示 invoice_reversed。",
+		[]string{"R10", "R8", "C3b", "B2b"},
+		[]string{"TestS5RPartialRedReversalRollbackAndPurchaseInvoiceRefD20 (R10)", "TestS5RD20PayableAdjustmentAndInvoiceReversed (R8)"}},
+	"S5R-D23": {"S5R-D23 出口后发布、按有效期绑定", "有效期覆盖出口日期的修订在发布之后仍被采用；未申报的案件显示 policy_superseded 并重新绑定。",
+		[]string{"R10", "A3a", "C3b"},
+		[]string{"TestS5RCaseBindsTheRevisionValidAtTheExportDateAndRebindsD23 (R10)"}},
+	"S5R-D22": {"S5R-D22 已冲销的资金记录", "document_bundle.check 与 tax_refund_case.record_result received 拒绝已冲销的资金记录。",
+		[]string{"R13", "R8", "C3a", "C3b"},
+		[]string{"TestS5RD22TheBundleRefusesAReversedFundRecord (R13)", "TestS5RD22TheReceivedRefundRefusesAReversedFundRecord (R13)"}},
 }
 
 // cnatEvidence is one case's record (BRANT_CNAT_EVIDENCE).
