@@ -15,6 +15,10 @@
 #   make eer-live     live runs against a running EER (decision E-2; never in CI): the EER adapter's
 #                     live tests and the stop barrier of a task on PostgreSQL 16 at PG_PORT; EER and
 #                     its credentials come from the environment (internal/ai/adapters/eer/eerlive)
+#   make ai-eval      the Q01 evaluation suite with the scripted model (tests/ai-evaluation; WBS S4-07a, BC-AT28)
+#                     against its own database AI_EVAL_DB in the container on PG_PORT; report in bin/ai-eval/
+#   make ai-eval-live the same with the live model service (build tag aievallive; never in CI): the key comes from
+#                     IDP_BRANT_MODEL_API_KEY; without it the run is reported NOT EXECUTED (exit 3)
 
 GO ?= go
 GOLANGCI_LINT_VERSION ?= v2.15.0
@@ -34,7 +38,7 @@ DB_ENV = CI=true \
 	IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
 	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable'
 
-.PHONY: check fmt fmt-check vet lint test deps allowlist roles modules db integration race spike build ci load drill eer-live
+.PHONY: check fmt fmt-check vet lint test deps allowlist roles modules db integration race spike build ci load drill eer-live ai-eval ai-eval-live
 
 check: modules fmt-check vet lint test deps
 
@@ -117,3 +121,24 @@ eer-live:
 	IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
 	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/brant?sslmode=disable' \
 	$(GO) test -tags 'integration eerlive' -count=1 -v -run '^TestEERLive' ./internal/bootstrap/
+
+# The AI evaluation runs against a database of its own (its brant-worker -dispatch relays every tenant's
+# events there), prepared by scripts/pg-prepare.sh in the container that publishes PG_PORT. AI_EVAL_ARGS:
+# extra flags of tests/ai-evaluation (-families, -trials, -parallel, -phase-timeout).
+AI_EVAL_DB ?= brant_aieval
+AI_EVAL_ARGS ?=
+AI_EVAL_PREPARE = BRANT_PG_CONTAINER="$$(docker ps --filter publish=$(PG_PORT) --format '{{.Names}}')" BRANT_PG_PORT=$(PG_PORT) \
+	BRANT_PG_DB=$(AI_EVAL_DB) scripts/pg-prepare.sh
+AI_EVAL_ENV = IDP_BRANT_MIGRATOR_DSN='postgres://brant_migrator:dev-migrator-only@127.0.0.1:$(PG_PORT)/$(AI_EVAL_DB)?sslmode=disable' \
+	IDP_BRANT_POSTGRES_DSN='postgres://brant_app:dev-app-only@127.0.0.1:$(PG_PORT)/$(AI_EVAL_DB)?sslmode=disable'
+
+ai-eval: build
+	$(GO) build -o bin/ai-evaluation ./tests/ai-evaluation
+	$(AI_EVAL_PREPARE)
+	$(AI_EVAL_ENV) bin/ai-evaluation -suite scripted -bin bin -out bin/ai-eval/$$(date -u +%Y%m%dT%H%M%SZ) $(AI_EVAL_ARGS)
+
+ai-eval-live: build
+	@if [ "$$CI" = "true" ]; then echo "make ai-eval-live never runs under CI=true"; exit 2; fi
+	$(GO) build -tags aievallive -o bin/ai-evaluation-live ./tests/ai-evaluation
+	$(AI_EVAL_PREPARE)
+	$(AI_EVAL_ENV) bin/ai-evaluation-live -suite live -bin bin -out bin/ai-eval/live-$$(date -u +%Y%m%dT%H%M%SZ) $(AI_EVAL_ARGS)
