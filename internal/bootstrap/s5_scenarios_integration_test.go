@@ -842,7 +842,8 @@ func (s *s5sc) recordCharge(id, status, amount, occurred string, source map[stri
 	s.t.Helper()
 	args := map[string]any{"charge_id": id, "expected_version": 0, "status": status, "source": source,
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": "order.1"}}, "fee_category": s.freight, "currency": s.usd,
-		"conversion": map[string]any{"kind": "same_currency"}, "amount": amount, "occurred_on": occurred, "analysis_on": occurred, "basis": basis}
+		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": amount, "occurred_on": occurred,
+		"analysis_on": occurred, "basis": basis}
 	if len(evidence) > 0 {
 		args["evidence_ids"] = evidence
 	}
@@ -1351,8 +1352,8 @@ func (s *s5sc) freightOf(d *s5scDeal, currency, amount string) {
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 0,
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "log." + d.id},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money(currency),
-		"conversion": map[string]any{"kind": "same_currency"}, "amount": amount, "occurred_on": today(), "analysis_on": today(),
-		"basis": "provider.1 海运报价 log." + d.id})
+		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": amount, "occurred_on": today(),
+		"analysis_on": today(), "basis": "provider.1 海运报价 log." + d.id})
 	s.source(brcTreasury, "freight.bill."+d.id, "合成货代账单：provider.1 海运费 "+amount+" "+currency+"，"+d.order()+"。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 1,
 		"evidence_ids": []string{"freight.bill." + d.id}})
@@ -1663,8 +1664,8 @@ func TestS5SCSABaseline46OverHTTP(t *testing.T) {
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.sa", "expected_version": 0,
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "log.sa"},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money("CNY"),
-		"conversion": map[string]any{"kind": "same_currency"}, "amount": "500.00", "occurred_on": today(), "analysis_on": today(),
-		"basis": "provider.1 海运报价 log.sa：预计 CNY 500.00"})
+		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": "500.00", "occurred_on": today(),
+		"analysis_on": today(), "basis": "provider.1 海运报价 log.sa：预计 CNY 500.00"})
 	s.source(brcTreasury, "freight.bill.sa", "合成货代账单 BILL-SA：provider.1 海运费 CNY 650.00，shipment.60 与 shipment.40。")
 	r := s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.sa", "expected_version": 1,
 		"status": "pending", "source": map[string]any{"kind": "supplier_bill", "party_id": "provider.1", "reference": "BILL-SA"}, "amount": "650.00",

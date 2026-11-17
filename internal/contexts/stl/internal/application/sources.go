@@ -80,13 +80,27 @@ type OrderShipmentLine struct {
 // OrderPurchaseLine is a line of a PUR purchase commitment of an order: the commitment's status, supplier, the
 // sealed net amount of the line in minor units of Currency, and its verified deliveries {DeliveryID, LineID (the
 // order line), Version}.
+//
+// S5R-D42 (R31 PurchaseLineRef v1 "含获批处置"): PurchaseQuantity is what the line buys (NetMinor is for it),
+// VerifiedQuantity what is verified delivered of it, and Dispositions its approved dispositions.
 type OrderPurchaseLine struct {
-	CommitmentID string
-	OrderLineID  string
-	Status       string
-	SupplierID   string
-	Currency     string
-	MinorUnits   int
-	NetMinor     string
-	Deliveries   []api.SettlementSourceRef
+	CommitmentID     string
+	OrderLineID      string
+	Status           string
+	SupplierID       string
+	Currency         string
+	MinorUnits       int
+	NetMinor         string
+	Deliveries       []api.SettlementSourceRef
+	PurchaseQuantity string
+	VerifiedQuantity string
+	Dispositions     []OrderDisposition
+}
+
+// OrderDisposition is an approved disposition of a commitment line's delivered goods: return_to_supplier, write_off
+// or hold_for_reuse, and its quantity (in the line's unit).
+type OrderDisposition struct {
+	DispositionID string
+	Disposition   string
+	Quantity      string
 }

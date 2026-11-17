@@ -23,6 +23,8 @@ func VerifiedFor(vs []PayerVerification, customer string) bool {
 // (SM-STL-FUND recorded → recorded, difference_resolved → difference_resolved).
 func (f *FundRecord) VerifyPayer(customer string, evidence []string, prior []PayerVerification, by Act) (*PayerVerification, error) {
 	switch {
+	case f.Reversed():
+		return nil, state("/args/fund_record_id", "The fund record is reversed")
 	case f.Kind != KindReceipt:
 		return nil, state("/args/fund_record_id", "Only a receipt's payer is verified; "+f.ID+" is a "+f.Kind)
 	case by.By == f.Recorded.By:

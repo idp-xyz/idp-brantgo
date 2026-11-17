@@ -63,6 +63,11 @@ type CommitmentLine struct {
 	SupplierID   string
 	Net          kernel.Money
 	Deliveries   []Delivery
+	// S5R-D42 (R31 PurchaseLineRef v1): the quantity the line buys (Net is for it), what is verified delivered of it and
+	// its approved dispositions.
+	Purchased    kernel.Decimal
+	Verified     kernel.Decimal
+	Dispositions []Disposition
 }
 
 // Delivery is a verified supplier delivery of a commitment line, by the source key of a purchase statement line
@@ -92,6 +97,11 @@ type Input struct {
 	ShipmentsShown      bool                            // FUL answered
 	Commitments         []CommitmentLine                // PUR's commitment lines of the order
 	CommitmentsShown    bool                            // PUR answered
+	// S5R-D19: the funds applied to the order (by ID) with their conversions, and the payments applied to each charge.
+	Funds          map[string]FundBasis
+	ChargePayments map[string][]fa.Application
+	// S5R-D20: the payable adjustments of each purchase statement.
+	PayableAdjustments map[string][]settlement.PayableAdjustment
 }
 
 // Source is a record a figure counts: its kind, ID, version and what of it counts.
@@ -136,6 +146,7 @@ type Confirmed struct {
 	Batches            []Batch
 	OrderLevelCharges  kernel.Money
 	UnsoldPurchaseCost kernel.Money
+	WriteOffCost       kernel.Money // S5R-D42: the written-off goods' cost, part of PurchaseCost
 }
 
 // FXItem is one cross-currency receipt of the order and its business settlement FX difference.
@@ -147,12 +158,21 @@ type FXItem struct {
 	Source        kernel.Money
 	Target        kernel.Money
 	Difference    kernel.Money
+	// S5R-D19: the basis (settlement_rate, conversion or unrealized), the fund, the rate the item is valued at and the
+	// conversions it realised by.
+	Basis         string
+	FundRecordID  string
+	Rate          string
+	ConversionIDs []string
+	Unrealized    bool
 }
 
 // FX is the business settlement FX difference: the order's cross-currency receipts against its analysis rate
 // (baseline 4.5 "资金换算与相应业务分析基准之间的差额，单列"). Never a receipt or revenue.
 type FX struct {
 	Difference kernel.Money
+	Realized   kernel.Money // S5R-D19: of Difference, what conversions (and receipts in another currency) realised
+	Unrealized kernel.Money // S5R-D19: of Difference, what is not converted yet, at the settlement rate of its application
 	Items      []FXItem
 	Gaps       []string
 }
@@ -160,11 +180,14 @@ type FX struct {
 // Cash is the net cash result: receipts applied to the order less payments applied to its share of purchase
 // payables (baseline 4.5 "实际收款－实际付款；明确范围，不等同于利润"); charges are not paid through STL.
 type Cash struct {
-	Receipts kernel.Money
-	Payments kernel.Money
-	Net      kernel.Money
-	Sources  []Source
-	Gaps     []string
+	Receipts       kernel.Money
+	Payments       kernel.Money
+	ChargePayments kernel.Money // S5R-D19: of Payments, what was paid on the order's charges
+	Net            kernel.Money
+	Unpaid         kernel.Money // S5R-D19: the order's part of its charges not paid through STL
+	Sources        []Source
+	UnpaidSources  []Source
+	Gaps           []string
 }
 
 // Figures are the order result as of AsOf in Currency (the order's analysis currency).
@@ -177,6 +200,11 @@ type Figures struct {
 	Confirmed Confirmed
 	FX        FX
 	Cash      Cash
+	// S5R-D42: the order is cancelled (no revenue; the result is its sunk cost) and whether it has sunk costs at all.
+	Cancelled bool
+	SunkCost  bool
+	// S5R-D24: the order's recharged charges, which the result leaves out.
+	Recharged []Source
 }
 
 func must(m kernel.Money, err error) kernel.Money {
@@ -367,11 +395,18 @@ func (in Input) purchases(b basis) purchases {
 		if !standing(st) {
 			continue
 		}
+		credits, adjusted := in.adjustments(st)
+		mine := false
 		for _, l := range st.Lines {
 			if l.OrderID != in.Order.ID {
 				continue
 			}
-			m, ok := b.of(l.Net)
+			mine = true
+			net := l.Net
+			if c, ok := credits[l.Seq]; ok {
+				net = sub(net, c) // S5R-D20: a confirmed payable adjustment credits the purchase cost
+			}
+			m, ok := b.of(net)
 			if !ok {
 				p.gaps = append(p.gaps, fmt.Sprintf("purchase statement %s line %d in %s does not convert into %s", st.ID, l.Seq,
 					l.Net.Currency().Code(), b.result.Code()))
@@ -392,19 +427,30 @@ func (in Input) purchases(b basis) purchases {
 			}
 			lc.cost, lc.purchased = add(lc.cost, m), lc.purchased.Add(l.Quantity)
 			p.sources = append(p.sources, Source{Kind: "purchase_statement", ID: st.ID, Version: st.Version,
-				Detail: fmt.Sprintf("line %d: %s of order line %s from %s, net %s", l.Seq, l.Quantity, l.OrderLineID, l.Source.ID, l.Net)})
+				Detail: fmt.Sprintf("line %d: %s of order line %s from %s, net %s", l.Seq, l.Quantity, l.OrderLineID, l.Source.ID, net)})
+		}
+		if mine {
+			p.sources = append(p.sources, adjusted...)
 		}
 	}
 	return p
 }
 
-// Compute derives the figures and close conditions of in.Order as of in.At (baseline 4.5, STL-INV-011).
+// Compute derives the figures and close conditions of in.Order as of in.At (baseline 4.5, STL-INV-011; S5R-D19, D20,
+// D24, D42: s5r.go).
 func Compute(in Input) (Figures, []Dimension) {
 	b := basisOf(in.Order)
-	f := Figures{AsOf: kernel.Instant(in.At), Currency: b.result, Rate: b.rate.String()}
+	f := Figures{AsOf: kernel.Instant(in.At), Currency: b.result, Rate: b.rate.String(), Cancelled: in.Order.Status == OrderCancelled,
+		Recharged: in.recharged()}
+	in = in.counted() // S5R-D24: a recharged charge is not in the result
 	orderSource := Source{Kind: "order", ID: in.Order.ID, Version: in.Order.Revision,
 		Detail: "net sales of the current revision " + in.Order.Net.String()}
 	net, _ := b.of(in.Order.Net)
+	if f.Cancelled {
+		// S5R-D42: a cancelled order sells nothing.
+		net = zero(b.result)
+		orderSource.Detail = "cancelled (" + in.Order.Ended + "): no revenue"
+	}
 
 	// Expected purchase cost: the commitment lines that buy for the order (PUR).
 	expected := zero(b.result)
@@ -483,10 +529,13 @@ func Compute(in Input) (Figures, []Dimension) {
 	ex.Gaps = append(append(append([]string{}, expectGaps...), p.gaps...), cGaps...)
 	f.Executing = ex
 
-	f.Confirmed = in.confirmed(b, p, cShares, cGaps)
-	f.FX = in.fx(b)
-	f.Cash = in.cash(b)
-	return f, in.conditions(b, p)
+	w := in.writeOffs(b)
+	f.Confirmed = in.confirmed(b, p, cShares, cGaps, w)
+	var values map[string]kernel.Money
+	f.FX, values = in.fx(b)
+	f.Cash = in.cash(b, values)
+	f.SunkCost = in.sunk(w)
+	return f, in.conditions(b, p, f)
 }
 
 // batchOf collects one batch while the confirmed result is derived.
@@ -501,11 +550,11 @@ type batchOf struct {
 // effective credit notes) − the confirmed purchase cost of the goods sold (each order line's settled purchase cost
 // over the quantity sold and the quantity not sold yet, by the largest remainder) − confirmed direct charges, per
 // shipment batch; charges of the order itself, or of a shipment not settled yet, are the order's.
-func (in Input) confirmed(b basis, p purchases, shares []share, chargeGaps []string) Confirmed {
+func (in Input) confirmed(b basis, p purchases, shares []share, chargeGaps []string, w writeOff) Confirmed {
 	oc := b.order
 	out := Confirmed{Figure: Figure{NetSales: zero(b.result), Credits: zero(b.result), PurchaseCost: zero(b.result),
 		PurchaseConfirmed: zero(b.result), PurchaseEstimated: zero(b.result), DirectCharges: zero(b.result), ChargesConfirmed: zero(b.result),
-		ChargesEstimated: zero(b.result)}, OrderLevelCharges: zero(b.result), UnsoldPurchaseCost: zero(b.result)}
+		ChargesEstimated: zero(b.result)}, OrderLevelCharges: zero(b.result), UnsoldPurchaseCost: zero(b.result), WriteOffCost: w.cost}
 	batches := map[string]*batchOf{}
 	var order []string
 	totalNet, totalCredits := zero(oc), zero(oc)
@@ -545,8 +594,10 @@ func (in Input) confirmed(b basis, p purchases, shares []share, chargeGaps []str
 		credited := zero(oc)
 		for _, n := range in.CreditNotes[st.ID] {
 			if n.Effective(st) && n.Amount.Currency() == oc {
-				credited = add(credited, n.Amount)
-				out.Sources = append(out.Sources, Source{Kind: "credit_note", ID: n.ID, Version: n.Version, Detail: n.Kind + " " + n.Amount.String()})
+				netPart, _ := n.Split(st) // S5R-D46(2): a credit note credits net sales by its net part
+				credited = add(credited, netPart)
+				out.Sources = append(out.Sources, Source{Kind: "credit_note", ID: n.ID, Version: n.Version, Detail: n.Kind + " " + n.Amount.String() +
+					" (net " + netPart.String() + ")"})
 			}
 		}
 		if credited.Sign() != 0 {
@@ -634,6 +685,10 @@ func (in Input) confirmed(b basis, p purchases, shares []share, chargeGaps []str
 		bt.Result = sub(sub(sub(bt.NetSales, bt.Credits), bt.CostOfSales), bt.DirectCharges)
 		out.PurchaseCost = add(out.PurchaseCost, bt.CostOfSales)
 	}
+	// S5R-D42: the written-off goods are sunk cost of the order, not of a batch.
+	out.PurchaseCost = add(out.PurchaseCost, w.cost)
+	out.Sources = append(out.Sources, w.sources...)
+	out.Gaps = append(out.Gaps, w.gaps...)
 	out.NetSales, out.Credits, out.PurchaseConfirmed, out.ChargesConfirmed = netR, creditsR, out.PurchaseCost, out.DirectCharges
 	out.Result = sub(sub(sub(netR, creditsR), out.PurchaseCost), out.DirectCharges)
 	out.Margin = margin(out.Result, sub(netR, creditsR))
@@ -659,17 +714,33 @@ func sortedKeys(m map[string]kernel.Decimal) []string {
 
 // fx is the business settlement FX difference: the standing cross-currency receipts of the order whose analysis
 // is in the result currency (C8 recorded each against the order's analysis rate).
-func (in Input) fx(b basis) FX {
-	out := FX{Difference: zero(b.result)}
+//
+// S5R-D19: a receipt in the order's currency, the order analysed in another, is realised by its fund's conversions and
+// the settlement rate its application recorded (s5r.go); values are what each such receipt is worth in the result
+// currency, for the net cash.
+func (in Input) fx(b basis) (FX, map[string]kernel.Money) {
+	out := FX{Difference: zero(b.result), Realized: zero(b.result), Unrealized: zero(b.result)}
+	values := map[string]kernel.Money{}
 	for i := range in.Applications {
 		x := &in.Applications[i]
-		if !x.Stands() || x.CreditNoteID != "" {
+		if !x.Stands() || x.CreditNoteID != "" || x.FundRecordID == "" {
 			continue
 		}
 		c := x.Conversion
 		if c == nil {
 			if x.Amount.Currency() == b.order && b.order != b.result {
-				out.Gaps = append(out.Gaps, "application "+x.ID+": a receipt in "+b.order.Code()+"; a later conversion of that fund is not attributed to the order")
+				r := in.realise(b, x)
+				values[x.ID] = r.value
+				out.Gaps = append(out.Gaps, r.gaps...)
+				for _, item := range r.items {
+					out.Difference = add(out.Difference, item.Difference)
+					if item.Unrealized {
+						out.Unrealized = add(out.Unrealized, item.Difference)
+					} else {
+						out.Realized = add(out.Realized, item.Difference)
+					}
+					out.Items = append(out.Items, item)
+				}
 			}
 			continue
 		}
@@ -679,21 +750,30 @@ func (in Input) fx(b basis) FX {
 			continue
 		}
 		out.Difference = add(out.Difference, *a.Difference)
+		out.Realized = add(out.Realized, *a.Difference)
 		out.Items = append(out.Items, FXItem{ApplicationID: x.ID, TargetKind: x.TargetKind, StatementID: x.StatementID, StageID: x.StageID,
-			Source: c.Source, Target: x.Amount, Difference: *a.Difference})
+			Source: c.Source, Target: x.Amount, Difference: *a.Difference, Basis: FXSettlementRate, FundRecordID: x.FundRecordID,
+			Rate: c.Value.String()})
 	}
-	return out
+	return out, values
 }
 
 // cash is the net cash result: receipts applied to the order's stages and receivables (what the fund gave, in
 // the result currency: its own amount when it is in it, at the analysis rate when it is in the order's) less
 // payments applied to the payables of its purchase statements, each statement's payments shared by the order's
 // part of the statement (largest remainder).
-func (in Input) cash(b basis) Cash {
-	out := Cash{Receipts: zero(b.result), Payments: zero(b.result)}
+func (in Input) cash(b basis, values map[string]kernel.Money) Cash {
+	out := Cash{Receipts: zero(b.result), Payments: zero(b.result), ChargePayments: zero(b.result), Unpaid: zero(b.result)}
 	for i := range in.Applications {
 		x := &in.Applications[i]
 		if !x.Stands() || x.FundRecordID == "" {
+			continue
+		}
+		if v, ok := values[x.ID]; ok {
+			// S5R-D19: what the receipt realised (conversions) or is valued at (the settlement rate of its application).
+			out.Receipts = add(out.Receipts, v)
+			out.Sources = append(out.Sources, Source{Kind: "application", ID: x.ID, Version: x.Version, Detail: "receipt " + x.Amount.String() +
+				" from fund " + x.FundRecordID + ", realised " + v.String()})
 			continue
 		}
 		m := x.Amount
@@ -743,14 +823,14 @@ func (in Input) cash(b basis) Cash {
 		out.Payments = add(out.Payments, r)
 		out.Sources = append(out.Sources, Source{Kind: "payable", ID: st.ID, Version: st.Version, Detail: "the order's part of payments " + part.String()})
 	}
-	out.Gaps = append(out.Gaps, "direct charges are not paid through STL: their payments are not counted")
+	in.chargeCash(b, &out) // S5R-D19: charge payments count; unpaid charges are listed
 	out.Net = sub(out.Receipts, out.Payments)
 	return out
 }
 
 // conditions are the close conditions as they stand (STL-INV-011), in their order.
-func (in Input) conditions(b basis, p purchases) []Dimension {
-	dims := []Dimension{in.fulfilment(), in.receivables(), in.payables(), in.purchaseCosts(p), in.directCharges(b)}
+func (in Input) conditions(b basis, p purchases, f Figures) []Dimension {
+	dims := []Dimension{in.fulfilment(f), in.receivables(), in.payables(), in.purchaseCosts(p), in.directCharges(b)}
 	return append(dims, Dimension{Name: DimClaims, Status: NotEnabled,
 		Items: []string{"clm: not_enabled — CLM is not enabled in S5; no open return or claim can be checked"}})
 }
@@ -762,8 +842,17 @@ func dim(name string, items []string, met string) Dimension {
 	return Dimension{Name: name, Status: Met, Items: []string{met}}
 }
 
-func (in Input) fulfilment() Dimension {
+func (in Input) fulfilment(f Figures) Dimension {
 	o := in.Order
+	if f.Cancelled {
+		// S5R-D42: a cancelled order with sunk costs closes settled, marked cancelled; without any it has no result.
+		if f.SunkCost {
+			return Dimension{Name: DimFulfilment, Status: Met, Items: []string{"cancelled (TRD " + o.Ended + ") with sunk costs: the result is " +
+				"their cost, no revenue (S5R-D42)"}}
+		}
+		return Dimension{Name: DimFulfilment, Status: Unmet, Items: []string{"cancelled (TRD " + o.Ended + ") without charges or write-offs: " +
+			"it has no operating result (S5R-D42)"}}
+	}
 	if o.Status == OrderClosed {
 		switch o.Ended {
 		case EndClose:

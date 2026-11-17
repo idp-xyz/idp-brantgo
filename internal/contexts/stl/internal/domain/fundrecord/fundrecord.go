@@ -38,10 +38,12 @@ const (
 	Out = "out"
 )
 
-// States (SM-STL-FUND): recorded, then difference_resolved from the first resolution on.
+// States (SM-STL-FUND): recorded, then difference_resolved from the first resolution on; reversed (S5R-D22,
+// STL-INV-014) is terminal.
 const (
 	StatusRecorded           = "recorded"
 	StatusDifferenceResolved = "difference_resolved"
+	StatusReversed           = "reversed"
 )
 
 // Resolutions of a difference: a bank charge or a discount borne by us (STL-INV-006).
@@ -106,7 +108,17 @@ type FundRecord struct {
 	OwnerTeam           string
 	Recorded            Act
 	Resolutions         []Resolution
+	Reversal            *Reversal // S5R-D22: the reversal of a reversed record
 }
+
+// Reversal is a fund record's reversal (S5R-D22, STL-INV-014): who reversed it, why (By.Reason) and on which evidence.
+type Reversal struct {
+	EvidenceIDs []string
+	By          Act
+}
+
+// Reversed reports whether the record is reversed: nothing is applied from it or drawn on it any more.
+func (f *FundRecord) Reversed() bool { return f.Status == StatusReversed }
 
 // Entries are the immutable entries drawn on a fund record, summed in its currency: Applied by
 // applications that stand, Drawn by refunds and returned remittances, Sold by conversions.
@@ -148,18 +160,27 @@ func (f *FundRecord) Resolved() kernel.Money {
 // payment conditions (STL-INV-006).
 func (f *FundRecord) Unexplained() kernel.Money { return must(f.Difference().Sub(f.Resolved())) }
 
-// Available is what applications may still allocate of the record given e.
+// Available is what applications may still allocate of the record given e: nothing once it is reversed.
 func (f *FundRecord) Available(e Entries) kernel.Money {
+	if f.Reversed() {
+		return must(kernel.NewMoney(f.Currency(), 0))
+	}
 	return must(must(must(f.Received.Add(f.Resolved())).Sub(e.Applied)).Sub(e.Drawn))
 }
 
-// Cash is what is still on the account of the record given e.
+// Cash is what is still on the account of the record given e: nothing once it is reversed.
 func (f *FundRecord) Cash(e Entries) kernel.Money {
+	if f.Reversed() {
+		return must(kernel.NewMoney(f.Currency(), 0))
+	}
 	return must(must(f.Received.Sub(e.Drawn)).Sub(e.Sold))
 }
 
-// Applicable reports whether applications may allocate the record: receipts only.
-func (f *FundRecord) Applicable() bool { return f.Kind == KindReceipt }
+// Applicable reports whether applications may allocate the record to a customer's target: receipts that stand only.
+func (f *FundRecord) Applicable() bool { return f.Kind == KindReceipt && !f.Reversed() }
+
+// Pays reports whether the record pays a supplier's payable or a charge (S5R-D19): payments that stand only.
+func (f *FundRecord) Pays() bool { return f.Kind == KindPayment && !f.Reversed() }
 
 // BankAccount is the POL bank_account revision the money moved on.
 type BankAccount struct {
@@ -269,6 +290,9 @@ func (f *FundRecord) account(in Input) error {
 func (f *FundRecord) drawOn(in Input, src *Source) error {
 	s := src.Record
 	path := "/args/source_fund_record_id"
+	if s.Reversed() {
+		return state(path, s.ID+" is reversed: nothing is drawn on it (S5R-D22)")
+	}
 	switch in.Kind {
 	case KindRefund:
 		if s.Kind != KindReceipt && s.Kind != KindNonGoods {
@@ -344,6 +368,8 @@ func (f *FundRecord) convert(in Input, src *Source) error {
 // independence row fund.resolve_difference independentOf 资金登记人).
 func (f *FundRecord) Resolve(resolution string, amount kernel.Money, evidence []string, by Act) error {
 	switch {
+	case f.Reversed():
+		return state("/args/fund_record_id", "The fund record is reversed")
 	case f.Kind != KindReceipt:
 		return state("/args/fund_record_id", "Only a receipt has a difference to resolve")
 	case by.By == f.Recorded.By:
@@ -360,4 +386,37 @@ func (f *FundRecord) Resolve(resolution string, amount kernel.Money, evidence []
 		By: by})
 	f.Status, f.Version = StatusDifferenceResolved, f.Version+1
 	return nil
+}
+
+// Reverse is fund.reverse's rule (S5R-D22; SM-STL-FUND recorded | difference_resolved → reversed; STL-INV-014): a
+// fund record that stands — an opening prepayment included — is reversed by someone other than its recorder
+// (independence row fund.reverse independentOf 资金登记人; INDEPENDENT_REVIEW_REQUIRED), once nothing stands applied
+// from it (standing: the IDs of its standing applications, FUND_RECORD_HAS_APPLICATIONS) and nothing drawn on it
+// stands (draws: its refunds, returned remittances and conversions that are not reversed; INVALID_STATE: reverse them
+// first). The record keeps its facts and moves to reversed, version + 1; the reversal records why.
+func (f *FundRecord) Reverse(standing, draws, evidence []string, by Act) error {
+	switch {
+	case f.Reversed():
+		return state("/args/fund_record_id", "The fund record is already reversed")
+	case by.By == f.Recorded.By:
+		return Reject(CodeIndependentReviewRequired, "/args/fund_record_id", "The recorder of the fund record does not reverse it")
+	case len(standing) > 0:
+		return Reject(CodeFundRecordHasApplications, "/args/fund_record_id", "Unapply first: "+join(standing))
+	case len(draws) > 0:
+		return state("/args/fund_record_id", "Reverse what is drawn on it first: "+join(draws))
+	}
+	f.Status, f.Version = StatusReversed, f.Version+1
+	f.Reversal = &Reversal{EvidenceIDs: evidence, By: by}
+	return nil
+}
+
+func join(ids []string) string {
+	out := ""
+	for i, id := range ids {
+		if i > 0 {
+			out += ", "
+		}
+		out += id
+	}
+	return out
 }

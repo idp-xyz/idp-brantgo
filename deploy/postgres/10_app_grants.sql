@@ -397,6 +397,13 @@ GRANT UPDATE (status, updated_at) ON brant_stl.opening_balance TO brant_app;
 GRANT UPDATE (release_cause) ON brant_stl.credit_reservation TO brant_app;
 GRANT SELECT, INSERT ON brant_stl.fund_payer_verification TO brant_app;
 
+-- STL settlement, results and payables (S5R-08; S5R-D19, D20, D22, D24, D42): a fund record moves to reversed with its
+-- reversal (only inserted), a payable adjustment is inserted requested and decided once (triggers); charge payments are
+-- applications; nothing is deleted.
+GRANT SELECT, INSERT ON brant_stl.fund_reversal, brant_stl.payable_adjustment TO brant_app;
+GRANT UPDATE (status, version, decided_by_kind, decided_by_id, decide_epoch, decided_at, decision_reason, updated_at)
+    ON brant_stl.payable_adjustment TO brant_app;
+
 -- CNX: a trade compliance check moves its state, current evaluation and decision and its version
 -- along SM-CNX-COMPLIANCE (trigger: binding, owner and opening fixed); evaluations, decisions and
 -- reopenings are only inserted (triggers); nothing is deleted; the ledger only grows. FOR UPDATE on

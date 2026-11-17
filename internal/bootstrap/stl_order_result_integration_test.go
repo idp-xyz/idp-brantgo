@@ -3,6 +3,7 @@
 package bootstrap_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,12 +97,25 @@ func TestOrderResultOnRealRecordsBRC001OverHTTP(t *testing.T) {
 	}
 
 	today := time.Now().UTC().Format("2006-01-02")
+	// S5R-D24: BRC-001 is FCA (the Incoterm its revision seals, TRD OrderRevisionRef v1): the main carriage is the buyer's
+	// and refused; the forwarder's freight before delivery is ours (pre_carriage, R0's reading of the 60.00).
+	main := map[string]any{"charge_id": "ocean.brc", "expected_version": 0, "status": "estimated",
+		"source":        map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "LOG-BRC-OCEAN"},
+		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": order}},
+		"fee_category":  map[string]any{"kind": "fee_category", "id": w.freight.ConfigID, "revision": w.freight.Revision},
+		"currency":      map[string]any{"kind": "currency", "id": w.usd.ConfigID, "revision": w.usd.Revision},
+		"conversion":    map[string]any{"kind": "same_currency"}, "cost_component": "main_carriage", "amount": "300.00", "occurred_on": today,
+		"analysis_on": today, "basis": "买方指定货代的海运费"}
+	if status, out := officer.try("stl", stlapi.Contract, stlapi.CommandRecordCharge, main); status != http.StatusUnprocessableEntity ||
+		out["code"] != "INVALID_KNOWN_VALUE" || !strings.Contains(fmt.Sprint(out["field_errors"]), "/args/cost_component") {
+		t.Fatalf("main carriage of an FCA order: %d %v", status, out)
+	}
 	if r := officer.command("stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.brc", "expected_version": 0,
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "LOG-BRC-001"},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": order}},
 		"fee_category":  map[string]any{"kind": "fee_category", "id": w.freight.ConfigID, "revision": w.freight.Revision},
 		"currency":      map[string]any{"kind": "currency", "id": w.usd.ConfigID, "revision": w.usd.Revision},
-		"conversion":    map[string]any{"kind": "same_currency"}, "amount": "60.00", "occurred_on": today, "analysis_on": today,
+		"conversion":    map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": "60.00", "occurred_on": today, "analysis_on": today,
 		"basis": "货代报价：FCA 交货前运杂费"}); r["status"] != "estimated" || r["row_version"] != float64(1) {
 		t.Fatalf("charge.record %v", r)
 	}

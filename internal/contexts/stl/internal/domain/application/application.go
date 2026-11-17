@@ -58,6 +58,7 @@ const (
 	TargetOrderStage = "order_stage"
 	TargetReceivable = "receivable"
 	TargetPayable    = "payable"
+	TargetCharge     = "charge" // S5R-D19: a payment to a confirmed charge (charge.go)
 	StatusApplied    = "applied"
 	StatusUnapplied  = "unapplied"
 	StatusMoved      = "moved"
@@ -75,14 +76,18 @@ type Application struct {
 	InstallmentSeq int
 	MovedFrom      string       // a replacement or remainder: the moved application it comes from
 	CreditNoteID   string       // the source is a confirmed credit note instead of a fund record (C8, source.go)
+	ChargeID       string       // S5R-D19: the charge a payment pays (target kind charge)
 	Amount         kernel.Money // what the target receives, in the target's currency
 	Conversion     *Conversion  // a fund in another currency: what it gives and at which rate (STL-INV-007)
-	Status         string
-	Version        int64
-	OwnerActor     string
-	OwnerTeam      string
-	Applied        fundrecord.Act
-	Unapplied      *fundrecord.Act
+	// Settlement is the POL settlement rate from the order's currency into its analysis currency that a receipt in the
+	// order's currency recorded when it was applied (S5R-D19): it values what of the receipt is not converted yet.
+	Settlement *SettlementRate
+	Status     string
+	Version    int64
+	OwnerActor string
+	OwnerTeam  string
+	Applied    fundrecord.Act
+	Unapplied  *fundrecord.Act
 	// PayerBasis says why the fund's payer pays the target's customer (S5R-D21; "" reads as customer);
 	// PayerProfileRevision is the trading profile revision of a permitted payer.
 	PayerBasis           string
@@ -103,8 +108,9 @@ type ApplyInput struct {
 	StageID      string
 	StageApplied kernel.Money
 	Amount       kernel.Money
-	FX           *FXInput // the settlement rate for a receipt in another currency than the order's (nil: none)
-	Payers       Payers   // S5R-D21: what lets another payer than the customer pay
+	FX           *FXInput         // the settlement rate for a receipt in another currency than the order's (nil: none)
+	Settlement   *SettlementInput // S5R-D19: the settlement rate into the analysis currency of a receipt in the order's currency
+	Payers       Payers           // S5R-D21: what lets another payer than the customer pay
 	By           fundrecord.Act
 	Team         string
 }
@@ -113,6 +119,8 @@ type ApplyInput struct {
 func Apply(in ApplyInput) (*Application, error) {
 	f, acc := in.Fund, in.Account
 	switch {
+	case f.Reversed():
+		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/fund_record_id", "The fund record is reversed (S5R-D22)")
 	case !f.Applicable():
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/fund_record_id",
 			"A "+f.Kind+" is not applied to orders: only receipts are (non-goods money waits for verification)")
@@ -135,6 +143,10 @@ func Apply(in ApplyInput) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+	settlement, err := settlementRate(conv, acc.Currency(), in.Settlement)
+	if err != nil {
+		return nil, err
+	}
 	if err = withinAvailable(in.Amount, f, in.FundEntries); err != nil {
 		return nil, err
 	}
@@ -143,8 +155,8 @@ func Apply(in ApplyInput) (*Application, error) {
 		return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsOpen, "/args/amount", "Only "+open.String()+" of stage "+stage.StageID+" is open")
 	}
 	return &Application{ID: in.ID, FundRecordID: f.ID, TargetKind: TargetOrderStage, OrderID: acc.OrderID, OrderRevision: acc.OrderRevision,
-		StageID: stage.StageID, Amount: amount, Conversion: conv, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team,
-		Applied: in.By, PayerBasis: payer, PayerProfileRevision: profile}, nil
+		StageID: stage.StageID, Amount: amount, Conversion: conv, Settlement: settlement, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID,
+		OwnerTeam: in.Team, Applied: in.By, PayerBasis: payer, PayerProfileRevision: profile}, nil
 }
 
 // Unapply undoes a standing application (SM-STL-APPLICATION: authorised person and reason). A moved

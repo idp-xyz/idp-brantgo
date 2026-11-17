@@ -9,10 +9,12 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/events"
+	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/invoices"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/orders"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/sources"
@@ -57,6 +59,8 @@ var (
 	_ api.OpeningQueries  = (*Module)(nil)
 
 	_ api.PayerCommands = (*Module)(nil)
+
+	_ api.PayableCommands = (*Module)(nil) // S5R-D20, S5R-D22 (R8)
 )
 
 // Upstream are the lookups of STL's upstream contexts: TRD's orders through STL's port Orders (R32),
@@ -90,10 +94,29 @@ type (
 	OrderShipmentLine = application.OrderShipmentLine
 	OrderPurchases    = application.OrderPurchases
 	OrderPurchaseLine = application.OrderPurchaseLine
+	// OrderDisposition is an approved disposition of a commitment line's goods (R31 PurchaseLineRef v1; S5R-D42).
+	OrderDisposition = application.OrderDisposition
 )
 
+// PurchaseInvoices is STL's port to CNX's PurchaseInvoiceRef v1 (R55, S5R-D20) and what passes through it; Upstream.Invoices
+// is optional (nil: CNX shows STL no purchase invoice).
+type (
+	PurchaseInvoices     = application.PurchaseInvoices
+	PurchaseInvoiceQuery = application.PurchaseInvoiceQuery
+	PurchaseInvoice      = application.PurchaseInvoice
+	PurchaseInvoiceMatch = application.PurchaseInvoiceMatch
+)
+
+// CNXPurchaseInvoices is STL's port to CNX on CNX's api: PurchaseInvoiceLookups (PurchaseInvoiceRef v1, R55, S5R-D20)
+// before STL's transaction. CNX is composed after STL, so lookups returns CNX's lookups once CNX exists (nil: CNX shows
+// no purchase invoice).
+func CNXPurchaseInvoices(lookups func() cnxapi.PurchaseInvoiceLookups) PurchaseInvoices {
+	return invoices.CNX{Lookups: lookups}
+}
+
 // TRDOrders is STL's port to TRD on TRD's api: OrderSnapshotLookups (OrderCommercialSnapshot v1,
-// R32) before STL's transaction.
+// R32) before STL's transaction; when lookups also answers OrderRevisionLookups (OrderRevisionRef v1), the Incoterm a
+// charge's cost component is checked against is the sealed revision's (S5R-D24).
 func TRDOrders(lookups trdapi.OrderSnapshotLookups) Orders { return orders.TRD{Lookups: lookups} }
 
 // The ports to the sources of settlement statements and what passes through them (S5-04b).

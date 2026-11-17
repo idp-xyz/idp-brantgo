@@ -57,6 +57,29 @@ type CreditNote struct {
 // Rest is what of a confirmed credit note is not applied yet, given applied, what stands applied from it.
 func (n *CreditNote) Rest(applied kernel.Money) kernel.Money { return must(n.Amount.Sub(applied)) }
 
+// Split splits the credit note's amount — what it credits on the receivable — into its net and tax parts by statement
+// st's net and tax (S5R-D46(2), STL-INV-008: "结算单带税额时贷项按净额与税额比例拆分（HALF_UP，各自一次）"): the net part is
+// amount × net ÷ total, HALF_UP once at the currency's minor units, the tax part the rest, so the two add up to the
+// amount exactly. A statement without tax gives the whole amount as net (the export statements of B0).
+func (n *CreditNote) Split(st *Statement) (net, tax kernel.Money) {
+	return SplitTax(n.Amount, st)
+}
+
+// SplitTax splits amount, a credit on statement st's receivable or payable, into its net and tax parts by the
+// statement's net and tax (S5R-D46(2)): net HALF_UP once, tax the exact rest.
+func SplitTax(amount kernel.Money, st *Statement) (net, tax kernel.Money) {
+	zero := must(kernel.NewMoney(amount.Currency(), 0))
+	if st.Tax.Sign() == 0 || st.Amount.Sign() <= 0 || st.Amount.Currency() != amount.Currency() {
+		return amount, zero
+	}
+	f, err := st.Net.Decimal().Quo(st.Amount.Decimal())
+	if err != nil {
+		return amount, zero
+	}
+	net = must(amount.MulHalfUp(f))
+	return net, must(amount.Sub(net))
+}
+
 // Effective reports whether the credit note counts against the statement's sales (baseline 4.5: confirmed
 // net sales are the confirmed statements less their effective credit notes): confirmed, on a statement that
 // stands.
@@ -120,7 +143,8 @@ func exceedsRoom(amount, room kernel.Money) error {
 }
 
 // RequestCredit is credit_note.request's rule (STL-INV-008): a credit note of a confirmed sales statement of
-// the order named, in its currency, above zero and within the credit room.
+// the order named — of an opening receivable, which binds no order, none (S5R-D22) —, in its currency, above zero and
+// within the credit room.
 func RequestCredit(in CreditInput) (*CreditNote, error) {
 	st := in.Statement
 	switch {
@@ -128,6 +152,9 @@ func RequestCredit(in CreditInput) (*CreditNote, error) {
 		return nil, state("/args/statement_id", "A credit note adjusts a business receivable: "+st.ID+" is a purchase statement")
 	case st.Status != StatusConfirmed:
 		return nil, state("/args/statement_id", "The statement is "+st.Status)
+	case st.OrderID != in.OrderID && st.OrderID == "":
+		// S5R-D22: a credit note of an opening receivable binds no order.
+		return nil, invalid("/args/order_id", "Statement "+st.ID+" is an opening receivable: it binds no order (leave order_id out)")
 	case st.OrderID != in.OrderID:
 		return nil, invalid("/args/order_id", "Statement "+st.ID+" settles order "+st.OrderID)
 	case !slices.Contains([]string{CreditPriceAllowance, CreditReturn, CreditClaim}, in.Kind):

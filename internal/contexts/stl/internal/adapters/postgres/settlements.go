@@ -296,6 +296,16 @@ func InstallmentApplied(ctx context.Context, exec bentopg.Executor, sc kernel.Sc
 		out[seq] = m
 		return struct{}{}, err
 	})
+	if err != nil || s.Kind != settlement.KindPurchase || len(s.Installments) == 0 {
+		return out, err
+	}
+	// S5R-D20: a payable's confirmed adjustments are taken off its one installment like its payments.
+	adj, err := adjusted(ctx, exec, sc, s)
+	if err != nil || adj.IsZero() {
+		return out, err
+	}
+	seq := s.Installments[0].Seq
+	out[seq], err = out[seq].Add(adj)
 	return out, err
 }
 

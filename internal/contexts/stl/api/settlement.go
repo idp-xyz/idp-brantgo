@@ -138,6 +138,9 @@ type StatementReceipt struct {
 	Lines             int
 	Installments      int
 	MovedApplications []string
+	// S5R-D20: a purchase statement's invoice_reversed flag (PurchaseInvoiceRef v1), as payable.get shows it.
+	InvoiceReversed bool
+	InvoicesShown   bool
 }
 
 // StatementLineView is a statement line: the source line settled (kind, ID, line, version), the order
@@ -205,8 +208,17 @@ type BalanceView struct {
 	EarliestDueAt  time.Time
 	Installments   []InstallmentView
 	Applications   []AllocationView
-	ConfirmedAt    time.Time
-	CheckedAt      time.Time
+	// S5R-D20 (payables): AdjustedMinor is what confirmed payable adjustments took off it (not in AppliedMinor;
+	// OpenMinor is net of both); Adjustments the caller sees; InvoiceReversed the derived flag — a CNX purchase
+	// invoice matched to a commitment line the statement settles was reversed by red invoices — with those invoices
+	// (Invoices); InvoicesShown false when CNX's PurchaseInvoiceRef v1 is not available.
+	AdjustedMinor   string
+	Adjustments     []PayableAdjustmentView
+	InvoiceReversed bool
+	InvoicesShown   bool
+	Invoices        []PurchaseInvoiceView
+	ConfirmedAt     time.Time
+	CheckedAt       time.Time
 }
 
 // StatementView is a settlement statement as settlement_statement.get shows it: its kind, state,
@@ -237,9 +249,15 @@ type StatementView struct {
 	CreditedMinor  string          // C8: Σ its effective credit notes
 	Reversal       *ReversalView   // C8: when reversed
 	OpeningID      string          // C10: an opening statement's opening item (no lines, no order; opening.go)
-	ConfirmedBy    kernel.ActorRef
-	ConfirmedAt    time.Time
-	CheckedAt      time.Time
+	// S5R-D20 (purchase statements): as on BalanceView.
+	AdjustedMinor   string
+	Adjustments     []PayableAdjustmentView
+	InvoiceReversed bool
+	InvoicesShown   bool
+	Invoices        []PurchaseInvoiceView
+	ConfirmedBy     kernel.ActorRef
+	ConfirmedAt     time.Time
+	CheckedAt       time.Time
 }
 
 // StagePositionView is a payment stage of the order account's revision as the order's settlement
