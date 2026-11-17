@@ -395,6 +395,35 @@ const (
 		spec_revision, unit_id, unit_revision, verified_quantity, code FROM brant_pur.guard_supplier_delivery_v1($1, $2, $3)`
 )
 
+// SupplierDeliveryGuard v2 (Context Map R59 beside v1; S5R-D05, FUL-INV-003): v1's answer for the
+// same (delivery, line, version) plus what the delivery line's commitment line adds up to — the
+// verified quantity of the versions verified now of all its deliveries (LineVerifiedQuantity) and
+// what its approved dispositions took out of the order (LineDisposedQuantity), in the line's unit —
+// so that FUL ships of a commitment line, with what its confirmed shipments shipped of it, at most
+// verified − disposed. It locks the commitment root FOR SHARE in the caller's transaction, not the
+// delivery root: every delivery command locks the delivery root and then that commitment root FOR
+// UPDATE, and both disposition commands lock the commitment root FOR UPDATE, so a correction, a
+// verification, a disposition's request or decision and the caller's transaction have one order
+// (migrations/pur/000007_pur_supplier_delivery_guard_v2.sql):
+//
+//	brant_pur.guard_supplier_delivery_v2(p_delivery_id text, p_line_id text, p_version bigint)
+//	    RETURNS TABLE (known boolean, status text, verified_version bigint, commitment_id text, order_id text,
+//	                   order_line_id text, supplier_id text, sku_id text, spec_revision bigint, unit_id text,
+//	                   unit_revision bigint, verified_quantity text, line_verified_quantity text,
+//	                   line_disposed_quantity text, code text)
+//
+// A disposition approved before the guard read the commitment root is counted; one decided while the
+// caller holds it waits until the caller's transaction ends (PUR, which never sees shipments, then
+// bounds it by what is verified only). The guard holds no delivery root: a caller that names several
+// deliveries of one commitment cannot cross a verification that holds one of them. Use it as v1
+// (ScanSupplierDeliveryGuardV2, then Check); v1 stays for callers that do not count dispositions.
+const (
+	SupplierDeliveryGuardV2Function = "brant_pur.guard_supplier_delivery_v2"
+	SupplierDeliveryGuardV2SQL      = `SELECT known, status, verified_version, commitment_id, order_id, order_line_id, supplier_id, sku_id,
+		spec_revision, unit_id, unit_revision, verified_quantity, line_verified_quantity, line_disposed_quantity, code
+		FROM brant_pur.guard_supplier_delivery_v2($1, $2, $3)`
+)
+
 // DeliveryLineRef names a line of a supplier delivery at a version of the delivery: LineID is the
 // order line the line's commitment line buys.
 type DeliveryLineRef struct {
@@ -428,22 +457,40 @@ type SupplierDeliveryVerdict struct {
 	UnitRevision     int64
 	VerifiedQuantity string
 	Code             string
+	// SupplierDeliveryGuard v2 only (S5R-D05): the commitment line's verified and disposed totals,
+	// stated for a known line.
+	LineVerifiedQuantity string
+	LineDisposedQuantity string
 }
 
 // ScanSupplierDeliveryGuard reads the row of SupplierDeliveryGuardSQL for ref through scan, such as
 // a pgx row's Scan.
 func ScanSupplierDeliveryGuard(ref DeliveryLineRef, scan func(dest ...any) error) (SupplierDeliveryVerdict, error) {
+	return scanDeliveryGuard(ref, false, scan)
+}
+
+// ScanSupplierDeliveryGuardV2 reads the row of SupplierDeliveryGuardV2SQL for ref through scan.
+func ScanSupplierDeliveryGuardV2(ref DeliveryLineRef, scan func(dest ...any) error) (SupplierDeliveryVerdict, error) {
+	return scanDeliveryGuard(ref, true, scan)
+}
+
+func scanDeliveryGuard(ref DeliveryLineRef, v2 bool, scan func(dest ...any) error) (SupplierDeliveryVerdict, error) {
 	v := SupplierDeliveryVerdict{Ref: ref}
-	var status, commitment, order, line, supplier, sku, unit, quantity, code *string
+	var status, commitment, order, line, supplier, sku, unit, quantity, lineVerified, lineDisposed, code *string
 	var verified, spec, unitRev *int64
-	if err := scan(&v.Known, &status, &verified, &commitment, &order, &line, &supplier, &sku, &spec, &unit, &unitRev, &quantity, &code); err != nil {
+	dest := []any{&v.Known, &status, &verified, &commitment, &order, &line, &supplier, &sku, &spec, &unit, &unitRev, &quantity}
+	if v2 {
+		dest = append(dest, &lineVerified, &lineDisposed)
+	}
+	if err := scan(append(dest, &code)...); err != nil {
 		return SupplierDeliveryVerdict{}, err
 	}
 	for _, f := range []struct {
 		from *string
 		to   *string
 	}{{status, &v.Status}, {commitment, &v.CommitmentID}, {order, &v.OrderID}, {line, &v.OrderLineID}, {supplier, &v.SupplierID},
-		{sku, &v.SkuID}, {unit, &v.UnitID}, {quantity, &v.VerifiedQuantity}, {code, &v.Code}} {
+		{sku, &v.SkuID}, {unit, &v.UnitID}, {quantity, &v.VerifiedQuantity}, {lineVerified, &v.LineVerifiedQuantity},
+		{lineDisposed, &v.LineDisposedQuantity}, {code, &v.Code}} {
 		if f.from != nil {
 			*f.to = *f.from
 		}
@@ -490,20 +537,24 @@ func deliveryCheck(known bool, status, code string, verified int64, path string)
 // delivered against as InspectionSubject v1 shows it (Line: commitment, order binding, supplier, SKU
 // specification, unit and the quantity the line buys), the claimed and the verified quantity (the
 // latter for a version that is or was verified), where and when the goods were handed over, who
-// verified it, and Code as the guard decides it.
+// verified it, and Code as the guard decides it. CommitmentLineVerified and CommitmentLineDisposed
+// are what SupplierDeliveryGuard v2 states of the commitment line now: its verified deliveries and
+// its approved dispositions (S5R-D05).
 type DeliveryLine struct {
-	Ref              DeliveryLineRef
-	Status           string
-	VerifiedVersion  int64
-	RowVersion       int64
-	Line             CommitmentLine
-	ClaimedQuantity  string
-	VerifiedQuantity string
-	HandoverPlace    string
-	HandedOverAt     time.Time
-	VerifiedBy       kernel.ActorRef
-	VerifiedAt       time.Time
-	Code             string
+	Ref                    DeliveryLineRef
+	Status                 string
+	VerifiedVersion        int64
+	RowVersion             int64
+	Line                   CommitmentLine
+	ClaimedQuantity        string
+	VerifiedQuantity       string
+	HandoverPlace          string
+	HandedOverAt           time.Time
+	VerifiedBy             kernel.ActorRef
+	VerifiedAt             time.Time
+	Code                   string
+	CommitmentLineVerified string
+	CommitmentLineDisposed string
 }
 
 // Check returns nil for a line whose version is the delivery's verified one, and the guard's

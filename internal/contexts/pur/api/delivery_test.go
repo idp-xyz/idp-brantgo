@@ -140,6 +140,21 @@ func TestSupplierDeliveryGuardVerdicts(t *testing.T) {
 	if stale.Usable() || r == nil || r.Code != CodeReferenceStale || r.Category != kernel.CategoryConflict || !strings.Contains(r.Fields[0].Reason, "version 2") {
 		t.Fatalf("stale %+v %+v", stale, r)
 	}
+	// SupplierDeliveryGuard v2 (R59, S5R-D05): v1's columns and the commitment line's totals before the code.
+	if !strings.Contains(SupplierDeliveryGuardV2SQL, SupplierDeliveryGuardV2Function+"($1, $2, $3)") ||
+		!strings.Contains(SupplierDeliveryGuardV2SQL, "verified_quantity, line_verified_quantity, line_disposed_quantity, code") {
+		t.Fatal("the v2 SQL")
+	}
+	v2 := append(row("verified", 1, "60", nil)[:12], "160", "40.5", nil)
+	served, err = ScanSupplierDeliveryGuardV2(ref, scan(v2...))
+	if err != nil || !served.Usable() || served.VerifiedQuantity != "60" || served.LineVerifiedQuantity != "160" || served.LineDisposedQuantity != "40.5" {
+		t.Fatalf("v2 served %+v %v", served, err)
+	}
+	unknown, err = ScanSupplierDeliveryGuardV2(ref, scan(false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		CodeSupplierDeliveryUnverified))
+	if err != nil || unknown.Known || outcome(unknown.Check("/p")) != "SUPPLIER_DELIVERY_UNVERIFIED /p" || unknown.LineVerifiedQuantity != "" {
+		t.Fatalf("v2 unknown %+v %v", unknown, err)
+	}
 	if (DeliveryLine{Status: "verified"}).Check("/p") != nil ||
 		outcome(DeliveryLine{Status: "rejected", Code: CodeSupplierDeliveryUnverified}.Check("/p")) != "SUPPLIER_DELIVERY_UNVERIFIED /p" {
 		t.Fatal("delivery line")

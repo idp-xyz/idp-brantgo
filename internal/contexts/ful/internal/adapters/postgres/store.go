@@ -361,14 +361,15 @@ func ConfirmShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 }
 
 // LoadConsumed returns what FUL's confirmed shipments shipped of order orderID's lines over every
-// revision, of the delivery lines deliveries over every version and under releases, as a statement
-// started now sees them. Called while the order's fulfilment root is held, it sees every
-// confirmation that consumes them (D-3).
+// revision, of each of its purchase commitment lines over every delivery (S5R-D05), of the delivery
+// lines deliveries over every version and under releases, as a statement started now sees them.
+// Called while the order's fulfilment root is held, it sees every confirmation that consumes them
+// (D-3): a commitment line serves one order line.
 func LoadConsumed(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, orderID string, deliveries []shipment.DeliveryRef,
 	releases []string) (shipment.Consumed, error) {
 	t, c := scope2(scope)
 	out := shipment.Consumed{OrderLines: map[string]kernel.Decimal{}, Deliveries: map[shipment.DeliveryRef]kernel.Decimal{},
-		Releases: map[string]kernel.Decimal{}}
+		CommitmentLines: map[shipment.CommitmentLine]kernel.Decimal{}, Releases: map[string]kernel.Decimal{}}
 	collect := func(sql string, args []any, put func(key []string, d kernel.Decimal)) error {
 		rows, err := exec.Query(ctx, sql, args...)
 		if err != nil {
@@ -392,6 +393,12 @@ func LoadConsumed(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 		AND s.shipment_id = l.shipment_id WHERE l.tenant_id = $1 AND l.company_id = $2 AND s.status = 'confirmed' AND `
 	if err := collect(`SELECT l.order_line_id, '', trim_scale(sum(l.quantity))::text`+confirmed+`s.order_id = $3 GROUP BY l.order_line_id`,
 		[]any{t, c, orderID}, func(k []string, d kernel.Decimal) { out.OrderLines[k[0]] = d }); err != nil {
+		return out, err
+	}
+	if err := collect(`SELECT l.commitment_id, l.order_line_id, trim_scale(sum(l.quantity))::text`+confirmed+
+		`s.order_id = $3 GROUP BY l.commitment_id, l.order_line_id`, []any{t, c, orderID}, func(k []string, d kernel.Decimal) {
+		out.CommitmentLines[shipment.CommitmentLine{CommitmentID: k[0], OrderLineID: k[1]}] = d
+	}); err != nil {
 		return out, err
 	}
 	if len(deliveries) > 0 {

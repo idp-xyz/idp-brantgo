@@ -27,10 +27,12 @@ const (
 	// the release has left after FUL's confirmed shipments.
 	CodeQualityReleaseInsufficient = "QUALITY_RELEASE_INSUFFICIENT"
 	// CodeSupplierDeliveryUnverified (409): a line's supplier delivery is not verified (PUR's
-	// SupplierDeliveryGuard v1; a supplier's claim never counts).
+	// SupplierDeliveryGuard v2; a supplier's claim never counts).
 	CodeSupplierDeliveryUnverified = "SUPPLIER_DELIVERY_UNVERIFIED"
 	// CodeSupplierDeliveryInsufficient (409): the shipment would ship more of a supplier delivery
-	// line than its verified quantity less FUL's confirmed shipments (FUL-INV-003).
+	// line than its verified quantity less FUL's confirmed shipments, or more of a purchase
+	// commitment line than its verified deliveries less its approved dispositions less FUL's
+	// confirmed shipments (FUL-INV-003, S5R-D05).
 	CodeSupplierDeliveryInsufficient = "SUPPLIER_DELIVERY_INSUFFICIENT"
 	// CodePartyScreeningNotClear (409): a party of the order is not screened clear now (PTY's
 	// PartyScreeningGuard v1).

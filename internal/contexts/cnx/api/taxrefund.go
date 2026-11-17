@@ -399,12 +399,15 @@ type TaxResultView struct {
 	ExternalReference string
 	ResultText        string
 	FundRecordID      string
-	PurchaseInvoiceID string // evidence_rolled_back (S5R-D20)
-	Evidence          []EvidenceView
-	Reason            string
-	RecordedBy        kernel.ActorRef
-	RecordedAt        time.Time
-	AuthorityEpoch    int64
+	// FundRecordReversed: STL's FundRecordRef v1 shows the received result's fund record reversed at
+	// the read (S5R-D22); the result keeps what it recorded.
+	FundRecordReversed bool
+	PurchaseInvoiceID  string // evidence_rolled_back (S5R-D20)
+	Evidence           []EvidenceView
+	Reason             string
+	RecordedBy         kernel.ActorRef
+	RecordedAt         time.Time
+	AuthorityEpoch     int64
 }
 
 // TaxAmountsView shows the amounts of a case side by side (CN-R08, CN-AT10), in minor units of

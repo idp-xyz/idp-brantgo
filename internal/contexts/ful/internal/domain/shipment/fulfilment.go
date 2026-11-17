@@ -1,6 +1,10 @@
 package shipment
 
-import "go.idp.xyz/idp-brant/internal/kernel"
+import (
+	"maps"
+
+	"go.idp.xyz/idp-brant/internal/kernel"
+)
 
 // The quantity rules of an order's fulfilment (tactical model FUL-AGG-OrderFulfilment; S5 decision
 // D-3 "lock roots, derive balances"). What an order line, a supplier delivery line or a quality
@@ -31,6 +35,20 @@ func WithinDelivery(before, shipping, verified kernel.Decimal, path string) erro
 	return nil
 }
 
+// WithinCommitmentLine refuses shipping more of purchase commitment line ref than may ship of it:
+// what PUR verified of it over all its deliveries less what its approved dispositions took out of the
+// order, with what FUL's confirmed shipments shipped of it over every delivery and version:
+// SUPPLIER_DELIVERY_INSUFFICIENT at path (FUL-INV-003, S5R-D05: disposed goods never ship).
+func WithinCommitmentLine(ref CommitmentLine, before, shipping kernel.Decimal, t CommitmentLineTotals, path string) error {
+	may := t.Verified.Sub(t.Disposed)
+	if total := before.Add(shipping); total.Cmp(may) > 0 {
+		return Reject(CodeSupplierDeliveryInsufficient, path, "Purchase commitment "+ref.CommitmentID+" line "+ref.OrderLineID+" has "+
+			t.Verified.String()+" verified and "+t.Disposed.String()+" disposed of by approved dispositions (S5R-D05); "+before.String()+
+			" shipped before and "+shipping.String()+" in this shipment exceed the "+may.String()+" that may ship")
+	}
+	return nil
+}
+
 // WithinRelease refuses shipping more under a quality release than it released, with what FUL's
 // confirmed shipments shipped under it: QUALITY_RELEASE_INSUFFICIENT at path. A revoked release
 // keeps what was shipped under it; it serves no further shipment.
@@ -49,19 +67,25 @@ func (s *Shipment) Before(c Consumed) Consumed {
 	if s.Status != StatusConfirmed {
 		return c
 	}
-	out := Consumed{OrderLines: map[string]kernel.Decimal{}, Deliveries: map[DeliveryRef]kernel.Decimal{}, Releases: map[string]kernel.Decimal{}}
-	for k, v := range c.OrderLines {
-		out.OrderLines[k] = v
+	out := Consumed{OrderLines: maps.Clone(c.OrderLines), Deliveries: maps.Clone(c.Deliveries), CommitmentLines: maps.Clone(c.CommitmentLines),
+		Releases: maps.Clone(c.Releases)}
+	if out.OrderLines == nil {
+		out.OrderLines = map[string]kernel.Decimal{}
 	}
-	for k, v := range c.Deliveries {
-		out.Deliveries[k] = v
+	if out.Deliveries == nil {
+		out.Deliveries = map[DeliveryRef]kernel.Decimal{}
 	}
-	for k, v := range c.Releases {
-		out.Releases[k] = v
+	if out.CommitmentLines == nil {
+		out.CommitmentLines = map[CommitmentLine]kernel.Decimal{}
+	}
+	if out.Releases == nil {
+		out.Releases = map[string]kernel.Decimal{}
 	}
 	for _, l := range s.Lines {
+		cl := CommitmentLine{CommitmentID: l.CommitmentID, OrderLineID: l.OrderLineID}
 		out.OrderLines[l.OrderLineID] = out.OrderLines[l.OrderLineID].Sub(l.Quantity)
 		out.Deliveries[l.Delivery] = out.Deliveries[l.Delivery].Sub(l.Quantity)
+		out.CommitmentLines[cl] = out.CommitmentLines[cl].Sub(l.Quantity)
 		out.Releases[l.ReleaseID] = out.Releases[l.ReleaseID].Sub(l.Quantity)
 	}
 	return out

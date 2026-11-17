@@ -355,6 +355,8 @@ type DeclarationLink struct {
 
 // FundLink is an STL fund record a fund_record requirement links (R38), labelled
 // commercial_allocation: STL's applications are a commercial allocation, never 出口收汇核销 (CN-R11).
+// The check keeps what STL stated of it then; Reversed is what STL's FundRecordRef v1 shows at the
+// read: true once fund.reverse reversed the record (S5R-D22), which no new check links.
 type FundLink struct {
 	FundRecordID  string
 	Kind          string
@@ -362,6 +364,7 @@ type FundLink struct {
 	Currency      string
 	ReceivedMinor string
 	Label         string
+	Reversed      bool
 }
 
 // RequirementView is a requirement as a check stated it.

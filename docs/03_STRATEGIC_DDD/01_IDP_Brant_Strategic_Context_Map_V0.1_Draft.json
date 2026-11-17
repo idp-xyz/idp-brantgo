@@ -2330,7 +2330,7 @@
       "to": "FUL",
       "pattern": "Customer／Supplier（守卫函数）",
       "fact": "直发路线的已核实供应商交付",
-      "contract": "SupplierDeliveryGuard v1",
+      "contract": "SupplierDeliveryGuard v1、SupplierDeliveryGuard v2（S5R-D05：同一（交付、行、版本）另答该行所属承诺行的核实交付合计与获批处置合计；锁承诺根 FOR SHARE、不锁交付根，使交付登记与核实、处置申请与批准和出运确认在承诺根上串行；FUL 以它判定 FUL-INV-003；v1 保留兼容）",
       "authority": "PUR",
       "risk": "出运量超过核实交付量",
       "contractStatus": "DESIGN",

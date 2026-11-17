@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 
+	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -49,7 +50,9 @@ type Funds interface {
 const FundIn = "in"
 
 // FundRecord is a fund record as STL states it: its kind, direction, state, currency and the amount
-// the bank credited, in minor units.
+// the bank credited, in minor units. Reversed is true once fund.reverse reversed it (S5R-D22): CNX
+// links a reversed record to no bundle check and no refund result (REFERENCE_STALE), and its reads
+// show the ones linked before as reversed.
 type FundRecord struct {
 	ID            string
 	Kind          string
@@ -57,6 +60,33 @@ type FundRecord struct {
 	Status        string
 	Currency      string
 	ReceivedMinor string
+	Reversed      bool
+}
+
+// fundReversed refuses a fund record STL reversed (S5R-D22) at path: REFERENCE_STALE, the record's
+// state no longer applies.
+func fundReversed(f FundRecord, path string) error {
+	if !f.Reversed {
+		return nil
+	}
+	return api.Reject(api.CodeReferenceStale, path, "STL reversed fund record "+f.ID+" (S5R-D22): it is no evidence of a receipt any more")
+}
+
+// reversedFunds asks STL, after a read's transaction, which of the fund records ids it shows reversed
+// now. Without the port, or for a record STL no longer shows the caller, nothing is reversed.
+func (s Service) reversedFunds(ctx context.Context, ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if s.Upstream.Funds == nil || len(ids) == 0 {
+		return out, nil
+	}
+	got, err := s.Upstream.Funds.ResolveFundRecords(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for id, f := range got {
+		out[id] = f.Reversed
+	}
+	return out, nil
 }
 
 // CreditNotes is CNX's port to STL for the credit notes whose impact a reconciliation records (S5 C10, CN-AT11 CNX

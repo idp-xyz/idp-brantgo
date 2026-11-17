@@ -68,7 +68,7 @@ func (QLT) GuardRelease(ctx context.Context, exec bentopg.Executor, ref qltapi.Q
 }
 
 // PUR is FUL's port to PUR's supplier deliveries (R59): DeliveryLookups v1 before FUL's transaction
-// and SupplierDeliveryGuard v1 inside it.
+// and SupplierDeliveryGuard v2 inside it.
 type PUR struct {
 	Deliveries purapi.DeliveryLookups
 }
@@ -100,22 +100,24 @@ func (p PUR) ResolveDeliveryLines(ctx context.Context, refs []fulapi.DeliveryLin
 		c := l.Line
 		out[r] = application.DeliveryLine{Ref: r, Known: true, Status: l.Status, VerifiedVersion: l.VerifiedVersion, CommitmentID: c.Ref.CommitmentID,
 			SupplierID: c.SupplierID, OrderID: c.OrderID, OrderLineID: c.Ref.OrderLineID, SkuID: c.SkuID, SpecRevision: c.SpecRevision,
-			UnitID: c.UnitID, UnitRevision: c.UnitRevision, VerifiedQuantity: l.VerifiedQuantity, Code: l.Code}
+			UnitID: c.UnitID, UnitRevision: c.UnitRevision, VerifiedQuantity: l.VerifiedQuantity, LineVerifiedQuantity: l.CommitmentLineVerified,
+			LineDisposedQuantity: l.CommitmentLineDisposed, Code: l.Code}
 	}
 	return out, nil
 }
 
-// GuardDeliveryLine runs SupplierDeliveryGuard v1, which locks the delivery root FOR SHARE until
-// FUL's transaction ends.
+// GuardDeliveryLine runs SupplierDeliveryGuard v2 (S5R-D05), which locks the line's commitment root
+// FOR SHARE until FUL's transaction ends.
 func (PUR) GuardDeliveryLine(ctx context.Context, exec bentopg.Executor, ref fulapi.DeliveryLineRef) (application.DeliveryLine, error) {
 	r := purRef(ref)
-	v, err := purapi.ScanSupplierDeliveryGuard(r, exec.QueryRow(ctx, purapi.SupplierDeliveryGuardSQL, purapi.SupplierDeliveryGuardArgs(r)...).Scan)
+	v, err := purapi.ScanSupplierDeliveryGuardV2(r, exec.QueryRow(ctx, purapi.SupplierDeliveryGuardV2SQL, purapi.SupplierDeliveryGuardArgs(r)...).Scan)
 	if err != nil {
 		return application.DeliveryLine{}, err
 	}
 	return application.DeliveryLine{Ref: ref, Known: v.Known, Status: v.Status, VerifiedVersion: v.VerifiedVersion, CommitmentID: v.CommitmentID,
 		SupplierID: v.SupplierID, OrderID: v.OrderID, OrderLineID: v.OrderLineID, SkuID: v.SkuID, SpecRevision: v.SpecRevision, UnitID: v.UnitID,
-		UnitRevision: v.UnitRevision, VerifiedQuantity: v.VerifiedQuantity, Code: v.Code}, nil
+		UnitRevision: v.UnitRevision, VerifiedQuantity: v.VerifiedQuantity, LineVerifiedQuantity: v.LineVerifiedQuantity,
+		LineDisposedQuantity: v.LineDisposedQuantity, Code: v.Code}, nil
 }
 
 // CNX is FUL's port to CNX's guards (R56): TradeComplianceGuard v1 and ExportLicenseGuard v1.

@@ -344,14 +344,24 @@ func (s Service) ResolveDeliveryLines(ctx context.Context, refs []api.DeliveryLi
 	}
 	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		f := newDeliveryFacts(ctx, exec, d)
+		disposed := map[string][]*commitment.Disposition{}
 		for _, ref := range refs {
-			line, _, _, ok, err := f.deliveryLine(ctx, ref)
+			line, c, _, ok, err := f.deliveryLine(ctx, ref)
 			if err != nil {
 				return err
 			}
-			if ok {
-				out[ref] = line
+			if !ok {
+				continue
 			}
+			if err = f.verified(ctx, c); err != nil {
+				return err
+			}
+			line.CommitmentLineVerified = text(c.sums[ref.LineID])
+			cl := api.CommitmentLineRef{CommitmentID: c.c.ID, OrderLineID: ref.LineID}
+			if line.CommitmentLineDisposed, _, err = approvedDispositions(ctx, exec, disposed, cl); err != nil {
+				return err
+			}
+			out[ref] = line
 		}
 		return nil
 	})
@@ -371,6 +381,7 @@ func (s Service) ResolveSettlementSources(ctx context.Context, refs []api.Delive
 	}
 	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		f := newDeliveryFacts(ctx, exec, d)
+		disposed := map[string][]*commitment.Disposition{}
 		for _, ref := range refs {
 			line, c, v, ok, err := f.deliveryLine(ctx, ref)
 			if err != nil {
@@ -380,6 +391,11 @@ func (s Service) ResolveSettlementSources(ctx context.Context, refs []api.Delive
 				continue
 			}
 			if err = f.verified(ctx, c); err != nil {
+				return err
+			}
+			line.CommitmentLineVerified = text(c.sums[ref.LineID])
+			cl := api.CommitmentLineRef{CommitmentID: c.c.ID, OrderLineID: ref.LineID}
+			if line.CommitmentLineDisposed, _, err = approvedDispositions(ctx, exec, disposed, cl); err != nil {
 				return err
 			}
 			net, tax, gross := c.amounts(ref.LineID)

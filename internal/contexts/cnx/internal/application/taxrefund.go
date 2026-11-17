@@ -292,7 +292,8 @@ func (s Service) AllocateTaxEvidence(ctx context.Context, cmd api.AllocateTaxEvi
 // evidence or with evidence under review; a conversion to an exemption under a policy that refunds nothing, S5R-D14;
 // an invoice's evidence rolled back in the case already, S5R-D20) and INVALID_KNOWN_VALUE (another currency than the
 // case's; a rollback of an invoice the case's evidence does not use), the amounts' digits (INVALID_KNOWN_VALUE),
-// the evidence (REFERENCE_INVALID), the fund record (REFERENCE_INVALID; not money in, in another
+// the evidence (REFERENCE_INVALID), the fund record (REFERENCE_INVALID; reversed by STL: REFERENCE_STALE,
+// S5R-D22; not money in, in another
 // currency or less than the amount: INVALID_KNOWN_VALUE). A rejection, the external result, returns
 // the case's evidence to the invoice lines' balances. TaxRefundResultRecorded is published.
 type recordTaxResult struct {
@@ -413,6 +414,8 @@ func (h *recordTaxResult) Apply(ctx context.Context, exec bentopg.Executor, d au
 		switch {
 		case !ok:
 			return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, fPath, "STL resolves no such fund record")
+		case f.Reversed:
+			return action.Outcome{}, fundReversed(f, fPath)
 		case f.Direction != FundIn:
 			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, fPath, "The fund record brings no money in")
 		case f.Currency != r.Currency.Code:

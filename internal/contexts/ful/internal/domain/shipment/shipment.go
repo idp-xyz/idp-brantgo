@@ -205,7 +205,7 @@ type ReleaseFact struct {
 
 // DeliveryFact is what PUR says of a supplier delivery line at the version asked (R59): Status,
 // Code — "" when that version is the delivery's verified one and serves a shipment —, what it is
-// of and the Verified quantity.
+// of, the Verified quantity and what its purchase commitment line adds up to (S5R-D05).
 type DeliveryFact struct {
 	Ref      DeliveryRef
 	Version  int64
@@ -213,6 +213,23 @@ type DeliveryFact struct {
 	Code     string
 	Scope    Scope
 	Verified kernel.Decimal
+	Line     CommitmentLineTotals
+}
+
+// CommitmentLine names a purchase commitment line: the commitment and the sales order line it buys.
+// Every supplier delivery line of it serves that order line.
+type CommitmentLine struct {
+	CommitmentID string
+	OrderLineID  string
+}
+
+// CommitmentLineTotals is what PUR's SupplierDeliveryGuard v2 states of a commitment line (R59,
+// S5R-D05): the verified quantity of the versions verified now of all its deliveries, and what its
+// approved dispositions took out of the order (returned to the supplier, written off or held for
+// reuse).
+type CommitmentLineTotals struct {
+	Verified kernel.Decimal
+	Disposed kernel.Decimal
 }
 
 // RequestLine is a line of a preparation: Delivery at Version.
@@ -227,11 +244,13 @@ type RequestLine struct {
 
 // Consumed is what FUL's confirmed shipments shipped before, as a transaction holding the order's
 // fulfilment root reads it: of each order line over every order revision, of each supplier
-// delivery line over every version, and under each quality release (FUL-INV-001, FUL-INV-003).
+// delivery line over every version, of each purchase commitment line over all its deliveries and
+// under each quality release (FUL-INV-001, FUL-INV-003).
 type Consumed struct {
-	OrderLines map[string]kernel.Decimal
-	Deliveries map[DeliveryRef]kernel.Decimal
-	Releases   map[string]kernel.Decimal
+	OrderLines      map[string]kernel.Decimal
+	Deliveries      map[DeliveryRef]kernel.Decimal
+	CommitmentLines map[CommitmentLine]kernel.Decimal
+	Releases        map[string]kernel.Decimal
 }
 
 // Request is a preparation: the shipment's ID, its order and route, its lines, the end user it
@@ -301,6 +320,7 @@ func Prepare(req Request, in Inputs) (*Shipment, error) {
 		RequestHash: req.RequestHash, OwnerActor: in.Preparer.ID, OwnerTeam: in.Team,
 		Prepared: Act{By: in.Preparer, Epoch: in.Epoch, At: now}}
 	shipping, fromDelivery, underRelease := map[string]kernel.Decimal{}, map[DeliveryRef]kernel.Decimal{}, map[string]kernel.Decimal{}
+	fromCommitment := map[CommitmentLine]kernel.Decimal{}
 	versions := map[DeliveryRef]int64{}
 	for i, l := range req.Lines {
 		at := slices.IndexFunc(o.Lines, func(ol OrderLine) bool { return ol.LineID == l.OrderLineID })
@@ -345,6 +365,11 @@ func Prepare(req Request, in Inputs) (*Shipment, error) {
 		}
 		fromDelivery[l.Delivery] = fromDelivery[l.Delivery].Add(l.Quantity)
 		if err := WithinDelivery(in.Consumed.Deliveries[l.Delivery], fromDelivery[l.Delivery], d.Verified, linePath(i, "quantity")); err != nil {
+			return nil, err
+		}
+		cl := CommitmentLine{CommitmentID: d.Scope.CommitmentID, OrderLineID: ol.LineID}
+		fromCommitment[cl] = fromCommitment[cl].Add(l.Quantity)
+		if err := WithinCommitmentLine(cl, in.Consumed.CommitmentLines[cl], fromCommitment[cl], d.Line, linePath(i, "quantity")); err != nil {
 			return nil, err
 		}
 		underRelease[l.ReleaseID] = underRelease[l.ReleaseID].Add(l.Quantity)

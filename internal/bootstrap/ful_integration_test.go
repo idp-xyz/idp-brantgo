@@ -214,12 +214,13 @@ func (w *fulWorld) released(commitment, quantity string) string {
 }
 
 // delivered has PUR answer delivery "delivery.<commitment>" line L1 at version 1, verified for
-// quantity, against commitment's line L1.
+// quantity, against commitment's line L1, the commitment line's only delivery, nothing disposed of
+// (SupplierDeliveryGuard v2's totals, S5R-D05).
 func (w *fulWorld) delivered(commitment, verified string) fulapi.DeliveryLineRef {
 	ref := fulapi.DeliveryLineRef{DeliveryID: "delivery." + commitment, LineID: "L1", Version: 1}
 	w.deliveries.put(ful.DeliveryLine{Ref: ref, Status: "verified", VerifiedVersion: 1, CommitmentID: commitment, SupplierID: "supplier.1",
 		OrderID: w.order.ObjectID, OrderLineID: "L1", SkuID: w.line.Sku.SkuID, SpecRevision: w.line.Sku.SpecRevision, UnitID: w.line.UnitRef.ID,
-		UnitRevision: w.line.UnitRef.Revision, VerifiedQuantity: verified})
+		UnitRevision: w.line.UnitRef.Revision, VerifiedQuantity: verified, LineVerifiedQuantity: verified, LineDisposedQuantity: "0"})
 	return ref
 }
 
