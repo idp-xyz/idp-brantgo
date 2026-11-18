@@ -23,6 +23,7 @@ const (
 	ReadRfq       = "rfq.get"
 	ReadSnapshots = "cost_snapshot.list"
 	ReadContext   = "costing_context.get"
+	ReadProposal  = "quote.price_proposal"
 	ReadConfig    = "config.lookup"
 	ReadSku       = "sku.get"
 	ReadParty     = "party.get"
@@ -111,6 +112,7 @@ func readCapabilities(t Q01Targets) ([]Capability, error) {
 		func() (Capability, error) { return readRfq(t) },
 		func() (Capability, error) { return readSnapshots(t) },
 		func() (Capability, error) { return readContext(t) },
+		func() (Capability, error) { return readProposal(t) },
 		func() (Capability, error) { return readConfig(t) },
 		func() (Capability, error) { return readSku(t) },
 		func() (Capability, error) { return readParty(t) },
@@ -187,6 +189,31 @@ func readContext(t Q01Targets) (Capability, error) {
 				return readReceipt{}, err
 			}
 			return projectContext(v), nil
+		})
+}
+
+func readProposal(t Q01Targets) (Capability, error) {
+	type in struct {
+		IdempotencyKey   string
+		RfqID            string                  `contract:"required,id"`
+		CustomerID       string                  `contract:"id" doc:"the RFQ's customer; leave out to use the RFQ's own"`
+		Currency         string                  `contract:"required" doc:"ISO 4217 code of the quote, such as USD"`
+		CostSnapshotRef  *trdapi.CostSnapshotRef `doc:"the adoptable snapshot the quote will name, with its result hash"`
+		PricingPolicyRef trdapi.ConfigRef        `contract:"required,kind=pricing_policy"`
+	}
+	return defineRead(Spec{Command: ReadProposal, Context: "trd", Contract: trdapi.Contract, Perm: "trd.read",
+		Summary: "The unit price to draft for each line of a ready RFQ: the sales price in force for the SKU, otherwise the line's unit cost divided by one minus the pricing policy's target margin. Copy UnitPrice and PriceBasisQuantity into the quote line and set DiscountRatio to 0. Source none has no price: stop, do not invent one. UnderFloor is still that price; a person reviews it. This read writes nothing."},
+		func(c in) ObjectRef { return ObjectRef{Type: "inq.rfq", ID: c.RfqID} },
+		func(ctx context.Context, c in) (readReceipt, error) {
+			if t.TRDPrices == nil {
+				return readReceipt{}, errNoTarget
+			}
+			v, err := t.TRDPrices.PriceProposal(ctx, trdapi.PriceProposalQuery{RfqID: c.RfqID, CustomerID: c.CustomerID,
+				Currency: c.Currency, CostSnapshotRef: c.CostSnapshotRef, PricingPolicyRef: c.PricingPolicyRef})
+			if err != nil {
+				return readReceipt{}, err
+			}
+			return projectProposal(v), nil
 		})
 }
 
@@ -380,6 +407,40 @@ func clip(s string, n int) (string, bool) {
 		return s, false
 	}
 	return string([]rune(s)[:n]), true
+}
+
+func projectProposal(v trdapi.PriceProposal) readReceipt {
+	type line struct {
+		RfqLineID          string `json:"RfqLineID"`
+		SkuID              string `json:"SkuID"`
+		Quantity           string `json:"Quantity,omitempty"`
+		Unit               string `json:"Unit,omitempty"`
+		Source             string `json:"Source"`
+		Reason             string `json:"Reason,omitempty"`
+		UnitPrice          string `json:"UnitPrice,omitempty"`
+		PriceBasisQuantity string `json:"PriceBasisQuantity,omitempty"`
+		UnderFloor         bool   `json:"UnderFloor,omitempty"`
+	}
+	lines := make([]line, 0, len(v.Lines))
+	truncated := false
+	for _, l := range v.Lines {
+		if len(lines) == maxReadLines {
+			truncated = true
+			break
+		}
+		lines = append(lines, line{RfqLineID: l.RfqLineID, SkuID: l.SkuID, Quantity: l.Quantity, Unit: l.Unit,
+			Source: l.Source, Reason: l.Reason, UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, UnderFloor: l.UnderFloor})
+	}
+	body := struct {
+		RfqID    string `json:"RfqID"`
+		Currency string `json:"Currency"`
+		Lines    []line `json:"Lines"`
+	}{RfqID: v.RfqID, Currency: v.Currency, Lines: lines}
+	omitted := "cost, margin and the price-list reference; copy UnitPrice, do not recompute it"
+	if truncated {
+		omitted = "lines beyond 40; " + omitted
+	}
+	return readReceipt{ObjectID: v.RfqID, RowVersion: v.RfqRowVersion, Status: "ok", Truncated: truncated, Omitted: omitted, Body: body}
 }
 
 func projectRfq(v inqapi.RfqView) readReceipt {

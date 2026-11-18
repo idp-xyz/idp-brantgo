@@ -24,7 +24,7 @@ import (
 func TestQ01ReadsAreBoundedApiReads(t *testing.T) {
 	f := &readFakes{text: strings.Repeat("询", 20000), form: strings.Repeat("L", 8000)}
 	reg, err := Q01Registry(Q01Targets{INQReads: f, CSTReads: f, CSTLists: f, POLLists: f, CATReads: f,
-		PTYReads: f, PTYProfiles: f, TRDReads: f, EVDReads: f, EVDExtracts: f})
+		PTYReads: f, PTYProfiles: f, TRDReads: f, TRDPrices: f, EVDReads: f, EVDExtracts: f})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +65,12 @@ func TestQ01ReadsAreBoundedApiReads(t *testing.T) {
 			t.Errorf("%s returned sensitive content", c.Command)
 		}
 	}
-	for _, name := range []string{ReadRfq, ReadSnapshots, ReadContext, ReadConfig, ReadSku, ReadParty, ReadQuote, ReadResponse, ReadOrder, ReadSource} {
+	for _, name := range []string{ReadRfq, ReadSnapshots, ReadContext, ReadProposal, ReadConfig, ReadSku, ReadParty, ReadQuote, ReadResponse, ReadOrder, ReadSource} {
 		if !seen[name] {
 			t.Errorf("missing read %s", name)
 		}
 	}
-	if !f.rfq || !f.snapshots || !f.context || !f.configs || !f.sku || !f.party || !f.profile || !f.quote || !f.ready || !f.response || !f.order || !f.source || !f.extract {
+	if !f.rfq || !f.snapshots || !f.context || !f.proposal || !f.configs || !f.sku || !f.party || !f.profile || !f.quote || !f.ready || !f.response || !f.order || !f.source || !f.extract {
 		t.Fatalf("a read did not call its api: %+v", *f)
 	}
 	if !strings.Contains(f.sourceOut, `"truncated":true`) || strings.Contains(f.sourceOut, strings.Repeat("询", SourceTextRunes+1)) {
@@ -108,8 +108,8 @@ func TestAReadCannotCarryAGrant(t *testing.T) {
 }
 
 type readFakes struct {
-	text, form, sourceOut                                                                                 string
-	rfq, snapshots, context, configs, sku, party, profile, quote, ready, response, order, source, extract bool
+	text, form, sourceOut                                                                                           string
+	rfq, snapshots, context, proposal, configs, sku, party, profile, quote, ready, response, order, source, extract bool
 }
 
 func (f *readFakes) GetRfq(_ context.Context, id string) (inqapi.RfqView, error) {
@@ -125,6 +125,13 @@ func (f *readFakes) SnapshotsOfRfq(context.Context, string) (cstapi.RfqSnapshotL
 	f.snapshots = true
 	return cstapi.RfqSnapshotList{RfqID: "rfq.1", Snapshots: []cstapi.RfqSnapshot{{
 		SnapshotID: "snap.1", ResultHash: strings.Repeat("ab", 32), Adoptability: "adoptable", ContextID: "context.1"}}}, nil
+}
+
+func (f *readFakes) PriceProposal(context.Context, trdapi.PriceProposalQuery) (trdapi.PriceProposal, error) {
+	f.proposal = true
+	return trdapi.PriceProposal{RfqID: "rfq.1", Currency: "USD", Lines: []trdapi.ProposedLine{{
+		RfqLineID: "L1", SkuID: "sku.1", Quantity: "24", Unit: "PCS", Source: trdapi.PriceSourceFormula,
+		UnitPrice: "8.00", PriceBasisQuantity: "1"}}}, nil
 }
 
 func (f *readFakes) GetContext(context.Context, string) (cstapi.ContextView, error) {

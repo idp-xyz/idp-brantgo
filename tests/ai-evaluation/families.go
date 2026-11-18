@@ -1074,5 +1074,5 @@ func gradeReads(ctx context.Context, t *trial) {
 			offered++
 		}
 	}
-	t.assert("bundle lists the ten reads", "10", fmt.Sprint(offered))
+	t.assert("bundle lists the eleven reads", "11", fmt.Sprint(offered))
 }

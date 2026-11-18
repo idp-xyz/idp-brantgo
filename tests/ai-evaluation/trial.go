@@ -268,7 +268,7 @@ func (t *trial) setup(ctx context.Context) error {
 // may delegate: the costing drafts are a costing person's (D1-D08: people cost on their pages).
 var clerkCapabilities = []string{"source.register", "file.register", "rfq.save_draft", "quote.save_draft", "quote.revise",
 	"quote.metadata.update", "quote.response.record", "order.prepare", "order.review.request",
-	"rfq.get", "cost_snapshot.list", "costing_context.get", "config.lookup", "sku.get", "party.get",
+	"rfq.get", "cost_snapshot.list", "costing_context.get", "quote.price_proposal", "config.lookup", "sku.get", "party.get",
 	"quote.get", "quote.response.get", "order.get", "source.get"}
 
 // readDelegation is the reads family's delegation: every Q01 read except order.get, so that call

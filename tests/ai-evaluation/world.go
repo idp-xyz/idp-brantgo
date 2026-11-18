@@ -227,7 +227,7 @@ func (s *setupRun) foundation(w *world) {
 	w.trade = s.config(w, "trade_terms", "FCA", map[string]any{"incoterm": "FCA", "edition": "2020", "named_place": "TEST NAMED PLACE",
 		"responsibility_note": "synthetic evidence only", "delivery": map[string]any{"kind": "fixed_date", "date": "2027-01-31"}})
 	w.policy = s.config(w, "pricing_policy", "policy.1", map[string]any{"name": "synthetic BRC-001 policy", "calculation_currency": "USD",
-		"minimum_margin": "0.25", "quote_valid_days": 7, "max_fx_age_seconds": 3600, "tax_profile": w.zero})
+		"minimum_margin": "0.25", "target_margin": "0.3125", "quote_valid_days": 7, "max_fx_age_seconds": 3600, "tax_profile": w.zero})
 	w.issuer = s.config(w, "company_profile", company, map[string]any{"legal_name": "合成企业", "registration_no": "SYNTHETIC-NOT-REAL",
 		"country": "CN", "address": "合成地址", "base_currency": "USD", "time_zone": "Asia/Shanghai", "policy_scope": "synthetic general trade test"})
 	w.template = s.config(w, "quote_document_template", "quote.template", map[string]any{"name": "formal", "language": "en",

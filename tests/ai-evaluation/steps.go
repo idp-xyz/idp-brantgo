@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -264,11 +265,15 @@ func (t *trial) costQuote(ctx context.Context) error {
 	return t.resume(ctx, "rfq", rfqID, t.rfqVersion, "询价已逐行核实并完成核价，成本快照 "+t.snap.snapshotID+" 已冻结")
 }
 
-// draftQuote is the agent's quote phase: the draft on the RFQ and the cost snapshot at price per
-// piece; the runner binds the root the draft created (task.bind_object, MD-31).
+// draftQuote is the agent's quote phase. It reads quote.price_proposal and drafts that price; price
+// is the family's truth, and a proposal that is not that price fails the phase. The runner binds
+// the root the draft created (task.bind_object, MD-31).
 func (t *trial) draftQuote(ctx context.Context, price string, more ...scriptStep) error {
+	if err := t.proposalMatches(ctx, price); err != nil {
+		return err
+	}
 	data := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, price, time.Now().Add(72*time.Hour))
-	steps := append([]scriptStep{turn(saveQuote(quoteID, data))}, more...)
+	steps := append([]scriptStep{turn(readProposal(t.w, t.snap)), turn(saveQuote(quoteID, data))}, more...)
 	steps = append(steps, done("报价草稿已保存，等待人工冻结、审核与生效。"))
 	if _, err := t.runAgent(ctx, agentPhase{name: "quote", steps: steps, until: lifecycleIs("waiting_input", "paused")}); err != nil {
 		return err
@@ -281,6 +286,33 @@ func (t *trial) draftQuote(ctx context.Context, price string, more ...scriptStep
 		return err
 	}
 	t.assert("quote root bound to the task", "bound "+quoteID, str(dig(v, "binding", "state"))+" "+str(dig(v, "binding", "quote_id")))
+	return nil
+}
+
+// proposalMatches reads the price proposal over HTTP and requires every BRC line at price per piece.
+func (t *trial) proposalMatches(ctx context.Context, price string) error {
+	q := url.Values{}
+	q.Set("currency", "USD")
+	q.Set("pricing_policy_id", str(t.w.policy["id"]))
+	q.Set("pricing_policy_revision", fmt.Sprint(t.w.policy["revision"]))
+	q.Set("cost_snapshot_id", t.snap.snapshotID)
+	q.Set("cost_snapshot_result_hash", t.snap.resultHash)
+	v, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/trd/rfqs/"+rfqID+"/price_proposal?"+q.Encode())
+	if err != nil {
+		return err
+	}
+	got := map[string]map[string]any{}
+	for _, line := range list(v["lines"]) {
+		m, _ := line.(map[string]any)
+		got[str(m["rfq_line_id"])] = m
+	}
+	for _, l := range brcLines {
+		m := got[l.id]
+		if str(m["source"]) == "" || str(m["source"]) == "none" || str(m["unit_price"]) != price || str(m["price_basis_quantity"]) != "1" {
+			return &phaseError{err: fmt.Errorf("quote.price_proposal for %s is source %q price %q basis %q; the truth drafts %s per piece",
+				l.id, str(m["source"]), str(m["unit_price"]), str(m["price_basis_quantity"]), price)}
+		}
+	}
 	return nil
 }
 

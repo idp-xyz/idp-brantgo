@@ -174,6 +174,13 @@ func httpQuoteData(w *world, rfq string, rfqVersion int64, snap costed, source, 
 		"evidence":       []any{map[string]any{"source_id": source, "locator": "inquiry"}}}
 }
 
+// readProposal is the agent's quote.price_proposal for the trial's RFQ, snapshot and pricing policy.
+func readProposal(w *world, snap costed) call {
+	return call{"quote.price_proposal", map[string]any{"RfqID": rfqID, "Currency": "USD",
+		"CostSnapshotRef":  map[string]any{"SnapshotID": snap.snapshotID, "ResultHash": snap.resultHash},
+		"PricingPolicyRef": goRef(w.policy)}}
+}
+
 func saveQuote(quote string, data map[string]any) call {
 	return call{"quote.save_draft", map[string]any{"QuoteID": quote, "ExpectedVersion": 0, "Data": data}}
 }

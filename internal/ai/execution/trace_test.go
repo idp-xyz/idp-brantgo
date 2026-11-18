@@ -361,13 +361,14 @@ func TestQ01PromptStatesTheOrderOfWork(t *testing.T) {
 	for _, want := range []string{"give every required one and leave out what you have no value for (an empty string or null is refused)",
 		"arrivals (what the task was resumed with)", "refusals", "as SourceRef, the reply among the arrivals",
 		"A refused call names the member it is about, what that member needs, the values allowed and the reason.",
-		"The facts' refusals are what earlier turns were refused: start from them.", "named place, delivery and units"} {
+		"The facts' refusals are what earlier turns were refused: start from them.", "named place, delivery and units",
+		"quote.price_proposal gives each line's UnitPrice and PriceBasisQuantity", "Source none has no price"} {
 		if !strings.Contains(strings.Join(strings.Fields(Q01Prompt), " "), strings.Join(strings.Fields(want), " ")) {
 			t.Errorf("the prompt does not say %q", want)
 		}
 	}
-	// It never names a price, or where one comes from: that is the owner's open question.
-	for _, word := range []string{"price", "Price", "margin", "8.00"} {
+	// The unit price is quote.price_proposal's. The prompt names no number and no margin.
+	for _, word := range []string{"margin", "8.00"} {
 		if strings.Contains(Q01Prompt, word) {
 			t.Errorf("the prompt names %q", word)
 		}

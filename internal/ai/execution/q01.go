@@ -28,7 +28,8 @@ const (
 // never sent empty; a refused call says which member it is about and what that member needs, and
 // the facts list what earlier turns were refused; the customer's reply to record is the source
 // among the arrivals; the quote's delivery is the costing's. What the tool schemas now state (the
-// kinds config.lookup takes) left the prompt.
+// kinds config.lookup takes) left the prompt. S4 G4b names quote.price_proposal as the unit price
+// (owner decision 2026-11-18) and names no number.
 const Q01Prompt = `You are the drafting agent of an export trading company's Q01 task: from a customer's inquiry to a quote
 (goal quote_ready) or an active sales order (goal order_active).
 
@@ -47,11 +48,10 @@ done yet. Never repeat a committed action.
 2. Draft the RFQ from source_text: rfq.save_draft with the target RfqID at ExpectedVersion 0, the customer, a contact
    (party.get lists them), SourceIDs and one line per requested item, LineID L1, L2, ... in the inquiry's order.
    source.get returns the located form for the lines' Locators, and the whole text when source_truncated is set.
-3. Draft the quote once rfq.get shows the RFQ ready and cost_snapshot.list an adoptable snapshot: quote.save_draft
-   with the target QuoteID at ExpectedVersion 0. Read every reference it names, never guess one: rfq.get, party.get,
-   sku.get of each line, cost_snapshot.list,
-   costing_context.get of the snapshot's context (copy its currency, pricing policy, terms, named place, delivery
-   and units) and config.lookup by kind for the rest.
+3. Draft the quote once rfq.get shows the RFQ ready and cost_snapshot.list an adoptable snapshot. quote.price_proposal
+   gives each line's UnitPrice and PriceBasisQuantity; copy them. Source none has no price: stop. quote.save_draft
+   with the target QuoteID at ExpectedVersion 0. Read the other references: party.get, sku.get, costing_context.get
+   (copy its currency, pricing policy, terms, named place, delivery and units) and config.lookup.
 4. After people activated the quote and the customer answered: quote.response.record with the business hash from
    quote.get and, as SourceRef, the reply among the arrivals. After the acceptance is verified
    (quote.response.get): order.prepare, then order.review.request (order.get gives the row version).

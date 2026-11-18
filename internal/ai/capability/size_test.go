@@ -10,7 +10,7 @@ import (
 // delegation and the three live trials of 2026-11-18): what one model call is sent.
 var clerkTools = []string{"source.register", "file.register", "rfq.save_draft", "quote.save_draft", "quote.revise",
 	"quote.metadata.update", "quote.response.record", "order.prepare", "order.review.request",
-	"rfq.get", "cost_snapshot.list", "costing_context.get", "config.lookup", "sku.get", "party.get",
+	"rfq.get", "cost_snapshot.list", "costing_context.get", "quote.price_proposal", "config.lookup", "sku.get", "party.get",
 	"quote.get", "quote.response.get", "order.get", "source.get"}
 
 // The tool list is sent with every model call, so its size is a budget (S4 G3: the live model was
@@ -19,9 +19,10 @@ var clerkTools = []string{"source.register", "file.register", "rfq.save_draft", 
 // the live trace of 3185097). Stating the required members, the allowed values, the kinds and the
 // formats costs about a quarter more, after what was cut for it: minLength on every string, the
 // upper bounds of lists, the sentences of the read descriptions that repeat the result's own
-// "omitted", and most of rfq.save_draft's description, which the members now carry. The ceiling
-// keeps a later member or word from growing the list unnoticed.
-const toolListCeiling = 18600
+// "omitted", and most of rfq.save_draft's description, which the members now carry. S4 G4b adds
+// quote.price_proposal (19,755 bytes for these 20 tools). The ceiling keeps a later member or
+// word from growing the list unnoticed.
+const toolListCeiling = 20000
 
 func TestToolListStaysWithinItsSize(t *testing.T) {
 	reg, err := Q01Registry(Q01Targets{})
@@ -46,7 +47,7 @@ func TestToolListStaysWithinItsSize(t *testing.T) {
 			t.Logf("%s\n%s\n%s", c.Command, c.Summary, raw)
 		}
 	}
-	t.Logf("19 tools: %d bytes of names, descriptions and schemas", total)
+	t.Logf("%d tools: %d bytes of names, descriptions and schemas", len(clerkTools), total)
 	if total > toolListCeiling {
 		t.Errorf("the tool list grew to %d bytes, above its ceiling of %d", total, toolListCeiling)
 	}

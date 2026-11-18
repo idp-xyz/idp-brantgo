@@ -38,6 +38,8 @@ type Q01Targets struct {
 	TRDReads    tradingReads
 	EVDReads    sourceReads
 	EVDExtracts extractReads
+	// TRDPrices is the price proposal (S4 G4b; owner decision 2026-11-18). Nil refuses the read.
+	TRDPrices trdapi.PriceProposalQueries
 }
 
 // errNoTarget is the error of a capability whose context was not given.
@@ -148,7 +150,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		}))
 	add(Define(Spec{Command: trdapi.CommandSaveDraft, Context: "trd", Contract: trdapi.Contract, Version: 1,
 		SideEffect: Draft, Risk: RiskMedium, Approval: ApprovalNone,
-		Summary: "Save the working revision of a quote draft, whole; people freeze, review and activate it. They can freeze it only when Data has every member except SalesFXRef, Charges, CustomerNotes and LegalTermsRef."},
+		Summary: "Save the working revision of a quote draft, whole; people freeze, review and activate it. They can freeze it only when Data has every member except SalesFXRef, Charges, CustomerNotes and LegalTermsRef. Each line's UnitPrice and PriceBasisQuantity come from quote.price_proposal."},
 		func(c trdapi.SaveDraft) ObjectRef {
 			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.ExpectedVersion}
 		},
