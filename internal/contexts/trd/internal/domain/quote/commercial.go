@@ -262,6 +262,12 @@ var ErrNoCalculation = errors.New("quote: a freeze needs the server calculation"
 // Complete refuses a draft that lacks what a freeze needs, at the first missing member in document
 // order: the customer and contact references have their own codes (CUSTOMER_REFERENCE_MISSING,
 // CONTACT_REFERENCE_MISSING), the cost snapshot COST_SNAPSHOT_MISSING, the rest DRAFT_NOT_READY.
+//
+// The same rule is published over the api's QuoteData as api.MissingForFreeze, for callers that may
+// not import the domain (the AI layer's gateway refuses an agent's draft a freeze would refuse,
+// S4 G6). This package cannot call it and it cannot call this: the application's
+// TestMissingForFreezeIsWhatTheFreezeAsks compares the two member by member and in every
+// combination, so a member added or reordered here fails that test until the api's rule follows.
 func (d Data) Complete() error {
 	const p = "/args/data"
 	missing := func(path string) error { return kernel.Reject(kernel.CodeDraftNotReady, p+path, "") }

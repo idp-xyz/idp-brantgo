@@ -176,7 +176,10 @@ func Define[C any, R any](spec Spec, object func(C) ObjectRef, run func(context.
 // model's field locators are verified against the extracts and its lines' pending fields completed
 // (AI-INV-004: the model's claims are candidates). A preparation never decides what the owning
 // context decides; its rejections are the call's. Re-sending a prepared call uses the prepared
-// command, so its request hash stays the one the target ledger records.
+// command, so its request hash stays the one the target ledger records. The other preparation is
+// quote.save_draft's (S4 G6, freezable.go): it decides nothing TRD's save decides, which accepts a
+// partial draft, but refuses an agent's draft that the person's freeze would refuse for what it
+// lacks, so the agent is told in the turn it drafted in.
 func Prepared[C any](c Capability, err error, prepare func(context.Context, C) (C, error)) (Capability, error) {
 	if err != nil {
 		return Capability{}, err

@@ -101,6 +101,7 @@
 "A payment stage has an ID, a trigger and 0 to 3650 days"
 "A payment stage's amount is an integer of minor units"
 "A payment stage's percentage is not a decimal"
+"A person cannot freeze a draft without this member, so the draft is not saved; send the whole draft with it"
 "A person's or agent's release is abandoned or expired"
 "A plan follows the object it was made for"
 "A prepared draft is never modified or replaced; void it and prepare a new one"

@@ -148,9 +148,11 @@ func Q01(t Q01Targets) ([]Capability, error) {
 			}
 			return t.CSTScenarios.EvaluateScenario(ctx, c)
 		}))
-	add(Define(Spec{Command: trdapi.CommandSaveDraft, Context: "trd", Contract: trdapi.Contract, Version: 1,
+	// S4 G6: the agent's draft is one a person can freeze as far as completeness goes; an incomplete
+	// one is refused before TRD is called, at the member the freeze would refuse (freezable.go).
+	saveQuote, err := Define(Spec{Command: trdapi.CommandSaveDraft, Context: "trd", Contract: trdapi.Contract, Version: 1,
 		SideEffect: Draft, Risk: RiskMedium, Approval: ApprovalNone,
-		Summary: "Save the working revision of a quote draft, whole; people freeze, review and activate it. They can freeze it only when Data has every member except SalesFXRef, Charges, CustomerNotes and LegalTermsRef. Each line's UnitPrice and PriceBasisQuantity come from quote.price_proposal."},
+		Summary: "Save the working revision of a quote draft, whole; people freeze, review and activate it. They can freeze it only when Data has every member except SalesFXRef, Charges, CustomerNotes and LegalTermsRef; a draft without one is refused here. Each line's UnitPrice and PriceBasisQuantity come from quote.price_proposal."},
 		func(c trdapi.SaveDraft) ObjectRef {
 			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.ExpectedVersion}
 		},
@@ -159,7 +161,8 @@ func Q01(t Q01Targets) ([]Capability, error) {
 				return trdapi.Receipt{}, errNoTarget
 			}
 			return t.TRD.SaveDraft(ctx, c)
-		}))
+		})
+	add(Prepared(saveQuote, err, freezableDraft))
 	add(Define(Spec{Command: trdapi.CommandRevise, Context: "trd", Contract: trdapi.Contract, Version: 1,
 		SideEffect: Draft, Risk: RiskMedium, Approval: ApprovalNone,
 		Summary: "Copy a frozen quote revision into a new working revision."},
