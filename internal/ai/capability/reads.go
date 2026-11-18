@@ -131,10 +131,10 @@ func readCapabilities(t Q01Targets) ([]Capability, error) {
 func readRfq(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		RfqID          string
+		RfqID          string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadRfq, Context: "inq", Contract: inqapi.Contract, Perm: "inq.read",
-		Summary: "Read an RFQ and its lines: row version, customer, contact, and each line's sku, quantity and unit. It does not change the RFQ."},
+		Summary: "Read an RFQ and its lines: status, row version, customer, contact, and each line's sku, quantity and unit."},
 		func(c in) ObjectRef { return ObjectRef{Type: "inq.rfq", ID: c.RfqID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.INQReads == nil {
@@ -151,10 +151,10 @@ func readRfq(t Q01Targets) (Capability, error) {
 func readSnapshots(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		RfqID          string
+		RfqID          string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadSnapshots, Context: "cst", Contract: cstapi.Contract, Perm: "cst.read",
-		Summary: "Read the cost snapshots of an RFQ: snapshot id, result hash, costing context, currency, total in minor units, and whether the snapshot is adoptable now. The snapshot document and the component graph are not returned."},
+		Summary: "Read the cost snapshots of an RFQ: snapshot id, result hash, costing context, currency, total in minor units, and whether the snapshot is adoptable now."},
 		func(c in) ObjectRef { return ObjectRef{Type: "inq.rfq", ID: c.RfqID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.CSTLists == nil {
@@ -173,10 +173,10 @@ func readSnapshots(t Q01Targets) (Capability, error) {
 func readContext(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		ContextID      string
+		ContextID      string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadContext, Context: "cst", Contract: cstapi.Contract, Perm: "cst.read",
-		Summary: "Read a costing context: the RFQ it binds and the configuration references its active revision costs under (currency, pricing policy, trade and payment terms, named place, units). Assumption text and evidence bodies are not returned."},
+		Summary: "Read a costing context: the RFQ it binds and the configuration references its active revision costs under (currency, pricing policy, trade and payment terms, named place, delivery, units)."},
 		func(c in) ObjectRef { return ObjectRef{Type: "cst.costing_context", ID: c.ContextID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.CSTReads == nil {
@@ -193,10 +193,10 @@ func readContext(t Q01Targets) (Capability, error) {
 func readConfig(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		Kind           string
+		Kind           string `contract:"required,enum=company_profile|currency|unit|unit_conversion|fx_rate|calendar|trade_terms|payment_terms|tax_profile|tax_application|fee_category|pricing_policy|number_sequence|document_template|quote_document_template|screening_regulation|credit_policy|legal_terms|order_document_template|shipment_document_template|export_tax_policy|sales_price"`
 	}
 	return defineRead(Spec{Command: ReadConfig, Context: "pol", Contract: polapi.Contract, Perm: "pol.read",
-		Summary: "Read the configurations of one kind that are in force now: each id and revision, never the configuration body. Kind bank_account is refused; this read never returns pol.read_sensitive content."},
+		Summary: "Read the configurations of one kind that are in force now: each id and revision, never the configuration body. Bank accounts are not this read's."},
 		func(c in) ObjectRef { return ObjectRef{Type: "pol.config", ID: c.Kind} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.POLLists == nil {
@@ -215,7 +215,7 @@ func readConfig(t Q01Targets) (Capability, error) {
 func readSku(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		SkuID          string
+		SkuID          string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadSku, Context: "cat", Contract: catapi.Contract, Perm: "cat.read",
 		Summary: "Read a SKU: status, base unit and confirmed specification revisions. The current revision is the highest confirmed one."},
@@ -235,10 +235,10 @@ func readSku(t Q01Targets) (Capability, error) {
 func readParty(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		PartyID        string
+		PartyID        string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadParty, Context: "pty", Contract: ptyapi.Contract, Perm: "pty.read",
-		Summary: "Read a customer and its trading profile: the confirmed party revision, address ids, the profile's active revision, payment and trade terms, and contacts at their row versions. Address text is not returned."},
+		Summary: "Read a customer and its trading profile: the confirmed party revision, address ids, the profile's active revision, payment and trade terms, and contacts at their row versions."},
 		func(c in) ObjectRef { return ObjectRef{Type: "pty.party", ID: c.PartyID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.PTYReads == nil || t.PTYProfiles == nil {
@@ -262,10 +262,10 @@ func readParty(t Q01Targets) (Capability, error) {
 func readQuote(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		QuoteID        string
+		QuoteID        string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadQuote, Context: "trd", Contract: trdapi.Contract, Perm: "trd.read",
-		Summary: "Read a quote: root version, each revision's status and business hash, the references a revision names, its lines, and whether the active revision is ready now. Commercial document bytes and the internal note are not returned."},
+		Summary: "Read a quote: root version, each revision's status and business hash, the references a revision names, its lines, and whether the active revision is ready now."},
 		func(c in) ObjectRef { return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.TRDReads == nil {
@@ -291,10 +291,10 @@ func readQuote(t Q01Targets) (Capability, error) {
 func readResponse(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		ResponseID     string
+		ResponseID     string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadResponse, Context: "trd", Contract: trdapi.Contract, Perm: "trd.read",
-		Summary: "Read a customer response and the acceptances verified from it: business hash, effectivity and the accepted line ids. Evidence bodies are not returned."},
+		Summary: "Read a customer response and the acceptances verified from it: business hash, effectivity and the accepted line ids."},
 		func(c in) ObjectRef { return ObjectRef{Type: "trd.response", ID: c.ResponseID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.TRDReads == nil {
@@ -311,10 +311,10 @@ func readResponse(t Q01Targets) (Capability, error) {
 func readOrder(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		OrderID        string
+		OrderID        string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadOrder, Context: "trd", Contract: trdapi.Contract, Perm: "trd.read",
-		Summary: "Read a sales order: status, row version, order hash, the quote revision and business hash it binds, and the acceptance. Document bytes are not returned."},
+		Summary: "Read a sales order: status, row version, order hash, the quote revision and business hash it binds, and the acceptance."},
 		func(c in) ObjectRef { return ObjectRef{Type: trdapi.ObjectOrder, ID: c.OrderID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.TRDReads == nil {
@@ -331,10 +331,10 @@ func readOrder(t Q01Targets) (Capability, error) {
 func readSource(t Q01Targets) (Capability, error) {
 	type in struct {
 		IdempotencyKey string
-		SourceID       string
+		SourceID       string `contract:"required,id"`
 	}
 	return defineRead(Spec{Command: ReadSource, Context: "evd", Contract: evdapi.Contract, Perm: "evd.read",
-		Summary: "Read a source's text (at most 3000 characters) and, for a file extract, its locator form (at most 1500 characters), with the content SHA-256 and the full length. File bytes are not returned."},
+		Summary: "Read a source's text (at most 3000 characters) and, for a file extract, its locator form (at most 1500 characters), with the content SHA-256 and the full length."},
 		func(c in) ObjectRef { return ObjectRef{Type: "evd.source", ID: c.SourceID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.EVDReads == nil {
@@ -427,6 +427,7 @@ func projectContext(v cstapi.ContextView) readReceipt {
 	}
 	var lines []line
 	var currency, policy, trade, payment, place *refView
+	var delivery *deliveryView
 	var rfqID string
 	var rfqVersion int64
 	status := ""
@@ -444,6 +445,7 @@ func projectContext(v cstapi.ContextView) readReceipt {
 			trade = cstRef(&b.SalesTradeTermsRef)
 			payment = cstRef(&b.SalesPaymentTermsRef)
 			place = &refView{Kind: b.NamedPlaceRef.Kind, ID: b.NamedPlaceRef.ID, Revision: b.NamedPlaceRef.Revision}
+			delivery = deliveryOf(b.Delivery)
 		}
 		for _, l := range rev.Data.Lines {
 			if len(lines) == maxReadLines {
@@ -466,14 +468,55 @@ func projectContext(v cstapi.ContextView) readReceipt {
 		TradeTerms  *refView `json:"trade_terms,omitempty"`
 		Payment     *refView `json:"payment_terms,omitempty"`
 		NamedPlace  *refView `json:"named_place,omitempty"`
-		Lines       []line   `json:"lines,omitempty"`
+		// Delivery is the costing's delivery requirement in the member names quote.save_draft
+		// takes for Data.Delivery, which the freeze requires to be this delivery exactly.
+		Delivery *deliveryView `json:"delivery,omitempty"`
+		Lines    []line        `json:"lines,omitempty"`
 	}{ContextID: v.ContextID, RootVersion: v.RootVersion, Revision: revision, Status: status, RfqID: rfqID, RfqVersion: rfqVersion,
-		Currency: currency, Policy: policy, TradeTerms: trade, Payment: payment, NamedPlace: place, Lines: lines}
+		Currency: currency, Policy: policy, TradeTerms: trade, Payment: payment, NamedPlace: place, Delivery: delivery, Lines: lines}
 	omitted := "assumptions, evidence and the other revisions' bodies"
 	if truncated {
 		omitted = "lines beyond 40; " + omitted
 	}
 	return readReceipt{ObjectID: v.ContextID, RowVersion: v.RootVersion, Status: status, Truncated: truncated, Omitted: omitted, Body: body}
+}
+
+// deliveryView is a costing's delivery under the names of trdapi.Delivery's members, so a quote
+// draft copies it as it stands (S4 G3): the first live trials sent a delivery without milestone or
+// time zone because no read showed the one the quote must repeat. Members that are not given are
+// left out, as the gateway requires of a call.
+type deliveryView struct {
+	Kind        string   `json:"Kind"`
+	Date        string   `json:"Date,omitempty"`
+	AnchorRef   *argView `json:"AnchorRef,omitempty"`
+	Days        int      `json:"Days,omitempty"`
+	DayBasis    string   `json:"DayBasis,omitempty"`
+	CalendarRef *argView `json:"CalendarRef,omitempty"`
+	Milestone   string   `json:"Milestone"`
+	PlaceRef    argView  `json:"PlaceRef"`
+	TimeZone    string   `json:"TimeZone"`
+}
+
+// argView is a reference under the names a tool's arguments use.
+type argView struct {
+	Kind     string `json:"Kind"`
+	ID       string `json:"ID"`
+	Revision int64  `json:"Revision"`
+}
+
+func deliveryOf(d cstapi.Delivery) *deliveryView {
+	if d.Kind == "" {
+		return nil
+	}
+	out := &deliveryView{Kind: d.Kind, Date: d.Date, Days: d.Days, DayBasis: d.DayBasis, Milestone: d.Milestone, TimeZone: d.TimeZone,
+		PlaceRef: argView{Kind: d.PlaceRef.Kind, ID: d.PlaceRef.ID, Revision: d.PlaceRef.Revision}}
+	if a := d.AnchorRef; a != nil {
+		out.AnchorRef = &argView{Kind: a.Kind, ID: a.ID, Revision: a.Revision}
+	}
+	if c := d.CalendarRef; c != nil {
+		out.CalendarRef = &argView{Kind: c.Kind, ID: c.ID, Revision: c.Revision}
+	}
+	return out
 }
 
 func activeContext(v cstapi.ContextView) *cstapi.ContextRevisionView {

@@ -261,6 +261,9 @@ func checkInput(t reflect.Type) error {
 		if slices.Contains(platformOwned, name) {
 			return fmt.Errorf("field %s is platform-owned (AI-INV-004)", path)
 		}
+		if _, err := RuleOf(f); err != nil {
+			return fmt.Errorf("field %s: %w", path, err)
+		}
 		switch base(f.Type).Kind() {
 		case reflect.Float32, reflect.Float64:
 			return fmt.Errorf("field %s is a float; business values are decimals or minor units", path)

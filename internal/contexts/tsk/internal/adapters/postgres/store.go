@@ -294,11 +294,19 @@ func SaveTask(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, t 
 
 func insertChange(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string, ch task.Change) error {
 	tenant, company := scope2(scope)
+	// What a resume named as arrived stays on its history row (tsk 000006).
+	var aKind, aID *string
+	var aVersion *int64
+	if a := ch.Arrival; a != nil {
+		aKind, aID, aVersion = &a.Kind, &a.ID, &a.Version
+	}
 	_, err := exec.Exec(ctx, `INSERT INTO brant_tsk.task_transition (tenant_id, company_id, task_id, task_version, command, from_state,
-		to_state, control_mode, control_epoch, control_change, actor_kind, actor_id, authority_epoch, recorded_at, reason)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		to_state, control_mode, control_epoch, control_change, actor_kind, actor_id, authority_epoch, recorded_at, reason,
+		arrival_kind, arrival_id, arrival_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
 		tenant, company, id, ch.Version, string(ch.Command), nullable(string(ch.From)), string(ch.To), string(ch.Mode), ch.ControlEpoch,
-		nullable(ch.ControlChange), string(ch.By.Kind), ch.By.ID, ch.Epoch, kernel.Instant(ch.At), nullable(ch.Reason))
+		nullable(ch.ControlChange), string(ch.By.Kind), ch.By.ID, ch.Epoch, kernel.Instant(ch.At), nullable(ch.Reason),
+		aKind, aID, aVersion)
 	return err
 }
 
@@ -306,7 +314,8 @@ func insertChange(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 func LoadHistory(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) ([]task.Change, error) {
 	tenant, company := scope2(scope)
 	rows, err := exec.Query(ctx, `SELECT task_version, command, coalesce(from_state, ''), to_state, control_mode, control_epoch,
-		coalesce(control_change, ''), actor_kind, actor_id, authority_epoch, recorded_at, coalesce(reason, '')
+		coalesce(control_change, ''), actor_kind, actor_id, authority_epoch, recorded_at, coalesce(reason, ''),
+		arrival_kind, arrival_id, arrival_version
 		FROM brant_tsk.task_transition WHERE tenant_id = $1 AND company_id = $2 AND task_id = $3 ORDER BY task_version`, tenant, company, id)
 	if err != nil {
 		return nil, err
@@ -314,10 +323,15 @@ func LoadHistory(ctx context.Context, exec bentopg.Executor, scope kernel.Scope,
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (task.Change, error) {
 		var ch task.Change
 		var command, from, to, mode, kind string
+		var aKind, aID *string
+		var aVersion *int64
 		err := r.Scan(&ch.Version, &command, &from, &to, &mode, &ch.ControlEpoch, &ch.ControlChange, &kind, &ch.By.ID, &ch.Epoch, &ch.At,
-			&ch.Reason)
+			&ch.Reason, &aKind, &aID, &aVersion)
 		ch.Command, ch.From, ch.To, ch.Mode, ch.By.Kind, ch.At = task.Command(command), task.State(from), task.State(to), task.Mode(mode),
 			kernel.ActorKind(kind), ch.At.UTC()
+		if aKind != nil && aID != nil && aVersion != nil {
+			ch.Arrival = &task.Ref{Kind: *aKind, ID: *aID, Version: *aVersion}
+		}
 		return ch, err
 	})
 }

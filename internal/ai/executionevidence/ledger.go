@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"go.idp.xyz/idp-bento-go/application"
@@ -58,7 +60,10 @@ type Reservation struct {
 
 // Outcome settles a reserved call. A model call reports what the provider returned; Cost is the
 // actual cost (nil: unknown, then State must be unknown). Code is the refusal or failure code
-// (failed, unavailable).
+// (failed, unavailable). RefusalPath and RefusalReason are a refused tool call's (state failed; S4
+// G3): the request member the rejection points at and the reason the refusing context stated. The
+// ledger keeps a path only of plain pointer characters (RefusalPathOK) and whatever reason its
+// caller hands it, which is a static text of the product (capability.StatedReason) or nothing.
 type Outcome struct {
 	State         string
 	ModelReturned string
@@ -70,8 +75,18 @@ type Outcome struct {
 	FinishReason  string
 	ActionID      string
 	Code          string
+	RefusalPath   string
+	RefusalReason string
 	Cost          *kernel.Money
 }
+
+// refusalPath is the form of a refusal's path the ledger keeps: a JSON Pointer of the characters
+// the contracts' member names and indexes use, at most 200. A path that carries anything else —
+// a member name a model made up — is not kept.
+var refusalPath = regexp.MustCompile(`^/[A-Za-z0-9_.:~/-]{0,199}$`)
+
+// RefusalPathOK reports whether the ledger keeps path as a refusal's path.
+func RefusalPathOK(path string) bool { return refusalPath.MatchString(path) }
 
 // Call is one row of the ledger.
 type Call struct {
@@ -100,6 +115,8 @@ type Call struct {
 	FinishReason   string
 	ActionID       string
 	Code           string
+	RefusalPath    string
+	RefusalReason  string
 	Cost           *kernel.Money
 	SettledAt      time.Time
 }
@@ -321,10 +338,11 @@ func (l Ledger) Settle(ctx context.Context, callID string, o Outcome) (Call, err
 		now := kernel.Instant(l.Clock.Now())
 		_, err = exec.Exec(ctx, `UPDATE brant_ai.model_call SET state = $4, model_returned = nullif($5, ''), input_sha256 = nullif($6, ''),
 			output_sha256 = nullif($7, ''), input_tokens = $8, output_tokens = $9, latency_ms = $10, finish_reason = nullif($11, ''),
-			action_id = nullif($12, ''), code = nullif($13, ''), cost_minor = nullif($14, '')::numeric, settled_at = $15
+			action_id = nullif($12, ''), code = nullif($13, ''), cost_minor = nullif($14, '')::numeric, settled_at = $15,
+			refusal_path = nullif($16, ''), refusal_reason = nullif($17, '')
 			WHERE tenant_id = $1 AND company_id = $2 AND call_id = $3`, string(p.Scope.Tenant), string(p.Scope.Company), callID,
 			o.State, o.ModelReturned, o.InputSHA256, o.OutputSHA256, o.InputTokens, o.OutputTokens, latency, o.FinishReason, o.ActionID,
-			o.Code, cost, now)
+			o.Code, cost, now, o.RefusalPath, o.RefusalReason)
 		if err != nil {
 			return err
 		}
@@ -356,6 +374,14 @@ func (o Outcome) check() error {
 	}
 	if o.State == StateWaiting && o.Code != CodeWaitingApproval {
 		return bad("a wait is " + CodeWaitingApproval)
+	}
+	switch {
+	case (o.RefusalPath != "" || o.RefusalReason != "") && o.State != StateFailed:
+		return bad("only a refused call has a refusal's path and reason")
+	case o.RefusalPath != "" && !RefusalPathOK(o.RefusalPath):
+		return bad("the refusal's path is not a plain pointer")
+	case utf8.RuneCountInString(o.RefusalReason) > 200:
+		return bad("the refusal's reason is longer than 200 characters")
 	}
 	if o.Cost != nil && o.Cost.Sign() < 0 {
 		return bad("negative cost")
@@ -490,7 +516,7 @@ const selectCall = `SELECT call_id, task_id, seq, kind, retry, state, actor_id, 
 	coalesce(profile_id, ''), coalesce(provider, ''), coalesce(model_requested, ''), coalesce(prompt_sha256, ''), coalesce(tool_command, ''),
 	currency, minor_units, reserved_minor::text, reserved_at, coalesce(model_returned, ''), coalesce(input_sha256, ''),
 	coalesce(output_sha256, ''), input_tokens, output_tokens, latency_ms, coalesce(finish_reason, ''), coalesce(action_id, ''),
-	coalesce(code, ''), cost_minor::text, settled_at
+	coalesce(code, ''), cost_minor::text, settled_at, coalesce(refusal_path, ''), coalesce(refusal_reason, '')
 	FROM brant_ai.model_call WHERE tenant_id = $1 AND company_id = $2 AND `
 
 func loadCalls(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, where string, arg string) ([]Call, error) {
@@ -507,7 +533,7 @@ func loadCalls(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, w
 		err := row.Scan(&c.CallID, &c.TaskID, &c.Seq, &c.Kind, &c.Retry, &c.State, &c.ActorID, &c.TaskVersion, &c.Bundle.BundleID,
 			&c.Bundle.SHA256, &c.ProfileID, &c.Provider, &c.ModelRequested, &c.PromptSHA256, &c.ToolCommand, &code, &units, &reserved,
 			&c.ReservedAt, &c.ModelReturned, &c.InputSHA256, &c.OutputSHA256, &c.InputTokens, &c.OutputTokens, &c.LatencyMS,
-			&c.FinishReason, &c.ActionID, &c.Code, &cost, &settled)
+			&c.FinishReason, &c.ActionID, &c.Code, &cost, &settled, &c.RefusalPath, &c.RefusalReason)
 		if err != nil {
 			return Call{}, err
 		}

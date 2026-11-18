@@ -81,35 +81,43 @@ var quantityPattern = regexp.MustCompile(`^(?:(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,
 
 // RfqLine is one requested item. Every field but LineID may be unknown in a draft; an empty string
 // is unknown.
+//
+// The contract and doc tags state, for a caller that learns the command from a description (the AI
+// layer's tool schemas, internal/ai/capability Rule; S4 G3), what Validate enforces of a member and
+// a few words about it; the tests of internal/ai/capability keep them true against Validate.
 type RfqLine struct {
-	LineID        string
-	SkuID         string
-	Quantity      string // decimal string, never a float
-	UOM           string
-	RequestedItem string // the customer's own words for an item not yet mapped to a SKU
-	SourceID      string
-	Locator       string // where in the source the line is, such as "第1段，第2项"
+	LineID        string `contract:"required,id"`
+	SkuID         string `contract:"id"`
+	Quantity      string `contract:"decimal=quantity"` // decimal string, never a float
+	UOM           string `contract:"enum=PCS"`
+	RequestedItem string `doc:"the customer's own words"` // for an item not yet mapped to a SKU too
+	SourceID      string `contract:"id,with=Locators"`
+	Locator       string `doc:"where the line stands in its source, such as row 5"` // such as "第1段，第2项"
 	// Locators place the line's fields in its source, a file extract (WBS S4-04b; BC-AT27 字段定位):
 	// the field, the place in the notation of the extract's reader and the source's own words there
 	// (原始需求值; the line's field holds the verified structured value, core design 5.2). Several
 	// locators of one field are alternative places. Left out of the request hash while empty.
-	Locators []FieldLocator `json:",omitempty"`
+	Locators []FieldLocator `json:",omitempty" doc:"for a file extract: where each field stands"`
 	// Pending are the fields the draft leaves for the human to settle on rfq.confirm_scope.
-	Pending []PendingField `json:",omitempty"`
+	Pending []PendingField `json:",omitempty" doc:"fields the source does not settle"`
 }
 
-// FieldLocator places one field of a line in the line's source.
+// FieldLocator places one field of a line (requested_item, sku_id, quantity or uom) in the line's
+// source: Locator is the place in the notation the extractor version of the source defines (text
+// "line:col", PDF "page:line", XLSX "Sheet!B3"), Quote the source's own words there.
 type FieldLocator struct {
-	Field   string // requested_item, sku_id, quantity or uom
-	Locator string // text "line:col", PDF "page:line", XLSX "Sheet!B3" (the extractor version of the source defines it)
-	Quote   string // the source's own words at the locator
+	Field   string `contract:"required,enum=requested_item|sku_id|quantity|uom"`
+	Locator string `contract:"required" doc:"where these words start: text line:col, PDF page:line, XLSX Sheet!B3"`
+	Quote   string `contract:"required" doc:"the source's own words for the field"`
 }
 
-// PendingField is a field the source does not settle.
+// PendingField is a field the source does not settle, for Reason ambiguous, conflict, missing,
+// unlocated or noted. Candidates are the values the field could take, such as two SKUs for one
+// customer style (AN01).
 type PendingField struct {
-	Field      string
-	Reason     string   // ambiguous, conflict, missing, unlocated or noted
-	Candidates []string `json:",omitempty"` // values the field could take, such as two SKUs for one customer style (AN01)
+	Field      string   `contract:"required,enum=requested_item|sku_id|quantity|uom"`
+	Reason     string   `contract:"required,enum=ambiguous|conflict|missing|unlocated|noted"`
+	Candidates []string `json:",omitempty"`
 }
 
 // SaveRfq creates a draft RFQ at ExpectedVersion 0 or replaces the whole draft at its current
@@ -117,13 +125,13 @@ type PendingField struct {
 // Nil and empty slices are different requests for idempotency.
 type SaveRfq struct {
 	IdempotencyKey   string
-	RfqID            string
-	ExpectedVersion  int64
-	CustomerID       string
-	ContactID        string
-	Lines            []RfqLine
+	RfqID            string    `contract:"required,id,wire=id"`
+	ExpectedVersion  int64     `contract:"min=0" doc:"0 creates the RFQ; else its row version"`
+	CustomerID       string    `contract:"id"`
+	ContactID        string    `contract:"id"`
+	Lines            []RfqLine `doc:"the whole draft, not a patch"`
 	SourceIDs        []string
-	UnresolvedFields []string
+	UnresolvedFields []string `doc:"open questions that block confirmation"`
 }
 
 // ConfirmRfqScope makes a complete draft ready. Only a human confirms, and the evidence must cover

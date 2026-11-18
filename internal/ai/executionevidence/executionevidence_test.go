@@ -171,11 +171,23 @@ func TestReservationsAndOutcomesAreChecked(t *testing.T) {
 		"reserved":             {State: StateReserved, Cost: &zero},
 		"negative":             {State: StateSucceeded, Cost: &neg},
 		"unavailable, no code": {State: StateUnavailable, Cost: &zero},
+		// S4 G3: where and why a call was refused is a refused call's only; the path is a plain
+		// pointer, the reason at most 200 characters.
+		"a refusal's path on a success":  {State: StateSucceeded, Cost: &zero, RefusalPath: "/args/id"},
+		"a refusal's reason on a wait":   {State: StateWaiting, Code: CodeWaitingApproval, Cost: &zero, RefusalReason: "x"},
+		"a path with a made-up name":     {State: StateFailed, Code: "SCHEMA_INVALID", Cost: &zero, RefusalPath: `/args/Unit Price "x"`},
+		"a path that is not a pointer":   {State: StateFailed, Code: "SCHEMA_INVALID", Cost: &zero, RefusalPath: "args/id"},
+		"a reason beyond 200 characters": {State: StateFailed, Code: "SCHEMA_INVALID", Cost: &zero, RefusalReason: strings.Repeat("r", 201)},
 	}
 	for name, o := range outcomes {
 		if err := o.check(); err == nil || !strings.Contains(err.Error(), "outcome") {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+	refused := Outcome{State: StateFailed, Code: "REFERENCE_INVALID", Cost: &zero, RefusalPath: "/args/data/lines/0/sku_ref/sku_id",
+		RefusalReason: strings.Repeat("理", 200)}
+	if err := refused.check(); err != nil || !RefusalPathOK("/") || !RefusalPathOK("/args/a~1b/0") || RefusalPathOK("") {
+		t.Fatalf("a refused call's outcome: %v", err)
 	}
 	if CallID("t.1", 1) == CallID("t.1", 2) || CallID("t.1", 1) == CallID("t.2", 1) || !kernel.ValidIdentifier(CallID("t.1", 1)) {
 		t.Fatal("call IDs")

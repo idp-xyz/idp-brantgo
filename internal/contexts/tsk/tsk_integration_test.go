@@ -423,11 +423,23 @@ func TestTaskLifecycleThroughRegisteredCommands(t *testing.T) {
 		t.Fatalf("release %+v", last)
 	}
 	var cmds []string
+	var arrivals []api.ObjectRef
 	for i, h := range v.History {
 		if h.TaskVersion != int64(i+1) || (i > 0 && h.From != v.History[i-1].To) {
 			t.Fatalf("history %d: %+v", i, h)
 		}
 		cmds = append(cmds, h.Command)
+		// What a resume named as arrived stays on its history row, as given (S4 G3, tsk 000006); no
+		// other row has one.
+		if h.Arrival != nil {
+			if h.Command != api.CommandResume {
+				t.Fatalf("history %d (%s) has an arrival", i, h.Command)
+			}
+			arrivals = append(arrivals, *h.Arrival)
+		}
+	}
+	if !slices.Equal(arrivals, []api.ObjectRef{{Kind: "acceptance", ID: "acc.1", Version: 1}, {Kind: "order", ID: "order.1", Version: 2}}) {
+		t.Fatalf("arrivals in the history: %+v", arrivals)
 	}
 	if !slices.Equal(cmds, []string{"task.create", "task.scope", "task.scope", "task.bind_object", "task.wait", "task.resume", "task.verify",
 		"goal.verify", "task.resume", "task.verify", "goal.verify", "task.release"}) || v.TaskVersion != 12 {
@@ -1020,6 +1032,17 @@ func TestDatabaseKeepsTheStateMachine(t *testing.T) {
 		`DELETE FROM brant_tsk.business_task WHERE task_id = 'task.1'`,
 		`UPDATE brant_tsk.task_transition SET reason = 'x' WHERE task_id = 'task.1'`,
 		`DELETE FROM brant_tsk.task_transition WHERE task_id = 'task.1'`,
+		// S4 G3 (tsk 000006): an arrival is never added to a history row afterwards, is a resume's only
+		// and is whole.
+		`UPDATE brant_tsk.task_transition SET arrival_kind = 'order', arrival_id = 'order.1', arrival_version = 1 WHERE task_id = 'task.1'`,
+		`INSERT INTO brant_tsk.task_transition (tenant_id, company_id, task_id, task_version, command, from_state, to_state, control_mode,
+			control_epoch, actor_kind, actor_id, authority_epoch, recorded_at, arrival_kind, arrival_id, arrival_version)
+			SELECT tenant_id, company_id, task_id, 90, 'task.pause', 'running', 'paused', 'ai', 0, 'human', 'alice', 1, now(), 'order', 'order.1', 1
+			FROM brant_tsk.business_task WHERE task_id = 'task.1'`,
+		`INSERT INTO brant_tsk.task_transition (tenant_id, company_id, task_id, task_version, command, from_state, to_state, control_mode,
+			control_epoch, actor_kind, actor_id, authority_epoch, recorded_at, arrival_kind)
+			SELECT tenant_id, company_id, task_id, 91, 'task.resume', 'waiting_input', 'running', 'ai', 0, 'system', 'sys', 1, now(), 'order'
+			FROM brant_tsk.business_task WHERE task_id = 'task.1'`,
 	} {
 		err := w.sql(stmt)
 		var pgErr *pgconn.PgError

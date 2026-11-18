@@ -241,6 +241,9 @@ type Change struct {
 	Epoch         int64
 	At            time.Time
 	Reason        string
+	// Arrival is what a task.resume named as arrived (S4 G3): kept on the history row as given, so
+	// whoever continues the task finds it; nil for every other command and for a resume without one.
+	Arrival *Ref
 }
 
 // CreateRequest is a validated task.create.
@@ -409,7 +412,7 @@ func (t *Task) Wait(r WaitRequest, act Act) (Change, error) {
 }
 
 // Resume resumes the task (task.resume). A waiting task resumes to running when what it waited for
-// arrives (system; the arrival is recorded). A paused task resumes to the waiting state it was
+// arrives (system; the arrival is recorded on the history row, Change.Arrival). A paused task resumes to the waiting state it was
 // paused in, or else to running (human, with a reason), once no action is submitted or unknown
 // (SM-TSK-TASK "已有副作用已对账"). A task that reaches running by a resume before its scope was
 // settled — scoping → waiting_input → running when the missing items arrive, or paused before scoping
@@ -448,7 +451,12 @@ func (t *Task) Resume(reason string, arrival *Ref, unsettled int, act Act) (Chan
 		}
 	}
 	t.PauseCond, t.PausedFrom = nil, ""
-	return t.move(CmdResume, to, act, reason, ""), nil
+	ch := t.move(CmdResume, to, act, reason, "")
+	if arrival != nil {
+		a := *arrival
+		ch.Arrival = &a
+	}
+	return ch, nil
 }
 
 // Verify moves a running task to verifying (task.verify; system): its required actions have

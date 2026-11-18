@@ -84,6 +84,29 @@ func makeInquiry(kind, name string, rows []inquiryRow, extra []string) (inquiry,
 	return in, nil
 }
 
+// atRowStart is the inquiry as an agent reads it that quotes every field's own words and places
+// all of them where the field's row begins (the live trial of 2026-11-18): text line:col becomes
+// line:1, an XLSX cell the row's column A; a PDF line is one place already. The quotes are the
+// file's; only the places are wrong.
+func (in inquiry) atRowStart() inquiry {
+	out := in
+	out.at = map[string]map[string]fieldAt{}
+	for line, fields := range in.at {
+		out.at[line] = map[string]fieldAt{}
+		for f, at := range fields {
+			switch in.kind {
+			case kindText:
+				row, _, _ := strings.Cut(at.Locator, ":")
+				at.Locator = row + ":1"
+			case kindXLSX:
+				at.Locator = sheetName + "!A" + strings.TrimLeft(strings.TrimPrefix(at.Locator, sheetName+"!"), "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+			}
+			out.at[line][f] = at
+		}
+	}
+	return out
+}
+
 func (r inquiryRow) cells() []string { return []string{r.code, r.item, r.qty, r.uom} }
 
 var rowFields = []string{fieldSKU, fieldItem, fieldQty, fieldUOM}

@@ -65,18 +65,26 @@ const (
 // extractor (Extractor) read them, so the text and its locators come from the file, never from the
 // caller (AI-INV-004). The registrant must see the file; a file outside the input profile is
 // INPUT_PROFILE_UNSUPPORTED.
+//
+// The contract and doc tags state, for a caller that learns the command from a description (the AI
+// layer's tool schemas, internal/ai/capability Rule; S4 G3), what Validate enforces of a member and
+// a few words about it; the tests of internal/ai/capability keep them true against Validate.
+//
+// SourceID is args.id. ContentText is the text of a manual_text or an email_text and empty for a
+// file_extract. Provider, AccountRef, ExternalMessageID and AuthorClaim (who the message claims to
+// come from, not verified) are an email's only.
 type RegisterSource struct {
 	IdempotencyKey    string
-	SourceID          string // args.id
-	ContentText       string // manual_text and email_text; empty for a file_extract
-	SourceKind        string // manual_text, email_text or file_extract
-	Provider          string // email only
-	AccountRef        string // email only
-	ExternalMessageID string // email only
-	AuthorClaim       string // email only: who the message claims to come from, not verified
+	SourceID          string `contract:"required,id,wire=id"`
+	ContentText       string `contract:"when=SourceKind:manual_text|email_text"`
+	SourceKind        string `contract:"required,enum=file_extract|manual_text|email_text" doc:"file_extract: the platform reads the file FileID names"`
+	Provider          string `contract:"id,when=SourceKind:email_text"`
+	AccountRef        string `contract:"id,when=SourceKind:email_text"`
+	ExternalMessageID string `contract:"when=SourceKind:email_text"`
+	AuthorClaim       string `contract:"when=SourceKind:email_text"`
 	// FileID is the business file a file_extract is read from. Left out of the request hash while
 	// empty, so requests sent before it replay unchanged (X-INV-001).
-	FileID string `json:",omitempty"`
+	FileID string `json:",omitempty" contract:"id,when=SourceKind:file_extract"`
 }
 
 // Validate checks the closed contract (Python BC_T01_commands.schema.json, source.register).
@@ -135,13 +143,16 @@ type Auditor interface {
 
 // RegisterFile registers an immutable business file. A new version names the file it supersedes;
 // a file has at most one successor, so versions never branch.
+//
+// FileID is args.id; MimeType is text/plain, application/pdf or the XLSX type; ContentBase64 is the
+// standard Base64 of at most MaxFileBytes bytes.
 type RegisterFile struct {
 	IdempotencyKey   string
-	FileID           string // args.id
-	FileName         string
-	MimeType         string // text/plain, application/pdf or the XLSX type
-	ContentBase64    string // standard Base64 of at most MaxFileBytes bytes
-	SupersedesFileID string
+	FileID           string `contract:"required,id,wire=id"`
+	FileName         string `contract:"required"`
+	MimeType         string `contract:"required,enum=text/plain|application/pdf|application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"`
+	ContentBase64    string `contract:"required" doc:"standard Base64"`
+	SupersedesFileID string `contract:"id"`
 }
 
 // Validate checks the closed contract (Python foundation.commands.schema.json, file.register).

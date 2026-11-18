@@ -61,7 +61,9 @@ func (f *fakeTSK) GetTask(_ context.Context, id string) (tskapi.TaskView, error)
 		Target: tskapi.Target{QuoteID: "quote.1"}, Source: &tskapi.SourceRef{Kind: tskapi.SourceFile, ID: "file.inquiry"},
 		Binding: &tskapi.BindingView{QuoteID: "quote.1", State: tskapi.BindingBound, ControlEpoch: 1,
 			BoundAt: time.Date(2026, 11, 13, 8, 0, 0, 0, time.UTC)},
-		History: []tskapi.TransitionView{{Seq: 1, Command: tskapi.CommandCreate, To: tskapi.StateCreated, TaskVersion: 1}}}, nil
+		History: []tskapi.TransitionView{{Seq: 1, Command: tskapi.CommandCreate, To: tskapi.StateCreated, TaskVersion: 1},
+			{Seq: 4, Command: tskapi.CommandResume, From: tskapi.StateWaitingInput, To: tskapi.StateRunning, TaskVersion: 4,
+				Arrival: &tskapi.ObjectRef{Kind: tskapi.SourceEVD, ID: "mail.reply"}}}}, nil
 }
 
 func (f *fakeTSK) GoalVerifications(context.Context, string) ([]tskapi.GoalVerification, error) {
@@ -108,7 +110,11 @@ func (f *fakeAI) ModelCalls(_ context.Context, id string) ([]executionevidence.C
 	in := int64(120)
 	return []executionevidence.Call{{CallID: "call.1", TaskID: id, Seq: 1, Kind: "model", State: "succeeded", ActorID: "agent.1",
 		Bundle: executionevidence.Ref{BundleID: "q01.agent", SHA256: strings.Repeat("b", 64)}, ModelRequested: "scripted", Reserved: zero,
-		ReservedAt: time.Date(2026, 11, 13, 8, 0, 0, 0, time.UTC), InputTokens: &in, Cost: &zero}}, nil
+		ReservedAt: time.Date(2026, 11, 13, 8, 0, 0, 0, time.UTC), InputTokens: &in, Cost: &zero},
+		{CallID: "call.2", TaskID: id, Seq: 2, Kind: "tool", State: "failed", ActorID: "agent.1", ToolCommand: "quote.save_draft",
+			Bundle: executionevidence.Ref{BundleID: "q01.agent", SHA256: strings.Repeat("b", 64)}, Reserved: zero, Cost: &zero,
+			ReservedAt: time.Date(2026, 11, 13, 8, 0, 1, 0, time.UTC), Code: kernel.CodeReferenceInvalid,
+			RefusalPath: "/args/data/currency_ref/kind", RefusalReason: "The reference is not of the kind its field takes"}}, nil
 }
 
 // RunStep plays the execution entry: it records the step, sends the command with the action's key
@@ -250,6 +256,15 @@ func TestTSKReads(t *testing.T) {
 	if src, _ := a.body["source"].(map[string]any); len(src) != 2 || src["kind"] != "evd_file" || src["id"] != "file.inquiry" {
 		t.Fatalf("source %v", a.body["source"])
 	}
+	// The history shows what a resume named as arrived (S4 G3), and nothing on the other entries.
+	history, _ := a.body["history"].([]any)
+	if len(history) != 2 || history[0].(map[string]any)["arrival"] != nil {
+		t.Fatalf("history %v", history)
+	}
+	if arrival, _ := history[1].(map[string]any)["arrival"].(map[string]any); arrival["kind"] != "evd_source" || arrival["id"] != "mail.reply" ||
+		arrival["version"] != float64(0) {
+		t.Fatalf("the resume's arrival %v", history[1])
+	}
 	if a = call(t, h, "GET", "/api/brant/v1/tsk/tasks/task.9", "Bearer good", ""); a.status != 404 {
 		t.Fatalf("%d %v", a.status, a.body)
 	}
@@ -304,12 +319,17 @@ func TestAICommandsAndReads(t *testing.T) {
 	}
 	a = call(t, h, "GET", "/api/brant/v1/ai/tasks/task.1/model_calls", "Bearer good", "")
 	calls, _ := a.body["calls"].([]any)
-	if a.status != 200 || len(calls) != 1 {
+	if a.status != 200 || len(calls) != 2 {
 		t.Fatalf("%d %v", a.status, a.body)
 	}
 	c := calls[0].(map[string]any)
 	if c["reserved"].(map[string]any)["amount"] != "0.00" || c["input_tokens"] != float64(120) || c["bundle_id"] != "q01.agent" ||
-		c["reserved_at"] != "2026-11-13T08:00:00.000000Z" {
+		c["reserved_at"] != "2026-11-13T08:00:00.000000Z" || c["refusal_path"] != nil || c["refusal_reason"] != nil {
+		t.Fatalf("%v", c)
+	}
+	// A refused tool call shows where and why it was refused (S4 G3).
+	if c = calls[1].(map[string]any); c["state"] != "failed" || c["code"] != kernel.CodeReferenceInvalid ||
+		c["refusal_path"] != "/args/data/currency_ref/kind" || c["refusal_reason"] != "The reference is not of the kind its field takes" {
 		t.Fatalf("%v", c)
 	}
 }

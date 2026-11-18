@@ -240,11 +240,119 @@ func TestMoneyAndOutcomes(t *testing.T) {
 	}
 }
 
+// The scripted owner settles what a person would (S4 G3, decision E-7 a): a field the draft leaves
+// pending or states otherwise than the truth gets the true value, and a field INQ holds ambiguous
+// between several places gets the place the truth knows — only when it is one of the places INQ
+// kept. Every field so settled is an owner resolution, synthetic. What the truth cannot repair is
+// an error: a line missing, a line the truth does not have, a true place INQ did not keep.
+func TestTheScriptedOwnerSettlesWhatAPersonWould(t *testing.T) {
+	in, err := makeInquiry(kindText, "inquiry", brcRows(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	truth := brcTruth()
+	// The draft of the live trial: every value right, the unit placed at the four rows it stands in.
+	draft := func() map[string]any {
+		var lines []any
+		for _, l := range brcLines {
+			locs := []any{map[string]any{"field": fieldSKU, "locator": in.at[l.id][fieldSKU].Locator, "quote": l.sku}}
+			for _, o := range brcLines {
+				locs = append(locs, map[string]any{"field": fieldUOM, "locator": in.at[o.id][fieldUOM].Locator, "quote": "PCS"})
+			}
+			lines = append(lines, map[string]any{"line_id": l.id, "sku_id": l.sku, "quantity": l.qty, "uom": "PCS", "requested_item": l.item,
+				"locators": locs, "pending": []any{map[string]any{"field": fieldUOM, "reason": "ambiguous"}}})
+		}
+		return map[string]any{"lines": lines}
+	}
+	line := func(d map[string]any, i int) map[string]any { return d["lines"].([]any)[i].(map[string]any) }
+	verified, res, err := ownerVerification(draft(), truth, in)
+	if err != nil || len(verified) != 4 || len(res) != 4 {
+		t.Fatal(verified, res, err)
+	}
+	for i, l := range brcLines {
+		place := in.at[l.id][fieldUOM].Locator
+		want := OwnerResolution{LineID: l.id, Field: fieldUOM, Kind: resolvedPlace, PendingReason: "ambiguous", From: "PCS", To: "PCS",
+			Locator: place, Synthetic: true}
+		fields := verified[i].(map[string]any)["fields"].([]any)
+		if res[i] != want || len(fields) != 1 || fields[0].(map[string]any)["locator"] != place || fields[0].(map[string]any)["value"] != "PCS" {
+			t.Fatalf("line %s: %+v, sent %v", l.id, res[i], fields)
+		}
+	}
+	// A draft as the truth has it: every line verified as it stands, nothing settled.
+	clean := draft()
+	for i := range brcLines {
+		delete(line(clean, i), "pending")
+	}
+	if verified, res, err = ownerVerification(clean, truth, in); err != nil || len(res) != 0 || len(verified) != 4 ||
+		len(verified[0].(map[string]any)) != 1 {
+		t.Fatal(verified, res, err)
+	}
+	// A pending field with one place or none, and a value that differs: the value is stated, no place.
+	other := draft()
+	line(other, 0)["pending"] = []any{map[string]any{"field": fieldUOM, "reason": "missing"}}
+	line(other, 0)["uom"] = ""
+	line(other, 1)["quantity"], line(other, 1)["pending"] = "63", nil
+	line(other, 2)["pending"] = []any{map[string]any{"field": fieldSKU, "reason": "ambiguous", "candidates": []any{"ST01.blue.S", "ST01.blue.M"}},
+		map[string]any{"field": fieldItem, "reason": "noted"}}
+	line(other, 3)["pending"] = nil
+	if _, res, err = ownerVerification(other, truth, in); err != nil || len(res) != 4 {
+		t.Fatal(res, err)
+	}
+	for i, want := range []OwnerResolution{
+		{LineID: "L1", Field: fieldUOM, Kind: resolvedValue, PendingReason: "missing", To: "PCS", Synthetic: true},
+		{LineID: "L2", Field: fieldQty, Kind: resolvedCorrected, From: "63", To: "36", Synthetic: true},
+		{LineID: "L3", Field: fieldSKU, Kind: resolvedValue, PendingReason: "ambiguous", From: "ST01.blue.S", To: "ST01.blue.S", Synthetic: true},
+		{LineID: "L3", Field: fieldItem, Kind: resolvedValue, PendingReason: "noted", From: brcLines[2].item, To: brcLines[2].item, Synthetic: true},
+	} {
+		if res[i] != want {
+			t.Errorf("resolution %d: %+v, want %+v", i, res[i], want)
+		}
+	}
+	// What the truth cannot repair.
+	short := draft()
+	short["lines"] = short["lines"].([]any)[:3]
+	extra := draft()
+	line(extra, 3)["line_id"] = "L9"
+	cut := draft()
+	line(cut, 0)["locators"] = line(cut, 0)["locators"].([]any)[2:] // INQ kept other places, not L1's own
+	for name, d := range map[string]map[string]any{"a line missing": short, "a line the truth does not have": extra, "the true place not kept": cut} {
+		if _, _, err := ownerVerification(d, truth, in); err == nil {
+			t.Errorf("%s: repaired", name)
+		}
+	}
+	// An agent that places every field at its row's start quotes the file's words at the wrong
+	// place, in the text and the XLSX notation.
+	claimed := in.atRowStart()
+	if claimed.at["L1"][fieldUOM] != (fieldAt{Locator: "5:1", Quote: "PCS"}) || claimed.at["L4"][fieldQty] != (fieldAt{Locator: "8:1", Quote: "48"}) ||
+		in.at["L1"][fieldUOM].Locator == "5:1" {
+		t.Fatalf("%+v", claimed.at)
+	}
+	sheet, err := makeInquiry(kindXLSX, "inquiry", brcRows(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sheet.atRowStart().at["L2"][fieldUOM].Locator; got != sheetName+"!A6" {
+		t.Fatalf("xlsx row start %q", got)
+	}
+	// Counted in the registry, and extra human work whatever INQ's correction kind.
+	rec := &TrialRecord{Family: "feedback", Trial: 1, Pass: true, OwnerResolutions: res, Corrections: []map[string]any{{"kind": "verified"}},
+		HumanSteps: []HumanStep{{Command: "rfq.confirm_scope", Required: true, Outcome: "ok"}}}
+	if automationOf(rec) != "extra_human_work" || automationOf(&TrialRecord{Corrections: rec.Corrections, HumanSteps: rec.HumanSteps}) != "required_review_only" {
+		t.Fatal("automation level of a trial with owner resolutions")
+	}
+	run := &EvalRun{Trials: []*TrialRecord{rec}}
+	run.summarize([]*family{{name: "feedback"}})
+	if run.Families[0].OwnerResolutions != 4 || run.Totals.OwnerResolutions != 4 || !strings.Contains(rec.signature(), "resolutions=4") ||
+		!strings.Contains(run.markdown(), "settled by the scripted owner (synthetic, not the AI's work): L1 uom value_stated") {
+		t.Fatalf("%+v\n%s", run.Totals, run.markdown())
+	}
+}
+
 // The fixed set is fixed before the run: every family names its design IDs, its goal, the task's
 // goal code, its expected outcome, a flow and a grader; names are unique.
 func TestTheFixedSet(t *testing.T) {
 	names := familyNames()
-	if len(names) != 13 || names[0] != "normal" || names[len(names)-1] != "reads" {
+	if len(names) != 14 || names[0] != "normal" || names[len(names)-1] != "feedback" {
 		t.Fatal(names)
 	}
 	seen := map[string]bool{}
@@ -272,7 +380,7 @@ func TestFlags(t *testing.T) {
 	t.Setenv("CI", "")
 	base := []string{"-dsn", "postgres://a", "-migrator-dsn", "postgres://m"}
 	cfg, err := parseFlags(base)
-	if err != nil || cfg.suite != suiteScripted || cfg.trials != 5 || len(cfg.families) != 13 {
+	if err != nil || cfg.suite != suiteScripted || cfg.trials != 5 || len(cfg.families) != 14 {
 		t.Fatal(cfg, err)
 	}
 	// S4 G2: the scripted suite's phase timeout is 2 minutes unless -phase-timeout says otherwise (the

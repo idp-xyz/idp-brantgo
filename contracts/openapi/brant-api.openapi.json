@@ -2128,7 +2128,7 @@
             "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
           }
         },
-        "summary": "The model and tool calls of a task in order: reservation, outcome, the model ID as returned, prompt/input/output hashes, tokens, latency, cost and the action a tool call ran (ai.model_call.list; no prompt or output content)",
+        "summary": "The model and tool calls of a task in order: reservation, outcome, the model ID as returned, prompt/input/output hashes, tokens, latency, cost, the action a tool call ran and, for a refused tool call, the code, the request path and the refusing context's static reason (ai.model_call.list; no prompt or output content)",
         "tags": [
           "ai"
         ]
@@ -84231,7 +84231,7 @@
             "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
           }
         },
-        "summary": "A business task: goal and version, lifecycle, control mode, the control epoch recorded from TRD and the binding of its quote root, owner, agent, target, source (kind evd_source, evd_file or rfq, and the id of that EVD source, uploaded EVD file or RFQ), budget, execution bundle, what it waits for or why it is paused or stopping, how it ended, and its append-only history (task.get)",
+        "summary": "A business task: goal and version, lifecycle, control mode, the control epoch recorded from TRD and the binding of its quote root, owner, agent, target, source (kind evd_source, evd_file or rfq, and the id of that EVD source, uploaded EVD file or RFQ), budget, execution bundle, what it waits for or why it is paused or stopping, how it ended, and its append-only history, in which a resume keeps what it named as arrived (arrival: kind, id, version) (task.get)",
         "tags": [
           "tsk"
         ]

@@ -207,11 +207,11 @@ var orderCodes = map[string]kernel.Category{
 // grant (D-7, ObjectQuote at BusinessRevision).
 type PrepareOrder struct {
 	IdempotencyKey   string
-	OrderID          string
-	QuoteID          string
-	BusinessRevision int64
-	BusinessHash     string
-	AcceptanceID     string
+	OrderID          string `contract:"required,id"`
+	QuoteID          string `contract:"required,id"`
+	BusinessRevision int64  `contract:"required"`
+	BusinessHash     string `contract:"required,hash"`
+	AcceptanceID     string `contract:"required,id" doc:"the verified acceptance"`
 	// NotifyPartyRef is the notify party the order binds (S5R-D40; optional, JSON
 	// notify_party_ref): an address of the role notify of a confirmed PTY party revision the caller
 	// sees, current now (AddressRoleRef v1; REFERENCE_INVALID, REFERENCE_STALE, or
@@ -224,9 +224,9 @@ type PrepareOrder struct {
 // Human or AI; an AI agent with an approval grant (D-7, ObjectOrder at ExpectedVersion).
 type RequestOrderReview struct {
 	IdempotencyKey  string
-	OrderID         string
-	ExpectedVersion int64
-	ReviewID        string
+	OrderID         string `contract:"required,id"`
+	ExpectedVersion int64  `contract:"required" doc:"the order's row version"`
+	ReviewID        string `contract:"required,id"`
 }
 
 // RiskAcknowledgement names one upstream risk an approval acknowledges, as the order's reads show

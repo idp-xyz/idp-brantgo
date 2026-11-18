@@ -224,6 +224,9 @@ var PercentFormat = kernel.DecimalFormat{IntDigits: 3, Scale: 6}
 // KindKnown reports whether kind is one of the twenty-three configuration kinds.
 func KindKnown(kind string) bool { return slices.Contains(kinds, kind) }
 
+// Kinds returns the configuration kinds, in the order KindKnown uses. sales_price is the twenty-third.
+func Kinds() []string { return slices.Clone(kinds) }
+
 // KindImplemented reports whether POL accepts configurations of kind yet.
 func KindImplemented(kind string) bool { return slices.Contains(implemented, kind) }
 
