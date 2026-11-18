@@ -121,7 +121,10 @@ type Gateway struct {
 //     GRANT_EXPIRED, PERMISSION_DENIED);
 //   - the capability's preparation completes the command (unit B4: rfq.save_draft's field locators
 //     verified against the file extracts, read as the agent; its refusals, such as
-//     REFERENCE_INVALID or INPUT_PROFILE_UNSUPPORTED, are the call's and audited).
+//     REFERENCE_INVALID or INPUT_PROFILE_UNSUPPORTED, are the call's and audited; S4 G6:
+//     quote.save_draft's draft that lacks what a freeze needs is refused here with the freeze's
+//     code and path, DRAFT_NOT_READY, CUSTOMER_REFERENCE_MISSING, CONTACT_REFERENCE_MISSING or
+//     COST_SNAPSHOT_MISSING, before the owning context is called).
 func (g Gateway) Decode(ctx context.Context, b Binding, call model.ToolCall) (Call, error) {
 	p, err := identity.FromContext(ctx)
 	if err != nil {

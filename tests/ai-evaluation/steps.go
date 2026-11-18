@@ -583,13 +583,19 @@ func (t *trial) assertPayable(ctx context.Context, want string) {
 
 // countActions counts the task's committed actions of command.
 func (t *trial) countActions(ctx context.Context, command string) int {
+	return t.countActionsIn(ctx, command, "committed")
+}
+
+// countActionsIn counts the task's actions of command that are in state (TSK's own: committed,
+// rejected, ...).
+func (t *trial) countActionsIn(ctx context.Context, command, state string) int {
 	a, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/tsk/tasks/"+taskID+"/actions")
 	if err != nil {
 		return -1
 	}
 	n := 0
 	for _, x := range list(a["actions"]) {
-		if str(dig(x, "target", "command")) == command && str(dig(x, "state")) == "committed" {
+		if str(dig(x, "target", "command")) == command && str(dig(x, "state")) == state {
 			n++
 		}
 	}

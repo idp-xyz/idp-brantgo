@@ -241,10 +241,15 @@ func (l *g3Learner) quote(f g3Facts, steps int, results []g3Result) model.Messag
 		delete(line, member)
 	}
 	d["Delivery"] = map[string]any{"Kind": "date", "Date": "2027-01-31", "PlaceRef": d["Delivery"].(map[string]any)["PlaceRef"]}
-	delete(d, "ExpiresAt")
-	if now, err := kernel.ParseTimestamp(f.Now); l.sees.facts && err == nil {
-		d["ExpiresAt"] = kernel.FormatTimestamp(now.Add(72 * time.Hour)) // the facts' clock, not the model's
+	// Every draft states an expiry, as the live model's did: since S4 G6 the gateway refuses a draft
+	// a person could not freeze (a draft without ExpiresAt is DRAFT_NOT_READY there, which would end
+	// the controls at a member this test is not about). A learner that sees the facts counts it from
+	// the platform's clock, the others from their own idea of today.
+	now := time.Now()
+	if t, err := kernel.ParseTimestamp(f.Now); l.sees.facts && err == nil {
+		now = t
 	}
+	d["ExpiresAt"] = kernel.FormatTimestamp(now.Add(72 * time.Hour))
 	args := map[string]any{"QuoteID": f.Target.QuoteID, "ExpectedVersion": 0, "Data": d}
 	for _, n := range notes {
 		l.learn(args, n, costing)

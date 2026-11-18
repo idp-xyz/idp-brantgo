@@ -91,9 +91,9 @@ var fixedSet = []*family{
 		expected: "delegated reads succeed, are hashed in the ledger and are not TSK actions; an undelegated read and a foreign object are refused; bank_account is refused; the bundle lists the reads",
 		run:      runReads, grade: gradeReads},
 	{name: "feedback", design: []string{"S4-03", "S4-07", "G3", "BC-AT27", "BC-AT28", "SD-07"},
-		goal:     "the agent makes the live trials' mistakes: it places every field at its row's start and names no place for the line, and its first quote draft has no unit price",
+		goal:     "the agent makes the live trials' mistakes: it places every field at its row's start and names no place for the line, its first quote draft has no cost snapshot and its second no unit price",
 		goalCode: "quote_ready", input: kindText,
-		expected: "each line takes the row its located fields stand in; INQ holds each line's unit ambiguous and the owner names its place (4 owner resolutions, synthetic: extra human work, not the AI's); the refused quote draft is in the ledger with its path and the next turn's draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
+		expected: "each line takes the row its located fields stand in; INQ holds each line's unit ambiguous and the owner names its place (4 owner resolutions, synthetic: extra human work, not the AI's); the draft without the cost snapshot is refused by the gateway with COST_SNAPSHOT_MISSING before TRD and leaves no TSK action, the one without a unit price is refused by TRD, both are in the ledger with their paths and the third draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
 		run:      runFeedback, grade: gradeFeedback},
 }
 
@@ -928,11 +928,16 @@ func runReads(ctx context.Context, t *trial) error {
 // G3). The RFQ draft quotes every field's own words and places all of them where the row begins;
 // the gateway's locating moves the quotes that stand at one place and keeps every place of the
 // unit, which stands in every row, so INQ holds each line's unit ambiguous: the owner names the
-// place (confirmRFQ, an owner resolution a line). The first quote draft has no unit price and is
-// refused; with one model call a turn, the corrected draft is the next turn's, which starts from
-// facts that list the refusal. The scripted model cannot read a refusal: that a model which reads
-// it converges, and one that is not told does not, is proved by the composed test
-// TestAgentLearnsAQuoteDraftFromRefusalsAndFacts. Here the records are graded over HTTP.
+// place (confirmRFQ, an owner resolution a line). The first quote draft is the one of the live
+// trial of 2026-11-18 18:51 (normal-1): every member but the cost snapshot. TRD would save it and
+// the owner's freeze would be refused COST_SNAPSHOT_MISSING, so the gateway refuses it first, before
+// TRD is called, with that code at the member (S4 G6). The second has the snapshot and no unit price
+// and is refused by TRD; the third is whole and commits. With one model call a turn, each draft is
+// the next turn's, which starts from facts that list the refusals. The scripted model cannot read a
+// refusal: that a model which reads it converges, and one that is not told does not, is proved by
+// the composed tests TestAgentLearnsAQuoteDraftFromRefusalsAndFacts and
+// TestAnAgentsDraftWithoutTheCostSnapshotIsRefusedInTheSameTurn. Here the records are graded over
+// HTTP.
 func runFeedback(ctx context.Context, t *trial) error {
 	claimed := t.in.atRowStart()
 	t.claimed = &claimed
@@ -953,11 +958,14 @@ func runFeedback(ctx context.Context, t *trial) error {
 	}
 	expires := time.Now().Add(72 * time.Hour)
 	good := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, unitPrice, expires)
+	noSnapshot := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, unitPrice, expires)
+	delete(noSnapshot, "CostSnapshotRef")
 	bad := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, unitPrice, expires)
 	for _, l := range bad["Lines"].([]any) {
 		delete(l.(map[string]any), "UnitPrice")
 	}
-	steps := []scriptStep{turn(saveQuote(quoteID, bad)), turn(saveQuote(quoteID, good)), done("报价草稿已按拒绝原因更正并保存。")}
+	steps := []scriptStep{turn(saveQuote(quoteID, noSnapshot)), turn(saveQuote(quoteID, bad)), turn(saveQuote(quoteID, good)),
+		done("报价草稿已按拒绝原因更正并保存。")}
 	if _, err := t.runAgent(ctx, agentPhase{name: "quote", steps: steps, maxSteps: 1, until: lifecycleIs("waiting_input", "paused")}); err != nil {
 		return err
 	}
@@ -1008,17 +1016,25 @@ func gradeFeedback(ctx context.Context, t *trial) {
 		}
 	}
 	t.assert("RFQ lines: the place the agent left out is the row of the line's fields", "4 of 4", fmt.Sprintf("%d of %d", rowed, len(brcLines)))
-	// The ledger keeps where the first quote draft was refused; one draft committed.
-	var refused []string
+	// The ledger keeps where each refused quote draft was refused, and the reason the gateway gave
+	// the first (S4 G6); one draft committed.
+	var refused, reasons []string
 	if mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls"); err == nil {
 		for _, x := range list(mc["calls"]) {
 			if str(dig(x, "tool_command")) == "quote.save_draft" && str(dig(x, "state")) == "failed" {
 				refused = append(refused, str(dig(x, "code"))+" "+str(dig(x, "refusal_path")))
+				reasons = append(reasons, str(dig(x, "refusal_reason")))
 			}
 		}
 	}
-	t.assert("the refused quote draft in the ledger, with its path", "SCHEMA_INVALID /args/data/lines/0/unit_price", strings.Join(refused, "; "))
+	t.assert("the refused quote drafts in the ledger, with their paths",
+		"COST_SNAPSHOT_MISSING /args/data/cost_snapshot_ref; SCHEMA_INVALID /args/data/lines/0/unit_price", strings.Join(refused, "; "))
+	t.assert("the reason of the refusal before TRD: a person could not freeze the draft", "true",
+		fmt.Sprint(len(reasons) == 2 && strings.Contains(reasons[0], "cannot freeze") && reasons[1] == ""))
 	t.assert("committed quote.save_draft actions", "1", fmt.Sprint(t.countActions(ctx, "quote.save_draft")))
+	// TSK recorded the draft TRD refused, and none for the one the gateway refused before its intent
+	// existed.
+	t.assert("rejected quote.save_draft actions: only the draft TRD refused", "1", fmt.Sprint(t.countActionsIn(ctx, "quote.save_draft", "rejected")))
 	// TSK keeps what the task was resumed with on the history row of each resume.
 	var arrivals []string
 	if v, err := t.task(ctx); err == nil {
