@@ -17,6 +17,15 @@
 // Every trial is kept in the EvalRun registry (report.json, summary.md) with its phases, human steps,
 // corrections, cost and assertions; families report first success and repeat consistency.
 //
+// The task names the uploaded inquiry file as its source (kind evd_file) and the agent registers the
+// extract itself, in both suites; which source it registered — and which response and order it
+// created — the operator and the graders read from the task's records, so a live model may name them
+// as it likes (learn.go). An agent phase that fails, or asks the model and commits nothing, records
+// why and the last ledger calls with their codes. With -trace (on by default in the live suite, never
+// under CI=true) the agent workers also write their local diagnostic trace of every turn under the
+// trial's directory: what the model was told and what it sent, to classify a failed live trial. That
+// trace is not evidence.
+//
 //	go run ./tests/ai-evaluation -bin bin -out bin/ai-eval/run1                      # scripted suite (make ai-eval)
 //	go run ./tests/ai-evaluation -families normal,an09 -trials 2 -parallel 2 ...
 //	go run -tags aievallive ./tests/ai-evaluation -suite live ...                    # live suite (make ai-eval-live)
@@ -62,7 +71,27 @@ type config struct {
 	longWait           time.Duration
 	archive            string
 	live               liveConfig
+	// trace: the agent workers write their local diagnostic trace under each trial's directory
+	// (-trace on, or auto in the live suite; never under CI=true).
+	trace bool
 }
+
+// Default phase timeouts (-phase-timeout 0). The scripted model answers at once. A local model
+// answers in 6–30 s per call, and a task's budget is 40 model calls: at 30 s each that is 20
+// minutes. 25 minutes let the task's own budget, not the harness, end a phase that keeps calling the
+// model (the task pauses budget_exhausted), so a phase that reaches the timeout has stopped
+// answering.
+const (
+	scriptedPhaseTimeout = 2 * time.Minute
+	livePhaseTimeout     = 25 * time.Minute
+)
+
+// Values of -trace.
+const (
+	traceAuto = "auto"
+	traceOn   = "on"
+	traceOff  = "off"
+)
 
 // liveConfig is the model service of the live suite (decisions E-3/E-5: an OpenAI-compatible service,
 // its key only in the environment).
@@ -94,7 +123,7 @@ func main() {
 func parseFlags(args []string) (config, error) {
 	fs := flag.NewFlagSet("ai-evaluation", flag.ContinueOnError)
 	cfg := config{}
-	var families string
+	var families, trace string
 	fs.StringVar(&cfg.suite, "suite", suiteScripted, "scripted (the scripted model; CI and make ai-eval) or live (an OpenAI-compatible model service; build tag aievallive)")
 	fs.StringVar(&cfg.bin, "bin", "bin", "directory holding brant-api, brant-worker, brant-admin and brant-migrate (make build)")
 	fs.StringVar(&cfg.dsn, "dsn", os.Getenv("IDP_BRANT_POSTGRES_DSN"), "application role DSN of the evaluation's own database")
@@ -103,7 +132,10 @@ func parseFlags(args []string) (config, error) {
 	fs.StringVar(&families, "families", "all", "families to run, comma-separated ("+strings.Join(familyNames(), ",")+"), or all")
 	fs.IntVar(&cfg.trials, "trials", 5, "trials per family (decision E-4: the fixed set is 11 families × 5 trials)")
 	fs.IntVar(&cfg.parallel, "parallel", 4, "trials run at the same time (each in its own tenant)")
-	fs.DurationVar(&cfg.phaseTimeout, "phase-timeout", 2*time.Minute, "longest an agent phase may take before the trial fails")
+	fs.DurationVar(&cfg.phaseTimeout, "phase-timeout", 0, "longest an agent phase may take before the trial fails; 0 is the suite's default: "+
+		scriptedPhaseTimeout.String()+" scripted, "+livePhaseTimeout.String()+" live (a local model answers in 6–30 s per call)")
+	fs.StringVar(&trace, "trace", traceAuto, "the agent workers' local diagnostic trace of every turn under trials/<trial>/trace/ (facts, model replies, "+
+		"tool results in clear; not evidence): on, off, or auto (on in the live suite, off in the scripted one); never under CI=true")
 	fs.DurationVar(&cfg.longWait, "long-wait", 5*time.Second, "AN06: how long the processes stay down while the task waits")
 	fs.StringVar(&cfg.archive, "archive", "docs", "the master archive (role templates are read from it)")
 	fs.StringVar(&cfg.live.baseURL, "model-base-url", "http://127.0.0.1:8080", "live suite: base URL of the OpenAI-compatible model service")
@@ -122,6 +154,27 @@ func parseFlags(args []string) (config, error) {
 		return cfg, errors.New("-dsn and -migrator-dsn (IDP_BRANT_POSTGRES_DSN, IDP_BRANT_MIGRATOR_DSN) are required")
 	case cfg.trials < 1 || cfg.parallel < 1:
 		return cfg, errors.New("-trials and -parallel must be at least 1")
+	case cfg.phaseTimeout < 0:
+		return cfg, errors.New("-phase-timeout must not be negative")
+	}
+	if cfg.phaseTimeout == 0 {
+		cfg.phaseTimeout = scriptedPhaseTimeout
+		if cfg.suite == suiteLive {
+			cfg.phaseTimeout = livePhaseTimeout
+		}
+	}
+	ci := os.Getenv("CI") == "true"
+	switch trace {
+	case traceOn:
+		if ci {
+			return cfg, errors.New("-trace on never runs under CI=true: the agent trace is a local diagnostic")
+		}
+		cfg.trace = true
+	case traceAuto:
+		cfg.trace = cfg.suite == suiteLive && !ci
+	case traceOff:
+	default:
+		return cfg, fmt.Errorf("-trace must be on, off or auto, got %q", trace)
 	}
 	var err error
 	if cfg.families, err = selectFamilies(families); err != nil {
@@ -261,7 +314,14 @@ func newEvalRun(cfg config) *EvalRun {
 	host, _ := os.Hostname()
 	r.Environment = Environment{Host: host, GoVersion: runtime.Version(), OS: runtime.GOOS + "/" + runtime.GOARCH, CPUs: runtime.NumCPU(),
 		CI: os.Getenv("CI") == "true", Parallel: cfg.parallel, PhaseTimeout: cfg.phaseTimeout.String(), GitHead: gitHead(),
-		Processes: "brant-migrate -apply; brant-api (local OIDC issuer); brant-worker -dispatch (one); brant-worker -agent (one per agent phase)"}
+		AgentTrace: "off",
+		Processes:  "brant-migrate -apply; brant-api (local OIDC issuer); brant-worker -dispatch (one); brant-worker -agent (one per agent phase)"}
+	if cfg.trace {
+		r.Environment.AgentTrace = "on: each agent phase's turns under trials/<trial>/trace/<nn>-<phase>/<tenant>/<company>/<task>/turn-*.jsonl, " +
+			"the tools on offer in trials/<trial>/trace/<nn>-<phase>/tools-*.json (brant-worker -agent-trace-dir). A local diagnostic of synthetic " +
+			"trials — the prompt, the facts, the model's replies and the tool results in clear, never the model key — to classify failed trials; " +
+			"it is not evidence and not a result of this run"
+	}
 	return r
 }
 

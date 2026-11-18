@@ -58,7 +58,8 @@ func (f *fakeTSK) GetTask(_ context.Context, id string) (tskapi.TaskView, error)
 	}
 	return tskapi.TaskView{TaskID: id, GoalCode: tskapi.GoalQuoteReady, Lifecycle: tskapi.StateRunning, ControlMode: tskapi.ModeAI, ControlEpoch: 1,
 		TaskVersion: 4, Initiator: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "alice"}, OwnerID: "alice", AgentID: "agent.1",
-		Target: tskapi.Target{QuoteID: "quote.1"}, Binding: &tskapi.BindingView{QuoteID: "quote.1", State: tskapi.BindingBound, ControlEpoch: 1,
+		Target: tskapi.Target{QuoteID: "quote.1"}, Source: &tskapi.SourceRef{Kind: tskapi.SourceFile, ID: "file.inquiry"},
+		Binding: &tskapi.BindingView{QuoteID: "quote.1", State: tskapi.BindingBound, ControlEpoch: 1,
 			BoundAt: time.Date(2026, 11, 13, 8, 0, 0, 0, time.UTC)},
 		History: []tskapi.TransitionView{{Seq: 1, Command: tskapi.CommandCreate, To: tskapi.StateCreated, TaskVersion: 1}}}, nil
 }
@@ -226,6 +227,14 @@ func TestTSKCommandsDecodeTheirMembers(t *testing.T) {
 		ra.Target.RequestHash != strings.Repeat("e", 64) || ra.ControlEpoch != 1 || ra.DelegationID != "del.1" {
 		t.Fatalf("%d %v %+v", a.status, a.body, ra)
 	}
+	// A task that starts from an uploaded file names the file as its source (S4 G2): the same
+	// members, kind evd_file.
+	a = post(tskapi.CommandCreate, `{"task_id":"task.2","goal_code":"order_active","control_mode":"ai","agent_id":"agent.1",`+
+		`"target":{"rfq_id":"rfq.2","quote_id":"quote.2","customer_id":"customer.1"},"source":{"kind":"evd_file","id":"file.inquiry"}}`)
+	fc := tsk.commands[3].(tskapi.CreateTask)
+	if a.status != 200 || a.body["object_id"] != "task.2" || fc.Source == nil || *fc.Source != (tskapi.SourceRef{Kind: tskapi.SourceFile, ID: "file.inquiry"}) {
+		t.Fatalf("%d %v %+v", a.status, a.body, fc.Source)
+	}
 }
 
 // TSK's reads: a task with its binding and history, the verifications (none: []), the actions.
@@ -236,6 +245,10 @@ func TestTSKReads(t *testing.T) {
 	if a.status != 200 || a.body["ok"] != true || a.body["control_epoch"] != float64(1) || b["quote_id"] != "quote.1" ||
 		b["bound_at"] != "2026-11-13T08:00:00.000000Z" || a.body["initiator"].(map[string]any)["kind"] != "human" {
 		t.Fatalf("%d %v", a.status, a.body)
+	}
+	// The source a task serves, here an uploaded file (S4 G2): kind and id.
+	if src, _ := a.body["source"].(map[string]any); len(src) != 2 || src["kind"] != "evd_file" || src["id"] != "file.inquiry" {
+		t.Fatalf("source %v", a.body["source"])
 	}
 	if a = call(t, h, "GET", "/api/brant/v1/tsk/tasks/task.9", "Bearer good", ""); a.status != 404 {
 		t.Fatalf("%d %v", a.status, a.body)

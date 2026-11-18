@@ -59,7 +59,9 @@ type RunnerTasks interface {
 	tskapi.Commands
 }
 
-// Sources reads a task's EVD source as the agent (EVD re-checks the agent's access now, CT16).
+// Sources reads a task's EVD source as the agent (EVD re-checks the agent's access now, CT16): the
+// source an evd_source task names, or the source a committed source.register of an evd_file task
+// registered from the task's file.
 type Sources interface {
 	GetSource(ctx context.Context, sourceID string) (evdapi.SourceView, error)
 }
@@ -85,6 +87,12 @@ type Sources interface {
 //     completed: open actions reconciled, then task.finish_stop;
 //   - a running task without an active delegation is paused for its owner (AN04).
 //
+// A task that starts from an uploaded file (source kind evd_file, S4 G2) is told its file; once a
+// committed source.register of the task registered that file's extract, the facts name the source
+// and carry its bounded text as they do for an evd_source task. When that happens inside a turn the
+// runner rebuilds the facts and the model goes on from them (a turn is a replan over what happened,
+// decision E-6), so the model reads the inquiry in the call after it registered it.
+//
 // With an external runtime (Runtime, e.g. EER; WBS S4-05), the stop barrier of a task also waits
 // until the runtime's operation of the task (runtime.OperationOf) has ended: the runner asks the
 // runtime to cancel it and finishes the stop only once the runtime shows it ended or never had it
@@ -97,9 +105,10 @@ type Runner struct {
 	Evidence    executionevidence.Ledger
 	Model       model.Port
 	Bundle      executionevidence.Bundle
-	Prompt      string   // the system prompt template; its SHA-256 is the bundle's
-	Accepts     []string // SHA-256s of earlier bundles this runtime still runs (baseline 17.3)
-	Sources     Sources  // optional: the source text of an evd_source task goes into the facts
+	Prompt      string    // the system prompt template; its SHA-256 is the bundle's
+	Accepts     []string  // SHA-256s of earlier bundles this runtime still runs (baseline 17.3)
+	Sources     Sources   // optional: the text of the task's source, or of its file's registered extract, goes into the facts
+	Trace       *TraceDir // optional, off by default: the local diagnostic trace of every turn (trace.go)
 	Scopes      []kernel.Scope
 	Agents      []string     // AI actor IDs the runner acts as
 	MaxSteps    int          // model turns per task and pass (default 8)
@@ -316,6 +325,11 @@ type turn struct {
 	limits executionevidence.Limits
 	dels   []policy.Delegation
 	res    TurnResult
+	// source is the source registered from the file of an evd_file task, once the facts found it;
+	// others are the task's committed source.register actions found to be something else.
+	source string
+	others map[string]bool
+	trace  *turnTrace
 }
 
 // Turn takes one turn on task as agent in scope.
@@ -323,7 +337,7 @@ func (r *Runner) Turn(ctx context.Context, scope kernel.Scope, agent, task strin
 	if err := r.Init(ctx); err != nil {
 		return TurnResult{}, err
 	}
-	t := &turn{r: r, scope: scope, res: TurnResult{TaskID: task}}
+	t := &turn{r: r, scope: scope, res: TurnResult{TaskID: task}, others: map[string]bool{}}
 	var err error
 	if t.agent, err = withPrincipal(ctx, kernel.ActorAI, agent, scope); err != nil {
 		return t.res, err
@@ -343,6 +357,10 @@ func (r *Runner) Turn(ctx context.Context, scope kernel.Scope, agent, task strin
 	switch t.view.Lifecycle {
 	case tskapi.StateCompleted, tskapi.StateClosedUnfulfilled, tskapi.StateCancelled, tskapi.StateFailed:
 		r.setEnded(scope, task)
+	}
+	if traceErr := t.trace.end(r.Clock.Now(), t.res, err); traceErr != nil {
+		// The trace is a diagnostic: losing it does not fail the turn, and it is said.
+		r.Logger.Warn("agent trace not written", "task", task, "error", traceErr)
 	}
 	return t.res, err
 }
@@ -483,6 +501,9 @@ func (t *turn) converse(actions []tskapi.ActionView) error {
 	if err != nil {
 		return err
 	}
+	t.trace = t.r.Trace.begin(t.scope, actorID(t.agent), t.view, traceBundle{BundleID: t.r.ref.BundleID, SHA256: t.r.ref.SHA256,
+		Profile: t.r.Bundle.Model.ProfileID, Model: t.r.Bundle.Model.Model, PromptSHA256: t.r.Bundle.PromptSHA256}, t.r.Prompt, tools, t.r.Clock.Now())
+	t.trace.facts(t.r.Clock.Now(), facts, false)
 	messages := []model.Message{{Role: model.RoleSystem, Content: t.r.Prompt}, {Role: model.RoleUser, Content: facts}}
 	for step := 0; step < t.r.MaxSteps; step++ {
 		resp, stop, err := t.ask(messages, tools)
@@ -512,8 +533,76 @@ func (t *turn) converse(actions []tskapi.ActionView) error {
 		if err = t.bindCreatedRoot(actions); err != nil {
 			return err
 		}
+		if t.awaitsExtract(actions) {
+			// The task's file may have been registered in this step: the facts are rebuilt, and when
+			// they now carry the source and its text the model goes on from them, not from a
+			// conversation that never showed it the inquiry (decision E-6: a replan over what happened).
+			if facts, err = t.facts(actions); err != nil {
+				return err
+			}
+			if t.source != "" {
+				messages = []model.Message{{Role: model.RoleSystem, Content: t.r.Prompt}, {Role: model.RoleUser, Content: facts}}
+				t.trace.facts(t.r.Clock.Now(), facts, true)
+			}
+		}
 	}
 	return nil
+}
+
+// awaitsExtract reports whether the task serves an uploaded file whose registered extract the
+// facts have not found yet, while a committed source.register of the task has not been looked at.
+func (t *turn) awaitsExtract(actions []tskapi.ActionView) bool {
+	s := t.view.Source
+	if s == nil || s.Kind != tskapi.SourceFile || t.source != "" || t.r.Sources == nil {
+		return false
+	}
+	for _, a := range actions {
+		if registersSource(a) && !t.others[a.ActionID] {
+			return true
+		}
+	}
+	return false
+}
+
+// registersSource reports whether a is a committed source.register with the target's receipt.
+func registersSource(a tskapi.ActionView) bool {
+	return a.Target.Context == tskapi.TargetEVD && a.Target.Command == evdapi.CommandRegisterSource && a.State == tskapi.ActionCommitted &&
+		a.Result != nil
+}
+
+// readSource reads a source as the agent; a source the agent may not read (or that is gone) is
+// nil, not an error.
+func (t *turn) readSource(id string) (*evdapi.SourceView, error) {
+	src, err := t.r.Sources.GetSource(t.agent, id)
+	if err == nil {
+		return &src, nil
+	}
+	if _, ok := kernel.AsRejection(err); ok {
+		return nil, nil
+	}
+	return nil, err
+}
+
+// registeredExtract returns the source of the task's file: the object of the task's oldest
+// committed source.register whose source EVD shows, to the agent now, as an extract of that file
+// (EVD's record, not the model's word: the action names the source, EVD names the file it was
+// read from). Nil until there is one.
+func (t *turn) registeredExtract(actions []tskapi.ActionView) (*evdapi.SourceView, error) {
+	for _, a := range actions {
+		if !registersSource(a) || t.others[a.ActionID] {
+			continue
+		}
+		src, err := t.readSource(a.Result.ObjectID)
+		if err != nil {
+			return nil, err
+		}
+		if src != nil && src.Extract != nil && src.Extract.FileID == t.view.Source.ID {
+			t.source = src.SourceID
+			return src, nil
+		}
+		t.others[a.ActionID] = true
+	}
+	return nil, nil
 }
 
 // tools returns the tools the task's delegations allow, and for each the delegation that allows it
@@ -556,6 +645,16 @@ func (t *turn) ask(messages []model.Message, tools []model.Tool) (model.Response
 		latency := t.r.Clock.Now().Sub(start)
 		if resp.Latency > 0 {
 			latency = resp.Latency
+		}
+		switch {
+		case callErr == nil:
+			t.trace.reply(t.r.Clock.Now(), resp, latency)
+		case errors.Is(callErr, context.DeadlineExceeded):
+			t.trace.modelError(t.r.Clock.Now(), "timeout", retry)
+		case errors.Is(callErr, model.ErrUnavailable):
+			t.trace.modelError(t.r.Clock.Now(), "unavailable", retry)
+		default:
+			t.trace.modelError(t.r.Clock.Now(), "refused", retry)
 		}
 		out, err := t.settleModel(call, req, resp, callErr, latency)
 		if err != nil {
@@ -638,16 +737,21 @@ func (t *turn) toolCall(call model.ToolCall, toolDel map[string]policy.Delegatio
 		}
 		switch {
 		case runErr == nil:
+			t.trace.toolResult(t.r.Clock.Now(), call, answer, "")
 			return answer, false, nil
 		case errors.Is(runErr, errWaiting):
+			t.trace.toolEnded(t.r.Clock.Now(), "tool_wait", call, "")
 			return "", true, nil
 		case errors.Is(runErr, model.ErrUnavailable):
+			t.trace.toolEnded(t.r.Clock.Now(), "tool_error", call, "unavailable")
 			continue
 		}
 		if _, ok := kernel.AsRejection(runErr); !ok {
+			t.trace.toolEnded(t.r.Clock.Now(), "tool_error", call, "internal")
 			return "", true, runErr
 		}
 		t.res.Refusals = append(t.res.Refusals, name+" "+errorCode(runErr))
+		t.trace.toolResult(t.r.Clock.Now(), call, answer, errorCode(runErr))
 		return answer, false, nil
 	}
 }
@@ -883,6 +987,12 @@ func (t *turn) pause(cause, why, condition string) error {
 
 // facts is the user message of a turn: the task as TSK and the owning contexts record it now — not
 // a stored conversation (decision E-6; baseline 17.3: a turn is a replan over what happened).
+//
+// The source: a task that names an EVD source (evd_source) gets that source's text, read as the
+// agent and cut at 2000 characters (source_text; source_truncated and source_sha256 when cut). A
+// task that names an uploaded file (evd_file, S4 G2) is told the file (source_file_id); it has no
+// text until the task registered the file's extract — then registered_source_id names the source a
+// committed source.register of the task created and source_text carries its text the same way.
 func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 	v := t.view
 	type actionFact struct {
@@ -898,17 +1008,19 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 		Version  int64  `json:"object_version"`
 	}
 	f := struct {
-		TaskID          string            `json:"task_id"`
-		Goal            string            `json:"goal"`
-		Target          tskapi.Target     `json:"target"`
-		Source          *tskapi.SourceRef `json:"source,omitempty"`
-		SourceText      string            `json:"source_text,omitempty"`
-		SourceTruncated bool              `json:"source_truncated,omitempty"`
-		SourceSHA256    string            `json:"source_sha256,omitempty"`
-		BoundQuote      string            `json:"bound_quote,omitempty"`
-		Actions         []actionFact      `json:"actions"`
-		ApprovalGrants  []grantFact       `json:"approval_grants,omitempty"`
-		Rules           string            `json:"rules"`
+		TaskID             string            `json:"task_id"`
+		Goal               string            `json:"goal"`
+		Target             tskapi.Target     `json:"target"`
+		Source             *tskapi.SourceRef `json:"source,omitempty"`
+		SourceFileID       string            `json:"source_file_id,omitempty"`
+		RegisteredSourceID string            `json:"registered_source_id,omitempty"`
+		SourceText         string            `json:"source_text,omitempty"`
+		SourceTruncated    bool              `json:"source_truncated,omitempty"`
+		SourceSHA256       string            `json:"source_sha256,omitempty"`
+		BoundQuote         string            `json:"bound_quote,omitempty"`
+		Actions            []actionFact      `json:"actions"`
+		ApprovalGrants     []grantFact       `json:"approval_grants,omitempty"`
+		Rules              string            `json:"rules"`
 	}{TaskID: v.TaskID, Goal: v.GoalCode, Target: v.Target, Source: v.Source,
 		Rules: "Use only the tools offered; their arguments are the fields of the command. Scope, actor, task, epoch and grants are the platform's. " +
 			"Drafts are reviewed and made effective by people. Answer without a tool call when nothing is left for you to do; the platform then verifies the goal."}
@@ -929,9 +1041,23 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 	for _, g := range grants {
 		f.ApprovalGrants = append(f.ApprovalGrants, grantFact{Command: g.Command, ObjectID: g.ObjectID, Version: g.ObjectVersion})
 	}
-	if t.r.Sources != nil && v.Source != nil && v.Source.Kind == tskapi.SourceEVD {
-		src, err := t.r.Sources.GetSource(t.agent, v.Source.ID)
-		if err == nil {
+	if v.Source != nil && v.Source.Kind == tskapi.SourceFile {
+		f.SourceFileID = v.Source.ID
+	}
+	if t.r.Sources != nil && v.Source != nil {
+		var src *evdapi.SourceView
+		switch v.Source.Kind {
+		case tskapi.SourceEVD:
+			src, err = t.readSource(v.Source.ID)
+		case tskapi.SourceFile:
+			if src, err = t.registeredExtract(actions); src != nil {
+				f.RegisteredSourceID = src.SourceID
+			}
+		}
+		if err != nil {
+			return "", err
+		}
+		if src != nil {
 			// The full extract is source.get. The fact carries a bounded excerpt so a turn stays
 			// within what one model call can hold (S4 G1).
 			text, cut := clipRunes(src.ContentText, 2000)
@@ -940,8 +1066,6 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 				f.SourceTruncated = true
 				f.SourceSHA256 = src.ContentSHA256
 			}
-		} else if _, ok := kernel.AsRejection(err); !ok {
-			return "", err
 		}
 	}
 	raw, err := json.Marshal(f)

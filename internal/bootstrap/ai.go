@@ -52,6 +52,13 @@ type AgentConfig struct {
 	Accepts  []string
 	MaxSteps int
 	Logger   *slog.Logger
+	// TraceDir, when set, is where the runner writes its local diagnostic trace of every turn: the
+	// facts, the model's replies and the tool results in clear (execution.TraceDir; S4 G2). Off by
+	// default; for synthetic trials on a developer's machine, never under CI and never evidence.
+	// TraceSecrets are values the trace must never hold, such as the model service's key: a record
+	// that would hold one is written with it replaced.
+	TraceDir     string
+	TraceSecrets []string
 }
 
 // Agent assembles the agent runner over c: the Q01 bundle with cfg's model profile and the default
@@ -60,8 +67,15 @@ func (c *Contexts) Agent(cfg AgentConfig) (*execution.Runner, error) {
 	if c.AI == nil {
 		return nil, errors.New("bootstrap: the AI layer is not wired")
 	}
+	var trace *execution.TraceDir
+	if cfg.TraceDir != "" {
+		var err error
+		if trace, err = execution.NewTraceDir(cfg.TraceDir, cfg.TraceSecrets...); err != nil {
+			return nil, err
+		}
+	}
 	return c.AI.Runner(ai.RunnerConfig{Scopes: cfg.Scopes, Agents: cfg.Agents, Model: cfg.Model, Profile: cfg.Profile,
-		Budget: execution.Q01DefaultBudget(), Accepts: cfg.Accepts, Sources: c.EVD, MaxSteps: cfg.MaxSteps, Logger: cfg.Logger})
+		Budget: execution.Q01DefaultBudget(), Accepts: cfg.Accepts, Sources: c.EVD, MaxSteps: cfg.MaxSteps, Logger: cfg.Logger, Trace: trace})
 }
 
 // Agent wires every context and returns the agent runner over them. Call it at most once per

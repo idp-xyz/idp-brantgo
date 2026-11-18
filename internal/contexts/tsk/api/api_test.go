@@ -63,6 +63,31 @@ func TestCreateTaskContract(t *testing.T) {
 	if err := m.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	// The source kinds (S4 G2, owner decision 2026-11-18): an EVD source, an uploaded EVD file whose
+	// extract the task's agent registers, or an RFQ; nothing else, and the ID is an identifier.
+	for _, kind := range []string{SourceEVD, SourceFile, SourceRFQ} {
+		c := create()
+		c.Source = &SourceRef{Kind: kind, ID: "file.inquiry"}
+		if err := c.Validate(); err != nil || !SourceKind(kind) {
+			t.Fatalf("source kind %s: %v", kind, err)
+		}
+	}
+	if SourceFile != "evd_file" || SourceEVD != "evd_source" || SourceRFQ != "rfq" {
+		t.Fatal(SourceFile, SourceEVD, SourceRFQ)
+	}
+	for _, kind := range []string{"", "file", "evd_extract", "file_extract", "EVD_FILE", "evd_file "} {
+		c := create()
+		c.Source = &SourceRef{Kind: kind, ID: "file.inquiry"}
+		rejected(t, c.Validate(), kernel.CodeSchemaInvalid, "/args/source/kind")
+		if SourceKind(kind) {
+			t.Fatalf("%q is a source kind", kind)
+		}
+	}
+	bad := create()
+	bad.Source = &SourceRef{Kind: SourceFile, ID: "file inquiry"}
+	rejected(t, bad.Validate(), kernel.CodeSchemaInvalid, "/args/source/id")
+	bad.Source = &SourceRef{Kind: SourceFile}
+	rejected(t, bad.Validate(), kernel.CodeSchemaInvalid, "/args/source/id")
 	cost, err := create().Budget.MaxCost.Cost()
 	if err != nil || cost.MinorString() != "300" || cost.Currency().Code() != "USD" {
 		t.Fatalf("%v %v", cost, err)

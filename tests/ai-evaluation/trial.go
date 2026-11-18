@@ -28,13 +28,20 @@ const (
 )
 
 // IDs of a trial's objects; each trial has a tenant of its own (D1-D09), so they repeat.
+//
+// The task names what exists when it is created: the uploaded inquiry file (source kind evd_file,
+// S4 G2) and, as its target, the RFQ and the quote the agent's drafts will create. What the agent
+// creates under an ID of its own choosing — the source it registers from the file, the customer
+// response it records, the order it prepares — the scripted operator and the graders learn from the
+// task's records (trial.sourceID, response, order), so the live arm works whatever the model names
+// them. orderID and responseID are what the scripted model names them, and what a person names them
+// who does the agent's part by hand (AN08).
 const (
 	taskID       = "task.q01"
 	rfqID        = "rfq.q01"
 	quoteID      = "quote.q01"
 	orderID      = "order.q01"
 	fileID       = "file.inquiry"
-	sourceID     = "src.inquiry"
 	mailID       = "mail.reply"
 	responseID   = "response.q01"
 	acceptanceID = "acceptance.q01"
@@ -59,6 +66,12 @@ type trial struct {
 	issued   map[string]bool
 	budget   *Budget
 	approval int // approvals issued so far
+
+	// What the agent created under IDs of its own choosing, as the task's records show it (learn.go):
+	// the source registered from the inquiry file, the customer response and the order.
+	sourceID     string
+	learnedResp  string
+	learnedOrder string
 
 	rfqVersion   int64
 	snap         costed
@@ -221,9 +234,11 @@ func (t *trial) setup(ctx context.Context) error {
 	if t.fam.bundleSHA != "" {
 		bundle.SHA256 = t.fam.bundleSHA
 	}
+	// The task starts from the uploaded file (S4 G2, owner decision 2026-11-18): its source is the
+	// file itself; the agent registers the extract as its first step, in both arms.
 	create := map[string]any{"task_id": taskID, "goal_code": t.fam.goalCode, "control_mode": "ai", "agent_id": t.agentID, "owner_id": actorClerk,
 		"target": map[string]any{"rfq_id": rfqID, "quote_id": quoteID, "customer_id": "customer.1"},
-		"source": map[string]any{"kind": "evd_source", "id": sourceID},
+		"source": map[string]any{"kind": "evd_file", "id": fileID},
 		"budget": map[string]any{"max_model_calls": b.MaxModelCalls, "max_retries": b.MaxRetries,
 			"max_cost": map[string]any{"currency": b.Currency, "minor_units": 2, "amount": b.MaxCost}},
 		"execution_bundle": map[string]any{"bundle_id": bundle.BundleID, "sha256": bundle.SHA256}}
@@ -400,6 +415,7 @@ func (t *trial) collect(ctx context.Context) {
 		t.rec.Lifecycle, t.rec.CompletionActor = str(v["lifecycle"]), str(v["completion_actor"])
 		t.rec.GoalCompleted = t.rec.Lifecycle == "completed"
 		t.rec.Authority["task_version"] = num(v["task_version"])
+		t.rec.Authority["task_source"] = v["source"] // the uploaded file the task names (kind evd_file)
 		t.rec.Authority["control_mode"] = str(v["control_mode"])
 		t.rec.Authority["control_epoch"] = num(v["control_epoch"])
 		t.rec.Authority["binding"] = v["binding"]
@@ -512,7 +528,7 @@ func (t *trial) collect(ctx context.Context) {
 		t.rec.Authority["quote_control"] = q["control"]
 		t.save("quote.json", q)
 	}
-	if o, err := clerk.get(ctx, "/api/brant/v1/trd/orders/"+orderID); err == nil {
+	if o, err := clerk.get(ctx, "/api/brant/v1/trd/orders/"+t.order()); err == nil {
 		t.rec.Authority["order_status"] = str(o["status"])
 		t.rec.Authority["order_prepared_by"] = str(dig(o, "prepared_by", "kind")) + ":" + str(dig(o, "prepared_by", "id"))
 		t.save("order.json", o)

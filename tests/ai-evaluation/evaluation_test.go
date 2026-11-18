@@ -4,12 +4,67 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
+
+// S4 G2: a failed agent phase is explained from the model-call ledger — each call by kind, state,
+// code and, for a model call, finish reason, tokens and latency; never content, which the ledger
+// does not hold. The summary shows the explanation for a trial that missed its outcome. The source
+// ID the scripted model chooses differs per trial and input kind, so nothing can know it but through
+// the task's records, and it is an identifier as the prompt states the rule.
+func TestPhaseDiagnosisAndTheScriptedSourceID(t *testing.T) {
+	for want, call := range map[string]map[string]any{
+		"#7 model succeeded finish=stop in=5800 out=40 21000ms": {"seq": float64(7), "kind": "model", "state": "succeeded", "finish_reason": "stop",
+			"input_tokens": float64(5800), "output_tokens": float64(40), "latency_ms": float64(21000)},
+		"#8 tool rfq.get failed NOT_FOUND":            {"seq": float64(8), "kind": "tool", "tool_command": "rfq.get", "state": "failed", "code": "NOT_FOUND"},
+		"#9 model unavailable TOOL_UNAVAILABLE retry": {"seq": float64(9), "kind": "model", "state": "unavailable", "code": "TOOL_UNAVAILABLE", "retry": true},
+		"#10 tool order.prepare waiting WAITING_APPROVAL": {"seq": float64(10), "kind": "tool", "tool_command": "order.prepare", "state": "waiting",
+			"code": "WAITING_APPROVAL"},
+		"#11 tool source.register succeeded": {"seq": float64(11), "kind": "tool", "tool_command": "source.register", "state": "succeeded"},
+	} {
+		if got := describeCall(call); got != want {
+			t.Errorf("describeCall = %q, want %q", got, want)
+		}
+	}
+	phase := PhaseRecord{Name: "rfq", ModelCalls: 5, ToolCalls: 10, Timeout: "20m0s",
+		Diagnosis: "no write: the phase ended with the task waiting_input after 5 model calls and 10 tool calls, and committed no action",
+		LastCalls: []string{"#14 tool rfq.get failed NOT_FOUND", "#15 model succeeded finish=stop in=5800 out=40 21000ms"}}
+	failed := &TrialRecord{Family: "normal", Trial: 1, TrialID: "normal-1", Outcome: "waiting_input", Failure: failAgentPhase, Phases: []PhaseRecord{phase}}
+	passed := &TrialRecord{Family: "normal", Trial: 2, TrialID: "normal-2", Pass: true, Outcome: "completed", Phases: []PhaseRecord{phase}}
+	md := (&EvalRun{Trials: []*TrialRecord{failed, passed}, Environment: Environment{PhaseTimeout: "20m0s", AgentTrace: "off"}}).markdown()
+	if !strings.Contains(md, "- normal-1: phase rfq: no write: the phase ended with the task waiting_input after 5 model calls and 10 tool calls, "+
+		"and committed no action [last calls: #14 tool rfq.get failed NOT_FOUND; #15 model succeeded finish=stop in=5800 out=40 21000ms]") ||
+		strings.Contains(md, "- normal-2:") || !strings.Contains(md, "- phase timeout: 20m0s\n- agent trace: off\n") {
+		t.Fatalf("%s", md)
+	}
+	identifier := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
+	seen := map[string]bool{}
+	for _, kind := range []string{kindText, kindXLSX, kindPDF} {
+		for n := 1; n <= 5; n++ {
+			id := (&trial{n: n, in: inquiry{kind: kind}}).agentSourceID()
+			if seen[id] || !identifier.MatchString(id) || id == fileID {
+				t.Fatalf("scripted source ID %q", id)
+			}
+			seen[id] = true
+		}
+	}
+	// What a trial learned of the agent's own objects wins over the scripted names; without it the
+	// scripted names stand (a person doing the agent's part by hand uses them).
+	tr := &trial{}
+	if tr.order() != orderID || tr.response() != responseID {
+		t.Fatal(tr.order(), tr.response())
+	}
+	tr.learnedOrder, tr.learnedResp = "so-2026-17", "resp:a"
+	if tr.order() != "so-2026-17" || tr.response() != "resp:a" {
+		t.Fatal(tr.order(), tr.response())
+	}
+}
 
 // BC-AT27's synthetic inputs (decision E-6): each generated inquiry places every field it gives at
 // the locator the harness quotes, in the notation of baseline 14.2 (text line:col, PDF page:line,
@@ -214,11 +269,42 @@ func TestTheFixedSet(t *testing.T) {
 func TestFlags(t *testing.T) {
 	t.Setenv("IDP_BRANT_POSTGRES_DSN", "")
 	t.Setenv("IDP_BRANT_MIGRATOR_DSN", "")
+	t.Setenv("CI", "")
 	base := []string{"-dsn", "postgres://a", "-migrator-dsn", "postgres://m"}
 	cfg, err := parseFlags(base)
 	if err != nil || cfg.suite != suiteScripted || cfg.trials != 5 || len(cfg.families) != 13 {
 		t.Fatal(cfg, err)
 	}
+	// S4 G2: the scripted suite's phase timeout is 2 minutes unless -phase-timeout says otherwise (the
+	// live suite's default is 25 minutes, for a local model that answers in 6–30 s per call under a
+	// budget of 40 calls); the agent trace is off unless asked for, and never on under CI=true.
+	if cfg.phaseTimeout != 2*time.Minute || cfg.trace || livePhaseTimeout != 25*time.Minute {
+		t.Fatal(cfg.phaseTimeout, cfg.trace)
+	}
+	if cfg, err = parseFlags(append(base, "-phase-timeout", "7m", "-trace", "on")); err != nil || cfg.phaseTimeout != 7*time.Minute || !cfg.trace {
+		t.Fatal(cfg, err)
+	}
+	if r := newEvalRun(cfg); r.Environment.PhaseTimeout != "7m0s" || !strings.Contains(r.StopCondition, "7m0s") ||
+		!strings.Contains(r.Environment.AgentTrace, "not evidence") || !strings.HasPrefix(r.Environment.AgentTrace, "on:") {
+		t.Fatalf("%+v", r.Environment)
+	}
+	if cfg, err = parseFlags(append(base, "-trace", "off")); err != nil || cfg.trace || newEvalRun(cfg).Environment.AgentTrace != "off" {
+		t.Fatal(cfg, err)
+	}
+	if _, err = parseFlags(append(base, "-trace", "yes")); err == nil {
+		t.Fatal("-trace yes")
+	}
+	if _, err = parseFlags(append(base, "-phase-timeout", "-1s")); err == nil {
+		t.Fatal("a negative phase timeout")
+	}
+	t.Setenv("CI", "true")
+	if _, err = parseFlags(append(base, "-trace", "on")); err == nil || !strings.Contains(err.Error(), "CI=true") {
+		t.Fatalf("the trace under CI=true: %v", err)
+	}
+	if cfg, err = parseFlags(base); err != nil || cfg.trace {
+		t.Fatal(cfg, err)
+	}
+	t.Setenv("CI", "")
 	if _, err = parseFlags([]string{"-trials", "1"}); err == nil {
 		t.Fatal("no DSN")
 	}

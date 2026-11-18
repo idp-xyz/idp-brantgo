@@ -710,6 +710,94 @@ func TestOneOpenTaskPerGoalAndSource(t *testing.T) {
 	}
 }
 
+// A task may start from an uploaded file (S4 G2, owner decision 2026-11-18; migration 000005): its
+// source names the EVD business file itself (kind evd_file), and the reads show it. 来源防重 covers the
+// kind as it covers the others: one open task serves a goal for a file, also when several are created
+// at once; another goal, and the same ID as another kind of source, are other tasks; once the task has
+// ended a new one may serve the file. A kind the contract does not know is SCHEMA_INVALID, and the
+// database refuses it too: raw SQL of an unknown kind fails the widened CHECK, which admits evd_file.
+func TestATaskServesAnUploadedFile(t *testing.T) {
+	w := newWorld(t)
+	file := func(c *api.CreateTask) { c.Source = &api.SourceRef{Kind: api.SourceFile, ID: "file.inquiry"} }
+	var wg sync.WaitGroup
+	errs := make([]error, 4)
+	ids := []string{"task.fa", "task.fb", "task.fc", "task.fd"}
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c := api.CreateTask{IdempotencyKey: "file." + ids[i], TaskID: ids[i], GoalCode: api.GoalOrderActive, ControlMode: api.ModeAI,
+				AgentID: "agent.1"}
+			file(&c)
+			_, errs[i] = w.m.CreateTask(w.alice, c)
+		}()
+	}
+	wg.Wait()
+	var open string
+	for i, err := range errs {
+		switch code(err) {
+		case "OK":
+			if open != "" {
+				t.Fatalf("%s and %s serve the file", open, ids[i])
+			}
+			open = ids[i]
+		case api.CodeBusinessKeyConflict:
+			if rej, _ := kernel.AsRejection(err); rej.Fields[0].Path != "/args/source" {
+				t.Fatalf("refused at %s", rej.Fields[0].Path)
+			}
+		default:
+			t.Fatalf("%v", err)
+		}
+	}
+	if open == "" {
+		t.Fatal("no task serves the file")
+	}
+	if v := w.get(open); v.Source == nil || *v.Source != (api.SourceRef{Kind: api.SourceFile, ID: "file.inquiry"}) {
+		t.Fatalf("source %+v", v.Source)
+	}
+	// Another goal for the file, and the same ID as an EVD source, are other tasks.
+	w.create("task.fq", func(c *api.CreateTask) { file(c); c.GoalCode = api.GoalQuoteReady })
+	w.create("task.fs", func(c *api.CreateTask) { c.Source = &api.SourceRef{Kind: api.SourceEVD, ID: "file.inquiry"} })
+	// A kind the contract does not know.
+	_, err := w.m.CreateTask(w.alice, api.CreateTask{IdempotencyKey: w.key(), TaskID: "task.fx", GoalCode: api.GoalOrderActive,
+		ControlMode: api.ModeAI, AgentID: "agent.1", Source: &api.SourceRef{Kind: "file_extract", ID: "file.inquiry"}})
+	w.want(err, kernel.CodeSchemaInvalid)
+	if rej, _ := kernel.AsRejection(err); rej.Fields[0].Path != "/args/source/kind" {
+		t.Fatalf("refused at %s", rej.Fields[0].Path)
+	}
+	// The database: an unknown kind fails the CHECK migration 000005 widened; evd_file passes it (that
+	// row is then refused for another reason: no command wrote its history row).
+	insert := func(id, kind string) error {
+		return w.sql(`INSERT INTO brant_tsk.business_task (tenant_id, company_id, task_id, goal_code, goal_version, lifecycle, control_mode,
+			control_epoch, task_version, initiator_kind, initiator_id, owner_id, source_kind, source_id, request_hash, created_at, updated_at)
+			VALUES ('` + w.tenant + `', 'company.A', '` + id + `', 'quote_ready', 1, 'created', 'manual', 0, 1, 'human', 'alice', 'alice', '` + kind +
+			`', 'file.raw', repeat('a', 64), now(), now())`)
+	}
+	var pgErr *pgconn.PgError
+	if err = insert("task.raw1", "file_extract"); !errors.As(err, &pgErr) || pgErr.Code != "23514" ||
+		pgErr.ConstraintName != "business_task_source_kind_check" {
+		t.Fatalf("raw SQL of an unknown source kind: %v", err)
+	}
+	if err = insert("task.raw2", api.SourceFile); !errors.As(err, &pgErr) || pgErr.ConstraintName == "business_task_source_kind_check" ||
+		pgErr.Code[:2] != "23" {
+		t.Fatalf("raw SQL of an evd_file task without its history: %v", err)
+	}
+	for _, id := range []string{"task.raw1", "task.raw2"} {
+		if _, err = w.m.GetTask(w.alice, id); code(err) != kernel.CodeNotFound {
+			t.Fatalf("%s exists: %v", id, err)
+		}
+	}
+	// Once the open task has ended, a new one may serve the file.
+	r := w.must(w.m.ScopeTask(w.sys, api.ScopeTask{IdempotencyKey: w.key(), TaskID: open, ExpectedVersion: 1}))
+	r = w.must(w.m.ScopeTask(w.sys, api.ScopeTask{IdempotencyKey: w.key(), TaskID: open, ExpectedVersion: r.RowVersion}))
+	_, err = w.m.CreateTask(w.alice, api.CreateTask{IdempotencyKey: w.key(), TaskID: "task.fn", GoalCode: api.GoalOrderActive,
+		ControlMode: api.ModeAI, AgentID: "agent.1", Source: &api.SourceRef{Kind: api.SourceFile, ID: "file.inquiry"}})
+	w.want(err, api.CodeBusinessKeyConflict)
+	w.must(w.m.CloseUnfulfilled(w.sys, api.CloseUnfulfilled{IdempotencyKey: w.key(), TaskID: open, ExpectedVersion: r.RowVersion,
+		Cause: api.CloseNotPursued, Reason: "客户不再跟进"}))
+	w.create("task.fn", file)
+}
+
 // task_version CAS on PostgreSQL 16: of two commands sent at the same version, one commits and the
 // other is VERSION_CONFLICT; nothing is lost or doubled in the history.
 func TestConcurrentCommandsOnOneTask(t *testing.T) {

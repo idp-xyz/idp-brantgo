@@ -780,6 +780,26 @@ func TestCreate(t *testing.T) {
 	if err != nil || tk.Initiator != tskSys || tk.State != Created || tk.Mode != ModeAI {
 		t.Fatalf("%v %+v", err, tk)
 	}
+	// A task serves a source of a known kind: an EVD source, an uploaded EVD file whose extract its
+	// agent registers (S4 G2, owner decision 2026-11-18), or an RFQ.
+	for _, kind := range []string{SourceEVD, SourceFile, SourceRFQ} {
+		with := r
+		with.Source = &Source{Kind: kind, ID: "ref.1"}
+		tk, _, err := Create(with, Act{By: alice, Epoch: 1, At: t0})
+		if err != nil || tk.Source == nil || *tk.Source != (Source{Kind: kind, ID: "ref.1"}) {
+			t.Fatalf("%s: %v %+v", kind, err, tk)
+		}
+	}
+	if SourceFile != "evd_file" {
+		t.Fatal(SourceFile)
+	}
+	for _, kind := range []string{"", "file", "evd_extract", "EVD_FILE"} {
+		with := r
+		with.Source = &Source{Kind: kind, ID: "ref.1"}
+		if _, _, err := Create(with, Act{By: alice, Epoch: 1, At: t0}); code(err) != kernel.CodeSchemaInvalid {
+			t.Fatalf("source kind %q: %s", kind, code(err))
+		}
+	}
 }
 
 // close_unfulfilled and fail end the task with their cause, never as success, and only once no

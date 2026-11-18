@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -234,6 +235,10 @@ func (t *trial) runAgent(ctx context.Context, p agentPhase) (map[string]any, err
 	if err != nil {
 		return nil, err
 	}
+	writesBefore, err := t.committedActions(ctx)
+	if err != nil {
+		return nil, err
+	}
 	first, err := t.task(ctx)
 	if err != nil {
 		return nil, err
@@ -248,6 +253,12 @@ func (t *trial) runAgent(ctx context.Context, p agentPhase) (map[string]any, err
 	}
 	args := []string{"-agent", "-agent-scope", t.tenant + "/" + company, "-agent-id", t.agentID, "-agent-poll", poll.String(),
 		"-agent-steps", strconv.Itoa(steps)}
+	if t.env.cfg.trace {
+		// The worker's local diagnostic trace of the phase, under the trial's directory (S4 G2):
+		// what the model was told and what it sent. Not evidence; the registry says where it is.
+		rec.Trace = filepath.Join("trace", fmt.Sprintf("%02d-%s", len(t.rec.Phases)+1, p.name))
+		args = append(args, "-agent-trace-dir", filepath.Join(t.dir, rec.Trace))
+	}
 	var env []string
 	if t.env.cfg.suite == suiteLive {
 		args = append(args, t.env.cfg.live.workerArgs()...)
@@ -277,6 +288,7 @@ func (t *trial) runAgent(ctx context.Context, p agentPhase) (map[string]any, err
 	if timeout == 0 {
 		timeout = t.env.cfg.phaseTimeout
 	}
+	rec.Timeout = timeout.String()
 	deadline := time.Now().Add(timeout)
 	var view map[string]any
 	killed := false
@@ -332,9 +344,16 @@ func (t *trial) runAgent(ctx context.Context, p agentPhase) (map[string]any, err
 		_ = w.stop()
 	}
 	rec.Seconds = round(time.Since(start).Seconds(), 2)
-	after, cerr := t.modelCalls(ctx)
+	// What the phase did is read after it ended, whatever ended it: the records outlive ctx's
+	// phase and a failed phase is the one that has to be explained.
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	after, cerr := t.modelCalls(rctx)
 	if cerr == nil {
 		rec.ModelCalls, rec.ToolCalls = after.model-before.model, after.tool-before.tool
+	}
+	if writes, werr := t.committedActions(rctx); werr == nil {
+		rec.Writes = writes - writesBefore
 	}
 	if view != nil {
 		rec.Lifecycle = str(view["lifecycle"])
@@ -345,8 +364,90 @@ func (t *trial) runAgent(ctx context.Context, p agentPhase) (map[string]any, err
 			rec.WorkerLogTail = tail
 		}
 	}
+	var pe *phaseError
+	switch {
+	case killed:
+		// AN05: the harness ended the worker on purpose.
+	case errors.As(err, &pe) && pe.timeout:
+		rec.Diagnosis = fmt.Sprintf("timeout: the task was %s after %s; the phase made %d model calls and %d tool calls and committed %d actions",
+			rec.Lifecycle, timeout, rec.ModelCalls, rec.ToolCalls, rec.Writes)
+	case err != nil:
+		rec.Diagnosis = fmt.Sprintf("failed: the phase made %d model calls and %d tool calls and committed %d actions before it ended",
+			rec.ModelCalls, rec.ToolCalls, rec.Writes)
+	case rec.ModelCalls > 0 && rec.Writes == 0:
+		rec.Diagnosis = fmt.Sprintf("no write: the phase ended with the task %s after %d model calls and %d tool calls, and committed no action",
+			rec.Lifecycle, rec.ModelCalls, rec.ToolCalls)
+	}
+	if rec.Diagnosis != "" {
+		rec.LastCalls = t.lastCalls(rctx, before.model+before.tool, 12)
+	}
 	t.rec.Phases = append(t.rec.Phases, rec)
 	return view, err
+}
+
+// committedActions counts the task's committed actions (its writes).
+func (t *trial) committedActions(ctx context.Context) (int, error) {
+	a, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/tsk/tasks/"+taskID+"/actions")
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, x := range list(a["actions"]) {
+		if str(dig(x, "state")) == "committed" {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// lastCalls describes the last n calls of the task's model-call ledger after the first skip: for a
+// model call its state, finish reason, tokens and latency; for a tool call the command, its state
+// and the code of a refusal or wait. The ledger holds no content (decision E-6), so neither does
+// this.
+func (t *trial) lastCalls(ctx context.Context, skip, n int) []string {
+	mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls")
+	if err != nil {
+		return []string{"the model-call ledger could not be read: " + codeOf(err)}
+	}
+	calls := list(mc["calls"])
+	if skip > len(calls) {
+		skip = len(calls)
+	}
+	calls = calls[skip:]
+	if len(calls) > n {
+		calls = calls[len(calls)-n:]
+	}
+	out := make([]string, 0, len(calls))
+	for _, x := range calls {
+		out = append(out, describeCall(x))
+	}
+	return out
+}
+
+// describeCall is one ledger call in words.
+func describeCall(x any) string {
+	s := fmt.Sprintf("#%d %s", num(dig(x, "seq")), str(dig(x, "kind")))
+	if str(dig(x, "kind")) == "model" {
+		s += " " + str(dig(x, "state"))
+		if f := str(dig(x, "finish_reason")); f != "" {
+			s += " finish=" + f
+		}
+		if dig(x, "input_tokens") != nil {
+			s += fmt.Sprintf(" in=%d out=%d", num(dig(x, "input_tokens")), num(dig(x, "output_tokens")))
+		}
+		if dig(x, "latency_ms") != nil {
+			s += fmt.Sprintf(" %dms", num(dig(x, "latency_ms")))
+		}
+	} else {
+		s += " " + str(dig(x, "tool_command")) + " " + str(dig(x, "state"))
+	}
+	if c := str(dig(x, "code")); c != "" {
+		s += " " + c
+	}
+	if dig(x, "retry") == true {
+		s += " retry"
+	}
+	return s
 }
 
 // tailOf returns the last n lines of a log file.
