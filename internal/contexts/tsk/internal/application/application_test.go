@@ -202,6 +202,49 @@ func TestReadinessNotWired(t *testing.T) {
 	}
 }
 
+// The kinds of source a task may serve are one list in three places (S4 G2, owner decision
+// 2026-11-18: evd_file beside evd_source and rfq): the contract's, the domain's and the database's
+// CHECK on brant_tsk.business_task.source_kind as migration 000005 widened it. Migration 000001's
+// narrower CHECK is the one 000005 drops by name.
+func TestSourceKindsAreOneList(t *testing.T) {
+	want := []string{api.SourceEVD, api.SourceFile, api.SourceRFQ}
+	if !slices.Equal(want, []string{task.SourceEVD, task.SourceFile, task.SourceRFQ}) {
+		t.Fatalf("contract %v, domain %v", want, []string{task.SourceEVD, task.SourceFile, task.SourceRFQ})
+	}
+	for _, k := range append(slices.Clone(want), "file_extract", "") {
+		if api.SourceKind(k) != (task.Source{Kind: k}).Known() || api.SourceKind(k) != slices.Contains(want, k) {
+			t.Errorf("%q: contract %v, domain %v", k, api.SourceKind(k), task.Source{Kind: k}.Known())
+		}
+	}
+	kinds := func(file, marker string) []string {
+		raw, err := os.ReadFile(root("migrations", "tsk", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sql := string(raw)
+		start := strings.Index(sql, marker)
+		if start < 0 {
+			t.Fatalf("%s: %q not found", file, marker)
+		}
+		end := strings.Index(sql[start:], "))")
+		var out []string
+		for _, part := range strings.Split(sql[start+len(marker):start+end], ",") {
+			out = append(out, strings.Trim(strings.TrimSpace(part), "'"))
+		}
+		return out
+	}
+	if got := kinds("000005_tsk_source_file.sql", "CHECK (source_kind IN ("); !slices.Equal(got, want) {
+		t.Fatalf("migration 000005 allows %v, the contract %v", got, want)
+	}
+	if got := kinds("000001_tsk_tasks.sql", "CHECK (source_kind IN ("); !slices.Equal(got, []string{api.SourceEVD, api.SourceRFQ}) {
+		t.Fatalf("migration 000001 allows %v", got)
+	}
+	raw, err := os.ReadFile(root("migrations", "tsk", "000005_tsk_source_file.sql"))
+	if err != nil || !strings.Contains(string(raw), "DROP CONSTRAINT business_task_source_kind_check;") {
+		t.Fatalf("migration 000005 does not drop 000001's check by its name: %v", err)
+	}
+}
+
 // The database's own guard (brant_tsk.guard_task, migration 000001) allows exactly the moves of
 // SM-TSK-TASK: its list of state pairs is the set of (from, to) pairs of the transition table.
 func TestDatabaseGuardMovesAreSMTSKTASK(t *testing.T) {

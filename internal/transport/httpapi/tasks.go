@@ -32,15 +32,15 @@ type TSK interface {
 // tskCommands routes every command the Context Map lists for TSK: the 15 commands of SM-TSK-TASK's
 // transitions and ActionExecution's two. TSK's commands name their objects (task_id, action_id), so
 // no member is renamed to id; the members follow the reflective mapping (task.create {task_id,
-// goal_code, control_mode, agent_id, owner_id, target {rfq_id, quote_id, customer_id}, source {kind,
-// id}, deadline, budget {max_model_calls, max_retries, max_cost {currency, minor_units, amount}},
-// execution_bundle {bundle_id, sha256}}, ...; tskapi's package comment lists them). The commands
-// SM-TSK-TASK gives the system (task.wait, task.verify, goal.verify, task.finish_stop,
-// task.bind_object) are routed too, for a system client; TSK's rules refuse them to people and AI
-// agents (PERMISSION_DENIED), and every task command to an AI agent (AI-INV-004). The answer is the
-// closed receipt: object_id is the task (the action for action.*), row_version its version, status
-// its lifecycle state (the action's state); the control a task records is read with GET
-// /api/brant/v1/tsk/tasks/<id>.
+// goal_code, control_mode, agent_id, owner_id, target {rfq_id, quote_id, customer_id}, source {kind
+// evd_source|evd_file|rfq, id}, deadline, budget {max_model_calls, max_retries, max_cost {currency,
+// minor_units, amount}}, execution_bundle {bundle_id, sha256}}, ...; tskapi's package comment lists
+// them). The commands SM-TSK-TASK gives the system (task.wait, task.verify, goal.verify,
+// task.finish_stop, task.bind_object) are routed too, for a system client; TSK's rules refuse them to
+// people and AI agents (PERMISSION_DENIED), and every task command to an AI agent (AI-INV-004). The
+// answer is the closed receipt: object_id is the task (the action for action.*), row_version its
+// version, status its lifecycle state (the action's state); the control a task records is read with
+// GET /api/brant/v1/tsk/tasks/<id>.
 func tskCommands(c TSK) *commandSet {
 	return &commandSet{bc: "tsk", contract: tskapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile),
 		commands: map[string]commandFunc{
@@ -79,7 +79,7 @@ func (s *server) tskRoutes(mux *http.ServeMux) {
 // tskReads are TSK's read routes and the task-step route in the OpenAPI document.
 var tskReads = []readRoute{
 	{"/api/brant/v1/tsk/tasks/{id}", "tsk.task.get", "tsk",
-		"A business task: goal and version, lifecycle, control mode, the control epoch recorded from TRD and the binding of its quote root, owner, agent, target, source, budget, execution bundle, what it waits for or why it is paused or stopping, how it ended, and its append-only history (task.get)", []string{"id"}, false},
+		"A business task: goal and version, lifecycle, control mode, the control epoch recorded from TRD and the binding of its quote root, owner, agent, target, source (kind evd_source, evd_file or rfq, and the id of that EVD source, uploaded EVD file or RFQ), budget, execution bundle, what it waits for or why it is paused or stopping, how it ended, and its append-only history (task.get)", []string{"id"}, false},
 	{"/api/brant/v1/tsk/tasks/{id}/verifications", "tsk.task.verification.list", "tsk",
 		"The goal verifications of a task, oldest first: who judged, the outcome and its code, the unmet assertions, every assertion with its checks and evidence, the records judged and TRD's control of a bound root (task.verifications)", []string{"id"}, false},
 	{"/api/brant/v1/tsk/tasks/{id}/actions", "tsk.action.list", "tsk",

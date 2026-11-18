@@ -151,6 +151,11 @@ func (s Service) perform(ctx context.Context, name string, req api.Command, obje
 // by another request, BUSINESS_KEY_CONFLICT. An open task serving the same goal for the same source
 // refuses the new one (来源防重, BUSINESS_KEY_CONFLICT). The owner (a human; the initiator when
 // none is named) and the agent of an AI task must hold active grants of their kinds.
+//
+// The source is recorded as the reference it is — kind and ID — whatever its kind (an EVD source, an
+// uploaded EVD file, an RFQ): task.create reads neither EVD nor INQ, so it checks no existence and no
+// visibility of what the reference names. A task whose file or source is missing or hidden from its
+// agent is found out by the agent's first step, which EVD refuses (NOT_FOUND) as that actor.
 type createCommand struct {
 	s        Service
 	cmd      api.CreateTask

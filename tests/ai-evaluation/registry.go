@@ -79,20 +79,24 @@ type Budget struct {
 
 // Environment is where the run ran.
 type Environment struct {
-	Host         string  `json:"host"`
-	GoVersion    string  `json:"go_version"`
-	OS           string  `json:"os"`
-	CPUs         int     `json:"cpus"`
-	Database     string  `json:"database"`
-	Migrate      string  `json:"migrate"`
-	Processes    string  `json:"processes"`
-	CI           bool    `json:"ci"`
-	GitHead      string  `json:"git_head,omitempty"`
-	Parallel     int     `json:"parallel"`
-	PhaseTimeout string  `json:"phase_timeout"`
-	Load1Start   float64 `json:"load1_start"`
-	Load1End     float64 `json:"load1_end"`
-	Error        string  `json:"error,omitempty"`
+	Host         string `json:"host"`
+	GoVersion    string `json:"go_version"`
+	OS           string `json:"os"`
+	CPUs         int    `json:"cpus"`
+	Database     string `json:"database"`
+	Migrate      string `json:"migrate"`
+	Processes    string `json:"processes"`
+	CI           bool   `json:"ci"`
+	GitHead      string `json:"git_head,omitempty"`
+	Parallel     int    `json:"parallel"`
+	PhaseTimeout string `json:"phase_timeout"` // the timeout used: -phase-timeout, or the suite's default
+	// AgentTrace says whether the agent workers wrote their local diagnostic trace (brant-worker
+	// -agent-trace-dir; S4 G2) and where. A trace is a diagnostic file of synthetic trials — what
+	// the model was told and what it sent, in clear — not evidence and not a result of the run.
+	AgentTrace string  `json:"agent_trace"`
+	Load1Start float64 `json:"load1_start"`
+	Load1End   float64 `json:"load1_end"`
+	Error      string  `json:"error,omitempty"`
 }
 
 // Probe is a one-off check of the run outside the families (a role-template gap, for instance).
@@ -182,18 +186,30 @@ type CostRecord struct {
 }
 
 // PhaseRecord is one agent phase (one brant-worker -agent process).
+//
+// Writes are the task's actions that committed during the phase. A phase that failed — it timed
+// out, its worker ended — or that asked the model and committed nothing records why (Diagnosis) and
+// the last calls of the model-call ledger with their states and codes (LastCalls), so a failed live
+// trial can be classified from the registry: the model never wrote, a tool kept refusing, the
+// model service did not answer. Trace is the phase's trace directory under the trial's, when the
+// agent trace is on.
 type PhaseRecord struct {
-	Name          string  `json:"name"`
-	Script        string  `json:"script,omitempty"`
-	ScriptSteps   int     `json:"script_steps"`
-	ModelCalls    int     `json:"model_calls"`
-	ToolCalls     int     `json:"tool_calls"`
-	Lifecycle     string  `json:"lifecycle_after"`
-	Killed        bool    `json:"killed,omitempty"`
-	Seconds       float64 `json:"seconds"`
-	StartedAt     string  `json:"started_at"`
-	Error         string  `json:"error,omitempty"`
-	WorkerLogTail string  `json:"worker_log_tail,omitempty"`
+	Name          string   `json:"name"`
+	Script        string   `json:"script,omitempty"`
+	ScriptSteps   int      `json:"script_steps"`
+	ModelCalls    int      `json:"model_calls"`
+	ToolCalls     int      `json:"tool_calls"`
+	Writes        int      `json:"writes"`
+	Lifecycle     string   `json:"lifecycle_after"`
+	Killed        bool     `json:"killed,omitempty"`
+	Seconds       float64  `json:"seconds"`
+	StartedAt     string   `json:"started_at"`
+	Timeout       string   `json:"timeout"`
+	Error         string   `json:"error,omitempty"`
+	Diagnosis     string   `json:"diagnosis,omitempty"`
+	LastCalls     []string `json:"last_calls,omitempty"`
+	Trace         string   `json:"trace,omitempty"`
+	WorkerLogTail string   `json:"worker_log_tail,omitempty"`
 }
 
 // FamilySummary is a family's trials together: the fixed-set metrics of baseline 19.1 (goal
@@ -366,8 +382,9 @@ func (r *EvalRun) markdown() string {
 		r.DataNote, r.Model.Kind, r.Model.ProfileID, r.Model.Returned, r.Model.TokensNote, r.Model.CostNote)
 	fmt.Fprintf(&b, "- execution bundle %s sha256 %s\n- trials per family %d, budget per task %d model calls, %d retries, %s %s\n",
 		r.BundleRef.BundleID, r.BundleRef.SHA256, r.TrialsPerFamily, r.Budget.MaxModelCalls, r.Budget.MaxRetries, r.Budget.MaxCost, r.Budget.Currency)
-	fmt.Fprintf(&b, "- reviewer: %s\n- environment: %s, %s, %d CPUs, %s; %s\n\n", r.Reviewer, r.Environment.OS, r.Environment.GoVersion,
+	fmt.Fprintf(&b, "- reviewer: %s\n- environment: %s, %s, %d CPUs, %s; %s\n", r.Reviewer, r.Environment.OS, r.Environment.GoVersion,
 		r.Environment.CPUs, r.Environment.Database, r.Environment.Processes)
+	fmt.Fprintf(&b, "- phase timeout: %s\n- agent trace: %s\n\n", r.Environment.PhaseTimeout, r.Environment.AgentTrace)
 	b.WriteString("| family | design | goal | expected | trials | passed | goal completed (AI) | outcomes | first | consistent | model calls | tool calls | tokens | cost | human corrections | human steps | mean s |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, f := range r.Families {
@@ -404,6 +421,13 @@ func (r *EvalRun) markdown() string {
 		}
 		if len(tr.Refusals) > 0 {
 			lines = append(lines, "refusals: "+strings.Join(tr.Refusals, "; "))
+		}
+		// Why an agent phase of a trial that missed its outcome stopped (report.json has it for
+		// every phase that asked the model and committed nothing).
+		for _, p := range tr.Phases {
+			if !tr.Pass && p.Diagnosis != "" {
+				lines = append(lines, fmt.Sprintf("phase %s: %s [last calls: %s]", p.Name, p.Diagnosis, strings.Join(p.LastCalls, "; ")))
+			}
 		}
 		lines = append(lines, tr.Notes...)
 		if len(lines) > 0 {

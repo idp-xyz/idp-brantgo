@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -23,15 +24,27 @@ func brcAgentLines() []agentLine {
 	return out
 }
 
-// draftRFQ is the agent's first phase: register the inquiry file's extract as a source (B4,
-// file_extract) and draft the RFQ from it with field locators; the model then says it is done, which
-// only starts verification (AI-INV-004): the goal is not met and the task waits for input.
+// draftRFQ is the agent's first phase: register the extract of the inquiry file the task names (B4,
+// file_extract; S4 G2: the task's facts name the file, the source ID is the agent's own choice) and
+// draft the RFQ from it with field locators; the model then says it is done, which only starts
+// verification (AI-INV-004): the goal is not met and the task waits for input. Which source the
+// agent registered is then read from the task's records, and a phase that registered none or saved
+// no RFQ draft is the agent's failure (agent_phase), not a person's refused step.
 func (t *trial) draftRFQ(ctx context.Context, lines []agentLine, more ...scriptStep) error {
-	steps := []scriptStep{turn(registerExtract(sourceID, fileID), saveRFQ(rfqID, sourceID, t.in, lines))}
+	src := t.agentSourceID()
+	steps := []scriptStep{turn(registerExtract(src, fileID), saveRFQ(rfqID, src, t.in, lines))}
 	steps = append(steps, more...)
 	steps = append(steps, done("RFQ 草稿已按附件逐行保存，等待负责人逐行核实。"))
-	_, err := t.runAgent(ctx, agentPhase{name: "rfq", steps: steps, until: lifecycleIs("waiting_input", "paused", "waiting_approval")})
-	return err
+	if _, err := t.runAgent(ctx, agentPhase{name: "rfq", steps: steps, until: lifecycleIs("waiting_input", "paused", "waiting_approval")}); err != nil {
+		return err
+	}
+	if err := t.learnSource(ctx); err != nil {
+		return err
+	}
+	if t.countActions(ctx, "rfq.save_draft") < 1 {
+		return &phaseError{err: errors.New("the task's records show no committed rfq.save_draft")}
+	}
+	return nil
 }
 
 // confirmRFQ is the owner's line-by-line verification (BC-AT27, B4): each line of the agent's draft
@@ -70,7 +83,7 @@ func (t *trial) confirmRFQ(ctx context.Context, truth map[string]map[string]stri
 		verified = append(verified, v)
 	}
 	out, err := t.humanStep(ctx, actorClerk, "inq", contractINQ, "rfq.confirm_scope", "h.rfq.confirm", true, map[string]any{"id": rfqID,
-		"expected_version": r["row_version"], "evidence_ids": []string{sourceID}, "verified_lines": verified})
+		"expected_version": r["row_version"], "evidence_ids": []string{t.sourceID}, "verified_lines": verified})
 	if err != nil {
 		return err
 	}
@@ -80,9 +93,10 @@ func (t *trial) confirmRFQ(ctx context.Context, truth map[string]map[string]stri
 
 // checkLocators is the reviewer's reading of the file's extract (BC-AT27 字段定位; S4 B4): the owner
 // reads the located form EVD registered for the inquiry over HTTP and checks that every locator of
-// the agent's lines names a place in it holding the quoted words.
+// the agent's lines names a place in it holding the quoted words. The source is the one the task's
+// records show the agent registered from the inquiry file (learnSource).
 func (t *trial) checkLocators(ctx context.Context, rfq map[string]any) error {
-	x, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/evd/sources/"+sourceID+"/extract")
+	x, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/evd/sources/"+t.sourceID+"/extract")
 	if err != nil {
 		return err
 	}
@@ -150,7 +164,7 @@ func brcTruth() map[string]map[string]string {
 // the RFQ is ready and the cost snapshot frozen (no consumer tells TSK, D1-D06).
 func (t *trial) costQuote(ctx context.Context) error {
 	var err error
-	t.snap, err = costing(ctx, t.ops, t.w, costTag, t.rfqVersion, sourceID)
+	t.snap, err = costing(ctx, t.ops, t.w, costTag, t.rfqVersion, t.sourceID)
 	t.human(actorBuyer, "costing (supplier RFQ, offers, costing context, scenario)", "plain", true, err)
 	t.human(actorCostChecker, "cost_snapshot.freeze", "plain", true, err)
 	if err != nil {
@@ -162,18 +176,20 @@ func (t *trial) costQuote(ctx context.Context) error {
 // draftQuote is the agent's quote phase: the draft on the RFQ and the cost snapshot at price per
 // piece; the runner binds the root the draft created (task.bind_object, MD-31).
 func (t *trial) draftQuote(ctx context.Context, price string, more ...scriptStep) error {
-	data := quoteData(t.w, rfqID, t.rfqVersion, t.snap, sourceID, price, time.Now().Add(72*time.Hour))
+	data := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, price, time.Now().Add(72*time.Hour))
 	steps := append([]scriptStep{turn(saveQuote(quoteID, data))}, more...)
 	steps = append(steps, done("报价草稿已保存，等待人工冻结、审核与生效。"))
 	if _, err := t.runAgent(ctx, agentPhase{name: "quote", steps: steps, until: lifecycleIs("waiting_input", "paused")}); err != nil {
 		return err
+	}
+	if t.quoteRoot = t.actionVersion(ctx, "quote.save_draft"); t.quoteRoot == 0 {
+		return &phaseError{err: errors.New("the task's records show no committed quote.save_draft")}
 	}
 	v, err := t.task(ctx)
 	if err != nil {
 		return err
 	}
 	t.assert("quote root bound to the task", "bound "+quoteID, str(dig(v, "binding", "state"))+" "+str(dig(v, "binding", "quote_id")))
-	t.quoteRoot = t.actionVersion(ctx, "quote.save_draft")
 	return nil
 }
 
@@ -254,19 +270,22 @@ func (t *trial) customerReply(ctx context.Context) error {
 	return t.resume(ctx, "evd_source", mailID, 0, "客户回复已到达："+mailID)
 }
 
-// recordResponse is the agent's phase recording the customer's response to the active revision.
+// recordResponse is the agent's phase recording the customer's response to the active revision; the
+// response it recorded is then read from the task's records.
 func (t *trial) recordResponse(ctx context.Context) error {
 	steps := []scriptStep{turn(recordResponse(responseID, quoteID, t.revision, t.businessHash, mailID, time.Now())),
 		done("客户回复已登记，等待人工核实接受。")}
-	_, err := t.runAgent(ctx, agentPhase{name: "response", steps: steps, until: lifecycleIs("waiting_input", "paused")})
-	return err
+	if _, err := t.runAgent(ctx, agentPhase{name: "response", steps: steps, until: lifecycleIs("waiting_input", "paused")}); err != nil {
+		return err
+	}
+	return t.learnResponse(ctx)
 }
 
 // verifyAcceptance has the owner verify the response into an acceptance (human only) and resumes
 // the task on it.
 func (t *trial) verifyAcceptance(ctx context.Context) error {
 	if _, err := t.humanStep(ctx, actorClerk, "trd", contractTRD, "quote.response.verify", "h.response.verify", true, map[string]any{
-		"response_id": responseID, "acceptance_id": acceptanceID, "business_revision": t.revision, "business_hash": t.businessHash,
+		"response_id": t.response(), "acceptance_id": acceptanceID, "business_revision": t.revision, "business_hash": t.businessHash,
 		"customer_ref": map[string]any{"party_id": "customer.1", "revision": t.w.customerRevision},
 		"contact_ref":  map[string]any{"contact_id": "contact.1", "row_version": 2}, "line_ids": lineIDs()}); err != nil {
 		return err
@@ -306,20 +325,31 @@ func (t *trial) prepareOrderPhase(ctx context.Context, p agentPhase) error {
 // where TRD is written.
 func (t *trial) activateOrder(ctx context.Context) error {
 	clerk := t.ops[actorClerk]
-	o, err := clerk.get(ctx, "/api/brant/v1/trd/orders/"+orderID)
+	// The order and its open review are the ones the records name: the task's committed
+	// order.prepare, and the order's own last review.
+	if err := t.learnOrder(ctx); err != nil {
+		return err
+	}
+	order := t.order()
+	o, err := clerk.get(ctx, "/api/brant/v1/trd/orders/"+order)
 	if err != nil {
 		return err
 	}
 	t.orderHash, t.orderVersion, t.orderReview = str(o["order_hash"]), num(o["row_version"]), "review.order.1"
+	if reviews := list(o["reviews"]); len(reviews) > 0 {
+		if id := str(dig(reviews[len(reviews)-1], "review_id")); id != "" {
+			t.orderReview = id
+		}
+	}
 	out, err := t.humanStep(ctx, actorOrderReviewer, "trd", contractTRD, "order.review.decide", "h.order.decide", true, map[string]any{
-		"order_id": orderID, "expected_version": t.orderVersion, "review_id": t.orderReview, "order_hash": t.orderHash, "decision": "approve",
+		"order_id": order, "expected_version": t.orderVersion, "review_id": t.orderReview, "order_hash": t.orderHash, "decision": "approve",
 		"expires_at": stamp(time.Now().Add(24 * time.Hour)), "reason": "订单与已接受的报价一致（合成评测）"})
 	if err != nil {
 		return err
 	}
 	t.orderVersion = stepVersion(out)
 	evidence := []string{t.w.evidence}
-	e, err := t.humanCmd(ctx, actorCompliance, "cnx", contractCNX, "trade_compliance.evaluate", true, map[string]any{"order_id": orderID,
+	e, err := t.humanCmd(ctx, actorCompliance, "cnx", contractCNX, "trade_compliance.evaluate", true, map[string]any{"order_id": order,
 		"order_revision": 1, "expected_version": 0, "regulation_id": "screening", "regulation_revision": 1,
 		"programme_lists": []string{cnProgrammes, unProgrammes}, "code_table_version": codeTable,
 		"destination":       map[string]any{"country": clearCountry, "reason": "客户 PO 载明的卸货国（合成）", "evidence_ids": evidence},
@@ -339,10 +369,10 @@ func (t *trial) activateOrder(ctx context.Context) error {
 		return err
 	}
 	if _, err = t.humanCmd(ctx, actorClerk, "stl", contractSTL, "credit.reserve", true, map[string]any{"reservation_id": "credit.q01",
-		"order_id": orderID, "order_revision": 1, "order_hash": t.orderHash, "credit_policy": t.w.credit}); err != nil {
+		"order_id": order, "order_revision": 1, "order_hash": t.orderHash, "credit_policy": t.w.credit}); err != nil {
 		return err
 	}
-	out, err = t.humanStep(ctx, actorClerk, "trd", contractTRD, "order.activate", "h.order.activate", true, map[string]any{"order_id": orderID,
+	out, err = t.humanStep(ctx, actorClerk, "trd", contractTRD, "order.activate", "h.order.activate", true, map[string]any{"order_id": order,
 		"expected_version": t.orderVersion, "review_id": t.orderReview})
 	if err != nil {
 		return err
@@ -381,7 +411,7 @@ func (t *trial) assertCompleted(ctx context.Context, goal, actor string) {
 	g, err := clerk.get(ctx, "/api/brant/v1/trd/quotes/"+quoteID+"/goal_readiness?goal="+goal)
 	t.assert("TRD goal readiness "+goal, "satisfied", str(g["outcome"])+codeOf(err))
 	if goal == "order_active" {
-		o, err := clerk.get(ctx, "/api/brant/v1/trd/orders/"+orderID)
+		o, err := clerk.get(ctx, "/api/brant/v1/trd/orders/"+t.order())
 		t.assert("TRD order status", "active", str(o["status"])+codeOf(err))
 		if actor == "ai_with_required_review" {
 			t.assert("TRD order prepared by", "ai:"+t.agentID, str(dig(o, "prepared_by", "kind"))+":"+str(dig(o, "prepared_by", "id")))

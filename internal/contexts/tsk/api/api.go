@@ -64,8 +64,9 @@
 // and adopted at TRD's epoch; the change then proceeds as if the bind had been recorded (S4 C3).
 //
 // Request members in snake_case: task.create {task_id, goal_code, control_mode, agent_id, owner_id,
-// target {rfq_id, quote_id, customer_id}, source {kind, id}, deadline, budget {max_model_calls,
-// max_retries, max_cost {currency, minor_units, amount}}, execution_bundle {bundle_id, sha256}};
+// target {rfq_id, quote_id, customer_id}, source {kind evd_source|evd_file|rfq, id}, deadline, budget
+// {max_model_calls, max_retries, max_cost {currency, minor_units, amount}}, execution_bundle
+// {bundle_id, sha256}};
 // task.scope {task_id, expected_version, note}; task.wait {task_id, expected_version, wait, reason,
 // responsible_id, items, awaiting {kind, id, version}, due_at}; task.verify, goal.verify and
 // task.finish_stop {task_id, expected_version}; task.pause {task_id, expected_version, cause,
@@ -213,11 +214,21 @@ const (
 	BindingReleased = "released"
 )
 
-// Kinds of the source a task serves (来源防重).
+// Kinds of the source a task serves (来源防重). A task that starts from an uploaded file names the
+// file itself (SourceFile, owner decision 2026-11-18, S4 G2): the file exists when the task is
+// created, the source that holds its text does not — the task's agent registers that extract as
+// its first step (EVD source.register, source_kind file_extract, naming the file), and the
+// committed action is the task's record of which source that is.
 const (
-	SourceEVD = "evd_source" // an EVD source, such as a registered inquiry message
-	SourceRFQ = "rfq"        // an INQ customer RFQ
+	SourceEVD  = "evd_source" // an EVD source, such as a registered inquiry message
+	SourceFile = "evd_file"   // an EVD business file (file.register), such as an uploaded inquiry
+	SourceRFQ  = "rfq"        // an INQ customer RFQ
 )
+
+// SourceKind reports whether kind is a kind of source a task may name.
+func SourceKind(kind string) bool {
+	return kind == SourceEVD || kind == SourceFile || kind == SourceRFQ
+}
 
 // Limits of the contract.
 const (
@@ -240,7 +251,9 @@ type Target struct {
 	CustomerID string
 }
 
-// SourceRef is the source a task serves; one open task serves a goal for a source.
+// SourceRef is the source a task serves: Kind evd_source, evd_file or rfq, and the ID of that EVD
+// source, EVD business file or INQ RFQ. One open task serves a goal for a source. TSK records the
+// reference; it does not read EVD or INQ for it (the task's steps do, as their actors).
 type SourceRef struct {
 	Kind string
 	ID   string
@@ -572,7 +585,7 @@ func (c CreateTask) Validate() error {
 		}
 	}
 	if s := c.Source; s != nil {
-		if s.Kind != SourceEVD && s.Kind != SourceRFQ {
+		if !SourceKind(s.Kind) {
 			return schema("/args/source/kind")
 		}
 		if !kernel.ValidIdentifier(s.ID) {

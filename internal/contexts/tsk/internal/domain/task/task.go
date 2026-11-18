@@ -102,10 +102,23 @@ type Target struct {
 	CustomerID string
 }
 
+// Kinds of the source a task serves: an EVD source, an EVD business file whose extract the task's
+// agent registers as its first step (S4 G2), or an INQ customer RFQ.
+const (
+	SourceEVD  = "evd_source"
+	SourceFile = "evd_file"
+	SourceRFQ  = "rfq"
+)
+
 // Source is the source a task serves.
 type Source struct {
 	Kind string
 	ID   string
+}
+
+// Known reports whether the source is of a kind a task may serve.
+func (s Source) Known() bool {
+	return s.Kind == SourceEVD || s.Kind == SourceFile || s.Kind == SourceRFQ
 }
 
 // Budget limits a task's model calls, retries and cost.
@@ -248,7 +261,8 @@ type CreateRequest struct {
 }
 
 // Create creates a task in created (task.create): the initiator is a human or system actor; the
-// owner is set (the application qualifies it); a deadline lies after now.
+// owner is set (the application qualifies it); a source is of a known kind; a deadline lies after
+// now.
 func Create(r CreateRequest, act Act) (*Task, Change, error) {
 	if act.By.Kind != kernel.ActorHuman && act.By.Kind != kernel.ActorSystem {
 		return nil, Change{}, kernel.Reject(kernel.CodePermissionDenied, "/", "Only a human or system actor creates a task")
@@ -258,6 +272,9 @@ func Create(r CreateRequest, act Act) (*Task, Change, error) {
 	}
 	if r.Mode == ModeAI && r.Agent == "" {
 		return nil, Change{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args/agent_id", "")
+	}
+	if r.Source != nil && !r.Source.Known() {
+		return nil, Change{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args/source/kind", "A task serves an EVD source, an EVD file or an RFQ")
 	}
 	now := kernel.Instant(act.At)
 	if !r.Deadline.IsZero() && !kernel.Instant(r.Deadline).After(now) {

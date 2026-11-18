@@ -25,6 +25,16 @@
 // optional bearer key is read from the environment variable -model-key-env, never from a flag, and
 // never logged). The runner's system actor system:ai.runner needs its grant in every company
 // (brant-admin agent), each agent its role template (brant-admin assign ... -roles ai_q01_agent).
+//
+// -agent-trace-dir <dir> turns on the runner's local diagnostic trace (off by default): for every
+// turn in which the model is asked, a JSON Lines file under <dir>/<tenant>/<company>/<task>/ with the
+// prompt, the task's facts, each model reply (text and tool calls with their arguments) and each tool
+// result as it went back to the model, and <dir>/tools-<hash>.json with the tools on offer and their
+// argument schemas. The model-call ledger keeps hashes only; the trace is how a person sees
+// why a live model failed a synthetic trial. It holds source text and tool results in clear, so it
+// is for synthetic trials on a developer's machine: the worker refuses it under CI=true, it is not
+// evidence, and it never holds the model service's key (the key travels only in the HTTP
+// Authorization header; a record that would hold its value is written with it replaced).
 package main
 
 import (
@@ -49,7 +59,7 @@ import (
 // agentFlags are the flags of -agent.
 type agentFlags struct {
 	on                                  *bool
-	scopes, agents, accepts             *string
+	scopes, agents, accepts, trace      *string
 	poll, timeout                       *time.Duration
 	steps                               *int
 	kind, script, name, baseURL, keyEnv *string
@@ -61,6 +71,8 @@ func defineAgentFlags() agentFlags {
 		scopes:  flag.String("agent-scope", "", "tenant/company pairs the runner serves, comma-separated"),
 		agents:  flag.String("agent-id", "", "AI actor IDs the runner acts as, comma-separated"),
 		accepts: flag.String("agent-accept-bundles", "", "SHA-256s of earlier ExecutionBundles the runner still runs, comma-separated"),
+		trace: flag.String("agent-trace-dir", "", "directory for the local diagnostic trace of every agent turn (facts, model replies, tool results in clear); "+
+			"empty, the default, writes none; refused under CI=true; synthetic trials only, never evidence"),
 		poll:    flag.Duration("agent-poll", 5*time.Second, "wait between passes over the runner's tasks"),
 		steps:   flag.Int("agent-steps", 8, "model turns per task and pass"),
 		kind:    flag.String("model", "scripted", "model of the runner: scripted or openaicompat"),
@@ -81,6 +93,9 @@ func (f agentFlags) config(logger *slog.Logger) (bootstrap.AgentConfig, error) {
 	if len(agents) == 0 {
 		return bootstrap.AgentConfig{}, errors.New("-agent needs -agent-id")
 	}
+	if *f.trace != "" && os.Getenv("CI") == "true" {
+		return bootstrap.AgentConfig{}, errors.New("-agent-trace-dir is a local diagnostic and never runs under CI=true")
+	}
 	mc := bootstrap.ModelConfig{Kind: *f.kind, Name: *f.name, BaseURL: *f.baseURL, APIKey: os.Getenv(*f.keyEnv), Timeout: *f.timeout}
 	if mc.Kind == bootstrap.ModelScripted {
 		if *f.script == "" {
@@ -95,7 +110,7 @@ func (f agentFlags) config(logger *slog.Logger) (bootstrap.AgentConfig, error) {
 		return bootstrap.AgentConfig{}, err
 	}
 	return bootstrap.AgentConfig{Scopes: scopes, Agents: agents, Model: m, Profile: profile, Accepts: split(*f.accepts),
-		MaxSteps: *f.steps, Logger: logger}, nil
+		MaxSteps: *f.steps, Logger: logger, TraceDir: *f.trace, TraceSecrets: []string{mc.APIKey}}, nil
 }
 
 func split(list string) []string {
@@ -176,8 +191,12 @@ func run() error {
 			return err
 		}
 		ref := runner.Ref()
+		trace := "off"
+		if acfg.TraceDir != "" {
+			trace = acfg.TraceDir
+		}
 		logger.Info("running agents", "agents", acfg.Agents, "scopes", len(acfg.Scopes), "model", *af.kind, "profile", acfg.Profile.ProfileID,
-			"bundle", ref.BundleID, "bundle_sha256", ref.SHA256, "poll", *af.poll)
+			"bundle", ref.BundleID, "bundle_sha256", ref.SHA256, "poll", *af.poll, "trace", trace)
 		running++
 		go func() { done <- runner.Run(ctx, *af.poll) }()
 	}

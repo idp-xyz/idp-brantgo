@@ -66,6 +66,9 @@ type RunnerConfig struct {
 	Sources  execution.Sources            // optional
 	MaxSteps int
 	Logger   *slog.Logger
+	// Trace is the opt-in local diagnostic trace of every turn (execution.TraceDir); nil, the
+	// default, writes none.
+	Trace *execution.TraceDir
 	// Runtime is an external execution runtime (internal/ai/runtime; the EER adapter) whose
 	// operation of a stopping task must end before the stop barrier completes; nil: none.
 	Runtime runtime.Port
@@ -88,7 +91,7 @@ func (l *Layer) Runner(cfg RunnerConfig) (*execution.Runner, error) {
 	}
 	return &execution.Runner{Executor: l.Execution, Tasks: l.tasks, Gateway: l.Gateway, DB: l.ledger.DB, Evidence: l.Evidence,
 		Model: cfg.Model, Bundle: bundle, Prompt: execution.Q01Prompt, Accepts: cfg.Accepts, Sources: cfg.Sources, Scopes: cfg.Scopes,
-		Agents: cfg.Agents, MaxSteps: cfg.MaxSteps, Clock: l.Evidence.Clock, Logger: cfg.Logger, Runtime: cfg.Runtime}, nil
+		Agents: cfg.Agents, MaxSteps: cfg.MaxSteps, Clock: l.Evidence.Clock, Logger: cfg.Logger, Runtime: cfg.Runtime, Trace: cfg.Trace}, nil
 }
 
 // ModelCalls returns the model and tool calls of a task (ai.read), audited as ai.model_call.list,

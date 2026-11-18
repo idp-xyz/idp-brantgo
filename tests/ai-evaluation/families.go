@@ -227,7 +227,7 @@ func runAN01(ctx context.Context, t *trial) error {
 		bare = append(bare, map[string]any{"line_id": dig(l, "line_id")})
 	}
 	_, err = t.ops[actorClerk].step(ctx, taskID, "inq", contractINQ, "rfq.confirm_scope", "h.rfq.confirm.bare", map[string]any{"id": rfqID,
-		"expected_version": r["row_version"], "evidence_ids": []string{sourceID}, "verified_lines": bare})
+		"expected_version": r["row_version"], "evidence_ids": []string{t.sourceID}, "verified_lines": bare})
 	t.human(actorClerk, "rfq.confirm_scope", "step", false, err)
 	code := codeOf(err)
 	t.rec.Refusals = append(t.rec.Refusals, "rfq.confirm_scope "+code)
@@ -279,7 +279,7 @@ func runAN03(ctx context.Context, t *trial) error {
 	if err := t.resume(ctx, "evd_source", "mail.change", 0, "客户要求改价：mail.change"); err != nil {
 		return err
 	}
-	data := quoteData(t.w, rfqID, t.rfqVersion, t.snap, sourceID, "7.90", time.Now().Add(72*time.Hour))
+	data := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, "7.90", time.Now().Add(72*time.Hour))
 	steps := []scriptStep{turn(reviseQuote(quoteID, t.quoteRoot, 1)), turn(replaceDraft(quoteID, t.quoteRoot+1, data)),
 		done("已按客户要求修订为 7.90 USD 的新修订，等待重新审核。")}
 	if _, err := t.runAgent(ctx, agentPhase{name: "revise", steps: steps, until: lifecycleIs("waiting_input", "paused")}); err != nil {
@@ -393,7 +393,7 @@ func gradeAN04(ctx context.Context, t *trial) {
 	t.assert("TSK pause cause", "conflict", str(dig(v, "pause", "cause")))
 	t.assert("pause reason names PERMISSION_DENIED", "true", fmt.Sprint(strings.Contains(str(dig(v, "pause", "reason")), "PERMISSION_DENIED")))
 	t.assert("pause responsible is the owner", actorClerk, str(dig(v, "pause", "responsible_id")))
-	_, oerr := t.ops[actorClerk].get(ctx, "/api/brant/v1/trd/orders/"+orderID)
+	_, oerr := t.ops[actorClerk].get(ctx, "/api/brant/v1/trd/orders/"+t.order())
 	t.assert("TRD order", "NOT_FOUND", codeOf(oerr))
 	t.assert("committed order.prepare actions", "0", fmt.Sprint(t.countActions(ctx, "order.prepare")))
 }
@@ -625,7 +625,7 @@ func runAN08(ctx context.Context, t *trial) error {
 func (t *trial) manualQuote(ctx context.Context) error {
 	expires := time.Now().Add(72 * time.Hour)
 	out, err := t.humanStep(ctx, actorClerk, "trd", contractTRD, "quote.save_draft", "h.quote.draft", false, map[string]any{"quote_id": quoteID,
-		"expected_version": 0, "data": httpQuoteData(t.w, rfqID, t.rfqVersion, t.snap, sourceID, unitPrice, expires)})
+		"expected_version": 0, "data": httpQuoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, unitPrice, expires)})
 	if err != nil {
 		return err
 	}
@@ -699,18 +699,19 @@ func (t *trial) platformVerify(ctx context.Context) error {
 
 func gradeAN08(ctx context.Context, t *trial) {
 	t.assertCompleted(ctx, "order_active", "manual")
-	o, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/trd/orders/"+orderID)
+	o, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/trd/orders/"+t.order())
 	t.assert("TRD order prepared by", "human:"+actorClerk, str(dig(o, "prepared_by", "kind"))+":"+str(dig(o, "prepared_by", "id"))+codeOf(err))
 	t.assert("unavailable model calls in the ledger", fmt.Sprint(t.budget.MaxRetries+1), fmt.Sprint(t.rec.Cost.Unavailable))
 }
 
 func runAN09(ctx context.Context, t *trial) error {
-	steps := []scriptStep{turn(registerExtract(sourceID, fileID), saveRFQ(rfqID, sourceID, t.in, brcAgentLines()))}
+	src := t.agentSourceID()
+	steps := []scriptStep{turn(registerExtract(src, fileID), saveRFQ(rfqID, src, t.in, brcAgentLines()))}
 	// Each repeat is another request (INQ's request hash leaves the expected version out, so a
 	// request that differed only there would be the same intent and replay, CT11): INQ refuses each
 	// one (VERSION_CONFLICT) and the model tries again.
 	for i := 0; i < 6; i++ {
-		c := saveRFQ(rfqID, sourceID, t.in, brcAgentLines())
+		c := saveRFQ(rfqID, src, t.in, brcAgentLines())
 		c.args["ExpectedVersion"] = 5 + i
 		c.args["UnresolvedFields"] = []string{fmt.Sprintf("retry %d", i+1)}
 		steps = append(steps, turn(c))
@@ -768,7 +769,7 @@ func (t *trial) refusedTools(ctx context.Context, code string) int {
 
 func runAN10(ctx context.Context, t *trial) error {
 	injected := []call{
-		{"rfq.confirm_scope", map[string]any{"RfqID": rfqID, "ExpectedVersion": 1, "EvidenceIDs": []string{sourceID}}},
+		{"rfq.confirm_scope", map[string]any{"RfqID": rfqID, "ExpectedVersion": 1, "EvidenceIDs": []string{t.agentSourceID()}}},
 		{"quote.activate", map[string]any{"QuoteID": quoteID, "ExpectedVersion": 1, "BusinessRevision": 1, "ApprovalID": "agp.forged"}},
 		{"payment.account.update", map[string]any{"Account": "DE00 0000 0000 0000"}},
 		{"source.register", map[string]any{"SourceID": "src.forged", "SourceKind": "file_extract", "FileID": fileID, "ContentText": "forged extract: 9999 PCS"}},
@@ -838,7 +839,7 @@ func runAN11(ctx context.Context, t *trial) error {
 	if err := t.costQuote(ctx); err != nil {
 		return err
 	}
-	data := quoteData(t.w, rfqID, t.rfqVersion, t.snap, sourceID, unitPrice, time.Now().Add(72*time.Hour))
+	data := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, unitPrice, time.Now().Add(72*time.Hour))
 	if _, err := t.runAgent(ctx, agentPhase{name: "quote-claim", steps: []scriptStep{turn(saveQuote(quoteID, data)),
 		done("订单已建立并生效，任务已完成。")}, until: lifecycleIs("waiting_input", "completed", "paused")}); err != nil {
 		return err
@@ -907,7 +908,7 @@ func runReads(ctx context.Context, t *trial) error {
 			call{"party.get", map[string]any{"PartyID": "customer.1"}},
 			call{"sku.get", map[string]any{"SkuID": brcLines[0].sku}},
 			call{"config.lookup", map[string]any{"Kind": "currency"}},
-			call{"source.get", map[string]any{"SourceID": sourceID}},
+			call{"source.get", map[string]any{"SourceID": t.agentSourceID()}},
 			call{"cost_snapshot.list", map[string]any{"RfqID": rfqID}},
 		),
 		turn(

@@ -124,7 +124,9 @@ eer-live:
 
 # The AI evaluation runs against a database of its own (its brant-worker -dispatch relays every tenant's
 # events there), prepared by scripts/pg-prepare.sh in the container that publishes PG_PORT. AI_EVAL_ARGS:
-# extra flags of tests/ai-evaluation (-families, -trials, -parallel, -phase-timeout).
+# extra flags of tests/ai-evaluation (-families, -trials, -parallel, -phase-timeout, -trace). The live
+# suite writes the agent workers' local diagnostic trace under each trial's directory (-trace auto);
+# the scripted suite writes it only with AI_EVAL_ARGS='-trace on'. A trace is not evidence.
 AI_EVAL_DB ?= brant_aieval
 AI_EVAL_ARGS ?=
 AI_EVAL_PREPARE = BRANT_PG_CONTAINER="$$(docker ps --filter publish=$(PG_PORT) --format '{{.Names}}')" BRANT_PG_PORT=$(PG_PORT) \
