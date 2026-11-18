@@ -19,6 +19,7 @@ type TRD interface {
 	trdapi.Reconciler
 	trdapi.ActionReconciler
 	trdapi.GoalQueries
+	trdapi.PriceProposalQueries
 	trdapi.Auditor
 }
 
@@ -241,6 +242,41 @@ func (s *server) orderCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, okView(v))
+}
+
+// priceProposal answers GET /api/brant/v1/trd/rfqs/<id>/price_proposal?currency=<code>&pricing_policy_id=
+// <id>&pricing_policy_revision=<n>[&cost_snapshot_id=<id>&cost_snapshot_result_hash=<hash>][&customer_id=<id>]
+// (owner decision 2026-11-18; trdapi.PriceProposalQueries): the unit price the price list or the
+// formula proposes for every line of the RFQ, which a quote draft may take or not. The parameters
+// are the members of trdapi.PriceProposalQuery, a reference's members joined with "_"
+// (pricing_policy_ref.id is pricing_policy_id); a refusal names the member's path.
+func (s *server) priceProposal(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	text := []string{"currency", "pricing_policy_id", "cost_snapshot_id", "cost_snapshot_result_hash", "customer_id"}
+	ints := url.Values{}
+	for k, v := range q {
+		if len(v) != 1 {
+			s.reject(w, r, kernel.Reject(kernel.CodeSchemaInvalid, "/"+k, "repeated query parameter"))
+			return
+		}
+		if !slices.Contains(text, k) {
+			ints[k] = v
+		}
+	}
+	nums, err := queryValues(ints, "pricing_policy_revision")
+	if err == nil {
+		pq := trdapi.PriceProposalQuery{RfqID: r.PathValue("id"), CustomerID: q.Get("customer_id"), Currency: q.Get("currency"),
+			PricingPolicyRef: trdapi.ConfigRef{Kind: trdapi.PricingPolicyKind, ID: q.Get("pricing_policy_id"), Revision: nums["pricing_policy_revision"]}}
+		if q.Has("cost_snapshot_id") || q.Has("cost_snapshot_result_hash") {
+			pq.CostSnapshotRef = &trdapi.CostSnapshotRef{SnapshotID: q.Get("cost_snapshot_id"), ResultHash: q.Get("cost_snapshot_result_hash")}
+		}
+		var v trdapi.PriceProposal
+		if v, err = s.cfg.TRD.PriceProposal(r.Context(), pq); err == nil {
+			writeJSON(w, http.StatusOK, okView(v))
+			return
+		}
+	}
+	s.fail(w, r, err)
 }
 
 // orderDocument answers GET /api/brant/v1/trd/orders/<id>/revisions/<revision>/documents/<kind>:

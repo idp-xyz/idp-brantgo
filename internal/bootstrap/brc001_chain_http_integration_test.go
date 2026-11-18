@@ -270,6 +270,13 @@ type brc001 struct {
 	snapshotID, resultHash, quoteHash string
 	number, orderHash                 string
 	orderRevision                     int64
+
+	// targetMargin, when set before foundation, is policy.1's target margin (owner decision
+	// 2026-11-18); the chain itself runs without one, as before the target margin existed.
+	// unitPrices, when set before quote, are the unit prices the sales clerk drafts by RFQ line
+	// (8.00 otherwise): the price proposal's, in trd_price_proposal_integration_test.go.
+	targetMargin string
+	unitPrices   map[string]string
 }
 
 func newBRC001(t *testing.T) *brc001 {
@@ -505,8 +512,12 @@ func (b *brc001) foundation() {
 			map[string]any{"stage_id": "P2", "percent": "70", "trigger": polapi.TriggerAfterShipment, "days": 30}}})
 	b.trade = b.config("trade_terms", "FCA", map[string]any{"incoterm": "FCA", "edition": polapi.IncotermsEdition2020, "named_place": "TEST NAMED PLACE",
 		"responsibility_note": "synthetic evidence only", "delivery": map[string]any{"kind": polapi.DeliveryFixedDate, "date": "2027-01-31"}})
-	b.policy = b.config("pricing_policy", "policy.1", map[string]any{"name": "synthetic BRC-001 policy", "calculation_currency": "USD",
-		"minimum_margin": "0.25", "quote_valid_days": 7, "max_fx_age_seconds": 3600, "tax_profile": b.zero})
+	policy := map[string]any{"name": "synthetic BRC-001 policy", "calculation_currency": "USD",
+		"minimum_margin": "0.25", "quote_valid_days": 7, "max_fx_age_seconds": 3600, "tax_profile": b.zero}
+	if b.targetMargin != "" {
+		policy["target_margin"] = b.targetMargin // S4 G4a: the price proposal's formula (trd_price_proposal_integration_test.go)
+	}
+	b.policy = b.config("pricing_policy", "policy.1", policy)
 	b.company = b.config("company_profile", "company.A", map[string]any{"legal_name": "合成企业", "registration_no": "SYNTHETIC-NOT-REAL",
 		"country": "CN", "address": "合成地址", "base_currency": "USD", "time_zone": "Asia/Shanghai", "policy_scope": "synthetic general trade test"})
 	b.template = b.config("quote_document_template", "quote.template", map[string]any{"name": "formal", "language": polapi.LanguageEn,
@@ -736,18 +747,21 @@ func (b *brc001) costing() {
 	b.fact("currently_eligible_for_quote", true, "status", brcDig(adopt, "adoptability", "status"))
 }
 
-// quote is ES-01 steps 11–14: sales drafts quote.1 on the snapshot, freezes it with the server
-// calculation and submits it; quote.reviewer approves; sales activates it.
-func (b *brc001) quote() {
-	b.phase = "TRD quote"
-	proof := []any{map[string]any{"source_id": "source.1", "locator": "第1段"}}
+// quoteData is the draft of BRC-001's quote as the sales clerk saves it on the snapshot, with the
+// evidence it cites: the four lines at b.unitPrices (8.00 each unless set).
+func (b *brc001) quoteData() (data map[string]any, proof []any) {
+	proof = []any{map[string]any{"source_id": "source.1", "locator": "第1段"}}
 	var lines []any
 	for i, l := range brcLines {
+		price := "8.00"
+		if p, ok := b.unitPrices[l.id]; ok {
+			price = p
+		}
 		lines = append(lines, map[string]any{"line_id": l.id, "rfq_line_id": l.id, "sku_ref": map[string]any{"sku_id": l.sku, "spec_revision": 1},
-			"quantity": l.qty, "unit_ref": b.pcs, "unit_price": "8.00", "price_basis_quantity": "1", "discount_ratio": "0",
+			"quantity": l.qty, "unit_ref": b.pcs, "unit_price": price, "price_basis_quantity": "1", "discount_ratio": "0",
 			"tax_application_ref": b.sale[l.sku], "evidence": []any{map[string]any{"source_id": "source.1", "locator": fmt.Sprintf("第1段，第%d项", i+1)}}})
 	}
-	data := map[string]any{"named_place_ref": b.place,
+	data = map[string]any{"named_place_ref": b.place,
 		"delivery": map[string]any{"kind": trdapi.DeliveryFixed, "date": "2027-01-31", "milestone": trdapi.MilestoneHandover, "place_ref": b.place,
 			"time_zone": "Asia/Shanghai"},
 		"issuer_ref":            b.company,
@@ -761,6 +775,14 @@ func (b *brc001) quote() {
 		"payment_terms_ref": b.payment, "document_template_ref": b.template, "sequence_ref": b.seq,
 		"expires_at":     kernel.FormatTimestamp(time.Now().Add(72 * time.Hour)),
 		"customer_notes": "客户可见说明：BRC-001 合成样例，ST01 红/蓝 × S/M。", "evidence": proof}
+	return data, proof
+}
+
+// quote is ES-01 steps 11–14: sales drafts quote.1 on the snapshot, freezes it with the server
+// calculation and submits it; quote.reviewer approves; sales activates it.
+func (b *brc001) quote() {
+	b.phase = "TRD quote"
+	data, proof := b.quoteData()
 	const trd = trdapi.Contract
 	if r := b.cmd(brcSales, "trd", trd, "quote.save_draft", map[string]any{"quote_id": "quote.1", "expected_version": 0, "data": data}); r["status"] != trdapi.StatusWorking {
 		b.t.Fatalf("save_draft %v", r)

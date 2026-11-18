@@ -27,6 +27,8 @@ var (
 	_ api.Queries        = (*Module)(nil)
 	_ api.InForceQueries = (*Module)(nil)
 	_ api.Auditor        = (*Module)(nil)
+
+	_ api.SalesPriceQueries = (*Module)(nil)
 )
 
 // New wires POL to db, a transaction owner that belongs to POL alone, and to EVD's queries for the

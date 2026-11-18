@@ -59,7 +59,10 @@ func content(cmd api.SaveDraft) config.Content {
 	case d.PricingPolicy != nil:
 		p := d.PricingPolicy
 		c.PricingPolicy = &config.PricingPolicy{Name: p.Name, CalculationCurrency: p.CalculationCurrency, MinimumMargin: p.MinimumMargin,
-			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: config.Ref(p.TaxProfile)}
+			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: config.Ref(p.TaxProfile),
+			TargetMargin: p.TargetMargin}
+	case d.SalesPrice != nil:
+		c.SalesPrice = ptr(config.SalesPrice(*d.SalesPrice))
 	case d.BankAccount != nil:
 		c.BankAccount = ptr(config.BankAccount(*d.BankAccount))
 	case d.NumberSequence != nil:
@@ -182,7 +185,10 @@ func data(c config.Content) api.ConfigData {
 	case c.PricingPolicy != nil:
 		p := c.PricingPolicy
 		d.PricingPolicy = &api.PricingPolicy{Name: p.Name, CalculationCurrency: p.CalculationCurrency, MinimumMargin: p.MinimumMargin,
-			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: api.ConfigRef(p.TaxProfile)}
+			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: api.ConfigRef(p.TaxProfile),
+			TargetMargin: p.TargetMargin}
+	case c.SalesPrice != nil:
+		d.SalesPrice = ptr(api.SalesPrice(*c.SalesPrice))
 	case c.BankAccount != nil:
 		d.BankAccount = ptr(api.BankAccount(*c.BankAccount))
 	case c.NumberSequence != nil:

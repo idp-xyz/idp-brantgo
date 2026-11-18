@@ -243,6 +243,9 @@ type ConfigData struct {
 	OrderDocumentTemplate    *OrderDocumentTemplate
 	ShipmentDocumentTemplate *ShipmentDocumentTemplate
 	ExportTaxPolicy          *ExportTaxPolicy
+	// SalesPrice (sales_price.go) is left out of a command's request hash when it is not the
+	// member set, so the stored requests of every other kind replay with the hash they had.
+	SalesPrice *SalesPrice `json:",omitempty"`
 }
 
 // CompanyProfile is the company of the scope; its config_id is the company's ID (at most
@@ -411,6 +414,15 @@ type FeeCategory struct {
 }
 
 // PricingPolicy is the basis of cost estimates and quotations.
+//
+// MinimumMargin is the floor: a quote whose margin (net sales − cost) ÷ net sales is below it needs
+// the margin exception (TRD-INV-007). TargetMargin is the margin the company prices for when no
+// sales price is in force for a SKU (owner decision 2026-11-18; sales_price.go): TRD's price
+// proposal divides a line's unit cost by 1 − TargetMargin, the same definition of margin as the
+// floor's (a cost of 5.50 at 0.3125 is 8.00). It is optional, from 0 up to but excluding 1 and
+// never below MinimumMargin; a policy without one proposes no price by formula. POL leaves it out
+// of the stored data and of the request hash when it is empty, so a pricing policy saved before it
+// existed keeps its content hash and its request replays unchanged.
 type PricingPolicy struct {
 	Name                string
 	CalculationCurrency string    // currency code, configured and in force
@@ -418,6 +430,7 @@ type PricingPolicy struct {
 	QuoteValidDays      int       // 1–365
 	MaxFXAgeSeconds     int64     // 1–31536000: how long before use an exchange rate may be observed
 	TaxProfile          ConfigRef // a tax_profile revision in force
+	TargetMargin        string    `json:",omitempty"` // "" (none) or kernel.FactorFormat, at least MinimumMargin and below 1
 }
 
 // BankAccount is an account of the company or of a party. The account number is sensitive: readers
@@ -678,7 +691,7 @@ func (d ConfigData) validate(kind string) error {
 		KindQuoteDocumentTemplate: d.QuoteDocumentTemplate != nil, KindCreditPolicy: d.CreditPolicy != nil,
 		KindScreeningRegulation: d.ScreeningRegulation != nil, KindLegalTerms: d.LegalTerms != nil,
 		KindOrderDocumentTemplate: d.OrderDocumentTemplate != nil, KindShipmentDocumentTemplate: d.ShipmentDocumentTemplate != nil,
-		KindExportTaxPolicy: d.ExportTaxPolicy != nil,
+		KindExportTaxPolicy: d.ExportTaxPolicy != nil, KindSalesPrice: d.SalesPrice != nil,
 	}
 	for k, present := range members {
 		if present != (k == kind) {
@@ -730,6 +743,8 @@ func (d ConfigData) validate(kind string) error {
 		return d.ShipmentDocumentTemplate.validate()
 	case KindExportTaxPolicy:
 		return d.ExportTaxPolicy.validate()
+	case KindSalesPrice:
+		return d.SalesPrice.validate()
 	}
 	return schema("/args/kind")
 }
@@ -894,7 +909,8 @@ func (p *PricingPolicy) validate() error {
 	if err := first(field{"name", name(p.Name)}, field{"calculation_currency", currencyCode(p.CalculationCurrency)},
 		field{"minimum_margin", decimal(p.MinimumMargin, kernel.FactorFormat)},
 		field{"quote_valid_days", p.QuoteValidDays >= 1 && p.QuoteValidDays <= maxQuoteValidDays},
-		field{"max_fx_age_seconds", p.MaxFXAgeSeconds >= 1 && p.MaxFXAgeSeconds <= maxFXAgeSeconds}); err != nil {
+		field{"max_fx_age_seconds", p.MaxFXAgeSeconds >= 1 && p.MaxFXAgeSeconds <= maxFXAgeSeconds},
+		field{"target_margin", p.TargetMargin == "" || decimal(p.TargetMargin, kernel.FactorFormat)}); err != nil {
 		return err
 	}
 	return requiredRef(&p.TaxProfile, KindTaxProfile, "/args/data/tax_profile")

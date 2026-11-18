@@ -36,7 +36,8 @@ internal/contexts/sup/            SUP: supplier RFQs; supplier offers, purchase 
 internal/contexts/pol/            POL: twenty configuration kinds (S3 adds legal_terms with the tenant's default, S3-17,
                                   and order_document_template, S3-15) with independent publication, ConfigGuard v1, FX,
                                   tax and unit lookups, document numbers,
-                                  foundation snapshots
+                                  foundation snapshots; the sales price list (kind sales_price, one price per
+                                  configuration, with its lookup) and the pricing policy's target margin (S4 G4a)
 internal/contexts/cst/            CST: costing contexts and measurements in sealed revisions, the calculation rules, cost
                                   scenarios with deterministic evaluations, frozen cost snapshots (once per scenario),
                                   source attestations and denials; CostSnapshotRef lookup and AdoptabilityGuard v1
@@ -50,7 +51,8 @@ internal/contexts/trd/            TRD (S3; S5 wiring): QuoteRoot working drafts,
                                   they arrived before expiry, the acceptance effectivity ledger; AcceptanceGuard v1;
                                   the read side: quote_ready, paged quote, approval, document, commit and Outbox
                                   histories, dispatch preflight and target, reconciliation and replays that re-check
-                                  the caller's grant, data scope and EVD sources;
+                                  the caller's grant, data scope and EVD sources; the price proposal of an RFQ's lines
+                                  (S4 G4a: a sales price in force, otherwise unit cost ÷ (1 − target margin); a read);
                                   sales orders: preparation taking the conversion slot, review with risk
                                   acknowledgement, activation re-checking the source and upstream (STL/CNX extension
                                   points not wired), cancellation in draft; ActiveOrderRef v1 and OrderGuard v1 for PUR;

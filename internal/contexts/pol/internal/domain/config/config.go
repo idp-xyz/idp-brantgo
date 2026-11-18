@@ -111,6 +111,7 @@ type Content struct {
 	OrderDocumentTemplate    *OrderDocumentTemplate
 	ShipmentDocumentTemplate *ShipmentDocumentTemplate
 	ExportTaxPolicy          *ExportTaxPolicy
+	SalesPrice               *SalesPrice
 }
 
 // Validity returns the revision's validity interval.
@@ -173,6 +174,8 @@ func (c Content) Data() any {
 		return present(c.ShipmentDocumentTemplate)
 	case KindExportTaxPolicy:
 		return present(c.ExportTaxPolicy)
+	case KindSalesPrice:
+		return present(c.SalesPrice)
 	}
 	return nil
 }
@@ -266,6 +269,8 @@ func (c *Content) DecodeData(raw []byte) error {
 		return decode(raw, &c.ShipmentDocumentTemplate)
 	case KindExportTaxPolicy:
 		return decode(raw, &c.ExportTaxPolicy)
+	case KindSalesPrice:
+		return decode(raw, &c.SalesPrice)
 	}
 	return fmt.Errorf("pol: no data of kind %q", c.Kind)
 }
@@ -391,8 +396,9 @@ func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, e
 	return superseded, nil
 }
 
-// sameDefinition reports whether b keeps the meaning of a (POL-INV-002); other kinds have no
-// immutable definition.
+// sameDefinition reports whether b keeps the meaning of a (POL-INV-002), and whether a sales price
+// keeps its subject — its SKU, customer and currency — so a configuration of the price list stays
+// one price with its history (owner decision 2026-11-18); other kinds have no immutable definition.
 func sameDefinition(a, b Content) bool {
 	switch a.Kind {
 	case KindCurrency:
@@ -401,6 +407,9 @@ func sameDefinition(a, b Content) bool {
 	case KindUnit:
 		x, y := a.Unit, b.Unit
 		return x.Code == y.Code && x.Dimension == y.Dimension && x.Precision == y.Precision
+	case KindSalesPrice:
+		x, y := a.SalesPrice, b.SalesPrice
+		return x.SkuID == y.SkuID && x.PartyID == y.PartyID && x.Currency == y.Currency
 	}
 	return true
 }

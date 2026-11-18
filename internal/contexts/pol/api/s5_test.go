@@ -93,7 +93,8 @@ func TestS5Contracts(t *testing.T) {
 			t.Errorf("%s: %s, want %s", c.kind, got, c.want)
 		}
 	}
-	if len(kinds) != 22 || kinds[20] != KindShipmentDocumentTemplate || kinds[21] != KindExportTaxPolicy ||
+	// Later kinds follow them (sales_price, the twenty-third: owner decision 2026-11-18, sales_price_test.go).
+	if len(kinds) < 22 || kinds[20] != KindShipmentDocumentTemplate || kinds[21] != KindExportTaxPolicy ||
 		!KindImplemented(KindShipmentDocumentTemplate) || !KindImplemented(KindExportTaxPolicy) {
 		t.Fatal("shipment_document_template and export_tax_policy are the twenty-first and twenty-second kinds")
 	}

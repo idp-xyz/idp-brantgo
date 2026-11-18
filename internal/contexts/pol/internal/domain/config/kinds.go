@@ -37,6 +37,8 @@ const (
 	// D-12) and the export tax refund method (CN-AT12).
 	KindShipmentDocumentTemplate Kind = "shipment_document_template"
 	KindExportTaxPolicy          Kind = "export_tax_policy"
+	// One price of the sales price list (owner decision 2026-11-18).
+	KindSalesPrice Kind = "sales_price"
 )
 
 // Closed values the rules below compare.
@@ -221,7 +223,9 @@ type FeeCategory struct {
 
 // PricingPolicy is the basis of cost estimates and quotations: the calculation currency, the
 // minimum margin, how long a quotation is valid, how old an exchange rate may be and the tax
-// profile revision.
+// profile revision. TargetMargin, the margin a price is proposed for when no sales price is in
+// force (owner decision 2026-11-18), is omitted when the policy states none, so a policy published
+// before it existed keeps its content hash.
 type PricingPolicy struct {
 	Name                string `json:"name"`
 	CalculationCurrency string `json:"calculation_currency"`
@@ -229,7 +233,25 @@ type PricingPolicy struct {
 	QuoteValidDays      int    `json:"quote_valid_days"`
 	MaxFXAgeSeconds     int64  `json:"max_fx_age_seconds"`
 	TaxProfile          Ref    `json:"tax_profile"`
+	TargetMargin        string `json:"target_margin,omitempty"`
 }
+
+// SalesPrice is one price of the sales price list (owner decision 2026-11-18): UnitPrice of
+// Currency for PriceBasisQuantity of Unit of one SKU (CAT's, stored as given), for every customer or,
+// with PartyID, for one (PTY's, stored as given). SkuID, PartyID and Currency are its subject, which
+// its first publication fixes.
+type SalesPrice struct {
+	SkuID              string `json:"sku_id"`
+	PartyID            string `json:"party_id,omitempty"`
+	Currency           string `json:"currency"`
+	Unit               string `json:"unit"`
+	UnitPrice          string `json:"unit_price"`
+	PriceBasisQuantity string `json:"price_basis_quantity"`
+}
+
+// Subject returns what the price is the price of: its SKU, its customer ("" for every customer)
+// and its currency.
+func (p SalesPrice) Subject() (sku, party, currency string) { return p.SkuID, p.PartyID, p.Currency }
 
 // BankAccount is an account of the company or of a party (PTY's, stored as given). The account
 // number is sensitive.
@@ -394,8 +416,9 @@ type ExportTaxPolicy struct {
 // currencies with a positive rate observed no later than it becomes valid; a conversion between
 // two units with a positive factor; payment stages with distinct IDs and positive percentages
 // summing to 100, held against the shipping documents only when due after shipment; time zones that
-// exist; tax rates and margins in [0, 1], no rate where tax does not apply; a template whose
-// placeholders are exactly its fixed fields; credit tiers ascending, at known levels.
+// exist; tax rates and margins in [0, 1], no rate where tax does not apply; a target margin below 1
+// and not below the minimum margin; a positive sales price for a positive basis quantity; a
+// template whose placeholders are exactly its fixed fields; credit tiers ascending, at known levels.
 //
 // It judges the content of a revision being saved or published, never a stored revision that is
 // read: since S5R (POL-INV-006) a new revision states officially assigned country codes (S5R-D15),
@@ -473,6 +496,9 @@ func Validate(id string, c Content) error {
 		if !ratio(c.PricingPolicy.MinimumMargin) {
 			return invalid("/args/data/minimum_margin")
 		}
+		return checkTargetMargin(c.PricingPolicy)
+	case KindSalesPrice:
+		return checkSalesPrice(c.SalesPrice)
 	case KindNumberSequence:
 		if !zone(c.NumberSequence.TimeZone) {
 			return invalid("/args/data/time_zone")
@@ -498,6 +524,36 @@ func Validate(id string, c Content) error {
 			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/refund_method",
 				"State exempt or taxable: not_applicable is kept for revisions published before S5R only")
 		}
+	}
+	return nil
+}
+
+// checkTargetMargin requires a target margin, when the policy states one, from 0 up to but excluding
+// 1 and not below the minimum margin (owner decision 2026-11-18): a price is the cost divided by one
+// minus the target margin, which a margin of 1 does not define, and a target under the floor would
+// propose prices that need the margin exception.
+func checkTargetMargin(p *PricingPolicy) error {
+	if p.TargetMargin == "" {
+		return nil
+	}
+	target, err := kernel.ParseDecimal(p.TargetMargin, kernel.FactorFormat)
+	if err != nil || target.Cmp(kernel.DecimalFromInt(1)) >= 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/target_margin", "A target margin is at least 0 and below 1")
+	}
+	if minimum, err := kernel.ParseDecimal(p.MinimumMargin, kernel.FactorFormat); err != nil || target.Cmp(minimum) < 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/target_margin", "A target margin is not below the minimum margin")
+	}
+	return nil
+}
+
+// checkSalesPrice requires a positive unit price and a positive price basis quantity (owner decision
+// 2026-11-18): a price of zero is no price, and a price is for some quantity.
+func checkSalesPrice(p *SalesPrice) error {
+	if price, err := kernel.ParseDecimal(p.UnitPrice, kernel.PriceFormat); err != nil || price.Sign() <= 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/unit_price", "A sales price is positive")
+	}
+	if basis, err := kernel.ParseDecimal(p.PriceBasisQuantity, kernel.QuantityFormat); err != nil || basis.Sign() <= 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/price_basis_quantity", "A price basis quantity is positive")
 	}
 	return nil
 }
@@ -735,6 +791,9 @@ func (c Content) References() []Reference {
 		byID("/args/data/currency", KindCurrency, c.BankAccount.Currency)
 	case KindCreditPolicy:
 		byID("/args/data/currency", KindCurrency, c.CreditPolicy.Currency)
+	case KindSalesPrice:
+		byID("/args/data/currency", KindCurrency, c.SalesPrice.Currency)
+		byID("/args/data/unit", KindUnit, c.SalesPrice.Unit)
 	}
 	return out
 }
@@ -812,6 +871,12 @@ func CheckReferences(id string, c Content, f Facts) error {
 				return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/approval_tiers/"+strconv.Itoa(i)+"/max_amount",
 					"More digits than the currency's minor units")
 			}
+		}
+	case KindSalesPrice:
+		p := c.SalesPrice
+		unit := f.Configs[Target{Kind: KindUnit, ID: p.Unit}].Rev.Content.Unit
+		if basis, err := kernel.ParseDecimal(p.PriceBasisQuantity, kernel.QuantityFormat); err != nil || !basis.RoundHalfUp(unit.Precision).Equal(basis) {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/price_basis_quantity", "More digits than the unit's precision")
 		}
 	}
 	return nil

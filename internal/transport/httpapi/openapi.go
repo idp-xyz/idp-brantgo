@@ -107,6 +107,9 @@ func OpenAPI() ([]byte, error) {
 		for _, p := range readQuery[r.path] {
 			params = append(params, map[string]any{"name": p, "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 0}})
 		}
+		for _, p := range readRequiredQuery[r.path] {
+			params = append(params, map[string]any{"name": p, "in": "query", "required": true, "schema": map[string]any{"type": "integer", "minimum": 1}})
+		}
 		for _, p := range readTextQuery[r.path] {
 			params = append(params, map[string]any{"name": p.name, "in": "query", "required": p.required, "schema": map[string]any{"type": "string", "minLength": 1}})
 		}
@@ -222,6 +225,8 @@ var reads = []readRoute{
 		"What OrderCommercialSnapshot v1 tells STL, CNX and FUL of a draft or active order at its current revision, from what TRD sealed: binding, state, terms with address roles and the payment plan with its credit portion, lines, charges, totals, S/C and PI references and the analysis rate (code REFERENCE_INVALID when the sealed revision is not intact)", []string{"id"}, false},
 	{"/api/brant/v1/trd/orders/{id}/revisions/{revision}/documents/{kind}", "trd.order.document.get", "trd",
 		"The export sales contract (sales_contract) or proforma invoice (proforma_invoice) of an order revision: binding, signed copies and bytes (Base64), verified on read", []string{"id", "revision", "kind"}, false},
+	{"/api/brant/v1/trd/rfqs/{id}/price_proposal", "trd.quote.price_proposal", "trd",
+		"The price proposal of a ready RFQ's lines (?currency=, the quote currency's code; pricing_policy_id and pricing_policy_revision, the pricing policy the quote binds; cost_snapshot_id with cost_snapshot_result_hash, the cost snapshot it adopts, optional; customer_id optional, the RFQ's customer): per line the sales price in force for its SKU (the customer's own before the general one), otherwise the snapshot's unit cost ÷ (1 − the policy's target margin) rounded HALF_UP to the currency's minor units, otherwise none with the reason; with the margin the price gives on the snapshot's cost and whether it is under the policy's minimum margin. It is a proposal: quote.save_draft takes the price its author sends", []string{"id"}, false},
 	{"/api/brant/v1/trd/customer_responses/{id}", "trd.customer_response.get", "trd", "A customer response and its acceptances", []string{"id"}, false},
 	{"/api/brant/v1/trd/acceptances/{id}", "trd.acceptance.get", "trd", "An acceptance and its effectivity history", []string{"id"}, false},
 	{"/api/brant/v1/pur/purchase_drafts/{id}", "pur.purchase_draft.get", "pur",
@@ -267,6 +272,13 @@ var readTextQuery = map[string][]struct {
 	required bool
 }{
 	"/api/brant/v1/trd/quotes/{id}/goal_readiness": {{"goal", true}, {"customer_id", false}, {"rfq_id", false}},
+	"/api/brant/v1/trd/rfqs/{id}/price_proposal": {{"currency", true}, {"pricing_policy_id", true}, {"cost_snapshot_id", false},
+		{"cost_snapshot_result_hash", false}, {"customer_id", false}},
+}
+
+// readRequiredQuery names the required positive integer query parameters of a read.
+var readRequiredQuery = map[string][]string{
+	"/api/brant/v1/trd/rfqs/{id}/price_proposal": {"pricing_policy_revision"},
 }
 
 // readQuery names the optional integer query parameters of a read.
