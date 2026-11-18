@@ -221,6 +221,9 @@ var PercentFormat = kernel.DecimalFormat{IntDigits: 3, Scale: 6}
 // KindKnown reports whether kind is one of the twenty-two configuration kinds.
 func KindKnown(kind string) bool { return slices.Contains(kinds, kind) }
 
+// Kinds returns the twenty-two configuration kinds, in the order of the tactical model.
+func Kinds() []string { return slices.Clone(kinds) }
+
 // KindImplemented reports whether POL accepts configurations of kind yet.
 func KindImplemented(kind string) bool { return slices.Contains(implemented, kind) }
 

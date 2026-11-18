@@ -723,6 +723,11 @@ func (t *turn) toolCall(call model.ToolCall, toolDel map[string]policy.Delegatio
 			o.State, o.Code = executionevidence.StateUnavailable, codes.ToolUnavailable
 		default:
 			o.State, o.Code = executionevidence.StateFailed, errorCode(runErr)
+			if _, ok := kernel.AsRejection(runErr); ok {
+				// A refusal: the model is told where and why, and the ledger keeps it for the facts of
+				// the next turn (S4 G3; refusal.go).
+				answer, o.RefusalPath, o.RefusalReason = t.refused(call, runErr)
+			}
 		}
 		if t.isRead(call.Name) {
 			// A read is recorded as hashes, never as the records it returned (E-6).
@@ -773,11 +778,11 @@ func (t *turn) isRead(name string) bool {
 func (t *turn) readCall(b gateway.Binding, c gateway.Call) (string, Receipt, error) {
 	admitted, err := t.r.Gateway.Admit(t.agent, b, c, "rd.1")
 	if err != nil {
-		return refusal(err), Receipt{}, err
+		return "", Receipt{}, err
 	}
 	res, err := admitted.Run(t.agent)
 	if err != nil {
-		return refusal(err), Receipt{}, err
+		return "", Receipt{}, err
 	}
 	body := map[string]any{"ok": true, "read": c.Capability.Command, "result": res.Detail}
 	raw, err := json.Marshal(body)
@@ -803,7 +808,7 @@ func (t *turn) runTool(call model.ToolCall, toolDel map[string]policy.Delegation
 	b := gateway.Binding{TaskID: t.view.TaskID, DelegationID: d.DelegationID}
 	c, err := t.r.Gateway.Decode(t.agent, b, call)
 	if err != nil {
-		return refusal(err), Receipt{}, err
+		return "", Receipt{}, err
 	}
 	if c.Capability.SideEffect == capability.Read {
 		// A read changes nothing, so it is not an ActionExecution (TSK-INV-003, D-2). The gateway
@@ -841,7 +846,7 @@ func (t *turn) runTool(call model.ToolCall, toolDel map[string]policy.Delegation
 		Send: func(ctx context.Context, _ any) (capability.Result, error) { return admitted.Run(ctx) }}
 	rcpt, err := t.r.Executor.Run(t.agent, step)
 	if err != nil {
-		return refusal(err), rcpt, err
+		return "", rcpt, err
 	}
 	t.res.Receipts = append(t.res.Receipts, rcpt)
 	return answerOf(rcpt), rcpt, nil
@@ -993,6 +998,20 @@ func (t *turn) pause(cause, why, condition string) error {
 // task that names an uploaded file (evd_file, S4 G2) is told the file (source_file_id); it has no
 // text until the task registered the file's extract — then registered_source_id names the source a
 // committed source.register of the task created and source_text carries its text the same way.
+//
+// What a turn cannot see in the records it is told here (S4 G3):
+//
+//   - now, the platform's clock, so an instant a draft states (a quote's ExpiresAt) is one after it;
+//   - arrivals, what the task was resumed with, oldest first, as TSK recorded each on the history
+//     row of its task.resume (kind, id, version): the ready RFQ, the source of the customer's
+//     reply, the verified acceptance. The last maxArrivalFacts, without the runner's own resumes
+//     on an approval grant;
+//   - refusals, the task's refused tool calls a new turn would otherwise repeat (refusalFacts):
+//     tool, code, path, the member of the tool's arguments, what it needs and the values it takes,
+//     the refusing context's static reason, and how often the refusal was met. They come from the
+//     ledger of the task's calls (brant_ai.model_call), which has every refused tool call — the
+//     gateway's and a read's too, which are no actions in TSK. A rejected action is therefore not
+//     listed among the actions: its refusal says more.
 func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 	v := t.view
 	type actionFact struct {
@@ -1007,9 +1026,15 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 		ObjectID string `json:"object_id"`
 		Version  int64  `json:"object_version"`
 	}
+	type arrivalFact struct {
+		Kind    string `json:"kind"`
+		ID      string `json:"id"`
+		Version int64  `json:"version,omitempty"`
+	}
 	f := struct {
 		TaskID             string            `json:"task_id"`
 		Goal               string            `json:"goal"`
+		Now                string            `json:"now"`
 		Target             tskapi.Target     `json:"target"`
 		Source             *tskapi.SourceRef `json:"source,omitempty"`
 		SourceFileID       string            `json:"source_file_id,omitempty"`
@@ -1018,22 +1043,43 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 		SourceTruncated    bool              `json:"source_truncated,omitempty"`
 		SourceSHA256       string            `json:"source_sha256,omitempty"`
 		BoundQuote         string            `json:"bound_quote,omitempty"`
+		Arrivals           []arrivalFact     `json:"arrivals,omitempty"`
 		Actions            []actionFact      `json:"actions"`
+		Refusals           []refusalNote     `json:"refusals,omitempty"`
 		ApprovalGrants     []grantFact       `json:"approval_grants,omitempty"`
 		Rules              string            `json:"rules"`
-	}{TaskID: v.TaskID, Goal: v.GoalCode, Target: v.Target, Source: v.Source,
-		Rules: "Use only the tools offered; their arguments are the fields of the command. Scope, actor, task, epoch and grants are the platform's. " +
+	}{TaskID: v.TaskID, Goal: v.GoalCode, Now: kernel.FormatTimestamp(t.r.Clock.Now()), Target: v.Target, Source: v.Source,
+		Rules: "Use only the tools offered; their arguments are the members the tool's schema names, an unknown one left out. " +
+			"Scope, actor, task, epoch and grants are the platform's. " +
 			"Drafts are reviewed and made effective by people. Answer without a tool call when nothing is left for you to do; the platform then verifies the goal."}
 	if v.Binding != nil && v.Binding.State == tskapi.BindingBound {
 		f.BoundQuote = v.Binding.QuoteID
 	}
+	for _, h := range v.History {
+		// The runner's own resume on an approval grant is not news to the agent: the grant is
+		// listed among the approval grants while it is issued.
+		if h.Command == tskapi.CommandResume && h.Arrival != nil && h.Arrival.Kind != ArrivalApprovalGrant {
+			f.Arrivals = append(f.Arrivals, arrivalFact{Kind: h.Arrival.Kind, ID: h.Arrival.ID, Version: h.Arrival.Version})
+		}
+	}
+	if len(f.Arrivals) > maxArrivalFacts {
+		f.Arrivals = f.Arrivals[len(f.Arrivals)-maxArrivalFacts:]
+	}
 	for _, a := range actions {
+		if a.State == tskapi.ActionRejected {
+			continue // told with its code, path and reason among the refusals
+		}
 		af := actionFact{Command: a.Target.Command, State: a.State}
 		if a.Result != nil {
 			af.ObjectID, af.RowVersion, af.Status = a.Result.ObjectID, a.Result.RowVersion, a.Result.Status
 		}
 		f.Actions = append(f.Actions, af)
 	}
+	calls, err := t.r.Evidence.Calls(t.agent, v.TaskID)
+	if err != nil {
+		return "", err
+	}
+	f.Refusals = t.refusalFacts(calls)
 	grants, err := t.r.issuedGrants(t.agent, t.scope, t.dels)
 	if err != nil {
 		return "", err
@@ -1072,6 +1118,11 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 	return string(raw), err
 }
 
+// maxArrivalFacts bounds the arrivals a turn's facts carry: the last five. A Q01 task is resumed
+// on the ready RFQ, the activated quote, the customer's reply and the verified acceptance; five
+// keeps the reply and the acceptance in sight until the order is prepared.
+const maxArrivalFacts = 5
+
 // ProposalID names the approval a task waits for: one per task, command and request.
 func ProposalID(taskID, command, requestHash string) string {
 	return "agp." + IntentOf(taskID, command, "", requestHash)[3:]
@@ -1103,16 +1154,6 @@ func answerOf(r Receipt) string {
 		a["object_id"], a["row_version"], a["status"] = r.Stored.ObjectID, r.Stored.RowVersion, r.Stored.Status
 	case r.Result != nil:
 		a["object_id"], a["row_version"], a["status"] = r.Result.ObjectID, r.Result.RowVersion, r.Result.Status
-	}
-	raw, _ := json.Marshal(a)
-	return string(raw)
-}
-
-// refusal is what the model sees of a refused call: the code and the path, never more.
-func refusal(err error) string {
-	a := map[string]any{"ok": false, "code": errorCode(err)}
-	if rej, ok := kernel.AsRejection(err); ok && len(rej.Fields) > 0 {
-		a["path"] = rej.Fields[0].Path
 	}
 	raw, _ := json.Marshal(a)
 	return string(raw)

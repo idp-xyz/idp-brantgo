@@ -103,9 +103,13 @@ func view(t *task.Task, history []task.Change) api.TaskView {
 		v.Termination = &api.TerminationView{Cause: e.Cause, Reason: e.Reason, ResponsibleID: e.Responsible, By: e.By, At: e.At}
 	}
 	for _, h := range history {
-		v.History = append(v.History, api.TransitionView{Seq: h.Version, Command: string(h.Command), From: string(h.From), To: string(h.To),
+		tv := api.TransitionView{Seq: h.Version, Command: string(h.Command), From: string(h.From), To: string(h.To),
 			ControlMode: string(h.Mode), ControlEpoch: h.ControlEpoch, ControlChange: h.ControlChange, TaskVersion: h.Version, Actor: h.By,
-			AuthorityEpoch: h.Epoch, At: h.At, Reason: h.Reason})
+			AuthorityEpoch: h.Epoch, At: h.At, Reason: h.Reason}
+		if a := h.Arrival; a != nil {
+			tv.Arrival = &api.ObjectRef{Kind: a.Kind, ID: a.ID, Version: a.Version}
+		}
+		v.History = append(v.History, tv)
 	}
 	return v
 }

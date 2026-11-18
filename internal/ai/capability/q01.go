@@ -66,7 +66,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 	// with the AI layer's extractor; the model never supplies an extract's text.
 	add(Define(Spec{Command: evdapi.CommandRegisterSource, Context: "evd", Contract: evdapi.Contract, Version: 2,
 		SideEffect: Draft, Risk: RiskLow, Approval: ApprovalNone,
-		Summary: "Register a text source (manual_text or an email body as email_text) as evidence, or the text of a registered business file (SourceKind file_extract with FileID, no ContentText): EVD reads the file with the platform's extractor; returns the source ID."},
+		Summary: "Register evidence: the text of a registered business file (file_extract: the platform reads the file, you send no text), or a text you give (manual_text, email_text). Returns the source ID."},
 		func(c evdapi.RegisterSource) ObjectRef { return ObjectRef{Type: "evd.source", ID: c.SourceID} },
 		func(ctx context.Context, c evdapi.RegisterSource) (evdapi.Receipt, error) {
 			if t.EVD == nil {
@@ -89,7 +89,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 	// and completes the pending fields before the call is hashed (internal/ai/locate).
 	saveRfq, err := Define(Spec{Command: inqapi.CommandSaveRfq, Context: "inq", Contract: inqapi.Contract, Version: 2,
 		SideEffect: Draft, Risk: RiskLow, Approval: ApprovalNone,
-		Summary: "Save a customer RFQ draft with its lines, cited sources and unresolved fields; a human verifies every line and confirms its scope. A line can be confirmed only when it has SkuID, Quantity, UOM, SourceID and Locator (where the line stands in its source, such as \"row 5\"). For a line read from a file_extract source, also give Locators: for each field (requested_item, sku_id, quantity, uom) the locator in the extract (text line:col, PDF page:line, XLSX Sheet!B3) and the source's own words there (Quote); name Pending fields (ambiguous, conflict, missing) with Candidates. Locators are verified against the extract."},
+		Summary: "Save a customer RFQ draft, whole; people verify every line and confirm its scope. A line can be confirmed only when it has SkuID, Quantity, UOM, SourceID and Locator. For a line read from a file extract, give Locators for each field you state: they are verified against the extract, and a field whose words stand at several places stays pending until a person names the place."},
 		func(c inqapi.SaveRfq) ObjectRef {
 			return ObjectRef{Type: "inq.rfq", ID: c.RfqID, Version: c.ExpectedVersion}
 		},
@@ -148,7 +148,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 		}))
 	add(Define(Spec{Command: trdapi.CommandSaveDraft, Context: "trd", Contract: trdapi.Contract, Version: 1,
 		SideEffect: Draft, Risk: RiskMedium, Approval: ApprovalNone,
-		Summary: "Save the working revision of a quote draft; a human freezes, reviews and activates it."},
+		Summary: "Save the working revision of a quote draft, whole; people freeze, review and activate it. They can freeze it only when Data has every member except SalesFXRef, Charges, CustomerNotes and LegalTermsRef."},
 		func(c trdapi.SaveDraft) ObjectRef {
 			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.ExpectedVersion}
 		},

@@ -124,7 +124,7 @@ var aiReads = []readRoute{
 	{"/api/brant/v1/ai/approval_grants/{id}", "ai.approval_grant.get", "ai",
 		"An approval grant: the call it binds (command, request hash, object and version), its expiry, issuer, status and the key of the call that used it (ai.approval_grant.get)", []string{"id"}, false},
 	{"/api/brant/v1/ai/tasks/{id}/model_calls", "ai.model_call.list", "ai",
-		"The model and tool calls of a task in order: reservation, outcome, the model ID as returned, prompt/input/output hashes, tokens, latency, cost and the action a tool call ran (ai.model_call.list; no prompt or output content)", []string{"id"}, false},
+		"The model and tool calls of a task in order: reservation, outcome, the model ID as returned, prompt/input/output hashes, tokens, latency, cost, the action a tool call ran and, for a refused tool call, the code, the request path and the refusing context's static reason (ai.model_call.list; no prompt or output content)", []string{"id"}, false},
 	{"/api/brant/v1/ai/execution_bundles/{id}/{sha256}", "ai.execution_bundle.get", "ai",
 		"A recorded ExecutionBundle by its ID and the SHA-256 of its canonical JSON, with that canonical document (ai.execution_bundle.get)", []string{"id", "sha256"}, false},
 }
@@ -167,6 +167,8 @@ type callView struct {
 	FinishReason   string     `json:"finish_reason,omitempty"`
 	ActionID       string     `json:"action_id,omitempty"`
 	Code           string     `json:"code,omitempty"`
+	RefusalPath    string     `json:"refusal_path,omitempty"`
+	RefusalReason  string     `json:"refusal_reason,omitempty"`
 	Cost           *moneyView `json:"cost,omitempty"`
 	SettledAt      string     `json:"settled_at,omitempty"`
 }
@@ -185,7 +187,7 @@ func (s *server) modelCalls(w http.ResponseWriter, r *http.Request) {
 			ModelRequested: c.ModelRequested, PromptSHA256: c.PromptSHA256, ToolCommand: c.ToolCommand, Reserved: moneyOf(c.Reserved),
 			ReservedAt: timestamp(c.ReservedAt), ModelReturned: c.ModelReturned, InputSHA256: c.InputSHA256, OutputSHA256: c.OutputSHA256,
 			InputTokens: c.InputTokens, OutputTokens: c.OutputTokens, LatencyMS: c.LatencyMS, FinishReason: c.FinishReason,
-			ActionID: c.ActionID, Code: c.Code}
+			ActionID: c.ActionID, Code: c.Code, RefusalPath: c.RefusalPath, RefusalReason: c.RefusalReason}
 		if c.Cost != nil {
 			m := moneyOf(*c.Cost)
 			v.Cost = &m

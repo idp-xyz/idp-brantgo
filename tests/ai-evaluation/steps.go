@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +34,11 @@ func brcAgentLines() []agentLine {
 // no RFQ draft is the agent's failure (agent_phase), not a person's refused step.
 func (t *trial) draftRFQ(ctx context.Context, lines []agentLine, more ...scriptStep) error {
 	src := t.agentSourceID()
-	steps := []scriptStep{turn(registerExtract(src, fileID), saveRFQ(rfqID, src, t.in, lines))}
+	in := t.in
+	if t.claimed != nil {
+		in = *t.claimed // where the agent says the fields stand, when that is not where they stand
+	}
+	steps := []scriptStep{turn(registerExtract(src, fileID), saveRFQ(rfqID, src, in, lines))}
 	steps = append(steps, more...)
 	steps = append(steps, done("RFQ 草稿已按附件逐行保存，等待负责人逐行核实。"))
 	if _, err := t.runAgent(ctx, agentPhase{name: "rfq", steps: steps, until: lifecycleIs("waiting_input", "paused", "waiting_approval")}); err != nil {
@@ -48,8 +54,11 @@ func (t *trial) draftRFQ(ctx context.Context, lines []agentLine, more ...scriptS
 }
 
 // confirmRFQ is the owner's line-by-line verification (BC-AT27, B4): each line of the agent's draft
-// is compared with the fixed truth; a field that differs or is pending is stated with the true
-// value (a correction), the others are verified as they stand. Through the task-step route.
+// is compared with the fixed truth; a field that differs or is pending is settled from the truth
+// (ownerVerification), the others are verified as they stand. Every field the owner settles is an
+// owner resolution of the trial, synthetic, and INQ records it as the owner's correction: a
+// person's work, never the agent's. A draft the truth cannot repair is the agent's failure
+// (agent_phase), not a person's refused step. Through the task-step route.
 func (t *trial) confirmRFQ(ctx context.Context, truth map[string]map[string]string) error {
 	r, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/inq/rfqs/"+rfqID)
 	if err != nil {
@@ -59,22 +68,107 @@ func (t *trial) confirmRFQ(ctx context.Context, truth map[string]map[string]stri
 	if err = t.checkLocators(ctx, r); err != nil {
 		return err
 	}
-	var verified []any
-	for _, l := range list(r["lines"]) {
+	verified, resolutions, err := ownerVerification(r, truth, t.in)
+	if err != nil {
+		return &phaseError{err: err}
+	}
+	out, err := t.humanStep(ctx, actorClerk, "inq", contractINQ, "rfq.confirm_scope", "h.rfq.confirm", true, map[string]any{"id": rfqID,
+		"expected_version": r["row_version"], "evidence_ids": []string{t.sourceID}, "verified_lines": verified})
+	if err != nil {
+		return err
+	}
+	// Counted once the confirmation that carried them is recorded.
+	t.rec.OwnerResolutions = append(t.rec.OwnerResolutions, resolutions...)
+	t.rfqVersion = stepVersion(out)
+	return nil
+}
+
+// Kinds of an owner resolution.
+const (
+	resolvedPlace     = "place_named"     // a field whose words stand at several places: the owner names the place
+	resolvedValue     = "value_stated"    // a field the draft left pending: the owner states the value
+	resolvedCorrected = "value_corrected" // a field the draft stated otherwise: the owner states the true value
+)
+
+// ownerVerification is what a person who knows the inquiry sends as verified_lines for the agent's
+// RFQ draft (S4 G3): each line of the draft, and for a field the draft leaves pending or states
+// otherwise than the truth, the true value. Where INQ holds a field ambiguous between several
+// places of the source (the agent quoted the right words and did not place them: the unit "PCS"
+// stands in every row), the owner names the place the truth knows the value at, which INQ requires
+// (SOURCE_AMBIGUOUS otherwise) and admits only when it is one of the places it kept. Every field so
+// settled is returned as an owner resolution.
+//
+// What the truth cannot repair is an error: a draft whose lines are not the inquiry's (one missing,
+// one the truth does not have), and an ambiguous field whose true place is not among the places INQ
+// kept (it keeps four; a person would save the line with the place, which the scripted owner does
+// not do).
+func ownerVerification(rfq map[string]any, truth map[string]map[string]string, in inquiry) ([]any, []OwnerResolution, error) {
+	drafted := map[string]bool{}
+	var unknown, missing []string
+	for _, l := range list(rfq["lines"]) {
 		id := str(dig(l, "line_id"))
-		var fields []any
-		pending := map[string]bool{}
-		for _, p := range list(dig(l, "pending")) {
-			pending[str(dig(p, "field"))] = true
+		drafted[id] = true
+		if _, ok := truth[id]; !ok {
+			unknown = append(unknown, id)
 		}
-		for _, f := range []string{fieldSKU, fieldQty, fieldUOM} {
-			want, ok := truth[id][f]
-			if !ok {
+	}
+	for id := range truth {
+		if !drafted[id] {
+			missing = append(missing, id)
+		}
+	}
+	if len(unknown) > 0 || len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, nil, fmt.Errorf("the agent's RFQ draft is not the inquiry's line set (missing %v, not in the truth %v): the owner cannot "+
+			"repair it from the truth", missing, unknown)
+	}
+	var verified []any
+	var resolutions []OwnerResolution
+	for _, l := range list(rfq["lines"]) {
+		id := str(dig(l, "line_id"))
+		reasons, places := map[string]string{}, map[string][]string{}
+		for _, p := range list(dig(l, "pending")) {
+			reasons[str(dig(p, "field"))] = str(dig(p, "reason"))
+		}
+		for _, x := range list(dig(l, "locators")) {
+			f := str(dig(x, "field"))
+			places[f] = append(places[f], str(dig(x, "locator")))
+		}
+		var fields []any
+		for _, f := range []string{fieldSKU, fieldQty, fieldUOM, fieldItem} {
+			current := str(dig(l, f))
+			reason, pending := reasons[f]
+			want, known := truth[id][f]
+			if !known {
+				// The truth states the SKU, the quantity and the unit. The customer's words for the
+				// item are verified as the draft has them, unless the draft left them pending.
+				if !pending {
+					continue
+				}
+				want = current
+				if want == "" {
+					want = in.at[id][f].Quote
+				}
+			}
+			if !pending && current == want {
 				continue
 			}
-			if pending[f] || str(dig(l, f)) != want {
-				fields = append(fields, map[string]any{"field": f, "value": want})
+			field := map[string]any{"field": f, "value": want}
+			res := OwnerResolution{LineID: id, Field: f, Kind: resolvedValue, PendingReason: reason, From: current, To: want, Synthetic: true}
+			switch {
+			case !pending:
+				res.Kind = resolvedCorrected
+			case reason == pendingAmbiguous && len(places[f]) > 1:
+				at, ok := in.at[id][f]
+				if !ok || !slices.Contains(places[f], at.Locator) {
+					return nil, nil, fmt.Errorf("line %s field %s is ambiguous between %v and the truth's place %q is not among them: the owner "+
+						"cannot name it", id, f, places[f], at.Locator)
+				}
+				field["locator"] = at.Locator
+				res.Kind, res.Locator = resolvedPlace, at.Locator
 			}
+			fields = append(fields, field)
+			resolutions = append(resolutions, res)
 		}
 		v := map[string]any{"line_id": id}
 		if len(fields) > 0 {
@@ -82,14 +176,11 @@ func (t *trial) confirmRFQ(ctx context.Context, truth map[string]map[string]stri
 		}
 		verified = append(verified, v)
 	}
-	out, err := t.humanStep(ctx, actorClerk, "inq", contractINQ, "rfq.confirm_scope", "h.rfq.confirm", true, map[string]any{"id": rfqID,
-		"expected_version": r["row_version"], "evidence_ids": []string{t.sourceID}, "verified_lines": verified})
-	if err != nil {
-		return err
-	}
-	t.rfqVersion = stepVersion(out)
-	return nil
+	return verified, resolutions, nil
 }
+
+// pendingAmbiguous is INQ's pending reason of a field that fits several values or places.
+const pendingAmbiguous = "ambiguous"
 
 // checkLocators is the reviewer's reading of the file's extract (BC-AT27 字段定位; S4 B4): the owner
 // reads the located form EVD registered for the inquiry over HTTP and checks that every locator of

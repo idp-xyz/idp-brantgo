@@ -79,7 +79,7 @@ func (s *server) tskRoutes(mux *http.ServeMux) {
 // tskReads are TSK's read routes and the task-step route in the OpenAPI document.
 var tskReads = []readRoute{
 	{"/api/brant/v1/tsk/tasks/{id}", "tsk.task.get", "tsk",
-		"A business task: goal and version, lifecycle, control mode, the control epoch recorded from TRD and the binding of its quote root, owner, agent, target, source (kind evd_source, evd_file or rfq, and the id of that EVD source, uploaded EVD file or RFQ), budget, execution bundle, what it waits for or why it is paused or stopping, how it ended, and its append-only history (task.get)", []string{"id"}, false},
+		"A business task: goal and version, lifecycle, control mode, the control epoch recorded from TRD and the binding of its quote root, owner, agent, target, source (kind evd_source, evd_file or rfq, and the id of that EVD source, uploaded EVD file or RFQ), budget, execution bundle, what it waits for or why it is paused or stopping, how it ended, and its append-only history, in which a resume keeps what it named as arrived (arrival: kind, id, version) (task.get)", []string{"id"}, false},
 	{"/api/brant/v1/tsk/tasks/{id}/verifications", "tsk.task.verification.list", "tsk",
 		"The goal verifications of a task, oldest first: who judged, the outcome and its code, the unmet assertions, every assertion with its checks and evidence, the records judged and TRD's control of a bound root (task.verifications)", []string{"id"}, false},
 	{"/api/brant/v1/tsk/tasks/{id}/actions", "tsk.action.list", "tsk",

@@ -716,9 +716,11 @@ func TestResume(t *testing.T) {
 	if _, err := tk.Resume("model back", nil, 0, sys); code(err) != kernel.CodePermissionDenied {
 		t.Fatalf("a system actor resumes a paused task: %s", code(err))
 	}
-	ok(t)(tk.Resume("model back", nil, 0, hum))
-	if tk.State != WaitingExternal || tk.PauseCond != nil || tk.PausedFrom != "" || tk.WaitCond.Awaiting.Kind != "customer_response" {
-		t.Fatalf("%+v", tk)
+	back, err := tk.Resume("model back", nil, 0, hum)
+	must(t, back, err)
+	if tk.State != WaitingExternal || tk.PauseCond != nil || tk.PausedFrom != "" || tk.WaitCond.Awaiting.Kind != "customer_response" ||
+		back.Arrival != nil {
+		t.Fatalf("%+v %+v", tk, back)
 	}
 	if _, err := tk.Resume("", nil, 0, sys); code(err) != kernel.CodeSchemaInvalid {
 		t.Fatalf("a waiting task resumes on an arrival: %s", code(err))
@@ -726,10 +728,24 @@ func TestResume(t *testing.T) {
 	if _, err := tk.Resume("", &Ref{Kind: "acceptance", ID: "acc.1", Version: 1}, 0, hum); code(err) != kernel.CodePermissionDenied {
 		t.Fatalf("a human resumes a waiting task: %s", code(err))
 	}
-	ch, err := tk.Resume("", &Ref{Kind: "acceptance", ID: "acc.1", Version: 1}, 0, sys)
+	arrived := &Ref{Kind: "acceptance", ID: "acc.1", Version: 1}
+	ch, err := tk.Resume("", arrived, 0, sys)
 	must(t, ch, err)
 	if tk.State != Running || ch.Reason != "arrived: acceptance acc.1" {
 		t.Fatalf("%+v %+v", tk, ch)
+	}
+	// The change keeps what arrived as given (S4 G3), a copy the caller cannot change afterwards,
+	// also when the resume states a reason of its own.
+	arrived.ID = "changed"
+	if ch.Arrival == nil || *ch.Arrival != (Ref{Kind: "acceptance", ID: "acc.1", Version: 1}) {
+		t.Fatalf("the change's arrival: %+v", ch.Arrival)
+	}
+	again := running(t, ModeAI)
+	ok(t)(again.Wait(WaitRequest{Wait: WaitInput, Reason: "reply", Responsible: "alice", Items: []string{"the customer's reply"}}, sys))
+	named, err := again.Resume("客户回复已到达", &Ref{Kind: "evd_source", ID: "mail.reply"}, 0, sys)
+	must(t, named, err)
+	if named.Reason != "客户回复已到达" || named.Arrival == nil || *named.Arrival != (Ref{Kind: "evd_source", ID: "mail.reply"}) {
+		t.Fatalf("a resume with a reason of its own: %+v", named)
 	}
 
 	// Paused before the scope was settled: the human who resumes it settles the scope.

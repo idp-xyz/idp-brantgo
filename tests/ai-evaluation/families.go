@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -89,6 +90,11 @@ var fixedSet = []*family{
 		goalCode: "quote_ready",
 		expected: "delegated reads succeed, are hashed in the ledger and are not TSK actions; an undelegated read and a foreign object are refused; bank_account is refused; the bundle lists the reads",
 		run:      runReads, grade: gradeReads},
+	{name: "feedback", design: []string{"S4-03", "S4-07", "G3", "BC-AT27", "BC-AT28", "SD-07"},
+		goal:     "the agent makes the live trials' mistakes: it places every field at its row's start, and its first quote draft has no unit price",
+		goalCode: "quote_ready", input: kindText,
+		expected: "INQ holds each line's unit ambiguous and the owner names its place (4 owner resolutions, synthetic: extra human work, not the AI's); the refused quote draft is in the ledger with its path and the next turn's draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
+		run:      runFeedback, grade: gradeFeedback},
 }
 
 func init() {
@@ -916,6 +922,96 @@ func runReads(ctx context.Context, t *trial) error {
 			call{"rfq.get", map[string]any{"RfqID": "rfq.other-tenant"}},
 			call{"config.lookup", map[string]any{"Kind": "bank_account"}},
 		))
+}
+
+// runFeedback is the scripted suite's run of the mistakes the live model made on 2026-11-18 (S4
+// G3). The RFQ draft quotes every field's own words and places all of them where the row begins;
+// the gateway's locating moves the quotes that stand at one place and keeps every place of the
+// unit, which stands in every row, so INQ holds each line's unit ambiguous: the owner names the
+// place (confirmRFQ, an owner resolution a line). The first quote draft has no unit price and is
+// refused; with one model call a turn, the corrected draft is the next turn's, which starts from
+// facts that list the refusal. The scripted model cannot read a refusal: that a model which reads
+// it converges, and one that is not told does not, is proved by the composed test
+// TestAgentLearnsAQuoteDraftFromRefusalsAndFacts. Here the records are graded over HTTP.
+func runFeedback(ctx context.Context, t *trial) error {
+	claimed := t.in.atRowStart()
+	t.claimed = &claimed
+	if err := t.draftRFQ(ctx, brcAgentLines()); err != nil {
+		return err
+	}
+	if err := t.confirmRFQ(ctx, brcTruth()); err != nil {
+		return err
+	}
+	if err := t.costQuote(ctx); err != nil {
+		return err
+	}
+	expires := time.Now().Add(72 * time.Hour)
+	good := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, unitPrice, expires)
+	bad := quoteData(t.w, rfqID, t.rfqVersion, t.snap, t.sourceID, unitPrice, expires)
+	for _, l := range bad["Lines"].([]any) {
+		delete(l.(map[string]any), "UnitPrice")
+	}
+	steps := []scriptStep{turn(saveQuote(quoteID, bad)), turn(saveQuote(quoteID, good)), done("报价草稿已按拒绝原因更正并保存。")}
+	if _, err := t.runAgent(ctx, agentPhase{name: "quote", steps: steps, maxSteps: 1, until: lifecycleIs("waiting_input", "paused")}); err != nil {
+		return err
+	}
+	if t.quoteRoot = t.actionVersion(ctx, "quote.save_draft"); t.quoteRoot == 0 {
+		return &phaseError{err: errors.New("the task's records show no committed quote.save_draft")}
+	}
+	if err := t.freezeAndReview(ctx, 1); err != nil {
+		return err
+	}
+	if err := t.activateQuote(ctx); err != nil {
+		return err
+	}
+	return t.verifyPhase(ctx)
+}
+
+func gradeFeedback(ctx context.Context, t *trial) {
+	t.assertCompleted(ctx, "quote_ready", "ai_with_required_review")
+	t.assertPayable(ctx, "96000")
+	// The owner named the place of each line's unit, the truth's; nothing else needed settling.
+	named := 0
+	for _, o := range t.rec.OwnerResolutions {
+		if o.Kind == resolvedPlace && o.Field == fieldUOM && o.PendingReason == pendingAmbiguous && o.Locator == t.in.at[o.LineID][fieldUOM].Locator &&
+			o.Synthetic {
+			named++
+		}
+	}
+	t.assert("owner resolutions: the place of a line's unit named", "4 of 4", fmt.Sprintf("%d of %d", named, len(t.rec.OwnerResolutions)))
+	// INQ's own record of them: the owner's corrections of what the agent proposed.
+	recorded := 0
+	for _, c := range t.rec.Corrections {
+		if str(c["kind"]) == "verified" && str(c["field"]) == fieldUOM && str(c["reason"]) == pendingAmbiguous && str(c["locator"]) != "" &&
+			str(dig(c, "proposed_by", "id")) == t.agentID && str(dig(c, "corrected_by", "id")) == actorClerk {
+			recorded++
+		}
+	}
+	t.assert("INQ corrections: verified at the named place, proposed by the agent, corrected by the owner", "4 of 4",
+		fmt.Sprintf("%d of %d", recorded, len(t.rec.Corrections)))
+	t.assert("automation level", "extra_human_work", t.rec.Automation)
+	// The ledger keeps where the first quote draft was refused; one draft committed.
+	var refused []string
+	if mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls"); err == nil {
+		for _, x := range list(mc["calls"]) {
+			if str(dig(x, "tool_command")) == "quote.save_draft" && str(dig(x, "state")) == "failed" {
+				refused = append(refused, str(dig(x, "code"))+" "+str(dig(x, "refusal_path")))
+			}
+		}
+	}
+	t.assert("the refused quote draft in the ledger, with its path", "SCHEMA_INVALID /args/data/lines/0/unit_price", strings.Join(refused, "; "))
+	t.assert("committed quote.save_draft actions", "1", fmt.Sprint(t.countActions(ctx, "quote.save_draft")))
+	// TSK keeps what the task was resumed with on the history row of each resume.
+	var arrivals []string
+	if v, err := t.task(ctx); err == nil {
+		for _, h := range list(v["history"]) {
+			if a := dig(h, "arrival"); a != nil {
+				arrivals = append(arrivals, str(dig(h, "command"))+" "+str(dig(a, "kind"))+" "+str(dig(a, "id")))
+			}
+		}
+	}
+	t.rec.Authority["arrivals"] = arrivals
+	t.assert("TSK history: the first resume's arrival", "task.resume rfq "+rfqID, strings.Join(arrivals[:min(1, len(arrivals))], ""))
 }
 
 func gradeReads(ctx context.Context, t *trial) {

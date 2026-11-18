@@ -851,7 +851,10 @@ type TerminationView struct {
 
 // TransitionView is one entry of a task's append-only history: a command, the states and control
 // it moved between, who issued it under which authority epoch, and ControlChange for a control
-// transition (bind, take_control, handoff, cancel, finish_stop, release; empty otherwise).
+// transition (bind, take_control, handoff, cancel, finish_stop, release; empty otherwise). Arrival
+// is what a task.resume named as arrived, as given (S4 G3; nil for every other entry and for a
+// resume that named none): whoever continues the task finds there what it was resumed with — the
+// source of the customer's reply, the verified acceptance, the approval grant.
 type TransitionView struct {
 	Seq            int64
 	Command        string
@@ -865,6 +868,7 @@ type TransitionView struct {
 	AuthorityEpoch int64
 	At             time.Time
 	Reason         string
+	Arrival        *ObjectRef
 }
 
 // TaskView is a task as the reads show it.

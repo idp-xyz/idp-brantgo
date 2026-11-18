@@ -61,6 +61,7 @@ type trial struct {
 	ops      map[string]*actor
 	w        *world
 	in       inquiry
+	claimed  *inquiry // the places the scripted agent claims for the fields, when not the file's own (family feedback)
 	rec      *TrialRecord
 	ownAPI   *proc // AN06: the trial's own brant-api
 	issued   map[string]bool
@@ -550,6 +551,11 @@ func automationOf(r *TrialRecord) string {
 		if k := str(c["kind"]); k != "verified" {
 			return "extra_human_work"
 		}
+	}
+	// A field of the agent's draft that a person had to settle — a place named for an ambiguous
+	// field is recorded by INQ as verified — is extra human work too (S4 G3).
+	if len(r.OwnerResolutions) > 0 {
+		return "extra_human_work"
 	}
 	for _, h := range r.HumanSteps {
 		if !h.Required && h.Outcome == "ok" {

@@ -111,34 +111,38 @@ type Probe struct {
 
 // TrialRecord is one trial, kept whatever its outcome.
 type TrialRecord struct {
-	Family          string             `json:"family"`
-	Trial           int                `json:"trial"`
-	TrialID         string             `json:"trial_id"`
-	Design          []string           `json:"design"`
-	Goal            string             `json:"goal"`
-	Input           InputRecord        `json:"input"`
-	Expected        string             `json:"expected"`
-	Outcome         string             `json:"outcome"`
-	Pass            bool               `json:"pass"`
-	Failure         string             `json:"failure,omitempty"`
-	Error           string             `json:"error,omitempty"`
-	TaskID          string             `json:"task_id"`
-	Lifecycle       string             `json:"lifecycle"`
-	CompletionActor string             `json:"completion_actor,omitempty"`
-	GoalCompleted   bool               `json:"goal_completed"`
-	Automation      string             `json:"automation"`
-	Assertions      []Assertion        `json:"assertions"`
-	Authority       map[string]any     `json:"authority"`
-	Corrections     []map[string]any   `json:"corrections"`
-	HumanSteps      []HumanStep        `json:"human_steps"`
-	Refusals        []string           `json:"refusals,omitempty"`
-	Cost            CostRecord         `json:"cost"`
-	Phases          []PhaseRecord      `json:"phases"`
-	Verifications   []map[string]any   `json:"verifications,omitempty"`
-	Budget          *Budget            `json:"budget,omitempty"`
-	Seconds         float64            `json:"seconds"`
-	Notes           []string           `json:"notes,omitempty"`
-	extra           map[string]float64 // per-trial values the family's grader reads
+	Family          string           `json:"family"`
+	Trial           int              `json:"trial"`
+	TrialID         string           `json:"trial_id"`
+	Design          []string         `json:"design"`
+	Goal            string           `json:"goal"`
+	Input           InputRecord      `json:"input"`
+	Expected        string           `json:"expected"`
+	Outcome         string           `json:"outcome"`
+	Pass            bool             `json:"pass"`
+	Failure         string           `json:"failure,omitempty"`
+	Error           string           `json:"error,omitempty"`
+	TaskID          string           `json:"task_id"`
+	Lifecycle       string           `json:"lifecycle"`
+	CompletionActor string           `json:"completion_actor,omitempty"`
+	GoalCompleted   bool             `json:"goal_completed"`
+	Automation      string           `json:"automation"`
+	Assertions      []Assertion      `json:"assertions"`
+	Authority       map[string]any   `json:"authority"`
+	Corrections     []map[string]any `json:"corrections"`
+	// OwnerResolutions are the fields of the agent's RFQ draft the scripted owner settled from the
+	// trial's fixed truth at the confirmation (S4 G3): a place named, a value stated or corrected.
+	// Each is a person's work, synthetic, never the agent's; INQ's record of it is among Corrections.
+	OwnerResolutions []OwnerResolution  `json:"owner_resolutions"`
+	HumanSteps       []HumanStep        `json:"human_steps"`
+	Refusals         []string           `json:"refusals,omitempty"`
+	Cost             CostRecord         `json:"cost"`
+	Phases           []PhaseRecord      `json:"phases"`
+	Verifications    []map[string]any   `json:"verifications,omitempty"`
+	Budget           *Budget            `json:"budget,omitempty"`
+	Seconds          float64            `json:"seconds"`
+	Notes            []string           `json:"notes,omitempty"`
+	extra            map[string]float64 // per-trial values the family's grader reads
 }
 
 // InputRecord is the trial's inquiry file.
@@ -157,6 +161,22 @@ type Assertion struct {
 	Want string `json:"want"`
 	Got  string `json:"got"`
 	Pass bool   `json:"pass"`
+}
+
+// OwnerResolution is one field of the agent's RFQ draft that the scripted owner settled from the
+// trial's fixed truth when confirming the RFQ, as a person who knows the inquiry would (decision
+// E-7 a): Kind place_named — the field's words stand at several places of the source and the owner
+// named the one the value was read at —, value_stated — the draft left the field pending and the
+// owner stated it —, or value_corrected — the draft stated another value. It is always synthetic.
+type OwnerResolution struct {
+	LineID        string `json:"line_id"`
+	Field         string `json:"field"`
+	Kind          string `json:"kind"`
+	PendingReason string `json:"pending_reason,omitempty"` // INQ's reason the field was pending for
+	From          string `json:"from,omitempty"`           // the draft's value
+	To            string `json:"to"`                       // the value the owner verified
+	Locator       string `json:"locator,omitempty"`        // the place the owner named
+	Synthetic     bool   `json:"synthetic"`
 }
 
 // HumanStep is a step the scripted human operator took. Every one is synthetic (decision E-7):
@@ -234,6 +254,7 @@ type FamilySummary struct {
 	Tokens           int64          `json:"tokens"`
 	Cost             string         `json:"cost"`
 	HumanCorrections int            `json:"human_corrections"`
+	OwnerResolutions int            `json:"owner_resolutions"` // fields of the agent's RFQ drafts the scripted owner settled; among the corrections
 	HumanSteps       int            `json:"human_steps"`
 	MeanSeconds      float64        `json:"mean_seconds"`
 }
@@ -249,6 +270,7 @@ type Totals struct {
 	Tokens           int64   `json:"tokens"`
 	Cost             string  `json:"cost"`
 	HumanCorrections int     `json:"human_corrections"`
+	OwnerResolutions int     `json:"owner_resolutions"`
 	HumanSteps       int     `json:"human_steps"`
 	Seconds          float64 `json:"seconds"`
 }
@@ -300,6 +322,7 @@ func (r *EvalRun) summarize(families []*family) {
 			s.Tokens += t.Cost.InputTokens + t.Cost.OutputTokens
 			cost += minorOf(t.Cost.Cost)
 			s.HumanCorrections += len(t.Corrections)
+			s.OwnerResolutions += len(t.OwnerResolutions)
 			s.HumanSteps += len(t.HumanSteps)
 			seconds += t.Seconds
 		}
@@ -321,6 +344,7 @@ func (r *EvalRun) summarize(families []*family) {
 		r.Totals.ToolCalls += s.ToolCalls
 		r.Totals.Tokens += s.Tokens
 		r.Totals.HumanCorrections += s.HumanCorrections
+		r.Totals.OwnerResolutions += s.OwnerResolutions
 		r.Totals.HumanSteps += s.HumanSteps
 		r.Totals.Seconds = round(r.Totals.Seconds+seconds, 2)
 	}
@@ -338,7 +362,7 @@ func (t *TrialRecord) signature() string {
 	for _, p := range t.Phases {
 		fmt.Fprintf(&b, ";%s:%d/%d", p.Name, p.ModelCalls, p.ToolCalls)
 	}
-	fmt.Fprintf(&b, ";corrections=%d", len(t.Corrections))
+	fmt.Fprintf(&b, ";corrections=%d;resolutions=%d", len(t.Corrections), len(t.OwnerResolutions))
 	return b.String()
 }
 
@@ -385,7 +409,7 @@ func (r *EvalRun) markdown() string {
 	fmt.Fprintf(&b, "- reviewer: %s\n- environment: %s, %s, %d CPUs, %s; %s\n", r.Reviewer, r.Environment.OS, r.Environment.GoVersion,
 		r.Environment.CPUs, r.Environment.Database, r.Environment.Processes)
 	fmt.Fprintf(&b, "- phase timeout: %s\n- agent trace: %s\n\n", r.Environment.PhaseTimeout, r.Environment.AgentTrace)
-	b.WriteString("| family | design | goal | expected | trials | passed | goal completed (AI) | outcomes | first | consistent | model calls | tool calls | tokens | cost | human corrections | human steps | mean s |\n")
+	b.WriteString("| family | design | goal | expected | trials | passed | goal completed (AI) | outcomes | first | consistent | model calls | tool calls | tokens | cost | human corrections (owner resolutions) | human steps | mean s |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, f := range r.Families {
 		var outcomes []string
@@ -393,13 +417,15 @@ func (r *EvalRun) markdown() string {
 			outcomes = append(outcomes, fmt.Sprintf("%s %d", k, v))
 		}
 		sort.Strings(outcomes)
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %d | %d | %d (%d) | %s | %v | %v | %d | %d | %d | %s | %d | %d | %.1f |\n", f.Family,
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %d | %d | %d (%d) | %s | %v | %v | %d | %d | %d | %s | %d (%d) | %d | %.1f |\n", f.Family,
 			strings.Join(f.Design, ", "), f.Goal, f.Expected, f.Trials, f.Passed, f.GoalCompleted, f.AICompleted, strings.Join(outcomes, ", "),
-			f.FirstTrialPassed, f.Consistent, f.ModelCalls, f.ToolCalls, f.Tokens, f.Cost, f.HumanCorrections, f.HumanSteps, f.MeanSeconds)
+			f.FirstTrialPassed, f.Consistent, f.ModelCalls, f.ToolCalls, f.Tokens, f.Cost, f.HumanCorrections, f.OwnerResolutions, f.HumanSteps,
+			f.MeanSeconds)
 	}
 	t := r.Totals
-	fmt.Fprintf(&b, "\nTotals: %d trials, %d passed, %d goals completed (%d by the AI with the required reviews), %d model calls, %d tool calls, %d tokens, cost %s, %d human corrections (synthetic), %d human steps (synthetic), %.1f s.\n",
-		t.Trials, t.Passed, t.GoalCompleted, t.AICompleted, t.ModelCalls, t.ToolCalls, t.Tokens, t.Cost, t.HumanCorrections, t.HumanSteps, t.Seconds)
+	fmt.Fprintf(&b, "\nTotals: %d trials, %d passed, %d goals completed (%d by the AI with the required reviews), %d model calls, %d tool calls, %d tokens, cost %s, %d human corrections (synthetic; %d of them fields of the agent's RFQ drafts that the scripted owner settled from the truth: a person's work, not the AI's), %d human steps (synthetic), %.1f s.\n",
+		t.Trials, t.Passed, t.GoalCompleted, t.AICompleted, t.ModelCalls, t.ToolCalls, t.Tokens, t.Cost, t.HumanCorrections, t.OwnerResolutions,
+		t.HumanSteps, t.Seconds)
 	if len(r.Probes) > 0 {
 		b.WriteString("\n## Probes\n\n")
 		for _, p := range r.Probes {
@@ -421,6 +447,17 @@ func (r *EvalRun) markdown() string {
 		}
 		if len(tr.Refusals) > 0 {
 			lines = append(lines, "refusals: "+strings.Join(tr.Refusals, "; "))
+		}
+		if len(tr.OwnerResolutions) > 0 {
+			var settled []string
+			for _, o := range tr.OwnerResolutions {
+				s := o.LineID + " " + o.Field + " " + o.Kind
+				if o.Locator != "" {
+					s += " " + o.Locator
+				}
+				settled = append(settled, s)
+			}
+			lines = append(lines, "settled by the scripted owner (synthetic, not the AI's work): "+strings.Join(settled, "; "))
 		}
 		// Why an agent phase of a trial that missed its outcome stopped (report.json has it for
 		// every phase that asked the model and committed nothing).

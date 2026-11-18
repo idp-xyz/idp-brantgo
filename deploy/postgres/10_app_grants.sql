@@ -569,6 +569,8 @@ GRANT UPDATE (status, row_version, used_key, used_by_id, used_epoch, used_at, re
 GRANT SELECT, INSERT ON brant_ai.execution_bundle, brant_ai.task_budget, brant_ai.model_call TO brant_app;
 GRANT UPDATE (state, model_returned, input_sha256, output_sha256, input_tokens, output_tokens, latency_ms, finish_reason,
     action_id, code, cost_minor, settled_at) ON brant_ai.model_call TO brant_app;
+-- A refused tool call is settled with where and why it was refused (S4 unit G3, ai 000004).
+GRANT UPDATE (refusal_path, refusal_reason) ON brant_ai.model_call TO brant_app;
 -- A reservation locks its task's budget row FOR UPDATE, which needs UPDATE on one column; the trigger
 -- refuses every change of a budget.
 GRANT UPDATE (source) ON brant_ai.task_budget TO brant_app;
