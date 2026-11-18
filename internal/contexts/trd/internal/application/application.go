@@ -141,6 +141,8 @@ type Upstream struct {
 	Rfqs      inqapi.RfqLookups      // RfqRef v1 (R12)
 	Snapshots cstapi.SnapshotLookups // CostSnapshotRef v1 (R11)
 	Contexts  cstapi.Lookups         // the costing context a snapshot froze (R11)
+	// Prices is POL's sales price list as the price proposal reads it (R15; owner decision 2026-11-18).
+	Prices polapi.SalesPriceQueries
 }
 
 // Numbers is POL's NumberIssue v1 (Context Map R15): number.issue, which POL runs as the actor in

@@ -58,6 +58,7 @@ var (
 	_ api.Reconciler            = (*Module)(nil)
 	_ api.ActionReconciler      = (*Module)(nil)
 	_ api.GoalQueries           = (*Module)(nil)
+	_ api.PriceProposalQueries  = (*Module)(nil)
 )
 
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,
@@ -75,6 +76,9 @@ type Upstream struct {
 	Rfqs      inqapi.RfqLookups
 	Snapshots cstapi.SnapshotLookups
 	Contexts  cstapi.Lookups
+	// Prices is POL's lookup of the sales price list (polapi.SalesPriceQueries), which the price
+	// proposal reads before TRD's transaction (R15; owner decision 2026-11-18).
+	Prices polapi.SalesPriceQueries
 	// Credit is STL's CreditGuard v1 (STLCreditGuard) and TradeCompliance CNX's
 	// TradeComplianceGuard v1 (CNXTradeComplianceGuard). Both are guard functions run with TRD's
 	// own executor, so TRD is composed before STL and CNX exist as modules (S5 decision D-2).
@@ -129,8 +133,8 @@ func CNXTradeComplianceGuard() TradeComplianceGuard { return guards.CNXTradeComp
 // activate with a recorded gap where TRD-INV-022 and TRD-INV-023 ask for a verdict.
 func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	if up.Sources == nil || up.Parties == nil || up.Profiles == nil || up.Skus == nil || up.Configs == nil || up.Numbers == nil ||
-		up.Rfqs == nil || up.Snapshots == nil || up.Contexts == nil {
-		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL, INQ and CST and POL's number.issue")
+		up.Rfqs == nil || up.Snapshots == nil || up.Contexts == nil || up.Prices == nil {
+		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL (with its sales price list), INQ and CST and POL's number.issue")
 	}
 	if up.Credit == nil || up.TradeCompliance == nil {
 		return nil, errors.New("trd: module needs STL's CreditGuard and CNX's TradeComplianceGuard")
@@ -151,7 +155,7 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 		Orders: application.OrderGuards{Credit: up.Credit, TradeCompliance: up.TradeCompliance},
 		Facts:  application.OrderFacts{Shipments: up.Shipments, Commitments: up.Commitments},
 		Upstream: application.Upstream{Sources: up.Sources, Parties: up.Parties, Profiles: up.Profiles, Skus: up.Skus, Configs: up.Configs,
-			Numbers: up.Numbers, Rfqs: up.Rfqs, Snapshots: up.Snapshots, Contexts: up.Contexts},
+			Numbers: up.Numbers, Rfqs: up.Rfqs, Snapshots: up.Snapshots, Contexts: up.Contexts, Prices: up.Prices},
 		Ledger: &action.Ledger{
 			DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 			Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetQuote, Visible: application.Visible,

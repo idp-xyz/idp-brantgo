@@ -180,6 +180,9 @@ func (s Service) Publish(ctx context.Context, cmd api.Publish) (api.Receipt, err
 		if err != nil {
 			return action.Outcome{}, err
 		}
+		if err = singleSalesPrice(ctx, exec, h.root); err != nil {
+			return action.Outcome{}, err
+		}
 		// The publisher must be able to read every source it cites (Python publish: _sources after
 		// the state, independence and validity checks).
 		for i, id := range cmd.EvidenceIDs {

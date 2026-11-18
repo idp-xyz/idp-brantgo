@@ -128,6 +128,9 @@ const (
 	// KindExportTaxPolicy is the export tax refund method that applies to the company's exports, as
 	// its professional review verified it (CN-F01, CN-D02, CN-R08; CN-AT12; Context Map R50).
 	KindExportTaxPolicy = "export_tax_policy"
+	// KindSalesPrice is one price of the sales price list: the price of one SKU in one currency,
+	// for every customer or for one (owner decision 2026-11-18; sales_price.go).
+	KindSalesPrice = "sales_price"
 )
 
 // Closed values of configuration data.
@@ -203,7 +206,7 @@ var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
 		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy, KindLegalTerms,
-		KindOrderDocumentTemplate, KindShipmentDocumentTemplate, KindExportTaxPolicy}
+		KindOrderDocumentTemplate, KindShipmentDocumentTemplate, KindExportTaxPolicy, KindSalesPrice}
 	implemented      = slices.Clone(kinds)
 	purposes         = []string{PurposeCostEstimate, PurposeQuotation, PurposeCredit, PurposeSettlement}
 	snapshotPurposes = []string{PurposeCostEstimate, PurposeQuotation}
@@ -218,7 +221,7 @@ var (
 // PercentFormat is the lexical form of a payment stage's percentage.
 var PercentFormat = kernel.DecimalFormat{IntDigits: 3, Scale: 6}
 
-// KindKnown reports whether kind is one of the twenty-two configuration kinds.
+// KindKnown reports whether kind is one of the twenty-three configuration kinds.
 func KindKnown(kind string) bool { return slices.Contains(kinds, kind) }
 
 // KindImplemented reports whether POL accepts configurations of kind yet.

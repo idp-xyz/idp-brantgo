@@ -716,6 +716,10 @@
           "quote_valid_days": {
             "type": "integer"
           },
+          "target_margin": {
+            "minLength": 1,
+            "type": "string"
+          },
           "tax_profile": {
             "additionalProperties": false,
             "properties": {
@@ -766,6 +770,36 @@
             "type": "array"
           },
           "title": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pol.sales_price": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "party_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "price_basis_quantity": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sku_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "unit": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "unit_price": {
             "minLength": 1,
             "type": "string"
           }
@@ -30109,6 +30143,10 @@
                           {
                             "$ref": "#/components/schemas/pol.quote_document_template",
                             "title": "quote_document_template"
+                          },
+                          {
+                            "$ref": "#/components/schemas/pol.sales_price",
+                            "title": "sales_price"
                           },
                           {
                             "$ref": "#/components/schemas/pol.screening_regulation",
@@ -78594,6 +78632,134 @@
           }
         },
         "summary": "A formal quote document: its binding and bytes (Base64), verified on read",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/rfqs/{id}/price_proposal": {
+      "get": {
+        "operationId": "trd.quote.price_proposal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pricing_policy_revision",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pricing_policy_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cost_snapshot_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cost_snapshot_result_hash",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object as the caller may see it."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "The price proposal of a ready RFQ's lines (?currency=, the quote currency's code; pricing_policy_id and pricing_policy_revision, the pricing policy the quote binds; cost_snapshot_id with cost_snapshot_result_hash, the cost snapshot it adopts, optional; customer_id optional, the RFQ's customer): per line the sales price in force for its SKU (the customer's own before the general one), otherwise the snapshot's unit cost ÷ (1 − the policy's target margin) rounded HALF_UP to the currency's minor units, otherwise none with the reason; with the margin the price gives on the snapshot's cost and whether it is under the policy's minimum margin. It is a proposal: quote.save_draft takes the price its author sends",
         "tags": [
           "trd"
         ]
