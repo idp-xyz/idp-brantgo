@@ -687,6 +687,72 @@ func TestQuoteDraftReferencesTakeTheKindsTheSchemaStates(t *testing.T) {
 	}
 }
 
+// A draft whose lines name no place of their own (the live trials of 2026-11-18,
+// bin/ai-eval/live-20261118T100220Z and …100617Z normal-2): the model placed every field of every
+// line where its words stand and left RfqLine.Locator out, and the owner's rfq.confirm_scope was
+// DRAFT_NOT_READY at /args/lines/0/locator. By the owner's decision of that day the gateway's
+// locating gives such a line the row its fields stand in, so the agent's draft is one a person can
+// confirm as it stands. INQ is unchanged: the same lines saved without the gateway are refused.
+func TestALineWithoutItsPlaceIsConfirmedAtTheRowOfItsFields(t *testing.T) {
+	w := newAgentWorld(t, false)
+	text := "SYNTHETIC INQUIRY G5 - not a real customer\nFrom: customer.1 (contact.1)\nCode | Item | Qty | Unit\n" +
+		"sku.1 | synthetic shirt red | 120 | PCS\nsku.1 | synthetic shirt blue | 60 | PCS\n"
+	w.rawFile(w.clerk, "file.g5", "inquiry.txt", evdapi.MimeText, []byte(text))
+	// Each field at its own place in rows 4 and 5, as the live model placed them.
+	fields := map[string][]inqapi.FieldLocator{
+		"L1": {{Field: "sku_id", Locator: "4:1", Quote: "sku.1"}, {Field: "requested_item", Locator: "4:9", Quote: "synthetic shirt red"},
+			{Field: "quantity", Locator: "4:31", Quote: "120"}, {Field: "uom", Locator: "4:37", Quote: "PCS"}},
+		"L2": {{Field: "sku_id", Locator: "5:1", Quote: "sku.1"}, {Field: "requested_item", Locator: "5:9", Quote: "synthetic shirt blue"},
+			{Field: "quantity", Locator: "5:32", Quote: "60"}, {Field: "uom", Locator: "5:37", Quote: "PCS"}},
+	}
+	line := func(id, item, qty string) map[string]any {
+		var locators []map[string]string
+		for _, x := range fields[id] {
+			locators = append(locators, at(x.Field, x.Locator, x.Quote))
+		}
+		return map[string]any{"LineID": id, "SkuID": "sku.1", "RequestedItem": item, "Quantity": qty, "UOM": "PCS", "SourceID": "src.g5",
+			"Locators": locators}
+	}
+	m := model.NewScripted("scripted-q01-v1", calls(registerExtractCall("c1", "src.g5", "file.g5")),
+		calls(tc("c2", inqapi.CommandSaveRfq, map[string]any{"RfqID": "rfq.g5", "CustomerID": "customer.1", "ContactID": "contact.1",
+			"SourceIDs": []string{"src.g5"}, "Lines": []map[string]any{line("L1", "synthetic shirt red", "120"),
+				line("L2", "synthetic shirt blue", "60")}})), done("RFQ 草稿已保存。"))
+	r := w.runner(m)
+	w.sourcedTask("task.g5.rfq", tskapi.Target{RfqID: "rfq.g5", CustomerID: "customer.1"}, tskapi.SourceRef{Kind: tskapi.SourceFile, ID: "file.g5"},
+		bundleRef(r), evdapi.CommandRegisterSource, inqapi.CommandSaveRfq)
+	if res := w.turnOn(r, "task.g5.rfq"); len(res.Receipts) != 2 || len(res.Refusals) != 0 || m.Remaining() != 0 {
+		t.Fatalf("the drafting turn %+v", res)
+	}
+	rfq, err := w.c.INQ.GetRfq(w.clerk, "rfq.g5")
+	w.must(err)
+	for i, row := range []string{"4:1", "5:1"} {
+		if l := rfq.Lines[i]; l.Locator != row || len(l.Pending) != 0 || !slices.Equal(l.Locators, fields[l.LineID]) {
+			t.Fatalf("line %d after the locating: place %q, pending %+v, locators %+v", i, l.Locator, l.Pending, l.Locators)
+		}
+	}
+	// The owner verifies each line as it stands; nothing is left to settle.
+	_, err = w.c.INQ.ConfirmRfqScope(w.clerk, inqapi.ConfirmRfqScope{IdempotencyKey: w.key(), RfqID: "rfq.g5", ExpectedVersion: rfq.RowVersion,
+		EvidenceIDs: []string{"src.g5"}, VerifiedLines: []inqapi.LineVerification{{LineID: "L1"}, {LineID: "L2"}}})
+	w.must(err)
+	if rfq, err = w.c.INQ.GetRfq(w.clerk, "rfq.g5"); err != nil || rfq.Status != inqapi.StatusReady || len(rfq.Corrections) != 0 {
+		t.Fatalf("after the confirmation: %s, corrections %+v, %v", rfq.Status, rfq.Corrections, err)
+	}
+	// The same lines saved by a person, past the gateway, keep no place and cannot be confirmed:
+	// the rule is INQ's as before, and the place is the AI layer's candidate.
+	var plain []inqapi.RfqLine
+	for _, id := range []string{"L1", "L2"} {
+		plain = append(plain, inqapi.RfqLine{LineID: id, SkuID: "sku.1", Quantity: "120", UOM: "PCS", SourceID: "src.g5", Locators: fields[id]})
+	}
+	saved, err := w.c.INQ.SaveRfq(w.clerk, inqapi.SaveRfq{IdempotencyKey: w.key(), RfqID: "rfq.g5.plain", CustomerID: "customer.1",
+		ContactID: "contact.1", SourceIDs: []string{"src.g5"}, Lines: plain})
+	w.must(err)
+	_, err = w.c.INQ.ConfirmRfqScope(w.clerk, inqapi.ConfirmRfqScope{IdempotencyKey: w.key(), RfqID: "rfq.g5.plain", ExpectedVersion: saved.RowVersion,
+		EvidenceIDs: []string{"src.g5"}, VerifiedLines: []inqapi.LineVerification{{LineID: "L1"}, {LineID: "L2"}}})
+	if code(err) != kernel.CodeDraftNotReady || path(err) != "/args/lines/0/locator" {
+		t.Fatalf("a draft without line places, confirmed past the gateway: %v", err)
+	}
+}
+
 // Field locators at the row's start (the live trial of 2026-11-18, live-20261118T045207Z): the
 // model quotes each field's own words and places all of them where the row begins. The gateway's
 // locating moves a quote that stands at one place and keeps every place of one that stands at

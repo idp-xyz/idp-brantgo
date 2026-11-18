@@ -29,6 +29,7 @@ func (f *fakeTRD) PriceProposal(_ context.Context, q trdapi.PriceProposalQuery) 
 	}
 	out := trdapi.PriceProposal{RfqID: q.RfqID, RfqRowVersion: 2, CustomerID: "customer.1", Currency: q.Currency, PricePrecision: 2,
 		PricingPolicyRef: q.PricingPolicyRef, MinimumMargin: "0.25", TargetMargin: "0.3125",
+		QuoteValidDays: 7, ExpiresAtLatest: time.Date(2026, 11, 25, 6, 0, 0, 0, time.UTC),
 		CheckedAt: time.Date(2026, 11, 18, 6, 0, 0, 0, time.UTC),
 		Lines: []trdapi.ProposedLine{
 			{RfqLineID: "L1", SkuID: "ST01.red.S", Quantity: "24", Unit: "PCS", Source: trdapi.PriceSourceFormula, UnitPrice: "8.00",
@@ -129,6 +130,7 @@ func TestPriceProposalRoute(t *testing.T) {
 	var wantBody map[string]any
 	if err = json.Unmarshal([]byte(`{"ok":true,"rfq_id":"rfq.1","rfq_row_version":2,"customer_id":"customer.1","currency":"USD","price_precision":2,
 		"pricing_policy_ref":{"kind":"pricing_policy","id":"policy.1","revision":1},"minimum_margin":"0.25","target_margin":"0.3125",
+		"quote_valid_days":7,"expires_at_latest":"2026-11-25T06:00:00.000000Z",
 		"cost_snapshot":{"snapshot_id":"snapshot.1","result_hash":"`+hash+`","evidence_hash":"e","status":"adoptable","adoptable":true},
 		"checked_at":"2026-11-18T06:00:00.000000Z","lines":[
 		{"rfq_line_id":"L1","sku_id":"ST01.red.S","quantity":"24","unit":"PCS","source":"formula","unit_price":"8.00","price_basis_quantity":"1",

@@ -29,7 +29,7 @@ func TestProposalInTheContractsForm(t *testing.T) {
 			Lines: []inqapi.RfqRefLine{{LineID: "L1", SkuID: "ST01.red.S", SkuSpecRevision: 1, Quantity: "24", UOM: "PCS"},
 				{LineID: "L2", SkuID: "ST01.red.M", SkuSpecRevision: 1, Quantity: "36", UOM: "PCS"},
 				{LineID: "L3", SkuID: "ST01.blue.S", SkuSpecRevision: 1, Quantity: "12", UOM: "PCS"}}},
-		policy: polapi.PricingPolicy{Name: "policy", CalculationCurrency: "USD", MinimumMargin: "0.25", TargetMargin: "0.3125"},
+		policy: polapi.PricingPolicy{Name: "policy", CalculationCurrency: "USD", MinimumMargin: "0.25", TargetMargin: "0.3125", QuoteValidDays: 7},
 		prices: polapi.SalesPrices{Currency: usd, Prices: []polapi.SalesPriceInForce{{
 			Ref: polapi.ConfigRef{Kind: polapi.KindSalesPrice, ConfigID: "price.red.M", Revision: 2}, SkuID: "ST01.red.M", Unit: "PCS",
 			UnitPrice: kernel.MustDecimal("8.4"), PriceBasisQuantity: kernel.MustDecimal("1")}}},
@@ -45,6 +45,9 @@ func TestProposalInTheContractsForm(t *testing.T) {
 	}
 	want := api.PriceProposal{RfqID: "rfq.1", RfqRowVersion: 2, CustomerID: "customer.1", Currency: "USD", PricePrecision: 2,
 		PricingPolicyRef: q.PricingPolicyRef, MinimumMargin: "0.25", TargetMargin: "0.3125",
+		// The policy's seven days from the instant of the read, to the microsecond (owner decision
+		// 2026-11-18 on the quote's validity: the drafter is told the freeze's bound).
+		QuoteValidDays: 7, ExpiresAtLatest: time.Date(2026, 11, 25, 6, 0, 0, 123456000, time.UTC),
 		CostSnapshot: &api.CostQualification{SnapshotID: "snapshot.1", ResultHash: hash, EvidenceHash: "evidence", Status: "adoptable", Adoptable: true},
 		CheckedAt:    time.Date(2026, 11, 18, 6, 0, 0, 123456000, time.UTC),
 		Lines: []api.ProposedLine{

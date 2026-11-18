@@ -202,7 +202,7 @@ func readProposal(t Q01Targets) (Capability, error) {
 		PricingPolicyRef trdapi.ConfigRef        `contract:"required,kind=pricing_policy"`
 	}
 	return defineRead(Spec{Command: ReadProposal, Context: "trd", Contract: trdapi.Contract, Perm: "trd.read",
-		Summary: "The unit price to draft for each line of a ready RFQ: the sales price in force for the SKU, otherwise the line's unit cost divided by one minus the pricing policy's target margin. Copy UnitPrice and PriceBasisQuantity into the quote line and set DiscountRatio to 0. Source none has no price: stop, do not invent one. UnderFloor is still that price; a person reviews it. This read writes nothing."},
+		Summary: "The unit price to draft for each line of a ready RFQ (the sales price in force, otherwise unit cost over one minus the target margin) and ExpiresAtLatest, the latest ExpiresAt the pricing policy lets the quote have. Copy UnitPrice and PriceBasisQuantity into the quote line with DiscountRatio 0. Source none has no price: stop, do not invent one. UnderFloor is still that price; a person reviews it."},
 		func(c in) ObjectRef { return ObjectRef{Type: "inq.rfq", ID: c.RfqID} },
 		func(ctx context.Context, c in) (readReceipt, error) {
 			if t.TRDPrices == nil {
@@ -431,11 +431,19 @@ func projectProposal(v trdapi.PriceProposal) readReceipt {
 		lines = append(lines, line{RfqLineID: l.RfqLineID, SkuID: l.SkuID, Quantity: l.Quantity, Unit: l.Unit,
 			Source: l.Source, Reason: l.Reason, UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, UnderFloor: l.UnderFloor})
 	}
+	// The members carry the names quote.save_draft takes them under, so they are copied, not mapped.
+	// ExpiresAtLatest is in the contracts' timestamp form, as Data.ExpiresAt is sent; it is left out
+	// when the policy bounds no validity (the freeze then refuses the quote whatever it says).
+	latest := ""
+	if v.QuoteValidDays > 0 && !v.ExpiresAtLatest.IsZero() {
+		latest = kernel.FormatTimestamp(v.ExpiresAtLatest)
+	}
 	body := struct {
-		RfqID    string `json:"RfqID"`
-		Currency string `json:"Currency"`
-		Lines    []line `json:"Lines"`
-	}{RfqID: v.RfqID, Currency: v.Currency, Lines: lines}
+		RfqID           string `json:"RfqID"`
+		Currency        string `json:"Currency"`
+		ExpiresAtLatest string `json:"ExpiresAtLatest,omitempty"`
+		Lines           []line `json:"Lines"`
+	}{RfqID: v.RfqID, Currency: v.Currency, ExpiresAtLatest: latest, Lines: lines}
 	omitted := "cost, margin and the price-list reference; copy UnitPrice, do not recompute it"
 	if truncated {
 		omitted = "lines beyond 40; " + omitted

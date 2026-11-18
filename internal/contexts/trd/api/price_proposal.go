@@ -160,6 +160,15 @@ type ProposedLine struct {
 // target margin ("" when it states none), what CST says now of the snapshot named (nil when none
 // was named or CST shows the caller none), one ProposedLine per RFQ line in line-ID order, and the
 // instant it was judged at.
+//
+// QuoteValidDays is the policy's bound on a quote's validity and ExpiresAtLatest is CheckedAt plus
+// that many days (owner decision 2026-11-18, after the live trials whose drafts lapsed weeks
+// later: the drafter is told the bound). The freeze requires issued < expires_at ≤ issued +
+// quote_valid_days × 86400 s with issued the instant of the freeze (TRD-INV-005), so a draft
+// whose ExpiresAt is not after ExpiresAtLatest is within the bound whenever it is frozen after
+// this read, and is QUOTE_EXPIRED only when it is frozen at or after its ExpiresAt. Like the
+// price it is advice: quote.save_draft takes the ExpiresAt its author sends, and the freeze
+// judges it as before.
 type PriceProposal struct {
 	RfqID            string
 	RfqRowVersion    int64
@@ -169,6 +178,8 @@ type PriceProposal struct {
 	PricingPolicyRef ConfigRef
 	MinimumMargin    string
 	TargetMargin     string
+	QuoteValidDays   int
+	ExpiresAtLatest  time.Time
 	CostSnapshot     *CostQualification
 	Lines            []ProposedLine
 	CheckedAt        time.Time

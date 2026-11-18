@@ -152,9 +152,13 @@ func proposal(q api.PriceProposalQuery, in proposalInputs, at time.Time) (api.Pr
 		basis.Prices = append(basis.Prices, calc.ListPrice{Ref: calc.Ref{Kind: p.Ref.Kind, ID: p.Ref.ConfigID, Revision: p.Ref.Revision},
 			SkuID: p.SkuID, Customer: p.PartyID, Unit: p.Unit, UnitPrice: p.UnitPrice, BasisQuantity: p.PriceBasisQuantity})
 	}
+	checked := kernel.Instant(at)
 	out := api.PriceProposal{RfqID: in.rfq.RfqID, RfqRowVersion: in.rfq.RowVersion, CustomerID: in.rfq.CustomerID, Currency: currency.Code(),
 		PricePrecision: currency.MinorUnits(), PricingPolicyRef: q.PricingPolicyRef, MinimumMargin: in.policy.MinimumMargin,
-		TargetMargin: in.policy.TargetMargin, Lines: []api.ProposedLine{}, CheckedAt: kernel.Instant(at)}
+		TargetMargin: in.policy.TargetMargin, QuoteValidDays: in.policy.QuoteValidDays,
+		// The freeze's bound, issued + quote_valid_days × 86400 s, as if the quote were frozen now.
+		ExpiresAtLatest: checked.Add(time.Duration(in.policy.QuoteValidDays) * 24 * time.Hour),
+		Lines:           []api.ProposedLine{}, CheckedAt: checked}
 	if snap := in.snapshot; snap != nil {
 		out.CostSnapshot = &api.CostQualification{SnapshotID: snap.Ref.SnapshotID, ResultHash: snap.Ref.ResultHash, EvidenceHash: snap.EvidenceHash,
 			Status: snap.Adoptability.Status, Adoptable: snap.Adoptability.Adoptable()}

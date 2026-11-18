@@ -20,7 +20,8 @@ var clerkTools = []string{"source.register", "file.register", "rfq.save_draft", 
 // formats costs about a quarter more, after what was cut for it: minLength on every string, the
 // upper bounds of lists, the sentences of the read descriptions that repeat the result's own
 // "omitted", and most of rfq.save_draft's description, which the members now carry. S4 G4b adds
-// quote.price_proposal (19,755 bytes for these 20 tools). The ceiling keeps a later member or
+// quote.price_proposal (19,755 bytes for these 20 tools); the latest expiry and the line's place
+// (owner decisions 2026-11-18) add their words (19,860). The ceiling keeps a later member or
 // word from growing the list unnoticed.
 const toolListCeiling = 20000
 

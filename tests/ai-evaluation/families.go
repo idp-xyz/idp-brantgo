@@ -91,9 +91,9 @@ var fixedSet = []*family{
 		expected: "delegated reads succeed, are hashed in the ledger and are not TSK actions; an undelegated read and a foreign object are refused; bank_account is refused; the bundle lists the reads",
 		run:      runReads, grade: gradeReads},
 	{name: "feedback", design: []string{"S4-03", "S4-07", "G3", "BC-AT27", "BC-AT28", "SD-07"},
-		goal:     "the agent makes the live trials' mistakes: it places every field at its row's start, and its first quote draft has no unit price",
+		goal:     "the agent makes the live trials' mistakes: it places every field at its row's start and names no place for the line, and its first quote draft has no unit price",
 		goalCode: "quote_ready", input: kindText,
-		expected: "INQ holds each line's unit ambiguous and the owner names its place (4 owner resolutions, synthetic: extra human work, not the AI's); the refused quote draft is in the ledger with its path and the next turn's draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
+		expected: "each line takes the row its located fields stand in; INQ holds each line's unit ambiguous and the owner names its place (4 owner resolutions, synthetic: extra human work, not the AI's); the refused quote draft is in the ledger with its path and the next turn's draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
 		run:      runFeedback, grade: gradeFeedback},
 }
 
@@ -936,7 +936,13 @@ func runReads(ctx context.Context, t *trial) error {
 func runFeedback(ctx context.Context, t *trial) error {
 	claimed := t.in.atRowStart()
 	t.claimed = &claimed
-	if err := t.draftRFQ(ctx, brcAgentLines()); err != nil {
+	// The lines name no place of their own (the live trials of 2026-11-18 18:02 and 18:06): the
+	// gateway's locating gives each the row its fields stand in, or the owner could not confirm it.
+	lines := brcAgentLines()
+	for i := range lines {
+		lines[i].noPlace = true
+	}
+	if err := t.draftRFQ(ctx, lines); err != nil {
 		return err
 	}
 	if err := t.confirmRFQ(ctx, brcTruth()); err != nil {
@@ -990,6 +996,18 @@ func gradeFeedback(ctx context.Context, t *trial) {
 	t.assert("INQ corrections: verified at the named place, proposed by the agent, corrected by the owner", "4 of 4",
 		fmt.Sprintf("%d of %d", recorded, len(t.rec.Corrections)))
 	t.assert("automation level", "extra_human_work", t.rec.Automation)
+	// The agent named no place for its lines: each has the row its fields stand in (a text row is
+	// where its line begins), which is what let the owner confirm it.
+	rowed := 0
+	if r, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/inq/rfqs/"+rfqID); err == nil {
+		for _, l := range list(r["lines"]) {
+			row, _, _ := strings.Cut(t.in.at[str(dig(l, "line_id"))][fieldUOM].Locator, ":")
+			if row != "" && str(dig(l, "locator")) == row+":1" {
+				rowed++
+			}
+		}
+	}
+	t.assert("RFQ lines: the place the agent left out is the row of the line's fields", "4 of 4", fmt.Sprintf("%d of %d", rowed, len(brcLines)))
 	// The ledger keeps where the first quote draft was refused; one draft committed.
 	var refused []string
 	if mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls"); err == nil {

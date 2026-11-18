@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
@@ -171,6 +172,14 @@ func TestPriceProposalOnBRC001(t *testing.T) {
 		brcDig(p, "cost_snapshot", "status") != "adoptable" || brcDig(p, "cost_snapshot", "adoptable") != true || brcStr(p["checked_at"]) == "" {
 		t.Fatalf("proposal %v", p)
 	}
+	// The proposal also says how long the quote may be valid (owner decision 2026-11-18, after live
+	// trials whose drafts lapsed weeks later): policy.1's seven days, counted from the read.
+	checked, errChecked := kernel.ParseTimestamp(brcStr(p["checked_at"]))
+	latest, errLatest := kernel.ParseTimestamp(brcStr(p["expires_at_latest"]))
+	if errChecked != nil || errLatest != nil || brcNum(p["quote_valid_days"]) != 7 || !latest.Equal(checked.Add(7*24*time.Hour)) {
+		t.Fatalf("validity: %v days, checked at %v, latest expiry %v", p["quote_valid_days"], p["checked_at"], p["expires_at_latest"])
+	}
+	b.fact("quote_valid_days", p["quote_valid_days"], "expires_at_latest", p["expires_at_latest"])
 	total := new(big.Int)
 	for _, l := range brcList(p["lines"]) {
 		n, _ := new(big.Int).SetString(brcStr(brcMap(l)["net_minor"]), 10)
@@ -191,7 +200,7 @@ func TestPriceProposalOnBRC001(t *testing.T) {
 		got, err := w.c.TRD.PriceProposal(ctx, query)
 		w.must(err)
 		if len(got.Lines) != 4 || got.PricePrecision != 2 || got.TargetMargin != "0.3125" || got.CostSnapshot == nil || !got.CostSnapshot.Adoptable ||
-			got.CheckedAt.IsZero() {
+			got.CheckedAt.IsZero() || got.QuoteValidDays != 7 || !got.ExpiresAtLatest.Equal(got.CheckedAt.Add(7*24*time.Hour)) {
 			t.Fatalf("%s: %+v", who, got)
 		}
 		for i, l := range got.Lines {
@@ -229,6 +238,26 @@ func TestPriceProposalOnBRC001(t *testing.T) {
 	for _, l := range brcList(p["lines"]) {
 		b.unitPrices[brcStr(brcMap(l)["rfq_line_id"])] = brcStr(brcMap(l)["unit_price"])
 	}
+	// The validity is advice of the same kind, and it is the freeze's own bound. A draft that lapses
+	// an hour after the proposal's latest expiry is taken as a draft and cannot be frozen (what
+	// stopped the live trials); a draft that lapses exactly at it freezes, although the freeze comes
+	// after the read.
+	b.phase = "TRD quote validity"
+	beyond, _ := b.quoteData()
+	beyond["expires_at"] = kernel.FormatTimestamp(latest.Add(time.Hour))
+	if r := b.cmd(brcSales, "trd", trdapi.Contract, "quote.save_draft", map[string]any{"quote_id": "quote.beyond", "expected_version": 0, "data": beyond}); r["status"] != trdapi.StatusWorking {
+		t.Fatalf("a draft that lapses after the latest expiry: %v", r)
+	}
+	b.refused(brcSales, "trd", trdapi.Contract, "quote.freeze", map[string]any{"quote_id": "quote.beyond", "expected_version": 1, "working_revision": 1},
+		http.StatusUnprocessableEntity, trdapi.CodeQuoteValidityInvalid)
+	within, _ := b.quoteData()
+	within["expires_at"] = brcStr(p["expires_at_latest"])
+	b.cmd(brcSales, "trd", trdapi.Contract, "quote.save_draft", map[string]any{"quote_id": "quote.latest", "expected_version": 0, "data": within})
+	b.cmd(brcSales, "trd", trdapi.Contract, "quote.freeze", map[string]any{"quote_id": "quote.latest", "expected_version": 1, "working_revision": 1})
+	if rev := brcMap(brcDig(b.get(brcSales, "/api/brant/v1/trd/quotes/quote.latest"), "revisions", 0)); rev["status"] != trdapi.StatusFrozen {
+		t.Fatalf("the draft that lapses at the latest expiry: %v", rev["status"])
+	}
+	b.fact("frozen_with_expires_at", within["expires_at"])
 	b.quote()
 	if b.record.Amounts["quote_payable"] != "960.00 USD" {
 		t.Fatalf("the quote at the proposed prices: %v", b.record.Amounts)

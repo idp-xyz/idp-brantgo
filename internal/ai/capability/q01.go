@@ -91,7 +91,7 @@ func Q01(t Q01Targets) ([]Capability, error) {
 	// and completes the pending fields before the call is hashed (internal/ai/locate).
 	saveRfq, err := Define(Spec{Command: inqapi.CommandSaveRfq, Context: "inq", Contract: inqapi.Contract, Version: 2,
 		SideEffect: Draft, Risk: RiskLow, Approval: ApprovalNone,
-		Summary: "Save a customer RFQ draft, whole; people verify every line and confirm its scope. A line can be confirmed only when it has SkuID, Quantity, UOM, SourceID and Locator. For a line read from a file extract, give Locators for each field you state: they are verified against the extract, and a field whose words stand at several places stays pending until a person names the place."},
+		Summary: "Save a customer RFQ draft, whole; people verify every line and confirm its scope. A line can be confirmed only when it has SkuID, Quantity, UOM, SourceID and Locator (left out, it is the row its located fields share). For a line read from a file extract, give Locators for each field you state: they are verified against the extract, and a field whose words stand at several places stays pending until a person names the place."},
 		func(c inqapi.SaveRfq) ObjectRef {
 			return ObjectRef{Type: "inq.rfq", ID: c.RfqID, Version: c.ExpectedVersion}
 		},

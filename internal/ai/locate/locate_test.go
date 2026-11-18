@@ -106,10 +106,12 @@ func TestLinesVerifyAndCompleteTheCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// L1 and L2 named no place of their own: each takes the row its fields stand in. L3 has no
+	// field at one place, so its place stays for a person to name.
 	want := []inqapi.RfqLine{
-		{LineID: "L1", RequestedItem: "ST-100", Quantity: "120", UOM: "PCS", SourceID: "src.x", Locators: []inqapi.FieldLocator{
+		{LineID: "L1", RequestedItem: "ST-100", Quantity: "120", UOM: "PCS", SourceID: "src.x", Locator: "询价单!2:2", Locators: []inqapi.FieldLocator{
 			loc("requested_item", "询价单!A2", "ST-100"), loc("quantity", "询价单!B2", "120"), loc("uom", "询价单!C2", "PCS")}},
-		{LineID: "L2", RequestedItem: "SP-200", Quantity: "24", SourceID: "src.x", Locators: []inqapi.FieldLocator{
+		{LineID: "L2", RequestedItem: "SP-200", Quantity: "24", SourceID: "src.x", Locator: "询价单!3:3", Locators: []inqapi.FieldLocator{
 			loc("requested_item", "询价单!A3", "SP-200"), loc("quantity", "询价单!B3", "24")},
 			Pending: []inqapi.PendingField{{Field: "requested_item", Reason: "noted"}, {Field: "quantity", Reason: "noted"},
 				{Field: "uom", Reason: "missing"}}},
@@ -140,6 +142,72 @@ func TestLinesVerifyAndCompleteTheCandidates(t *testing.T) {
 		"L2.quantity=verified[询价单!B3][hidden_row formula_cached_value] L3.requested_item=ambiguous[询价单!A2 询价单!A4][] "+
 		"L3.quantity=unlocated[][] L3.sku_id=unlocated[][]" {
 		t.Fatalf("findings %s", got)
+	}
+}
+
+// A line that names no place of its own takes the row its fields stand in (owner decision
+// 2026-11-18; the live trials bin/ai-eval/live-20261118T100220Z and …100617Z normal-2, whose drafts
+// placed every field and left RfqLine.Locator out, so the owner's rfq.confirm_scope was
+// DRAFT_NOT_READY at /args/lines/0/locator). The row is the one that holds every field standing at
+// exactly one place, in the extract's notation: where a text line begins, a PDF line, a sheet's
+// row. A field kept at several places says nothing; fields in two rows, or no field at one place,
+// leave the place empty; a place the model names is kept; a line of another source is not touched.
+func TestALineWithoutItsPlaceTakesTheRowOfItsFields(t *testing.T) {
+	evd := newEVD()
+	evd.register(t, "src.text", evdapi.MimeText, []byte("Code | Item | Qty | Unit\nsku.1 | shirt red | 120 | PCS\nsku.2 | shirt blue | 60 | PCS\n"))
+	evd.register(t, "src.pdf", evdapi.MimePDF, ingesttest.PDF{Pages: []ingesttest.PDFPage{{Texts: []ingesttest.PDFText{
+		{Font: "F1", Size: 12, X: 72, Y: 780, Text: "Code Item Qty"},
+		{Font: "F1", Size: 12, X: 72, Y: 760, Text: "sku.9 jacket 48"},
+	}}}}.Bytes())
+	evd.register(t, "src.x", evdapi.MimeXLSX, inquiry())
+	text := func(id, locator string, locators ...inqapi.FieldLocator) inqapi.RfqLine {
+		return inqapi.RfqLine{LineID: id, SourceID: "src.text", Locator: locator, Locators: locators}
+	}
+	lines := []inqapi.RfqLine{
+		// Every field at its own place in row 2; the unit stands in rows 2 and 3 and is named at neither.
+		text("L1", "", loc("sku_id", "2:1", "sku.1"), loc("requested_item", "2:9", "shirt red"), loc("quantity", "2:21", "120"),
+			loc("uom", "1:1", "PCS")),
+		// Every field placed where the row begins, as the live model did: each is moved to its place in row 3.
+		text("L2", "", loc("sku_id", "3:1", "sku.2"), loc("requested_item", "3:1", "shirt blue"), loc("quantity", "3:1", "60")),
+		// Fields of two rows: no row is the line's.
+		text("L3", "", loc("sku_id", "2:1", "sku.1"), loc("quantity", "3:22", "60")),
+		// Nothing stands at one place: the unit is in both rows, the quantity nowhere.
+		text("L4", "", loc("uom", "1:1", "PCS"), loc("quantity", "2:21", "999")),
+		// The model's own word for the place is kept, whatever the fields say.
+		text("L5", "row of the red shirt", loc("sku_id", "3:1", "sku.2")),
+		{LineID: "L6", SourceID: "src.pdf", Locators: []inqapi.FieldLocator{loc("sku_id", "1:2", "sku.9"), loc("quantity", "1:2", "48")}},
+		{LineID: "L7", SourceID: "src.x", Locators: []inqapi.FieldLocator{loc("requested_item", "询价单!A3", "SP-200"), loc("quantity", "询价单!B3", "24")}},
+		{LineID: "L8", RequestedItem: "毛衣", SourceID: "src.mail"},
+	}
+	got, err := Locator{Extracts: evd}.Lines(context.Background(), lines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var says []string
+	for _, l := range got {
+		var pending []string
+		for _, p := range l.Pending {
+			pending = append(pending, p.Field+":"+p.Reason)
+		}
+		says = append(says, fmt.Sprintf("%s=%q%v", l.LineID, l.Locator, pending))
+	}
+	want := `L1="2:1"[uom:ambiguous] L2="3:1"[] L3=""[] L4=""[quantity:unlocated uom:ambiguous] L5="row of the red shirt"[] ` +
+		`L6="1:2"[] L7="询价单!3:3"[requested_item:noted quantity:noted] L8=""[]`
+	if s := strings.Join(says, " "); s != want {
+		t.Fatalf("places\n got %s\nwant %s", s, want)
+	}
+	// L2's fields were moved to where their words stand, and the row is theirs.
+	if !reflect.DeepEqual(got[1].Locators, []inqapi.FieldLocator{loc("sku_id", "3:1", "sku.2"), loc("requested_item", "3:9", "shirt blue"),
+		loc("quantity", "3:22", "60")}) {
+		t.Fatalf("L2 locators %+v", got[1].Locators)
+	}
+	// Row names the row in each notation, and nothing for a locator of another kind.
+	x, err := ingest.FromEVD(evd.extracts["src.x"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Row(x, "询价单!C4") != "询价单!4:4" || Row(x, "4:1") != "" || Row(x, "") != "" {
+		t.Fatalf("rows of a sheet: %q %q", Row(x, "询价单!C4"), Row(x, "4:1"))
 	}
 }
 

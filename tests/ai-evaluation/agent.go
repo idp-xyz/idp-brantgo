@@ -72,10 +72,13 @@ func registerExtract(source, file string) call {
 	return call{"source.register", map[string]any{"SourceID": source, "SourceKind": "file_extract", "FileID": file}}
 }
 
-// agentLine is an RFQ line candidate the agent proposes.
+// agentLine is an RFQ line candidate the agent proposes. noPlace leaves the line's own Locator out,
+// as the live model did on 2026-11-18 (it placed every field and not the line): the gateway's
+// locating then gives the line the row its fields stand in.
 type agentLine struct {
 	id, sku, item, qty, uom string
 	pending                 []map[string]any
+	noPlace                 bool
 }
 
 // saveRFQ is the agent's rfq.save_draft from the inquiry's extract: each field with a value quotes
@@ -86,6 +89,9 @@ func saveRFQ(rfq, source string, in inquiry, lines []agentLine) call {
 		m := map[string]any{"LineID": l.id, "SourceID": source, "Locator": "inquiry " + in.kind + " row of " + l.id}
 		if at, ok := in.at[l.id][fieldItem]; ok {
 			m["Locator"] = "inquiry " + in.kind + " " + at.Locator
+		}
+		if l.noPlace {
+			delete(m, "Locator")
 		}
 		var locs []any
 		for _, f := range []struct{ field, key, value string }{{fieldSKU, "SkuID", l.sku}, {fieldItem, "RequestedItem", l.item},

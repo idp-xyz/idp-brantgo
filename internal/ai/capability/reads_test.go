@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	cstapi "go.idp.xyz/idp-brant/internal/contexts/cst/api"
@@ -107,6 +108,52 @@ func TestAReadCannotCarryAGrant(t *testing.T) {
 	}
 }
 
+// What quote.price_proposal answers a model (S4 G4b; owner decisions 2026-11-18 on the unit price
+// and on the quote's validity): per line the price and its basis quantity under the names
+// quote.save_draft takes them, the source, the reason of a line without a price and the flag of a
+// price under the floor; and ExpiresAtLatest in the contracts' timestamp form, which Data.ExpiresAt
+// takes as it is. Cost, margins and the price-list reference are not in it. A policy that bounds no
+// validity gives no ExpiresAtLatest.
+func TestPriceProposalReadCarriesWhatADraftCopies(t *testing.T) {
+	latest := time.Date(2026, 11, 25, 6, 0, 0, 123456000, time.UTC)
+	p := trdapi.PriceProposal{RfqID: "rfq.1", RfqRowVersion: 2, CustomerID: "customer.1", Currency: "USD", PricePrecision: 2,
+		MinimumMargin: "0.25", TargetMargin: "0.3125", QuoteValidDays: 7, ExpiresAtLatest: latest,
+		Lines: []trdapi.ProposedLine{
+			{RfqLineID: "L1", SkuID: "sku.1", Quantity: "24", Unit: "PCS", Source: trdapi.PriceSourceFormula, UnitPrice: "8.00",
+				PriceBasisQuantity: "1", UnitCost: "5.50", TargetMargin: "0.3125", NetMinor: "19200", CostMinor: "13200", Margin: "0.3125"},
+			{RfqLineID: "L2", SkuID: "sku.2", Quantity: "36", Unit: "PCS", Source: trdapi.PriceSourceList, UnitPrice: "700.00",
+				PriceBasisQuantity: "100", PriceListRef: &trdapi.ConfigRef{Kind: "sales_price", ID: "price.2", Revision: 3},
+				PriceListScope: trdapi.PriceListCustomer, NetMinor: "25200", CostMinor: "19800", Margin: "0.214285714286", UnderFloor: true},
+			{RfqLineID: "L3", SkuID: "sku.3", Quantity: "12", Unit: "PCS", Source: trdapi.PriceSourceNone, Reason: trdapi.ProposalNoTargetMargin},
+		}}
+	raw, err := json.Marshal(projectProposal(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"object_id":"rfq.1","row_version":2,"status":"ok",` +
+		`"omitted":"cost, margin and the price-list reference; copy UnitPrice, do not recompute it",` +
+		`"result":{"RfqID":"rfq.1","Currency":"USD","ExpiresAtLatest":"2026-11-25T06:00:00.123456Z","Lines":[` +
+		`{"RfqLineID":"L1","SkuID":"sku.1","Quantity":"24","Unit":"PCS","Source":"formula","UnitPrice":"8.00","PriceBasisQuantity":"1"},` +
+		`{"RfqLineID":"L2","SkuID":"sku.2","Quantity":"36","Unit":"PCS","Source":"price_list","UnitPrice":"700.00","PriceBasisQuantity":"100","UnderFloor":true},` +
+		`{"RfqLineID":"L3","SkuID":"sku.3","Quantity":"12","Unit":"PCS","Source":"none","Reason":"no_target_margin"}]}}`
+	if string(raw) != want {
+		t.Fatalf("the answer\n got %s\nwant %s", raw, want)
+	}
+	// The instant reads back as the one TRD stated: a draft that copies it sends that bound.
+	if back, err := kernel.ParseTimestamp("2026-11-25T06:00:00.123456Z"); err != nil || !back.Equal(latest) {
+		t.Fatalf("ExpiresAtLatest reads back as %v %v", back, err)
+	}
+	p.QuoteValidDays, p.ExpiresAtLatest = 0, p.CheckedAt
+	if raw, err = json.Marshal(projectProposal(p)); err != nil || strings.Contains(string(raw), "ExpiresAtLatest") {
+		t.Fatalf("a policy that bounds no validity: %s %v", raw, err)
+	}
+	// More lines than a read returns are cut and said so.
+	p.Lines = make([]trdapi.ProposedLine, maxReadLines+1)
+	if r := projectProposal(p); !r.Truncated || !strings.HasPrefix(r.Omitted, "lines beyond 40; ") {
+		t.Fatalf("a long proposal: truncated %v, omitted %q", r.Truncated, r.Omitted)
+	}
+}
+
 type readFakes struct {
 	text, form, sourceOut                                                                                           string
 	rfq, snapshots, context, proposal, configs, sku, party, profile, quote, ready, response, order, source, extract bool
@@ -129,9 +176,10 @@ func (f *readFakes) SnapshotsOfRfq(context.Context, string) (cstapi.RfqSnapshotL
 
 func (f *readFakes) PriceProposal(context.Context, trdapi.PriceProposalQuery) (trdapi.PriceProposal, error) {
 	f.proposal = true
-	return trdapi.PriceProposal{RfqID: "rfq.1", Currency: "USD", Lines: []trdapi.ProposedLine{{
-		RfqLineID: "L1", SkuID: "sku.1", Quantity: "24", Unit: "PCS", Source: trdapi.PriceSourceFormula,
-		UnitPrice: "8.00", PriceBasisQuantity: "1"}}}, nil
+	return trdapi.PriceProposal{RfqID: "rfq.1", Currency: "USD", QuoteValidDays: 7,
+		ExpiresAtLatest: time.Date(2026, 11, 25, 6, 0, 0, 0, time.UTC), Lines: []trdapi.ProposedLine{{
+			RfqLineID: "L1", SkuID: "sku.1", Quantity: "24", Unit: "PCS", Source: trdapi.PriceSourceFormula,
+			UnitPrice: "8.00", PriceBasisQuantity: "1"}}}, nil
 }
 
 func (f *readFakes) GetContext(context.Context, string) (cstapi.ContextView, error) {

@@ -304,7 +304,7 @@ type QuoteData struct {
 	Delivery            *Delivery    `doc:"the costing's delivery, exactly"`
 	DocumentTemplateRef *ConfigRef   `contract:"kind=quote_document_template"`
 	SequenceRef         *ConfigRef   `contract:"kind=number_sequence"`
-	ExpiresAt           string       `contract:"instant" doc:"when the offer lapses"`
+	ExpiresAt           string       `contract:"instant" doc:"when the offer lapses; not after quote.price_proposal's ExpiresAtLatest"`
 	CustomerNotes       *string      `doc:"shown to the customer"`
 	Evidence            []Evidence   `contract:"min=1"`
 	LegalTermsRef       *ConfigRef   `contract:"kind=legal_terms"`

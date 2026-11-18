@@ -14,7 +14,12 @@
 //     undecodable glyphs): the field is pending noted.
 //
 // A field with a value but no locator in a line whose source is a file extract is pending
-// unlocated. Extracts are read through EVD as the caller, so access to the file is re-checked on
+// unlocated. A line that names no place of its own (RfqLine.Locator, which INQ needs before a
+// person can confirm the line) takes the row its fields stand in: the one row that holds every
+// field of the line that stands at exactly one place (owner decision 2026-11-18, after live
+// trials in which the model placed every field and left the line's place out). Fields in several
+// rows, or no field at one place, leave it empty; a place the model names is kept as it is.
+// Extracts are read through EVD as the caller, so access to the file is re-checked on
 // every use (CT16). The files a draft's lines cite must keep the input profile together (at most 3
 // files and 50,000 characters, baseline 14.2: INPUT_PROFILE_UNSUPPORTED).
 package locate
@@ -110,6 +115,28 @@ func Notes(e *ingest.Extract, place string) []string {
 	return out
 }
 
+// Row returns the row of e that place stands in, in e's notation: where a text line begins
+// ("5:1"), a PDF line, which is its own place ("1:2"), a sheet's row as the reader's notes name it
+// ("Sheet1!5:5"); "" when place is not a locator of e's kind.
+func Row(e *ingest.Extract, place string) string {
+	switch e.Kind {
+	case ingest.KindText:
+		if line, _, err := ingest.ParseTextLocator(place); err == nil {
+			return ingest.TextLocator(line, 1)
+		}
+	case ingest.KindPDF:
+		if page, line, err := ingest.ParsePDFLocator(place); err == nil {
+			return ingest.PDFLocator(page, line)
+		}
+	case ingest.KindXLSX:
+		if sheet, row, _, err := ingest.ParseCellLocator(place); err == nil {
+			r := strconv.Itoa(row)
+			return ingest.SheetPrefix(sheet) + "!" + r + ":" + r
+		}
+	}
+	return ""
+}
+
 // Finding is what the extract says about one field of a line.
 type Finding struct {
 	Line    int // the line's index
@@ -142,9 +169,16 @@ func (l Locator) profile() ingest.Profile {
 // REFERENCE_INVALID (PERMISSION_DENIED without evd.read). It is the reviewer's verification read as
 // well (BC-AT27: field locating verifiable), and it writes nothing.
 func (l Locator) Check(ctx context.Context, lines []inqapi.RfqLine) ([]Finding, error) {
+	out, _, err := l.check(ctx, lines)
+	return out, err
+}
+
+// check is Check, with the extract of every source the lines cite (nil for a source that is not a
+// readable file extract).
+func (l Locator) check(ctx context.Context, lines []inqapi.RfqLine) ([]Finding, map[string]*ingest.Extract, error) {
 	extracts, err := l.extracts(ctx, lines)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []Finding
 	for i, line := range lines {
@@ -183,7 +217,7 @@ func (l Locator) Check(ctx context.Context, lines []inqapi.RfqLine) ([]Finding, 
 			}
 		}
 	}
-	return out, nil
+	return out, extracts, nil
 }
 
 // Lines returns the lines with their field locators verified and their pending fields completed
@@ -191,12 +225,13 @@ func (l Locator) Check(ctx context.Context, lines []inqapi.RfqLine) ([]Finding, 
 // (at most MaxPlaces) with the field pending ambiguous, unlocated quotes dropped with the field
 // pending unlocated, questioned places pending noted. A pending field the model named keeps its
 // candidates, and its reason unless the extract gives a weightier one (ambiguous, conflict,
-// unlocated, noted, missing, in that order). Lines of other sources are returned as they are.
+// unlocated, noted, missing, in that order). A line without a place of its own takes the row its
+// fields share (sharedRow). Lines of other sources are returned as they are.
 func (l Locator) Lines(ctx context.Context, lines []inqapi.RfqLine) ([]inqapi.RfqLine, error) {
 	if err := l.profile().CheckQuoteLines(len(lines)); err != nil {
 		return nil, profileRefusal(err)
 	}
-	findings, err := l.Check(ctx, lines)
+	findings, extracts, err := l.check(ctx, lines)
 	if err != nil {
 		return nil, err
 	}
@@ -206,13 +241,32 @@ func (l Locator) Lines(ctx context.Context, lines []inqapi.RfqLine) ([]inqapi.Rf
 		byLine[f.Line] = append(byLine[f.Line], f)
 	}
 	for i, fs := range byLine {
-		out[i] = complete(lines[i], fs)
+		out[i] = complete(lines[i], fs, extracts[lines[i].SourceID])
 	}
 	return out, nil
 }
 
-// complete rebuilds one line's locators and pending fields from its findings.
-func complete(line inqapi.RfqLine, findings []Finding) inqapi.RfqLine {
+// sharedRow is the row of e in which every field that stands at exactly one place stands, fields
+// in the order given; "" when no field stands at one place or they stand in several rows. A field
+// kept at several places is ambiguous and says nothing about the line's row.
+func sharedRow(e *ingest.Extract, order []string, places map[string][]inqapi.FieldLocator) string {
+	row := ""
+	for _, field := range order {
+		if len(places[field]) != 1 {
+			continue
+		}
+		r := Row(e, places[field][0].Locator)
+		if r == "" || (row != "" && r != row) {
+			return ""
+		}
+		row = r
+	}
+	return row
+}
+
+// complete rebuilds one line's locators and pending fields from its findings in extract e, and
+// gives a line without a place of its own the row its fields share.
+func complete(line inqapi.RfqLine, findings []Finding, e *ingest.Extract) inqapi.RfqLine {
 	reasons := map[string]string{}
 	places := map[string][]inqapi.FieldLocator{}
 	var order []string
@@ -248,6 +302,9 @@ func complete(line inqapi.RfqLine, findings []Finding) inqapi.RfqLine {
 	line.Locators = nil
 	for _, field := range order {
 		line.Locators = append(line.Locators, places[field]...)
+	}
+	if line.Locator == "" && e != nil {
+		line.Locator = sharedRow(e, order, places)
 	}
 	given := map[string]inqapi.PendingField{}
 	for _, p := range line.Pending {

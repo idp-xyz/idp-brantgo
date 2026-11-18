@@ -301,6 +301,13 @@ func (t *trial) proposalMatches(ctx context.Context, price string) error {
 	if err != nil {
 		return err
 	}
+	// The proposal also states how long the quote may be valid: the policy's seven days from the read.
+	checked, errC := time.Parse(time.RFC3339Nano, str(v["checked_at"]))
+	latest, errL := time.Parse(time.RFC3339Nano, str(v["expires_at_latest"]))
+	if errC != nil || errL != nil || num(v["quote_valid_days"]) != 7 || !latest.Equal(checked.Add(7*24*time.Hour)) {
+		return &phaseError{err: fmt.Errorf("quote.price_proposal states validity %v days, checked at %q, latest expiry %q; the policy allows 7 days",
+			v["quote_valid_days"], str(v["checked_at"]), str(v["expires_at_latest"]))}
+	}
 	got := map[string]map[string]any{}
 	for _, line := range list(v["lines"]) {
 		m, _ := line.(map[string]any)
