@@ -71,11 +71,17 @@ func (t *turn) noteOf(tool string, args json.RawMessage, code, path, reason stri
 
 // refused is the refusal of call as the model sees it, and as the ledger keeps it.
 func (t *turn) refused(call model.ToolCall, err error) (answer string, path, reason string) {
+	return t.refusedAs(call.Name, call.Arguments, err)
+}
+
+// refusedAs is the refusal of a call of tool with arguments args: a tool call of the model, or the
+// request of a proposal the platform sent.
+func (t *turn) refusedAs(tool string, args json.RawMessage, err error) (answer string, path, reason string) {
 	code := errorCode(err)
 	if rej, ok := kernel.AsRejection(err); ok && len(rej.Fields) > 0 {
 		path, reason = rej.Fields[0].Path, rej.Fields[0].Reason
 	}
-	n := t.noteOf(call.Name, call.Arguments, code, path, reason)
+	n := t.noteOf(tool, args, code, path, reason)
 	body := struct {
 		OK bool `json:"ok"`
 		refusalNote

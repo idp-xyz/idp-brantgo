@@ -25,6 +25,10 @@ type Q01Targets struct {
 	TRD           trdapi.Commands
 	TRDAcceptance trdapi.AcceptanceCommands
 	TRDOrders     trdapi.OrderCommands
+	// TRDOrderChecks is TRD's judgement of an order request without writing (S4 G7b), which the
+	// agent's order.prepare and order.review.request get before a person is asked to approve them.
+	// Nil refuses the judgement with errNoTarget: a request nobody judged is not put to a person.
+	TRDOrderChecks trdapi.OrderRequestChecks
 	// The reads (S4 G1). Each field is the owning context's api query the read calls; nil refuses
 	// the read with errNoTarget instead of panicking, as the command targets do. The interfaces
 	// are the methods the reads use, which the context modules implement.
@@ -199,9 +203,12 @@ func Q01(t Q01Targets) ([]Capability, error) {
 			}
 			return t.TRDAcceptance.RecordResponse(ctx, c)
 		}))
-	add(Define(Spec{Command: trdapi.CommandPrepareOrder, Context: "trd", Contract: trdapi.Contract, Version: 1,
+	// The two order commands wait for a person's approval grant. TRD judges the request first
+	// (S4 G7b), so a person is asked only about a request TRD would not refuse; the platform stores
+	// the request the person approves and sends exactly it.
+	prepareOrder, err := Define(Spec{Command: trdapi.CommandPrepareOrder, Context: "trd", Contract: trdapi.Contract, Version: 1,
 		SideEffect: Submit, Risk: RiskHigh, Approval: ApprovalGrant,
-		Summary: "Prepare a draft sales order from a verified acceptance of an active quote revision; needs a human's approval grant for exactly this request."},
+		Summary: "Prepare a draft sales order from a verified acceptance of an active quote revision; a person approves this request, then the platform sends it."},
 		func(c trdapi.PrepareOrder) ObjectRef {
 			return ObjectRef{Type: trdapi.ObjectQuote, ID: c.QuoteID, Version: c.BusinessRevision}
 		},
@@ -210,10 +217,16 @@ func Q01(t Q01Targets) ([]Capability, error) {
 				return trdapi.OrderReceipt{}, errNoTarget
 			}
 			return t.TRDOrders.PrepareOrder(ctx, c)
-		}))
-	add(Define(Spec{Command: trdapi.CommandRequestOrderReview, Context: "trd", Contract: trdapi.Contract, Version: 1,
+		})
+	add(Judged(prepareOrder, err, func(ctx context.Context, c trdapi.PrepareOrder) error {
+		if t.TRDOrderChecks == nil {
+			return errNoTarget
+		}
+		return t.TRDOrderChecks.CheckPrepareOrder(ctx, c)
+	}))
+	requestReview, err := Define(Spec{Command: trdapi.CommandRequestOrderReview, Context: "trd", Contract: trdapi.Contract, Version: 1,
 		SideEffect: Submit, Risk: RiskHigh, Approval: ApprovalGrant,
-		Summary: "Open the review of a draft sales order; needs a human's approval grant for exactly this request."},
+		Summary: "Open the review of a draft sales order; a person approves this request, then the platform sends it."},
 		func(c trdapi.RequestOrderReview) ObjectRef {
 			return ObjectRef{Type: trdapi.ObjectOrder, ID: c.OrderID, Version: c.ExpectedVersion}
 		},
@@ -222,7 +235,13 @@ func Q01(t Q01Targets) ([]Capability, error) {
 				return trdapi.OrderReceipt{}, errNoTarget
 			}
 			return t.TRDOrders.RequestOrderReview(ctx, c)
-		}))
+		})
+	add(Judged(requestReview, err, func(ctx context.Context, c trdapi.RequestOrderReview) error {
+		if t.TRDOrderChecks == nil {
+			return errNoTarget
+		}
+		return t.TRDOrderChecks.CheckRequestOrderReview(ctx, c)
+	}))
 	reads, err := readCapabilities(t)
 	if err != nil {
 		return nil, err

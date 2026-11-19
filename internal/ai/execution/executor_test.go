@@ -322,8 +322,16 @@ func TestKeysAndIntentsAreStable(t *testing.T) {
 	i := IntentOf("task.1", "rfq.save_draft", "rfq.1", hash)
 	if i != IntentOf("task.1", "rfq.save_draft", "rfq.1", hash) || i == IntentOf("task.2", "rfq.save_draft", "rfq.1", hash) ||
 		i == IntentOf("task.1", "rfq.save_draft", "rfq.1", "ff"+hash[2:]) || !kernel.ValidIdentifier(i) ||
-		!kernel.ValidIdentifier(ProposalID("task.1", "order.prepare", hash)) {
+		!kernel.ValidIdentifier(ProposalID("task.1", "order.prepare", hash, 1)) {
 		t.Fatal("intents")
+	}
+	// A proposal is one request at one object version: an approval grant binds the version, which no
+	// hash covers (S4 G7b).
+	p := ProposalID("task.1", "order.prepare", hash, 1)
+	if p != ProposalID("task.1", "order.prepare", hash, 1) || p == ProposalID("task.1", "order.prepare", hash, 2) ||
+		p == ProposalID("task.2", "order.prepare", hash, 1) || p == ProposalID("task.1", "order.review.request", hash, 1) ||
+		p == ProposalID("task.1", "order.prepare", "ff"+hash[2:], 1) || p == IntentOf("task.1", "order.prepare", "", hash) {
+		t.Fatal("proposals")
 	}
 	cmd, err := WithKey(evdapi.RegisterSource{SourceID: "s"}, "k.1")
 	if err != nil || cmd.(evdapi.RegisterSource).IdempotencyKey != "k.1" {

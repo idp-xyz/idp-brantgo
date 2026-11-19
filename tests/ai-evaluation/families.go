@@ -409,17 +409,33 @@ func runAN05(ctx context.Context, t *trial) error {
 		return err
 	}
 	prepare := prepareOrder(orderID, quoteID, t.revision, t.businessHash, acceptanceID)
+	// The worker is killed once the order exists and the model's next turn, which repeats the call,
+	// was answered. Before G7b the order committed inside that second turn, so the kill always followed
+	// two model turns; now the platform sends the approved request before the model is asked again, and
+	// a kill on the order alone raced the scripted turn (the second turn was recorded in one trial of
+	// five). Waiting for the second turn keeps the phase what it was: committed, then the repeat
+	// replayed, then the crash.
+	turns, err := t.modelCalls(ctx)
+	if err != nil {
+		return err
+	}
 	if err := t.prepareOrderPhase(ctx, agentPhase{name: "order-crash", steps: []scriptStep{turn(prepare), turn(prepare)}, maxSteps: 1,
 		poll: 4 * time.Second, until: func(map[string]any) bool { return false },
 		kill: func(ctx context.Context, _ map[string]any) (bool, error) {
-			_, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/trd/orders/"+orderID)
-			return err == nil, nil
+			_, read := t.ops[actorClerk].get(ctx, "/api/brant/v1/trd/orders/"+orderID)
+			if committed := read == nil; !committed {
+				return false, nil
+			}
+			now, err := t.modelCalls(ctx)
+			return now.model-turns.model >= 2, err
 		}}); err != nil {
 		return err
 	}
 	before := t.approval
 	request := requestOrderReview(orderID, 1, "review.order.1")
-	if err := t.prepareOrderPhase(ctx, agentPhase{name: "order-restart", steps: []scriptStep{turn(prepare), turn(prepare), turn(request), turn(request),
+	// The restarted model still repeats order.prepare, as a model may: that is the replay AN05 grades. It
+	// proposes order.review.request once; the platform sends it after the grant.
+	if err := t.prepareOrderPhase(ctx, agentPhase{name: "order-restart", steps: []scriptStep{turn(prepare), turn(request),
 		done("订单草稿已准备并提交审核。")}}); err != nil {
 		return err
 	}
@@ -500,7 +516,9 @@ func runAN06(ctx context.Context, t *trial) error {
 		return err
 	}
 	request := requestOrderReview(orderID, 1, "review.order.1")
-	if err = t.prepareOrderPhase(ctx, agentPhase{name: "order-resumed", steps: []scriptStep{turn(prepare), turn(request), turn(request),
+	// After the restart the grant resumes the task and the platform sends the stored order.prepare; the
+	// model's first call is the next step (before G7b it had to repeat order.prepare to send it).
+	if err = t.prepareOrderPhase(ctx, agentPhase{name: "order-resumed", steps: []scriptStep{turn(request),
 		done("订单草稿已准备并提交审核。")}}); err != nil {
 		return err
 	}

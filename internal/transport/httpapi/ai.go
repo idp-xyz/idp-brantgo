@@ -11,6 +11,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/execution"
 	"go.idp.xyz/idp-brant/internal/ai/executionevidence"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
+	"go.idp.xyz/idp-brant/internal/ai/proposal"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -25,6 +26,7 @@ type AI interface {
 	RevokeApprovalGrant(ctx context.Context, cmd approvalgrant.RevokeGrant) (approvalgrant.Receipt, error)
 	GetDelegation(ctx context.Context, id string) (policy.Delegation, error)
 	GetApprovalGrant(ctx context.Context, id string) (approvalgrant.Grant, error)
+	GetProposal(ctx context.Context, id string) (proposal.Proposal, error)
 	ApprovalGrantsOf(ctx context.Context, delegationID string) ([]approvalgrant.Grant, error)
 	ModelCalls(ctx context.Context, taskID string) ([]executionevidence.Call, error)
 	ExecutionBundle(ctx context.Context, ref executionevidence.Ref) (executionevidence.Bundle, error)
@@ -110,6 +112,7 @@ func (s *server) aiRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/brant/v1/ai/delegations/{id}/approval_grants", s.authenticated(listRead(s, s.cfg.AI.ApprovalGrantsOf, "delegation_id",
 		"approval_grants")))
 	mux.Handle("GET /api/brant/v1/ai/approval_grants/{id}", s.authenticated(read(s, s.cfg.AI.GetApprovalGrant, okView[approvalgrant.Grant])))
+	mux.Handle("GET /api/brant/v1/ai/proposals/{id}", s.authenticated(read(s, s.cfg.AI.GetProposal, proposalOf)))
 	mux.Handle("GET /api/brant/v1/ai/tasks/{id}/model_calls", s.authenticated(s.modelCalls))
 	mux.Handle("GET /api/brant/v1/ai/execution_bundles/{id}/{sha256}", s.authenticated(s.executionBundle))
 	mux.Handle("POST "+StepPath, s.authenticated(s.taskStep))
@@ -123,10 +126,56 @@ var aiReads = []readRoute{
 		"The approval grants issued under a delegation, each with the command, request hash, object and version it binds, its expiry and its use (ai.approval_grant.get)", []string{"id"}, false},
 	{"/api/brant/v1/ai/approval_grants/{id}", "ai.approval_grant.get", "ai",
 		"An approval grant: the call it binds (command, request hash, object and version), its expiry, issuer, status and the key of the call that used it (ai.approval_grant.get)", []string{"id"}, false},
+	{"/api/brant/v1/ai/proposals/{id}", "ai.proposal.get", "ai",
+		"The request an AI agent proposed and a person is asked to approve with an approval grant: the command, the arguments of the request as the agent made them (without the idempotency key), its hash, the object and version a grant binds, the delegation, the status (pending, sending, sent, refused, void) and, once settled, the refusal's code and path or the TSK action that committed it (ai.proposal.get)", []string{"id"}, false},
 	{"/api/brant/v1/ai/tasks/{id}/model_calls", "ai.model_call.list", "ai",
 		"The model and tool calls of a task in order: reservation, outcome, the model ID as returned, prompt/input/output hashes, tokens, latency, cost, the action a tool call ran and, for a refused tool call, the code, the request path and the refusing context's static reason (ai.model_call.list; no prompt or output content)", []string{"id"}, false},
 	{"/api/brant/v1/ai/execution_bundles/{id}/{sha256}", "ai.execution_bundle.get", "ai",
 		"A recorded ExecutionBundle by its ID and the SHA-256 of its canonical JSON, with that canonical document (ai.execution_bundle.get)", []string{"id", "sha256"}, false},
+}
+
+// proposalView is a proposal as the read shows it. arguments is the request as the agent's tool call
+// carried it, in the names of the tool's schema and without the idempotency key; a person approves
+// what it shows (S4 G7b).
+type proposalView struct {
+	OK            bool            `json:"ok"`
+	ProposalID    string          `json:"proposal_id"`
+	TaskID        string          `json:"task_id"`
+	DelegationID  string          `json:"delegation_id"`
+	AgentID       string          `json:"agent_id"`
+	InitiatorID   string          `json:"initiator_id"`
+	Command       string          `json:"command"`
+	RequestHash   string          `json:"request_hash"`
+	ObjectType    string          `json:"object_type"`
+	ObjectID      string          `json:"object_id"`
+	ObjectVersion int64           `json:"object_version"`
+	Arguments     json.RawMessage `json:"arguments"`
+	Status        string          `json:"status"`
+	RowVersion    int64           `json:"row_version"`
+	Attempts      int             `json:"attempts"`
+	Sends         int             `json:"sends"`
+	ProposedAt    string          `json:"proposed_at"`
+	ClaimedAt     string          `json:"claimed_at,omitempty"`
+	GrantID       string          `json:"grant_id,omitempty"`
+	SettledAt     string          `json:"settled_at,omitempty"`
+	OutcomeCode   string          `json:"outcome_code,omitempty"`
+	OutcomePath   string          `json:"outcome_path,omitempty"`
+	ActionID      string          `json:"action_id,omitempty"`
+}
+
+func proposalOf(p proposal.Proposal) proposalView {
+	v := proposalView{OK: true, ProposalID: p.ProposalID, TaskID: p.TaskID, DelegationID: p.DelegationID, AgentID: p.AgentID,
+		InitiatorID: p.InitiatorID, Command: p.Command, RequestHash: p.RequestHash, ObjectType: p.ObjectType, ObjectID: p.ObjectID,
+		ObjectVersion: p.ObjectVersion, Arguments: p.Arguments, Status: p.Status, RowVersion: p.RowVersion, Attempts: p.Attempts,
+		Sends: p.Sends, ProposedAt: timestamp(p.ProposedAt), GrantID: p.GrantID, OutcomeCode: p.OutcomeCode, OutcomePath: p.OutcomePath,
+		ActionID: p.ActionID}
+	if !p.ClaimedAt.IsZero() {
+		v.ClaimedAt = timestamp(p.ClaimedAt)
+	}
+	if !p.SettledAt.IsZero() {
+		v.SettledAt = timestamp(p.SettledAt)
+	}
+	return v
 }
 
 // moneyView is an amount as the reads show it: currency, its minor units and the decimal amount.

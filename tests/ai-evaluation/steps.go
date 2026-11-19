@@ -424,12 +424,15 @@ func (t *trial) verifyAcceptance(ctx context.Context) error {
 }
 
 // orderSteps are the agent's order phase in the scripted model: order.prepare needs a person's
-// approval grant (D-7), so the first proposal makes the task wait; once the owner issued it the
-// runner resumes the task and the model proposes it again; the same for order.review.request.
+// approval grant (D-7), so the proposal makes the task wait; the platform keeps the request (S4 G7b),
+// and once the owner issued the grant the runner resumes the task and sends the stored request itself,
+// without asking the model. The model's next call is the next step, order.review.request, which waits
+// and is sent the same way. (Until G7b the script repeated each call after its grant, because the
+// model had to send it again.)
 func (t *trial) orderSteps() []scriptStep {
 	prepare := prepareOrder(orderID, quoteID, t.revision, t.businessHash, acceptanceID)
 	request := requestOrderReview(orderID, 1, "review.order.1")
-	return []scriptStep{turn(prepare), turn(prepare), turn(request), turn(request), done("订单草稿已准备并提交审核，等待人工审核与生效。")}
+	return []scriptStep{turn(prepare), turn(request), done("订单草稿已准备并提交审核，等待人工审核与生效。")}
 }
 
 // prepareOrder is the agent's order phase; the owner approves each proposal as it waits.

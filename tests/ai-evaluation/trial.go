@@ -394,6 +394,9 @@ func (t *trial) approveWaits(ctx context.Context, v map[string]any) (bool, error
 	if t.fam.approve != nil && !t.fam.approve(t, command) {
 		return false, nil
 	}
+	if err := t.readProposal(ctx, str(dig(v, "wait", "awaiting", "id")), command, hash); err != nil {
+		return false, err
+	}
 	t.approval++
 	_, err := t.humanCmd(ctx, actorClerk, "ai", contractAI, "ai.approval_grant.issue", true, map[string]any{"id": fmt.Sprintf("grant.%d", t.approval),
 		"delegation_id": delegationID, "command": command, "request_hash": hash, "object_id": object, "object_version": version,
@@ -403,6 +406,24 @@ func (t *trial) approveWaits(ctx context.Context, v map[string]any) (bool, error
 	}
 	t.issued[proposal] = true
 	return true, nil
+}
+
+// readProposal is the approver reading what the grant will approve (S4 G7b): the proposal the wait
+// names is readable over HTTP by the owner, is still pending, and is the command and request hash the
+// wait's items carry, with the arguments the agent proposed.
+func (t *trial) readProposal(ctx context.Context, id, command, hash string) error {
+	p, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/proposals/"+id)
+	if err != nil {
+		return fmt.Errorf("the approver cannot read the proposal %s: %w", id, err)
+	}
+	if str(p["proposal_id"]) != id || str(p["command"]) != command || str(p["request_hash"]) != hash || str(p["status"]) != "pending" ||
+		str(dig(p, "arguments", "OrderID")) == "" {
+		return fmt.Errorf("the proposal %s is not the call the wait names (%s, %s): %v", id, command, hash, p)
+	}
+	n, _ := t.rec.Authority["proposals_read"].(int)
+	t.rec.Authority["proposals_read"] = n + 1
+	t.note("the approver read the proposal %s before the grant: %s on %s", id, command, str(dig(p, "arguments", "OrderID")))
+	return nil
 }
 
 // collect reads the trial's authoritative records back: the task, its actions and verifications,

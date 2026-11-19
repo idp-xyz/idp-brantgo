@@ -571,6 +571,11 @@ GRANT UPDATE (state, model_returned, input_sha256, output_sha256, input_tokens, 
     action_id, code, cost_minor, settled_at) ON brant_ai.model_call TO brant_app;
 -- A refused tool call is settled with where and why it was refused (S4 unit G3, ai 000004).
 GRANT UPDATE (refusal_path, refusal_reason) ON brant_ai.model_call TO brant_app;
+-- The request an agent proposed and a person is asked to approve (S4 unit G7b, ai 000005): made once,
+-- then claimed, sent and settled through the status columns only (trigger); never deleted.
+GRANT SELECT, INSERT ON brant_ai.proposal TO brant_app;
+GRANT UPDATE (status, row_version, attempts, sends, claimed_at, grant_id, settled_at, outcome_code, outcome_path, action_id,
+    delegation_id, initiator_id, owner_team_id) ON brant_ai.proposal TO brant_app;
 -- A reservation locks its task's budget row FOR UPDATE, which needs UPDATE on one column; the trigger
 -- refuses every change of a budget.
 GRANT UPDATE (source) ON brant_ai.task_budget TO brant_app;

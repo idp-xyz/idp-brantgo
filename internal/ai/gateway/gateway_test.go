@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-brant/internal/ai/adapters/model"
 	"go.idp.xyz/idp-brant/internal/ai/approvalgrant"
 	"go.idp.xyz/idp-brant/internal/ai/capability"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
+	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -142,6 +145,123 @@ func TestOnlyAnAdmissionCarriesTheGrantProof(t *testing.T) {
 	}
 	if len(seen) != 2 || seen[0] || seen[1] {
 		t.Fatalf("a hand-built admission carried a proof: %v", seen)
+	}
+}
+
+type refusingChecks struct {
+	err   error
+	asked int
+}
+
+func (r *refusingChecks) CheckPrepareOrder(context.Context, trdapi.PrepareOrder) error {
+	r.asked++
+	return r.err
+}
+
+func (r *refusingChecks) CheckRequestOrderReview(context.Context, trdapi.RequestOrderReview) error {
+	r.asked++
+	return r.err
+}
+
+const prepareArgs = `{"OrderID":"order.1","QuoteID":"quote.1","BusinessRevision":2,"BusinessHash":"` +
+	"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" + `","AcceptanceID":"acc.1"}`
+
+// S4 G7b: Judge asks the owning context before a person is asked and returns its rejection as the
+// call's, audited in brant_ai like any refusal of the gateway; a request it accepts and a command
+// that needs no judgement pass, and nothing is audited for them.
+func TestJudgeIsTheOwningContextsRefusal(t *testing.T) {
+	checks := &refusingChecks{err: kernel.Reject(kernel.CodeInvalidKnownValue, "/args/notify_party_ref", "")}
+	reg, err := capability.Q01Registry(capability.Q01Targets{TRDOrderChecks: checks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := &recordingAuditor{}
+	g := Gateway{Registry: reg, Auditor: audit}
+	ctx := agentContext(t, kernel.ActorAI)
+	c, err := reg.Lookup("tenant.1", trdapi.CommandPrepareOrder, "/command")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := trdapi.PrepareOrder{OrderID: "order.1", QuoteID: "quote.1", BusinessRevision: 2, BusinessHash: strings.Repeat("a", 64), AcceptanceID: "acc.1"}
+	hash, err := c.RequestHash(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepare := Call{Capability: c, Command: cmd, RequestHash: hash, Object: c.Object(cmd)}
+	err = g.Judge(ctx, prepare)
+	rej, ok := kernel.AsRejection(err)
+	if !ok || rej.Code != kernel.CodeInvalidKnownValue || rej.Fields[0].Path != "/args/notify_party_ref" || checks.asked != 1 {
+		t.Fatalf("judge %v, asked %d", err, checks.asked)
+	}
+	if len(audit.entries) != 1 || audit.entries[0] != "order.prepare INVALID_KNOWN_VALUE" {
+		t.Fatalf("audited %v", audit.entries)
+	}
+	checks.err = nil
+	if err = g.Judge(ctx, prepare); err != nil || checks.asked != 2 || len(audit.entries) != 1 {
+		t.Fatalf("an accepted request: %v, asked %d, audited %v", err, checks.asked, audit.entries)
+	}
+	plain, err := reg.Lookup("tenant.1", "source.register", "/command")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = g.Judge(ctx, Call{Capability: plain, Command: plain.WithKey(evdapi.RegisterSource{SourceID: "s"}, "")}); err != nil || checks.asked != 2 {
+		t.Fatalf("a command without a judgement: %v, asked %d", err, checks.asked)
+	}
+}
+
+// S4 G7b: Reload gives back the call a stored proposal was only if it is that request still: arguments
+// that decode strictly, hash and object the proposal recorded. A stored request that changed under the
+// proposal (a schema that moved, a row altered) is ErrProposalChanged and sends nothing; the actor,
+// the command and the binding are checked as for a model's call.
+func TestReloadRefusesAProposalThatIsNotTheRequestProposed(t *testing.T) {
+	reg, err := capability.Q01Registry(capability.Q01Targets{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := reg.Lookup("tenant.1", trdapi.CommandPrepareOrder, "/command")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := trdapi.PrepareOrder{OrderID: "order.1", QuoteID: "quote.1", BusinessRevision: 2, BusinessHash: strings.Repeat("a", 64), AcceptanceID: "acc.1"}
+	hash, _ := c.RequestHash(cmd)
+	object := c.Object(cmd)
+	audit := &recordingAuditor{}
+	g := Gateway{Registry: reg, Auditor: audit}
+	ctx := agentContext(t, kernel.ActorAI)
+	b := Binding{TaskID: "task.1", DelegationID: "del.1"}
+	args := json.RawMessage(prepareArgs)
+
+	if _, err = g.Reload(ctx, b, trdapi.CommandPrepareOrder, args, strings.Repeat("b", 64), object); !errors.Is(err, ErrProposalChanged) {
+		t.Errorf("another hash: %v", err)
+	}
+	if _, err = g.Reload(ctx, b, trdapi.CommandPrepareOrder, args, hash, capability.ObjectRef{Type: object.Type, ID: object.ID, Version: object.Version + 1}); !errors.Is(err, ErrProposalChanged) {
+		t.Errorf("another object version: %v", err)
+	}
+	if _, err = g.Reload(ctx, b, trdapi.CommandPrepareOrder, args, hash, capability.ObjectRef{Type: object.Type, ID: "quote.2", Version: object.Version}); !errors.Is(err, ErrProposalChanged) {
+		t.Errorf("another object: %v", err)
+	}
+	for name, stored := range map[string]string{"an unknown member": `{"OrderID":"order.1","Scope":"x"}`, "the key": `{"OrderID":"order.1","IdempotencyKey":"k"}`,
+		"not json": `{`, "an empty string": `{"OrderID":""}`} {
+		_, err = g.Reload(ctx, b, trdapi.CommandPrepareOrder, json.RawMessage(stored), hash, object)
+		if !errors.Is(err, ErrProposalChanged) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err = g.Reload(agentContext(t, kernel.ActorHuman), b, trdapi.CommandPrepareOrder, args, hash, object); err == nil {
+		t.Error("a person's context")
+	} else if rej, ok := kernel.AsRejection(err); !ok || rej.Code != kernel.CodePermissionDenied {
+		t.Errorf("a person's context: %v", err)
+	}
+	if _, err = g.Reload(ctx, b, "quote.activate", args, hash, object); err == nil {
+		t.Error("a human-only command")
+	} else if rej, ok := kernel.AsRejection(err); !ok || rej.Code != kernel.CodePermissionDenied {
+		t.Errorf("a human-only command: %v", err)
+	}
+	if _, err = g.Reload(ctx, Binding{DelegationID: "del.1"}, trdapi.CommandPrepareOrder, args, hash, object); !errors.Is(err, ErrBinding) {
+		t.Errorf("binding: %v", err)
+	}
+	if _, err = g.Reload(context.Background(), b, trdapi.CommandPrepareOrder, args, hash, object); err == nil {
+		t.Error("no principal")
 	}
 }
 

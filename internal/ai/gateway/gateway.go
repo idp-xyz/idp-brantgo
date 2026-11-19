@@ -162,6 +162,65 @@ func (g Gateway) Decode(ctx context.Context, b Binding, call model.ToolCall) (Ca
 	return Call{Capability: c, Command: cmd, RequestHash: hash, Object: c.Object(cmd), Delegation: auth.Delegation}, nil
 }
 
+// Judge asks the owning context whether it would refuse call, a decoded call of a capability that
+// needs an approval grant, before a person is asked to approve it (S4 G7b). The context judges as the
+// AI actor of ctx and writes nothing; its rejection is the call's, and it is audited in brant_ai as
+// any refusal of the gateway is. A capability without a judgement passes.
+func (g Gateway) Judge(ctx context.Context, call Call) error {
+	if err := call.Capability.Judge(ctx, call.Command); err != nil {
+		return g.audit(action.WithCorrelation(ctx, action.Correlation(ctx)), call.Capability.Command, call.Object.ID, err)
+	}
+	return nil
+}
+
+// ErrProposalChanged is a stored proposal that is no longer the request that was proposed: its
+// arguments do not decode, or hash or name another object than the proposal recorded. Nothing is sent
+// for it.
+var ErrProposalChanged = errors.New("gateway: the stored proposal is not the request that was proposed")
+
+// Reload turns a stored proposal back into the call it was (S4 G7b): command's capability, args
+// decoded strictly as a model's arguments are, and the delegation allowed for the task now. The
+// request is not prepared again and not changed: its hash and its object must be the ones the
+// proposal recorded, which an approval grant binds (ErrProposalChanged otherwise). What Decode
+// checks of the actor, the capability and the delegation is checked again; Admit then re-checks the
+// delegation and uses the grant, as for any call.
+func (g Gateway) Reload(ctx context.Context, b Binding, command string, args json.RawMessage, hash string, object capability.ObjectRef) (Call, error) {
+	p, err := identity.FromContext(ctx)
+	if err != nil {
+		return Call{}, err
+	}
+	if err = b.check(); err != nil {
+		return Call{}, err
+	}
+	ctx = action.WithCorrelation(ctx, action.Correlation(ctx))
+	if p.Actor.Kind != kernel.ActorAI {
+		return Call{}, g.audit(ctx, auditName(command), "", kernel.Reject(kernel.CodePermissionDenied, "/", "the gateway serves AI actors"))
+	}
+	c, err := g.Registry.Lookup(p.Scope.Tenant, command, "/command")
+	if err != nil {
+		return Call{}, g.audit(ctx, auditName(command), "", err)
+	}
+	cmd, err := g.decode(c, args)
+	if err != nil {
+		if _, ok := kernel.AsRejection(err); ok {
+			return Call{}, errors.Join(ErrProposalChanged, err)
+		}
+		return Call{}, err
+	}
+	got, err := c.RequestHash(cmd)
+	if err != nil {
+		return Call{}, err
+	}
+	if got != hash || c.Object(cmd) != object {
+		return Call{}, ErrProposalChanged
+	}
+	auth, err := g.Policy.Check(ctx, policy.Step{DelegationID: b.DelegationID, TaskID: b.TaskID, Capability: c})
+	if err != nil {
+		return Call{}, err // audited by Check
+	}
+	return Call{Capability: c, Command: cmd, RequestHash: got, Object: object, Delegation: auth.Delegation}, nil
+}
+
 // Admit clears call to run with key, the idempotency key of the action intent the executor
 // persisted before the side effect (TSK-INV-003; baseline 17.1). It re-checks the delegation at
 // this step and, for a capability that needs one, uses the approval grant b names for exactly this

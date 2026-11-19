@@ -114,7 +114,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000001_tsk_tasks", "brant:000002_tsk_action_executions", "brant:000003_tsk_goal_verifications",
 		"brant:000004_tsk_barrier_reconciliation", "brant:000005_tsk_source_file", "brant:000006_tsk_resume_arrival",
 		"brant:000001_ai_delegations", "brant:000002_ai_model_calls", "brant:000003_ai_model_call_waiting",
-		"brant:000004_ai_model_call_refusal",
+		"brant:000004_ai_model_call_refusal", "brant:000005_ai_proposal",
 	}
 	if got := strings.Join(ids, " "); got != strings.Join(want, " ") {
 		t.Fatalf("migration order = %s", got)
