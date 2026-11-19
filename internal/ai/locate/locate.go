@@ -6,19 +6,29 @@
 //
 //   - the quote stands at the locator: verified, kept (in the extract's own notation);
 //   - it stands elsewhere, at exactly one place: relocated to that place;
-//   - it stands at several places and the locator is not one of them: every place is kept (at most
-//     MaxPlaces) and the field is pending ambiguous (SOURCE_AMBIGUOUS until a human verifies it);
+//   - it stands at several places and the locator names a row (Row) in which it stands exactly once:
+//     relocated to that place (owner decision 2026-11-18 20:15, after live trials in which the model
+//     placed every field at the start of its row and the unit "PCS" stands in every row);
+//   - it stands at several places, and the locator names no row of the extract, or the quote does not
+//     stand in that row, or stands there more than once: every place is kept (at most MaxPlaces) and
+//     the field is pending ambiguous (SOURCE_AMBIGUOUS until a human verifies it);
 //   - it stands nowhere: the locator is dropped and the field is pending unlocated;
 //   - a place carries a reader's note that questions the value (a formula's cached value, a date
 //     shown from a serial number, an error value, a hidden sheet, row or column, invisible text,
 //     undecodable glyphs): the field is pending noted.
 //
+// The choice is among the places the extract proves: the quote stands where the gateway says it does,
+// never where the model says. A PDF line is its own row, and a quote that stands in the line the model
+// names is verified there before the row rule is reached, so the rule moves quotes of text and XLSX
+// extracts only.
+//
 // A field with a value but no locator in a line whose source is a file extract is pending
 // unlocated. A line that names no place of its own (RfqLine.Locator, which INQ needs before a
 // person can confirm the line) takes the row its fields stand in: the one row that holds every
-// field of the line that stands at exactly one place (owner decision 2026-11-18, after live
-// trials in which the model placed every field and left the line's place out). Fields in several
-// rows, or no field at one place, leave it empty; a place the model names is kept as it is.
+// field of the line that stands at exactly one place, a field that took its place from the row it
+// named included (owner decisions 2026-11-18, after live trials in which the model placed every
+// field and left the line's place out). Fields in several rows, or no field at one place, leave it
+// empty; a place the model names is kept as it is.
 // Extracts are read through EVD as the caller, so access to the file is re-checked on
 // every use (CT16). The files a draft's lines cite must keep the input profile together (at most 3
 // files and 50,000 characters, baseline 14.2: INPUT_PROFILE_UNSUPPORTED).
@@ -51,8 +61,8 @@ const MaxPlaces = inqapi.MaxLineLocators / 4
 // Statuses of a field locator.
 const (
 	Verified  = "verified"  // the quote stands at the locator
-	Relocated = "relocated" // the quote stands at exactly one other place
-	Ambiguous = "ambiguous" // the quote stands at several places, the locator is none of them
+	Relocated = "relocated" // the quote stands at exactly one other place, or once in the row the locator names
+	Ambiguous = "ambiguous" // the quote stands at several places and the locator's row does not hold it exactly once
 	Unlocated = "unlocated" // the quote stands nowhere, or the field has a value and no locator
 )
 
@@ -79,8 +89,10 @@ func Canonical(e *ingest.Extract, locator string) (string, bool) {
 }
 
 // Find returns the places quote stands at in e: hint alone when the quote stands there; otherwise
-// every place it stands. Several places are SOURCE_AMBIGUOUS, returned with the places; no place
-// is neither.
+// the one place it stands, or, when it stands at several, the one place in the row hint names if
+// the quote stands exactly once in that row (the owner's rule of 2026-11-18: the agent's row picks
+// among the places the extract proves). Otherwise every place it stands: several places are
+// SOURCE_AMBIGUOUS, returned with the places; no place is neither.
 func Find(e *ingest.Extract, quote, hint string) ([]string, error) {
 	if hint != "" {
 		if c, ok := Canonical(e, hint); ok && e.Verify(c, quote) {
@@ -89,6 +101,9 @@ func Find(e *ingest.Extract, quote, hint string) ([]string, error) {
 	}
 	places := e.Find(quote)
 	if len(places) > 1 {
+		if p := onceInRowOf(e, places, hint); p != "" {
+			return []string{p}, nil
+		}
 		return places, kernel.RejectAs(codes.SourceAmbiguous, kernel.CategoryInvalid, "/quote",
 			strconv.Itoa(len(places))+" places: "+strings.Join(places[:min(len(places), MaxPlaces)], ", "))
 	}
@@ -135,6 +150,28 @@ func Row(e *ingest.Extract, place string) string {
 		}
 	}
 	return ""
+}
+
+// onceInRowOf returns the place of places that stands in the row hint names, when exactly one does;
+// "" when hint is no locator of e's kind (the agent named no place, or one of another notation), or
+// the row holds none of places or several. A place in a column the row does not have still names its
+// row: the row is what the agent claims, and what it picks from is only what the extract proves.
+func onceInRowOf(e *ingest.Extract, places []string, hint string) string {
+	row := Row(e, hint)
+	if row == "" {
+		return ""
+	}
+	found := ""
+	for _, p := range places {
+		if Row(e, p) != row {
+			continue
+		}
+		if found != "" {
+			return ""
+		}
+		found = p
+	}
+	return found
 }
 
 // Finding is what the extract says about one field of a line.

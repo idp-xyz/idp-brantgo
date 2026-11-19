@@ -758,80 +758,140 @@ func TestALineWithoutItsPlaceIsConfirmedAtTheRowOfItsFields(t *testing.T) {
 	}
 }
 
-// Field locators at the row's start (the live trial of 2026-11-18, live-20261118T045207Z): the
-// model quotes each field's own words and places all of them where the row begins. The gateway's
-// locating moves a quote that stands at one place and keeps every place of one that stands at
-// several — the unit, "PCS", stands in every row — with the field pending ambiguous. A confirmation
-// that states the value and names no place is SOURCE_AMBIGUOUS, as the scripted owner's was; naming
-// the place a person read the value at settles it, and INQ records it as the owner's correction.
-func TestRowStartLocatorsNeedThePlaceAPersonNames(t *testing.T) {
-	w := newAgentWorld(t, false)
-	text := "SYNTHETIC INQUIRY G3 - not a real customer\nFrom: customer.1 (contact.1)\nCode | Item | Qty | Unit\n" +
-		"sku.1 | synthetic shirt red | 120 | PCS\nsku.1 | synthetic shirt blue | 60 | PCS\n"
-	w.rawFile(w.clerk, "file.g3", "inquiry.txt", evdapi.MimeText, []byte(text))
-	line := func(id, row, item, qty string) map[string]any {
-		return map[string]any{"LineID": id, "SkuID": "sku.1", "RequestedItem": item, "Quantity": qty, "UOM": "PCS", "SourceID": "src.g3",
-			"Locator": row + ":1", "Locators": []map[string]string{at("requested_item", row+":1", item), at("sku_id", row+":1", "sku.1"),
-				at("quantity", row+":1", qty), at("uom", row+":1", "PCS")}}
+// rowStartRfq has the agent draft, in one turn, an RFQ from a text inquiry as the live model did on
+// 2026-11-18 (bin/ai-eval/live-20261118T115840Z, normal-1 and normal-4): every field of a line is
+// quoted with its own words and placed where its row begins, and the line's own place is left out.
+// The inquiry has a row a line from its fourth line on, "sku.1 | item | quantity | PCS": the unit
+// "PCS" stands in every row. items[i] and qtys[i] are the words of line L<i+1>. It returns the
+// inquiry's lines and the draft as INQ holds it after the gateway's locating.
+func (w *agentWorld) rowStartRfq(id string, items, qtys []string) ([]string, inqapi.RfqView) {
+	w.t.Helper()
+	rows := []string{"SYNTHETIC INQUIRY " + id + " - not a real customer", "From: customer.1 (contact.1)", "Code | Item | Qty | Unit"}
+	source, file := "src."+id, "file."+id
+	var lines []map[string]any
+	for i := range items {
+		rows = append(rows, "sku.1 | "+items[i]+" | "+qtys[i]+" | PCS")
+		start := strconv.Itoa(len(rows)) + ":1"
+		lines = append(lines, map[string]any{"LineID": "L" + strconv.Itoa(i+1), "SkuID": "sku.1", "RequestedItem": items[i], "Quantity": qtys[i],
+			"UOM": "PCS", "SourceID": source, "Locators": []map[string]string{at("sku_id", start, "sku.1"),
+				at("requested_item", start, items[i]), at("quantity", start, qtys[i]), at("uom", start, "PCS")}})
 	}
-	m := model.NewScripted("scripted-q01-v1", calls(registerExtractCall("c1", "src.g3", "file.g3")),
-		calls(tc("c2", inqapi.CommandSaveRfq, map[string]any{"RfqID": "rfq.g3", "CustomerID": "customer.1", "ContactID": "contact.1",
-			"SourceIDs": []string{"src.g3"}, "Lines": []map[string]any{line("L1", "4", "synthetic shirt red", "120"),
-				line("L2", "5", "synthetic shirt blue", "60")}})), done("RFQ 草稿已保存。"))
+	w.rawFile(w.clerk, file, "inquiry.txt", evdapi.MimeText, []byte(strings.Join(rows, "\n")+"\n"))
+	task, rfqID := "task."+id+".rfq", "rfq."+id
+	m := model.NewScripted("scripted-q01-v1", calls(registerExtractCall("c1", source, file)),
+		calls(tc("c2", inqapi.CommandSaveRfq, map[string]any{"RfqID": rfqID, "CustomerID": "customer.1", "ContactID": "contact.1",
+			"SourceIDs": []string{source}, "Lines": lines})), done("RFQ 草稿已保存。"))
 	r := w.runner(m)
-	w.sourcedTask("task.g3.rfq", tskapi.Target{RfqID: "rfq.g3", CustomerID: "customer.1"}, tskapi.SourceRef{Kind: tskapi.SourceFile, ID: "file.g3"},
+	w.sourcedTask(task, tskapi.Target{RfqID: rfqID, CustomerID: "customer.1"}, tskapi.SourceRef{Kind: tskapi.SourceFile, ID: file},
 		bundleRef(r), evdapi.CommandRegisterSource, inqapi.CommandSaveRfq)
-	if res := w.turnOn(r, "task.g3.rfq"); len(res.Receipts) != 2 || len(res.Refusals) != 0 || m.Remaining() != 0 {
-		t.Fatalf("the drafting turn %+v", res)
+	if res := w.turnOn(r, task); len(res.Receipts) != 2 || len(res.Refusals) != 0 || m.Remaining() != 0 {
+		w.t.Fatalf("the drafting turn %+v", res)
 	}
-	rfq, err := w.c.INQ.GetRfq(w.clerk, "rfq.g3")
+	rfq, err := w.c.INQ.GetRfq(w.clerk, rfqID)
 	w.must(err)
-	for i, row := range []string{"4", "5"} {
-		l := rfq.Lines[i]
-		var places []string
-		for _, x := range l.Locators {
-			if x.Field == inqapi.FieldUOM {
-				places = append(places, x.Locator)
-			}
+	return rows, rfq
+}
+
+// placesOf returns where the words of a line of the draft stand in its row of the inquiry (row is
+// the 1-based line of rows): each field at its own place, as the gateway's locating leaves them,
+// in the order the model listed the fields, the unit's words at their last place of the row.
+func placesOf(rows []string, row int, items, qtys []string, i int) []inqapi.FieldLocator {
+	text := rows[row-1]
+	place := func(col int) string { return fmt.Sprintf("%d:%d", row, col+1) }
+	return []inqapi.FieldLocator{{Field: "sku_id", Locator: place(0), Quote: "sku.1"},
+		{Field: "requested_item", Locator: place(strings.Index(text, items[i])), Quote: items[i]},
+		{Field: "quantity", Locator: place(strings.Index(text, " | "+qtys[i]+" | ") + 3), Quote: qtys[i]},
+		{Field: "uom", Locator: place(strings.LastIndex(text, "PCS")), Quote: "PCS"}}
+}
+
+// The live trials' draft (live-20261118T115840Z normal-1 and normal-4): every field of a line quoted
+// with its own words and placed where its row begins, the unit's words in every row. By the owner's
+// decision of 2026-11-18 20:15 the gateway's locating takes the unit's place in the row the agent
+// named, where its words stand once, so the draft is one a person confirms as it stands: every
+// line has its row and every field its own place, nothing is pending, and the confirmation names
+// no field and leaves no correction. INQ is unchanged: the places are the AI layer's candidates.
+func TestALiveShapedDraftIsConfirmedAsItStands(t *testing.T) {
+	w := newAgentWorld(t, false)
+	items, qtys := []string{"synthetic shirt red", "synthetic shirt blue", "synthetic shirt green"}, []string{"120", "60", "36"}
+	rows, rfq := w.rowStartRfq("g7a.live", items, qtys)
+	if len(rfq.Lines) != len(items) {
+		t.Fatalf("lines %+v", rfq.Lines)
+	}
+	var verified []inqapi.LineVerification
+	for i, l := range rfq.Lines {
+		row := i + 4
+		if l.Locator != fmt.Sprintf("%d:1", row) || len(l.Pending) != 0 || !slices.Equal(l.Locators, placesOf(rows, row, items, qtys, i)) {
+			t.Fatalf("line %d after the locating: place %q, pending %+v, locators %+v", i, l.Locator, l.Pending, l.Locators)
 		}
-		if len(l.Pending) != 1 || l.Pending[0].Field != inqapi.FieldUOM || l.Pending[0].Reason != inqapi.PendingAmbiguous ||
-			!slices.Equal(places, []string{"4:37", "5:37"}) || !slices.Contains(l.Locators, inqapi.FieldLocator{Field: inqapi.FieldSkuID,
-			Locator: row + ":1", Quote: "sku.1"}) {
-			t.Fatalf("line %d after the locating: pending %+v, locators %+v", i, l.Pending, l.Locators)
+		verified = append(verified, inqapi.LineVerification{LineID: l.LineID})
+	}
+	_, err := w.c.INQ.ConfirmRfqScope(w.clerk, inqapi.ConfirmRfqScope{IdempotencyKey: w.key(), RfqID: rfq.RfqID, ExpectedVersion: rfq.RowVersion,
+		EvidenceIDs: []string{"src.g7a.live"}, VerifiedLines: verified})
+	w.must(err)
+	if rfq, err = w.c.INQ.GetRfq(w.clerk, rfq.RfqID); err != nil || rfq.Status != inqapi.StatusReady || len(rfq.Corrections) != 0 {
+		t.Fatalf("after the confirmation: %s, corrections %+v, %v", rfq.Status, rfq.Corrections, err)
+	}
+}
+
+// A unit that stays ambiguous is still held by INQ (the owner's rule of 2026-11-18 20:15 resolves a
+// field only where its words stand once in the row the agent named). In this inquiry the first row
+// holds "PCS" twice, in the item and as the unit; the agent places the unit where the row begins, so
+// the gateway keeps the places the extract proves — the row's two and the second row's — and the
+// field is pending ambiguous, while the second line's unit, once in its row, is resolved. A
+// confirmation that settles nothing is SOURCE_AMBIGUOUS, so is one that states the value and names no
+// place, as the scripted owner's was in the live trial; naming the place a person read the value at
+// settles it, and INQ records it as the owner's correction.
+func TestAUnitThatStandsTwiceInItsRowIsStillHeldAmbiguous(t *testing.T) {
+	w := newAgentWorld(t, false)
+	items, qtys := []string{"synthetic shirt red per PCS", "synthetic shirt blue"}, []string{"120", "60"}
+	rows, rfq := w.rowStartRfq("g7a.twice", items, qtys)
+	if len(rfq.Lines) != 2 {
+		t.Fatalf("lines %+v", rfq.Lines)
+	}
+	inItem, unit := strings.Index(rows[3], "PCS")+1, strings.LastIndex(rows[3], "PCS")+1
+	next := strings.LastIndex(rows[4], "PCS") + 1
+	first, second := rfq.Lines[0], rfq.Lines[1]
+	var held []string
+	for _, x := range first.Locators {
+		if x.Field == inqapi.FieldUOM {
+			held = append(held, x.Locator)
 		}
 	}
-	confirm := func(fields func(row string) []inqapi.VerifiedField) error {
-		_, err := w.c.INQ.ConfirmRfqScope(w.clerk, inqapi.ConfirmRfqScope{IdempotencyKey: w.key(), RfqID: "rfq.g3", ExpectedVersion: rfq.RowVersion,
-			EvidenceIDs:   []string{"src.g3"},
-			VerifiedLines: []inqapi.LineVerification{{LineID: "L1", Fields: fields("4")}, {LineID: "L2", Fields: fields("5")}}})
+	want := []string{fmt.Sprintf("4:%d", inItem), fmt.Sprintf("4:%d", unit), fmt.Sprintf("5:%d", next)}
+	if first.Locator != "4:1" || len(first.Pending) != 1 || first.Pending[0].Field != inqapi.FieldUOM ||
+		first.Pending[0].Reason != inqapi.PendingAmbiguous || !slices.Equal(held, want) ||
+		!slices.Equal(first.Locators[:3], placesOf(rows, 4, items, qtys, 0)[:3]) {
+		t.Fatalf("line 1 after the locating: place %q, pending %+v, locators %+v", first.Locator, first.Pending, first.Locators)
+	}
+	if second.Locator != "5:1" || len(second.Pending) != 0 || !slices.Equal(second.Locators, placesOf(rows, 5, items, qtys, 1)) {
+		t.Fatalf("line 2 after the locating: place %q, pending %+v, locators %+v", second.Locator, second.Pending, second.Locators)
+	}
+	confirm := func(fields []inqapi.VerifiedField) error {
+		_, err := w.c.INQ.ConfirmRfqScope(w.clerk, inqapi.ConfirmRfqScope{IdempotencyKey: w.key(), RfqID: rfq.RfqID, ExpectedVersion: rfq.RowVersion,
+			EvidenceIDs:   []string{"src.g7a.twice"},
+			VerifiedLines: []inqapi.LineVerification{{LineID: "L1", Fields: fields}, {LineID: "L2"}}})
 		return err
 	}
-	// Each line verified as it stands: the pending field stays.
-	err = confirm(func(string) []inqapi.VerifiedField { return nil })
+	// Each line verified as it stands: the first line's pending field stays.
+	err := confirm(nil)
 	if code(err) != inqapi.CodeSourceAmbiguous || path(err) != "/args/lines/0/uom" {
 		t.Fatalf("a confirmation that settles nothing: %v", err)
 	}
 	// The value stated, no place named: what the scripted owner sent in the live trial.
-	err = confirm(func(string) []inqapi.VerifiedField {
-		return []inqapi.VerifiedField{{Field: inqapi.FieldUOM, Value: "PCS"}}
-	})
+	err = confirm([]inqapi.VerifiedField{{Field: inqapi.FieldUOM, Value: "PCS"}})
 	if rej, _ := kernel.AsRejection(err); code(err) != inqapi.CodeSourceAmbiguous || path(err) != "/args/verified_lines/0/fields/0/locator" ||
 		capability.StatedReason(rej.Code, rej.Fields[0].Reason) != "Name the place verified" {
 		t.Fatalf("a confirmation without the place: %v", err)
 	}
-	// The place named: the row's own.
-	w.must(confirm(func(row string) []inqapi.VerifiedField {
-		return []inqapi.VerifiedField{{Field: inqapi.FieldUOM, Value: "PCS", Locator: row + ":37"}}
-	}))
-	rfq, err = w.c.INQ.GetRfq(w.clerk, "rfq.g3")
+	// The place named: the unit's own in the first row.
+	w.must(confirm([]inqapi.VerifiedField{{Field: inqapi.FieldUOM, Value: "PCS", Locator: want[1]}}))
+	rfq, err = w.c.INQ.GetRfq(w.clerk, rfq.RfqID)
 	w.must(err)
-	if rfq.Status != inqapi.StatusReady || len(rfq.Corrections) != 2 {
+	if rfq.Status != inqapi.StatusReady || len(rfq.Corrections) != 1 {
 		t.Fatalf("after the confirmation: %s, corrections %+v", rfq.Status, rfq.Corrections)
 	}
-	for i, c := range rfq.Corrections {
-		if c.Kind != inqapi.CorrectionVerified || c.Field != inqapi.FieldUOM || c.Locator != []string{"4:37", "5:37"}[i] ||
-			c.Reason != inqapi.PendingAmbiguous || c.ProposedBy.ID != agentID || c.CorrectedBy.ID != "clerk.ai" || c.To != "PCS" {
-			t.Fatalf("correction %d: %+v", i, c)
-		}
+	if c := rfq.Corrections[0]; c.Kind != inqapi.CorrectionVerified || c.LineID != "L1" || c.Field != inqapi.FieldUOM || c.Locator != want[1] ||
+		c.Reason != inqapi.PendingAmbiguous || c.ProposedBy.ID != agentID || c.CorrectedBy.ID != "clerk.ai" || c.To != "PCS" {
+		t.Fatalf("correction: %+v", c)
 	}
 }

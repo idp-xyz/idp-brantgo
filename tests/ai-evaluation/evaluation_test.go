@@ -183,6 +183,37 @@ func TestAN01InquiryLeavesTheUnitsOut(t *testing.T) {
 	}
 }
 
+// The feedback family's inquiry (S4 G7a): the unit "PCS" stands in every row, once in the rows of
+// L2 to L4 and twice in the row of L1, whose item carries it too. An agent that places every field
+// at its row's start names, for each unit, a row the gateway can settle, except L1's: the owner's
+// resolution stays exercised, for one line.
+func TestFeedbackInquiryHoldsTheUnitTwiceInOneRow(t *testing.T) {
+	in, err := makeInquiry(kindText, "inquiry", feedbackRows(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Split(string(in.data), "\n")
+	claimed := in.atRowStart()
+	for i, l := range brcLines {
+		row, _, _ := strings.Cut(in.at[l.id][fieldUOM].Locator, ":")
+		n, _ := strconv.Atoi(row)
+		want := 1
+		if i == 0 {
+			want = 2
+		}
+		if got := strings.Count(text[n-1], "PCS"); got != want || claimed.at[l.id][fieldUOM].Locator != row+":1" {
+			t.Errorf("%s: row %d holds PCS %d times, want %d; the agent names %q", l.id, n, got, want, claimed.at[l.id][fieldUOM].Locator)
+		}
+	}
+	if in.at["L1"][fieldItem].Quote != feedbackItem || in.at["L2"][fieldItem].Quote != brcLines[1].item {
+		t.Fatalf("%+v", in.at)
+	}
+	// Nothing else of the file changes: the other families' rows are BRC-001's.
+	if rows := brcRows(); rows[0].item == feedbackItem || rows[1] != feedbackRows()[1] {
+		t.Fatalf("%+v", rows)
+	}
+}
+
 // Baseline 19.1: every trial is kept; the family reports first success and repeat consistency from
 // all of them, and the totals count every trial, failed ones included.
 func TestRegistryKeepsEveryTrial(t *testing.T) {

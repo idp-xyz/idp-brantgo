@@ -91,9 +91,9 @@ var fixedSet = []*family{
 		expected: "delegated reads succeed, are hashed in the ledger and are not TSK actions; an undelegated read and a foreign object are refused; bank_account is refused; the bundle lists the reads",
 		run:      runReads, grade: gradeReads},
 	{name: "feedback", design: []string{"S4-03", "S4-07", "G3", "BC-AT27", "BC-AT28", "SD-07"},
-		goal:     "the agent makes the live trials' mistakes: it places every field at its row's start and names no place for the line, its first quote draft has no cost snapshot and its second no unit price",
-		goalCode: "quote_ready", input: kindText,
-		expected: "each line takes the row its located fields stand in; INQ holds each line's unit ambiguous and the owner names its place (4 owner resolutions, synthetic: extra human work, not the AI's); the draft without the cost snapshot is refused by the gateway with COST_SNAPSHOT_MISSING before TRD and leaves no TSK action, the one without a unit price is refused by TRD, both are in the ledger with their paths and the third draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
+		goal:     "the agent makes the live trials' mistakes: it places every field at its row's start and names no place for the line (the unit's words stand in every row, and twice in the first), its first quote draft has no cost snapshot and its second no unit price",
+		goalCode: "quote_ready", input: kindText, rows: feedbackRows,
+		expected: "each line takes the row its located fields stand in; the gateway resolves the unit of the three lines whose row holds \"PCS\" once to its place in that row (owner decision 2026-11-18 20:15), and the first line's row holds it twice, so INQ holds that unit ambiguous and the owner names its place (1 owner resolution, synthetic: extra human work, not the AI's); the draft without the cost snapshot is refused by the gateway with COST_SNAPSHOT_MISSING before TRD and leaves no TSK action, the one without a unit price is refused by TRD, both are in the ledger with their paths and the third draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
 		run:      runFeedback, grade: gradeFeedback},
 }
 
@@ -924,11 +924,25 @@ func runReads(ctx context.Context, t *trial) error {
 		))
 }
 
+// feedbackItem is the first line's item in the feedback family's inquiry: it carries the unit's
+// words, so the first row holds "PCS" twice.
+const feedbackItem = "knitted T-shirt red S, sold by PCS"
+
+// feedbackRows are BRC-001's rows with the first line's item as feedbackItem. The unit stands in
+// every row; the rows of L2 to L4 hold it once, the row of L1 twice.
+func feedbackRows() []inquiryRow {
+	rows := brcRows()
+	rows[0].item = feedbackItem
+	return rows
+}
+
 // runFeedback is the scripted suite's run of the mistakes the live model made on 2026-11-18 (S4
-// G3). The RFQ draft quotes every field's own words and places all of them where the row begins;
-// the gateway's locating moves the quotes that stand at one place and keeps every place of the
-// unit, which stands in every row, so INQ holds each line's unit ambiguous: the owner names the
-// place (confirmRFQ, an owner resolution a line). The first quote draft is the one of the live
+// G3, G7a). The RFQ draft quotes every field's own words and places all of them where the row
+// begins; the gateway's locating moves the quotes that stand at one place, and takes the unit,
+// which stands in every row, at its place in the row the agent named where the row holds it once
+// (owner decision 2026-11-18 20:15). That settles the units of L2 to L4. The row of L1 holds the
+// unit twice, so the gateway keeps every place of it and INQ holds that unit ambiguous: the owner
+// names the place (confirmRFQ, one owner resolution). The first quote draft is the one of the live
 // trial of 2026-11-18 18:51 (normal-1): every member but the cost snapshot. TRD would save it and
 // the owner's freeze would be refused COST_SNAPSHOT_MISSING, so the gateway refuses it first, before
 // TRD is called, with that code at the member (S4 G6). The second has the snapshot and no unit price
@@ -947,6 +961,7 @@ func runFeedback(ctx context.Context, t *trial) error {
 	for i := range lines {
 		lines[i].noPlace = true
 	}
+	lines[0].item = feedbackItem
 	if err := t.draftRFQ(ctx, lines); err != nil {
 		return err
 	}
@@ -984,15 +999,18 @@ func runFeedback(ctx context.Context, t *trial) error {
 func gradeFeedback(ctx context.Context, t *trial) {
 	t.assertCompleted(ctx, "quote_ready", "ai_with_required_review")
 	t.assertPayable(ctx, "96000")
-	// The owner named the place of each line's unit, the truth's; nothing else needed settling.
+	// The gateway took the unit of L2 to L4 from the row the agent named, where it stands once. The
+	// owner named one place, the truth's, of the unit of L1 (its row holds the words twice); nothing
+	// else needed settling.
 	named := 0
 	for _, o := range t.rec.OwnerResolutions {
-		if o.Kind == resolvedPlace && o.Field == fieldUOM && o.PendingReason == pendingAmbiguous && o.Locator == t.in.at[o.LineID][fieldUOM].Locator &&
-			o.Synthetic {
+		if o.Kind == resolvedPlace && o.LineID == brcLines[0].id && o.Field == fieldUOM && o.PendingReason == pendingAmbiguous &&
+			o.Locator == t.in.at[o.LineID][fieldUOM].Locator && o.Synthetic {
 			named++
 		}
 	}
-	t.assert("owner resolutions: the place of a line's unit named", "4 of 4", fmt.Sprintf("%d of %d", named, len(t.rec.OwnerResolutions)))
+	t.assert("owner resolutions: only the place of the unit whose row holds it twice named", "1 of 1",
+		fmt.Sprintf("%d of %d", named, len(t.rec.OwnerResolutions)))
 	// INQ's own record of them: the owner's corrections of what the agent proposed.
 	recorded := 0
 	for _, c := range t.rec.Corrections {
@@ -1001,21 +1019,38 @@ func gradeFeedback(ctx context.Context, t *trial) {
 			recorded++
 		}
 	}
-	t.assert("INQ corrections: verified at the named place, proposed by the agent, corrected by the owner", "4 of 4",
+	t.assert("INQ corrections: verified at the named place, proposed by the agent, corrected by the owner", "1 of 1",
 		fmt.Sprintf("%d of %d", recorded, len(t.rec.Corrections)))
 	t.assert("automation level", "extra_human_work", t.rec.Automation)
 	// The agent named no place for its lines: each has the row its fields stand in (a text row is
-	// where its line begins), which is what let the owner confirm it.
-	rowed := 0
+	// where its line begins), which is what let the owner confirm it. The unit of every line but
+	// L1 is at one place, its own, with nothing pending: the gateway resolved it.
+	rowed, resolved := 0, 0
 	if r, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/inq/rfqs/"+rfqID); err == nil {
 		for _, l := range list(r["lines"]) {
-			row, _, _ := strings.Cut(t.in.at[str(dig(l, "line_id"))][fieldUOM].Locator, ":")
+			id := str(dig(l, "line_id"))
+			row, _, _ := strings.Cut(t.in.at[id][fieldUOM].Locator, ":")
 			if row != "" && str(dig(l, "locator")) == row+":1" {
 				rowed++
+			}
+			var units []string
+			for _, x := range list(dig(l, "locators")) {
+				if str(dig(x, "field")) == fieldUOM {
+					units = append(units, str(dig(x, "locator")))
+				}
+			}
+			held := false
+			for _, p := range list(dig(l, "pending")) {
+				held = held || str(dig(p, "field")) == fieldUOM
+			}
+			if id != brcLines[0].id && !held && slices.Equal(units, []string{t.in.at[id][fieldUOM].Locator}) {
+				resolved++
 			}
 		}
 	}
 	t.assert("RFQ lines: the place the agent left out is the row of the line's fields", "4 of 4", fmt.Sprintf("%d of %d", rowed, len(brcLines)))
+	t.assert("RFQ lines: a unit that stands once in the row the agent named is at its own place, not pending", "3 of 3",
+		fmt.Sprintf("%d of %d", resolved, len(brcLines)-1))
 	// The ledger keeps where each refused quote draft was refused, and the reason the gateway gave
 	// the first (S4 G6); one draft committed.
 	var refused, reasons []string
