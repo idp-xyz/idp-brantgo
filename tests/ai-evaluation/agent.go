@@ -72,13 +72,21 @@ func registerExtract(source, file string) call {
 	return call{"source.register", map[string]any{"SourceID": source, "SourceKind": "file_extract", "FileID": file}}
 }
 
+// recordWord is the word a record of the located form starts with ("segment<TAB>5:1<TAB>text",
+// brant-extract/1). The live model of 2026-11-19 copied it in front of every place it wrote.
+const recordWord = "segment"
+
 // agentLine is an RFQ line candidate the agent proposes. noPlace leaves the line's own Locator out,
 // as the live model did on 2026-11-18 (it placed every field and not the line): the gateway's
-// locating then gives the line the row its fields stand in.
+// locating then gives the line the row its fields stand in. withWord writes every place of the line,
+// the line's own included, with the located form's record word and a space in front, as the live
+// model did on 2026-11-19 ("segment 6:1"): the gateway reads each as the place of the extract's
+// notation it names and INQ stores it without the word.
 type agentLine struct {
 	id, sku, item, qty, uom string
 	pending                 []map[string]any
 	noPlace                 bool
+	withWord                bool
 }
 
 // saveRFQ is the agent's rfq.save_draft from the inquiry's extract: each field with a value quotes
@@ -89,6 +97,9 @@ func saveRFQ(rfq, source string, in inquiry, lines []agentLine) call {
 		m := map[string]any{"LineID": l.id, "SourceID": source, "Locator": "inquiry " + in.kind + " row of " + l.id}
 		if at, ok := in.at[l.id][fieldItem]; ok {
 			m["Locator"] = "inquiry " + in.kind + " " + at.Locator
+			if l.withWord {
+				m["Locator"] = recordWord + " " + at.Locator
+			}
 		}
 		if l.noPlace {
 			delete(m, "Locator")
@@ -101,7 +112,11 @@ func saveRFQ(rfq, source string, in inquiry, lines []agentLine) call {
 			}
 			m[f.key] = f.value
 			if at, ok := in.at[l.id][f.field]; ok {
-				locs = append(locs, map[string]any{"Field": f.field, "Locator": at.Locator, "Quote": at.Quote})
+				place := at.Locator
+				if l.withWord {
+					place = recordWord + " " + place
+				}
+				locs = append(locs, map[string]any{"Field": f.field, "Locator": place, "Quote": at.Quote})
 			}
 		}
 		if len(locs) > 0 {

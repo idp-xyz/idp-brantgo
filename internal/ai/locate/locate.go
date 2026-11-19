@@ -22,13 +22,21 @@
 // names is verified there before the row rule is reached, so the rule moves quotes of text and XLSX
 // extracts only.
 //
+// A place the agent writes is read once, by Canonical: a place of the extract's notation, or one
+// with the located form's record word in front of it ("segment 5:43", which the model copies from
+// the form it reads; lead decision 2026-11-19, after the live trials of that day). Nothing else is
+// tolerated, and a place read so is checked like any other: it says where to look, it proves
+// nothing.
+//
 // A field with a value but no locator in a line whose source is a file extract is pending
 // unlocated. A line that names no place of its own (RfqLine.Locator, which INQ needs before a
 // person can confirm the line) takes the row its fields stand in: the one row that holds every
 // field of the line that stands at exactly one place, a field that took its place from the row it
 // named included (owner decisions 2026-11-18, after live trials in which the model placed every
 // field and left the line's place out). Fields in several rows, or no field at one place, leave it
-// empty; a place the model names is kept as it is.
+// empty. A place the model names is kept: as the place Canonical reads in it when it reads one
+// ("segment 5:1" is stored as "5:1"), else as the model wrote it ("row 5"; INQ takes any text
+// there and the gateway never checks it).
 // Extracts are read through EVD as the caller, so access to the file is re-checked on
 // every use (CT16). The files a draft's lines cite must keep the input profile together (at most 3
 // files and 50,000 characters, baseline 14.2: INPUT_PROFILE_UNSUPPORTED).
@@ -71,37 +79,67 @@ const (
 var questioning = []string{ingest.NoteFormulaCachedValue, ingest.NoteDateFromSerial, ingest.NoteErrorValue, ingest.NoteHiddenSheet,
 	ingest.NoteHiddenRow, ingest.NoteHiddenColumn, ingest.NoteInvisibleText, ingest.NoteUndecodableGlyphs}
 
-// Canonical returns locator in the notation e writes ("sheet1!c3" → "sheet1!C3"), or false when it
-// is not a locator of e's kind.
+// recordWord is the word a record of the located form starts with ("segment\t5:43\ttext", the form
+// brant-extract/1 gives the model to read its places from). A model that copies it in front of a
+// place writes "segment 5:43" (live trial of 2026-11-19, bin/ai-eval/live-20261119T082915Z
+// normal-1); Canonical reads that as the place 5:43, the one tolerance of this package.
+const recordWord = "segment"
+
+// Canonical is where a place the agent wrote is read: it returns the place in the notation e writes
+// ("sheet1!c3" → "sheet1!C3"), or "" and false when what the agent wrote is not a place of e's kind.
+// One leading recordWord and the spaces and tabs after it are dropped first, once ("segment 5:43" is
+// 5:43, "segment Inquiry!C5" is Inquiry!C5); what is left must be a place of the notation as it is,
+// so "segment", "segment 5:43 PCS", "segment segment 5:43", "Segment 5:43" and "row 5:43" are not.
+// Everything that reads a place the agent wrote (Find's hint, the status of a field locator, the
+// line's own place) reads it here.
 func Canonical(e *ingest.Extract, locator string) (string, bool) {
+	locator = withoutRecordWord(locator)
 	switch e.Kind {
 	case ingest.KindText:
-		line, col, err := ingest.ParseTextLocator(locator)
-		return ingest.TextLocator(line, col), err == nil
+		if line, col, err := ingest.ParseTextLocator(locator); err == nil {
+			return ingest.TextLocator(line, col), true
+		}
 	case ingest.KindPDF:
-		page, line, err := ingest.ParsePDFLocator(locator)
-		return ingest.PDFLocator(page, line), err == nil
+		if page, line, err := ingest.ParsePDFLocator(locator); err == nil {
+			return ingest.PDFLocator(page, line), true
+		}
 	case ingest.KindXLSX:
-		sheet, row, col, err := ingest.ParseCellLocator(locator)
-		return ingest.CellLocator(sheet, row, col), err == nil
+		if sheet, row, col, err := ingest.ParseCellLocator(locator); err == nil {
+			return ingest.CellLocator(sheet, row, col), true
+		}
 	}
 	return "", false
+}
+
+// withoutRecordWord drops the recordWord s starts with and the spaces and tabs that follow it, once.
+// s is returned as it is when it does not start so (the word at another place, in another case,
+// without white space after it, or alone).
+func withoutRecordWord(s string) string {
+	rest, ok := strings.CutPrefix(s, recordWord)
+	if !ok {
+		return s
+	}
+	place := strings.TrimLeft(rest, " \t")
+	if place == rest {
+		return s
+	}
+	return place
 }
 
 // Find returns the places quote stands at in e: hint alone when the quote stands there; otherwise
 // the one place it stands, or, when it stands at several, the one place in the row hint names if
 // the quote stands exactly once in that row (the owner's rule of 2026-11-18: the agent's row picks
 // among the places the extract proves). Otherwise every place it stands: several places are
-// SOURCE_AMBIGUOUS, returned with the places; no place is neither.
+// SOURCE_AMBIGUOUS, returned with the places; no place is neither. hint is read by Canonical, so a
+// place written with the record word is the place.
 func Find(e *ingest.Extract, quote, hint string) ([]string, error) {
-	if hint != "" {
-		if c, ok := Canonical(e, hint); ok && e.Verify(c, quote) {
-			return []string{c}, nil
-		}
+	named, _ := Canonical(e, hint) // "" when the agent named no place of e's notation
+	if named != "" && e.Verify(named, quote) {
+		return []string{named}, nil
 	}
 	places := e.Find(quote)
 	if len(places) > 1 {
-		if p := onceInRowOf(e, places, hint); p != "" {
+		if p := onceInRowOf(e, places, named); p != "" {
 			return []string{p}, nil
 		}
 		return places, kernel.RejectAs(codes.SourceAmbiguous, kernel.CategoryInvalid, "/quote",
@@ -153,9 +191,10 @@ func Row(e *ingest.Extract, place string) string {
 }
 
 // onceInRowOf returns the place of places that stands in the row hint names, when exactly one does;
-// "" when hint is no locator of e's kind (the agent named no place, or one of another notation), or
-// the row holds none of places or several. A place in a column the row does not have still names its
-// row: the row is what the agent claims, and what it picks from is only what the extract proves.
+// "" when hint is no place of e's kind (the agent named no place, or one of another notation; hint
+// is a place as Canonical reads it), or the row holds none of places or several. A place in a column
+// the row does not have still names its row: the row is what the agent claims, and what it picks
+// from is only what the extract proves.
 func onceInRowOf(e *ingest.Extract, places []string, hint string) string {
 	row := Row(e, hint)
 	if row == "" {
@@ -277,8 +316,20 @@ func (l Locator) Lines(ctx context.Context, lines []inqapi.RfqLine) ([]inqapi.Rf
 	for _, f := range findings {
 		byLine[f.Line] = append(byLine[f.Line], f)
 	}
-	for i, fs := range byLine {
-		out[i] = complete(lines[i], fs, extracts[lines[i].SourceID])
+	for i := range out {
+		e := extracts[out[i].SourceID]
+		if e == nil {
+			continue
+		}
+		// The line's own place is stored as the place of the extract's notation when the agent wrote one
+		// ("segment 5:1" is "5:1"), whether or not the line has fields; what is not a place is left
+		// as it is.
+		if place, ok := Canonical(e, out[i].Locator); ok {
+			out[i].Locator = place
+		}
+		if fs := byLine[i]; len(fs) > 0 {
+			out[i] = complete(out[i], fs, e)
+		}
 	}
 	return out, nil
 }

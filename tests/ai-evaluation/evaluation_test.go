@@ -214,6 +214,37 @@ func TestFeedbackInquiryHoldsTheUnitTwiceInOneRow(t *testing.T) {
 	}
 }
 
+// The feedback family's agent writes every place of its second line, the line's own included, with
+// the located form's record word, as the live model did on 2026-11-19 ("segment 6:1"); the other
+// three lines name no place of their own and write plain places. The second line's unit is one the
+// gateway can settle (TestFeedbackInquiryHoldsTheUnitTwiceInOneRow: its row holds the words once).
+func TestFeedbackAgentWritesOneLinesPlacesWithTheRecordWord(t *testing.T) {
+	in, err := makeInquiry(kindText, "inquiry", feedbackRows(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := saveRFQ("rfq.x", "src.x", in.atRowStart(), feedbackLines()).args["Lines"].([]any)
+	if len(lines) != len(brcLines) {
+		t.Fatalf("%d lines", len(lines))
+	}
+	for i, l := range lines {
+		m := l.(map[string]any)
+		own, named := m["Locator"].(string)
+		var places []string
+		for _, x := range m["Locators"].([]any) {
+			places = append(places, x.(map[string]any)["Locator"].(string))
+		}
+		start := strconv.Itoa(5+i) + ":1"
+		wantOwn, wantPlace := "", start
+		if i == 1 {
+			wantOwn, wantPlace = recordWord+" "+start, recordWord+" "+start
+		}
+		if named != (wantOwn != "") || own != wantOwn || !slices.Equal(places, []string{wantPlace, wantPlace, wantPlace, wantPlace}) {
+			t.Errorf("%s: own place %q (%v), places %q; want %q and %q", brcLines[i].id, own, named, places, wantOwn, wantPlace)
+		}
+	}
+}
+
 // Baseline 19.1: every trial is kept; the family reports first success and repeat consistency from
 // all of them, and the totals count every trial, failed ones included.
 func TestRegistryKeepsEveryTrial(t *testing.T) {
