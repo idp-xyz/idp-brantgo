@@ -12,7 +12,8 @@
 //     Gateway.Tools offers the model only what the delegation allows; model.Port is the model;
 //   - the HTTP routes (unit C3): GrantDelegation, RevokeDelegation, IssueApprovalGrant,
 //     RevokeApprovalGrant (human-only), GetDelegation, GetApprovalGrant, ApprovalGrantsOf
-//     (ai.read), Audit (ai.audit), AuditRejected;
+//     (ai.read), GetProposal (ai.read: the request an approval grant is asked for), Audit (ai.audit),
+//     AuditRejected;
 //   - bootstrap: New with its own *bentopg.DB, capability.Q01Registry over the composed contexts and
 //     WithTasks (TSK and the owning contexts' request identities); Runner for brant-worker -agent;
 //   - the task-step route (unit C3): RunStep, the execution entry of a person's step on a task;
@@ -32,6 +33,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/executionevidence"
 	"go.idp.xyz/idp-brant/internal/ai/gateway"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
+	"go.idp.xyz/idp-brant/internal/ai/proposal"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
@@ -55,6 +57,7 @@ const (
 func Rules() []authorization.Rule {
 	rules := append(policy.Rules(), approvalgrant.Rules()...)
 	rules = append(rules, evidenceRules()...)
+	rules = append(rules, proposal.Rules()...)
 	return append(rules, authorization.Rule{Command: CommandAudit, Permission: PermissionAudit,
 		ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}})
 }
@@ -152,6 +155,12 @@ func (l *Layer) GetDelegation(ctx context.Context, id string) (policy.Delegation
 // GetApprovalGrant reads an approval grant (ai.read).
 func (l *Layer) GetApprovalGrant(ctx context.Context, id string) (approvalgrant.Grant, error) {
 	return l.Grants.GetGrant(ctx, id)
+}
+
+// GetProposal reads the request an agent proposed and a person is asked to approve, with its
+// arguments and what became of it (ai.read, audited as ai.proposal.get; S4 G7b).
+func (l *Layer) GetProposal(ctx context.Context, id string) (proposal.Proposal, error) {
+	return proposal.Service{Ledger: l.ledger}.Get(ctx, id)
 }
 
 // ApprovalGrantsOf reads the approval grants of a delegation (ai.read).

@@ -30,6 +30,12 @@ import (
 // RoleNotify is the PTY address role of a notify party (ptyapi.AddressNotify).
 const RoleNotify = "notify"
 
+// notifyRoleReason is the reason of the refusal of a notify party whose address has another role. It
+// is one text for every role, so that a caller, an AI agent among them, is told what to correct
+// without the refusal carrying a value (S4 G7b: the agent's order.prepare is judged before a person
+// is asked).
+const notifyRoleReason = "The notify party's address must be one with the role notify; leave the notify party out when the party has none"
+
 // Seal is what a revision sealed of its trade terms and parties (see above).
 type Seal struct {
 	Incoterm  string          `json:"incoterm"`
@@ -109,7 +115,7 @@ func NewSeal(t Terms, addresses []quote.AddressSnapshot, f SealFacts, tradePath,
 		case x == nil || x.Ref != *n:
 			return nil, kernel.Reject(kernel.CodeReferenceInvalid, notifyPath, "The notify party's address is needed")
 		case x.Role != RoleNotify:
-			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, notifyPath, "The address's role is "+x.Role+", not notify")
+			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, notifyPath, notifyRoleReason)
 		default:
 			s.Notify = &SealedAddress{Address: x.Address, Country: x.Country}
 		}

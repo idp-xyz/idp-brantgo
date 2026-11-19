@@ -315,7 +315,7 @@ func TestQ01PromptStatesTheOrderOfWork(t *testing.T) {
 		`NOT_FOUND from a read of a target means "not created yet": your draft at ExpectedVersion 0 creates the target RFQ or quote.`,
 		"It is never a reason to stop or to read again.",
 		"1 to 64 characters: letters, digits and . _ : -", "starting with a letter or digit",
-		"When the facts list the grant for it, send the same call again", "answer without a tool call",
+		"once given, the platform sends it as you made it", "Never repeat it or invent a grant", "answer without a tool call",
 		"Do the first step below that is not done yet.",
 	} {
 		if !strings.Contains(strings.Join(strings.Fields(Q01Prompt), " "), strings.Join(strings.Fields(want), " ")) {

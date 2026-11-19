@@ -217,7 +217,7 @@ type PrepareOrder struct {
 	// sees, current now (AddressRoleRef v1; REFERENCE_INVALID, REFERENCE_STALE, or
 	// INVALID_KNOWN_VALUE for another role, at /args/notify_party_ref). Omitted from the request
 	// hash when absent, so a command stored before S5R replays.
-	NotifyPartyRef *AddressRoleRef `json:",omitempty"`
+	NotifyPartyRef *AddressRoleRef `json:",omitempty" doc:"an address with the role notify; leave out when the party has none"`
 }
 
 // RequestOrderReview opens review ReviewID of draft order OrderID (Python order.review.request).

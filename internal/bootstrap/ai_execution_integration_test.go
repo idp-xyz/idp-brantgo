@@ -414,27 +414,28 @@ func TestAgentRunnerRunsOnlyACompatibleBundle(t *testing.T) {
 // for exactly that request. Without one the task waits for approval (task.wait approval, awaiting the
 // runner's proposal, with the command, request hash and object as items) and nothing is recorded or
 // sent; the runner leaves it waiting until the clerk issues the grant, then resumes the task (arrival:
-// the grant) and the agent's next call runs with it: one order, prepared by the agent, the grant used
-// by the action's key, the delegation and grant recorded on the attempt.
+// the grant) and sends the request the agent proposed, as the platform and without a model call (S4
+// G7b; a runner that took over after a restart does the same): one order, prepared by the agent, the
+// grant used by the action's key, the delegation and grant recorded on the attempt.
 func TestAgentRunnerWaitsForAnApprovalGrant(t *testing.T) {
 	w := newAgentWorld(t, true)
 	_, acc := w.accepted("quote.1")
 	prepare := map[string]any{"OrderID": "order.ai.1", "QuoteID": acc.QuoteID, "BusinessRevision": acc.BusinessRevision,
 		"BusinessHash": acc.BusinessHash, "AcceptanceID": acc.ObjectID}
-	m := model.NewScripted("scripted-q01-v1", calls(tc("c1", trdapi.CommandPrepareOrder, prepare)), calls(tc("c2", trdapi.CommandPrepareOrder, prepare)),
-		done("订单已生效。"))
+	m := model.NewScripted("scripted-q01-v1", calls(tc("c1", trdapi.CommandPrepareOrder, prepare)))
 	r := w.runner(m)
 	w.aiTask("task.order", tskapi.GoalOrderActive, tskapi.Target{QuoteID: "quote.1", CustomerID: "customer.1"}, budgetOf(10, 2), bundleRef(r),
 		trdapi.CommandPrepareOrder)
 	res := w.turnOn(r, "task.order")
 	v := w.taskView("task.order")
 	if res.Waiting != tskapi.WaitApproval || v.Lifecycle != tskapi.StateWaitingApproval || v.Wait.Awaiting == nil ||
-		v.Wait.Awaiting.Kind != execution.ArrivalApprovalGrant || v.Wait.Awaiting.Version != acc.BusinessRevision || len(v.Wait.Items) != 3 ||
+		v.Wait.Awaiting.Kind != execution.ArrivalApprovalGrant || v.Wait.Awaiting.Version != acc.BusinessRevision || len(v.Wait.Items) != 4 ||
 		v.Wait.ResponsibleID != "clerk.ai" {
 		t.Fatalf("turn %+v, task %s %+v", res, v.Lifecycle, v.Wait)
 	}
 	hash := strings.TrimPrefix(v.Wait.Items[1], "request_hash ")
-	if v.Wait.Awaiting.ID != execution.ProposalID("task.order", trdapi.CommandPrepareOrder, hash) {
+	if v.Wait.Awaiting.ID != execution.ProposalID("task.order", trdapi.CommandPrepareOrder, hash, acc.BusinessRevision) ||
+		v.Wait.Items[3] != "proposal "+v.Wait.Awaiting.ID {
 		t.Fatalf("awaiting %+v", v.Wait.Awaiting)
 	}
 	if actions, err := w.c.TSK.TaskActions(w.clerk, "task.order"); err != nil || len(actions) != 0 {
@@ -463,8 +464,12 @@ func TestAgentRunnerWaitsForAnApprovalGrant(t *testing.T) {
 	_, err := w.c.AI.IssueApprovalGrant(w.clerk, approvalgrantIssue(w, "grant.order", "del.task.order", trdapi.CommandPrepareOrder, hash, "quote.1",
 		acc.BusinessRevision))
 	w.must(err)
-	res = w.turnOn(r, "task.order")
-	if res.ModelCalls != 2 || len(res.Receipts) != 1 || res.Receipts[0].Stage != execution.Verified || !res.Verified || m.Remaining() != 0 {
+	// The runner restarts while the task waits: another one, with a model that only answers, takes it
+	// over. The proposal is the platform's, not the model's: it is sent from the stored request.
+	m2 := model.NewScripted("scripted-q01-v1", done("订单草稿已准备。"))
+	res = w.turnOn(w.runner(m2), "task.order")
+	if res.ModelCalls != 1 || res.ToolCalls != 1 || len(res.Receipts) != 1 || res.Receipts[0].Stage != execution.Verified || !res.Verified ||
+		m2.Remaining() != 0 || m.Remaining() != 0 {
 		t.Fatalf("turn %+v", res)
 	}
 	if o := w.getOrder("order.ai.1"); o.PreparedBy.ID != agentID || o.Status != trdapi.OrderDraft {
@@ -793,7 +798,9 @@ func TestWorkerAgentModeRunsTheRunner(t *testing.T) {
 }
 
 // AN05, D1 finding 2, F1: after order.prepare has committed, the runner repeats the call without
-// waiting for another approval grant and without using one. The replay is TSK's stored receipt.
+// waiting for another approval grant and without using one. The replay is TSK's stored receipt. Since
+// S4 G7b the platform sent the request after the grant (the first receipt, not a replay) and the two
+// calls the model still makes are replays: three succeeded tool calls, one wait, one grant used.
 // Sending the same key to TRD as the agent, with no proof, is still PERMISSION_DENIED: a stored
 // result is no exception at the command ledger.
 func TestAgentRunnerReplaysACommittedIntentWithoutASecondGrant(t *testing.T) {
@@ -815,7 +822,8 @@ func TestAgentRunnerReplaysACommittedIntentWithoutASecondGrant(t *testing.T) {
 		acc.BusinessRevision))
 	w.must(err)
 	res = w.turnOn(r, "task.replay")
-	if res.Waiting != "" || len(res.Receipts) < 2 || !res.Receipts[len(res.Receipts)-1].Replayed {
+	if res.Waiting != "" || len(res.Receipts) != 3 || res.Receipts[0].Replayed || !res.Receipts[1].Replayed || !res.Receipts[2].Replayed ||
+		res.ModelCalls != 3 || m.Remaining() != 0 {
 		t.Fatalf("replay turn %+v", res)
 	}
 	grants, err := w.c.AI.ApprovalGrantsOf(w.clerk, "del.task.replay")
@@ -823,7 +831,7 @@ func TestAgentRunnerReplaysACommittedIntentWithoutASecondGrant(t *testing.T) {
 	if len(grants) != 1 || grants[0].Status != "used" || grants[0].GrantID != "grant.replay" {
 		t.Fatalf("grants %+v", grants)
 	}
-	var replayed, waited int
+	var succeeded, waited int
 	for _, c := range w.ledger("task.replay") {
 		if c.Kind != executionevidence.KindTool || c.ToolCommand != trdapi.CommandPrepareOrder {
 			continue
@@ -832,13 +840,13 @@ func TestAgentRunnerReplaysACommittedIntentWithoutASecondGrant(t *testing.T) {
 		case executionevidence.StateWaiting:
 			waited++
 		case executionevidence.StateSucceeded:
-			replayed++
+			succeeded++
 		default:
 			t.Fatalf("prepare call %s %s", c.State, c.Code)
 		}
 	}
-	if waited != 1 || replayed != 2 {
-		t.Fatalf("waited %d replayed %d", waited, replayed)
+	if waited != 1 || succeeded != 3 {
+		t.Fatalf("waited %d succeeded %d", waited, succeeded)
 	}
 	actionID := res.Receipts[0].ActionID
 	_, err = w.c.TRD.PrepareOrder(w.agent, trdapi.PrepareOrder{IdempotencyKey: actionID, OrderID: "order.replay", QuoteID: acc.QuoteID,

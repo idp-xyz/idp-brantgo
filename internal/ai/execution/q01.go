@@ -66,8 +66,8 @@ quote. It is never a reason to stop or to read again.
 An ID you choose (SourceID, ResponseID, OrderID, ReviewID) is 1 to 64 characters: letters, digits and . _ : -,
 starting with a letter or digit, not used before.
 
-A call that needs a person's approval grant makes the task wait. When the facts list the grant for it, send the same
-call again; never invent a grant. When no step is open for you, answer without a tool call: the platform then
+A call that needs a person's approval grant makes the task wait; once given, the platform sends it as you made it.
+Never repeat it or invent a grant. When no step is open for you, answer without a tool call: the platform then
 verifies the goal.`
 
 // Q01Goals are the goals of the Q01 task profile with their versions.

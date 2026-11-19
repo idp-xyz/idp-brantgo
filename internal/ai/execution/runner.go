@@ -21,6 +21,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/executionevidence"
 	"go.idp.xyz/idp-brant/internal/ai/gateway"
 	"go.idp.xyz/idp-brant/internal/ai/policy"
+	"go.idp.xyz/idp-brant/internal/ai/proposal"
 	"go.idp.xyz/idp-brant/internal/ai/runtime"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
@@ -275,25 +276,6 @@ func (r *Runner) delegations(ctx context.Context, scope kernel.Scope, agent, tas
 	return out, err
 }
 
-// grantFor returns an issued, unexpired approval grant of d for exactly call, or nil.
-func (r *Runner) grantFor(ctx context.Context, scope kernel.Scope, d policy.Delegation, call gateway.Call) (*approvalgrant.Grant, error) {
-	var out *approvalgrant.Grant
-	now := r.Clock.Now()
-	err := policy.WithinScope(ctx, r.DB, scope, func(ctx context.Context, exec bentopg.Executor) error {
-		grants, err := approvalgrant.OfDelegation(ctx, exec, scope, d.DelegationID)
-		for _, g := range grants {
-			if g.Status == approvalgrant.StatusIssued && now.Before(g.ExpiresAt) && g.Command == call.Capability.Command &&
-				g.RequestHash == call.RequestHash && g.ObjectID == call.Object.ID && g.ObjectVersion == call.Object.Version {
-				g := g
-				out = &g
-				return err
-			}
-		}
-		return err
-	})
-	return out, err
-}
-
 // issuedGrants returns the issued, unexpired approval grants of the delegations.
 func (r *Runner) issuedGrants(ctx context.Context, scope kernel.Scope, dels []policy.Delegation) ([]approvalgrant.Grant, error) {
 	var out []approvalgrant.Grant
@@ -429,6 +411,24 @@ func (t *turn) run() error {
 	if err = t.bindCreatedRoot(actions); err != nil {
 		return err
 	}
+	// What a person approved is sent by the platform, as the model made it, before the model is
+	// asked (S4 G7b); a proposal the owning context refused reaches the model's facts as any refusal.
+	sentAny, err := t.sendApproved()
+	if errors.Is(err, errInFlight) {
+		// Another runner holds the claim and is sending: this one neither asks the model nor ends the
+		// task's turn under it (a task that left running refuses the send in flight); the next turn
+		// reads what came of it.
+		t.res.Skipped = "another runner is sending the approved request; the next turn reads what came of it"
+		return nil
+	}
+	if err != nil || t.view.Lifecycle != tskapi.StateRunning {
+		return err
+	}
+	if sentAny {
+		if actions, err = t.r.Executor.Recover(t.agent, v.TaskID); err != nil {
+			return err
+		}
+	}
 	return t.converse(actions)
 }
 
@@ -455,7 +455,7 @@ func (t *turn) resumeOnGrant() (bool, error) {
 	}
 	awaited := t.view.Wait.Awaiting
 	for _, g := range grants {
-		if ProposalID(t.view.TaskID, g.Command, g.RequestHash) != awaited.ID {
+		if ProposalID(t.view.TaskID, g.Command, g.RequestHash, g.ObjectVersion) != awaited.ID {
 			continue
 		}
 		_, err = t.r.Tasks.ResumeTask(t.system, tskapi.ResumeTask{IdempotencyKey: commandKey(t.view, "resume"), TaskID: t.view.TaskID,
@@ -719,6 +719,9 @@ func (t *turn) toolCall(call model.ToolCall, toolDel map[string]policy.Delegatio
 		case errors.Is(runErr, errWaiting):
 			// A wait is not a refusal (D1 finding 5): the call did not run, and it is not GRANT_INVALID.
 			o.State, o.Code = executionevidence.StateWaiting, executionevidence.CodeWaitingApproval
+		case errors.Is(runErr, errInFlight):
+			// Another runner is sending the request: nothing was sent here and nothing is asked.
+			o.State, o.Code = executionevidence.StateUnavailable, codes.ToolUnavailable
 		case errors.Is(runErr, model.ErrUnavailable):
 			o.State, o.Code = executionevidence.StateUnavailable, codes.ToolUnavailable
 		default:
@@ -746,6 +749,9 @@ func (t *turn) toolCall(call model.ToolCall, toolDel map[string]policy.Delegatio
 			return answer, false, nil
 		case errors.Is(runErr, errWaiting):
 			t.trace.toolEnded(t.r.Clock.Now(), "tool_wait", call, "")
+			return "", true, nil
+		case errors.Is(runErr, errInFlight):
+			t.trace.toolEnded(t.r.Clock.Now(), "tool_error", call, "in_flight")
 			return "", true, nil
 		case errors.Is(runErr, model.ErrUnavailable):
 			t.trace.toolEnded(t.r.Clock.Now(), "tool_error", call, "unavailable")
@@ -824,27 +830,45 @@ func (t *turn) runTool(call model.ToolCall, toolDel map[string]policy.Delegation
 			return "", Receipt{}, err
 		} else if ok {
 			t.res.Receipts = append(t.res.Receipts, rcpt)
+			if err := t.closeSent(ProposalID(t.view.TaskID, c.Capability.Command, c.RequestHash, c.Object.Version), rcpt); err != nil {
+				return "", rcpt, err
+			}
 			return answerOf(rcpt), rcpt, nil
 		}
-		g, err := t.r.grantFor(t.agent, t.scope, d, c)
+		// The owning context judges the request, writing nothing, before a person is asked to approve
+		// it (S4 G7b): a refusal is the call's, in this turn, with no proposal, no wait and no grant.
+		if err := t.r.Gateway.Judge(t.agent, c); err != nil {
+			return "", Receipt{}, err
+		}
+		p, err := t.propose(d, c)
 		if err != nil {
 			return "", Receipt{}, err
 		}
-		if g == nil {
+		g, err := t.r.grantMatching(t.agent, t.scope, d.DelegationID, t.matchOf(c, p.Sends > 0))
+		if err != nil {
+			return "", Receipt{}, err
+		}
+		switch {
+		case g == nil && p.Status == proposal.StatusSending && !p.Stale(t.r.Clock.Now()):
+			return "", Receipt{}, errInFlight
+		case g == nil:
 			return "", Receipt{}, t.waitForGrant(c)
 		}
-		b.GrantID = g.GrantID
+		// A grant is there for the request: it is sent as a proposal is, claimed first.
+		res, err := t.dispatch(p.ProposalID, d, *g, c, nil)
+		switch {
+		case err != nil:
+			return "", res.Receipt, err
+		case !res.Claimed:
+			return "", Receipt{}, errInFlight
+		case res.Err != nil:
+			return "", res.Receipt, res.Err
+		}
+		t.res.Receipts = append(t.res.Receipts, res.Receipt)
+		return answerOf(res.Receipt), res.Receipt, nil
 	}
 	var admitted gateway.Admitted
-	step := Step{TaskID: t.view.TaskID, BusinessIntentID: IntentOf(t.view.TaskID, c.Capability.Command, c.Object.ID, c.RequestHash),
-		Context: c.Capability.Context, Command: c.Command, RequestHash: c.RequestHash, DelegationID: b.DelegationID, GrantID: b.GrantID,
-		Admit: func(ctx context.Context, key string) error {
-			var err error
-			admitted, err = t.r.Gateway.Admit(ctx, b, c, key)
-			return err
-		},
-		Send: func(ctx context.Context, _ any) (capability.Result, error) { return admitted.Run(ctx) }}
-	rcpt, err := t.r.Executor.Run(t.agent, step)
+	rcpt, err := t.r.Executor.Run(t.agent, t.stepOf(b, c, &admitted))
 	if err != nil {
 		return "", rcpt, err
 	}
@@ -856,14 +880,14 @@ func (t *turn) runTool(call model.ToolCall, toolDel map[string]policy.Delegation
 // approval; AI-INV-002, D-7): the wait names the proposal and its items the command, request hash
 // and object the grant must bind.
 func (t *turn) waitForGrant(c gateway.Call) error {
-	proposal := ProposalID(t.view.TaskID, c.Capability.Command, c.RequestHash)
+	id := ProposalID(t.view.TaskID, c.Capability.Command, c.RequestHash, c.Object.Version)
 	items := []string{"command " + c.Capability.Command, "request_hash " + c.RequestHash,
-		fmt.Sprintf("object %s %s version %d", c.Object.Type, c.Object.ID, c.Object.Version)}
-	_, err := t.r.Tasks.WaitTask(t.system, tskapi.WaitTask{IdempotencyKey: commandKey(t.view, "wait."+proposal), TaskID: t.view.TaskID,
+		fmt.Sprintf("object %s %s version %d", c.Object.Type, c.Object.ID, c.Object.Version), "proposal " + id}
+	_, err := t.r.Tasks.WaitTask(t.system, tskapi.WaitTask{IdempotencyKey: commandKey(t.view, "wait."+id), TaskID: t.view.TaskID,
 		ExpectedVersion: t.view.TaskVersion, Wait: tskapi.WaitApproval, ResponsibleID: t.view.OwnerID, Items: items,
 		Reason: bounded("The agent proposes "+c.Capability.Command+" on "+c.Object.ID+"; it needs a person's approval grant (ai.approval_grant.issue) "+
-			"for exactly this request before it runs.", tskapi.MaxReason),
-		Awaiting: &tskapi.ObjectRef{Kind: ArrivalApprovalGrant, ID: proposal, Version: c.Object.Version}})
+			"for exactly this request, which ai.proposal.get shows, before the platform sends it.", tskapi.MaxReason),
+		Awaiting: &tskapi.ObjectRef{Kind: ArrivalApprovalGrant, ID: id, Version: c.Object.Version}})
 	if err != nil {
 		return err
 	}
@@ -1122,11 +1146,6 @@ func (t *turn) facts(actions []tskapi.ActionView) (string, error) {
 // on the ready RFQ, the activated quote, the customer's reply and the verified acceptance; five
 // keeps the reply and the acceptance in sight until the order is prepared.
 const maxArrivalFacts = 5
-
-// ProposalID names the approval a task waits for: one per task, command and request.
-func ProposalID(taskID, command, requestHash string) string {
-	return "agp." + IntentOf(taskID, command, "", requestHash)[3:]
-}
 
 // commandKey is the runner's idempotency key of a TSK command on a task at the version it saw.
 func commandKey(v tskapi.TaskView, what string) string {

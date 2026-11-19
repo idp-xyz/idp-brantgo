@@ -127,7 +127,7 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetOrderDocument, Permission: PermissionRead, ActorKinds: anyActor},
 		// The order's snapshot fact (S5 unit A2) as OrderSnapshotLookups gives it, read and audited.
 		{Command: CommandGetOrderSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
-	}, append(readRules(), costRules()...)...)
+	}, append(append(readRules(), costRules()...), checkRules()...)...)
 }
 
 // Upstream are the contexts TRD reads references from.

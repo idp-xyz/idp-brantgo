@@ -10,6 +10,7 @@ package capability
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -126,6 +127,7 @@ type Capability struct {
 	object  func(any) ObjectRef
 	run     func(context.Context, any) (any, error)
 	prepare func(context.Context, any) (any, error)
+	judge   func(context.Context, any) error
 }
 
 // KeyField is the api command field that carries the idempotency key. The execution entry sets it
@@ -189,6 +191,61 @@ func Prepared[C any](c Capability, err error, prepare func(context.Context, C) (
 	}
 	c.prepare = func(ctx context.Context, cmd any) (any, error) { return prepare(ctx, cmd.(C)) }
 	return c, nil
+}
+
+// Judged returns c, built by Define (with its error err), with the owning context's judgement of a
+// request, made before a person is asked to approve it (S4 G7b): judge says, without writing, whether
+// the context would refuse the request now, and returns the context's own rejection when it would.
+// It belongs to a capability that needs an approval grant, whose call otherwise waits for a person
+// before the context has seen it. A judgement decides nothing the context does not decide: what it
+// accepts the context can still refuse when the request is sent (the records move, the transaction
+// judges what only it can), and the approval grant is not spent on a request it refuses.
+func Judged[C any](c Capability, err error, judge func(context.Context, C) error) (Capability, error) {
+	if err != nil {
+		return Capability{}, err
+	}
+	if c.input != reflect.TypeFor[C]() || judge == nil {
+		return Capability{}, fmt.Errorf("%w: %s: the judgement does not take %s", ErrInvalid, c.Command, c.input)
+	}
+	if c.Approval != ApprovalGrant {
+		return Capability{}, fmt.Errorf("%w: %s: only a capability that needs an approval grant is judged before it waits", ErrInvalid, c.Command)
+	}
+	c.judge = func(ctx context.Context, cmd any) error { return judge(ctx, cmd.(C)) }
+	return c, nil
+}
+
+// Judges reports whether the capability has the owning context's judgement of a request.
+func (c Capability) Judges() bool { return c.judge != nil }
+
+// Judge asks the owning context whether it would refuse cmd, a value of the input type, now; nil
+// when it would not, and for a capability without a judgement.
+func (c Capability) Judge(ctx context.Context, cmd any) error {
+	if reflect.TypeOf(cmd) != c.input {
+		return fmt.Errorf("capability: %s judges %s, not %T", c.Command, c.input, cmd)
+	}
+	if c.judge == nil {
+		return nil
+	}
+	return c.judge(ctx, cmd)
+}
+
+// Arguments returns cmd, a value of the input type, as the arguments of a tool call: the JSON object
+// of its members under their Go names, in key order, without the idempotency key. Strict decoding of
+// it gives cmd back, so a request stored this way hashes as it did (RequestHash).
+func (c Capability) Arguments(cmd any) (json.RawMessage, error) {
+	if reflect.TypeOf(cmd) != c.input {
+		return nil, fmt.Errorf("capability: %s takes %s, not %T", c.Command, c.input, cmd)
+	}
+	raw, err := json.Marshal(c.WithKey(cmd, ""))
+	if err != nil {
+		return nil, err
+	}
+	var members map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &members); err != nil {
+		return nil, err
+	}
+	delete(members, KeyField)
+	return json.Marshal(members)
 }
 
 // Prepare completes cmd, a value of the input type, with the capability's preparation; a
