@@ -21,6 +21,25 @@ type QuoteView struct {
 	Approvals       []ApprovalView // in the order they were given
 	Holds           []HoldView     // risk holds, in the order they were registered
 	Conversion      *ConversionView
+	// MultiOrderLedger is the quote-line consumption of a multi_order quote (TRD-INV-024). Nil,
+	// and omitted from the quote read, when the quote is single_full and nothing has been consumed.
+	MultiOrderLedger *MultiOrderLedger
+}
+
+// MultiOrderLedger is the remaining quantity of each line of the active multi_order revision.
+type MultiOrderLedger struct {
+	Lines []MultiOrderLedgerLine
+}
+
+// MultiOrderLedgerLine is one line: the cap (empty when uncapped), what the ledger has consumed
+// and what remains. Remaining is empty when the line is uncapped.
+type MultiOrderLedgerLine struct {
+	LineID           string
+	QuotedQuantity   string
+	MaxOrderQuantity string
+	Uncapped         bool
+	Consumed         string
+	Remaining        string
 }
 
 // ControlView is the root's object control (control.go). A root that is not unbound names its task

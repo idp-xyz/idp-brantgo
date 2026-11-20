@@ -226,10 +226,10 @@ func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authori
 	if !kernel.Instant(at).Before(rev.Seal.ExpiresAt) {
 		_ = r.add(api.CheckValidity, refusal(api.CodeQuoteExpired, "/expires_at"))
 	}
-	if q.Slot != nil {
-		// The root's one full_v1 conversion is taken: the revision serves no conversion any more (S3
-		// gap closed in S4 unit A3; baseline 15.4: 已占用时返回已有订单或明确冲突 — the order is the
-		// root's GetQuote conversion and GoalReadiness's evidence).
+	if q.Slot != nil || q.Consumed {
+		// The root's one full_v1 conversion is taken, or a partial order has consumed quantity
+		// (TRD-INV-024): the revision serves no further full_v1 conversion. GoalReadiness v1 still
+		// reads only the full_v1 slot.
 		_ = r.add(api.CheckConversion, api.Reject(api.CodeConversionSlotConflict, "/quote_id"))
 	}
 	if _, err := q.ReadyApproval(rev, at, s.standings(ctx, exec, q)); r.add(api.CheckApproval, err) != nil {
@@ -241,6 +241,10 @@ func (s Service) readiness(ctx context.Context, exec bentopg.Executor, d authori
 			return out, err
 		}
 		return finish()
+	}
+	if c.Data.ConversionMode == quote.ModeMultiOrder && q.Slot == nil && !q.Consumed {
+		// Opted into partial orders: order.prepare is not the conversion (TRD-INV-024).
+		_ = r.add(api.CheckConversion, api.Reject(api.CodeConversionSlotConflict, "/quote_id"))
 	}
 	if _, err = s.guardUpstream(ctx, exec, sealedGuards(rev, c), at); r.add(api.CheckUpstream, err) != nil {
 		return out, err

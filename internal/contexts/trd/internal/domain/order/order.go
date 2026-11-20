@@ -215,9 +215,12 @@ type Order struct {
 	RowVersion      int64
 	Prepared        quote.Act
 	ActivatedReview string
-	Reviews         []*Review // in the order they were requested
-	Commits         []*Commit // one per activated order revision
-	Closure         *Closure
+	// Consumption is the append-only ledger rows a partial preparation writes with the order
+	// (TRD-INV-024). Empty for order.prepare. Not reloaded: the ledger is the record.
+	Consumption []Consumption
+	Reviews     []*Review // in the order they were requested
+	Commits     []*Commit // one per activated order revision
+	Closure     *Closure
 	// The active order's revisions, amendments, their commit evidence and its end (active.go).
 	Revisions        []RevisionRecord
 	Amendments       []*amendment.Amendment
@@ -269,6 +272,16 @@ func Prepare(p Preparation, q *quote.Quote, a *acceptance.Acceptance, scope kern
 		return nil, err
 	}
 	rev := q.Revision(p.Revision)
+	sealed, err := quote.ParseCommercial(rev.Seal.Commercial, rev.Seal.BusinessHash)
+	if err != nil {
+		return nil, err
+	}
+	// A multi_order quote, and any quote that already has a partial ledger row, has no full_v1
+	// slot to take (TRD-INV-024). The default quote never sets the mode, so this check is idle
+	// for every order.prepare that exists today.
+	if sealed.Data.ConversionMode == quote.ModeMultiOrder || q.Consumed {
+		return nil, fail(quote.CodeConversionSlotConflict, "/args/quote_id", "The quote converts through order.prepare_partial")
+	}
 	src := Source{QuoteID: q.ID, Revision: rev.Number, BusinessHash: rev.Seal.BusinessHash, Number: rev.Formal.Document.Number,
 		DocumentSHA256: rev.Formal.Document.ContentSHA256, AcceptanceID: a.ID, AcceptanceVersion: a.Version, ArrivalAt: a.ArrivalAt,
 		ArrivalBasis: a.ArrivalBasis, ExpiresAt: a.ExpiresAt}

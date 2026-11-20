@@ -242,6 +242,7 @@ func TestCodesHaveCatalogCategories(t *testing.T) {
 		CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 		// Formalization and conversion: both 409.
 		CodeRootConversionLocked: kernel.CategoryConflict, CodeConversionSlotConflict: kernel.CategoryConflict,
+		CodeConversionSlotUnsupported: kernel.CategoryInvalid, CodeQuoteRemainingInsufficient: kernel.CategoryConflict,
 		// Customer responses and acceptance: SOURCE_MESSAGE_DUPLICATE, ACCEPTANCE_ALREADY_EXISTS and
 		// ACCEPTANCE_NOT_VALID 409, the rest 422.
 		CodeAcceptanceNotUnconditional: kernel.CategoryInvalid, CodeAcceptanceScopeMismatch: kernel.CategoryInvalid,

@@ -72241,6 +72241,474 @@
         ]
       }
     },
+    "/api/brant/v1/trd/commands/order.prepare_partial": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "trd.order.prepare_partial",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acceptance_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_hash": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "business_revision": {
+                        "type": "integer"
+                      },
+                      "charges": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "amount_minor": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "charge_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "lines": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "line_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "notify_party_ref": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "address_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "party_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "party_revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "order_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "payment_plan": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "amount_minor": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "stage_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "quote_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "order.prepare_partial"
+                  },
+                  "contract": {
+                    "const": "brant.quotation/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "order.prepare_partial",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/commands/order.prepare_partial/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent, or its envelope with the request hash in place of the arguments (ActionReconciliation v1: the SHA-256 of the business arguments the context's ledger records). Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "trd.order.prepare_partial.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "args": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "acceptance_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "business_hash": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "business_revision": {
+                            "type": "integer"
+                          },
+                          "charges": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "amount_minor": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "charge_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "lines": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "line_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "notify_party_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "address_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "party_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "party_revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "order_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "payment_plan": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "amount_minor": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "stage_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "command": {
+                        "const": "order.prepare_partial"
+                      },
+                      "contract": {
+                        "const": "brant.quotation/0.1.0"
+                      },
+                      "idempotency_key": {
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "contract",
+                      "command",
+                      "idempotency_key",
+                      "args"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "command": {
+                        "const": "order.prepare_partial"
+                      },
+                      "contract": {
+                        "const": "brant.quotation/0.1.0"
+                      },
+                      "idempotency_key": {
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                        "type": "string"
+                      },
+                      "request_hash": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "contract",
+                      "command",
+                      "idempotency_key",
+                      "request_hash"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of order.prepare_partial sent with this idempotency key (动作对账)",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
     "/api/brant/v1/trd/commands/order.review.decide": {
       "post": {
         "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
@@ -77162,6 +77630,10 @@
                             },
                             "type": "object"
                           },
+                          "conversion_mode": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "cost_snapshot_ref": {
                             "additionalProperties": false,
                             "properties": {
@@ -77456,6 +77928,10 @@
                                   "minLength": 1,
                                   "type": "string"
                                 },
+                                "max_order_quantity": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
                                 "price_basis_quantity": {
                                   "minLength": 1,
                                   "type": "string"
@@ -77500,6 +77976,9 @@
                                     "id"
                                   ],
                                   "type": "object"
+                                },
+                                "uncapped": {
+                                  "type": "boolean"
                                 },
                                 "unit_price": {
                                   "minLength": 1,
@@ -77930,6 +78409,10 @@
                                 },
                                 "type": "object"
                               },
+                              "conversion_mode": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
                               "cost_snapshot_ref": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -78224,6 +78707,10 @@
                                       "minLength": 1,
                                       "type": "string"
                                     },
+                                    "max_order_quantity": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
                                     "price_basis_quantity": {
                                       "minLength": 1,
                                       "type": "string"
@@ -78268,6 +78755,9 @@
                                         "id"
                                       ],
                                       "type": "object"
+                                    },
+                                    "uncapped": {
+                                      "type": "boolean"
                                     },
                                     "unit_price": {
                                       "minLength": 1,

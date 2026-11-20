@@ -69,6 +69,9 @@ type Terms struct {
 	CustomerNotes    string       `json:"customer_notes"`
 	Evidence         []Evidence   `json:"evidence"`
 	LegalTerms       *Ref         `json:"legal_terms_ref,omitempty"`
+	// ConversionMode is sealed only for multi_order (TRD-INV-024). Empty is omitted, so a default
+	// quote's commercial document is unchanged.
+	ConversionMode string `json:"conversion_mode,omitempty"`
 }
 
 // Commercial is the commercial document a freeze seals (Python commercial.schema.json, on TRD's
@@ -564,9 +567,23 @@ func sealedTerms(d Data) Terms {
 	if d.CustomerNotes != nil {
 		t.CustomerNotes = *d.CustomerNotes
 	}
+	// single_full is the default and is not part of the document (TRD-INV-024). A cap on that
+	// default is refused before the seal; clearing it here keeps a document that omitted the
+	// members byte-for-byte what it was.
+	if d.ConversionMode == ModeMultiOrder {
+		t.ConversionMode = ModeMultiOrder
+	}
 	for i := range t.Lines {
 		if t.Lines[i].BaseQuantity != "" {
 			t.Lines[i].BaseQuantity = trimDecimal(t.Lines[i].BaseQuantity)
+		}
+		if t.ConversionMode != ModeMultiOrder {
+			t.Lines[i].MaxOrderQuantity = ""
+			t.Lines[i].Uncapped = false
+			continue
+		}
+		if t.Lines[i].MaxOrderQuantity != "" {
+			t.Lines[i].MaxOrderQuantity = trimDecimal(t.Lines[i].MaxOrderQuantity)
 		}
 	}
 	slices.SortFunc(t.Addresses, func(a, b AddressRef) int { return cmp.Compare(a.AddressID, b.AddressID) })

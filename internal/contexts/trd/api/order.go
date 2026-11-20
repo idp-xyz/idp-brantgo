@@ -93,6 +93,7 @@ import (
 // expected_version, reason, evidence}.
 const (
 	CommandPrepareOrder          = "order.prepare"
+	CommandPreparePartialOrder   = "order.prepare_partial"
 	CommandRequestOrderReview    = "order.review.request"
 	CommandDecideOrderReview     = "order.review.decide"
 	CommandActivateOrder         = "order.activate"
@@ -294,7 +295,97 @@ type CloseOrderUnfulfilled struct {
 	Evidence        []Evidence
 }
 
-// Validate checks the closed contract.
+// PartialLine is one line of order.prepare_partial and the quantity this order takes of it.
+type PartialLine struct {
+	LineID   string `contract:"required,id"`
+	Quantity string `contract:"required,decimal=quantity,positive"`
+}
+
+// PartialCharge is a quote charge this order adds. AmountMinor is exact minor units on the sealed
+// tax profile's price basis (the net when exclusive, the gross when inclusive).
+type PartialCharge struct {
+	ChargeID    string `contract:"required,id"`
+	AmountMinor string `contract:"required" doc:"exact minor units on the tax profile's price basis"`
+}
+
+// PartialStage is one stated payment amount. Together the stages are the quote's payment plan and
+// sum to this order's payable.
+type PartialStage struct {
+	StageID     string `contract:"required,id"`
+	AmountMinor string `contract:"required" doc:"exact minor units of this order's payable"`
+}
+
+// PreparePartialOrder places part of a multi_order quote into a draft sales order (TRD-INV-024,
+// F-01, BC-D06, SIM-03). Human only: it is not a Q01 capability. Lines are required. Charges and
+// PaymentPlan are optional; omitted charges add nothing and an omitted plan is the quote's
+// percentages. NotifyPartyRef is omitted from the request hash when absent, as on order.prepare.
+type PreparePartialOrder struct {
+	IdempotencyKey   string
+	OrderID          string        `contract:"required,id"`
+	QuoteID          string        `contract:"required,id"`
+	BusinessRevision int64         `contract:"required"`
+	BusinessHash     string        `contract:"required,hash"`
+	AcceptanceID     string        `contract:"required,id" doc:"the verified acceptance, shared by every order of the revision"`
+	Lines            []PartialLine `contract:"required,min=1"`
+	Charges          []PartialCharge
+	PaymentPlan      []PartialStage
+	NotifyPartyRef   *AddressRoleRef `json:",omitempty" doc:"an address with the role notify; leave out when the party has none"`
+}
+
+// Validate checks the closed contract of order.prepare_partial.
+func (c PreparePartialOrder) Validate() error {
+	if err := (PrepareOrder{IdempotencyKey: c.IdempotencyKey, OrderID: c.OrderID, QuoteID: c.QuoteID,
+		BusinessRevision: c.BusinessRevision, BusinessHash: c.BusinessHash, AcceptanceID: c.AcceptanceID,
+		NotifyPartyRef: c.NotifyPartyRef}).Validate(); err != nil {
+		return err
+	}
+	if len(c.Lines) < 1 || len(c.Lines) > MaxLines {
+		return schema("/args/lines")
+	}
+	seen := map[string]bool{}
+	for i, l := range c.Lines {
+		p := index("/args/lines", i)
+		switch {
+		case !kernel.ValidIdentifier(l.LineID):
+			return schema(p + "/line_id")
+		case seen[l.LineID]:
+			return kernel.Reject(kernel.CodeDuplicateLineID, p+"/line_id", "")
+		case !decimal(l.Quantity, kernel.QuantityFormat, true):
+			return schema(p + "/quantity")
+		}
+		seen[l.LineID] = true
+	}
+	if len(c.Charges) > MaxCharges {
+		return schema("/args/charges")
+	}
+	seenCharge := map[string]bool{}
+	for i, ch := range c.Charges {
+		p := index("/args/charges", i)
+		if !kernel.ValidIdentifier(ch.ChargeID) || seenCharge[ch.ChargeID] {
+			return schema(p + "/charge_id")
+		}
+		seenCharge[ch.ChargeID] = true
+		if _, err := kernel.ParseMinor(kernel.MustCurrency("USD", 2), ch.AmountMinor); err != nil || ch.AmountMinor == "0" {
+			return schema(p + "/amount_minor")
+		}
+	}
+	if len(c.PaymentPlan) > 20 {
+		return schema("/args/payment_plan")
+	}
+	seenStage := map[string]bool{}
+	for i, s := range c.PaymentPlan {
+		p := index("/args/payment_plan", i)
+		if !kernel.ValidIdentifier(s.StageID) || seenStage[s.StageID] {
+			return schema(p + "/stage_id")
+		}
+		seenStage[s.StageID] = true
+		if _, err := kernel.ParseMinor(kernel.MustCurrency("USD", 2), s.AmountMinor); err != nil || s.AmountMinor == "0" {
+			return schema(p + "/amount_minor")
+		}
+	}
+	return nil
+}
+
 func (c PrepareOrder) Validate() error {
 	switch {
 	case !kernel.ValidIdentifier(c.IdempotencyKey):
@@ -458,6 +549,7 @@ func orderEnd(key, id string, expected int64, reason string, proofs []Evidence) 
 }
 
 func (PrepareOrder) trdCommand()          {}
+func (PreparePartialOrder) trdCommand()   {}
 func (RequestOrderReview) trdCommand()    {}
 func (DecideOrderReview) trdCommand()     {}
 func (ActivateOrder) trdCommand()         {}
@@ -623,6 +715,7 @@ type OrderCheck struct {
 // OrderCommands is the command entry point of sales orders. Errors are as Commands describes them.
 type OrderCommands interface {
 	PrepareOrder(ctx context.Context, cmd PrepareOrder) (OrderReceipt, error)
+	PreparePartialOrder(ctx context.Context, cmd PreparePartialOrder) (OrderReceipt, error)
 	RequestOrderReview(ctx context.Context, cmd RequestOrderReview) (OrderReceipt, error)
 	DecideOrderReview(ctx context.Context, cmd DecideOrderReview) (OrderReceipt, error)
 	ActivateOrder(ctx context.Context, cmd ActivateOrder) (OrderReceipt, error)

@@ -198,6 +198,8 @@ GRANT UPDATE (effectivity, effectivity_version, revoked_by_kind, revoked_by_id, 
     ON brant_trd.quote_approval TO brant_app;
 GRANT SELECT, INSERT ON brant_trd.quote_document, brant_trd.quote_commit_evidence, brant_trd.quote_revision_closure,
     brant_trd.quote_risk_hold, brant_trd.quote_conversion_slot TO brant_app;
+-- TRD 000011 (S6-07, TRD-INV-024): the quote-line consumption ledger is append-only.
+GRANT SELECT, INSERT ON brant_trd.quote_order_consumption TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint, text) TO brant_app;
 -- Customer responses and the effectivity ledger are only inserted (triggers); an acceptance changes
 -- its effectivity once (trigger), and acceptance.invalidate and acceptance.mark_disputed lock it FOR

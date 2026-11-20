@@ -63,6 +63,7 @@ func trdCommands(c TRD) *commandSet {
 		trdapi.CommandInvalidateAcceptance:      reflected("", "", receiptOf[trdapi.Receipt](c.InvalidateAcceptance)),
 		trdapi.CommandDisputeAcceptance:         reflected("", "", receiptOf[trdapi.Receipt](c.DisputeAcceptance)),
 		trdapi.CommandPrepareOrder:              reflected("", "", receiptOf[trdapi.Receipt](c.PrepareOrder)),
+		trdapi.CommandPreparePartialOrder:       reflected("", "", receiptOf[trdapi.Receipt](c.PreparePartialOrder)),
 		trdapi.CommandRequestOrderReview:        reflected("", "", receiptOf[trdapi.Receipt](c.RequestOrderReview)),
 		trdapi.CommandDecideOrderReview:         reflected("", "", receiptOf[trdapi.Receipt](c.DecideOrderReview)),
 		trdapi.CommandActivateOrder:             reflected("", "", receiptOf[trdapi.Receipt](c.ActivateOrder)),
