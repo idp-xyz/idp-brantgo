@@ -107,6 +107,7 @@ type Config struct {
 	FUL      FUL
 	TSK      TSK // S4, optional as well: TSK's commands and reads
 	AI       AI  // S4, optional: the AI layer's commands and reads and the task-step route (unit C3)
+	STK      STK // S6, optional: nil leaves stock commands out (the company switch defaults to off)
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -195,6 +196,9 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.AI != nil {
 		s.contexts["ai"] = aiCommands(cfg.AI)
+	}
+	if cfg.STK != nil {
+		s.contexts["stk"] = stkCommands(cfg.STK)
 	}
 	mux := &patternMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

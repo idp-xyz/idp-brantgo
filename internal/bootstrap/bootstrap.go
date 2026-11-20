@@ -33,6 +33,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/contexts/pur"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt"
+	"go.idp.xyz/idp-brant/internal/contexts/stk"
 	"go.idp.xyz/idp-brant/internal/contexts/stl"
 	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/contexts/trd"
@@ -184,6 +185,7 @@ type Contexts struct {
 	CST *cst.Module
 	TRD *trd.Module
 	PUR *pur.Module
+	STK *stk.Module
 	QLT *qlt.Module
 	STL *stl.Module
 	CNX *cnx.Module
@@ -267,6 +269,14 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	if err == nil {
 		c.PUR, err = pur.New(db, pur.Upstream{Orders: pur.TRDOrders(c.TRD), Supply: c.SUP, Snapshots: c.CST, Parties: c.PTY, Configs: c.POL,
 			Numbers: c.POL, Skus: c.CAT, Sources: c.EVD})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// STK (S6-01) after PUR: stock.receive reads ReceiptRequest v1 (R28) before its transaction.
+		// The company switch defaults to off, so existing flows do not post stock.
+		c.STK, err = stk.New(db, c.PUR)
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -439,7 +449,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, STK: c.STK, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
 	tc.STL = c.STL
 	tc.CNX = c.CNX

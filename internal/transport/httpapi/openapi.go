@@ -28,7 +28,7 @@ func OpenAPI() ([]byte, error) {
 	sets = append(sets, stlCommands(struct{ STL }{}))
 	sets = append(sets, cnxCommands(struct{ CNX }{}))
 	sets = append(sets, fulCommands(struct{ FUL }{}))
-	sets = append(sets, tskCommands(struct{ TSK }{}), aiCommands(struct{ AI }{}))
+	sets = append(sets, tskCommands(struct{ TSK }{}), aiCommands(struct{ AI }{}), stkCommands(struct{ STK }{}))
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
