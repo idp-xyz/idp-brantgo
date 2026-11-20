@@ -121,3 +121,32 @@ func TestSourceAmbiguousIsInTheCatalog(t *testing.T) {
 	}
 	t.Fatal("SOURCE_AMBIGUOUS is not in the catalog")
 }
+
+// An empty opportunity id is absent from the JSON the request hash covers, so Q01 and every
+// existing save hash the same bytes. A supplied id is part of the hash (R40).
+func TestOpportunityIDIsAbsentFromTheRequestJSONWhenEmpty(t *testing.T) {
+	raw, err := json.Marshal(SaveRfq{IdempotencyKey: "k1", RfqID: "rfq.1", ExpectedVersion: 1, CustomerID: "customer.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "opportunity") {
+		t.Fatalf("empty opportunity id is in the request JSON: %s", raw)
+	}
+	raw, err = json.Marshal(SaveRfq{RfqID: "rfq.1", OpportunityID: "opp.1"})
+	if err != nil || !strings.Contains(string(raw), `"opportunity_id":"opp.1"`) {
+		t.Fatalf("%s %v", raw, err)
+	}
+	if code(SaveRfq{IdempotencyKey: "k1", RfqID: "rfq.1", OpportunityID: "not an id"}.Validate()) != "SCHEMA_INVALID /args/opportunity_id" {
+		t.Fatal(code(SaveRfq{IdempotencyKey: "k1", RfqID: "rfq.1", OpportunityID: "not an id"}.Validate()))
+	}
+}
+
+func code(err error) string {
+	if r, ok := kernel.AsRejection(err); ok {
+		return r.Code + " " + r.Fields[0].Path
+	}
+	if err == nil {
+		return "OK"
+	}
+	return err.Error()
+}

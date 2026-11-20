@@ -70,7 +70,9 @@ type world struct {
 	serial   atomic.Int64 // keys may be drawn from concurrent goroutines
 }
 
-func newWorld(t *testing.T) *world {
+func newWorld(t *testing.T) *world { return newWorldWith(t, bootstrap.PlatformConfig{}) }
+
+func newWorldWith(t *testing.T, opt bootstrap.PlatformConfig) *world {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -79,7 +81,7 @@ func newWorld(t *testing.T) *world {
 		t.Fatal(err)
 	}
 	t.Cleanup(platform.Close)
-	c, err := platform.Contexts()
+	c, err := platform.ContextsWithOptions(opt)
 	if err != nil {
 		t.Fatal(err)
 	}

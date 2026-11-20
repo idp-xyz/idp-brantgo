@@ -248,6 +248,7 @@ type rfqJSON struct {
 	RowVersion       int64             `json:"row_version"`
 	CustomerID       string            `json:"customer_id,omitempty"`
 	ContactID        string            `json:"contact_id,omitempty"`
+	OpportunityID    string            `json:"opportunity_id,omitempty"`
 	Lines            []lineJSON        `json:"lines"`
 	SourceIDs        []string          `json:"source_ids"`
 	UnresolvedFields []string          `json:"unresolved_fields"`
@@ -265,7 +266,7 @@ func actorRef(a kernel.ActorRef) *actorView {
 
 func rfqView(v inqapi.RfqView) rfqJSON {
 	out := rfqJSON{OK: true, RfqID: v.RfqID, Status: v.Status, RowVersion: v.RowVersion, CustomerID: v.CustomerID, ContactID: v.ContactID,
-		Lines: []lineJSON{}, SourceIDs: v.SourceIDs, UnresolvedFields: v.UnresolvedFields, Corrections: []correctionJSON{}}
+		OpportunityID: v.OpportunityID, Lines: []lineJSON{}, SourceIDs: v.SourceIDs, UnresolvedFields: v.UnresolvedFields, Corrections: []correctionJSON{}}
 	for _, l := range v.Lines {
 		line := lineJSON{LineID: l.LineID, SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem,
 			SourceID: l.SourceID, Locator: l.Locator, SkuSpecRevision: l.SkuSpecRevision, ProposedBy: actorRef(l.ProposedBy),

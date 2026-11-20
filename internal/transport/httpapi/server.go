@@ -101,14 +101,16 @@ type Config struct {
 	PUR PUR
 	// The S5 contexts are optional: nil leaves a context's commands and routes out, so a transport
 	// that serves or tests other contexts needs no stand-in for them. The composed process sets all.
-	QLT      QLT
-	STL      STL
-	CNX      CNX
-	FUL      FUL
-	CLM      CLM // S6, optional for a transport that is not the composed process: nil leaves claims out
+	QLT QLT
+	STL STL
+	CNX CNX
+	FUL FUL
+	STK STK // S6, optional: nil leaves stock commands out (the company switch defaults to off)
+	CLM CLM // S6, optional for a transport that is not the composed process: nil leaves claims out
+	// CRM is optional (S6-D04, BC-AT24). Nil leaves its commands unregistered.
+	CRM      CRM
 	TSK      TSK // S4, optional as well: TSK's commands and reads
 	AI       AI  // S4, optional: the AI layer's commands and reads and the task-step route (unit C3)
-	STK      STK // S6, optional: nil leaves stock commands out (the company switch defaults to off)
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -192,17 +194,20 @@ func New(cfg Config) (http.Handler, error) {
 	if cfg.FUL != nil {
 		s.contexts["ful"] = fulCommands(cfg.FUL)
 	}
+	if cfg.STK != nil {
+		s.contexts["stk"] = stkCommands(cfg.STK)
+	}
 	if cfg.CLM != nil {
 		s.contexts["clm"] = clmCommands(cfg.CLM)
+	}
+	if cfg.CRM != nil {
+		s.contexts["crm"] = crmCommands(cfg.CRM)
 	}
 	if cfg.TSK != nil {
 		s.contexts["tsk"] = tskCommands(cfg.TSK)
 	}
 	if cfg.AI != nil {
 		s.contexts["ai"] = aiCommands(cfg.AI)
-	}
-	if cfg.STK != nil {
-		s.contexts["stk"] = stkCommands(cfg.STK)
 	}
 	mux := &patternMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
