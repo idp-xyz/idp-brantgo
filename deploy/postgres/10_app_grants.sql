@@ -496,6 +496,9 @@ GRANT UPDATE (status, row_version, packing_records, confirmed_by_kind, confirmed
 GRANT EXECUTE ON FUNCTION brant_ful.order_shipped_v1(text) TO brant_app;
 -- QLT's quality_release.revoke executes ReleaseConsumption v1 (R79, S5R-D18) inside its own transactions.
 GRANT EXECUTE ON FUNCTION brant_ful.release_consumption_v1(text) TO brant_app;
+-- PUR's purchase.commitment.dispose and purchase.commitment.disposition.decide execute CommitmentShipped v1
+-- (R82, PUR-INV-013) inside their own transactions, after the commitment root is locked.
+GRANT EXECUTE ON FUNCTION brant_ful.commitment_shipped_v1(text) TO brant_app;
 
 -- FUL milestones and export lots (S5-03b): a shipment line's price is only inserted with its
 -- shipment; a milestone plan moves only its version, revision, counts and last revision (trigger),

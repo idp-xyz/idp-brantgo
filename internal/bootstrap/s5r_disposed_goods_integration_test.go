@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/pur"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // S5R unit R13 on PostgreSQL 16: goods an approved purchase disposition took out of the order never ship while
@@ -27,8 +28,9 @@ import (
 // — the decision holds it FOR UPDATE, SupplierDeliveryGuard v2 FOR SHARE.
 //   - approval first: the confirmation reads, after the lock, what the approval took out and is refused
 //     SUPPLIER_DELIVERY_INSUFFICIENT when the shipment needs it;
-//   - confirmation first: the approval waits until the shipment committed and is then judged by PUR on what is verified
-//     only (PUR sees no shipment: no FUL→PUR relationship); what it took out is then missing from every later shipment.
+//   - confirmation first: the approval waits until the shipment committed and is then judged on verified less what that
+//     commitment line shipped (PUR-INV-013, CommitmentShipped v1, R82). A quantity that no longer fits is refused and
+//     stays requested; a quantity that fits is approved after it.
 
 func (w *fulPurWorld) disposals() purDispose {
 	return purDispose{w: w.scenWorld, m: func() *pur.Module { return w.c.PUR }}
@@ -152,11 +154,13 @@ func TestS5RD05ApprovalFirstRefusesTheWaitingConfirmation(t *testing.T) {
 	w.want(err, fulapi.CodeSupplierDeliveryInsufficient)
 }
 
-// The commit order "confirmation first": while shipment.1's confirmation of 60 of the 100 verified holds
-// commitment.1's root FOR SHARE (SupplierDeliveryGuard v2), the reviewer's approval of a requested write_off of 50
-// waits; the shipment commits confirmed, then PUR approves the 50 on what is verified (PUR-INV-013's "已出运" half is
-// not PUR's to see: the gap R13 reports). Nothing more ships of the line: 60 shipped and 50 disposed of exceed the 100
-// verified, and PurchaseLineRef v1 shows both for STL's cap of the write-off (S5R-D42).
+// The commit order "confirmation first" (PUR-INV-013, R82): while shipment.1's confirmation of 60 of the 100
+// verified holds commitment.1's root FOR SHARE (SupplierDeliveryGuard v2), the reviewer's approval of a requested
+// write_off of 50 waits. The shipment commits confirmed. The approval is then refused: 50 is one past the 40 that
+// verified 100 less shipped 60 leaves (INVALID_KNOWN_VALUE at /disposition/quantity). The shipment stays confirmed,
+// the disposition stays requested and the line's disposed quantity is 0. A write-off of 40, requested while nothing
+// had shipped (50 and 40 together are within the 100), is then approved: at a decision only approved dispositions
+// hold room. Nothing more ships: 60 shipped and 40 disposed of are the whole 100.
 func TestS5RD05ConfirmationFirstMakesTheApprovalWait(t *testing.T) {
 	w := newFulPurWorld(t)
 	x := w.disposals()
@@ -166,6 +170,8 @@ func TestS5RD05ConfirmationFirstMakesTheApprovalWait(t *testing.T) {
 	w.must(err)
 	w.grantedOn(fl, "shipment.1", fulapi.ScopeShipment)
 	_, err = x.dispose(w.author, "disp.1", "commitment.1", purapi.DispositionWriteOff, "50")
+	w.must(err)
+	_, err = x.dispose(w.author, "disp.40", "commitment.1", purapi.DispositionWriteOff, "40")
 	w.must(err)
 
 	w.hold.set("delivery")
@@ -184,22 +190,48 @@ func TestS5RD05ConfirmationFirstMakesTheApprovalWait(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("the confirmation holding the commitment root: %v", err)
 	}
-	if err := <-decided; err != nil {
-		t.Fatalf("the approval after FUL committed: %v", err)
+	err = <-decided
+	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/disposition/quantity" ||
+		!strings.Contains(reasonOf(err), "verified delivered 100") || !strings.Contains(reasonOf(err), "60 of it shipped") {
+		t.Fatalf("the approval after FUL committed: %s at %s (%s)", code(err), path(err), reasonOf(err))
 	}
 	if v, err := fl.GetShipment(w.merch, "shipment.1"); err != nil || v.Status != fulapi.StatusConfirmed {
 		t.Fatalf("the shipment stays confirmed %+v %v", v, err)
 	}
-	_, err = w.ship(fl, w.merch, "shipment.2", "1", d1)
-	if code(err) != fulapi.CodeSupplierDeliveryInsufficient || !strings.Contains(reasonOf(err), "60 shipped before") {
-		t.Fatalf("after the approval: %s (%s)", code(err), reasonOf(err))
+	cv, err := w.c.PUR.GetCommitment(w.author, "commitment.1")
+	w.must(err)
+	if got := dispositionStatus(cv, "disp.1"); got != purapi.DispositionRequested {
+		t.Fatalf("the refused disposition stays requested, got %s", got)
 	}
 	line := purapi.CommitmentLineRef{CommitmentID: "commitment.1", OrderLineID: "L1"}
 	lines, err := w.c.PUR.ResolvePurchaseLines(w.author, []purapi.CommitmentLineRef{line})
 	w.must(err)
-	if l := lines[line]; l.VerifiedQuantity != "100" || l.DisposedQuantity != "50" {
+	if l := lines[line]; l.VerifiedQuantity != "100" || l.DisposedQuantity != "0" {
+		t.Fatalf("nothing is disposed of until a quantity that fits is approved %+v", l)
+	}
+	r, err := x.decide(w.reviewer, "disp.40", 1, purapi.DecisionApprove, "")
+	w.must(err)
+	if r.Status != purapi.DispositionApproved {
+		t.Fatalf("40 equals 100 verified less 60 shipped %+v", r)
+	}
+	lines, err = w.c.PUR.ResolvePurchaseLines(w.author, []purapi.CommitmentLineRef{line})
+	w.must(err)
+	if l := lines[line]; l.DisposedQuantity != "40" {
 		t.Fatalf("PurchaseLineRef v1 %+v", l)
 	}
+	_, err = w.ship(fl, w.merch, "shipment.2", "1", d1)
+	if code(err) != fulapi.CodeSupplierDeliveryInsufficient || !strings.Contains(reasonOf(err), "60 shipped before") {
+		t.Fatalf("after the approval of 40: %s (%s)", code(err), reasonOf(err))
+	}
+}
+
+func dispositionStatus(v purapi.CommitmentView, id string) string {
+	for _, d := range v.Dispositions {
+		if d.DispositionID == id {
+			return d.Status
+		}
+	}
+	return ""
 }
 
 // SupplierDeliveryGuard v2 holds the commitment root and no delivery root: one confirmation of a shipment from

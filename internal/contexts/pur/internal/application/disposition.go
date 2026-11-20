@@ -16,15 +16,16 @@ import (
 // Dispositions of delivered goods (WBS S5R-04; S5R-D05; domain/commitment disposition.go;
 // api/disposition.go; SM-PUR-COMMITMENT-DISPOSITION, PUR-INV-013).
 //
-// Lock order (tactical lockOrder, PUR-INV-013 "领域守卫＋承诺根 FOR UPDATE"): the commitment root FOR UPDATE;
-// for a decision then the disposition row FOR UPDATE, which only ever happens under its commitment's
-// lock; the commitment's verified deliveries and dispositions are read without a lock — every delivery
-// verification and every disposition command locks this commitment root first, so they are as the last
-// one committed; then the company's authority guard FOR SHARE (the ledger's Authorize); then the rows,
-// the ledger's result, audit and Outbox. No upstream guard is called: a disposition only takes from what
-// DownstreamCommitments v1 shows TRD (S5 decision D-1: TRD reading it as still open refuses
-// conservatively), and the EVD sources a request cites are read before the transaction (R76). The
-// commitment's row is never written: its status and version stay.
+// Lock order (tactical lockOrder, PUR-INV-013): the commitment root FOR UPDATE; for a decision then the
+// disposition row FOR UPDATE, which only ever happens under its commitment's lock; the company's
+// authority guard FOR SHARE (the ledger's Authorize); then lock-free reads. The commitment's verified
+// deliveries and dispositions are read without a lock — every delivery verification and every
+// disposition command locks this commitment root first — and so is FUL's CommitmentShipped v1 (R82),
+// run with PUR's own executor and no lock on a FUL row. That read is correct only while
+// shipment.confirm holds the commitment root FOR SHARE through SupplierDeliveryGuard v2 until it
+// commits; a new FUL command that confirms shipment quantity calls it too. No upstream guard is
+// called. The EVD sources a request cites are read before the transaction (R76). The commitment's row
+// is never written: its status and version stay.
 
 var dispositionCmds = []string{api.CommandDisposeCommitment, api.CommandDecideDisposition}
 
@@ -89,8 +90,9 @@ func (h *disposeCommand) Lock(ctx context.Context, exec bentopg.Executor) error 
 // (VERSION_CONFLICT; the same request by the same requester is answered from the stored disposition), a
 // commitment the requester does not see (NOT_FOUND), a draft not intact (REFERENCE_INVALID), Dispose's
 // refusals (INVALID_STATE for a commitment never issued, REFERENCE_INVALID for a line it does not buy,
-// INVALID_KNOWN_VALUE for a quantity beyond what is verified delivered of the line less its other
-// dispositions) and evidence the requester does not read (REFERENCE_INVALID).
+// INVALID_KNOWN_VALUE for a quantity beyond what is verified delivered of the line less what FUL
+// shipped of it, less its other dispositions) and evidence the requester does not read
+// (REFERENCE_INVALID).
 func (h *disposeCommand) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 	sc := scope(ctx)
 	if x := h.existing; x != nil {
@@ -119,11 +121,15 @@ func (h *disposeCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	shipped, err := shippedOfLine(ctx, exec, c.ID, h.req.OrderLineID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	others, err := postgres.DispositionsOfCommitment(ctx, exec, sc, c.ID)
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	x, err := commitment.Dispose(h.req, c, lines, unit, verified, others, d.Actor, d.Epoch, h.s.Clock.Now())
+	x, err := commitment.Dispose(h.req, c, lines, unit, verified, shipped, others, d.Actor, d.Epoch, h.s.Clock.Now())
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -179,7 +185,9 @@ func (h *decideDisposition) Lock(ctx context.Context, exec bentopg.Executor) err
 // Apply refuses, in this order: a disposition the decider does not see (NOT_FOUND), Decidable's refusals
 // (VERSION_CONFLICT, INVALID_STATE, INDEPENDENT_REVIEW_REQUIRED); then a rejection is recorded; an
 // approval goes on with Approve's refusal of a line whose approved dispositions would exceed what is
-// verified delivered of it now (INVALID_KNOWN_VALUE) and publishes PurchaseCommitmentDisposed.
+// verified delivered of it less what FUL shipped of it (INVALID_KNOWN_VALUE) and publishes
+// PurchaseCommitmentDisposed. The decision is the authority: a request that fitted before a shipment
+// confirmed is refused here.
 func (h *decideDisposition) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 	sc := scope(ctx)
 	c, x := h.l.c, h.x
@@ -202,11 +210,15 @@ func (h *decideDisposition) Apply(ctx context.Context, exec bentopg.Executor, d 
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	shipped, err := shippedOfLine(ctx, exec, c.ID, x.OrderLineID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	others, err := postgres.DispositionsOfCommitment(ctx, exec, sc, c.ID)
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	if err = x.Approve(verified[x.OrderLineID], others, act); err != nil {
+	if err = x.Approve(verified[x.OrderLineID], shipped, others, act); err != nil {
 		return action.Outcome{}, err
 	}
 	if err = postgres.SaveDisposition(ctx, exec, sc, x, now); err != nil {
@@ -245,6 +257,16 @@ func (s Service) dispositionReceipt(ctx context.Context, res api.Receipt) (api.D
 		return nil
 	})
 	return out, err
+}
+
+// shippedOfLine is what FUL's confirmed shipments shipped of order line orderLineID of commitment
+// commitmentID (CommitmentShipped v1). The domain adds the line's rows; this reads them.
+func shippedOfLine(ctx context.Context, exec bentopg.Executor, commitmentID, orderLineID string) (kernel.Decimal, error) {
+	lines, err := postgres.CommitmentShipped(ctx, exec, commitmentID)
+	if err != nil {
+		return kernel.Decimal{}, err
+	}
+	return commitment.ShippedOf(lines, orderLineID), nil
 }
 
 // dispositionViews returns xs, in their order (by disposition ID), as the commitment read shows them.

@@ -137,3 +137,60 @@ func ScanReleaseConsumption(scan func(dest ...any) error) (ReleaseShipped, error
 	}
 	return out, nil
 }
+
+// CommitmentShipped v1 (Context Map R82 FUL→PUR, "OHS（事务内无锁读取）", guardLock false: 已确认出运量，
+// 按承诺行; risk 先读后写使已提交出运被漏看; PUR-INV-013, the "减已出运" half of S5R-D05). PUR's
+// purchase.commitment.dispose and purchase.commitment.disposition.decide read what a commitment
+// line shipped inside their own transaction, without locks, after they locked the commitment root
+// FOR UPDATE. That read is consistent because shipment.confirm — the only command that adds to the
+// confirmed shipped quantity — holds the same commitment root FOR SHARE through PUR's
+// SupplierDeliveryGuard v2 until it commits: a confirmation either committed before PUR got its
+// lock, and the read sees it, or waits for PUR and then meets the commitment as PUR left it. It is
+// correct only while every writer of confirmed shipment quantity holds that root; a new FUL command
+// that confirms shipment quantity calls SupplierDeliveryGuard v2 too. Prepared and cancelled
+// shipments never count. The grain is the commitment line: several commitments may share one order
+// line, and one commitment's shipments are not another's.
+//
+// It is a SECURITY DEFINER function in FUL's schema with a fixed search_path
+// (migrations/ful/000010_ful_commitment_shipped.sql):
+//
+//	brant_ful.commitment_shipped_v1(p_commitment_id text)
+//	    RETURNS TABLE (order_line_id text, unit_id text, unit_revision bigint, shipped_quantity text, shipments bigint)
+//
+// It returns one row per order line and unit of the commitment that has a confirmed shipment line
+// in the caller's scope (app.tenant_id and app.company_id), ordered by order line, and no row when
+// the commitment shipped nothing: shipped_quantity is the sum of those lines (QuantityFormat text),
+// shipments the number of confirmed shipments they came from. The function takes no lock and
+// applies no data scope. A caller, after its lock, with its own executor:
+//
+//	rows, err := exec.Query(ctx, fulapi.CommitmentShippedSQL, fulapi.CommitmentShippedArgs(commitmentID)...)
+//	for rows.Next() {
+//		line, err := fulapi.ScanCommitmentShipped(rows.Scan)
+//		...
+//	}
+const (
+	CommitmentShippedFunction = "brant_ful.commitment_shipped_v1"
+	CommitmentShippedSQL      = `SELECT order_line_id, unit_id, unit_revision, shipped_quantity, shipments FROM brant_ful.commitment_shipped_v1($1)`
+)
+
+// CommitmentShippedArgs returns the arguments of CommitmentShippedSQL for commitment commitmentID.
+func CommitmentShippedArgs(commitmentID string) []any { return []any{commitmentID} }
+
+// CommitmentShipped is one row of CommitmentShipped v1: what the confirmed shipments shipped of one
+// order line of a commitment, in the unit named, and how many confirmed shipments that came from.
+type CommitmentShipped struct {
+	OrderLineID  string
+	UnitID       string
+	UnitRevision int64
+	Quantity     string
+	Shipments    int64
+}
+
+// ScanCommitmentShipped reads one row of CommitmentShippedSQL through scan, such as a pgx row's Scan.
+func ScanCommitmentShipped(scan func(dest ...any) error) (CommitmentShipped, error) {
+	var out CommitmentShipped
+	if err := scan(&out.OrderLineID, &out.UnitID, &out.UnitRevision, &out.Quantity, &out.Shipments); err != nil {
+		return CommitmentShipped{}, err
+	}
+	return out, nil
+}

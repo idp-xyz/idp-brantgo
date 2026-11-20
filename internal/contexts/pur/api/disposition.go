@@ -19,19 +19,21 @@ import (
 //	                                         S5R-D42) or hold_for_reuse (kept for a later order; recorded
 //	                                         only while STK is not enabled) — with a reason. The line's
 //	                                         dispositions approved or still requested add up to no more
-//	                                         than what is verified delivered of it (INVALID_KNOWN_VALUE).
-//	                                         An AI agent is refused (PERMISSION_DENIED).
+//	                                         than what is verified delivered of it less what FUL's confirmed
+//	                                         shipments shipped of the commitment line (INVALID_KNOWN_VALUE,
+//	                                         CommitmentShipped v1, R82). An AI agent is refused
+//	                                         (PERMISSION_DENIED).
 //	purchase.commitment.disposition.decide   human only (order reviewer), independent of the requester
 //	                                         (INDEPENDENT_REVIEW_REQUIRED): approve, the line's approved
-//	                                         dispositions still within what is verified delivered of it,
-//	                                         or reject with a reason. An approval publishes
-//	                                         PurchaseCommitmentDisposed and counts the goods as disposed of
-//	                                         in DownstreamCommitments v1 (R71).
+//	                                         dispositions still within verified less shipped, or reject
+//	                                         with a reason. The decision is the authority. An approval
+//	                                         publishes PurchaseCommitmentDisposed and counts the goods as
+//	                                         disposed of in DownstreamCommitments v1 (R71).
 //
 // A disposition never changes the commitment's status or version; its own version is 1 requested and 2
-// decided. What FUL shipped of the goods is not PUR's to read: at an order's cancellation nothing has
-// shipped, and for a remainder closed short the reviewer judges it (the register's "处置量不超过已核实交付减
-// 已出运" is checked against the verified deliveries only).
+// decided. Shipped is FUL's CommitmentShipped v1, read lock-free in PUR's transaction after the
+// commitment root is locked FOR UPDATE. The read is correct only while shipment.confirm holds that
+// root FOR SHARE through SupplierDeliveryGuard v2. At an order's cancellation nothing has shipped.
 //
 // Request members in snake_case: purchase.commitment.dispose {disposition_id, commitment_id,
 // order_line_id, disposition (return_to_supplier, write_off or hold_for_reuse), quantity, reason,
