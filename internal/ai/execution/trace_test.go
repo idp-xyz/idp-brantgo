@@ -42,7 +42,7 @@ func readTrace(t *testing.T, path string) (string, []map[string]any) {
 // The trace of a turn (S4 G2): one JSON Lines file per turn under <dir>/<tenant>/<company>/<task>/,
 // a record per line in the order things happened, each written when it happens; what the model was
 // told (prompt, tools, facts) and what it sent and got back (replies with tool calls and arguments,
-// tool results) in clear, errors by class only. No record holds a secret the directory was given:
+// tool results) in clear, errors by class with the HTTP status and the transport word. No record holds a secret the directory was given:
 // neither as it is nor as it stands inside a JSON string. Files are private to their owner. A nil
 // trace records nothing.
 func TestTraceWritesATurnAndNeverASecret(t *testing.T) {
@@ -77,8 +77,8 @@ func TestTraceWritesATurnAndNeverASecret(t *testing.T) {
 	tr.toolResult(at, call, `{"ok":true,"receipt":"VERIFIED","object_id":"src.1"}`, "")
 	tr.toolResult(at, broken, `{"ok":false,"code":"SCHEMA_INVALID","path":"/args"}`, "SCHEMA_INVALID")
 	tr.facts(at, `{"task_id":"task.q01","registered_source_id":"src.1","source_text":"`+strings.ReplaceAll(strings.ReplaceAll(secret, `\`, `\\`), `"`, `\"`)+`"}`, true)
-	tr.modelError(at, "unavailable", false)
-	tr.modelError(at, "timeout", true)
+	tr.modelError(at, "unavailable", false, 503, "")
+	tr.modelError(at, "timeout", true, 0, "timeout")
 	tr.reply(at, model.Response{Model: "m-as-returned", FinishReason: "stop", Message: model.Message{Content: "done"}}, time.Second)
 	tr.toolEnded(at, "tool_wait", call, "")
 	tr.toolEnded(at, "tool_error", call, "internal")
@@ -146,9 +146,11 @@ func TestTraceWritesATurnAndNeverASecret(t *testing.T) {
 	if recs[5]["replan"] != true || recs[5]["facts"].(map[string]any)["source_text"] != traceRedacted {
 		t.Fatalf("rebuilt facts %v", recs[5])
 	}
-	// A model call that did not answer is recorded by class; it is a step of its own.
-	if a, b := recs[6], recs[7]; a["class"] != "unavailable" || a["step"] != float64(2) || a["retry"] != false || b["class"] != "timeout" ||
-		b["step"] != float64(3) || b["retry"] != true || len(a) != 5 {
+	// A model call that did not answer is recorded by class, with the HTTP status and the transport
+	// word, and nothing else; it is a step of its own.
+	if a, b := recs[6], recs[7]; a["class"] != "unavailable" || a["step"] != float64(2) || a["retry"] != false ||
+		a["http_status"] != float64(503) || a["transport"] != "" || b["class"] != "timeout" || b["step"] != float64(3) ||
+		b["retry"] != true || b["http_status"] != float64(0) || b["transport"] != "timeout" || len(a) != 7 || len(b) != 7 {
 		t.Fatalf("model errors %v %v", a, b)
 	}
 	if recs[9]["name"] != "source.register" || recs[9]["class"] != nil || recs[10]["class"] != "internal" || recs[10]["step"] != float64(4) {
@@ -186,7 +188,7 @@ func TestTraceWritesATurnAndNeverASecret(t *testing.T) {
 	none := off.begin(scope, "agent.q01", view, traceBundle{}, "p", nil, at)
 	none.facts(at, "{}", false)
 	none.reply(at, model.Response{}, 0)
-	none.modelError(at, "timeout", false)
+	none.modelError(at, "timeout", false, 0, "timeout")
 	none.toolResult(at, call, "{}", "")
 	none.toolEnded(at, "tool_wait", call, "")
 	if none != nil || none.end(at, TurnResult{}, nil) != nil {

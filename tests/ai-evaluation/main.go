@@ -32,7 +32,9 @@
 //
 // Exit status: 0 every trial met its expected outcome (scripted) or the live run completed; 1 a
 // scripted trial missed its expected outcome; 2 the harness could not run; 3 the live suite was not
-// executed (no model key in the environment).
+// executed (no model key in the environment). A live trial the model service did not let run, and a
+// scripted-only family, are recorded and do not change that: the live run still exits 0 when it
+// completed.
 package main
 
 import (
@@ -192,6 +194,11 @@ func run(ctx context.Context, cfg config) int {
 	r := newEvalRun(cfg)
 	families := familiesOf(cfg.families)
 	finish := func(code int) int {
+		for _, tr := range r.Trials {
+			if tr != nil && tr.NotExecuted {
+				r.NotExecuted = append(r.NotExecuted, tr.TrialID+": "+tr.Error)
+			}
+		}
 		r.FinishedAt = time.Now().UTC().Format(time.RFC3339)
 		r.Environment.Load1End = load1()
 		r.summarize(families)
@@ -227,6 +234,10 @@ func run(ctx context.Context, cfg config) int {
 	}
 	var jobs []job
 	for _, f := range families {
+		if !f.runsOnLive(cfg.suite) {
+			r.NotExecuted = append(r.NotExecuted, f.name+": not applicable on a live model. "+f.scriptedBecause)
+			continue
+		}
 		for n := 1; n <= cfg.trials; n++ {
 			jobs = append(jobs, job{f, n})
 		}
@@ -268,10 +279,13 @@ func run(ctx context.Context, cfg config) int {
 	}
 	failed := 0
 	for _, t := range r.Trials {
-		if !t.Pass {
+		if !t.Pass && !t.NotExecuted {
 			failed++
 		}
 	}
+	// Live trials that are not executed are not failures, and a live run that completed exits 0
+	// whether or not its trials passed: that is today's rule. The missing key exits 3 above, before
+	// any trial. Scripted trials that miss their outcome exit 1.
 	if failed > 0 && cfg.suite == suiteScripted {
 		fmt.Fprintf(os.Stderr, "ai-evaluation: %d of %d trials missed their expected outcome\n", failed, len(r.Trials))
 		return finish(exitFailed)

@@ -409,8 +409,62 @@ func (t *trial) runAgent(ctx context.Context, p agentPhase) (map[string]any, err
 	if rec.Diagnosis != "" {
 		rec.LastCalls = t.lastCalls(rctx, before.model+before.tool, 12)
 	}
+	if t.env.cfg.suite == suiteLive {
+		if f, ok := modelFailureIn(logPath); ok {
+			rec.ModelFailure = failureRecord(p.name, f)
+			t.rec.ModelFailure = rec.ModelFailure
+			t.note("model call failed: %s", f.line())
+		}
+		// The phase returned because its until matched, and the model service stopped it.
+		// A timeout or a worker that died stays that failure.
+		state := t.lastModelState(rctx, before.model+before.tool)
+		if err == nil && modelServiceDidNotRun(suiteLive, view, state) {
+			f := modelFailure{Class: ledgerModelClass(state)}
+			if rec.ModelFailure != nil {
+				f = modelFailure{Class: rec.ModelFailure.Class, HTTPStatus: rec.ModelFailure.HTTPStatus, Type: rec.ModelFailure.ErrorType,
+					Code: rec.ModelFailure.ErrorCode, Transport: rec.ModelFailure.Transport, FromLog: true}
+			}
+			err = &notExecuted{reason: outcomeNotExecuted + ": " + f.line()}
+			rec.Error = err.Error()
+		}
+	}
 	t.rec.Phases = append(t.rec.Phases, rec)
 	return view, err
+}
+
+// phaseCommittedNothing fails the trial at a phase that ended without the write the family's next
+// step needs. The phase already says "no write" when it asked the model and committed nothing.
+func (t *trial) phaseCommittedNothing(phase, what string) error {
+	for i := len(t.rec.Phases) - 1; i >= 0; i-- {
+		p := t.rec.Phases[i]
+		if p.Name != phase {
+			continue
+		}
+		if strings.HasPrefix(p.Diagnosis, "no write") {
+			return &phaseError{err: fmt.Errorf("phase %s committed no %s", phase, what)}
+		}
+		return nil
+	}
+	return nil
+}
+
+// lastModelState is the state of the phase's last model call, after the first skip ledger rows.
+func (t *trial) lastModelState(ctx context.Context, skip int) string {
+	mc, err := t.ops[actorClerk].get(ctx, "/api/brant/v1/ai/tasks/"+taskID+"/model_calls")
+	if err != nil {
+		return ""
+	}
+	calls := list(mc["calls"])
+	if skip > len(calls) {
+		skip = len(calls)
+	}
+	state := ""
+	for _, x := range calls[skip:] {
+		if str(dig(x, "kind")) == "model" {
+			state = str(dig(x, "state"))
+		}
+	}
+	return state
 }
 
 // committedActions counts the task's committed actions (its writes).

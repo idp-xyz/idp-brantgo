@@ -4,9 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 )
+
+func TestCallErrorKeepsTheClassification(t *testing.T) {
+	inner := fmt.Errorf("%w: status 404 not_found_error (model_not_found)", ErrInvalidRequest)
+	err := &CallError{Err: inner, Facts: CallFacts{Status: 404, Type: "not_found_error", Code: "model_not_found"}}
+	if !errors.Is(err, ErrInvalidRequest) || errors.Is(err, ErrUnavailable) || err.Error() != inner.Error() {
+		t.Fatalf("%v", err)
+	}
+	facts, ok := FactsOf(err)
+	if !ok || facts.Status != 404 || facts.Type != "not_found_error" || facts.Code != "model_not_found" || facts.Transport != "" {
+		t.Fatalf("%+v %v", facts, ok)
+	}
+	if _, ok = FactsOf(ErrUnavailable); ok {
+		t.Fatal("a plain sentinel has no facts")
+	}
+}
 
 func turn(content string) Request {
 	return Request{Profile: "q01.scripted", Messages: []Message{{Role: RoleSystem, Content: "rules"}, {Role: RoleUser, Content: content}},
