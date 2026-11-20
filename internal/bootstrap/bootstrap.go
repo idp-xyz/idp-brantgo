@@ -22,6 +22,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai"
 	"go.idp.xyz/idp-brant/internal/ai/ingest"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
+	"go.idp.xyz/idp-brant/internal/contexts/clm"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
@@ -190,6 +191,7 @@ type Contexts struct {
 	STL *stl.Module
 	CNX *cnx.Module
 	FUL *ful.Module
+	CLM *clm.Module
 	TSK *tsk.Module
 	AI  *ai.Layer // internal/ai: not a bounded context (ADR-BR-003)
 }
@@ -341,6 +343,15 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
+		// CLM (S6-03) after FUL: it reads ShipmentLineRef v1 before its transaction (R34) and
+		// publishes CreditRequest v1 for STL (R35). It calls no guard.
+		c.CLM, err = clm.New(db, clm.Upstream{Lines: clm.FULLines(c.FUL), Evidence: clmEvidence{Sources: c.EVD},
+			Currency: clmCurrency{Configs: c.POL}})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
 		// TSK (S4) after TRD: it calls TRD's object control (R17) and its GoalReadiness v1 (R18; S4
 		// unit B2: goal.verify) before its own transactions, and the ActionReconciliation v1 of the
 		// contexts a task step writes (R18, R66–R69; S4 unit B1).
@@ -454,6 +465,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	tc.STL = c.STL
 	tc.CNX = c.CNX
 	tc.FUL = c.FUL
+	tc.CLM = c.CLM
 	tc.TSK = c.TSK
 	tc.AI = c.AI
 	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {

@@ -37,6 +37,9 @@ stk
 # (R26, R27, R44, R45, R56, R59); TRD reads its ShipmentFacts v1 at run time only (R70), and QLT its
 # ReleaseConsumption v1 (R79, S5R-D18).
 ful
+# clm (S6-03): after ful. It reads FUL ShipmentLineRef v1 before its transaction (R34, guardLock
+# false) and publishes CreditRequest v1 for STL (R35). It calls no guard function.
+clm
 # tsk (S4) after its upstreams trd (R18 GoalReadiness v1 and TRD's object control, R17) and evd, inq,
 # sup, cst (R66-R69 ActionReconciliation v1): it reads them before its transactions and calls no guard
 # function of theirs.
