@@ -7,7 +7,7 @@ This repository is the IDP Brant Go module (`go.idp.xyz/idp-brant`) plus its mas
 - `make check` passes (module verification, gofmt, vet, golangci-lint, unit tests, package rules).
 - Code that touches PostgreSQL also passes `make db && make integration`; `CI=true` makes a missing database a failure, never a skip.
 - New behaviour has a test at the level it belongs to: kernel and domain rules as unit tests, persistence and concurrency as PostgreSQL 16 integration tests.
-- The live suites (`make ai-eval-live`, `make eer-live`) never run under `CI=true`; a missing model key makes the live suite report NOT EXECUTED, never a pass. The model service key is only the environment variable `IDP_BRANT_MODEL_API_KEY`; if it is kept in a file, that file is the git-ignored `.env`, and the key never goes into a report, a log, a trace or the archive.
+- The live suites (`make ai-eval-live`, `make eer-live`) never run under `CI=true`; a missing model key makes the live suite report NOT EXECUTED, never a pass. On the live suite a trial the model service did not let run is NOT EXECUTED and a scripted-only family NOT APPLICABLE, never a pass and never a failure. The model service key is only the environment variable `IDP_BRANT_MODEL_API_KEY`; if it is kept in a file, that file is the git-ignored `.env`, and the key never goes into a report, a log, a trace or the archive.
 
 ## Rules the checks enforce
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -132,21 +133,26 @@ func TestFailuresMapToThePortsErrors(t *testing.T) {
 	defer srv.Close()
 	req := model.Request{Messages: []model.Message{{Role: model.RoleUser, Content: "x"}}}
 	cases := []struct {
-		status int
-		body   string
-		want   []error
+		status            int
+		body              string
+		want              []error
+		http              int
+		typ, code, transp string
 	}{
-		{401, `{"error":{"message":"missing or wrong API key ` + secret + `","type":"authentication_error"}}`, []error{ErrAuthentication, model.ErrUnavailable}},
-		{403, `{}`, []error{ErrAuthentication, model.ErrUnavailable}},
-		{429, `{"error":{"type":"rate_limit","code":429}}`, []error{model.ErrUnavailable}},
-		{503, ``, []error{model.ErrUnavailable}},
-		{408, ``, []error{model.ErrUnavailable}},
-		{400, `{"error":{"message":"bad","type":"invalid_request_error"}}`, []error{model.ErrInvalidRequest}},
-		{404, ``, []error{model.ErrInvalidRequest}},
-		{200, `{"choices":[]}`, []error{ErrMalformed, model.ErrUnavailable}},
-		{200, `not json`, []error{ErrMalformed, model.ErrUnavailable}},
-		{200, `{"choices":[{"message":{"role":"assistant","content":"` + strings.Repeat("x", 2048) + `"}}]}`, []error{ErrMalformed}},
-		{-1, ``, []error{model.ErrUnavailable, context.DeadlineExceeded}},
+		{401, `{"error":{"message":"missing or wrong API key ` + secret + `","type":"authentication_error"}}`, []error{ErrAuthentication, model.ErrUnavailable}, 401, "authentication_error", "", ""},
+		{403, `{}`, []error{ErrAuthentication, model.ErrUnavailable}, 403, "", "", ""},
+		{429, `{"error":{"type":"rate_limit","code":429,"message":"` + secret + `"}}`, []error{model.ErrUnavailable}, 429, "rate_limit", "429", ""},
+		{503, ``, []error{model.ErrUnavailable}, 503, "", "", ""},
+		{500, `{"error":{"message":"` + secret + `","type":"server_error","code":"internal"}}`, []error{model.ErrUnavailable}, 500, "server_error", "internal", ""},
+		{408, ``, []error{model.ErrUnavailable}, 408, "", "", ""},
+		{400, `{"error":{"message":"bad ` + secret + `","type":"invalid_request_error"}}`, []error{model.ErrInvalidRequest}, 400, "invalid_request_error", "", ""},
+		{404, `{"error":{"message":"` + secret + `","type":"not_found_error","code":"model_not_found"}}`, []error{model.ErrInvalidRequest}, 404, "not_found_error", "model_not_found", ""},
+		{409, `{"error":{"message":"` + secret + `","type":"conflict","code":"conflict"}}`, []error{model.ErrInvalidRequest}, 409, "conflict", "conflict", ""},
+		{422, `{"error":{"message":"` + secret + `","type":"unprocessable","code":422}}`, []error{model.ErrInvalidRequest}, 422, "unprocessable", "422", ""},
+		{200, `{"choices":[]}`, []error{ErrMalformed, model.ErrUnavailable}, 200, "", "", ""},
+		{200, `not json`, []error{ErrMalformed, model.ErrUnavailable}, 200, "", "", ""},
+		{200, `{"choices":[{"message":{"role":"assistant","content":"` + strings.Repeat("x", 2048) + `"}}]}`, []error{ErrMalformed}, 200, "", "", ""},
+		{-1, ``, []error{model.ErrUnavailable, context.DeadlineExceeded}, 0, "", "", model.TransportTimeout},
 	}
 	c, err := New(Config{BaseURL: srv.URL, Model: "m", APIKey: secret, Timeout: 100 * time.Millisecond, MaxResponseBytes: 1024})
 	if err != nil {
@@ -163,6 +169,11 @@ func TestFailuresMapToThePortsErrors(t *testing.T) {
 		if err != nil && (strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "missing or wrong")) {
 			t.Errorf("status %d: the error carries the service's text: %v", tc.status, err)
 		}
+		facts, ok := model.FactsOf(err)
+		if !ok || facts.Status != tc.http || facts.Type != tc.typ || facts.Code != tc.code || facts.Transport != tc.transp ||
+			strings.Contains(facts.Type, secret) || strings.Contains(facts.Code, secret) {
+			t.Errorf("status %d: facts %+v ok=%v", tc.status, facts, ok)
+		}
 	}
 	// Nobody listening.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -177,6 +188,10 @@ func TestFailuresMapToThePortsErrors(t *testing.T) {
 	}
 	if _, err = down.Complete(context.Background(), req); !errors.Is(err, model.ErrUnavailable) {
 		t.Fatalf("connection refused: %v", err)
+	}
+	if facts, ok := model.FactsOf(err); !ok || facts.Status != 0 || facts.Transport != model.TransportRefused || facts.Type != "" ||
+		strings.Contains(err.Error(), "chat/completions") || strings.Contains(err.Error(), secret) {
+		t.Fatalf("connection refused facts %+v ok=%v err=%v", facts, ok, err)
 	}
 	// An invalid request is refused before anything is sent.
 	if _, err = c.Complete(context.Background(), model.Request{}); !errors.Is(err, model.ErrInvalidRequest) {
@@ -207,5 +222,27 @@ func TestConfigIsChecked(t *testing.T) {
 	}
 	if WireName("cost_scenario.save_draft") != "cost_scenario__save_draft" || WireName("quote.response.record") != "quote__response__record" {
 		t.Fatal(WireName("quote.response.record"))
+	}
+}
+
+// A failure with no HTTP answer is one fixed transport word. A deadline wins over a reset wrapped
+// under it; the four words are the only ones.
+func TestTransportWord(t *testing.T) {
+	ctx := context.Background()
+	if got := transportWord(&net.OpError{Err: syscall.ECONNREFUSED}, ctx); got != model.TransportRefused {
+		t.Fatalf("refused %q", got)
+	}
+	if got := transportWord(&net.OpError{Err: syscall.ECONNRESET}, ctx); got != model.TransportReset {
+		t.Fatalf("reset %q", got)
+	}
+	if got := transportWord(errors.New("no such host"), ctx); got != model.TransportOther {
+		t.Fatalf("other %q", got)
+	}
+	dctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	time.Sleep(time.Millisecond)
+	reset := &net.OpError{Err: syscall.ECONNRESET}
+	if got := transportWord(reset, dctx); got != model.TransportTimeout {
+		t.Fatalf("a deadline is a timeout, got %q", got)
 	}
 }

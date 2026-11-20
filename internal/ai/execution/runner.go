@@ -629,7 +629,8 @@ func (t *turn) tools() ([]model.Tool, map[string]policy.Delegation, error) {
 
 // ask makes one model call within the budget: reserved first (BUDGET_EXHAUSTED pauses the task),
 // settled with what the provider returned; an unavailable model is retried within max_retries,
-// then the task pauses (BC-AT26).
+// then the task pauses (BC-AT26). A call that does not succeed is logged once, with its class and
+// the port's status facts, and traced the same way.
 func (t *turn) ask(messages []model.Message, tools []model.Tool) (model.Response, bool, error) {
 	req := model.Request{Profile: t.r.Bundle.Model.ProfileID, Messages: messages, Tools: tools, MaxOutputTokens: t.r.Bundle.Model.MaxOutputTokens}
 	profile := t.r.Bundle.Model
@@ -646,25 +647,29 @@ func (t *turn) ask(messages []model.Message, tools []model.Tool) (model.Response
 		if resp.Latency > 0 {
 			latency = resp.Latency
 		}
-		switch {
-		case callErr == nil:
+		// class is the runner's own word (timeout, unavailable, refused). The facts are the
+		// port's: status, type, code, transport. The log line is what the live harness reads
+		// (msg="model call failed"); it never carries the error's text.
+		class := modelFailClass(callErr)
+		facts, _ := model.FactsOf(callErr)
+		if callErr == nil {
 			t.trace.reply(t.r.Clock.Now(), resp, latency)
-		case errors.Is(callErr, context.DeadlineExceeded):
-			t.trace.modelError(t.r.Clock.Now(), "timeout", retry)
-		case errors.Is(callErr, model.ErrUnavailable):
-			t.trace.modelError(t.r.Clock.Now(), "unavailable", retry)
-		default:
-			t.trace.modelError(t.r.Clock.Now(), "refused", retry)
+		} else {
+			t.trace.modelError(t.r.Clock.Now(), class, retry, facts.Status, facts.Transport)
 		}
 		out, err := t.settleModel(call, req, resp, callErr, latency)
 		if err != nil {
 			return model.Response{}, true, err
 		}
+		if class != "" {
+			t.r.Logger.Info("model call failed",
+				"task", t.view.TaskID, "call", out.CallID, "class", class,
+				"http_status", facts.Status, "error_type", facts.Type, "error_code", facts.Code, "transport", facts.Transport)
+		}
 		switch {
 		case callErr == nil:
 			return resp, false, nil
 		case errors.Is(callErr, model.ErrUnavailable):
-			t.r.Logger.Info("model unavailable", "task", t.view.TaskID, "call", out.CallID)
 			continue
 		case t.agent.Err() != nil:
 			return model.Response{}, true, t.agent.Err()
@@ -673,6 +678,22 @@ func (t *turn) ask(messages []model.Message, tools []model.Tool) (model.Response
 			return model.Response{}, true, t.pause(tskapi.PauseModelUnavailable, codes.ToolUnavailable+": the model refused or broke the request",
 				"The model service answers the task's requests again and the owner resumes the task, or takes control (BC-AT26).")
 		}
+	}
+}
+
+// modelFailClass is the runner's class of a model call that did not succeed: a deadline is
+// timeout (checked before ErrUnavailable, and retried because the adapter wraps it as that),
+// ErrUnavailable is unavailable, and anything else — a request the port refuses — is refused.
+func modelFailClass(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, model.ErrUnavailable):
+		return "unavailable"
+	default:
+		return "refused"
 	}
 }
 

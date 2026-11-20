@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/ai/adapters/model"
@@ -211,23 +212,26 @@ func (c *Client) Complete(ctx context.Context, req model.Request) (model.Respons
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
 		// Connection refused, reset, DNS, TLS or the timeout: the model cannot answer now.
-		return model.Response{}, fmt.Errorf("%w: %w", model.ErrUnavailable, sanitize(err, ctx))
+		return model.Response{}, &model.CallError{Err: fmt.Errorf("%w: %w", model.ErrUnavailable, sanitize(err, ctx)),
+			Facts: model.CallFacts{Transport: transportWord(err, ctx)}}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, c.limit+1))
 	latency := time.Since(start)
 	if err != nil {
-		return model.Response{}, fmt.Errorf("%w: reading the answer: %w", model.ErrUnavailable, sanitize(err, ctx))
+		return model.Response{}, &model.CallError{Err: fmt.Errorf("%w: reading the answer: %w", model.ErrUnavailable, sanitize(err, ctx)),
+			Facts: model.CallFacts{Transport: transportWord(err, ctx)}}
 	}
 	if int64(len(data)) > c.limit {
-		return model.Response{}, fmt.Errorf("%w: the answer exceeds %d bytes", ErrMalformed, c.limit)
+		return model.Response{}, &model.CallError{Err: fmt.Errorf("%w: the answer exceeds %d bytes", ErrMalformed, c.limit),
+			Facts: model.CallFacts{Status: resp.StatusCode}}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return model.Response{}, statusError(resp.StatusCode, data)
 	}
 	var out wireResponse
 	if err = json.Unmarshal(data, &out); err != nil || len(out.Choices) == 0 {
-		return model.Response{}, ErrMalformed
+		return model.Response{}, &model.CallError{Err: ErrMalformed, Facts: model.CallFacts{Status: resp.StatusCode}}
 	}
 	choice := out.Choices[0]
 	msg, err := fromWire(choice.Message, names)
@@ -304,23 +308,66 @@ func arguments(raw json.RawMessage) json.RawMessage {
 
 // statusError maps a non-200 answer: 401/403 ErrAuthentication; 408, 429 and 5xx
 // model.ErrUnavailable; other 4xx model.ErrInvalidRequest. Only the status and the error type and
-// code the service gave are kept (an error message may echo the request).
+// code the service gave are kept (an error message may echo the request). The same type and code,
+// bounded as here, travel on model.CallError for the worker log.
 func statusError(status int, body []byte) error {
-	var we wireError
+	typ, code := errorFields(body)
 	detail := ""
-	if json.Unmarshal(body, &we) == nil && we.Error.Type != "" {
-		detail = " " + bounded(we.Error.Type, 60)
-		if we.Error.Code != nil {
-			detail += fmt.Sprintf(" (%v)", we.Error.Code)
+	if typ != "" {
+		detail = " " + typ
+		if code != "" {
+			detail += " (" + code + ")"
 		}
 	}
+	var err error
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return fmt.Errorf("%w: status %d%s", ErrAuthentication, status, detail)
+		err = fmt.Errorf("%w: status %d%s", ErrAuthentication, status, detail)
 	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500:
-		return fmt.Errorf("%w: status %d%s", model.ErrUnavailable, status, detail)
+		err = fmt.Errorf("%w: status %d%s", model.ErrUnavailable, status, detail)
+	default:
+		err = fmt.Errorf("%w: status %d%s", model.ErrInvalidRequest, status, detail)
 	}
-	return fmt.Errorf("%w: status %d%s", model.ErrInvalidRequest, status, detail)
+	return &model.CallError{Err: err, Facts: model.CallFacts{Status: status, Type: typ, Code: code}}
+}
+
+// errorFields is the error type and code of an HTTP error body, bounded, never the message.
+// A code is kept only when a type is present, as statusError has always done.
+func errorFields(body []byte) (string, string) {
+	var we wireError
+	if json.Unmarshal(body, &we) != nil || we.Error.Type == "" {
+		return "", ""
+	}
+	typ := oneLine(bounded(we.Error.Type, 60))
+	code := ""
+	if we.Error.Code != nil {
+		code = oneLine(bounded(fmt.Sprint(we.Error.Code), 60))
+	}
+	return typ, code
+}
+
+func oneLine(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	return strings.ReplaceAll(s, "\n", "")
+}
+
+// transportWord is the fixed word for a failure that produced no HTTP answer.
+func transportWord(err error, ctx context.Context) string {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return model.TransportTimeout
+	}
+	var ue *url.Error
+	if errors.As(err, &ue) && ue.Timeout() {
+		return model.TransportTimeout
+	}
+	switch {
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return model.TransportRefused
+	case errors.Is(err, syscall.ECONNRESET):
+		return model.TransportReset
+	default:
+		return model.TransportOther
+	}
 }
 
 // sanitize keeps the cause of a transport error without the request URL's query or anything else

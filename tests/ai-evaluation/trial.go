@@ -115,9 +115,12 @@ func runTrial(ctx context.Context, e *env, f *family, n int) (rec *TrialRecord) 
 		return rec
 	}
 	err := t.setup(ctx)
+	var stopped *notExecuted
 	if err != nil {
 		rec.Failure = failSetup
-	} else if err = f.run(ctx, t); err != nil && rec.Failure == "" {
+	} else if err = f.run(ctx, t); errors.As(err, &stopped) {
+		rec.NotExecuted = true
+	} else if err != nil && rec.Failure == "" {
 		rec.Failure = classify(err)
 	}
 	if err != nil {
@@ -131,12 +134,16 @@ func runTrial(ctx context.Context, e *env, f *family, n int) (rec *TrialRecord) 
 	}
 	rec.Pass = err == nil && len(rec.Assertions) > 0
 	for _, a := range rec.Assertions {
-		if !a.Pass {
+		if !a.Pass && !a.ScriptedOnly {
 			rec.Pass = false
 			if rec.Failure == "" {
 				rec.Failure = failAssertion
 			}
 		}
+	}
+	if rec.NotExecuted {
+		rec.Pass = false
+		rec.Failure = ""
 	}
 	rec.Outcome = outcomeOf(rec)
 	return rec
@@ -165,6 +172,9 @@ func classify(err error) string {
 }
 
 func outcomeOf(r *TrialRecord) string {
+	if r.NotExecuted {
+		return outcomeNotExecuted
+	}
 	s := r.Lifecycle
 	if s == "" {
 		s = "none"
@@ -314,7 +324,16 @@ func (t *trial) platformCmd(ctx context.Context, command string, args map[string
 }
 
 func (t *trial) assert(name, want, got string) {
-	t.rec.Assertions = append(t.rec.Assertions, Assertion{Name: name, Want: want, Got: got, Pass: want == got})
+	a := Assertion{Name: name, Want: want, Got: got, Pass: want == got}
+	if t.marksScriptedTurns(name) {
+		a.ScriptedOnly = true
+	}
+	t.rec.Assertions = append(t.rec.Assertions, a)
+}
+
+// marksScriptedTurns is a live-suite assertion whose expected value is the script's own turns.
+func (t *trial) marksScriptedTurns(name string) bool {
+	return t.env != nil && t.env.cfg.suite == suiteLive && t.fam != nil && scriptedTurnAssertion(t.fam.name, name)
 }
 
 func (t *trial) note(format string, a ...any) {

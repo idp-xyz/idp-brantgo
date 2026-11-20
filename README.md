@@ -159,7 +159,7 @@ make race         # the same with the race detector
 make spike        # consistency spikes; JSON report in bin/spike-consistency.json
 make ci           # all of the above, as .github/workflows/ci.yml runs them
 make ai-eval      # the Q01 evaluation suite with the scripted model, in its own database; report in bin/ai-eval/
-make ai-eval-live # the same with the live model service; refused under CI=true; without IDP_BRANT_MODEL_API_KEY it reports NOT EXECUTED
+make ai-eval-live # the same with the live model service; refused under CI=true; without IDP_BRANT_MODEL_API_KEY it reports NOT EXECUTED. A trial the model service did not let run is NOT EXECUTED, and a scripted-only family is NOT APPLICABLE, never a pass and never a failure
 make eer-live     # live runs against a running EER (decision E-2); refused under CI=true
 ```
 
