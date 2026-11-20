@@ -42,6 +42,10 @@ const (
 	// (error catalog SOURCE_AMBIGUOUS: 等待确认或更正); rfq.confirm_scope waits for the human to
 	// state the value and, for several places, the place verified.
 	CodeSourceAmbiguous = "SOURCE_AMBIGUOUS"
+
+	// CodeDependencyNotSupported: the caller cited an optional dependency this process does not
+	// run (error catalog, contexts include INQ since S6-D04). CRM off is the opportunity case.
+	CodeDependencyNotSupported = "DEPENDENCY_NOT_SUPPORTED"
 )
 
 // The fields of a line that field locators, pending fields and verifications name (core design
@@ -132,6 +136,11 @@ type SaveRfq struct {
 	Lines            []RfqLine `doc:"the whole draft, not a patch"`
 	SourceIDs        []string
 	UnresolvedFields []string `doc:"open questions that block confirmation"`
+	// OpportunityID cites a CRM opportunity (R40, S6-D04). Empty is every save that omits it,
+	// including Q01: the field is left out of the Q01 tool schema (ai:"-") and, while empty, out
+	// of the request hash. A process with CRM off refuses a non-empty id with
+	// DEPENDENCY_NOT_SUPPORTED.
+	OpportunityID string `json:"opportunity_id,omitempty" contract:"id" ai:"-" doc:"optional CRM opportunity; not a Q01 tool argument"`
 }
 
 // ConfirmRfqScope makes a complete draft ready. Only a human confirms, and the evidence must cover
@@ -189,6 +198,9 @@ func (c SaveRfq) Validate() error {
 	}
 	if c.CustomerID != "" && !kernel.ValidIdentifier(c.CustomerID) {
 		return schema("/args/customer_id")
+	}
+	if c.OpportunityID != "" && !kernel.ValidIdentifier(c.OpportunityID) {
+		return schema("/args/opportunity_id")
 	}
 	if c.ContactID != "" && !kernel.ValidIdentifier(c.ContactID) {
 		return schema("/args/contact_id")
@@ -460,7 +472,9 @@ type RfqView struct {
 	Lines            []RfqLineView
 	SourceIDs        []string
 	UnresolvedFields []string
-	Confirmation     *Confirmation
+	// OpportunityID is the CRM opportunity the draft cites, empty when it cites none (R40).
+	OpportunityID string
+	Confirmation  *Confirmation
 	// Corrections are every human correction and verification of the RFQ's lines, in order.
 	Corrections []Correction
 }
@@ -517,6 +531,12 @@ func uniqueIDs(ids []string, min int, path string) error {
 }
 
 func schema(path string) error { return kernel.Reject(kernel.CodeSchemaInvalid, path, "") }
+
+// DependencyNotSupported refuses a request that needs an optional module this process did not
+// compose (CRM off, an RFQ that cites an opportunity: BC-AT24). HTTP 422.
+func DependencyNotSupported(path string) error {
+	return kernel.RejectAs(CodeDependencyNotSupported, kernel.CategoryInvalid, path, "")
+}
 
 func text(s string, max int) bool {
 	n := utf8.RuneCountInString(s)

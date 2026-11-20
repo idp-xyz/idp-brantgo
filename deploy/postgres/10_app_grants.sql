@@ -540,6 +540,14 @@ GRANT UPDATE (disposition, disposition_shipment_id, disposition_revision, dispos
               disposition_reason)
     ON brant_ful.shipment_review_item TO brant_app;
 
+-- CRM (S6-04, optional): a lead is inserted once (SELECT FOR UPDATE still needs UPDATE; a trigger
+-- refuses a real change). An opportunity moves only its stage and row version. Follow-ups only
+-- grow. The ledger only grows. INQ reads an opportunity before its own transaction and takes no lock.
+GRANT USAGE ON SCHEMA brant_crm TO brant_app;
+GRANT SELECT, INSERT, UPDATE ON brant_crm.lead, brant_crm.opportunity TO brant_app;
+GRANT SELECT, INSERT ON brant_crm.follow_up, brant_crm.action_result, brant_crm.audit_event TO brant_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA brant_crm TO brant_app;
+
 -- TSK business tasks (S4-01): a task is inserted created and moves only along SM-TSK-TASK, one version at
 -- a time, never changing what it was created with (trigger); its history only grows (trigger); nothing
 -- is deleted; the ledger only grows. FOR UPDATE on tasks needs the column grants.

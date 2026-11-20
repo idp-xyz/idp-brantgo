@@ -279,10 +279,12 @@ type brc001 struct {
 	unitPrices   map[string]string
 }
 
-func newBRC001(t *testing.T) *brc001 {
-	w := newWorld(t)
+func newBRC001(t *testing.T) *brc001 { return newBRC001With(t, bootstrap.PlatformConfig{}) }
+
+func newBRC001With(t *testing.T, opt bootstrap.PlatformConfig) *brc001 {
+	w := newWorldWith(t, opt)
 	is := newIssuer(t)
-	handler, err := w.platform.API(bootstrap.APIConfig{Issuer: is.srv.URL, Audience: "brant-api", AllowInsecureHTTP: true})
+	handler, err := w.platform.API(bootstrap.APIConfig{Issuer: is.srv.URL, Audience: "brant-api", AllowInsecureHTTP: true, DisableCRM: opt.DisableCRM})
 	w.must(err)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

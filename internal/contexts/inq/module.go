@@ -8,6 +8,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
+	crmapi "go.idp.xyz/idp-brant/internal/contexts/crm/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq/internal/adapters/postgres"
@@ -53,4 +54,13 @@ func New(db *bentopg.DB, sources evdapi.Queries, parties ptyapi.Queries, skus ca
 			DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 			Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetRfq, Visible: application.Visible,
 		}}}, nil
+}
+
+// SetOpportunityLookup wires OpportunityRef v1 (R40). Nil leaves CRM off: a save that omits
+// opportunity_id is unchanged, and one that sends it returns DEPENDENCY_NOT_SUPPORTED.
+// Existing callers of New stay valid; bootstrap calls this only when CRM is composed.
+func (m *Module) SetOpportunityLookup(l crmapi.OpportunityLookups) {
+	if m != nil {
+		m.Opportunities = l
+	}
 }

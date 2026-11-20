@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-brant/internal/bootstrap"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
@@ -118,7 +119,10 @@ import (
 // in-process relay and dispatcher. With BRANT_BRC001_S5_REPORT set to a file path the test writes the
 // chain record as JSON (the S3 record's shape plus the dispatches).
 func TestBRC001OrderToSettlementOverHTTP(t *testing.T) {
-	c := newBRC001S5(t)
+	newBRC001S5(t).run()
+}
+
+func (c *brcS5) run() {
 	c.toPurchaseDraft()
 	c.configurations()
 	c.dispatch("after the activation (S3 chain, §5 step 6)")
@@ -189,8 +193,10 @@ type brcS5 struct {
 	invoiceID, taxCaseID, bundleID, salesContract     string
 }
 
-func newBRC001S5(t *testing.T) *brcS5 {
-	b := newBRC001(t)
+func newBRC001S5(t *testing.T) *brcS5 { return newBRC001S5With(t, bootstrap.PlatformConfig{}) }
+
+func newBRC001S5With(t *testing.T, opt bootstrap.PlatformConfig) *brcS5 {
+	b := newBRC001With(t, opt)
 	b.report = "BRANT_BRC001_S5_REPORT"
 	b.record.WBS = "S5 D1 (S5 plan §5; S5-01..S5-05, S5-07, S5-08, S5-12, S5-13, S5-15, S5-17)"
 	b.record.Parity = "BC-AT01 continued: BRC-001 order → settlement, write-off and China materials"

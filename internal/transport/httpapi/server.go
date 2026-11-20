@@ -101,10 +101,12 @@ type Config struct {
 	PUR PUR
 	// The S5 contexts are optional: nil leaves a context's commands and routes out, so a transport
 	// that serves or tests other contexts needs no stand-in for them. The composed process sets all.
-	QLT      QLT
-	STL      STL
-	CNX      CNX
-	FUL      FUL
+	QLT QLT
+	STL STL
+	CNX CNX
+	FUL FUL
+	// CRM is optional (S6-D04, BC-AT24). Nil leaves its commands unregistered.
+	CRM      CRM
 	TSK      TSK // S4, optional as well: TSK's commands and reads
 	AI       AI  // S4, optional: the AI layer's commands and reads and the task-step route (unit C3)
 	Verifier Verifier
@@ -189,6 +191,9 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.FUL != nil {
 		s.contexts["ful"] = fulCommands(cfg.FUL)
+	}
+	if cfg.CRM != nil {
+		s.contexts["crm"] = crmCommands(cfg.CRM)
 	}
 	if cfg.TSK != nil {
 		s.contexts["tsk"] = tskCommands(cfg.TSK)

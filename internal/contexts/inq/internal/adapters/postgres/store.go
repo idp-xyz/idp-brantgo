@@ -30,10 +30,10 @@ func Load(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id str
 	var customerVersion, contactVersion, epoch *int64
 	var evidence []string
 	err := exec.QueryRow(ctx, `SELECT rfq_id, status, row_version, coalesce(customer_party_id, ''), coalesce(contact_id, ''),
-		unresolved_fields, owner_actor_id, coalesce(owner_team_id, ''), customer_row_version, contact_row_version, evidence_ids,
-		coalesce(confirmed_by_kind, ''), coalesce(confirmed_by_id, ''), authority_epoch
+		coalesce(opportunity_id, ''), unresolved_fields, owner_actor_id, coalesce(owner_team_id, ''), customer_row_version,
+		contact_row_version, evidence_ids, coalesce(confirmed_by_kind, ''), coalesce(confirmed_by_id, ''), authority_epoch
 		FROM brant_inq.customer_rfq WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3`+lock, t, c, id).
-		Scan(&r.ID, &status, &r.RowVersion, &r.CustomerID, &r.ContactID, &r.Unresolved, &r.OwnerActor, &r.OwnerTeam,
+		Scan(&r.ID, &status, &r.RowVersion, &r.CustomerID, &r.ContactID, &r.OpportunityID, &r.Unresolved, &r.OwnerActor, &r.OwnerTeam,
 			&customerVersion, &contactVersion, &evidence, &confirmedKind, &confirmedID, &epoch)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -84,10 +84,10 @@ func Load(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id str
 // Insert stores a new RFQ with its lines and sources.
 func Insert(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *rfq.Rfq, at time.Time) error {
 	_, err := exec.Exec(ctx, `INSERT INTO brant_inq.customer_rfq (tenant_id, company_id, rfq_id, status, row_version, customer_party_id,
-		contact_id, unresolved_fields, owner_actor_id, owner_team_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), $8, $9, nullif($10, ''), $11, $11)`,
+		contact_id, opportunity_id, unresolved_fields, owner_actor_id, owner_team_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), nullif($8, ''), $9, $10, nullif($11, ''), $12, $12)`,
 		string(scope.Tenant), string(scope.Company), r.ID, string(r.Status), r.RowVersion, r.CustomerID, r.ContactID,
-		nonNil(r.Unresolved), r.OwnerActor, r.OwnerTeam, at)
+		r.OpportunityID, nonNil(r.Unresolved), r.OwnerActor, r.OwnerTeam, at)
 	if err != nil {
 		return err
 	}
@@ -110,12 +110,12 @@ func Update(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *r
 		customerVersion, contactVersion, epoch, evidence, kind, id = c.CustomerVersion, c.ContactVersion, c.Epoch, c.Evidence, string(c.By.Kind), c.By.ID
 	}
 	tag, err := exec.Exec(ctx, `UPDATE brant_inq.customer_rfq SET status = $4, row_version = $5, customer_party_id = nullif($6, ''),
-		contact_id = nullif($7, ''), unresolved_fields = $8, customer_row_version = $9, contact_row_version = $10, evidence_ids = $11,
-		confirmed_by_kind = $12, confirmed_by_id = $13, authority_epoch = $14,
-		confirmed_at = CASE WHEN $14::bigint IS NULL THEN NULL ELSE coalesce(confirmed_at, $15) END, updated_at = $15
-		WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3 AND row_version = $16`,
-		string(scope.Tenant), string(scope.Company), r.ID, string(r.Status), r.RowVersion, r.CustomerID, r.ContactID, nonNil(r.Unresolved),
-		customerVersion, contactVersion, evidence, kind, id, epoch, at, from)
+		contact_id = nullif($7, ''), opportunity_id = nullif($8, ''), unresolved_fields = $9, customer_row_version = $10,
+		contact_row_version = $11, evidence_ids = $12, confirmed_by_kind = $13, confirmed_by_id = $14, authority_epoch = $15,
+		confirmed_at = CASE WHEN $15::bigint IS NULL THEN NULL ELSE coalesce(confirmed_at, $16) END, updated_at = $16
+		WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3 AND row_version = $17`,
+		string(scope.Tenant), string(scope.Company), r.ID, string(r.Status), r.RowVersion, r.CustomerID, r.ContactID, r.OpportunityID,
+		nonNil(r.Unresolved), customerVersion, contactVersion, evidence, kind, id, epoch, at, from)
 	if err == nil && tag.RowsAffected() != 1 {
 		err = ErrConflict
 	}

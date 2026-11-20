@@ -24,6 +24,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	"go.idp.xyz/idp-brant/internal/contexts/crm"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/ful"
@@ -51,6 +52,13 @@ import (
 type Config struct {
 	PostgresDSN string
 	BentoSchema string // empty means bentopg.DefaultSchema
+}
+
+// PlatformConfig is how a process composes optional contexts. The zero value composes every
+// context, including CRM. DisableCRM leaves CRM unconstructed (S6-D04, BC-AT24): INQ's
+// opportunity lookup stays nil and the HTTP transport does not register CRM.
+type PlatformConfig struct {
+	DisableCRM bool
 }
 
 // Platform holds the connection pool that all transaction owners share.
@@ -180,6 +188,7 @@ type Contexts struct {
 	CAT *cat.Module
 	POL *pol.Module
 	INQ *inq.Module
+	CRM *crm.Module // nil when PlatformConfig.DisableCRM
 	SUP *sup.Module
 	CST *cst.Module
 	TRD *trd.Module
@@ -192,9 +201,15 @@ type Contexts struct {
 	AI  *ai.Layer // internal/ai: not a bounded context (ADR-BR-003)
 }
 
-// Contexts wires reference data and every bounded context, upstream first. Call it once per
-// process.
+// Contexts wires reference data and every bounded context, upstream first, with CRM enabled.
+// Call it once per process.
 func (p *Platform) Contexts() (*Contexts, error) {
+	return p.ContextsWithOptions(PlatformConfig{})
+}
+
+// ContextsWithOptions is Contexts with the optional packages PlatformConfig names. DisableCRM
+// skips CRM and leaves INQ without an opportunity lookup.
+func (p *Platform) ContextsWithOptions(opt PlatformConfig) (*Contexts, error) {
 	var c Contexts
 	db, err := p.newDB()
 	if err == nil {
@@ -233,11 +248,20 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	if err == nil {
 		c.CAT, err = cat.New(db, c.EVD)
 	}
+	if err == nil && !opt.DisableCRM {
+		db, err = p.newDB()
+		if err == nil {
+			c.CRM, err = crm.New(db)
+		}
+	}
 	if err == nil {
 		db, err = p.newDB()
 	}
 	if err == nil {
 		c.INQ, err = inq.New(db, c.EVD, c.PTY, c.CAT)
+		if err == nil && c.CRM != nil {
+			c.INQ.SetOpportunityLookup(c.CRM)
+		}
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -424,6 +448,8 @@ type APIConfig struct {
 	ReplayDispatch       bool
 	ReplayPublishTimeout time.Duration
 	Logger               *slog.Logger
+	// DisableCRM composes the API without CRM (BC-AT24). The zero value leaves CRM on.
+	DisableCRM bool
 }
 
 // API wires every context behind the HTTP transport with an OIDC verifier. It makes no network
@@ -435,12 +461,16 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 		return nil, err
 	}
 	p.verifier = verifier
-	c, err := p.Contexts()
+	c, err := p.ContextsWithOptions(PlatformConfig{DisableCRM: cfg.DisableCRM})
 	if err != nil {
 		return nil, err
 	}
 	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
+	if c.CRM != nil {
+		// A nil *Module stored in the interface would still be non-nil and panic on the route.
+		tc.CRM = c.CRM
+	}
 	tc.STL = c.STL
 	tc.CNX = c.CNX
 	tc.FUL = c.FUL
