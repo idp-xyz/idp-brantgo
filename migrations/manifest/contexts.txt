@@ -32,6 +32,10 @@ stl
 cnx
 # stk (S6-01) before ful: FUL calls StockAvailability v1 (R29, guardLock) inside shipment.confirm.
 stk
+# mfg (S6-02) after stk: calls no guard. PUR SubcontractDemand v1 is read before the MFG transaction
+# (R23). QLT reads InspectionSubject v1 before its transaction (R25). MaterialHandover v1 is STK's
+# command, called before the MFG transaction (R42).
+mfg
 # ful is last of the S5 order after pur (qlt, stl, cnx, ful): its transactions call the guard
 # functions of PTY, PUR, QLT and TRD, and from its commercial release on those of CNX and STL
 # (R26, R27, R44, R45, R56, R59); TRD reads its ShipmentFacts v1 at run time only (R70), and QLT its

@@ -106,6 +106,7 @@ type Config struct {
 	CNX CNX
 	FUL FUL
 	STK STK // S6, optional: nil leaves stock commands out (the company switch defaults to off)
+	MFG MFG // S6, optional: nil leaves manufacturing commands out (the company switch defaults to off)
 	CLM CLM // S6, optional for a transport that is not the composed process: nil leaves claims out
 	// CRM is optional (S6-D04, BC-AT24). Nil leaves its commands unregistered.
 	CRM      CRM
@@ -196,6 +197,9 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.STK != nil {
 		s.contexts["stk"] = stkCommands(cfg.STK)
+	}
+	if cfg.MFG != nil {
+		s.contexts["mfg"] = mfgCommands(cfg.MFG)
 	}
 	if cfg.CLM != nil {
 		s.contexts["clm"] = clmCommands(cfg.CLM)

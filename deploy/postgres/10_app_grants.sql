@@ -615,3 +615,15 @@ GRANT UPDATE (on_hand, reserved, row_version) ON brant_stk.stock_balance TO bran
 GRANT UPDATE (remaining_qty) ON brant_stk.cost_layer TO brant_app;
 GRANT UPDATE (remaining_qty, status, row_version) ON brant_stk.stock_reservation TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_stk.stock_availability_issue_v1(text, text, text, text, text, text, text, text, text, bigint, text, text, bigint, timestamptz) TO brant_app;
+
+-- MFG (S6-02): the company switch, a plan and a subcontract change. A draft's children are replaced.
+-- Progress claims and material handovers only grow. MFG locks no row of PUR, QLT or STK.
+GRANT USAGE ON SCHEMA brant_mfg TO brant_app;
+GRANT SELECT, INSERT ON brant_mfg.company_setting, brant_mfg.collaboration_plan, brant_mfg.operation_task,
+    brant_mfg.material_responsibility, brant_mfg.subcontract_order, brant_mfg.operation_progress,
+    brant_mfg.material_handover, brant_mfg.action_result, brant_mfg.audit_event TO brant_app;
+GRANT UPDATE (enabled, row_version, updated_by_kind, updated_by_id, update_epoch, updated_at) ON brant_mfg.company_setting TO brant_app;
+GRANT UPDATE (status, row_version, note, request_hash) ON brant_mfg.collaboration_plan TO brant_app;
+GRANT UPDATE (status, row_version, request_hash) ON brant_mfg.subcontract_order TO brant_app;
+GRANT DELETE ON brant_mfg.operation_task, brant_mfg.material_responsibility TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_mfg.guard_mutation() TO brant_app;

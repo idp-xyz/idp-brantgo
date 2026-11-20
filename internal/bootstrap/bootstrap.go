@@ -31,6 +31,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
+	"go.idp.xyz/idp-brant/internal/contexts/mfg"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/contexts/pur"
@@ -196,6 +197,7 @@ type Contexts struct {
 	TRD *trd.Module
 	PUR *pur.Module
 	STK *stk.Module
+	MFG *mfg.Module
 	QLT *qlt.Module
 	STL *stl.Module
 	CNX *cnx.Module
@@ -308,11 +310,24 @@ func (p *Platform) ContextsWithOptions(opt PlatformConfig) (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		// PUR publishes no InspectionSubject v1 yet (S5 unit A4): QLT's port to it answers
-		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup. FUL's ReleaseConsumption v1
-		// (R79) is a SQL function QLT's revocation reads; FUL is composed later (S5R-D18).
-		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Agencies: qlt.PTYAgencies(c.PTY),
-			Consumption: qlt.FULReleaseConsumption()})
+		// PUR's InspectionSubject v1 (R24) answers commitment lines. MFG is composed next, so the
+		// subcontract-operation kind (R25) is bound after mfg.New. FUL's ReleaseConsumption v1 (R79)
+		// is a SQL function QLT's revocation reads; FUL is composed later (S5R-D18).
+		factory := qlt.NewFactorySlot()
+		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.JoinedSubjects(qlt.PURSubjects(c.PUR), factory), Sources: c.EVD,
+			Agencies: qlt.PTYAgencies(c.PTY), Consumption: qlt.FULReleaseConsumption()})
+		if err == nil {
+			db, err = p.newDB()
+		}
+		if err == nil {
+			// MFG (S6-02) after STK: SubcontractDemand v1 is read from PUR before the subcontract
+			// transaction (R23). MaterialHandover v1 is STK's command, called before MFG records the
+			// association (R42). The company switch defaults to off.
+			c.MFG, err = mfg.New(db, c.PUR, stkHandover{stock: c.STK})
+		}
+		if err == nil {
+			factory.Bind(qlt.MFGSubjects(c.MFG))
+		}
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -486,7 +501,7 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, STK: c.STK, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, STK: c.STK, MFG: c.MFG, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
 	if c.CRM != nil {
 		// A nil *Module stored in the interface would still be non-nil and panic on the route.
