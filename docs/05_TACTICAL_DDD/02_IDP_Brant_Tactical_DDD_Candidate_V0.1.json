@@ -15,13 +15,13 @@
     "历史事实可读与当前可用分开：后续变化登记风险或撤销事件，不倒写已提交的合法事实。",
     "合同成立与内部生效分开：客户承诺在报价有效期内到达即合同成立；订单准备、审批与生效是对已成立合同的内部执行授权，报价随后到期不否定合同，上游变化作为风险由审批逐项确认（ADR-BR-013）。",
     "人工核实、审批与正式化命令只接受人工身份；humanOnlyCommands 是这份清单的唯一来源，命令目录与 M0 门禁页由它生成。AI 产生候选并走同一命令路径。",
-    "一个事务只修改一个既有聚合实例；同上下文内允许同时创建由本命令派生的新聚合，限于登记的例外：order.prepare 占用名额并创建订单草稿；quote.response.verify 创建 Acceptance；cost_snapshot.freeze 冻结场景并创建快照；purchase.draft.prepare 更新需求分配余额并创建草稿；inspection.record 带 supersedes 时把旧检验标为 superseded 并创建新检验；shipment.confirm 确认出运并消耗同范围放行；settlement.confirm 确认销售结算单时把阶段核销改写为 moved 并在应收上形成替代核销；purchase_invoice.verify 核实红字发票时把被冲蓝票标为 reversed（全额红冲）；purchase.commitment.change.apply 与 purchase.commitment.cancel 同时移动需求分配根（S5R 补录）。需要串行化的余额（资金可用额、订单累计出运、许可证用量、凭证用途余额）锁定所属根 FOR UPDATE 并由不可变分录派生，不另改第二个聚合（S5 D-3）。",
+    "一个事务只修改一个既有聚合实例；同上下文内允许同时创建由本命令派生的新聚合，限于登记的例外：order.prepare 占用名额并创建订单草稿；order.prepare_partial 在报价根下追加消耗分录并创建部分订单草稿；quote.response.verify 创建 Acceptance；cost_snapshot.freeze 冻结场景并创建快照；purchase.draft.prepare 更新需求分配余额并创建草稿；inspection.record 带 supersedes 时把旧检验标为 superseded 并创建新检验；shipment.confirm 确认出运并消耗同范围放行；settlement.confirm 确认销售结算单时把阶段核销改写为 moved 并在应收上形成替代核销；purchase_invoice.verify 核实红字发票时把被冲蓝票标为 reversed（全额红冲）；purchase.commitment.change.apply 与 purchase.commitment.cancel 同时移动需求分配根（S5R 补录）。需要串行化的余额（资金可用额、订单累计出运、许可证用量、凭证用途余额、报价行剩余可下单数量）锁定所属根 FOR UPDATE 并由不可变分录派生，不另改第二个聚合（S5 D-3）。",
     "不在本上下文事务内写入其他上下文：正式文档字节、哈希与编号绑定封存在 TRD 自身 schema；编号由 POL 在下游事务之前分配（回滚留号段空缺），EVD 经事件登记文件引用。",
     "一次成功写入原子提交业务变化、动作结果、提交证据、审计与 Outbox；失败不留下半份事实。",
     "集成事件载荷含 ID、版本，以及各聚合 eventPayloads 登记的业务值（数量、金额、期限、结论）；不含个人信息、法定标识与文件内容（S5R-D43，取代“载荷只含 ID 与版本”）。"
   ],
   "lockOrder": [
-    "本上下文聚合根行 FOR UPDATE；多根按 ID 排序（TRD 为报价根及其 ObjectControl，PUR 为供应商交付根 → 采购承诺根（只锁不写）→ 订单行需求分配根，承诺命令从不锁交付根；QLT 为放行根，撤回在锁定后无锁读取 FUL ReleaseConsumption v1（S5R-D18）；FUL 为出运根与订单履约根，STL 为资金记录根与订单账户或结算单根，CNX 为许可证根或退税案件根）",
+    "本上下文聚合根行 FOR UPDATE；多根按 ID 排序（TRD 为报价根及其 ObjectControl，PUR 为供应商交付根 → 采购承诺根（只锁不写）→ 订单行需求分配根，承诺命令从不锁交付根；QLT 为放行根，撤回在锁定后无锁读取 FUL ReleaseConsumption v1（S5R-D18）；FUL 为出运根与订单履约根，STL 为资金记录根与订单账户或结算单根，CNX 为许可证根或退税案件根）；STK 为库存余额根（多行按键排序）再占用与成本层，MFG 为协作计划或委外单根，CLM 为客诉案件根，CRM 为线索或商机根（S6）",
     "同根下级行 FOR UPDATE，固定顺序：QuoteRevision 与 RevisionEffectivity → AcceptanceEffectivity → SalesOrder 与 OrderAmendment → ApprovalEffectivity（报价批准与订单审批）",
     "上游守卫行 FOR SHARE：经上游发布的守卫函数调用，按上下文代码字母序；公司授权守卫（authority_epoch）属于上游守卫",
     "ActionResult／CommitEvidence／审计／Outbox 追加",
@@ -914,7 +914,8 @@
             "TRD-INV-009",
             "TRD-INV-010",
             "TRD-INV-015",
-            "TRD-INV-016"
+            "TRD-INV-016",
+            "TRD-INV-024"
           ],
           "commands": [
             "quote.save_draft",
@@ -946,7 +947,7 @@
           ],
           "goPackage": "internal/contexts/trd/internal/domain/quote",
           "pythonSource": "t03_write.py；t03_storage.py（save_draft…activate）；t03_quote_* 表",
-          "notes": "聚合较大但符合不变量：单一 active、转换名额锁定、批准绑定与对象控制都以根为冲突键。 正式文档字节与编号绑定在 TRD 自身 schema；编号由 POL 在事务前分配，EVD 经 QuoteActivated 登记文件引用。"
+          "notes": "聚合较大但符合不变量：单一 active、转换名额锁定、批准绑定与对象控制都以根为冲突键。 正式文档字节与编号绑定在 TRD 自身 schema；编号由 POL 在事务前分配，EVD 经 QuoteActivated 登记文件引用。 S6-D01：multi_order 的剩余数量是报价根上的只追加分录，不另改第二个聚合。"
         },
         {
           "id": "TRD-AGG-CustomerResponse",
@@ -1053,10 +1054,12 @@
             "TRD-INV-020",
             "TRD-INV-021",
             "TRD-INV-022",
-            "TRD-INV-023"
+            "TRD-INV-023",
+            "TRD-INV-024"
           ],
           "commands": [
             "order.prepare",
+            "order.prepare_partial",
             "order.review.request",
             "order.review.decide",
             "order.activate",
@@ -1092,7 +1095,7 @@
           ],
           "goPackage": "internal/contexts/trd/internal/domain/order",
           "pythonSource": "t03_storage.py prepare_order／activate_order；t04_order_review.py；t03_order_qualification.py；t03_order_snapshot.py",
-          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。 S5（负责人决定 2026-11-12）：order.activate 在 CNX 与 STL 扩展点调用 TradeComplianceGuard v1 与 CreditGuard v1；取消、关闭与变更应用在锁定订单后事务内无锁读取 FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1（R70、R71）；STK 未启用记为 not_enabled。 S5R：发布 OrderRevisionRef v1（按（订单、修订）读取任何已提交修订：行的单价、价格基数、折扣、净额与税额，条款，Incoterm 与版本，绑定地址及国别）；新修订以 omitempty 字段封存 Incoterm 与地址国别，旧修订哈希不变，旧修订从绑定的 POL、PTY 修订推导并标 derived（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor（D33）；取消检查把 PUR 的获批处置计为已处置（D05）。",
+          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。 S5（负责人决定 2026-11-12）：order.activate 在 CNX 与 STL 扩展点调用 TradeComplianceGuard v1 与 CreditGuard v1；取消、关闭与变更应用在锁定订单后事务内无锁读取 FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1（R70、R71）；STK 未启用记为 not_enabled。 S5R：发布 OrderRevisionRef v1（按（订单、修订）读取任何已提交修订：行的单价、价格基数、折扣、净额与税额，条款，Incoterm 与版本，绑定地址及国别）；新修订以 omitempty 字段封存 Incoterm 与地址国别，旧修订哈希不变，旧修订从绑定的 POL、PTY 修订推导并标 derived（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor（D33）；取消检查把 PUR 的获批处置计为已处置（D05）。 S6-D01：身份中的 full_v1 唯一仍是默认整单路径。multi_order 不另插第二条 full_v1 名额行，消耗见 TRD-INV-024。order.prepare_partial 仅人工。OrderPrepared 增加 conversion_mode；默认事件仍为 conversion_slot=full_v1。",
           "eventPayloads": {
             "OrderDocumentGenerated": [
               "order_id",
@@ -1116,6 +1119,25 @@
               "file_sha256",
               "file_size",
               "generated_by"
+            ],
+            "OrderPrepared": [
+              "order_id",
+              "quote_id",
+              "business_revision",
+              "business_hash",
+              "order_revision",
+              "order_hash",
+              "order_status",
+              "number",
+              "acceptance_id",
+              "acceptance_effectivity_version",
+              "arrival_at",
+              "arrival_basis",
+              "quote_expires_at",
+              "conversion_slot",
+              "conversion_mode",
+              "customer_party_id",
+              "customer_revision"
             ]
           }
         }
@@ -1580,7 +1602,7 @@
     },
     {
       "id": "MFG",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "委外与工序协作是否明确材料责任、作业粒度与交接依据？",
       "aggregates": [
         {
@@ -1596,16 +1618,28 @@
           ],
           "identity": "(tenant, company, plan_id)",
           "concurrency": "row_version CAS",
-          "invariants": [],
+          "invariants": [
+            "MFG-INV-001"
+          ],
           "commands": [
-            "collaboration_plan.publish"
+            "collaboration_plan.publish",
+            "mfg.module.configure"
           ],
           "events": [
             "CollaborationPlanPublished"
           ],
           "goPackage": "internal/contexts/mfg/internal/domain/plan",
           "pythonSource": "无",
-          "notes": "条件启用。"
+          "notes": "条件启用。公司开关 mfg.module.configure 仅管理员且仅人工，默认关闭，不改变计划状态。计划状态迁移只锁本根。",
+          "eventPayloads": {
+            "CollaborationPlanPublished": [
+              "plan_id",
+              "plan_version",
+              "status",
+              "material_responsibility_count",
+              "operation_count"
+            ]
+          }
         },
         {
           "id": "MFG-AGG-SubcontractOrder",
@@ -1618,7 +1652,10 @@
           ],
           "identity": "(tenant, company, subcontract_id)",
           "concurrency": "row_version CAS",
-          "invariants": [],
+          "invariants": [
+            "MFG-INV-001",
+            "MFG-INV-002"
+          ],
           "commands": [
             "subcontract_order.issue",
             "operation.record_progress"
@@ -1629,16 +1666,39 @@
           ],
           "goPackage": "internal/contexts/mfg/internal/domain/subcontract",
           "pythonSource": "无",
-          "notes": ""
+          "notes": "operation.record_progress 只锁委外单根，是外厂来源声明，不写 QLT 或 STK，也不推进协作计划（计划状态另由 collaboration_plan.publish 迁移）。",
+          "eventPayloads": {
+            "SubcontractOrderIssued": [
+              "subcontract_id",
+              "plan_id",
+              "demand_ref",
+              "quantity",
+              "unit_id",
+              "processing_fee_minor",
+              "currency"
+            ],
+            "OperationProgressRecorded": [
+              "subcontract_id",
+              "operation_id",
+              "progress_kind",
+              "quantity",
+              "unit_id",
+              "reported_at"
+            ]
+          }
         }
       ],
-      "policies": [],
-      "crossBoundary": [
-        "消费 PUR；向 QLT、STK 发布受检对象与交接。"
+      "policies": [
+        "公司未启用时返回 DEPENDENCY_NOT_SUPPORTED。",
+        "外厂上报完成只是来源声明，不形成合格库存或客户交付。"
       ],
-      "consistency": "待详细设计。",
+      "crossBoundary": [
+        "消费 PUR（SubcontractDemand v1，R23）。向 QLT 发布受检对象（InspectionSubject v1，种类 mfg_subcontract_operation，R25）。向 STK 发布材料交接（MaterialHandover v1，R42）。"
+      ],
+      "consistency": "一个命令只锁一个根：协作计划或委外单。工序进度不在同一事务里改计划。不锁 QLT 或 STK。",
       "risks": [
-        "工序加工量累加成销售需求。"
+        "工序加工量累加成销售需求。",
+        "外厂完成声明直接形成合格库存。"
       ]
     },
     {
@@ -1799,7 +1859,7 @@
     },
     {
       "id": "STK",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "可用数量是否扣除有效占用且出库并发安全？",
       "aggregates": [
         {
@@ -1816,12 +1876,18 @@
             "BatchRef"
           ],
           "identity": "(tenant, company, item, location, batch)",
-          "concurrency": "数量条件更新",
-          "invariants": [],
+          "concurrency": "余额行锁后数量条件更新；多行按键排序；再锁占用；再按 FIFO 锁成本层",
+          "invariants": [
+            "STK-INV-001",
+            "STK-INV-002",
+            "STK-INV-003",
+            "STK-INV-004"
+          ],
           "commands": [
             "stock.receive",
             "stock.issue",
-            "stock.adjust"
+            "stock.adjust",
+            "stk.module.configure"
           ],
           "events": [
             "StockReceived",
@@ -1830,7 +1896,47 @@
           ],
           "goPackage": "internal/contexts/stk/internal/domain/ledger",
           "pythonSource": "无",
-          "notes": "条件启用。"
+          "notes": "条件启用。公司开关 stk.module.configure 仅管理员且仅人工，默认关闭。收货、出库与调整是余额命令，不是生命周期状态。直发不写本聚合。",
+          "eventPayloads": {
+            "StockReceived": [
+              "movement_id",
+              "sku_id",
+              "location_id",
+              "batch_id",
+              "custody_kind",
+              "quantity",
+              "unit_id",
+              "unit_cost_minor",
+              "currency",
+              "layer_id",
+              "received_at",
+              "source_kind",
+              "source_id"
+            ],
+            "StockIssued": [
+              "movement_id",
+              "sku_id",
+              "location_id",
+              "batch_id",
+              "custody_kind",
+              "quantity",
+              "unit_id",
+              "reservation_id",
+              "shipment_id",
+              "shipment_line_id"
+            ],
+            "StockAdjusted": [
+              "movement_id",
+              "sku_id",
+              "location_id",
+              "batch_id",
+              "custody_kind",
+              "quantity_delta",
+              "unit_id",
+              "reason",
+              "adjusted_at"
+            ]
+          }
         },
         {
           "id": "STK-AGG-Reservation",
@@ -1840,8 +1946,10 @@
           "entities": [],
           "valueObjects": [],
           "identity": "(tenant, company, reservation_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
+          "concurrency": "先锁余额行，再锁占用行；不锁 FUL",
+          "invariants": [
+            "STK-INV-001"
+          ],
           "commands": [
             "reservation.place",
             "reservation.release"
@@ -1852,7 +1960,26 @@
           ],
           "goPackage": "internal/contexts/stk/internal/domain/reservation",
           "pythonSource": "—（Python 未实现）",
-          "notes": "轮廓聚合，待详细设计。"
+          "notes": "占用不是出库。出运对占用的消耗发生在 FUL 调用 StockAvailability v1 时，不是 stock.issue。",
+          "eventPayloads": {
+            "ReservationPlaced": [
+              "reservation_id",
+              "sku_id",
+              "location_id",
+              "batch_id",
+              "quantity",
+              "unit_id",
+              "order_id",
+              "order_line_id"
+            ],
+            "ReservationReleased": [
+              "reservation_id",
+              "sku_id",
+              "quantity",
+              "unit_id",
+              "released_at"
+            ]
+          }
         },
         {
           "id": "STK-AGG-BatchLineage",
@@ -1862,22 +1989,26 @@
           "entities": [],
           "valueObjects": [],
           "identity": "(tenant, company, batch_lineage_id)",
-          "concurrency": "待详细设计",
+          "concurrency": "随库存流水追加；R1 无独立命令",
           "invariants": [],
           "commands": [],
           "events": [],
           "goPackage": "internal/contexts/stk/internal/domain/batchlineage",
           "pythonSource": "—（Python 未实现）",
-          "notes": "材料、在制、成品批次至包装与出运的输入输出关系（基线 3.7）。轮廓聚合，待详细设计。"
+          "notes": "材料、在制、成品批次至包装与出运的输入输出关系（基线 3.7）。R1 随收发流水记录，不单列命令。"
         }
       ],
-      "policies": [],
-      "crossBoundary": [
-        "消费 PUR、MFG；向 FUL、STL 发布。"
+      "policies": [
+        "公司未启用时返回 DEPENDENCY_NOT_SUPPORTED，不以预留字段宣称已启用。",
+        "直发不虚构本仓收发。出运扣减只发生在 FUL shipment.confirm 的 stock 路线。"
       ],
-      "consistency": "待详细设计。",
+      "crossBoundary": [
+        "消费 PUR（ReceiptRequest v1，R28）与 MFG（MaterialHandover v1，R42）。向 FUL 发布 StockAvailability v1（R29，守卫锁），向 STL 发布 CostLayerRef v1（R41）。"
+      ],
+      "consistency": "余额行锁（多行按键排序），再占用行锁，再成本层按 FIFO 序。不锁 FUL。出运扣减由 FUL 在自己的事务里调用 StockAvailability v1。",
       "risks": [
-        "占用与可用量重复计入。"
+        "占用与可用量重复计入。",
+        "直发路线虚构本仓收发。"
       ]
     },
     {
@@ -2628,7 +2759,7 @@
     },
     {
       "id": "CLM",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "退货与补救是否保留原发货事实并受控关联财务与库存？",
       "aggregates": [
         {
@@ -2644,8 +2775,12 @@
             "ShipmentLineRef"
           ],
           "identity": "(tenant, company, claim_id)",
-          "concurrency": "row_version CAS",
-          "invariants": [],
+          "concurrency": "客诉案件根行锁；退货、补救与结案都锁这一根",
+          "invariants": [
+            "CLM-INV-001",
+            "CLM-INV-002",
+            "CLM-INV-003"
+          ],
           "commands": [
             "claim.open",
             "return.register",
@@ -2660,36 +2795,49 @@
           ],
           "goPackage": "internal/contexts/clm/internal/domain/claim",
           "pythonSource": "无",
-          "notes": ""
-        },
-        {
-          "id": "CLM-AGG-ReturnRecord",
-          "name": "ReturnRecord",
-          "cn": "退货记录",
-          "root": "ReturnRecord",
-          "entities": [],
-          "valueObjects": [],
-          "identity": "(tenant, company, return_record_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
-          "commands": [
-            "return.register"
-          ],
-          "events": [
-            "ReturnRegistered"
-          ],
-          "goPackage": "internal/contexts/clm/internal/domain/returnrecord",
-          "pythonSource": "—（Python 未实现）",
-          "notes": "轮廓聚合，待详细设计。"
+          "notes": "ReturnRecord 与 Remedy 是子实体，不是聚合根。R1 退货不写 STK，不改原出运。补救不自动过账。",
+          "eventPayloads": {
+            "ClaimOpened": [
+              "claim_id",
+              "shipment_id",
+              "shipment_line_id",
+              "order_id",
+              "customer_party_id"
+            ],
+            "ReturnRegistered": [
+              "claim_id",
+              "return_id",
+              "shipment_id",
+              "shipment_line_id",
+              "quantity",
+              "unit_id"
+            ],
+            "RemedyDecided": [
+              "claim_id",
+              "remedy_id",
+              "kind",
+              "amount_minor",
+              "currency",
+              "order_id"
+            ],
+            "ClaimClosed": [
+              "claim_id",
+              "closed_at"
+            ]
+          }
         }
       ],
-      "policies": [],
-      "crossBoundary": [
-        "消费 FUL；向 STL 发布贷项请求。"
+      "policies": [
+        "退货不抹去原发货，也不隐式创建补发。",
+        "remedy.decide 与 claim.close 仅人工，且独立于开案人。"
       ],
-      "consistency": "待详细设计。",
+      "crossBoundary": [
+        "事务前消费 FUL ShipmentLineRef v1（R34），不锁出运。向 STL 发布 CreditRequest v1（R35）；STL 在自己的事务前读取，CLM 不写 STL。"
+      ],
+      "consistency": "只锁客诉案件根。出运行在事务前读取。不在本事务调用 STL。",
       "risks": [
-        "退货抹去原发货。"
+        "退货抹去原发货。",
+        "同一获批补救重复贷项或退款。"
       ]
     },
     {
@@ -3102,7 +3250,7 @@
     },
     {
       "id": "CRM",
-      "depth": "outline",
+      "depth": "full",
       "coreQuestion": "关闭 CRM 时交易链是否仍成立？",
       "aggregates": [
         {
@@ -3118,16 +3266,26 @@
           ],
           "identity": "(tenant, company, opportunity_id)",
           "concurrency": "row_version CAS",
-          "invariants": [],
+          "invariants": [
+            "CRM-INV-001"
+          ],
           "commands": [
-            "opportunity.advance"
+            "opportunity.advance",
+            "follow_up.record"
           ],
           "events": [
             "OpportunityAdvanced"
           ],
           "goPackage": "internal/contexts/crm/internal/domain/opportunity",
           "pythonSource": "无",
-          "notes": "可选包。"
+          "notes": "可选包。阶段为 qualified、proposal、negotiation、won、lost、abandoned。FollowUp 是子实体，不是 BusinessTask。R1 不设指派与公海。",
+          "eventPayloads": {
+            "OpportunityAdvanced": [
+              "opportunity_id",
+              "stage",
+              "previous_stage"
+            ]
+          }
         },
         {
           "id": "CRM-AGG-Lead",
@@ -3137,22 +3295,27 @@
           "entities": [],
           "valueObjects": [],
           "identity": "(tenant, company, lead_id)",
-          "concurrency": "待详细设计",
-          "invariants": [],
+          "concurrency": "行版本 CAS；只追加",
+          "invariants": [
+            "CRM-INV-001"
+          ],
           "commands": [
             "lead.capture"
           ],
           "events": [],
           "goPackage": "internal/contexts/crm/internal/domain/lead",
           "pythonSource": "—（Python 未实现）",
-          "notes": "轮廓聚合，待详细设计。"
+          "notes": "线索只由 lead.capture 登记。R1 无指派与公海，无集成事件。"
         }
       ],
-      "policies": [],
-      "crossBoundary": [
-        "仅向 INQ 提供可选来源关联。"
+      "policies": [
+        "关闭 CRM 时核心交易链与 Q01 不依赖 CRM（BC-AT24）。",
+        "跟进不是 BusinessTask。"
       ],
-      "consistency": "单聚合。",
+      "crossBoundary": [
+        "仅向 INQ 提供可选 OpportunityRef v1（R40）。INQ 在自己的事务前读取，不锁商机。"
+      ],
+      "consistency": "单聚合事务：线索或商机根行锁。关闭时不构造 CRM。",
       "risks": [
         "交易链反向依赖 CRM。"
       ]
@@ -6475,6 +6638,441 @@
           0
         ]
       }
+    },
+    {
+      "id": "SM-STK-RESERVATION",
+      "context": "STK",
+      "aggregate": "Reservation",
+      "object": "Reservation",
+      "states": [
+        "active",
+        "released",
+        "consumed"
+      ],
+      "initial": "active",
+      "terminal": [
+        "released",
+        "consumed"
+      ],
+      "transitions": [
+        {
+          "from": "active",
+          "command": "reservation.place",
+          "to": "active",
+          "guard": "幂等占位；可用量扣减后仍不小于零，否则 STOCK_INSUFFICIENT；占用与可用量不重复计入（STK-INV-001）",
+          "actor": "human|ai"
+        },
+        {
+          "from": "active",
+          "command": "reservation.release",
+          "to": "released",
+          "guard": "释放不是出库；已消耗的占用不能释放（STOCK_RESERVATION_CONFLICT）",
+          "actor": "human|ai"
+        },
+        {
+          "from": "active",
+          "command": "（FUL StockAvailability v1 消耗）",
+          "to": "consumed",
+          "guard": "仅 shipment.confirm 的 stock 路线消耗匹配的有效占用；supplier_direct 不消耗（S6-D02）",
+          "actor": "system"
+        }
+      ],
+      "layout": {
+        "active": [
+          0,
+          0
+        ],
+        "released": [
+          1,
+          0
+        ],
+        "consumed": [
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-MFG-PLAN",
+      "context": "MFG",
+      "aggregate": "CollaborationPlan",
+      "object": "CollaborationPlan",
+      "states": [
+        "draft",
+        "published",
+        "in_progress",
+        "paused",
+        "completed",
+        "cancelled"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "completed",
+        "cancelled"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "command": "collaboration_plan.publish",
+          "to": "published",
+          "guard": "材料责任与作业粒度已明确；公司未启用返回 DEPENDENCY_NOT_SUPPORTED",
+          "actor": "human|ai"
+        },
+        {
+          "from": "draft",
+          "command": "collaboration_plan.publish",
+          "to": "cancelled",
+          "guard": "未发布前放弃，不形成委外需求",
+          "actor": "human|ai"
+        },
+        {
+          "from": "published",
+          "command": "collaboration_plan.publish",
+          "to": "in_progress",
+          "guard": "标为执行中；不形成合格库存或客户交付（MFG-INV-001）。不在本命令里写工序进度",
+          "actor": "human|ai"
+        },
+        {
+          "from": "in_progress",
+          "command": "collaboration_plan.publish",
+          "to": "paused",
+          "guard": "暂停不改写已记录的计划事实",
+          "actor": "human|ai"
+        },
+        {
+          "from": "paused",
+          "command": "collaboration_plan.publish",
+          "to": "in_progress",
+          "guard": "恢复执行仍不是合格库存或客户交付",
+          "actor": "human|ai"
+        },
+        {
+          "from": "in_progress",
+          "command": "collaboration_plan.publish",
+          "to": "completed",
+          "guard": "完成仍不是合格库存或客户交付",
+          "actor": "human|ai"
+        },
+        {
+          "from": "published",
+          "command": "collaboration_plan.publish",
+          "to": "cancelled",
+          "guard": "取消不形成库存",
+          "actor": "human|ai"
+        },
+        {
+          "from": "in_progress",
+          "command": "collaboration_plan.publish",
+          "to": "cancelled",
+          "guard": "取消不形成库存",
+          "actor": "human|ai"
+        },
+        {
+          "from": "paused",
+          "command": "collaboration_plan.publish",
+          "to": "cancelled",
+          "guard": "取消不形成库存",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "draft": [
+          0,
+          0
+        ],
+        "published": [
+          1,
+          0
+        ],
+        "in_progress": [
+          2,
+          0
+        ],
+        "paused": [
+          2,
+          1
+        ],
+        "completed": [
+          3,
+          0
+        ],
+        "cancelled": [
+          3,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-MFG-SUBCONTRACT",
+      "context": "MFG",
+      "aggregate": "SubcontractOrder",
+      "object": "SubcontractOrder",
+      "states": [
+        "issued",
+        "in_progress",
+        "completed",
+        "cancelled"
+      ],
+      "initial": "issued",
+      "terminal": [
+        "completed",
+        "cancelled"
+      ],
+      "transitions": [
+        {
+          "from": "issued",
+          "command": "subcontract_order.issue",
+          "to": "issued",
+          "guard": "幂等签发；加工量不计入销售需求；公司未启用返回 DEPENDENCY_NOT_SUPPORTED。仅人工",
+          "actor": "human"
+        },
+        {
+          "from": "issued",
+          "command": "operation.record_progress",
+          "to": "in_progress",
+          "guard": "外厂进度只是来源声明，不形成合格库存或客户交付（MFG-INV-001）",
+          "actor": "human|ai"
+        },
+        {
+          "from": "in_progress",
+          "command": "operation.record_progress",
+          "to": "completed",
+          "guard": "完成声明不形成合格库存或客户交付",
+          "actor": "human|ai"
+        },
+        {
+          "from": "issued",
+          "command": "operation.record_progress",
+          "to": "cancelled",
+          "guard": "取消不形成库存",
+          "actor": "human|ai"
+        },
+        {
+          "from": "in_progress",
+          "command": "operation.record_progress",
+          "to": "cancelled",
+          "guard": "取消不形成库存",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "issued": [
+          0,
+          0
+        ],
+        "in_progress": [
+          1,
+          0
+        ],
+        "completed": [
+          2,
+          0
+        ],
+        "cancelled": [
+          2,
+          1
+        ]
+      }
+    },
+    {
+      "id": "SM-CLM-CLAIM",
+      "context": "CLM",
+      "aggregate": "ClaimCase",
+      "object": "ClaimCase",
+      "states": [
+        "open",
+        "closed"
+      ],
+      "initial": "open",
+      "terminal": [
+        "closed"
+      ],
+      "transitions": [
+        {
+          "from": "open",
+          "command": "claim.open",
+          "to": "open",
+          "guard": "锚定已确认出运行；未确认或已取消答 INVALID_STATE；不改写出运（CLM-INV-001）",
+          "actor": "human|ai"
+        },
+        {
+          "from": "open",
+          "command": "return.register",
+          "to": "open",
+          "guard": "累计退货不超过已确认出运量，超出答 CLAIM_RETURN_EXCEEDS_SHIPPED；不写库存（CLM-INV-002）",
+          "actor": "human|ai"
+        },
+        {
+          "from": "open",
+          "command": "remedy.decide",
+          "to": "open",
+          "guard": "仅人工，且独立于开案人，否则 INDEPENDENT_REVIEW_REQUIRED；不自动贷项或退款（CLM-INV-003）",
+          "actor": "human"
+        },
+        {
+          "from": "open",
+          "command": "claim.close",
+          "to": "closed",
+          "guard": "仅人工，且独立于开案人；结案保留退货与补救历史",
+          "actor": "human"
+        }
+      ],
+      "layout": {
+        "open": [
+          0,
+          0
+        ],
+        "closed": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "id": "SM-CRM-OPPORTUNITY",
+      "context": "CRM",
+      "aggregate": "Opportunity",
+      "object": "Opportunity",
+      "states": [
+        "qualified",
+        "proposal",
+        "negotiation",
+        "won",
+        "lost",
+        "abandoned"
+      ],
+      "initial": "qualified",
+      "terminal": [
+        "won",
+        "lost",
+        "abandoned"
+      ],
+      "transitions": [
+        {
+          "from": "qualified",
+          "command": "opportunity.advance",
+          "to": "proposal",
+          "guard": "只沿登记阶段推进；R1 不设指派与公海",
+          "actor": "human|ai"
+        },
+        {
+          "from": "qualified",
+          "command": "opportunity.advance",
+          "to": "abandoned",
+          "guard": "放弃不产生交易单据",
+          "actor": "human|ai"
+        },
+        {
+          "from": "proposal",
+          "command": "opportunity.advance",
+          "to": "negotiation",
+          "guard": "只沿登记阶段推进",
+          "actor": "human|ai"
+        },
+        {
+          "from": "proposal",
+          "command": "opportunity.advance",
+          "to": "lost",
+          "guard": "失利不产生交易单据",
+          "actor": "human|ai"
+        },
+        {
+          "from": "proposal",
+          "command": "opportunity.advance",
+          "to": "abandoned",
+          "guard": "放弃不产生交易单据",
+          "actor": "human|ai"
+        },
+        {
+          "from": "negotiation",
+          "command": "opportunity.advance",
+          "to": "won",
+          "guard": "赢单只推进阶段，不创建报价或订单",
+          "actor": "human|ai"
+        },
+        {
+          "from": "negotiation",
+          "command": "opportunity.advance",
+          "to": "lost",
+          "guard": "失利不产生交易单据",
+          "actor": "human|ai"
+        },
+        {
+          "from": "negotiation",
+          "command": "opportunity.advance",
+          "to": "abandoned",
+          "guard": "放弃不产生交易单据",
+          "actor": "human|ai"
+        },
+        {
+          "from": "qualified",
+          "command": "follow_up.record",
+          "to": "qualified",
+          "guard": "跟进不是 BusinessTask，不改变阶段",
+          "actor": "human|ai"
+        },
+        {
+          "from": "proposal",
+          "command": "follow_up.record",
+          "to": "proposal",
+          "guard": "跟进不是 BusinessTask，不改变阶段",
+          "actor": "human|ai"
+        },
+        {
+          "from": "negotiation",
+          "command": "follow_up.record",
+          "to": "negotiation",
+          "guard": "跟进不是 BusinessTask，不改变阶段",
+          "actor": "human|ai"
+        },
+        {
+          "from": "won",
+          "command": "follow_up.record",
+          "to": "won",
+          "guard": "赢单后的跟进仍不是 BusinessTask",
+          "actor": "human|ai"
+        },
+        {
+          "from": "lost",
+          "command": "follow_up.record",
+          "to": "lost",
+          "guard": "跟进不改变终态",
+          "actor": "human|ai"
+        },
+        {
+          "from": "abandoned",
+          "command": "follow_up.record",
+          "to": "abandoned",
+          "guard": "跟进不改变终态",
+          "actor": "human|ai"
+        }
+      ],
+      "layout": {
+        "qualified": [
+          0,
+          0
+        ],
+        "proposal": [
+          1,
+          0
+        ],
+        "negotiation": [
+          2,
+          0
+        ],
+        "won": [
+          3,
+          0
+        ],
+        "lost": [
+          3,
+          1
+        ],
+        "abandoned": [
+          3,
+          2
+        ]
+      }
     }
   ],
   "invariantRegister": [
@@ -6916,7 +7514,7 @@
       "id": "TRD-INV-010",
       "context": "TRD",
       "aggregate": "QuoteRoot／SalesOrder",
-      "rule": "同根 full_v1 唯一订单；prepare 同事务占用名额；占用后 replace／cancel 返回 ROOT_CONVERSION_LOCKED。",
+      "rule": "同根 full_v1 唯一订单；prepare 同事务占用名额；占用后 replace／cancel 返回 ROOT_CONVERSION_LOCKED。默认 single_full／full_v1 不变；显式 opt-in 的 multi_order 见 TRD-INV-024。TRD-INV-020 仍是合同文件绑定，不是本规则。",
       "enforcement": "根行锁＋唯一约束 (company, root_quote_id, slot)",
       "positive": "唯一订单草稿",
       "negative": "不同键重复 prepare 返回 CONVERSION_SLOT_CONFLICT（BC-AT15）",
@@ -7373,6 +7971,160 @@
       "pythonEvidence": "—（Python 未实现）",
       "ulRef": "UL-INV-31",
       "status": "ACCEPTED（模拟评审）"
+    },
+    {
+      "id": "TRD-INV-024",
+      "context": "TRD",
+      "aggregate": "QuoteRoot／SalesOrder",
+      "rule": "报价默认 conversion_mode 为 single_full：order.prepare 仍整单占用 full_v1，行为与 Q01、BRC-001 不变。冻结时显式 multi_order 才允许 order.prepare_partial：行数量不超过封存的 max_order_quantity，省略该上限时以报价行数量为上限，未声明的超出须 uncapped。同一有效修订共享一份 full_unconditional Acceptance。消耗台账只追加，余额在报价根行锁下由分录派生；合计超出剩余返回 QUOTE_REMAINING_INSUFFICIENT。取消订单不归还已消耗数量。已有部分订单后，无行的 order.prepare 返回 CONVERSION_SLOT_CONFLICT；任一转换之后 quote.replace 与 quote.cancel 返回 ROOT_CONVERSION_LOCKED。部分订单的 OrderPrepared.conversion_mode 为 multi_order，conversion_slot 为 multi_order，不另插第二条 full_v1 名额行。",
+      "enforcement": "报价根行锁＋只追加分录；不更新既有 full_v1 名额行",
+      "positive": "有效期内两笔不重叠的部分订单都成功，并各走独立订单审批",
+      "negative": "并发两笔合计超出剩余时只有一笔成功；默认整单路径的第二次 order.prepare 仍是 CONVERSION_SLOT_CONFLICT",
+      "concurrency": "不重叠的并发准备都提交；重叠超额的第二笔在报价根行锁之后被拒绝",
+      "errors": "QUOTE_REMAINING_INSUFFICIENT、CONVERSION_SLOT_CONFLICT、ROOT_CONVERSION_LOCKED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "UL-INV-06",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D01）"
+    },
+    {
+      "id": "STK-INV-001",
+      "context": "STK",
+      "aggregate": "StockLedger／Reservation",
+      "rule": "可用量不小于零。出库或占用使用数量条件更新：可用量不足返回 STOCK_INSUFFICIENT；占用与可用量不重复计入，状态或数量冲突返回 STOCK_RESERVATION_CONFLICT。shipment.confirm 的 stock 路线是唯一为出运扣减库存的入口，且按出运与出运行幂等。",
+      "enforcement": "库存余额行锁后条件更新；FUL 在自己的事务内调用 StockAvailability v1",
+      "positive": "可用 10、占用 4，再出库 6 成功且不把占用再扣一次",
+      "negative": "可用 3 出库 4 返回 STOCK_INSUFFICIENT；同一出运行再次扣减不重复出库",
+      "concurrency": "两笔并发出库合计超额时只有一笔成功",
+      "errors": "STOCK_INSUFFICIENT、STOCK_RESERVATION_CONFLICT",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D02）"
+    },
+    {
+      "id": "STK-INV-002",
+      "context": "STK",
+      "aggregate": "StockLedger",
+      "rule": "供应商直发不写库存流水、不建成本层、不建占用。stock.issue 不接受出运拥有的占用。",
+      "enforcement": "supplier_direct 的确认不调用 StockAvailability v1",
+      "positive": "直发确认后没有对应的库存流水",
+      "negative": "直发路线不因启用 STK 而补写收发",
+      "concurrency": "—",
+      "errors": "—",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D02）"
+    },
+    {
+      "id": "STK-INV-003",
+      "context": "STK",
+      "aggregate": "StockLedger",
+      "rule": "收货追加不可变流水与成本层。出库按收到时间与层标识从最旧层分配，分配数量等于出库数量，金额为最小币值整数，乘积在唯一舍入点半数向上。",
+      "enforcement": "成本层按收到时间与层标识排序后条件更新剩余数量",
+      "positive": "先收到的层先被分配，两层金额合计等于出库成本",
+      "negative": "不得用移动平均覆盖已追加的层",
+      "concurrency": "同一余额的并发出库按余额行锁串行分配",
+      "errors": "—",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D02）"
+    },
+    {
+      "id": "STK-INV-004",
+      "context": "STK",
+      "aggregate": "StockLedger",
+      "rule": "公司未启用 STK 时，库存命令与本仓出运返回 DEPENDENCY_NOT_SUPPORTED。默认关闭。启用命令 stk.module.configure 仅管理员且仅人工。",
+      "enforcement": "公司设置在命令入口检查",
+      "positive": "未启用的公司保持既有直发行为",
+      "negative": "未启用时 stock.receive 返回 DEPENDENCY_NOT_SUPPORTED",
+      "concurrency": "—",
+      "errors": "DEPENDENCY_NOT_SUPPORTED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D02）"
+    },
+    {
+      "id": "MFG-INV-001",
+      "context": "MFG",
+      "aggregate": "CollaborationPlan／SubcontractOrder",
+      "rule": "外厂工序进度只是来源声明，不形成合格库存、质量放行或客户交付。公司未启用时 MFG 命令返回 DEPENDENCY_NOT_SUPPORTED。启用命令 mfg.module.configure 仅管理员且仅人工。",
+      "enforcement": "进度命令不写 QLT 与 STK；入口检查公司设置",
+      "positive": "记录进度后没有新的放行或库存流水",
+      "negative": "未启用时 subcontract_order.issue 返回 DEPENDENCY_NOT_SUPPORTED",
+      "concurrency": "—",
+      "errors": "DEPENDENCY_NOT_SUPPORTED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D02）"
+    },
+    {
+      "id": "MFG-INV-002",
+      "context": "MFG",
+      "aggregate": "SubcontractOrder",
+      "rule": "材料交接把转移、耗用、退回、损耗分成不同流水种类，不得混记。加工量不计入销售需求。",
+      "enforcement": "交接种类封闭枚举",
+      "positive": "耗用与退回各记一条流水",
+      "negative": "把损耗记成转移被拒绝",
+      "concurrency": "—",
+      "errors": "INVALID_KNOWN_VALUE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D02）"
+    },
+    {
+      "id": "CLM-INV-001",
+      "context": "CLM",
+      "aggregate": "ClaimCase",
+      "rule": "客诉锚定已确认的出运行。未确认或已取消的出运行拒绝。退货、补救与结案都不改写原出运。",
+      "enforcement": "事务前读取 ShipmentLineRef；客诉案件根行锁",
+      "positive": "已确认出运行可以开案",
+      "negative": "未确认出运行返回 INVALID_STATE",
+      "concurrency": "—",
+      "errors": "INVALID_STATE",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D03）"
+    },
+    {
+      "id": "CLM-INV-002",
+      "context": "CLM",
+      "aggregate": "ClaimCase",
+      "rule": "同一出运行上，未拒绝客诉的累计退货数量不超过该行已确认出运量。超出返回 CLAIM_RETURN_EXCEEDS_SHIPPED。R1 退货不写库存，也不增加订单可发数量。",
+      "enforcement": "客诉案件根行锁下汇总同一出运行的退货分录",
+      "positive": "出运 100、两笔退货 40 与 50 都成功",
+      "negative": "再退 20 返回 CLAIM_RETURN_EXCEEDS_SHIPPED",
+      "concurrency": "两笔并发退货合计超额时只有一笔成功",
+      "errors": "CLAIM_RETURN_EXCEEDS_SHIPPED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D03）"
+    },
+    {
+      "id": "CLM-INV-003",
+      "context": "CLM",
+      "aggregate": "ClaimCase",
+      "rule": "remedy.decide 与 claim.close 仅人工，且决定人独立于开案人，否则 INDEPENDENT_REVIEW_REQUIRED。同一获批补救不得再次贷项或退款，否则 CLAIM_REMEDY_ALREADY_SETTLED。不自动过账。",
+      "enforcement": "命令检查身份与独立性；STL 在事务前读取 CreditRequest v1 并在结算侧保持唯一",
+      "positive": "另一名订单审核人或信用经理决定补救后，STL 贷项一次",
+      "negative": "开案人自决返回 INDEPENDENT_REVIEW_REQUIRED；同一补救再次退款返回 CLAIM_REMEDY_ALREADY_SETTLED",
+      "concurrency": "同一补救的并发贷项只有一笔成功",
+      "errors": "INDEPENDENT_REVIEW_REQUIRED、CLAIM_REMEDY_ALREADY_SETTLED",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D03）"
+    },
+    {
+      "id": "CRM-INV-001",
+      "context": "CRM",
+      "aggregate": "Opportunity／Lead",
+      "rule": "CRM 是可选包。关闭时询价、报价、订单与结算不依赖 CRM，整链可运行。关闭后省略商机标识的询价与今日相同；携带商机标识返回 DEPENDENCY_NOT_SUPPORTED。人工调用未注册的 CRM 命令返回 UNSUPPORTED_CONTRACT。R1 不设客户指派与公海。跟进不是业务任务。",
+      "enforcement": "bootstrap 关闭开关；INQ 在事务前可选读取 OpportunityRef v1",
+      "positive": "关闭 CRM 时 Q01 整链通过（BC-AT24）",
+      "negative": "关闭时询价携带商机标识返回 DEPENDENCY_NOT_SUPPORTED",
+      "concurrency": "—",
+      "errors": "DEPENDENCY_NOT_SUPPORTED、UNSUPPORTED_CONTRACT",
+      "pythonEvidence": "—（Python 未实现）",
+      "ulRef": "",
+      "status": "ACCEPTED（S6 负责人决定 2026-11-20，S6-D04）"
     },
     {
       "id": "STL-INV-004",
@@ -9413,7 +10165,16 @@
     "payable_adjustment.request",
     "payable_adjustment.confirm",
     "declaration_profile.discard_draft",
-    "tax_refund_case.rebind_policy"
+    "tax_refund_case.rebind_policy",
+    "order.prepare_partial",
+    "stk.module.configure",
+    "stock.receive",
+    "stock.issue",
+    "stock.adjust",
+    "mfg.module.configure",
+    "subcontract_order.issue",
+    "remedy.decide",
+    "claim.close"
   ],
   "commandActors": {
     "order_account.open": "human|system",
