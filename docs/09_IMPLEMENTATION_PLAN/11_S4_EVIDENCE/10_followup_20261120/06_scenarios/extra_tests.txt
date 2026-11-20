@@ -1,0 +1,6 @@
+worktree s4-e3 base 9d2d045 container brant-pg16-s4e3 port 56440
+exit=0
+go version go1.26.8 linux/amd64
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	101.406s
+run=TestS5R12D05DispositionAndTheShipmentOverHTTP|TestCNATSuite18AIReadsInvoicesAndDeclarations|TestDeclarationProfileOverHTTP|TestS5RD05ConfirmationFirstMakesTheApprovalWait
+note=go test without -v prints one package line. Exit 0 means every matched test passed. The two scenario files in this directory are the records those writers produced.

@@ -1,0 +1,200 @@
+go mod verify
+all modules verified
+go mod tidy -diff
+go vet ./...
+go vet -tags integration ./...
+GOFLAGS= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+0 issues.
+go test -count=1 ./...
+?   	go.idp.xyz/idp-brant/cmd/brant-admin	[no test files]
+?   	go.idp.xyz/idp-brant/cmd/brant-api	[no test files]
+ok  	go.idp.xyz/idp-brant/cmd/brant-cli	0.046s
+ok  	go.idp.xyz/idp-brant/cmd/brant-migrate	0.299s
+?   	go.idp.xyz/idp-brant/cmd/brant-worker	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/ai	0.070s
+ok  	go.idp.xyz/idp-brant/internal/ai/adapters/bip	0.034s
+ok  	go.idp.xyz/idp-brant/internal/ai/adapters/eer	1.884s
+?   	go.idp.xyz/idp-brant/internal/ai/adapters/eer/eerlive	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/ai/adapters/model	0.003s
+ok  	go.idp.xyz/idp-brant/internal/ai/adapters/model/openaicompat	0.629s
+ok  	go.idp.xyz/idp-brant/internal/ai/approvalgrant	0.014s
+ok  	go.idp.xyz/idp-brant/internal/ai/capability	1.767s
+ok  	go.idp.xyz/idp-brant/internal/ai/channel	0.045s
+ok  	go.idp.xyz/idp-brant/internal/ai/codes	0.029s
+ok  	go.idp.xyz/idp-brant/internal/ai/execution	0.041s
+ok  	go.idp.xyz/idp-brant/internal/ai/executionevidence	0.014s
+ok  	go.idp.xyz/idp-brant/internal/ai/gateway	0.008s
+ok  	go.idp.xyz/idp-brant/internal/ai/ingest	0.097s
+?   	go.idp.xyz/idp-brant/internal/ai/ingest/ingesttest	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/ai/ingest/pdftext	0.126s
+ok  	go.idp.xyz/idp-brant/internal/ai/ingest/xlsx	0.358s
+ok  	go.idp.xyz/idp-brant/internal/ai/locate	0.157s
+ok  	go.idp.xyz/idp-brant/internal/ai/policy	0.064s
+ok  	go.idp.xyz/idp-brant/internal/ai/proposal	0.026s
+ok  	go.idp.xyz/idp-brant/internal/ai/runtime	0.002s
+ok  	go.idp.xyz/idp-brant/internal/bootstrap	0.096s
+?   	go.idp.xyz/idp-brant/internal/contexts/cat	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/api	0.079s
+?   	go.idp.xyz/idp-brant/internal/contexts/cat/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/application	0.073s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/declaration	0.033s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/mapping	0.024s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cat/internal/domain/sku	0.011s
+?   	go.idp.xyz/idp-brant/internal/contexts/cnx	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/api	0.008s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/events	0.010s
+?   	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/adapters/upstream	0.005s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/application	0.057s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/certificate	0.028s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/declaration	0.027s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/documentbundle	0.053s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/exportlicense	0.002s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/purchaseinvoice	0.018s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/taxrefund	0.021s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cnx/internal/domain/tradecompliancecheck	0.024s
+?   	go.idp.xyz/idp-brant/internal/contexts/cst	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/api	0.025s
+?   	go.idp.xyz/idp-brant/internal/contexts/cst/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/application	0.032s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/budget	0.175s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/costing	0.086s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/delivery	0.031s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/measurement	0.006s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/rules	0.513s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/scenario	0.006s
+ok  	go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/snapshot	0.003s
+?   	go.idp.xyz/idp-brant/internal/contexts/evd	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/evd/api	0.002s
+ok  	go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/events	0.023s
+?   	go.idp.xyz/idp-brant/internal/contexts/evd/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/evd/internal/application	0.262s
+ok  	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/file	0.149s
+ok  	go.idp.xyz/idp-brant/internal/contexts/evd/internal/domain/source	0.036s
+?   	go.idp.xyz/idp-brant/internal/contexts/ful	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/api	0.044s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/events	0.013s
+?   	go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/upstream	0.051s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/application	0.009s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/exportlot	0.007s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/fulfilment	0.003s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/milestone	0.012s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/release	0.030s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment	0.050s
+ok  	go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipmentdocumentset	0.027s
+?   	go.idp.xyz/idp-brant/internal/contexts/inq	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/inq/api	0.003s
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/inq/internal/application	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/inq/internal/domain/rfq	0.022s
+?   	go.idp.xyz/idp-brant/internal/contexts/pol	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/api	0.005s
+?   	go.idp.xyz/idp-brant/internal/contexts/pol/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/application	0.029s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/config	0.158s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/numbering	0.032s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pol/internal/domain/snapshot	0.016s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/api	0.002s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/application	0.037s
+?   	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/contact	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/lifecycle	0.004s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/party	0.016s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/profile	0.010s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pty/internal/domain/screening	0.005s
+?   	go.idp.xyz/idp-brant/internal/contexts/pur	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pur/api	0.004s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/events	0.016s
+?   	go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/orders	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/pur/internal/application	0.021s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/allocation	0.013s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/commitment	0.017s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/draft	0.081s
+ok  	go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/supplierdelivery	0.059s
+?   	go.idp.xyz/idp-brant/internal/contexts/qlt	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/qlt/api	0.051s
+ok  	go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/agencies	0.030s
+?   	go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/consumption	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/qlt/internal/adapters/subjects	0.066s
+ok  	go.idp.xyz/idp-brant/internal/contexts/qlt/internal/application	0.102s
+ok  	go.idp.xyz/idp-brant/internal/contexts/qlt/internal/domain/inspection	0.064s
+ok  	go.idp.xyz/idp-brant/internal/contexts/qlt/internal/domain/release	0.105s
+?   	go.idp.xyz/idp-brant/internal/contexts/stl	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/api	0.038s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/events	0.082s
+?   	go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/invoices	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/orders	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/sources	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/application	0.113s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/application	0.022s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/charge	0.046s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/customercredit	0.023s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/fundrecord	0.015s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/orderaccount	0.026s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/orderresult	0.012s
+ok  	go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/settlement	0.016s
+?   	go.idp.xyz/idp-brant/internal/contexts/sup	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/sup/api	0.002s
+?   	go.idp.xyz/idp-brant/internal/contexts/sup/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/sup/internal/application	0.013s
+ok  	go.idp.xyz/idp-brant/internal/contexts/sup/internal/domain/pricing	0.013s
+ok  	go.idp.xyz/idp-brant/internal/contexts/sup/internal/domain/revision	0.012s
+ok  	go.idp.xyz/idp-brant/internal/contexts/sup/internal/domain/supplierrfq	0.009s
+?   	go.idp.xyz/idp-brant/internal/contexts/trd	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/api	0.034s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/events	0.024s
+?   	go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/facts	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/guards	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/application	2.330s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/acceptance	0.059s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/amendment	0.082s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/calc	0.814s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/document	0.350s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/order	0.090s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderdoc	0.073s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev	0.303s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote	0.389s
+ok  	go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/response	0.058s
+?   	go.idp.xyz/idp-brant/internal/contexts/tsk	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/tsk/api	0.046s
+ok  	go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/events	0.061s
+?   	go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/postgres	[no test files]
+?   	go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/reconcile	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/contexts/tsk/internal/adapters/trd	0.089s
+ok  	go.idp.xyz/idp-brant/internal/contexts/tsk/internal/application	0.044s
+ok  	go.idp.xyz/idp-brant/internal/contexts/tsk/internal/domain/action	0.006s
+ok  	go.idp.xyz/idp-brant/internal/contexts/tsk/internal/domain/task	0.635s
+?   	go.idp.xyz/idp-brant/internal/foundation/action	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/aigrant	0.010s
+ok  	go.idp.xyz/idp-brant/internal/foundation/authorization	0.007s
+?   	go.idp.xyz/idp-brant/internal/foundation/bento	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/database	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/database/pgtest	[no test files]
+?   	go.idp.xyz/idp-brant/internal/foundation/identity	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/foundation/identity/oidc	1.964s
+ok  	go.idp.xyz/idp-brant/internal/foundation/messaging	0.991s
+ok  	go.idp.xyz/idp-brant/internal/foundation/strictjson	0.467s
+ok  	go.idp.xyz/idp-brant/internal/kernel	0.222s
+?   	go.idp.xyz/idp-brant/internal/reference	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/reference/api	0.037s
+ok  	go.idp.xyz/idp-brant/internal/reference/internal/application	0.029s
+ok  	go.idp.xyz/idp-brant/internal/reference/internal/lists	0.015s
+?   	go.idp.xyz/idp-brant/internal/reference/internal/postgres	[no test files]
+ok  	go.idp.xyz/idp-brant/internal/reference/internal/programmes	0.073s
+ok  	go.idp.xyz/idp-brant/internal/transport/httpapi	1.781s
+ok  	go.idp.xyz/idp-brant/tests/ai-evaluation	0.052s
+ok  	go.idp.xyz/idp-brant/tests/load	0.012s
+ok  	go.idp.xyz/idp-brant/tools/dependency-check	0.046s
+?   	go.idp.xyz/idp-brant/tools/openapigen	[no test files]
+ok  	go.idp.xyz/idp-brant/tools/rolegen	0.032s
+?   	go.idp.xyz/idp-brant/tools/spikes/consistency	[no test files]
+ok  	go.idp.xyz/idp-brant/tools/testshard	1.715s
+go run ./tools/dependency-check
+dependency-check: 189 packages, 73 allowlisted context relationships, CODEOWNERS covers internal/contexts/cat/, internal/contexts/cnx/, internal/contexts/cst/, internal/contexts/evd/, internal/contexts/ful/, internal/contexts/inq/, internal/contexts/pol/, internal/contexts/pty/, internal/contexts/pur/, internal/contexts/qlt/, internal/contexts/stl/, internal/contexts/sup/, internal/contexts/trd/, internal/contexts/tsk/, internal/kernel/, docs/ holds no Go code; no violations
+exit=0

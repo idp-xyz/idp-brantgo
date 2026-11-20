@@ -1,5 +1,28 @@
 # IDP Brant 主档案变更记录
 
+## V1.10 · 2026-11-20 · S4 后续轮：F2、R14、ADR-BR-IMP-003、目录补录与全量真实运行
+
+后续轮在集成分支 s4/followups 上，基线是 9d2d045（R14 合并 0cfdf59，F2 合并 9d2d045）。本版不改行为。登记合并代码里已经做了的类 (i)，类 (ii) 与类 (iii) 仍是缺口。全量真实运行的数字只按那次运行的 report.json 与 summary.md。
+
+### 新增
+- 09：S4 报告第 13 章（2026-11-20 的后续轮）。证据目录追加 `11_S4_EVIDENCE/10_followup_20261120/`（V1.9 的快照与早先的证据文件不改）。
+- 10：ADR-BR-IMP-003（brant_ai）与模拟评审 SR-86。状态 ACCEPTED（模拟评审）。没有人做过这次评审，记录写明是模拟、日期与负责人当天的决定。不写入 Context Map 的战略 ADR（IMP-001、IMP-002 也不在那里）。
+
+### 更新
+- 03：关系仍是 R14 写入的 82 条（本版不新加关系）。消费方加上 trd.cost_source_holds、tsk.task_progress、evd.formal_files。TRD 命令加上 quote.risk_hold.register 与 order.risk.record，EVD 命令加上 formal_file.register，操作者登记为系统。进程内查询四条。允许清单只改头一行的文件哈希，关系数仍是 82，没有新的允许行。
+- 05：事件载荷补上发射器已经写的字段名；task.create 的操作者为人工或系统；TSK 聚合备注写上来源种类。岗位模板原则 6 写明其余已知种类的发布还要 config.retire，并加一条 S4-D33 的原则。没有改任何岗位的权限，`make roles` 没有改生成的 Go 文件。
+- 06：错误码仍是 185 条。BUSINESS_KEY_CONFLICT 的上下文加上 TSK；CONTROL_EPOCH_STALE 的说明不再称设计码；INVALID_KNOWN_VALUE 写明处置超出已核实减已出运。
+- 09：WBS 状态不变。statusNote 加了日期：F2 关闭了写路由那一半，全量真实运行 15／70，S4-07 仍为 PARTIAL。
+- 构建器：版本 1.10。最新源码快照先看 `10_followup_20261120/02_go_source_manifest.txt`，V1.9 的 `02_go_source_manifest.txt` 仍是那天的记录。
+
+### 负责人决定（2026-11-20）
+- 13:36 选定五项后续工作，原始 EER 日志继续不公开。
+- 17:15 登记 ADR-BR-IMP-003 并写一条模拟评审记录（标明模拟、当天、依据当天的决定，结论 ACCEPTED）。真实套件的两处小改（L1）之后再重跑没执行的族；模型服务与别的工作共用，重跑前由负责人说何时有空。
+
+### 限制
+- 全量真实运行 70 次里 15 次通过（normal 5／5、ct14 5／5、an06 跑完的 2 次、an11 跑到结束的 3 次）。40 次实质上没有执行。an01 与 an03 里跑起来的次数是真实模型自己的结果，产品按现有规则处理。an09、an10 的计分以及 reads、feedback、an08 的规定回合不是真实模型上的通过。没有 9d2d045 的真实运行。
+- L1 已合并（e9966e9，ad704e3）。9d2d045 的门禁 `f1` 以 `gate_rc=0` 结束并已推送；其远程运行 44718089797 在编写时还没有结论。没有 9d2d045 或 ad704e3 上的真实运行。本档案提交自己的门禁与远程运行记在拉取请求中。G0、G1、G2 的结论不变（G2 仍是模拟 NO-GO）。
+
 ## V1.9 · 2026-11-20 · S4 与 S5R 完成：业务任务、AI 层与修订轮（真实模型试次部分）
 
 S4 在 S5 之后归档（负责人决定 E-9），其间夹着 S5R 修订轮：负责人在 S5 之后用 R0 把 47 项模拟签核决定写入设计源，单元 R1—R13 落实它们。合并：新上下文 TSK（业务任务的 13 个状态与控制模式、动作执行与对账、停止屏障、目标核验、人工接管与恢复）与 internal/ai（schema brant_ai：能力网关、委托与批准授权、预算、模型调用账本、执行器与代理运行器、提议、受限文件抽取与来源定位、渠道、运行时、EER 适配与 BIP 端口）；TRD 的人工控制模式与来源保留（cost_source_holds）；EVD 的文件抽取与正式文件；INQ 的 RFQ 行位置；Inbox 消费方；tests/ai-evaluation 的 Q01 评测套件与本机模型的真实运行；S5R 对 POL、PTY、TRD、PUR、QLT、FUL、STL、CNX 与消息中继的修订。自 S5 的基线 e98e826 到 S4 最终提交 1aa0290，除 docs 外 764 个文件变更（+138,786／−24,682），新增 30 个迁移文件（ai 5、tsk 6、cnx 3、evd、ful、pol、stl、trd、pur 各 2，inq、pty、qlt、ref 各 1）。执行证据回写到 09 阶段。

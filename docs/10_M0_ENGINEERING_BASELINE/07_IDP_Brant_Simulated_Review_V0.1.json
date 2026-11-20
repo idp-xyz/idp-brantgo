@@ -2011,6 +2011,14 @@
       "impact": "设计源：SM-CAT-DECLARATION 加 discarded；CNX 证书的更正说明。代码：CAT 草稿丢弃命令；CNX 无。测试：草稿丢弃；证书更正为撤销日后，FUL 签发时（S5R-D12）报差异。",
       "realOwner": "",
       "s5Change": ""
+    },
+    {
+      "id": "SR-86",
+      "subject": "ADR-BR-IMP-003",
+      "role": "R-AI",
+      "decision": "ACCEPTED",
+      "outcome": "模拟评审，没有人做过这次评审。2026-11-20 登记，依据负责人当天的决定：登记 ADR，并写一条模拟评审记录（注明是模拟、2026-11-20、依据当天的决定，结论 ACCEPTED）。",
+      "conditions": []
     }
   ],
   "contextSignoffs": [
