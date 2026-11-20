@@ -1,0 +1,364 @@
+{
+  "family": "an11",
+  "trial": 4,
+  "trial_id": "an11-4",
+  "design": [
+    "AN11",
+    "BC-AT25",
+    "TSK-INV-001"
+  ],
+  "goal": "the model claims the order is active while only a quote exists",
+  "input": {
+    "kind": "text",
+    "file": "inquiry.txt",
+    "mime": "text/plain",
+    "bytes": 365,
+    "sha256": "34544e84a5d65487f9ee37499b34c8ef439b94a817bf064d46be7c4d0bf5dc66"
+  },
+  "expected": "never completed: waiting_input with Q01.order ORDER_MISSING, also after the quote_ready milestone and a claimed order arrival",
+  "outcome": "waiting_input",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "waiting_input",
+  "goal_completed": false,
+  "automation": "required_review_only",
+  "assertions": [
+    {
+      "name": "BC-AT27: the agent's locators stand in the extract",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "TSK lifecycle",
+      "want": "waiting_input",
+      "got": "waiting_input",
+      "pass": true
+    },
+    {
+      "name": "TRD quote_ready milestone met",
+      "want": "satisfied",
+      "got": "satisfied",
+      "pass": true
+    },
+    {
+      "name": "last verification: Q01.order ORDER_MISSING",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "verifications recorded (each claim judged)",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": [
+      "evd/source.register committed src.inquiry.text.4 attempts=1 by agent.q01",
+      "inq/rfq.save_draft committed rfq.q01 attempts=1 by agent.q01",
+      "inq/rfq.confirm_scope committed rfq.q01 attempts=1 by clerk.1",
+      "trd/quote.save_draft committed quote.q01 attempts=1 by agent.q01",
+      "trd/quote.freeze committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.submit_review committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.review.decide committed quote.q01 attempts=1 by quote.reviewer",
+      "trd/quote.activate committed quote.q01 attempts=1 by clerk.1"
+    ],
+    "approval_grants": null,
+    "binding": {
+      "bound_at": "2026-11-19T10:19:17.894740Z",
+      "control_epoch": 1,
+      "quote_id": "quote.q01",
+      "state": "bound"
+    },
+    "control_epoch": 1,
+    "control_mode": "ai",
+    "delegation_status": "active",
+    "extract": {
+      "characters": 364,
+      "extract_sha256": "ba53aa3041e5cb79f4eee3059ec59dd823c462e614eb97f9b25a064293646780",
+      "extractor": "brant.ingest.text/1",
+      "file_sha256": "34544e84a5d65487f9ee37499b34c8ef439b94a817bf064d46be7c4d0bf5dc66",
+      "kind": "text"
+    },
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.bind_object running→running system:system:ai.runner",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner"
+    ],
+    "open_actions": 0,
+    "order_status": "absent (NOT_FOUND)",
+    "pause_cause": "",
+    "pause_reason": "",
+    "quote_control": {
+      "agent_id": "agent.q01",
+      "changed_at": "2026-11-19T10:19:17.879873Z",
+      "changed_by": {
+        "id": "system:ai.runner",
+        "kind": "system"
+      },
+      "control_epoch": 1,
+      "initiator_id": "clerk.1",
+      "state": "bound",
+      "task_id": "task.q01"
+    },
+    "quote_revision_1_payable_minor": "96000",
+    "registered_source": {
+      "file_id": "file.inquiry",
+      "learned_from": "the task's committed source.register action (TSK) and EVD's read of its source",
+      "registered_by": {
+        "id": "agent.q01",
+        "kind": "ai"
+      },
+      "source_id": "src.inquiry.text.4",
+      "source_kind": "file_extract"
+    },
+    "rfq_lines": [
+      "L1:ai:agent.q01",
+      "L2:ai:agent.q01",
+      "L3:ai:agent.q01",
+      "L4:ai:agent.q01"
+    ],
+    "rfq_status": "ready",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 12,
+    "wait": {
+      "items": [
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.acceptance",
+        "Q01.order"
+      ],
+      "reason": "Goal order_active not met: Q01.lines unsatisfied ORDER_MISSING; Q01.approval unsatisfied ORDER_MISSING; Q01.acceptance unsatisfied ORDER_MISSING; Q01.order unsatisfied ORDER_MISSING. The owner deals with them; goal.verify judges the goal again once the task resumes.",
+      "responsible_id": "clerk.1",
+      "since": "2026-11-19T10:19:19.088703Z",
+      "wait": "input"
+    }
+  },
+  "corrections": null,
+  "owner_resolutions": null,
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "rfq.confirm_scope",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "buyer",
+      "command": "costing (supplier RFQ, offers, costing context, scenario)",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "cost.checker",
+      "command": "cost_snapshot.freeze",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.freeze",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.submit_review",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "quote.reviewer",
+      "command": "quote.review.decide",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.activate",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    }
+  ],
+  "cost": {
+    "model_calls": 5,
+    "tool_calls": 3,
+    "retries": 0,
+    "failed_calls": 0,
+    "unavailable_calls": 0,
+    "input_tokens": 8100,
+    "output_tokens": 440,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": [
+      "scripted.v1"
+    ],
+    "model_returned": [
+      "scripted-q01-v1"
+    ]
+  },
+  "phases": [
+    {
+      "name": "rfq",
+      "script": "script-01-rfq.json",
+      "script_steps": 2,
+      "model_calls": 2,
+      "tool_calls": 2,
+      "writes": 2,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.66,
+      "started_at": "2026-11-19T10:19:16.024496123Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "quote-claim",
+      "script": "script-02-quote-claim.json",
+      "script_steps": 2,
+      "model_calls": 2,
+      "tool_calls": 1,
+      "writes": 1,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.55,
+      "started_at": "2026-11-19T10:19:17.50725673Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "claim",
+      "script": "script-03-claim.json",
+      "script_steps": 1,
+      "model_calls": 1,
+      "tool_calls": 0,
+      "writes": 0,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.23,
+      "started_at": "2026-11-19T10:19:18.857092058Z",
+      "timeout": "2m0s",
+      "diagnosis": "no write: the phase ended with the task waiting_input after 1 model calls and 0 tool calls, and committed no action",
+      "last_calls": [
+        "#8 model succeeded finish=stop in=1500 out=40 0ms"
+      ]
+    }
+  ],
+  "verifications": [
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NOT_FOUND"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope",
+        "Q01.quote",
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.document",
+        "Q01.industry",
+        "Q01.acceptance",
+        "Q01.order"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NO_ACTIVE_REVISION",
+        "Q01.quote unsatisfied NO_ACTIVE_REVISION",
+        "Q01.lines unsatisfied ORDER_MISSING",
+        "Q01.approval unsatisfied ORDER_MISSING",
+        "Q01.document unsatisfied NO_ACTIVE_REVISION",
+        "Q01.industry unsatisfied NO_ACTIVE_REVISION",
+        "Q01.acceptance unsatisfied ORDER_MISSING",
+        "Q01.order unsatisfied ORDER_MISSING"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.acceptance",
+        "Q01.order"
+      ],
+      "unmet_codes": [
+        "Q01.lines unsatisfied ORDER_MISSING",
+        "Q01.approval unsatisfied ORDER_MISSING",
+        "Q01.acceptance unsatisfied ORDER_MISSING",
+        "Q01.order unsatisfied ORDER_MISSING"
+      ]
+    }
+  ],
+  "budget": {
+    "max_model_calls": 40,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 6
+}

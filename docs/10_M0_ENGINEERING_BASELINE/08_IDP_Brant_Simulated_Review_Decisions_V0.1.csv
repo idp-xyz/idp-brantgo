@@ -37,6 +37,53 @@ SR-35,BC-D06,R-PRD,ACCEPTED_WITH_CONDITIONS,P0 保留 full_v1；R1 增加参照�
 SR-36,BC-D07,R-SEC,ACCEPTED,模型端点由租户选择；客户原文、成本与价格只在租户授权后发送给模型；日志脱敏，不记录附件全文与凭据；附件留存期限由租户配置。,
 SR-37,BC-D08,R-CA,ACCEPTED,EER／BIP 经防腐层适配，S4 评估；接入前保留人工路径与人工节点计量。,
 SR-38,CN-D01–08,R-CNX,ACCEPTED,产品决定（配置化）：CN-M01 为默认模式；税务办法由租户选择（外贸企业免退；生产企业免抵退属 CN-M02 条件能力）；商品申报参数与退税率按官方来源导入并保存版本；票据核验经人工或获准接口；银行渠道首期人工登记；专业系统接口在 S6；成本税额口径按 CST-INV-007；单证目录与期限按配置。客户适用性在租户开通时确认并留记录。,
+SR-39,S5R-D01,R-CA,ACCEPTED,出运确认留在跟单；单证员评估放行与放单；改 ES-10、ES-12,
+SR-40,S5R-D02,R-CA,ACCEPTED,order_account.open 设自有权限：资金与系统消费方持有，销售与 AI 不持有,
+SR-41,S5R-D03,R-CA,ACCEPTED,未提交报关即取消的出运，可凭人工以 local_cancellation 释放许可证分配,
+SR-42,S5R-D04,R-CA,ACCEPTED_WITH_CONDITIONS,一份报关单一张许可证；多证经出口批次；许可证记录一批一证与一证一关,S5 实现待改（R9）：B5 的许可证可按额度多次分配，与两用物项出口许可证“一批一证”不符：许可证须登记使用方式（single_use 默认）与海关关别，守卫接受出口批次的分配
+SR-43,S5R-D05,R-CA,ACCEPTED,PUR 新增获批处置（退厂、我方承担、留用），TRD 取消据此判定已处置,
+SR-44,S5R-D06,R-CA,ACCEPTED,缺保单答 SHIPMENT_DOCUMENTS_UNRECONCILED；合同保险比例进贸易条件；险别核对,
+SR-45,S5R-D07,R-CA,ACCEPTED_WITH_CONDITIONS,中继延迟 P95 ≤ 5 s、P99 ≤ 30 s；最老未分发事件 60 s 告警；至少 2 个分发进程,B0 前须真实负责人确认（运维与财务）：中继延迟目标（P95 ≤ 5 s、P99 ≤ 30 s）、告警阈值（60 s、300 s）与分发进程数的数值
+SR-46,S5R-D08,R-CA,ACCEPTED,修订生效时占用调整为新修订的信用部分（被替代释放＋承接），敞口随之下降,
+SR-47,S5R-D09,R-CA,ACCEPTED_WITH_CONDITIONS,付款条件例外的有效期取 credit_policy 的 decision_validity_days,B0 前须真实负责人确认（运维与财务）：付款条件例外有效期的数值（取 credit_policy 的 decision_validity_days，现为合成值 7 天）
+SR-48,S5R-D10,R-CA,ACCEPTED,放单保持严格；重新评估中的 blocked 仍答 blocked（守卫 v1 函数体）,
+SR-49,S5R-D11,R-CA,ACCEPTED,不加订舱状态；加节点 booking_requested,
+SR-50,S5R-D12,R-CA,ACCEPTED,签发时重查原产地证；未登记原产地证为可确认差异；加优惠原产地证种类,
+SR-51,S5R-D13,R-CA,ACCEPTED,加 unknown → not_received（以海关总署查询为准），之后可再次报关,
+SR-52,S5R-D14,R-CA,ACCEPTED_WITH_CONDITIONS,退（免）税方式按法定四类；征税批次不开案件；逾期转免税,B0 前须真实负责人确认（税务专业人员）：退（免）税方式四类的适用条件、资料要求与案件用途（CN-D01—08 须在 B0 前冻结）
+SR-53,S5R-D15,R-CA,ACCEPTED_WITH_CONDITIONS,项目可带区域、由人工复核；新修订国别严格校验；来源批准待真实负责人,B0 前须真实负责人确认（法务与合规）：（c）国别项目、制裁名单与出口管制来源的批准（批准矩阵行保持 PENDING，E-3）
+SR-54,S5R-D16,R-CA,ACCEPTED,invoice 计数器专指商业发票；其他发票类编号用自己的单据类型,
+SR-55,S5R-D17,R-CA,ACCEPTED_WITH_CONDITIONS,全面禁运或制裁命中时，clear 须附授权文件证据，有效期受其封顶,B0 前须真实负责人确认（法务）：全面禁运或制裁命中时例外依据（授权文件）的证据要求
+SR-56,S5R-D18,R-CA,ACCEPTED,FUL→QLT 读取已出运量；撤回记录冻结量；复检后再放行；让步可放行,
+SR-57,S5R-D19,R-CA,ACCEPTED,订单汇差用实际结汇汇率，未结汇按核销日汇率；费用付款计入净现金,
+SR-58,S5R-D20,R-CA,ACCEPTED_WITH_CONDITIONS,CNX→STL 发票读取与应付复核标记；应付调整命令；部分红冲与先回退,S5 实现待改（R10）：C3b 把部分红冲按全额冲回，与数电票“全额或部分红冲”不符：按红票金额冲减蓝票；已申报蓝票须先登记进货凭证信息回退
+SR-59,S5R-D21,R-CA,ACCEPTED_WITH_CONDITIONS,交易档案的许可付款人与 fund.verify_payer；发票主体不符直接拒绝,B0 前须真实负责人确认（外汇合规）：第三方付款（许可付款人、付款人核实）的外汇合规依据与留存要求
+SR-60,S5R-D22,R-CA,ACCEPTED,期初可开贷项；新增 fund.reverse；跨币种敞口用 credit 汇率,
+SR-61,S5R-D23,R-CA,ACCEPTED_WITH_CONDITIONS,退税案件按出口日期所在有效期绑定政策；POL 新增 ConfigAt v1,S5 实现待改（R10）：C3b 取“出口时已发布”的政策修订，与“以出口日期界定”不符：绑定有效期包含出口日期的修订（ConfigAt v1）
+SR-62,S5R-D24,R-CA,ACCEPTED,费用承担随 Incoterm；F 组术语下主运费不计我方成本,
+SR-63,S5R-D25,R-CA,ACCEPTED,documentation 模板加 number.issue（沿用 S5-D34）,
+SR-64,S5R-D26,R-CA,ACCEPTED,资金、信用、税务、合规岗位加证据登记权限,
+SR-65,S5R-D27,R-CA,ACCEPTED,order.activate 留在销售经办,
+SR-66,S5R-D28,R-CA,ACCEPTED,商业放行例外独立于评估人；证书登记不加独立性,
+SR-67,S5R-D29,R-CA,ACCEPTED,evaluate 只接受 human、ai；两个复核的 open 权限只给系统,
+SR-68,S5R-D30,R-CA,ACCEPTED,信用、退税、合规配置按种类授权发布；审批层级须对应岗位模板,
+SR-69,S5R-D31,R-CA,ACCEPTED,暂不建客户与销售经办的指派（R1 补）,
+SR-70,S5R-D32,R-CA,ACCEPTED,不改 ai_q01_agent；FUL 读取随将来的 AI 模板授予,
+SR-71,S5R-D33,R-CA,ACCEPTED,预计采购成本取 PUR 承诺行；R31 契约加 PurchaseLineRef v1,
+SR-72,S5R-D34,R-CA,ACCEPTED,参考数据登记为平台提供方，加 REF→PTY、REF→CNX，撤销全局放行,
+SR-73,S5R-D35,R-CA,ACCEPTED,TRD 发布 OrderRevisionRef v1；新修订封存 Incoterm 与地址国别,
+SR-74,S5R-D36,R-CA,ACCEPTED,R44、R77 加 ServiceRoleRef v1；服务角色种类与必填项,
+SR-75,S5R-D37,R-CA,ACCEPTED,复核暂不发布事实，待 TSK 需要,
+SR-76,S5R-D38,R-CA,ACCEPTED,screening_regulation 加 programmes；CNX 从法规读取项目名单,
+SR-77,S5R-D39,R-CA,ACCEPTED,复核键（订单、修订、原因）；处置词汇写入设计；不加改绑命令,
+SR-78,S5R-D40,R-CA,ACCEPTED,PTY 加 notify 角色、订单绑定通知方；出运加最终用户,
+SR-79,S5R-D41,R-CA,ACCEPTED,纯减量变更不查供应条件有效期；有未核实声明不得取消；单位须一致,
+SR-80,S5R-D42,R-CA,ACCEPTED,有沉没成本的取消订单可关闭为 cancelled 经营结果,
+SR-81,S5R-D43,R-CA,ACCEPTED,Context Map 加 queries 与读取目录；战术模型登记事件载荷,
+SR-82,S5R-D44,R-CA,ACCEPTED,不加 TRD 读取已核销资金；WF-06 文字改,
+SR-83,S5R-D45,R-CA,ACCEPTED,BT17 恢复为 MFG，期初用例另编号,
+SR-84,S5R-D46,R-CA,ACCEPTED,日历日；贷项拆税（R1）；迁移窗口接受；更正交付冲销重结,
+SR-85,S5R-D47,R-CA,ACCEPTED,CAT 加草稿丢弃；不加撤回，证书以更正修订截止有效期,
 SIGNOFF,PTY,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
 SIGNOFF,CAT,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,
 SIGNOFF,POL,R-MD,ACCEPTED,职责、事实权威、边界、聚合与不变量,

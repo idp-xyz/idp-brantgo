@@ -274,6 +274,12 @@
           "route": "GET /api/brant/v1/evd/sources/{id}",
           "permission": "evd.read",
           "audited": true
+        },
+        {
+          "name": "evd.source.extract.get",
+          "route": "GET /api/brant/v1/evd/sources/{id}/extract",
+          "permission": "evd.read",
+          "audited": true
         }
       ],
       "invariants": [
@@ -688,6 +694,18 @@
         {
           "name": "trd.quote.document.get",
           "route": "GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/document",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.goal.readiness",
+          "route": "GET /api/brant/v1/trd/quotes/{id}/goal_readiness",
+          "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.quote.price_proposal",
+          "route": "GET /api/brant/v1/trd/rfqs/{id}/price_proposal",
           "permission": "trd.read",
           "audited": true
         }
@@ -1540,7 +1558,32 @@
         "TaskClosedUnfulfilled",
         "ActionReconciled"
       ],
-      "queries": [],
+      "queries": [
+        {
+          "name": "tsk.task.get",
+          "route": "GET /api/brant/v1/tsk/tasks/{id}",
+          "permission": "tsk.read",
+          "audited": true
+        },
+        {
+          "name": "tsk.task.verification.list",
+          "route": "GET /api/brant/v1/tsk/tasks/{id}/verifications",
+          "permission": "tsk.read",
+          "audited": true
+        },
+        {
+          "name": "tsk.action.list",
+          "route": "GET /api/brant/v1/tsk/tasks/{id}/actions",
+          "permission": "tsk.read",
+          "audited": true
+        },
+        {
+          "name": "tsk.action.get",
+          "route": "GET /api/brant/v1/tsk/actions/{id}",
+          "permission": "tsk.read",
+          "audited": true
+        }
+      ],
       "invariants": [
         "UL-INV-18",
         "UL-INV-19"
@@ -2942,7 +2985,7 @@
       "name": "业务与 AI 链验收",
       "passCriteria": "正常、异常、幂等、并发、审核及接管；以真实结果核验任务；适用 AT／AN／CT 有证据。",
       "approverRole": "研发＋测试＋业务",
-      "status": "NOT_STARTED"
+      "status": "NO-GO（2026-11-20 记录，模拟评审 E0，负责人决定 E-9：缺真实业务证据）：脚本化评测 70／70（本机与 GitHub Actions），真实模型评测只跑了 normal 一族 4／4，其余 13 族未在真实模型上运行；AN12 与负责人亲自操作的试次未执行；该评审没有召开，结论按 E-9 的约定记录，各项验收的证据见 S4 报告的 G2 矩阵"
     },
     {
       "id": "G3",
@@ -3569,6 +3612,54 @@
         }
       ],
       "note": "平台提供方（S5R-D34，2026-11-13 模拟签核 E0）：参考数据不是限界上下文，下游只经 internal/reference/api 读取；依赖由 relationships 中以 REF 为上游的关系登记（R80、R81），允许清单与 Inbox 订阅检查只对这些关系的下游放行 internal/reference/api 与 idp-brant.ref。"
+    },
+    {
+      "id": "AI",
+      "name": "AI 能力层",
+      "package": "internal/ai（policy、approvalgrant、proposal、execution、capability、gateway、ingest、locate 等）",
+      "schema": "brant_ai",
+      "source": "—",
+      "events": [],
+      "commands": "ai.delegation.grant、ai.delegation.revoke、ai.approval_grant.issue、ai.approval_grant.revoke（人工专属，登记在 platformCommands）；以下读取是它的审计读取（ai.read）",
+      "queries": [
+        {
+          "name": "ai.delegation.get",
+          "route": "GET /api/brant/v1/ai/delegations/{id}",
+          "permission": "ai.read",
+          "audited": true
+        },
+        {
+          "name": "ai.approval_grant.list",
+          "route": "GET /api/brant/v1/ai/delegations/{id}/approval_grants",
+          "permission": "ai.read",
+          "audited": true
+        },
+        {
+          "name": "ai.approval_grant.get",
+          "route": "GET /api/brant/v1/ai/approval_grants/{id}",
+          "permission": "ai.read",
+          "audited": true
+        },
+        {
+          "name": "ai.proposal.get",
+          "route": "GET /api/brant/v1/ai/proposals/{id}",
+          "permission": "ai.read",
+          "audited": true
+        },
+        {
+          "name": "ai.model_call.list",
+          "route": "GET /api/brant/v1/ai/tasks/{id}/model_calls",
+          "permission": "ai.read",
+          "audited": true
+        },
+        {
+          "name": "ai.execution_bundle.get",
+          "route": "GET /api/brant/v1/ai/execution_bundles/{id}/{sha256}",
+          "permission": "ai.read",
+          "audited": true
+        }
+      ],
+      "note": "S4 登记（V1.9，E2 按已合并的代码补录）：AI 能力层不是限界上下文（Cargo 标准、ADR-BR-IMP-003 的 D-6 决定使用独立 schema brant_ai），在此登记它的读取路由，使读取目录与 OpenAPI 候选一致。它不是任何关系的上游：没有以 AI 为上游的 relationships，不发布集成事件（A5-D11），上下文也不依赖它的 api，因此允许清单不变。"
     }
   ],
   "consumers": [

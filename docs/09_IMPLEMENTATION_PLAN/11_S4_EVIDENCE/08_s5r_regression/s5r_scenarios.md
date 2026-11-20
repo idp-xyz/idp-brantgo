@@ -1,0 +1,115 @@
+# S5R scenarios added to the D1 / D2a / D2b chains
+
+## D2a S5R-D20 — passed
+
+S5R-D20 部分红冲、先回退、应付复核
+
+Test `TestCNATSuite05PartialRedRollbackAndPayableD20`. Requests: {'GET': 68, 'POST': 210}.
+
+- 应付复核前: stmt.purchase.1 invoice_reversed false
+- 部分红冲: red pin-01a1e94e-d24b-7c0a-a984-78ed52a7d51d of 24 PCS refused INVALID_STATE /args/facts/red_of until evidence_rolled_back; then verified, blue pin-01a1e94e-d171-765b-974a-4292b8fba6f9 stays verified reversal partial; payable invoice_reversed true; the case stays submitted
+
+## D2a S5R-D22 — passed
+
+S5R-D22 已冲销的资金记录
+
+Test `TestCNATSuite22ReversedFundRecordD22`. Requests: {'GET': 64, 'POST': 220}.
+
+- 单证套: linking fr.gone after fund.reverse is REFERENCE_STALE at /args/requirements/0/fund_record_ids/1; fr.kept stays on the earlier check and is shown reversed
+- 到账: received on fund.d22.gone is REFERENCE_STALE at /args/fund_record_id; fund.d22.paid is received and, reversed afterwards, stays on the result with fund_record_reversed true
+
+## D2a S5R-D23 — passed
+
+S5R-D23 出口后发布、按有效期绑定
+
+Test `TestCNATSuite12ValidityAndRebindD23`. Requests: {'GET': 60, 'POST': 200}.
+
+- S5R-D12: FUL prepared certificate_of_origin citing preferential certificate crt-01a1e94f-0593-7ecc-8ed7-aaa926cc73f6 (RCEP, customs); no certificate_applicability difference
+- S5R-D23: export.tax revision 2 published after lot.a's export, valid from the chain's start; the expected case showed policy_superseded and rebind_policy moved it from revision 1 to 2
+- 免税修订不能改绑仍有 export_refund 用途的案件（INVALID_STATE /args/revision）；planned 之后 rebind_policy → INVALID_STATE /args/case_id
+
+## D2b S5R-D03 — passed
+
+S5R-D03: a licence allocated to a lot is released on local cancellation only after customs rejects the declaration
+
+Test `TestS5R12D03LocalCancellationReleasesTheLicenceOverHTTP`. Requests: 146.
+
+- allocated: 200
+- allocated_again: 200
+- d03.cost_snapshot: 26000 USD
+- d03.po_number: PO-2026-00001
+- d03.quote: payable 40000 USD; cost 26000, profit 14000 USD; margin rule pass; payments P1 12000, P2 28000
+- declaration_rejected: rejected
+- release_before_cancel: 422 INVALID_STATE /args/allocation_id
+- release_while_declared: 422 INVALID_STATE /args/basis
+- released: 0 allocated, 1000 available, basis local_cancellation
+
+## D2b S5R-D04 — passed
+
+S5R-D04: two single_use licences cover one shipment through two export lots; a second allocation is refused
+
+Test `TestS5R12D04TwoLicencesTwoLotsOverHTTP`. Requests: 161.
+
+- confirmed: confirmed
+- d04.cost_snapshot: 66000 USD
+- d04.po_number: PO-2026-00001
+- d04.quote: payable 96000 USD; cost 66000, profit 30000 USD; margin rule pass; payments P1 28800, P2 67200
+- lot_a: 200
+- lot_b: 200
+- one_lot_short: blocked EXPORT_LICENSE_REQUIRED
+- release: granted alloc.a,alloc.b
+- release_without_lots: blocked EXPORT_LICENSE_REQUIRED
+- second_allocation: 422 INVALID_STATE /args/license_id
+- shipment_beside_its_lots: 422 INVALID_STATE /args/target/id
+- usage_mode_default: single_use
+
+## D2b S5R-D05 — passed
+
+S5R-D05: a write-off lets the order cancel and refuses the shipment; a confirmation that commits first still leaves the approval standing
+
+Test `TestS5R12D05DispositionAndTheShipmentOverHTTP`. Requests: 198.
+
+- approval_after_confirmation: approved 50 after 60 shipped
+- can.cost_snapshot: 21000 USD
+- can.po_number: PO-2026-00001
+- can.quote: payable 32000 USD; cost 21000, profit 11000 USD; margin rule pass; payments P1 9600, P2 22400
+- cancelled: cancelled
+- disposed_goods_do_not_ship: 409 SUPPLIER_DELIVERY_INSUFFICIENT
+- gap.cost_snapshot: 51000 USD
+- gap.po_number: PO-2026-00002
+- gap.quote: payable 80000 USD; cost 51000, profit 29000 USD; margin rule pass; payments P1 24000, P2 56000
+- later_shipment: 409 SUPPLIER_DELIVERY_INSUFFICIENT
+
+## D2b S5R-D10 — passed
+
+S5R-D10: documents release stays refused while a blocked conclusion is under review
+
+Test `TestS5R12D10DocumentsReleaseUnderReviewOverHTTP`. Requests: 248.
+
+- blocked: blocked
+- cleared: clear
+- documents_granted: granted
+- documents_under_review: blocked TRADE_COMPLIANCE_NOT_CLEAR blocked_under_review
+- original_bl: consumed
+
+## D2b S5R-D19 — passed
+
+S5R-D19 S-A: USD receipts converted at 7.0 and 6.875, freight paid through STL, net cash CNY 2,250.00
+
+Test `TestS5R12D19SANetCashFromUSDReceiptsOverHTTP`. Requests: 182.
+
+- charge_payment: pre_carriage paid 65000 open 0 paid
+- confirmed: settled 235000
+- d19.cost_snapshot: 450000 CNY
+- d19.po_number: PO-2026-00001
+- d19.quote: payable 100000 USD; cost 450000, profit 250000 CNY; margin rule pass; payments P1 20000, P2 80000
+- fx: -10000
+- fx_before_close: -10000 realised -10000 unrealised 0
+- net_cash: receipts 690000 charge_payments 65000 payments 465000 net 225000 unpaid 0
+- net_cash_freight_unpaid: receipts 690000 payments 400000 unpaid 65000 net 290000
+- prepayment: 20000 USD
+- purchase_paid: 400000 CNY
+- quote: payable 100000 USD; cost 450000, profit 250000 CNY; margin rule pass; payments P1 20000, P2 80000
+- receivables_open: 0
+- statement_400: P2 40000/0/40000
+- statement_600: P1 20000/20000/0 P2 40000/0/40000

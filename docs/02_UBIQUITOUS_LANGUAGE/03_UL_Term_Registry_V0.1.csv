@@ -1,10 +1,10 @@
 ﻿term_id,context_id,en,cn,definition,exclusions,invariant_refs,source_evidence,owner,scope_type,status,version
 PTY-Party,PTY,Party,交易主体,租户内外部企业或个人的公共身份；客户、供应商可以是同一主体的不同角色。,不是内部经营主体 Company；不是 CRM 线索。,UL-INV-14,基线 3.1；核心设计 4,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
 PTY-PartyRole,PTY,PartyRole,交易角色,主体在交易中的角色：客户、供应商、物流或服务方、制造工厂等。,角色增加不会自动增加内部 Company。,,基线 3.4,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
-PTY-TradingProfile,PTY,TradingProfile,公司交易档案,主体与某个内部公司之间的交易关系：结算条件、业务负责人等公司级信息。,不是主体身份本身；不跨公司共享。,,基线 3.1 PartyCompanyProfile,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
+PTY-TradingProfile,PTY,TradingProfile,公司交易档案,主体与某个内部公司之间的交易关系：结算条件、业务负责人等公司级信息。可列许可付款人（经档案发布的主体引用）；来自许可付款人的收款不是主体不一致（S5R-D21）。,不是主体身份本身；不跨公司共享。,,基线 3.1 PartyCompanyProfile,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
 PTY-Contact,PTY,Contact,联系人,归属于某主体的自然人联系人，含已核实的归属关系与用途授权的联络方式。,邮箱或电话不是唯一身份依据。,UL-INV-14,核心设计 5.2；T03 A30,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
-PTY-AddressRole,PTY,AddressRole,地址角色,主体地址在交易中的用途，如买方、收货方、付款方地址，按版本被报价引用。,不从贸易术语推导收货方或货权。,,T03 A31 报价地址角色映射,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
-PTY-ServicePartyRole,PTY,ServicePartyRole,服务方角色,伙伴提供物流等服务时的角色、适用服务、起讫地点、有效期与核实证据。,不改变原 customer／supplier 角色含义；不以自由文本替代适用性检查。,,T02 规格 13.1,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
+PTY-AddressRole,PTY,AddressRole,地址角色,主体地址在交易中的用途，如买方、收货方、付款方与通知方（notify，S5R-D40）地址，按版本被报价引用。,不从贸易术语推导收货方或货权。,,T03 A31 报价地址角色映射,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
+PTY-ServicePartyRole,PTY,ServicePartyRole,服务方角色,伙伴提供物流等服务时的角色、适用服务、起讫地点、有效期与核实证据。种类：forwarder（货代）、carrier（承运人）、insurer（保险人）、inspection_agency（检验机构）、customs_broker（报关行）；只有货代与承运人要求航线（UN/LOCODE），其余种类只需已核实（S5R-D36）。,不改变原 customer／supplier 角色含义；不以自由文本替代适用性检查。,,T02 规格 13.1,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
 PTY-MasterVerification,PTY,MasterVerification,主数据核实,授权人工对主体、联系人或 SKU 的身份与关系作出的核实声明，使其可用于交易。,不证明原文作者在现实中真实；不是客户接受。,UL-INV-17,T01 实施说明第 8 条,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
 PTY-PartyRef,PTY,PartyRef,主体引用,下游引用主体的已发布语言：kind＋id＋row_version，引用时核查可访问、角色、已核实及版本。,引用 ID 存在不等于已核实或当前可交易。,,T02 规格 3 MasterRef,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
 CAT-Item,CAT,Item,商品,公共商品身份，可被多个 SKU 共享。,商品共享不意味着库存或资金归属共享。,,基线 3.1,CAT Domain Owner,business,Approved（模拟评审）,0.1-draft
@@ -22,13 +22,13 @@ POL-CurrencyDefinition,POL,CurrencyDefinition,币种定义,币种代码、最小
 POL-UnitDefinition,POL,UnitDefinition,单位定义与换算,单位维度、精度及按 SKU、规格的换算版本，如 DOZEN＝12 PCS。,包装换算不能泛化到所有商品。,,FOUNDATION_SPEC 第 5 条,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-FxRate,POL,FxRate,用途汇率,带方向、用途（cost_estimate、quotation 等）、来源日期、可用时段与核实人的测算汇率。,报价测算不等于银行成交或会计凭证。,UL-INV-12,FOUNDATION_SPEC 第 4 条；T03 规格 5.2,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-WorkCalendar,POL,WorkCalendar,工作日历,交期推算使用的工作日历版本。,未核实日历不能推算承诺日。,,核心设计 7.1,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
-POL-TradeTerms,POL,TradeTerms,贸易条款,贸易术语版本、指定地点与卖方承担的费用范围。,不从术语字符串推导货权或同口径；FOB 与 CIF 同名不代表同口径。,,基线 2.5；T02 规格 7,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
+POL-TradeTerms,POL,TradeTerms,贸易条款,贸易术语版本、指定地点与卖方承担的费用范围。可带合同保险比例 insurance_percent（默认 110，下限 110），CIF／CIP 保险单按它核对（S5R-D06）。,不从术语字符串推导货权或同口径；FOB 与 CIF 同名不代表同口径。,,基线 2.5；T02 规格 7,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-PaymentTerms,POL,PaymentTerms,付款条件,付款阶段、比例（合计 100）、触发条件与到期天数。,付款计划不是应收或到账。,,FOUNDATION_SPEC 第 6 条,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-TaxProfile,POL,TaxProfile,税价口径,含税／未税、税率与税额处理方式的配置；示例税率均为合成参数。,不是现行税务结论；不默认零税。,,FOUNDATION_SPEC 第 6 条,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-TaxApplication,POL,TaxApplication,税适用依据,说明某税口径适用于哪一端（销售或购进）、哪类对象与交易范围的已核实依据。,购进成本税口径不能冒充销售税适用。,,T02 规格 16.3；T03 规格 5.1；T03 A28,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-FeeCategory,POL,FeeCategory,费用分类,费用归属与包含关系分类，用于成本归集与销售收费。,不是会计科目。,,基线 2.5,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-PricingPolicy,POL,PricingPolicy,核价政策,计算币种、最低毛利阈值、报价有效天数、汇率最大时效与独立复核要求等政策。,普通内容审批不能豁免政策规则。,,T03 规格 5.2；T03 A19,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
-POL-DocumentNumberSequence,POL,DocumentNumberSequence,单据编号序列,按公司、单据类型与年度原子分配编号；同业务引用唯一，号码不回收。,不能以连续号证明业务完整。,,FOUNDATION_SPEC 第 10 条,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
+POL-DocumentNumberSequence,POL,DocumentNumberSequence,单据编号序列,按公司、单据类型与年度原子分配编号；同业务引用唯一，号码不回收。,不能以连续号证明业务完整。invoice 单据类型专指商业发票；其他发票类编号用自己的单据类型；增值税发票不由 POL 编号（S5R-D16）。,,FOUNDATION_SPEC 第 10 条,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-DocumentTemplate,POL,DocumentTemplate,单据模板,只允许固定字段的受限确定性模板；正式报价模板独立发布、版本入商业哈希。,不执行代码、不抓取链接；草稿模板不能产出正式文档。,,FOUNDATION_SPEC 第 9 条；T03 规格 8,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 POL-FoundationSnapshot,POL,FoundationSnapshot,核价基础快照,保存被采用的全部配置及依赖版本、内容哈希与计算时点。,配置更新不覆盖历史快照。,,FOUNDATION_SPEC 第 11 条,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 EVD-SourceContent,EVD,SourceContent,来源内容,按原文 UTF-8 计算 SHA-256 的不可变内容记录；同 scope 相同内容共享。,哈希不等于真实性。,UL-INV-16,T01 实施说明第 4 条,EVD Domain Owner,business,Approved（模拟评审）,0.1-draft
@@ -88,7 +88,7 @@ TRD-CustomerResponse,TRD,CustomerResponse,客户回复,关联报价根、来源�
 TRD-ResponseClassification,TRD,ResponseClassification,回复分类,full_unconditional、conditional、partial、reject、ambiguous 五类人工分类。,AI 分类只是候选。,UL-INV-07,T04 A36、A45,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
 TRD-Acceptance,TRD,Acceptance,客户接受,经授权人工核实、精确绑定一个报价修订及其 business_hash 与完整行集合的完整无条件接受。,附条件、部分接受与身份不明只保留回复，不能伪造 Acceptance。,UL-INV-07,核心设计 8.2；T04 A37,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
 TRD-AcceptanceEffectivity,TRD,AcceptanceEffectivity,接受效力,独立记录 valid／invalidated／disputed 及版本；纠错须授权人工、原因与新证据。,不得把旧记录改回 valid；重新核实建立新 Acceptance。,UL-INV-07,核心设计 8.2,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
-TRD-SalesOrder,TRD,SalesOrder,外销订单,由已成立合同（有效 Acceptance）经 order.prepare 形成的订单：draft、active、cancelled、closed_unfulfilled、closed；生效后只经订单变更修订。,不是采购单或委外单；active 不等于已出运。,UL-INV-08,核心设计 6.1、8.3,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
+TRD-SalesOrder,TRD,SalesOrder,外销订单,由已成立合同（有效 Acceptance）经 order.prepare 形成的订单：draft、active、cancelled、closed_unfulfilled、closed；生效后只经订单变更修订。新修订封存 Incoterm 与绑定地址的国别，可选绑定通知方；按（订单、修订）经 OrderRevisionRef v1 被读取（S5R-D35、D40）。,不是采购单或委外单；active 不等于已出运。,UL-INV-08,核心设计 6.1、8.3,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
 TRD-OrderCommercialSnapshot,TRD,OrderCommercialSnapshot,订单商业快照,准确复制来源报价修订与接受范围的不可变商业快照及订单哈希。,改价改量返回报价修订，不在订单上直接修改。,,T03 A25,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
 TRD-ConversionSlot,TRD,ConversionSlot,转换名额,同一报价根唯一的 full_v1 整单转换名额；order.prepare 时永久占用，取消或未达成关闭不释放。,不能通过改请求键或新修订再取名额。,UL-INV-06,核心设计 8.3,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
 TRD-OrderReview,TRD,OrderReview,订单审批,绑定订单版本与商业快照哈希的独立审批请求与裁决；逐项确认订单准备后出现的上游风险；有效期由订单审批政策设定。,报价批准不替代订单生效审批。,UL-INV-08,T04 A38、A39,TRD Domain Owner,business,Approved（模拟评审）,0.1-draft
@@ -107,12 +107,12 @@ MFG-CollaborationPlan,MFG,CollaborationPlan,协同计划,需求／分配、工�
 MFG-SubcontractOrder,MFG,SubcontractOrder,委外单,整单、部件或工序委外安排，含材料责任、加工费与交接依据。,外厂上报完成只是来源声明。,,基线 3.5,MFG Domain Owner,business,Approved（模拟评审）,0.1-draft
 MFG-MaterialResponsibility,MFG,MaterialResponsibility,材料责任,外厂自购料、我方供料、客户提供或混合供料，按材料分别记录归属与损耗依据。,不从供应方式唯一推导交付路线。,,基线 3.4,MFG Domain Owner,business,Approved（模拟评审）,0.1-draft
 QLT-Inspection,QLT,Inspection,检验,对受检批次、工序或收货按标准版本形成的检验结果。,检验报告不直接改写库存或交付。,,基线 3.5,QLT Domain Owner,business,Approved（模拟评审）,0.1-draft
-QLT-Disposition,QLT,Disposition,不合格处置,对不合格品的处置决定：返工、让步、退回、报废等。,处置不自动生成补发或贷项。,,基线 F26,QLT Domain Owner,business,Approved（模拟评审）,0.1-draft
-QLT-QualityRelease,QLT,QualityRelease,质量放行,明确数量、范围、权限与有效性的质量放行；出运入口检查有效放行。,不是海关放行，也不是商业条件放行。,,基线 3.5、7.5,QLT Domain Owner,business,Approved（模拟评审）,0.1-draft
+QLT-Disposition,QLT,Disposition,不合格处置,对不合格品的处置决定：返工、让步、退回、报废等。让步接收须附客户同意证据（S5R-D18）。,处置不自动生成补发或贷项。,,基线 F26,QLT Domain Owner,business,Approved（模拟评审）,0.1-draft
+QLT-QualityRelease,QLT,QualityRelease,质量放行,明确数量、范围、权限与有效性的质量放行；出运入口检查有效放行。撤回时记录冻结量（放行量减已出运量），冻结量复检后再放行；获批让步的数量可放行并带 concession 标记（S5R-D18）。,不是海关放行，也不是商业条件放行。,,基线 3.5、7.5,QLT Domain Owner,business,Approved（模拟评审）,0.1-draft
 STK-StockMovement,STK,StockMovement,库存流水,已确认收货、出库、退货或盘点调整形成的流水；撤销通过反向受控调整。,直发路线不虚构本仓收发。,,基线 4.2,STK Domain Owner,business,Approved（模拟评审）,0.1-draft
 STK-Reservation,STK,Reservation,库存占用,对同一成本层可用数量的有效占用；确认出库使用并发安全的数量条件。,占用不是出库。,,基线 4.3,STK Domain Owner,business,Approved（模拟评审）,0.1-draft
 STK-BatchLineage,STK,BatchLineage,批次谱系,材料、在制、成品、包装与出运明细的输入输出关系；拆分合并保留来源与数量。,不能伪造无法证实的逐件来源。,,基线 3.7,STK Domain Owner,business,Approved（模拟评审）,0.1-draft
-FUL-MilestonePlan,FUL,MilestonePlan,节点计划,对象、责任人、前置项与计划日期；实际日期另行记录并区分供应商自报、内部核实与已验收。,预计进度不是实际。,,基线 3.5、F25,FUL Domain Owner,business,Approved（模拟评审）,0.1-draft
+FUL-MilestonePlan,FUL,MilestonePlan,节点计划,对象、责任人、前置项与计划日期；实际日期另行记录并区分供应商自报、内部核实与已验收。节点类型含 booking_requested（已申请订舱，与 booking_confirmed 配对；S5R-D11）。,预计进度不是实际。,,基线 3.5、F25,FUL Domain Owner,business,Approved（模拟评审）,0.1-draft
 FUL-ActualPackage,FUL,ActualPackage,实际装箱,包装单位、款色码配比、重体积、箱号与交付数量的实际记录。,不复制第二份库存。,,基线 3.5、F27,FUL Domain Owner,business,Approved（模拟评审）,0.1-draft
 FUL-ShipmentConfirmation,FUL,ShipmentConfirmation,出运确认,可交付数量、证据、库存或直发路线满足后记录的实际出运，是销售结算的默认来源。,不是海关放行、实际离境或客户验收。,UL-INV-21,基线 3.3,FUL Domain Owner,business,Approved（模拟评审）,0.1-draft
 FUL-ExportLot,FUL,ExportLot,出口批次,销售／交付至本次出口业务明细的数量与金额，被报关、发票与退税引用。,不复制第二份库存。,,基线 22.1,FUL Domain Owner,business,Approved（模拟评审）,0.1-draft
@@ -121,14 +121,14 @@ STL-Receivable,STL,Receivable,业务应收,销售结算单确认形成的业务�
 STL-FundRecord,STL,FundRecord,资金记录,经核实的实际收付款及凭据，含银行原币入账与费用。,不凭截图自动认定到账。,,基线 4.2；CN-R10,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
 STL-Application,STL,Application,核销,把可用收付余额分配给应收应付；撤销核销产生新记录，不抹除资金事实。,不是行政意义的出口收汇核销。,UL-INV-22,基线 4.2、4.3；CN-R11,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
 STL-Prepayment,STL,Prepayment,预收预付,货前实际收付款登记为未核销余额，货后按结算单核销。,预付款计划只管理合同节点，不是资金事实。,,基线 4.2,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
-STL-CreditNote,STL,CreditNote,贷项,依据批准的退货、价格或索赔调整业务应收。,不自动等同于已退款。,,基线 3.3,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
-STL-OrderResult,STL,OrderResult,订单经营结果,按来源可解释的订单净销售、成本、费用与结算状态；open、reviewed、settled。,期间费用不默认分配。,,基线 4.5、F10,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
-STL-FxConversion,STL,FxConversion,结汇,售出原币、银行实际汇率、到账人民币及手续费的资金转换记录。,结汇不新增客户收入，不再次核销同一应收。,,基线 22.2,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
+STL-CreditNote,STL,CreditNote,贷项,依据批准的退货、价格或索赔调整业务应收。期初结算单的贷项不绑定订单（S5R-D22）。,不自动等同于已退款。,,基线 3.3,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
+STL-OrderResult,STL,OrderResult,订单经营结果,按来源可解释的订单净销售、成本、费用与结算状态；open、reviewed、settled。业务结算汇差按实际结汇汇率，未结汇部分按核销日汇率标 unrealized；已取消订单有沉没成本时以 cancelled 标记关闭（S5R-D19、D42）。,期间费用不默认分配。,,基线 4.5、F10,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
+STL-FxConversion,STL,FxConversion,结汇,售出原币、银行实际汇率、到账人民币及手续费的资金转换记录。订单经营结果的汇差按核销到订单的外币收款所对应结汇的实际汇率归属（S5R-D19）。,结汇不新增客户收入，不再次核销同一应收。,,基线 22.2,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
 CLM-ClaimCase,CLM,ClaimCase,客诉案件,客诉事实、责任分析与补救决定的案件。,不直接改写原发货或账款。,,基线 F28,CLM Domain Owner,business,Approved（模拟评审）,0.1-draft
 CLM-ReturnRecord,CLM,ReturnRecord,退货,原发货、实际收回、质量与数量核实后的退货事实。,不自动重新增加订单可发数量，不隐式创建补发。,,基线 3.3,CLM Domain Owner,business,Approved（模拟评审）,0.1-draft
 CNX-PurchaseInvoice,CNX,PurchaseInvoice,购进发票,供应商、受票主体、票种与唯一标识、金额税额、状态及红蓝关系；原件、解析候选与核验状态分别记录。,实际开票与税务确认由获准专业渠道完成。,,基线 22.1；CN-R06,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
 CNX-DeclarationCase,CNX,DeclarationCase,报关案件,申报委托、草稿、提交引用、外部结果及更正链；内部状态与外部原始状态分开。,不猜测申报完成；海关放行不等于实际离境。,,基线 22.1；CN-R05、CN-R07,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
-CNX-TaxRefundCase,CNX,TaxRefundCase,退税案件,出口明细、购进凭证、申报资料与适用政策的匹配；预计、拟申报、已提交、核准、到账分别记录。,不把预计退税作为新增利润；不仅凭本地取消恢复用途额度。,,基线 22.1；CN-R08、CN-R09,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
+CNX-TaxRefundCase,CNX,TaxRefundCase,退税案件,出口明细、购进凭证、申报资料与适用政策的匹配；预计、拟申报、已提交、核准、到账分别记录。用途 export_refund（免抵退或免退）与 export_exemption（免税出口的资料留存），征税批次不开案件，逾期未申报可转为免税（S5R-D14）；政策修订绑定有效期包含出口日期的修订，与发布时间无关（S5R-D23）。,不把预计退税作为新增利润；不仅凭本地取消恢复用途额度。,,基线 22.1；CN-R08、CN-R09,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
 CNX-DocumentBundle,CNX,DocumentBundle,出口资料包,业务证据目录、资料版本、缺件、专业核实与有效期。,附件存在不等于真实性或法定效力已核实。,,基线 22.1；CN-R13,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
 CNX-ExternalReconciliation,CNX,ExternalReconciliation,外部对账,外部结果、内部关联、差异、责任与批准调整。,BIP 承担交换，不能替代核实。,,基线 22.1,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
 CRM-Opportunity,CRM,Opportunity,商机,线索转化后的销售机会、阶段与跟进。,交易只保留来源关联，不依赖商机。,,基线 F12,CRM Domain Owner,business,Approved（模拟评审）,0.1-draft
@@ -181,13 +181,19 @@ STL-CreditReservation,STL,Credit Reservation,信用占用,订单生效前在 STL
 STL-CreditException,STL,Credit Exception,信用例外,授权人工（独立于销售经办）对超额占用的显式批准，绑定订单、金额与有效期。,普通订单审批不构成信用例外。,UL-INV-30,ADR-BR-016,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
 CNX-TradeComplianceCheck,CNX,Trade Compliance Check,贸易合规核查,按订单修订对目的国、交易方所在国、商品管制分类与最终用途的禁运、制裁与出口管制核查及结论。,不是法律认定；AI 或名单服务只产生候选。,UL-INV-31,补齐矩阵 INT-07；CN-R14；ADR-BR-014,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
 CNX-EmbargoCheck,CNX,Embargo Check,国别禁运检查,按目的国与交易方所在国判断是否适用禁运或制裁项目，是贸易合规核查的一部分。,不能由主体名单筛查替代。,UL-INV-31,SAP 流程参照 GTC-02,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
-CNX-ExportLicense,CNX,Export License,出口许可证,外部机关签发的许可：编号、持有人、商品、数量与金额额度、目的国、最终用户与有效期。,附件存在不等于许可有效。,UL-INV-31,CN-R14；INT-06,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
+CNX-ExportLicense,CNX,Export License,出口许可证,外部机关签发的许可：编号、持有人、商品、数量与金额额度、目的国、最终用户与有效期。登记使用方式（single_use 一批一证，两用物项的法定方式与默认值；multi_use 须附证面依据）与海关关别（一证一关）；一份报关单只用一张许可证（S5R-D04）。,附件存在不等于许可有效。,UL-INV-31,CN-R14；INT-06,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
 CNX-LicenseAllocation,CNX,License Allocation,许可证用量分配,把许可额度分配给具体出运或出口批次的记录；累计不超额度。,不凭本地取消恢复已申报用量。,UL-INV-31,CN-R09,CNX Domain Owner,business,Approved（模拟评审）,0.1-draft
+CNX-CertificateResult,CNX,Certificate Result,官方证书结果,外部签发的官方证书登记：原产地证、许可证副本、检验证书与优惠原产地证（协定代码、签发机构；RCEP 原产地声明为其子类）；适用对象、目的市场、有效期与核实人（S5R-D12）。,不做优惠原产地判定；不撤回，机关撤销以更正修订截止有效期（S5R-D47）。,,CNX-INV-007；S5R-D12、D47,CNX Domain Owner,business,Approved（S5R 模拟签核 E0）,0.1-draft
 PUR-SupplierDelivery,PUR,Supplier Delivery,供应商交付,直发路线中供应商按承诺行向货代、堆场或收货人交接的数量、地点、时间与证据，经人工核实。,不是本仓收货；供应商上报未核实前不计数。,UL-INV-32,基线 3.4、3.6；SAP 流程参照 O2C-10,PUR Domain Owner,business,Approved（模拟评审）,0.1-draft
-POL-ScreeningRegulationProfile,POL,Screening Regulation Profile,筛查与合规适用配置,企业启用的筛查名单、合规法规与禁运项目及复筛频率的已发布配置版本。,不含名单条目本身；启用外国名单须法务批准。,,ADR-BR-017；参照 SAP GTS 法规与名单配置,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
+PUR-CommitmentDisposition,PUR,Commitment Disposition,承诺行获批处置,已核实交付但未出运的承诺行数量的处置去向：return_to_supplier（退回工厂）、write_off（我方承担，计入经营结果的沉没成本）、hold_for_reuse（转作后续订单使用）；采购申请、订单审核人独立批准后，订单取消把它计为已处置（S5R-D05）。,不改承诺状态；hold_for_reuse 在 STK 启用前只记录，不形成库存。,,S5R-D05；参照 SAP V1544,PUR Domain Owner,business,Approved（S5R 模拟签核 E0）,0.1-draft
+POL-ScreeningRegulationProfile,POL,Screening Regulation Profile,筛查与合规适用配置,企业启用的筛查名单、合规法规与禁运项目及复筛频率的已发布配置版本。列出启用的国别项目名单 programmes，CNX 评估从绑定的修订读取，不再由评估输入（S5R-D38）。,不含名单条目本身；启用外国名单须法务批准。,,ADR-BR-017；参照 SAP GTS 法规与名单配置,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
+POL-ExportTaxPolicy,POL,Export Tax Policy,出口退税政策,企业适用的出口退（免）税政策修订：退（免）税方式按法定四类（exempt_credit_refund 免抵退、exempt_refund 免退、exempt 免税、taxable 征税）、退税率与有效期；退税案件绑定有效期包含出口日期的修订（S5R-D14、D23）。,not_applicable 只保留给旧修订读取；四类的适用条件与资料要求须税务专业人员在 B0 前确认。,,S5R-D14、D23；财税〔2012〕39 号,POL Domain Owner,business,Approved（S5R 模拟签核 E0）,0.1-draft
 POL-CreditPolicy,POL,Credit Policy,信用政策,默认额度、额度来源、信用审批层级与金额阈值、逾期容忍天数的已发布配置版本。,不是某客户的额度；阈值不由租户自由字段改写。,UL-INV-30,ADR-BR-016；参照 SAP FSCM,POL Domain Owner,business,Approved（模拟评审）,0.1-draft
 PLATFORM-ScreeningListVersion,PLATFORM,Screening List Version,筛查名单版本,受控导入 internal/reference 的名单内容版本：来源、发布时间、导入时间与哈希。,不手工编辑条目；不是筛查结论。,,ADR-BR-007；ADR-BR-017,PLATFORM Domain Owner,platform,Approved（模拟评审）,0.1-draft
+PLATFORM-CountryProgrammeVersion,PLATFORM,Country Programme Version,国别项目名单版本,受控导入 internal/reference 的国别禁运与制裁项目版本：来源、发布日期、国家与项目；项目可带区域 regions（ISO 3166-2 清单），表示只有这些区域受影响（S5R-D15）。,不是合规结论；带区域的项目由合规人工按地址判断（region_review）。,,ADR-BR-017；S5R-D15、D34,PLATFORM Domain Owner,platform,Approved（S5R 模拟签核 E0）,0.1-draft
 PTY-PositiveList,PTY,Positive List,正向名单,经合规人工确认为误报、持续放行的主体与名单条目组合；绑定主体版本与条目版本。,条目或主体资料变化后失效，不是永久豁免。,,参照 SAP GTS 正向名单,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
 PTY-NegativeList,PTY,Negative List,负向名单,由合规人工登记、永久阻断的主体，不随名单更新解除。,不是官方名单条目。,,参照 SAP GTS 负向名单,PTY Domain Owner,business,Approved（模拟评审）,0.1-draft
 STL-CreditDecision,STL,Credit Decision,信用决定,超额或逾期超限时生成的待裁决记录，绑定订单、金额与原因，由具备相应金额层级的信用人员放行或拒绝。,普通订单审批不构成信用决定；销售经办不能裁决。,UL-INV-30,参照 SAP FSCM documented credit decision；ADR-BR-016,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
 STL-CreditLimitRequest,STL,Credit Limit Request,额度申请,新增或调整客户额度的申请，按金额分级审批后发布为新的额度版本。,申请人不能审批自己的申请。,UL-INV-30,参照 SAP 额度申请与审批工作流,STL Domain Owner,business,Approved（模拟评审）,0.1-draft
+STL-FundReversal,STL,Fund Reversal,资金冲销,对错误资金记录（含期初）的冲销：独立于资金登记人，须无有效核销；原记录保留，冲销后银行流水键可再用（S5R-D22）。,不是退款或退汇；退款与退汇另行登记资金记录。,,S5R-D22,STL Domain Owner,business,Approved（S5R 模拟签核 E0）,0.1-draft
+STL-PayableAdjustment,STL,Payable Adjustment,应付调整,采购侧的价格折让或少开，引用红字发票，由资金申请、信用经理独立确认后冲减应付（S5R-D20）。,红票本身不改应付；只换票不影响应付；不设自动消费方。,,S5R-D20；参照 SAP 后续借贷,STL Domain Owner,business,Approved（S5R 模拟签核 E0）,0.1-draft

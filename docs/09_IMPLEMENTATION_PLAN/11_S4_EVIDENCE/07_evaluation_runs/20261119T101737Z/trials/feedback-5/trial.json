@@ -1,0 +1,462 @@
+{
+  "family": "feedback",
+  "trial": 5,
+  "trial_id": "feedback-5",
+  "design": [
+    "S4-03",
+    "S4-07",
+    "G3",
+    "BC-AT27",
+    "BC-AT28",
+    "SD-07"
+  ],
+  "goal": "the agent makes the live trials' mistakes: it places every field at its row's start (the unit's words stand in every row, and twice in the first) and names no place for three of the lines; the second line's places, the line's own and its fields', it writes with the located form's record word (\"segment 6:1\"), as the live model did on 2026-11-19; its first quote draft has no cost snapshot and its second no unit price",
+  "input": {
+    "kind": "text",
+    "file": "inquiry.txt",
+    "mime": "text/plain",
+    "bytes": 378,
+    "sha256": "4a414a68c4dcae3233e09da4bc1835de5bb9f3d617752be718a088ed2684640f"
+  },
+  "expected": "each line takes the row its located fields stand in (the second line's own place, written \"segment 6:1\", is read as 6:1, and INQ holds no place with the record word on any line); the gateway resolves the unit of the three lines whose row holds \"PCS\" once to its place in that row (owner decision 2026-11-18 20:15), and the first line's row holds it twice, so INQ holds that unit ambiguous and the owner names its place (1 owner resolution, synthetic: extra human work, not the AI's); the draft without the cost snapshot is refused by the gateway with COST_SNAPSHOT_MISSING before TRD and leaves no TSK action, the one without a unit price is refused by TRD, both are in the ledger with their paths and the third draft commits; completed quote_ready (ai_with_required_review) at 960.00 USD",
+  "outcome": "completed/ai_with_required_review",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "completed",
+  "completion_actor": "ai_with_required_review",
+  "goal_completed": true,
+  "automation": "extra_human_work",
+  "assertions": [
+    {
+      "name": "BC-AT27: the agent's locators stand in the extract",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "TSK lifecycle",
+      "want": "completed",
+      "got": "completed",
+      "pass": true
+    },
+    {
+      "name": "TSK completion actor",
+      "want": "ai_with_required_review",
+      "got": "ai_with_required_review",
+      "pass": true
+    },
+    {
+      "name": "TSK last verification",
+      "want": "satisfied",
+      "got": "satisfied",
+      "pass": true
+    },
+    {
+      "name": "TSK actions settled",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    },
+    {
+      "name": "TRD goal readiness quote_ready",
+      "want": "satisfied",
+      "got": "satisfied",
+      "pass": true
+    },
+    {
+      "name": "TRD active revision 1 payable (minor units)",
+      "want": "96000",
+      "got": "96000",
+      "pass": true
+    },
+    {
+      "name": "owner resolutions: only the place of the unit whose row holds it twice named",
+      "want": "1 of 1",
+      "got": "1 of 1",
+      "pass": true
+    },
+    {
+      "name": "INQ corrections: verified at the named place, proposed by the agent, corrected by the owner",
+      "want": "1 of 1",
+      "got": "1 of 1",
+      "pass": true
+    },
+    {
+      "name": "automation level",
+      "want": "extra_human_work",
+      "got": "extra_human_work",
+      "pass": true
+    },
+    {
+      "name": "RFQ lines: the place of each line is the row of its fields (left out by three lines, written with the record word by L2)",
+      "want": "4 of 4",
+      "got": "4 of 4",
+      "pass": true
+    },
+    {
+      "name": "RFQ lines: a unit that stands once in the row the agent named is at its own place, not pending",
+      "want": "3 of 3",
+      "got": "3 of 3",
+      "pass": true
+    },
+    {
+      "name": "RFQ lines: no stored place carries the record word the agent wrote",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    },
+    {
+      "name": "RFQ line L2: the places written with the record word are stored as the file's own places",
+      "want": "6:1 6:1 6:14 6:38 6:43",
+      "got": "6:1 6:1 6:14 6:38 6:43",
+      "pass": true
+    },
+    {
+      "name": "the refused quote drafts in the ledger, with their paths",
+      "want": "COST_SNAPSHOT_MISSING /args/data/cost_snapshot_ref; SCHEMA_INVALID /args/data/lines/0/unit_price",
+      "got": "COST_SNAPSHOT_MISSING /args/data/cost_snapshot_ref; SCHEMA_INVALID /args/data/lines/0/unit_price",
+      "pass": true
+    },
+    {
+      "name": "the reason of the refusal before TRD: a person could not freeze the draft",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "committed quote.save_draft actions",
+      "want": "1",
+      "got": "1",
+      "pass": true
+    },
+    {
+      "name": "rejected quote.save_draft actions: only the draft TRD refused",
+      "want": "1",
+      "got": "1",
+      "pass": true
+    },
+    {
+      "name": "TSK history: the first resume's arrival",
+      "want": "task.resume rfq rfq.q01",
+      "got": "task.resume rfq rfq.q01",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": [
+      "evd/source.register committed src.inquiry.text.5 attempts=1 by agent.q01",
+      "inq/rfq.save_draft committed rfq.q01 attempts=1 by agent.q01",
+      "inq/rfq.confirm_scope committed rfq.q01 attempts=1 by clerk.1",
+      "trd/quote.save_draft rejected  attempts=1 by agent.q01",
+      "trd/quote.save_draft committed quote.q01 attempts=1 by agent.q01",
+      "trd/quote.freeze committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.submit_review committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.review.decide committed quote.q01 attempts=1 by quote.reviewer",
+      "trd/quote.activate committed quote.q01 attempts=1 by clerk.1"
+    ],
+    "approval_grants": null,
+    "arrivals": [
+      "task.resume rfq rfq.q01",
+      "task.resume quote quote.q01"
+    ],
+    "binding": {
+      "bound_at": "2026-11-19T10:19:37.826133Z",
+      "control_epoch": 1,
+      "quote_id": "quote.q01",
+      "state": "bound"
+    },
+    "control_epoch": 1,
+    "control_mode": "ai",
+    "delegation_status": "active",
+    "extract": {
+      "characters": 377,
+      "extract_sha256": "e2883bf30cbb6763d355b265b9acb06391271a65638fa881389f44273ab0b7b6",
+      "extractor": "brant.ingest.text/1",
+      "file_sha256": "4a414a68c4dcae3233e09da4bc1835de5bb9f3d617752be718a088ed2684640f",
+      "kind": "text"
+    },
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.bind_object running→running system:system:ai.runner",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:inbox.tsk.task_progress",
+      "task.verify running→verifying system:inbox.tsk.task_progress",
+      "goal.verify verifying→completed system:system:ai.runner"
+    ],
+    "open_actions": 0,
+    "order_status": "absent (NOT_FOUND)",
+    "pause_cause": "",
+    "pause_reason": "",
+    "quote_control": {
+      "agent_id": "agent.q01",
+      "changed_at": "2026-11-19T10:19:37.816138Z",
+      "changed_by": {
+        "id": "system:ai.runner",
+        "kind": "system"
+      },
+      "control_epoch": 1,
+      "initiator_id": "clerk.1",
+      "state": "bound",
+      "task_id": "task.q01"
+    },
+    "quote_revision_1_payable_minor": "96000",
+    "registered_source": {
+      "file_id": "file.inquiry",
+      "learned_from": "the task's committed source.register action (TSK) and EVD's read of its source",
+      "registered_by": {
+        "id": "agent.q01",
+        "kind": "ai"
+      },
+      "source_id": "src.inquiry.text.5",
+      "source_kind": "file_extract"
+    },
+    "rfq_lines": [
+      "L1:ai:agent.q01",
+      "L2:ai:agent.q01",
+      "L3:ai:agent.q01",
+      "L4:ai:agent.q01"
+    ],
+    "rfq_status": "ready",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 12,
+    "wait": null
+  },
+  "corrections": [
+    {
+      "command": "rfq.confirm_scope",
+      "corrected_by": {
+        "id": "clerk.1",
+        "kind": "human"
+      },
+      "field": "uom",
+      "from": "PCS",
+      "kind": "verified",
+      "line_id": "L1",
+      "locator": "5:56",
+      "proposed_by": {
+        "id": "agent.q01",
+        "kind": "ai"
+      },
+      "reason": "ambiguous",
+      "recorded_at": "2026-11-19T10:19:36.303289Z",
+      "row_version": 2,
+      "seq": 1,
+      "synthetic": true,
+      "to": "PCS"
+    }
+  ],
+  "owner_resolutions": [
+    {
+      "line_id": "L1",
+      "field": "uom",
+      "kind": "place_named",
+      "pending_reason": "ambiguous",
+      "from": "PCS",
+      "to": "PCS",
+      "locator": "5:56",
+      "synthetic": true
+    }
+  ],
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "rfq.confirm_scope",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "buyer",
+      "command": "costing (supplier RFQ, offers, costing context, scenario)",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "cost.checker",
+      "command": "cost_snapshot.freeze",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.freeze",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.submit_review",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "quote.reviewer",
+      "command": "quote.review.decide",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.activate",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    }
+  ],
+  "cost": {
+    "model_calls": 6,
+    "tool_calls": 5,
+    "retries": 0,
+    "failed_calls": 2,
+    "unavailable_calls": 0,
+    "input_tokens": 10200,
+    "output_tokens": 720,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": [
+      "scripted.v1"
+    ],
+    "model_returned": [
+      "scripted-q01-v1"
+    ]
+  },
+  "phases": [
+    {
+      "name": "rfq",
+      "script": "script-01-rfq.json",
+      "script_steps": 2,
+      "model_calls": 2,
+      "tool_calls": 2,
+      "writes": 2,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.55,
+      "started_at": "2026-11-19T10:19:35.554077963Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "quote",
+      "script": "script-02-quote.json",
+      "script_steps": 4,
+      "model_calls": 4,
+      "tool_calls": 3,
+      "writes": 1,
+      "lifecycle_after": "waiting_input",
+      "seconds": 1.19,
+      "started_at": "2026-11-19T10:19:36.949451792Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "verify",
+      "script": "script-03-verify.json",
+      "script_steps": 1,
+      "model_calls": 0,
+      "tool_calls": 0,
+      "writes": 0,
+      "lifecycle_after": "completed",
+      "seconds": 0.43,
+      "started_at": "2026-11-19T10:19:38.686961955Z",
+      "timeout": "2m0s"
+    }
+  ],
+  "verifications": [
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NOT_FOUND"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope",
+        "Q01.quote",
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.document",
+        "Q01.industry"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NO_ACTIVE_REVISION",
+        "Q01.quote unsatisfied NO_ACTIVE_REVISION",
+        "Q01.lines unsatisfied NO_ACTIVE_REVISION",
+        "Q01.approval unsatisfied NO_ACTIVE_REVISION",
+        "Q01.document unsatisfied NO_ACTIVE_REVISION",
+        "Q01.industry unsatisfied NO_ACTIVE_REVISION"
+      ]
+    },
+    {
+      "code": null,
+      "lifecycle": "completed",
+      "outcome": "satisfied",
+      "unmet": null,
+      "unmet_codes": null
+    }
+  ],
+  "budget": {
+    "max_model_calls": 40,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 5.95
+}
