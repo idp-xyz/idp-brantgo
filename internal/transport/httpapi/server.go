@@ -105,6 +105,7 @@ type Config struct {
 	STL      STL
 	CNX      CNX
 	FUL      FUL
+	CLM      CLM // S6, optional for a transport that is not the composed process: nil leaves claims out
 	TSK      TSK // S4, optional as well: TSK's commands and reads
 	AI       AI  // S4, optional: the AI layer's commands and reads and the task-step route (unit C3)
 	Verifier Verifier
@@ -189,6 +190,9 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.FUL != nil {
 		s.contexts["ful"] = fulCommands(cfg.FUL)
+	}
+	if cfg.CLM != nil {
+		s.contexts["clm"] = clmCommands(cfg.CLM)
 	}
 	if cfg.TSK != nil {
 		s.contexts["tsk"] = tskCommands(cfg.TSK)

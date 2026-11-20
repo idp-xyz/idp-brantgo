@@ -540,6 +540,18 @@ GRANT UPDATE (disposition, disposition_shipment_id, disposition_revision, dispos
               disposition_reason)
     ON brant_ful.shipment_review_item TO brant_app;
 
+-- CLM claims (S6-03): a claim is inserted open and moves only its version, and once to closed
+-- (trigger); returns and remedies are only inserted; the shipment-line lock row is only inserted
+-- and locked FOR UPDATE (the column grant); nothing is deleted. The claim commands call no guard
+-- function of another context.
+GRANT USAGE ON SCHEMA brant_clm TO brant_app;
+GRANT SELECT, INSERT ON brant_clm.claim_case, brant_clm.claim_return, brant_clm.claim_remedy,
+    brant_clm.shipment_line_claim_lock, brant_clm.action_result, brant_clm.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, closed_summary, closed_by_kind, closed_by_id, close_epoch, closed_at)
+    ON brant_clm.claim_case TO brant_app;
+GRANT UPDATE (lock_token) ON brant_clm.shipment_line_claim_lock TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_clm.guard_mutation() TO brant_app;
+
 -- TSK business tasks (S4-01): a task is inserted created and moves only along SM-TSK-TASK, one version at
 -- a time, never changing what it was created with (trigger); its history only grows (trigger); nothing
 -- is deleted; the ledger only grows. FOR UPDATE on tasks needs the column grants.
