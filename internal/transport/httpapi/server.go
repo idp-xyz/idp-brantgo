@@ -1,8 +1,10 @@
 // Package httpapi is Brant's HTTP transport: one command route per context
 // (POST /api/brant/v1/<bc>/commands/<command>), audited reads, and the ingress limits of the
 // engineering contracts. It authenticates every /api request from a bearer token, so actor, tenant
-// and company never come from a request body; it maps a rejection's category, never its cause, to
-// the status code (contract C5). It reaches contexts only through their api packages.
+// and company never come from a request body. An actor of kind ai is refused on every writing
+// route (PERMISSION_DENIED) before the body is read; an AI agent's commands go through the AI
+// gateway in process. It maps a rejection's category, never its cause, to the status code
+// (contract C5). It reaches contexts only through their api packages.
 package httpapi
 
 import (
@@ -121,6 +123,44 @@ const (
 	MaxFileBody = 15 << 20
 )
 
+// routeMux is the part of the request multiplexer the route registration uses.
+type routeMux interface {
+	Handle(pattern string, handler http.Handler)
+}
+
+// patternMux records every pattern it registers. A writing route is registered here, and the route
+// walk reads the record back through RegisteredPatterns.
+type patternMux struct {
+	*http.ServeMux
+	patterns []string
+}
+
+func (m *patternMux) Handle(pattern string, handler http.Handler) {
+	m.patterns = append(m.patterns, pattern)
+	m.ServeMux.Handle(pattern, handler)
+}
+
+func (m *patternMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	m.patterns = append(m.patterns, pattern)
+	m.ServeMux.HandleFunc(pattern, handler)
+}
+
+// registeredHandler is the transport's handler together with the patterns it registered.
+type registeredHandler struct {
+	http.Handler
+	patterns []string
+}
+
+// RegisteredPatterns returns the patterns New registered on handler, method included
+// ("POST /api/..."). A handler New did not return has none.
+func RegisteredPatterns(handler http.Handler) []string {
+	h, ok := handler.(*registeredHandler)
+	if !ok {
+		return nil
+	}
+	return append([]string(nil), h.patterns...)
+}
+
 // New returns the transport's handler.
 func New(cfg Config) (http.Handler, error) {
 	if cfg.EVD == nil || cfg.PTY == nil || cfg.CAT == nil || cfg.INQ == nil || cfg.POL == nil || cfg.REF == nil || cfg.SUP == nil || cfg.CST == nil || cfg.TRD == nil || cfg.PUR == nil || cfg.Verifier == nil ||
@@ -156,7 +196,7 @@ func New(cfg Config) (http.Handler, error) {
 	if cfg.AI != nil {
 		s.contexts["ai"] = aiCommands(cfg.AI)
 	}
-	mux := http.NewServeMux()
+	mux := &patternMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/", "no such route"))
 	})
@@ -252,7 +292,7 @@ func New(cfg Config) (http.Handler, error) {
 	if cfg.AI != nil {
 		s.aiRoutes(mux)
 	}
-	return s.correlated(mux), nil
+	return &registeredHandler{Handler: s.correlated(mux), patterns: append([]string(nil), mux.patterns...)}, nil
 }
 
 type server struct {
@@ -402,9 +442,13 @@ func read[V any, O any](s *server, get func(context.Context, string) (V, error),
 // timestamp formats a stored instant as RFC 3339 UTC with microseconds.
 func timestamp(t time.Time) string { return kernel.Instant(t).Format("2006-01-02T15:04:05.000000Z") }
 
-// replay answers POST /api/brant/v1/msg/dead_letters/<source>/<event_id>/replay. The letter goes
-// out again with its original event ID, so consumers deduplicate it.
+// replay answers POST /api/brant/v1/msg/dead_letters/<source>/<event_id>/replay. An AI actor is
+// refused before the replayer runs; this route does not audit its transport refusals. The letter
+// goes out again with its original event ID, so consumers deduplicate it.
 func (s *server) replay(w http.ResponseWriter, r *http.Request) {
+	if s.refuseAI(w, r, nil) {
+		return
+	}
 	res, err := s.cfg.Replayer.Replay(r.Context(), r.PathValue("source"), r.PathValue("event_id"))
 	switch {
 	case err == nil:

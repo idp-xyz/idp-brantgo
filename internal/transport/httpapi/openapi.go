@@ -55,7 +55,7 @@ func OpenAPI() ([]byte, error) {
 			if l := set.limits[n]; l.MaxBytes > int64(limit) {
 				limit, values = int(l.MaxBytes), max(l.MaxValues, values)
 			}
-			ingress := "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token."
+			ingress := "Request bodies are at most " + bytesText(limit) + " and " + strconv.Itoa(values) + " JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read."
 			body := map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"contract", "command", "idempotency_key", "args"},
 				"properties": map[string]any{
@@ -263,7 +263,7 @@ var reads = []readRoute{
 	{"/api/brant/v1/ref/country_programme_lists/{id}/versions/{version}", "ref.country_programme_list_version.get", "ref",
 		"One imported version of a country programme list with its programmes", []string{"id", "version"}, false},
 	{"/api/brant/v1/msg/dead_letters/{source}/{event_id}/replay", "msg.dead_letter.replay", "msg",
-		"Republish a dead letter with its original event ID (human holding dead_letter.replay; enabled with -replay-sink or -replay-dispatch)", []string{"source", "event_id"}, true},
+		"Republish a dead letter with its original event ID (human holding dead_letter.replay; an AI actor is refused at the transport before the replayer runs; enabled with -replay-sink or -replay-dispatch)", []string{"source", "event_id"}, true},
 }
 
 // readTextQuery names the string query parameters of a read.

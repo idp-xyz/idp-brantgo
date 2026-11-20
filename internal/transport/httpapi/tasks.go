@@ -69,7 +69,7 @@ func tskCommands(c TSK) *commandSet {
 // with their logs (action.list), an action (action.get). The claim of a task step (task.claim) has no
 // route: an HTTP client cannot carry it into a command — a person's step on a task goes through the
 // task-step route, which takes the claim itself.
-func (s *server) tskRoutes(mux *http.ServeMux) {
+func (s *server) tskRoutes(mux routeMux) {
 	mux.Handle("GET /api/brant/v1/tsk/tasks/{id}", s.authenticated(read(s, s.cfg.TSK.GetTask, okView[tskapi.TaskView])))
 	mux.Handle("GET /api/brant/v1/tsk/tasks/{id}/verifications", s.authenticated(listRead(s, s.cfg.TSK.GoalVerifications, "task_id", "verifications")))
 	mux.Handle("GET /api/brant/v1/tsk/tasks/{id}/actions", s.authenticated(listRead(s, s.cfg.TSK.TaskActions, "task_id", "actions")))
@@ -190,24 +190,31 @@ func stepReceiptOf(r execution.Receipt) stepReceipt {
 // attempt whose answer was lost is reconciled first, an intent that committed answers with its
 // result and sends nothing.
 //
-// Only people take steps here (PERMISSION_DENIED otherwise): an AI agent's steps go through the AI
-// gateway, which checks its delegation and uses its approval grants. TRD's object control commands
-// (object_control.*) are refused (PERMISSION_DENIED at /command): only TSK changes a root's control
-// (R17, D-4). A refusal before the step reaches the execution entry is audited in the owning context
-// under the command's name, as the command route audits it; the execution entry's refusals are
-// audited where they happen (TSK's claim and records, the owning context's command).
+// An AI actor is refused before the body is read, audited in the owning context when the route
+// exists and not audited when it does not (the route's other missing-route answer is not audited).
+// A system actor is still refused after the body, with this route's own words. TRD's object control
+// commands (object_control.*) are refused (PERMISSION_DENIED at /command): only TSK changes a root's
+// control (R17, D-4). A refusal before the step reaches the execution entry is audited in the owning
+// context under the command's name, as the command route audits it; the execution entry's refusals
+// are audited where they happen (TSK's claim and records, the owning context's command).
 func (s *server) taskStep(w http.ResponseWriter, r *http.Request) {
 	bc, name := r.PathValue("bc"), r.PathValue("command")
 	set, ok := s.contexts[bc]
-	if !ok || !slices.Contains(stepTargets, bc) {
+	route := ok && slices.Contains(stepTargets, bc)
+	if s.refuseAI(w, r, func(code string) error {
+		if !route {
+			return nil
+		}
+		return set.auditor.AuditRejected(r.Context(), rejectedCommand(set, name), "", code)
+	}) {
+		return
+	}
+	if !route {
 		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/", "no such route"))
 		return
 	}
-	run, known := set.commands[name]
-	audited := name
-	if !known {
-		audited = "invalid"
-	}
+	run := set.commands[name]
+	audited := rejectedCommand(set, name)
 	res, err := s.runStep(r, set, name, run)
 	if err != nil {
 		if rej, ok := kernel.AsRejection(err); ok && rej.Code != kernel.CodeUnauthenticated && !executed(err) {
@@ -252,6 +259,8 @@ func (s *server) runStep(r *http.Request, set *commandSet, name string, run comm
 	if err != nil {
 		return execution.Receipt{}, contextError(err)
 	}
+	// A system actor, and a request whose principal is missing, still stops here. An AI actor was
+	// refused before the body was read and does not reach this check.
 	if p, err := identity.FromContext(r.Context()); err != nil || p.Actor.Kind != kernel.ActorHuman {
 		return execution.Receipt{}, kernel.Reject(kernel.CodePermissionDenied, "/", "task steps here are people's; an AI agent's go through the AI gateway")
 	}
@@ -296,7 +305,7 @@ func stepOperation() map[string]any {
 		"operationId": "tsk.task.step",
 		"tags":        []string{"tsk"},
 		"summary":     "A person's step on a task through the execution entry (owner decision D-2)",
-		"description": "The command runs through internal/ai/execution: the task's claim from TSK, the attempt recorded in TSK before the command is sent, the command sent with the key of the business intent's action and, on the task's bound quote root, the task's control claim, the outcome reconciled with the owning context's ledger. The same business_intent_id is the same action and key in every attempt. People only (an AI agent's steps go through the AI gateway); object_control.* is PERMISSION_DENIED. Request bodies follow the owning command's ingress limits.",
+		"description": "The command runs through internal/ai/execution: the task's claim from TSK, the attempt recorded in TSK before the command is sent, the command sent with the key of the business intent's action and, on the task's bound quote root, the task's control claim, the outcome reconciled with the owning context's ledger. The same business_intent_id is the same action and key in every attempt. An AI actor is refused at the transport (PERMISSION_DENIED) before the body is read; a system actor is still refused after it. object_control.* is PERMISSION_DENIED. Request bodies follow the owning command's ingress limits.",
 		"parameters":  params,
 		"requestBody": body,
 		"responses":   responses,

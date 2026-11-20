@@ -28,6 +28,7 @@ This repository is the IDP Brant Go module (`go.idp.xyz/idp-brant`) plus its mas
 - An event consumer subscribes only to the events of its upstreams in the Context Map (`Subscriptions()`, checked against the allowlist), runs as its own system actor `system:inbox.<bc>.<purpose>` with the permissions `brant-admin inbox` grants, keys its command by the event ID, reads upstream state in `Prepare` before its transaction and never calls an upstream's transaction owner in the handler.
 - Migrations: a new file `migrations/<dir>/NNNNNN_<dir>_<topic>.sql`, numbered without gaps, listed in `migrations/manifest/contexts.txt`; applied files are never edited. A new directory goes into the manifest after the directories whose guards its transactions call (S5: `qlt`, `stl`, `cnx`, `ful` after `pur`; S4: `tsk` after its upstreams `trd`, `evd`, `inq`, `sup`, `cst`, and `ai` last); when two branches take the same number, the later merge renumbers its file. Grants for the application role go into `deploy/postgres/10_app_grants.sql`; every table gets FORCE RLS on `app.tenant_id` and `app.company_id`.
 - Python V0.50 is behaviour reference, not evidence: port its vectors into Go tests and cite the Python test they come from.
+- An AI actor's commands go through the AI gateway in process; every writing HTTP route refuses actor kind `ai` at the transport (PERMISSION_DENIED) before the body is read. A new writing route refuses it too; the route walk in `internal/transport/httpapi` checks it.
 
 ## The archive
 
