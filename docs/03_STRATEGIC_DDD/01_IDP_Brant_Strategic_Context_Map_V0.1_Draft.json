@@ -226,6 +226,12 @@
           "route": "—（进程内查询，POL api）",
           "permission": "—",
           "audited": false
+        },
+        {
+          "name": "pol.config.at",
+          "route": "—（进程内查询，POL api，ConfigAt v1）",
+          "permission": "—",
+          "audited": false
         }
       ],
       "invariants": [
@@ -255,7 +261,8 @@
       "commands": [
         "source.register",
         "source.use",
-        "file.register"
+        "file.register",
+        "formal_file.register"
       ],
       "facts": [
         "SourceRegistered",
@@ -278,6 +285,12 @@
         {
           "name": "evd.source.extract.get",
           "route": "GET /api/brant/v1/evd/sources/{id}/extract",
+          "permission": "evd.read",
+          "audited": true
+        },
+        {
+          "name": "file.formal.get",
+          "route": "—（进程内查询，EVD api）",
           "permission": "evd.read",
           "audited": true
         }
@@ -557,7 +570,9 @@
         "order.document.generate",
         "order.document.record_signed",
         "object_control.enter_manual",
-        "object_control.handoff"
+        "object_control.handoff",
+        "quote.risk_hold.register",
+        "order.risk.record"
       ],
       "facts": [
         "QuoteFrozen",
@@ -707,6 +722,18 @@
           "name": "trd.quote.price_proposal",
           "route": "GET /api/brant/v1/trd/rfqs/{id}/price_proposal",
           "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.order.revision.get",
+          "route": "—（进程内查询，TRD api，OrderRevisionRef v1）",
+          "permission": "—",
+          "audited": false
+        },
+        {
+          "name": "trd.order.request_checks",
+          "route": "—（进程内查询，TRD api，OrderRequestChecks；审计名 order.prepare.check 与 order.review.request.check）",
+          "permission": "—",
           "audited": true
         }
       ],
@@ -1089,7 +1116,7 @@
         "UL-INV-28"
       ],
       "boundary": "海关放行、实际离境、物流送达与客户验收是不同事实；不拥有库存（STK）与应收（STL）。",
-      "decision": "订单数量不得低于已确认出运数量；出运明细是销售结算默认来源。 S5 只支持供应商直发路线；本仓发货待 STK（S6-01）。 S5R（2026-11-13，模拟签核 E0）：出运确认留在跟单（D01）；commercial_release.evaluate 只接受 human、ai，shipment_review.open 只授予系统消费方（D29）；付款条件例外的有效期取 credit_policy 的 decision_validity_days（D09）；缺保险单答 SHIPMENT_DOCUMENTS_UNRECONCILED，合同保险比例取 trade_terms（D06）；签发时再查原产地证（D12）；单证与准备按出运绑定的订单修订读取 TRD（OrderRevisionRef v1，D35）；出运可陈述最终用户，单证打印并核对通知方（D40）；出运复核处置词汇 shipment_cancelled、replaced、reevaluated、no_action，不加改绑命令（D39）；复核暂不发布事实，TSK 需要时加 ShipmentReviewSettled（D37）。FUL 向 QLT 发布 ReleaseConsumption v1（D18）。",
+      "decision": "订单数量不得低于已确认出运数量；出运明细是销售结算默认来源。 S5 只支持供应商直发路线；本仓发货待 STK（S6-01）。 S5R（2026-11-13，模拟签核 E0）：出运确认留在跟单（D01）；commercial_release.evaluate 只接受 human、ai，shipment_review.open 只授予系统消费方（D29）；付款条件例外的有效期取 credit_policy 的 decision_validity_days（D09）；缺保险单答 SHIPMENT_DOCUMENTS_UNRECONCILED，合同保险比例取 trade_terms（D06）；签发时再查原产地证（D12）；单证与准备按出运绑定的订单修订读取 TRD（OrderRevisionRef v1，D35）；出运可陈述最终用户，单证打印并核对通知方（D40）；出运复核处置词汇 shipment_cancelled、replaced、reevaluated、no_action，不加改绑命令（D39）；复核暂不发布事实，TSK 需要时加 ShipmentReviewSettled（D37）。FUL 向 QLT 发布 ReleaseConsumption v1（D18）。FUL 向 PUR 发布 CommitmentShipped v1（PUR-INV-013 的已确认出运量，按承诺行）。",
       "legacy": "无（产品基线 F07、F25、F27）",
       "stage": "S5",
       "status": "CANDIDATE"
@@ -2642,6 +2669,18 @@
       "risk": "未登记的上下文读取或订阅参考数据（S5R-D34）",
       "contractStatus": "DESIGN",
       "guardLock": false
+    },
+    {
+      "id": "R82",
+      "frm": "FUL",
+      "to": "PUR",
+      "pattern": "OHS（事务内无锁读取）",
+      "fact": "已确认出运量，按承诺行；purchase.commitment.dispose 与 purchase.commitment.disposition.decide 在 PUR 自身事务中锁定承诺根 FOR UPDATE 后读取",
+      "contract": "CommitmentShipped v1",
+      "authority": "FUL",
+      "risk": "先读后写使已提交出运被漏看；正确的前提是 shipment.confirm 经 SupplierDeliveryGuard v2 以 FOR SHARE 持有承诺根直至提交，新的确认出运量的 FUL 命令也调用它",
+      "contractStatus": "DESIGN",
+      "guardLock": false
     }
   ],
   "platformCommands": [
@@ -3302,7 +3341,7 @@
       "classification": "交易",
       "fact_authority": "FUL",
       "write_owner": "FUL",
-      "consumers": "STL、CLM、CNX、TRD",
+      "consumers": "STL、CLM、CNX、TRD、PUR",
       "invariant": "订单数量不低于已确认出运数量",
       "forbidden": "本地出库等同海关出口确认",
       "priority": "P1"
@@ -3759,6 +3798,69 @@
         "见 S5 C4b-CNX 报告"
       ],
       "policies": "PL-14、PL-15、PL-16；idp-brant.ref 经 R81 登记（S5R-D34）"
+    },
+    {
+      "id": "trd.cost_source_holds",
+      "context": "TRD",
+      "systemActor": "system:inbox.trd.cost_source_holds",
+      "subscribes": [
+        "idp-brant.cst.cost_source_denied.v1"
+      ],
+      "permissions": [
+        "quote.risk_hold.register",
+        "order.risk.record",
+        "trd.read"
+      ],
+      "failureCodes": [
+        "trd.cost_source_denial_invalid"
+      ],
+      "policies": "PL-07；WF-03 第 4 步；S4 D-9：未形成合同的修订登记风险暂停，已生效订单只登记不阻断的风险记录"
+    },
+    {
+      "id": "tsk.task_progress",
+      "context": "TSK",
+      "systemActor": "system:inbox.tsk.task_progress",
+      "subscribes": [
+        "idp-brant.trd.quote_review_decided.v1",
+        "idp-brant.trd.quote_activated.v1",
+        "idp-brant.trd.quote_replaced.v1",
+        "idp-brant.trd.quote_approval_revoked.v1",
+        "idp-brant.trd.customer_response_recorded.v1",
+        "idp-brant.trd.acceptance_verified.v1",
+        "idp-brant.trd.order_review_decided.v1",
+        "idp-brant.trd.order_activated.v1",
+        "idp-brant.trd.order_approval_revoked.v1"
+      ],
+      "permissions": [
+        "task.resume",
+        "task.verify",
+        "tsk.read"
+      ],
+      "failureCodes": [
+        "tsk.trd_fact_invalid"
+      ],
+      "policies": "PL-04、PL-06；R18：等待中的任务在所等事实到达、目标可核验或报价批准被撤销时恢复，运行中的任务在目标可核验时开始核验"
+    },
+    {
+      "id": "evd.formal_files",
+      "context": "EVD",
+      "systemActor": "system:inbox.evd.formal_files",
+      "subscribes": [
+        "idp-brant.trd.quote_activated.v1",
+        "idp-brant.trd.quote_replaced.v1",
+        "idp-brant.trd.order_document_generated.v1"
+      ],
+      "permissions": [
+        "formal_file.register",
+        "evd.read",
+        "trd.read"
+      ],
+      "failureCodes": [
+        "evd.formal_document_event_invalid",
+        "evd.formal_document_mismatch",
+        "evd.formal_document_not_fileable"
+      ],
+      "policies": "R65；S4 D-8；IG-08：事务前重读 TRD 封存的正式文档，核对 SHA-256 后登记为业务文件"
     }
   ]
 }

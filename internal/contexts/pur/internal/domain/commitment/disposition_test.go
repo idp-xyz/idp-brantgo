@@ -1,6 +1,7 @@
 package commitment
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -28,22 +29,22 @@ func TestDispositionIsRequestedWithinTheVerifiedDeliveries(t *testing.T) {
 	verified := map[string]kernel.Decimal{"L1": q("60")}
 	lines := []string{"L1"}
 	at := now.Add(3 * time.Hour)
-	if _, err := Dispose(disposeReq("disp.1", WriteOff, "1"), requested(t, fixture()), lines, pcs, verified, nil, buyer, 7, at); code(err) != "INVALID_STATE /args/commitment_id" {
+	if _, err := Dispose(disposeReq("disp.1", WriteOff, "1"), requested(t, fixture()), lines, pcs, verified, q("0"), nil, buyer, 7, at); code(err) != "INVALID_STATE /args/commitment_id" {
 		t.Fatal(code(err))
 	}
 	other := disposeReq("disp.1", WriteOff, "1")
 	other.OrderLineID = "L9"
-	if _, err := Dispose(other, c, lines, pcs, verified, nil, buyer, 7, at); code(err) != "REFERENCE_INVALID /args/order_line_id" {
+	if _, err := Dispose(other, c, lines, pcs, verified, q("0"), nil, buyer, 7, at); code(err) != "REFERENCE_INVALID /args/order_line_id" {
 		t.Fatal(code(err))
 	}
-	if _, err := Dispose(disposeReq("disp.1", WriteOff, "61"), c, lines, pcs, verified, nil, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
+	if _, err := Dispose(disposeReq("disp.1", WriteOff, "61"), c, lines, pcs, verified, q("0"), nil, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
 		t.Fatal(code(err))
 	}
-	if _, err := Dispose(disposeReq("disp.1", WriteOff, "1"), c, lines, pcs, nil, nil, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
+	if _, err := Dispose(disposeReq("disp.1", WriteOff, "1"), c, lines, pcs, nil, q("0"), nil, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
 		t.Fatal("nothing verified delivered is disposed of: " + code(err))
 	}
 	version, status := c.RowVersion, c.Status
-	x, err := Dispose(disposeReq("disp.1", ReturnToSupplier, "40", Evidence{SourceID: "rma", Locator: "p1"}), c, lines, pcs, verified, nil, buyer, 7, at)
+	x, err := Dispose(disposeReq("disp.1", ReturnToSupplier, "40", Evidence{SourceID: "rma", Locator: "p1"}), c, lines, pcs, verified, q("0"), nil, buyer, 7, at)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,18 +57,18 @@ func TestDispositionIsRequestedWithinTheVerifiedDeliveries(t *testing.T) {
 	}
 	// 40 requested: 21 more is beyond the 60 verified; 20 fits; a rejected one holds nothing.
 	others := []*Disposition{x}
-	if _, err = Dispose(disposeReq("disp.2", WriteOff, "21"), c, lines, pcs, verified, others, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
+	if _, err = Dispose(disposeReq("disp.2", WriteOff, "21"), c, lines, pcs, verified, q("0"), others, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
 		t.Fatal(code(err))
 	}
 	x.Reject(Act{By: reviewer, At: at, Reason: "no"})
-	if _, err = Dispose(disposeReq("disp.2", WriteOff, "60"), c, lines, pcs, verified, others, buyer, 7, at); err != nil {
+	if _, err = Dispose(disposeReq("disp.2", WriteOff, "60"), c, lines, pcs, verified, q("0"), others, buyer, 7, at); err != nil {
 		t.Fatalf("a rejected disposition holds nothing: %v", err)
 	}
 	cancelled := issued(t, fixture())
 	if _, err = cancelled.Cancel(3, []LineQuantity{lineQ("100", "20")}, verified, nil, Act{By: buyer, At: at, Reason: "r"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = Dispose(disposeReq("disp.3", HoldForReuse, "60"), cancelled, lines, pcs, verified, nil, buyer, 7, at); err != nil {
+	if _, err = Dispose(disposeReq("disp.3", HoldForReuse, "60"), cancelled, lines, pcs, verified, q("0"), nil, buyer, 7, at); err != nil {
 		t.Fatalf("the goods of a cancelled commitment are disposed of: %v", err)
 	}
 }
@@ -77,7 +78,7 @@ func TestDispositionIsRequestedWithinTheVerifiedDeliveries(t *testing.T) {
 func TestDispositionAnswer(t *testing.T) {
 	c := issued(t, fixture())
 	r := disposeReq("disp.1", WriteOff, "10")
-	x, err := Dispose(r, c, []string{"L1"}, pcs, map[string]kernel.Decimal{"L1": q("60")}, nil, buyer, 7, now)
+	x, err := Dispose(r, c, []string{"L1"}, pcs, map[string]kernel.Decimal{"L1": q("60")}, q("0"), nil, buyer, 7, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,7 @@ func TestDispositionAnswer(t *testing.T) {
 func TestDispositionIsDecidedIndependentlyOnce(t *testing.T) {
 	c := issued(t, fixture())
 	verified := map[string]kernel.Decimal{"L1": q("60")}
-	x, err := Dispose(disposeReq("disp.1", WriteOff, "40"), c, []string{"L1"}, pcs, verified, nil, buyer, 7, now)
+	x, err := Dispose(disposeReq("disp.1", WriteOff, "40"), c, []string{"L1"}, pcs, verified, q("0"), nil, buyer, 7, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,13 +117,13 @@ func TestDispositionIsDecidedIndependentlyOnce(t *testing.T) {
 	}
 	approvedOther := &Disposition{ID: "disp.0", OrderLineID: "L1", Status: DispositionApproved, Quantity: q("30")}
 	act := Act{By: reviewer, Epoch: 8, At: now.Add(time.Hour)}
-	if got := code(x.Approve(q("60"), []*Disposition{approvedOther, x}, act)); got != "INVALID_KNOWN_VALUE /disposition/quantity" {
+	if got := code(x.Approve(q("60"), q("0"), []*Disposition{approvedOther, x}, act)); got != "INVALID_KNOWN_VALUE /disposition/quantity" {
 		t.Fatal(got)
 	}
-	if got := code(x.Approve(q("39"), nil, act)); got != "INVALID_KNOWN_VALUE /disposition/quantity" {
+	if got := code(x.Approve(q("39"), q("0"), nil, act)); got != "INVALID_KNOWN_VALUE /disposition/quantity" {
 		t.Fatal("a correction since the request: " + got)
 	}
-	if err = x.Approve(q("70"), []*Disposition{approvedOther, x}, act); err != nil {
+	if err = x.Approve(q("70"), q("0"), []*Disposition{approvedOther, x}, act); err != nil {
 		t.Fatal(err)
 	}
 	if x.Status != DispositionApproved || x.RowVersion != 2 || x.Decision == nil || !x.Decision.Approve || x.Decision.By != reviewer {
@@ -139,16 +140,83 @@ func TestDispositionIsDecidedIndependentlyOnce(t *testing.T) {
 	if Undercut(xs, map[string]kernel.Decimal{"L1": q("69")}, []string{"L1"}) != "L1" || Undercut(xs, map[string]kernel.Decimal{"L1": q("70")}, []string{"L1"}) != "" {
 		t.Fatal("undercut")
 	}
-	ret, err := Dispose(disposeReq("disp.2", ReturnToSupplier, "1"), c, []string{"L1"}, pcs, map[string]kernel.Decimal{"L1": q("100")}, nil, buyer, 7, now)
+	ret, err := Dispose(disposeReq("disp.2", ReturnToSupplier, "1"), c, []string{"L1"}, pcs, map[string]kernel.Decimal{"L1": q("100")}, q("0"), nil, buyer, 7, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := code(ret.Approve(q("100"), nil, act)); got != "INVALID_STATE /disposition/evidence" {
+	if got := code(ret.Approve(q("100"), q("0"), nil, act)); got != "INVALID_STATE /disposition/evidence" {
 		t.Fatal("a return to the supplier cites its evidence: " + got)
 	}
 	ret.Reject(Act{By: reviewer, At: now.Add(time.Hour), Reason: "no evidence"})
 	if ret.Status != DispositionRejected || ret.RowVersion != 2 || ret.Decision.Approve || ret.Decision.Reason != "no evidence" {
 		t.Fatalf("rejected %+v", ret)
+	}
+}
+
+func rejectionReason(err error) string {
+	if r, ok := kernel.AsRejection(err); ok && len(r.Fields) > 0 {
+		return r.Fields[0].Reason
+	}
+	return ""
+}
+
+// PUR-INV-013, the shipped half (R82 CommitmentShipped v1): a line's dispositions stay within verified
+// less what that commitment line shipped. Equal to the room is allowed, one unit over is refused, and
+// the reason names verified, shipped and what is already disposed. Nothing shipped leaves today's
+// vectors: 60 of 60 is allowed and 61 is refused. At a request, other requested and approved
+// dispositions hold room; at a decision, only other approved ones do.
+func TestDispositionIsBoundedByVerifiedLessShipped(t *testing.T) {
+	c := issued(t, fixture())
+	verified := map[string]kernel.Decimal{"L1": q("100")}
+	lines := []string{"L1"}
+	at := now
+	if _, err := Dispose(disposeReq("disp.full", WriteOff, "60"), c, lines, pcs, map[string]kernel.Decimal{"L1": q("60")}, q("0"), nil, buyer, 7, at); err != nil {
+		t.Fatal("nothing shipped, today's bound: " + code(err))
+	}
+	if _, err := Dispose(disposeReq("disp.over", WriteOff, "61"), c, lines, pcs, map[string]kernel.Decimal{"L1": q("60")}, q("0"), nil, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
+		t.Fatal(code(err))
+	}
+	shipped := q("60")
+	if _, err := Dispose(disposeReq("disp.edge", WriteOff, "40"), c, lines, pcs, verified, shipped, nil, buyer, 7, at); err != nil {
+		t.Fatal("40 equals 100 verified less 60 shipped: " + code(err))
+	}
+	_, err := Dispose(disposeReq("disp.one", WriteOff, "41"), c, lines, pcs, verified, shipped, nil, buyer, 7, at)
+	if code(err) != "INVALID_KNOWN_VALUE /args/quantity" || !strings.Contains(rejectionReason(err), "verified delivered 100") ||
+		!strings.Contains(rejectionReason(err), "60 of it shipped") || !strings.Contains(rejectionReason(err), "0 of it approved or requested") {
+		t.Fatalf("%s (%s)", code(err), rejectionReason(err))
+	}
+	requested := &Disposition{ID: "disp.req", OrderLineID: "L1", Status: DispositionRequested, Quantity: q("10")}
+	approved := &Disposition{ID: "disp.app", OrderLineID: "L1", Status: DispositionApproved, Quantity: q("10")}
+	otherLine := &Disposition{ID: "disp.other", OrderLineID: "L2", Status: DispositionApproved, Quantity: q("90")}
+	if _, err = Dispose(disposeReq("disp.room", WriteOff, "20"), c, lines, pcs, verified, shipped, []*Disposition{requested, approved, otherLine}, buyer, 7, at); err != nil {
+		t.Fatal("20 with 10 requested and 10 approved, another line ignored: " + code(err))
+	}
+	if _, err = Dispose(disposeReq("disp.room2", WriteOff, "21"), c, lines, pcs, verified, shipped, []*Disposition{requested, approved}, buyer, 7, at); code(err) != "INVALID_KNOWN_VALUE /args/quantity" {
+		t.Fatal(code(err))
+	}
+
+	asked, err := Dispose(disposeReq("disp.decide", WriteOff, "30"), c, lines, pcs, verified, q("0"), nil, buyer, 7, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	act := Act{By: reviewer, Epoch: 8, At: at}
+	// The request was within the room then. At the decision, 60 have shipped and another 10 are approved:
+	// 30 equals the 30 left, and the requested neighbour does not hold room.
+	if err = asked.Approve(q("100"), shipped, []*Disposition{approved, requested}, act); err != nil {
+		t.Fatal("a decision counts approved dispositions only: " + code(err))
+	}
+	over, err := Dispose(disposeReq("disp.decide2", WriteOff, "31"), c, lines, pcs, verified, q("0"), nil, buyer, 7, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = over.Approve(q("100"), shipped, []*Disposition{approved}, act)
+	if code(err) != "INVALID_KNOWN_VALUE /disposition/quantity" || !strings.Contains(rejectionReason(err), "60 of it shipped") ||
+		!strings.Contains(rejectionReason(err), "10 of it approved") {
+		t.Fatalf("%s (%s)", code(err), rejectionReason(err))
+	}
+	if got := ShippedOf([]LineShipped{{OrderLineID: "L1", Quantity: q("40")}, {OrderLineID: "L1", UnitID: "PCS", Quantity: q("20")},
+		{OrderLineID: "L9", Quantity: q("100")}}, "L1"); !got.Equal(q("60")) {
+		t.Fatalf("shipped of the line %s", got)
 	}
 }
 

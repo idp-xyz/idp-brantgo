@@ -34,6 +34,52 @@ var ErrUnavailable = errors.New("model: unavailable")
 // ErrInvalidRequest is a request the port refuses to send.
 var ErrInvalidRequest = errors.New("model: invalid request")
 
+// Transport words of a model call that got no HTTP answer. They are fixed words of the
+// failure, not text the service sent.
+const (
+	TransportTimeout = "timeout"
+	TransportRefused = "connection_refused"
+	TransportReset   = "connection_reset"
+	TransportOther   = "other"
+)
+
+// CallFacts is what a failed model call may record about the service. Status is the HTTP
+// status, or 0 when the service gave no HTTP answer. Type and Code are the error type and
+// code from an HTTP error body, bounded, never the service's message. Transport is empty
+// when an HTTP answer arrived, and otherwise one of the Transport words.
+type CallFacts struct {
+	Status    int
+	Type      string
+	Code      string
+	Transport string
+}
+
+// CallError is a failed model call. It wraps ErrUnavailable or ErrInvalidRequest (so the
+// runner's classification and retries are unchanged) and carries CallFacts. Its text is the
+// wrapped error's text.
+type CallError struct {
+	Err   error
+	Facts CallFacts
+}
+
+func (e *CallError) Error() string {
+	if e == nil || e.Err == nil {
+		return "model: call failed"
+	}
+	return e.Err.Error()
+}
+
+func (e *CallError) Unwrap() error { return e.Err }
+
+// FactsOf returns the CallFacts err carries.
+func FactsOf(err error) (CallFacts, bool) {
+	var ce *CallError
+	if !errors.As(err, &ce) || ce == nil {
+		return CallFacts{}, false
+	}
+	return ce.Facts, true
+}
+
 // Role is the author of a message.
 type Role string
 

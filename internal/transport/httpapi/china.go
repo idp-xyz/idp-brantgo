@@ -108,7 +108,7 @@ var cnxReads = []readRoute{
 }
 
 // cnxRoutes registers CNX's reads.
-func (s *server) cnxRoutes(mux *http.ServeMux) {
+func (s *server) cnxRoutes(mux routeMux) {
 	mux.Handle("GET /api/brant/v1/cnx/trade_compliance_checks/{id}", s.authenticated(read(s, s.cfg.CNX.GetCheck, okView[cnxapi.CheckView])))
 	mux.Handle("GET /api/brant/v1/cnx/orders/{id}/trade_compliance", s.authenticated(s.orderComplianceChecks))
 	mux.Handle("GET /api/brant/v1/cnx/regulations/{id}/trade_compliance", s.authenticated(s.regulationComplianceChecks))

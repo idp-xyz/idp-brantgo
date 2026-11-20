@@ -32,9 +32,11 @@ import (
 // The reproduction of C3's gap over HTTP with OIDC access tokens: the Q01 AI execution identity
 // (role template ai_q01_agent, which holds order.prepare and order.review.request) calls both
 // commands on the plain command route POST /api/brant/v1/trd/commands/... on a root no task binds,
-// without a grant. Both are PERMISSION_DENIED and audited in TRD; nothing is written. The agent
-// fares no better through TRD's Go api, nor does an AI actor holding the permissions outright. The
-// sales clerk then prepares the order and requests its review over the same routes.
+// without a grant. Both are PERMISSION_DENIED. F2 refuses them at the transport, before the body is
+// read, so the audit object id is empty. The ledger's own refusal, with the order as its object, is
+// what the Go api still reaches. The agent fares no better through TRD's Go api, nor does an AI
+// actor holding the permissions outright. The sales clerk then prepares the order and requests its
+// review over the same routes.
 func TestAIAgentCannotSkipTheApprovalGrantOnThePlainRoutes(t *testing.T) {
 	q := newOrderWorld(t)
 	_, acc := q.accepted("quote.1")
@@ -59,19 +61,19 @@ func TestAIAgentCannotSkipTheApprovalGrantOnThePlainRoutes(t *testing.T) {
 		"business_hash": acc.BusinessHash, "acceptance_id": acc.ObjectID}
 	request := map[string]any{"order_id": draft.ObjectID, "expected_version": 1, "review_id": "review.f1"}
 	for _, c := range []struct {
-		command, object string
-		args            map[string]any
+		command string
+		args    map[string]any
 	}{
-		{trdapi.CommandPrepareOrder, "order.f1", prepare},
-		{trdapi.CommandRequestOrderReview, draft.ObjectID, request},
+		{trdapi.CommandPrepareOrder, prepare},
+		{trdapi.CommandRequestOrderReview, request},
 	} {
 		status, out := agent.try("trd", trdapi.Contract, c.command, c.args)
 		t.Logf("ai_q01_agent %s on the plain route without a grant: %d %v", c.command, status, out)
 		if status != http.StatusForbidden || out["code"] != kernel.CodePermissionDenied {
 			t.Errorf("%s: %d %v, want 403 PERMISSION_DENIED", c.command, status, out)
 		}
-		if !q.audited(c.command, c.object, "rejected", kernel.CodePermissionDenied) {
-			t.Errorf("%s: TRD did not audit the refusal", c.command)
+		if !q.audited(c.command, "", "rejected", kernel.CodePermissionDenied) {
+			t.Errorf("%s: the transport did not audit the refusal with an empty object id", c.command)
 		}
 	}
 	if _, err = q.c.TRD.GetOrder(q.author, "order.f1"); code(err) != kernel.CodeNotFound {
@@ -94,6 +96,16 @@ func TestAIAgentCannotSkipTheApprovalGrantOnThePlainRoutes(t *testing.T) {
 		_, err = q.c.TRD.RequestOrderReview(ctx, q.requestCmd(draft.ObjectID, 1, "review.f1"))
 		if code(err) != kernel.CodePermissionDenied {
 			t.Errorf("%s: order.review.request through the api: %v", name, err)
+		}
+	}
+	// The ledger, not the transport, audits these: the Go api reaches aigrant.Check, which records
+	// the order. The plain route never gets that far, so its audit object id is empty.
+	for _, c := range []struct{ command, object string }{
+		{trdapi.CommandPrepareOrder, "order.f1"},
+		{trdapi.CommandRequestOrderReview, draft.ObjectID},
+	} {
+		if !q.audited(c.command, c.object, "rejected", kernel.CodePermissionDenied) {
+			t.Errorf("%s: the ledger did not audit the in-process refusal on %s", c.command, c.object)
 		}
 	}
 

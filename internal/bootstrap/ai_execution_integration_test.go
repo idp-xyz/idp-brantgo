@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -369,6 +370,142 @@ func TestAgentRunnerPausesAtItsBudget(t *testing.T) {
 	if res = w.turnOn(r, "task.down"); res.ModelCalls != 0 || res.Skipped != "not an AI task of this agent" || down.Remaining() != 1 {
 		t.Fatalf("turn on a manual task %+v", res)
 	}
+}
+
+// A failed model call is one worker log line and one trace field, and nothing else about it
+// changes: an unavailable call is still retried and pauses with the retry text, a deadline is
+// still state unknown and retried, a refused request is still not retried and pauses with the
+// refusal text, and the ledger's states and codes stay what they were. The planted secret is in
+// the error's text and in none of the log or the trace.
+func TestAgentRunnerRecordsAFailedModelCall(t *testing.T) {
+	w := newAgentWorld(t, false)
+	const planted = "sk-planted-not-a-real-key-9c2e"
+	down := &model.CallError{Err: model.ErrUnavailable, Facts: model.CallFacts{Transport: model.TransportRefused}}
+	steps := []model.Step{{Err: down}, {Err: down}, {Err: down}, {Err: down}}
+	m := model.NewScripted("scripted-q01-v1", steps...)
+	r := w.runner(m)
+	var downLog bytes.Buffer
+	r.Logger = slog.New(slog.NewTextHandler(&downLog, nil))
+	w.aiTask("task.downlog", tskapi.GoalQuoteReady, tskapi.Target{CustomerID: "customer.1"}, budgetOf(10, 2), bundleRef(r), evdapi.CommandRegisterSource)
+	res := w.turnOn(r, "task.downlog")
+	if res.Paused != tskapi.PauseModelUnavailable || res.ModelCalls != 3 || m.Remaining() != 1 {
+		t.Fatalf("turn %+v, %d steps left", res, m.Remaining())
+	}
+	v := w.taskView("task.downlog")
+	if v.Pause == nil || !strings.Contains(v.Pause.Reason, "still unavailable when the retries of the budget were used") ||
+		!strings.Contains(v.Pause.Reason, "TOOL_UNAVAILABLE") {
+		t.Fatalf("pause %+v", v.Pause)
+	}
+	var retries []bool
+	for _, c := range w.ledger("task.downlog") {
+		if c.State != executionevidence.StateUnavailable || c.Code != "TOOL_UNAVAILABLE" {
+			t.Fatalf("call %+v", c)
+		}
+		retries = append(retries, c.Retry)
+	}
+	if fmt.Sprint(retries) != "[false true true]" {
+		t.Fatalf("retries %v", retries)
+	}
+	if strings.Count(downLog.String(), `msg="model call failed"`) != 3 ||
+		strings.Count(downLog.String(), "class=unavailable") != 3 ||
+		strings.Count(downLog.String(), "http_status=0") != 3 ||
+		strings.Count(downLog.String(), "transport="+model.TransportRefused) != 3 {
+		t.Fatalf("unavailable log:\n%s", downLog.String())
+	}
+
+	refused := &model.CallError{Err: fmt.Errorf("%w: status 404 not_found_error (%s)", model.ErrInvalidRequest, planted),
+		Facts: model.CallFacts{Status: 404, Type: "not_found_error", Code: "model_not_found"}}
+	traceDir := t.TempDir()
+	td, err := execution.NewTraceDir(traceDir)
+	w.must(err)
+	m = model.NewScripted("scripted-q01-v1", model.Step{Err: refused})
+	r = w.runner(m)
+	var refusedLog bytes.Buffer
+	r.Logger = slog.New(slog.NewTextHandler(&refusedLog, nil))
+	r.Trace = td
+	w.aiTask("task.refused", tskapi.GoalQuoteReady, tskapi.Target{CustomerID: "customer.1"}, budgetOf(10, 2), bundleRef(r), evdapi.CommandRegisterSource)
+	res = w.turnOn(r, "task.refused")
+	if res.Paused != tskapi.PauseModelUnavailable || res.ModelCalls != 1 || m.Remaining() != 0 {
+		t.Fatalf("turn %+v, %d steps left", res, m.Remaining())
+	}
+	v = w.taskView("task.refused")
+	if v.Pause == nil || !strings.Contains(v.Pause.Reason, "the model refused or broke the request") || strings.Contains(v.Pause.Reason, planted) {
+		t.Fatalf("pause %+v", v.Pause)
+	}
+	calls := w.ledger("task.refused")
+	if len(calls) != 1 || calls[0].State != executionevidence.StateFailed || calls[0].Code != "TOOL_UNAVAILABLE" || calls[0].Retry ||
+		calls[0].Cost == nil || !calls[0].Cost.IsZero() {
+		t.Fatalf("ledger %+v", calls)
+	}
+	line := refusedLog.String()
+	if strings.Count(line, `msg="model call failed"`) != 1 || !strings.Contains(line, "class=refused") ||
+		!strings.Contains(line, "http_status=404") || !strings.Contains(line, "error_type=not_found_error") ||
+		!strings.Contains(line, "error_code=model_not_found") || strings.Contains(line, planted) || strings.Contains(line, "chat/completions") {
+		t.Fatalf("refused log:\n%s", line)
+	}
+	raw, recs := traceModelErrors(t, traceDir)
+	if strings.Contains(raw, planted) || len(recs) != 1 || recs[0]["class"] != "refused" || recs[0]["http_status"] != float64(404) ||
+		recs[0]["transport"] != "" || recs[0]["retry"] != false {
+		t.Fatalf("trace %v\n%s", recs, raw)
+	}
+
+	timed := &model.CallError{Err: fmt.Errorf("%w: %w", model.ErrUnavailable, context.DeadlineExceeded),
+		Facts: model.CallFacts{Transport: model.TransportTimeout}}
+	m = model.NewScripted("scripted-q01-v1", model.Step{Err: timed}, done("没有可做的事。"))
+	r = w.runner(m)
+	var timeLog bytes.Buffer
+	r.Logger = slog.New(slog.NewTextHandler(&timeLog, nil))
+	w.aiTask("task.timeout", tskapi.GoalQuoteReady, tskapi.Target{CustomerID: "customer.1"}, budgetOf(10, 2), bundleRef(r), evdapi.CommandRegisterSource)
+	res = w.turnOn(r, "task.timeout")
+	if res.Paused != "" || res.ModelCalls != 2 || res.Lifecycle != tskapi.StateWaitingInput {
+		t.Fatalf("turn %+v", res)
+	}
+	var states []string
+	for _, c := range w.ledger("task.timeout") {
+		if c.Kind == executionevidence.KindModel {
+			states = append(states, c.State+"/"+fmt.Sprint(c.Retry))
+		}
+	}
+	if fmt.Sprint(states) != "[unknown/false succeeded/true]" {
+		t.Fatalf("model calls %v", states)
+	}
+	if strings.Count(timeLog.String(), `msg="model call failed"`) != 1 || !strings.Contains(timeLog.String(), "class=timeout") ||
+		!strings.Contains(timeLog.String(), "http_status=0") || !strings.Contains(timeLog.String(), "transport="+model.TransportTimeout) {
+		t.Fatalf("timeout log:\n%s", timeLog.String())
+	}
+}
+
+func traceModelErrors(t *testing.T, dir string) (string, []map[string]any) {
+	t.Helper()
+	var raw strings.Builder
+	var out []map[string]any
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		raw.Write(b)
+		for _, line := range strings.Split(strings.TrimSuffix(string(b), "\n"), "\n") {
+			if line == "" {
+				continue
+			}
+			var rec map[string]any
+			if err = json.Unmarshal([]byte(line), &rec); err != nil {
+				t.Fatalf("%v in %s", err, line)
+			}
+			if rec["record"] == "model_error" {
+				out = append(out, rec)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw.String(), out
 }
 
 // CT14 and Q01 V0.1 tests/test_execution.py::test_incompatible_persisted_bundle_stops_actions

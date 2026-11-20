@@ -337,16 +337,14 @@ func (s *s5sc) dispose(d *s5scDeal, id, quantity string) {
 
 // S5R-D05 (PUR-INV-013, TRD-INV-019, FUL-INV-003): an order whose delivered goods are written off
 // cancels, and a shipment that still needs those goods is refused. On a second order the shipment
-// confirms first and the write-off is still approved — PUR does not see what FUL shipped (R13's gap) —
-// and nothing further ships.
+// confirms first: a write-off of 50 of the 40 left (100 verified, 60 shipped) is refused, a write-off
+// of 40 is taken and approved, and nothing further ships (R82, CommitmentShipped v1).
 func TestS5R12D05DispositionAndTheShipmentOverHTTP(t *testing.T) {
-	s := newS5SC(t, s5scMeta{ID: "S5R-D05", Title: "S5R-D05: a write-off lets the order cancel and refuses the shipment; a confirmation that commits first still leaves the approval standing",
-		Design:    []string{"S5R-D05", "PUR-INV-013", "TRD-INV-019", "FUL-INV-003", "R59"},
-		RestsOn:   []string{"R4", "R13"},
-		UnitTests: []string{"TestS5RD05DisposedGoodsNeverShipWhileTheOrderIsActive (R13)", "TestS5RD05ConfirmationFirstMakesTheApprovalWait (R13)"},
-		Deviations: []string{
-			"The confirmation-first gap R13 reports is shown, not closed: after shipment.gap of 60 committed, PUR approved a write-off of 50 of the 100 verified. PUR reads no shipment.",
-		}})
+	s := newS5SC(t, s5scMeta{ID: "S5R-D05", Title: "S5R-D05: a write-off lets the order cancel and refuses the shipment; after 60 shipped a write-off of 50 is refused and one of 40 is approved",
+		Design:    []string{"S5R-D05", "PUR-INV-013", "TRD-INV-019", "FUL-INV-003", "R59", "R82"},
+		RestsOn:   []string{"R4", "R13", "R14"},
+		UnitTests: []string{"TestS5RD05DisposedGoodsNeverShipWhileTheOrderIsActive (R13)", "TestS5RD05ConfirmationFirstMakesTheApprovalWait (R14)"},
+	})
 	s.dealFoundation(s5scUSDTenant("ST01.red.S"))
 	cancel := &s5scDeal{id: "can", lines: []s5scLine{{"L1", "ST01.red.S", "40", "8.00", "5.00"}}, consignee: "cons.de", freight: "10.00"}
 	s.form(cancel)
@@ -384,10 +382,19 @@ func TestS5R12D05DispositionAndTheShipmentOverHTTP(t *testing.T) {
 	s.inspect(gap, nil)
 	s.deliver(gap, "delivery.gap", [][2]string{{"L1", "100"}}, [][2]string{{"L1", "100"}})
 	s.ship(gap, "shipment.gap", [][2]string{{"L1", "60"}})
-	s.dispose(gap, "disp.gap", "50")
-	s.figure("approval_after_confirmation", "approved 50 after 60 shipped")
-	status, out = s.prepareOn(gap, "shipment.gap2", [][2]string{{"L1", "1"}})
+	status, out = s.post(brcPurchaser, "pur", purapi.Contract, purapi.CommandDisposeCommitment, map[string]any{"disposition_id": "disp.gap",
+		"commitment_id": gap.commitment, "order_line_id": "L1", "disposition": purapi.DispositionWriteOff, "quantity": "50",
+		"reason": "已交付未出运的货物转作核销（合成，S5R-D05）"})
 	reason := brcStr(brcDig(out, "field_errors", 0, "reason"))
+	s.want("request_after_confirmation", fmt.Sprint(status, " ", out["code"], " ", brcDig(out, "field_errors", 0, "path")),
+		"422 "+kernel.CodeInvalidKnownValue+" /args/quantity")
+	if !strings.Contains(reason, "100") || !strings.Contains(reason, "60") || !strings.Contains(reason, "shipped") {
+		t.Fatalf("the refusal names verified and shipped: %s", reason)
+	}
+	s.dispose(gap, "disp.fit", "40")
+	s.figure("approval_after_confirmation", "approved 40 after 60 shipped")
+	status, out = s.prepareOn(gap, "shipment.gap2", [][2]string{{"L1", "1"}})
+	reason = brcStr(brcDig(out, "field_errors", 0, "reason"))
 	if status != http.StatusUnprocessableEntity && status != http.StatusConflict || out["code"] != fulapi.CodeSupplierDeliveryInsufficient || !strings.Contains(reason, "60") {
 		t.Fatalf("after the approval %d %v", status, out)
 	}

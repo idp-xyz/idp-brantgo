@@ -91,7 +91,7 @@ var fulReads = []readRoute{
 }
 
 // fulRoutes registers FUL's reads.
-func (s *server) fulRoutes(mux *http.ServeMux) {
+func (s *server) fulRoutes(mux routeMux) {
 	mux.Handle("GET /api/brant/v1/ful/shipments/{id}", s.authenticated(read(s, s.cfg.FUL.GetShipment, okView[fulapi.ShipmentView])))
 	mux.Handle("GET /api/brant/v1/ful/orders/{id}/fulfilment", s.authenticated(read(s, s.cfg.FUL.GetFulfilment, okView[fulapi.FulfilmentView])))
 	mux.Handle("GET /api/brant/v1/ful/milestone_plans/{id}", s.authenticated(read(s, s.cfg.FUL.GetMilestonePlan, okView[fulapi.MilestonePlanView])))

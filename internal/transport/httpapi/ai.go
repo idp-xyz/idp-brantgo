@@ -107,7 +107,7 @@ func aiCommands(c AI) *commandSet {
 // its agent or a reader whose data scope covers its initiator), an approval grant, a task's model and
 // tool calls (for a reader who sees the task in TSK), a recorded ExecutionBundle; and the task-step
 // route, a person's step on a task through the execution entry.
-func (s *server) aiRoutes(mux *http.ServeMux) {
+func (s *server) aiRoutes(mux routeMux) {
 	mux.Handle("GET /api/brant/v1/ai/delegations/{id}", s.authenticated(read(s, s.cfg.AI.GetDelegation, okView[policy.Delegation])))
 	mux.Handle("GET /api/brant/v1/ai/delegations/{id}/approval_grants", s.authenticated(listRead(s, s.cfg.AI.ApprovalGrantsOf, "delegation_id",
 		"approval_grants")))

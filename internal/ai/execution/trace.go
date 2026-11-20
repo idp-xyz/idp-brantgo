@@ -48,7 +48,8 @@ const traceRedacted = "[REDACTED]"
 //	             runner rebuilt it inside the turn (a file source was registered)
 //	model_reply  one model call's answer: text, tool calls with their arguments, finish reason,
 //	             tokens, the model ID as returned
-//	model_error  a model call that did not answer: its class (unavailable, timeout, refused), no text
+//	model_error  a model call that did not answer: its class (unavailable, timeout, refused),
+//	             the HTTP status (0 when there was none) and the transport word, no text
 //	tool_result  what a tool call returned to the model, exactly: the receipt, the read or the
 //	             refusal's code and path
 //	tool_wait    a tool call that made the task wait for an approval grant (nothing went back)
@@ -258,13 +259,14 @@ func (t *turnTrace) reply(at time.Time, resp model.Response, latency time.Durati
 		"content": resp.Message.Content, "tool_calls": calls})
 }
 
-// modelError records a model call that did not answer, by class only.
-func (t *turnTrace) modelError(at time.Time, class string, retry bool) {
+// modelError records a model call that did not answer, by class, with the HTTP status (0 when the
+// service gave no answer) and the transport word. Neither is text the service sent.
+func (t *turnTrace) modelError(at time.Time, class string, retry bool, status int, transport string) {
 	if t == nil {
 		return
 	}
 	t.step++
-	t.write(at, "model_error", map[string]any{"step": t.step, "class": class, "retry": retry})
+	t.write(at, "model_error", map[string]any{"step": t.step, "class": class, "retry": retry, "http_status": status, "transport": transport})
 }
 
 // toolResult records what a tool call returned to the model.

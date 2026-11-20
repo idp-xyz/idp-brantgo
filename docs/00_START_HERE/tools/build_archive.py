@@ -28,7 +28,7 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.9"
+ARCHIVE_VERSION = "1.10"
 ARCHIVE_DATE = "2026-11-20"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
@@ -39,6 +39,8 @@ S3_EVIDENCE = "09_IMPLEMENTATION_PLAN/09_S3_EVIDENCE"
 S5_EVIDENCE = "09_IMPLEMENTATION_PLAN/13_S5_EVIDENCE"
 # S4 (with the S5R revision round that ran inside it) is archive V1.9: page 09e → 10_…S4_Execution_Report, evidence folder 11.
 S4_EVIDENCE = "09_IMPLEMENTATION_PLAN/11_S4_EVIDENCE"
+# V1.10 (2026-11-20 follow-up): a newer source snapshot beside the V1.9 file, which stays the record of that date.
+S4_FOLLOWUP_EVIDENCE = S4_EVIDENCE + "/10_followup_20261120"
 M0_EVIDENCE_FILES = [
     "README.md", "01_environment.json", "02_go_source_manifest.txt", "03_make_ci_go1.26.5.txt", "04_make_ci_go1.26.8.txt",
     "05_integration_verbose_go1.26.5.txt", "06_kernel_fuzz.txt", "07_migrate_first_run.txt", "08_migrate_second_run.txt",
@@ -73,6 +75,13 @@ S4_EVIDENCE_FILES = [
     "07_evaluation_runs/live-20261119T103137Z/trials/normal-1/trial.json",
     "08_s5r_regression/README.md", "08_s5r_regression/s5r_scenarios.json", "08_s5r_regression/d1_chain/compare.txt",
     "09_d2_eer_live/README.md",
+    "10_followup_20261120/README.md", "10_followup_20261120/02_go_source_manifest.txt",
+    "10_followup_20261120/03_make_check.txt", "10_followup_20261120/04_gates.md",
+    "10_followup_20261120/05_live-20261120T054323Z/report.json",
+    "10_followup_20261120/05_live-20261120T054323Z/summary.md",
+    "10_followup_20261120/06_scenarios/README.md",
+    "10_followup_20261120/07_live-20261120T122849Z/report.json",
+    "10_followup_20261120/07_live-20261120T122849Z/summary.md",
 ]
 # Spike outcomes the M0 report states; the build fails if the evidence says otherwise.
 SPIKE_EXPECTED = {
@@ -1470,6 +1479,7 @@ def write_registry(pages: list[str]) -> None:
             "V1.7 S3 完成：TRD 报价、审核与毛利例外、正式化、客户接受与合同成立、外销订单与订单变更、适用法律；PUR 采购草稿与需求分配；BRC-001 全链在 PostgreSQL 16 上经 HTTP 重放（报价 960.00、订单 960.00、草稿 600.00）。",
             "V1.8 S5 完成（先于 S4，负责人决定 2026-11-12）：新建 QLT、STL、CNX、FUL 四个上下文，扩展 PUR、TRD、CAT、POL、PTY 与参考数据；STL 信用守卫与 CNX 贸易合规守卫接入订单生效；S4-06a Inbox 分发；BRC-001 经 HTTP 从订单走到结算、核销与中国资料（结果 300.00 USD，31.25 %）；容量与恢复演练在 WSL2 上实测；G3、G4 按负责人决定记为模拟 NO-GO。",
             "V1.9 S4 与 S5R 完成（2026-11-20）：新建 TSK 上下文与 internal/ai（schema brant_ai）：任务生命周期与控制模式、动作执行与对账、能力网关、委托与批准授权、执行器与代理运行器、预算、模型适配、受限文件抽取与来源定位、EER 与 BIP 适配、Inbox 消费方；S5R 的 47 项模拟签核决定由单元 R1—R13 落实；Q01 评测套件脚本化 70／70，本地模型上的真实试次只有正常家族一个家族 4／4，其余 13 个家族未做真实试次；G2 按负责人决定记为模拟 NO-GO。",
+            "V1.10 S4 后续轮（2026-11-20）：登记 ADR-BR-IMP-003 与模拟评审 SR-86；三个 S4 消费方与它们的系统命令、类 (i) 的目录行、关系 82；F2 与 R14 写回。全量真实运行 live-20261120T054323Z 在 74743b8 上 70 次试次 15 次通过，40 次实质上没有执行；没有把其余家族记成真实通过。L1 已合并（ad704e3）。224ffcf 上的重跑 live-20261120T122849Z 跑完：45 次里 35 次通过，0 次未执行；an01 与 an03 为 0／5。被停止的 live-20261120T120042Z 不作为完成的运行。G2 仍是模拟 NO-GO。",
             "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4 仍为 NO-GO；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考。",
         ],
@@ -1678,7 +1688,7 @@ def validate(pages: list[str]) -> list[dict]:
     # Evidence was produced from the sources listed in the manifest; code that changed since then needs new evidence.
     # The latest evidence snapshot is the one the current code must match: S4 (with S5R), else S5, else S3, else S2, else S1, else M0.
     drift = []
-    manifest = next((DOCS / e / "02_go_source_manifest.txt" for e in (S4_EVIDENCE, S5_EVIDENCE, S3_EVIDENCE, S2_EVIDENCE, S1_EVIDENCE, M0_EVIDENCE)
+    manifest = next((DOCS / e / "02_go_source_manifest.txt" for e in (S4_FOLLOWUP_EVIDENCE, S4_EVIDENCE, S5_EVIDENCE, S3_EVIDENCE, S2_EVIDENCE, S1_EVIDENCE, M0_EVIDENCE)
                      if (DOCS / e / "02_go_source_manifest.txt").exists()), DOCS / M0_EVIDENCE / "02_go_source_manifest.txt")
     if manifest.exists():
         for ln in manifest.read_text(encoding="utf-8").splitlines():

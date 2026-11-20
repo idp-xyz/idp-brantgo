@@ -49,7 +49,7 @@ func (t *trial) draftRFQ(ctx context.Context, lines []agentLine, more ...scriptS
 		return err
 	}
 	if t.countActions(ctx, "rfq.save_draft") < 1 {
-		return &phaseError{err: errors.New("the task's records show no committed rfq.save_draft")}
+		return &phaseError{err: errors.New("phase rfq committed no rfq.save_draft")}
 	}
 	return nil
 }

@@ -118,8 +118,13 @@ func byHash(raw []byte) bool {
 // request hash in place of the arguments {contract, command, idempotency_key, request_hash}
 // (ActionReconciliation v1, Context Map R18, R66–R69; the caller kept the hash, not the command).
 // Reconciling needs the context's read permission and re-checks it and the caller's data scope now.
-// Only commands the context reconciles have the route.
+// Only commands the context reconciles have the route. An AI actor is refused first
+// (PERMISSION_DENIED, before the body is read, and not audited: this route does not audit its
+// transport refusals), including when the context or the command has no route.
 func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
+	if s.refuseAI(w, r, nil) {
+		return
+	}
 	set, ok := s.contexts[r.PathValue("bc")]
 	name := r.PathValue("command")
 	if !ok || !set.reconcilable(name) {

@@ -19,8 +19,11 @@ import (
 // disposition is an entity of the commitment: it never changes the commitment's status or version.
 //
 // The quantity of a line's dispositions — requested and approved at a request, approved at a decision —
-// is at most what is verified delivered of it. What FUL shipped of the goods is not PUR's to read (no
-// FUL→PUR relationship): the reviewer judges it, and at an order's cancellation nothing has shipped.
+// is at most what is verified delivered of it less what FUL's confirmed shipments shipped of that
+// commitment line (PUR-INV-013, CommitmentShipped v1, R82). The caller passes that shipped quantity,
+// read lock-free in PUR's transaction after the commitment root is locked; this package does the
+// comparison. Shipped goods are none at an order's cancellation, and a zero shipped quantity is the
+// verified-only bound.
 
 // States and kinds of a disposition (SM-PUR-COMMITMENT-DISPOSITION, PUR-INV-013).
 const (
@@ -90,6 +93,28 @@ func Disposed(xs []*Disposition) map[string]kernel.Decimal {
 	return out
 }
 
+// LineShipped is one row of FUL's CommitmentShipped v1: the confirmed shipments of one order line of
+// a commitment, in one unit, and how many confirmed shipments that came from.
+type LineShipped struct {
+	OrderLineID  string
+	UnitID       string
+	UnitRevision int64
+	Quantity     kernel.Decimal
+	Shipments    int64
+}
+
+// ShippedOf returns what lines say was confirmed shipped of order line orderLineID. A commitment
+// line is one unit (PUR-INV-012); rows of the line are added, and another line is not.
+func ShippedOf(lines []LineShipped, orderLineID string) kernel.Decimal {
+	var sum kernel.Decimal
+	for _, l := range lines {
+		if l.OrderLineID == orderLineID {
+			sum = sum.Add(l.Quantity)
+		}
+	}
+	return sum
+}
+
 // claimed is what the dispositions among xs of line, other than except, hold: approved ones, and with
 // pending also those still requested.
 func claimed(xs []*Disposition, line, except string, pending bool) kernel.Decimal {
@@ -107,12 +132,13 @@ func claimed(xs []*Disposition, line, except string, pending bool) kernel.Decima
 
 // Dispose decides purchase.commitment.dispose of r on commitment c (S5R-D05, PUR-INV-013) — whose draft
 // buys lines, the order line IDs, and line r.OrderLineID is in unit — by a human under epoch at instant
-// at, with verified, what is verified delivered of each line now, and others, the commitment's
-// dispositions. It refuses, in this order: a commitment never issued (INVALID_STATE: only delivered goods
-// are disposed of), a line the commitment does not buy (REFERENCE_INVALID), and a quantity beyond what is
-// verified delivered of the line less its dispositions approved or still requested
+// at, with verified, what is verified delivered of each line now, shipped, what FUL's confirmed
+// shipments shipped of the requested line, and others, the commitment's dispositions. It refuses, in
+// this order: a commitment never issued (INVALID_STATE: only delivered goods are disposed of), a line
+// the commitment does not buy (REFERENCE_INVALID), and a quantity beyond what is verified delivered of
+// the line less what shipped of it, less its dispositions approved or still requested
 // (INVALID_KNOWN_VALUE). The requester's kind and grant are the ledger's (human only).
-func Dispose(r DispositionRequest, c *Commitment, lines []string, unit Unit, verified map[string]kernel.Decimal, others []*Disposition,
+func Dispose(r DispositionRequest, c *Commitment, lines []string, unit Unit, verified map[string]kernel.Decimal, shipped kernel.Decimal, others []*Disposition,
 	by kernel.ActorRef, epoch int64, at time.Time) (*Disposition, error) {
 	switch {
 	case !IsCommitted(c.Status):
@@ -120,7 +146,7 @@ func Dispose(r DispositionRequest, c *Commitment, lines []string, unit Unit, ver
 	case !slices.Contains(lines, r.OrderLineID):
 		return nil, fail(kernel.CodeReferenceInvalid, "/args/order_line_id", "The commitment buys no such line")
 	}
-	if err := within(verified[r.OrderLineID], claimed(others, r.OrderLineID, r.ID, true), r.Quantity, r.OrderLineID, "/args/quantity",
+	if err := within(verified[r.OrderLineID], shipped, claimed(others, r.OrderLineID, r.ID, true), r.Quantity, r.OrderLineID, "/args/quantity",
 		"approved or requested"); err != nil {
 		return nil, err
 	}
@@ -129,18 +155,23 @@ func Dispose(r DispositionRequest, c *Commitment, lines []string, unit Unit, ver
 		Evidence: slices.Clone(r.Evidence), Requested: Act{By: by, Epoch: epoch, At: kernel.Instant(at)}}, nil
 }
 
-// within refuses quantity q of line when verified less what held already leaves less (INVALID_KNOWN_VALUE
-// at path).
-func within(verified, held, q kernel.Decimal, line, path, what string) error {
-	if held.Add(q).Cmp(verified) <= 0 {
+// within refuses quantity q of line when verified less what shipped of it, less what held already,
+// leaves less (INVALID_KNOWN_VALUE at path). The reason names the three numbers: verified, shipped
+// and already disposed (held). Equal to the room is allowed.
+func within(verified, shipped, held, q kernel.Decimal, line, path, what string) error {
+	room := verified.Sub(shipped)
+	if room.Sign() < 0 {
+		room = kernel.Decimal{}
+	}
+	if held.Add(q).Cmp(room) <= 0 {
 		return nil
 	}
-	left := verified.Sub(held)
+	left := room.Sub(held)
 	if left.Sign() < 0 {
 		left = kernel.Decimal{}
 	}
-	return fail(kernel.CodeInvalidKnownValue, path, "Line "+line+" is verified delivered "+verified.String()+", "+held.String()+" of it "+what+
-		" for disposition; at most "+left.String()+" more is disposed of")
+	return fail(kernel.CodeInvalidKnownValue, path, "Line "+line+" is verified delivered "+verified.String()+", "+shipped.String()+
+		" of it shipped, "+held.String()+" of it "+what+" for disposition; at most "+left.String()+" more is disposed of")
 }
 
 // Answer decides a request whose disposition ID is taken: the same request by the same requester is
@@ -178,16 +209,17 @@ func (x *Disposition) Reject(act Act) {
 }
 
 // Approve approves the disposition by act (SM-PUR-COMMITMENT-DISPOSITION requested → approved), with
-// verified, what is verified delivered of its line now, and others, the commitment's dispositions: its
-// quantity and the line's other approved dispositions are at most what is verified (INVALID_KNOWN_VALUE at
-// /disposition/quantity: a delivery was corrected since the request, or another disposition approved),
+// verified, what is verified delivered of its line now, shipped, what FUL's confirmed shipments shipped
+// of the line, and others, the commitment's dispositions: its quantity and the line's other approved
+// dispositions are at most verified less shipped (INVALID_KNOWN_VALUE at /disposition/quantity: a
+// delivery was corrected or a shipment confirmed since the request, or another disposition approved),
 // and a return to the supplier cites its evidence (INVALID_STATE; the request requires it). The version
-// moves.
-func (x *Disposition) Approve(verified kernel.Decimal, others []*Disposition, act Act) error {
+// moves. This check is the authority; the request's check is the early answer.
+func (x *Disposition) Approve(verified, shipped kernel.Decimal, others []*Disposition, act Act) error {
 	if x.Kind == ReturnToSupplier && len(x.Evidence) == 0 {
 		return fail(kernel.CodeInvalidState, "/disposition/evidence", "A return to the supplier cites its evidence")
 	}
-	if err := within(verified, claimed(others, x.OrderLineID, x.ID, false), x.Quantity, x.OrderLineID, "/disposition/quantity",
+	if err := within(verified, shipped, claimed(others, x.OrderLineID, x.ID, false), x.Quantity, x.OrderLineID, "/disposition/quantity",
 		"approved"); err != nil {
 		return err
 	}

@@ -18,7 +18,9 @@
 #   make ai-eval      the Q01 evaluation suite with the scripted model (tests/ai-evaluation; WBS S4-07a, BC-AT28)
 #                     against its own database AI_EVAL_DB in the container on PG_PORT; report in bin/ai-eval/
 #   make ai-eval-live the same with the live model service (build tag aievallive; never in CI): the key comes from
-#                     IDP_BRANT_MODEL_API_KEY; without it the run is reported NOT EXECUTED (exit 3)
+#                     IDP_BRANT_MODEL_API_KEY; without it the run is reported NOT EXECUTED (exit 3). A trial the
+#                     model service did not let run is NOT EXECUTED, and a scripted-only family is NOT
+#                     APPLICABLE; neither is a pass or a failure, and a completed live run still exits 0
 
 GO ?= go
 GOLANGCI_LINT_VERSION ?= v2.15.0

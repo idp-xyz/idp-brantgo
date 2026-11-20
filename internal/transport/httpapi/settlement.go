@@ -67,7 +67,7 @@ func stlCommands(c STL) *commandSet {
 }
 
 // stlRoutes registers STL's audited reads.
-func (s *server) stlRoutes(mux *http.ServeMux) {
+func (s *server) stlRoutes(mux routeMux) {
 	mux.Handle("GET /api/brant/v1/stl/customers/{id}/credit", s.authenticated(read(s, s.cfg.STL.GetCustomerCredit, okView[stlapi.CustomerCreditView])))
 	mux.Handle("GET /api/brant/v1/stl/credit_reservations/{id}", s.authenticated(read(s, s.cfg.STL.GetReservation, okView[stlapi.ReservationView])))
 	mux.Handle("GET /api/brant/v1/stl/credit_decisions/{id}", s.authenticated(read(s, s.cfg.STL.GetDecision, okView[stlapi.DecisionView])))

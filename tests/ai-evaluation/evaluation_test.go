@@ -420,7 +420,9 @@ func TestTheFixedSet(t *testing.T) {
 	seen := map[string]bool{}
 	for _, f := range fixedSet {
 		if f.run == nil || f.grade == nil || f.expected == "" || f.goal == "" || len(f.design) == 0 ||
-			(f.goalCode != "quote_ready" && f.goalCode != "order_active") {
+			(f.goalCode != "quote_ready" && f.goalCode != "order_active") ||
+			(f.applicability != applicable && f.applicability != scriptedOnly) ||
+			(f.applicability == scriptedOnly) != (f.scriptedBecause != "") {
 			t.Fatalf("%+v", f)
 		}
 		if seen[f.name] {

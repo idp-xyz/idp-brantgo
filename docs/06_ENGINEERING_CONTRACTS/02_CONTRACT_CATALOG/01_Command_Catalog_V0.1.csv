@@ -31,6 +31,7 @@ POL,config.discard_draft,仅人工,—（Python 未实现）,POST /api/brant/v1/
 EVD,source.register,人工或 AI（按动作权限）,source.register,POST /api/brant/v1/evd/commands/source.register,S1
 EVD,source.use,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/evd/commands/source.use,S1
 EVD,file.register,人工或 AI（按动作权限）,foundation.file.register,POST /api/brant/v1/evd/commands/file.register,S1
+EVD,formal_file.register,系统,—（Python 未实现）,POST /api/brant/v1/evd/commands/formal_file.register,S1
 INQ,rfq.save_draft,人工或 AI（同一守卫）,rfq.save_draft,POST /api/brant/v1/inq/commands/rfq.save_draft,S1
 INQ,rfq.confirm_scope,仅人工,rfq.confirm_scope,POST /api/brant/v1/inq/commands/rfq.confirm_scope,S1
 INQ,rfq.cancel,仅人工,rfq.cancel,POST /api/brant/v1/inq/commands/rfq.cancel,S1
@@ -102,6 +103,8 @@ TRD,order.document.generate,人工或 AI（按动作权限）,—（Python 未�
 TRD,order.document.record_signed,仅人工,—（Python 未实现）,POST /api/brant/v1/trd/commands/order.document.record_signed,S3
 TRD,object_control.enter_manual,系统,—（Python 未实现）,POST /api/brant/v1/trd/commands/object_control.enter_manual,S3
 TRD,object_control.handoff,系统,—（Python 未实现）,POST /api/brant/v1/trd/commands/object_control.handoff,S3
+TRD,quote.risk_hold.register,系统,—（Python 未实现）,POST /api/brant/v1/trd/commands/quote.risk_hold.register,S3
+TRD,order.risk.record,系统,—（Python 未实现）,POST /api/brant/v1/trd/commands/order.risk.record,S3
 PUR,purchase.draft.prepare,仅人工,purchase.draft.prepare,POST /api/brant/v1/pur/commands/purchase.draft.prepare,S3
 PUR,purchase.commitment.request,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/pur/commands/purchase.commitment.request,S3
 PUR,purchase.commitment.decide,仅人工,—（Python 未实现）,POST /api/brant/v1/pur/commands/purchase.commitment.decide,S3
@@ -203,7 +206,7 @@ CNX,tax_refund_case.rebind_policy,仅人工,—（Python 未实现）,POST /api/
 CRM,lead.capture,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/crm/commands/lead.capture,S6
 CRM,opportunity.advance,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/crm/commands/opportunity.advance,S6
 CRM,follow_up.record,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/crm/commands/follow_up.record,S6
-TSK,task.create,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.create,S4
+TSK,task.create,人工或系统（不接受 AI）,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.create,S4
 TSK,task.scope,人工或系统（不接受 AI）,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.scope,S4
 TSK,task.take_control,仅人工,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.take_control,S4
 TSK,task.release,仅人工,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.release,S4

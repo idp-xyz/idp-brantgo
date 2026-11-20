@@ -120,6 +120,7 @@ type TrialRecord struct {
 	Expected        string           `json:"expected"`
 	Outcome         string           `json:"outcome"`
 	Pass            bool             `json:"pass"`
+	NotExecuted     bool             `json:"not_executed,omitempty"` // the model service did not let the trial run; not a pass, not a failure
 	Failure         string           `json:"failure,omitempty"`
 	Error           string           `json:"error,omitempty"`
 	TaskID          string           `json:"task_id"`
@@ -142,6 +143,7 @@ type TrialRecord struct {
 	Budget           *Budget            `json:"budget,omitempty"`
 	Seconds          float64            `json:"seconds"`
 	Notes            []string           `json:"notes,omitempty"`
+	ModelFailure     *ModelCallFailure  `json:"model_failure,omitempty"` // the phase's last failed model call, live suite
 	extra            map[string]float64 // per-trial values the family's grader reads
 }
 
@@ -157,10 +159,11 @@ type InputRecord struct {
 // Assertion is one authority assertion of a trial: what the authoritative records say, read back
 // over HTTP (TSK, TRD, INQ, brant_ai), never what the model said.
 type Assertion struct {
-	Name string `json:"name"`
-	Want string `json:"want"`
-	Got  string `json:"got"`
-	Pass bool   `json:"pass"`
+	Name         string `json:"name"`
+	Want         string `json:"want"`
+	Got          string `json:"got"`
+	Pass         bool   `json:"pass"`
+	ScriptedOnly bool   `json:"scripted_only,omitempty"` // live: the expected value is the script's own turns; it does not fail the trial
 }
 
 // OwnerResolution is one field of the agent's RFQ draft that the scripted owner settled from the
@@ -214,22 +217,35 @@ type CostRecord struct {
 // model service did not answer. Trace is the phase's trace directory under the trial's, when the
 // agent trace is on.
 type PhaseRecord struct {
-	Name          string   `json:"name"`
-	Script        string   `json:"script,omitempty"`
-	ScriptSteps   int      `json:"script_steps"`
-	ModelCalls    int      `json:"model_calls"`
-	ToolCalls     int      `json:"tool_calls"`
-	Writes        int      `json:"writes"`
-	Lifecycle     string   `json:"lifecycle_after"`
-	Killed        bool     `json:"killed,omitempty"`
-	Seconds       float64  `json:"seconds"`
-	StartedAt     string   `json:"started_at"`
-	Timeout       string   `json:"timeout"`
-	Error         string   `json:"error,omitempty"`
-	Diagnosis     string   `json:"diagnosis,omitempty"`
-	LastCalls     []string `json:"last_calls,omitempty"`
-	Trace         string   `json:"trace,omitempty"`
-	WorkerLogTail string   `json:"worker_log_tail,omitempty"`
+	Name          string            `json:"name"`
+	Script        string            `json:"script,omitempty"`
+	ScriptSteps   int               `json:"script_steps"`
+	ModelCalls    int               `json:"model_calls"`
+	ToolCalls     int               `json:"tool_calls"`
+	Writes        int               `json:"writes"`
+	Lifecycle     string            `json:"lifecycle_after"`
+	Killed        bool              `json:"killed,omitempty"`
+	Seconds       float64           `json:"seconds"`
+	StartedAt     string            `json:"started_at"`
+	Timeout       string            `json:"timeout"`
+	Error         string            `json:"error,omitempty"`
+	Diagnosis     string            `json:"diagnosis,omitempty"`
+	LastCalls     []string          `json:"last_calls,omitempty"`
+	Trace         string            `json:"trace,omitempty"`
+	WorkerLogTail string            `json:"worker_log_tail,omitempty"`
+	ModelFailure  *ModelCallFailure `json:"model_failure,omitempty"`
+}
+
+// ModelCallFailure is the last failed model call of a phase, from the worker log: the runner's
+// class, the HTTP status (0 when the service gave no answer) and, for an HTTP answer, the
+// service's error type and code. Never the message, the URL or the key.
+type ModelCallFailure struct {
+	Phase      string `json:"phase,omitempty"`
+	Class      string `json:"class"`
+	HTTPStatus int    `json:"http_status"`
+	ErrorType  string `json:"error_type,omitempty"`
+	ErrorCode  string `json:"error_code,omitempty"`
+	Transport  string `json:"transport,omitempty"`
 }
 
 // FamilySummary is a family's trials together: the fixed-set metrics of baseline 19.1 (goal
@@ -257,6 +273,9 @@ type FamilySummary struct {
 	OwnerResolutions int            `json:"owner_resolutions"` // fields of the agent's RFQ drafts the scripted owner settled; among the corrections
 	HumanSteps       int            `json:"human_steps"`
 	MeanSeconds      float64        `json:"mean_seconds"`
+	NotExecuted      int            `json:"not_executed,omitempty"`
+	Applicability    string         `json:"applicability,omitempty"` // not_applicable: a scripted-only family was not run
+	Why              string         `json:"why,omitempty"`
 }
 
 // Totals are the run's totals over every trial.
@@ -273,6 +292,8 @@ type Totals struct {
 	OwnerResolutions int     `json:"owner_resolutions"`
 	HumanSteps       int     `json:"human_steps"`
 	Seconds          float64 `json:"seconds"`
+	NotExecuted      int     `json:"not_executed,omitempty"`
+	NotApplicable    int     `json:"not_applicable,omitempty"`
 }
 
 // summarize computes the family summaries and totals from the trials.
@@ -291,20 +312,23 @@ func (r *EvalRun) summarize(families []*family) {
 				continue
 			}
 			s.Trials++
-			if t.Pass {
+			switch {
+			case t.NotExecuted:
+				s.NotExecuted++
+			case t.Pass:
 				s.Passed++
 			}
-			if t.GoalCompleted {
+			if !t.NotExecuted && t.GoalCompleted {
 				s.GoalCompleted++
 				if t.CompletionActor == "ai_with_required_review" {
 					s.AICompleted++
 				}
 			}
 			s.Outcomes[t.Outcome]++
-			if t.Failure != "" {
+			if !t.NotExecuted && t.Failure != "" {
 				s.Failures[t.Failure]++
 			}
-			if t.Trial == 1 {
+			if t.Trial == 1 && !t.NotExecuted {
 				s.FirstTrialPassed = t.Pass
 			}
 			sig := t.signature()
@@ -333,6 +357,10 @@ func (r *EvalRun) summarize(families []*family) {
 		if len(s.Failures) == 0 {
 			s.Failures = nil
 		}
+		if r.Suite == suiteLive && f.applicability == scriptedOnly {
+			s.Applicability = "not_applicable"
+			s.Why = f.scriptedBecause
+		}
 		s.Cost = formatMinor(cost)
 		totalCost += cost
 		r.Families = append(r.Families, s)
@@ -346,6 +374,10 @@ func (r *EvalRun) summarize(families []*family) {
 		r.Totals.HumanCorrections += s.HumanCorrections
 		r.Totals.OwnerResolutions += s.OwnerResolutions
 		r.Totals.HumanSteps += s.HumanSteps
+		r.Totals.NotExecuted += s.NotExecuted
+		if s.Applicability == "not_applicable" {
+			r.Totals.NotApplicable++
+		}
 		r.Totals.Seconds = round(r.Totals.Seconds+seconds, 2)
 	}
 	r.Totals.Cost = formatMinor(totalCost)
@@ -417,15 +449,27 @@ func (r *EvalRun) markdown() string {
 			outcomes = append(outcomes, fmt.Sprintf("%s %d", k, v))
 		}
 		sort.Strings(outcomes)
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %d | %d | %d (%d) | %s | %v | %v | %d | %d | %d | %s | %d (%d) | %d | %.1f |\n", f.Family,
-			strings.Join(f.Design, ", "), f.Goal, f.Expected, f.Trials, f.Passed, f.GoalCompleted, f.AICompleted, strings.Join(outcomes, ", "),
-			f.FirstTrialPassed, f.Consistent, f.ModelCalls, f.ToolCalls, f.Tokens, f.Cost, f.HumanCorrections, f.OwnerResolutions, f.HumanSteps,
+		outcomeText := strings.Join(outcomes, ", ")
+		first, consistent := fmt.Sprint(f.FirstTrialPassed), fmt.Sprint(f.Consistent)
+		if f.Applicability == "not_applicable" {
+			outcomeText = "not applicable"
+			first, consistent = "—", "—"
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %d | %d | %d (%d) | %s | %s | %s | %d | %d | %d | %s | %d (%d) | %d | %.1f |\n", f.Family,
+			strings.Join(f.Design, ", "), f.Goal, f.Expected, f.Trials, f.Passed, f.GoalCompleted, f.AICompleted, outcomeText,
+			first, consistent, f.ModelCalls, f.ToolCalls, f.Tokens, f.Cost, f.HumanCorrections, f.OwnerResolutions, f.HumanSteps,
 			f.MeanSeconds)
 	}
 	t := r.Totals
 	fmt.Fprintf(&b, "\nTotals: %d trials, %d passed, %d goals completed (%d by the AI with the required reviews), %d model calls, %d tool calls, %d tokens, cost %s, %d human corrections (synthetic; %d of them fields of the agent's RFQ drafts that the scripted owner settled from the truth: a person's work, not the AI's), %d human steps (synthetic), %.1f s.\n",
 		t.Trials, t.Passed, t.GoalCompleted, t.AICompleted, t.ModelCalls, t.ToolCalls, t.Tokens, t.Cost, t.HumanCorrections, t.OwnerResolutions,
 		t.HumanSteps, t.Seconds)
+	if t.NotExecuted > 0 {
+		fmt.Fprintf(&b, "%d not executed: the model service did not answer or refused the request.\n", t.NotExecuted)
+	}
+	if t.NotApplicable > 0 {
+		fmt.Fprintf(&b, "%d not applicable on a live model: a scripted-only family was not run, and is not a pass and not a failure.\n", t.NotApplicable)
+	}
 	if len(r.Probes) > 0 {
 		b.WriteString("\n## Probes\n\n")
 		for _, p := range r.Probes {
@@ -440,9 +484,14 @@ func (r *EvalRun) markdown() string {
 	b.WriteString("\n## Assertions missed, refusals and notes per trial\n\n")
 	for _, tr := range r.Trials {
 		var lines []string
-		for _, a := range tr.Assertions {
-			if !a.Pass {
-				lines = append(lines, fmt.Sprintf("BAD %s: want %q, got %q", a.Name, a.Want, a.Got))
+		if !tr.NotExecuted {
+			for _, a := range tr.Assertions {
+				switch {
+				case a.ScriptedOnly:
+					lines = append(lines, fmt.Sprintf("not applicable (scripted turns) %s: want %q, got %q", a.Name, a.Want, a.Got))
+				case !a.Pass:
+					lines = append(lines, fmt.Sprintf("BAD %s: want %q, got %q", a.Name, a.Want, a.Got))
+				}
 			}
 		}
 		if len(tr.Refusals) > 0 {
