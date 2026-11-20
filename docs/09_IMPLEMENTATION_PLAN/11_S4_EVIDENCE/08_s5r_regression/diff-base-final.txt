@@ -1,0 +1,80 @@
+== D1 BRC-001
+  steps: 301 -> 301
+== d2a cn-at01.json result passed -> passed
+  requests: {'GET': 80, 'POST': 236} -> {'GET': 80, 'POST': 236}
+== d2a cn-at02.json result passed -> passed
+  requests: {'GET': 52, 'POST': 185} -> {'GET': 52, 'POST': 185}
+== d2a cn-at03.json result passed -> passed
+  requests: {'GET': 32, 'POST': 187} -> {'GET': 32, 'POST': 187}
+== d2a cn-at04.json result passed -> passed
+  - observed: 并发: allocations of 60 (lot.a) and 60 (lot.b) of invoice A sent at once: lot.a granted, lot.b refused TAX_EVIDENCE_EXCEEDED; A 60/100; the winner's retry under its key answered with the same action act-<id>, A still 60/100
+  - observed: 剩余: lot.b takes A's remaining 40 and 20 of B (3 allocations); one more of A → TAX_EVIDENCE_EXCEEDED; export_refund A 100/100 available 0, B 20/20 available 0; export_exemption of A keeps its own balance 24/100 available 76; two cases, one per lot
+  + observed: 并发: allocations of 60 (lot.a) and 60 (lot.b) of invoice A sent at once: lot.b granted, lot.a refused TAX_EVIDENCE_EXCEEDED; A 60/100; the winner's retry under its key answered with the same action act-<id>, A still 60/100
+  + observed: 剩余: lot.a takes A's remaining 40 and 20 of B (3 allocations); one more of A → TAX_EVIDENCE_EXCEEDED; export_refund A 100/100 available 0, B 20/20 available 0; export_exemption of A keeps its own balance 24/100 available 76; two cases, one per lot
+  requests: {'GET': 57, 'POST': 202} -> {'GET': 57, 'POST': 202}
+== d2a cn-at05.json result passed -> passed
+  requests: {'GET': 71, 'POST': 210} -> {'GET': 71, 'POST': 210}
+== d2a cn-at06.json result passed -> passed
+  requests: {'GET': 64, 'POST': 212} -> {'GET': 64, 'POST': 212}
+== d2a cn-at07.json result passed -> passed
+  requests: {'GET': 64, 'POST': 195} -> {'GET': 64, 'POST': 195}
+== d2a cn-at08.json result passed -> passed
+  requests: {'GET': 61, 'POST': 198} -> {'GET': 61, 'POST': 198}
+== d2a cn-at09.json result passed -> passed
+  requests: {'GET': 65, 'POST': 203} -> {'GET': 65, 'POST': 203}
+== d2a cn-at10.json result passed -> passed
+  requests: {'GET': 61, 'POST': 218} -> {'GET': 61, 'POST': 218}
+== d2a cn-at11.json result passed -> passed
+  requests: {'GET': 73, 'POST': 207} -> {'GET': 73, 'POST': 207}
+== d2a cn-at12.json result passed -> passed
+  requests: {'GET': 57, 'POST': 200} -> {'GET': 57, 'POST': 200}
+== d2a cn-at13.json result passed -> passed
+  requests: {'GET': 58, 'POST': 203} -> {'GET': 58, 'POST': 203}
+== d2a cn-at14.json result passed -> passed
+  requests: {'GET': 62, 'POST': 204} -> {'GET': 62, 'POST': 204}
+== d2a cn-at15.json result passed -> passed
+  requests: {'GET': 58, 'POST': 197} -> {'GET': 58, 'POST': 197}
+== d2a cn-at16.json result passed -> passed
+  requests: {'GET': 68, 'POST': 222} -> {'GET': 68, 'POST': 222}
+== d2a cn-at17.json result passed -> passed
+  requests: {'GET': 59, 'POST': 196} -> {'GET': 59, 'POST': 196}
+== d2a cn-at18.json result passed -> passed
+  requests: {'GET': 57, 'POST': 196} -> {'GET': 57, 'POST': 196}
+== d2a cnat_matrix.json: new
+== d2a s5r-d20.json: new
+== d2a s5r-d22.json: new
+== d2a s5r-d23.json: new
+== d2b BT10.json result passed -> passed
+  requests: 258 -> 258
+== d2b BT12.json result passed -> passed
+  requests: 237 -> 237
+== d2b BT18-BT24.json result passed -> passed
+  requests: 285 -> 285
+== d2b BT21.json result passed -> passed
+  requests: 237 -> 237
+== d2b PUR-CANCEL.json result passed -> passed
+  requests: 221 -> 221
+== d2b S-A.json result passed -> passed
+  requests: 179 -> 179
+== d2b S-B.json result passed -> passed
+  requests: 164 -> 164
+== d2b S5R-D03.json: new
+== d2b S5R-D04.json: new
+== d2b S5R-D05.json: new
+== d2b S5R-D10.json: new
+== d2b S5R-D19.json: new
+== d2b SC-08.json result passed -> passed
+  requests: 248 -> 248
+== d2b SC-09.json result passed -> passed
+  requests: 157 -> 157
+== d2b SIM-02.json result passed -> passed
+  requests: 200 -> 200
+== d2b STL-CROSS-CURRENCY.json result passed -> passed
+  requests: 245 -> 245
+== d2b STL-REVERSAL.json result passed -> passed
+  requests: 243 -> 243
+== d2b TD-AT13.json result passed -> passed
+  requests: 170 -> 170
+== d2b TD-AT14.json result passed -> passed
+  requests: 223 -> 223
+== d2b s5_scenarios.json: new

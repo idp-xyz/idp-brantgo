@@ -102,6 +102,16 @@ var cnatCatalog = map[string]cnatMeta{
 	"CN-AT18": {"AI读取票据／报关资料后误匹配", "显示来源与差异；候选须核实后进入相同业务命令，模型不能直接过账。",
 		[]string{"C3b (AI imports candidates; verify human only)", "C3a (AI prepares declarations; confirm human only)"},
 		[]string{"TestCNAT18CandidatesAreVerifiedByAHuman", "TestDeclarationHumanOnlyCommandsRefuseAnAIActor"}},
+	// S5R variants (R12). Same evidence writer; the id is not one of baseline §24.3's eighteen.
+	"S5R-D20": {"S5R-D20 部分红冲、先回退、应付复核", "部分红冲冲减蓝票余额；已提交案件的蓝票未回退时红票核实被拒；应付显示 invoice_reversed。",
+		[]string{"R10", "R8", "C3b", "B2b"},
+		[]string{"TestS5RPartialRedReversalRollbackAndPurchaseInvoiceRefD20 (R10)", "TestS5RD20PayableAdjustmentAndInvoiceReversed (R8)"}},
+	"S5R-D23": {"S5R-D23 出口后发布、按有效期绑定", "有效期覆盖出口日期的修订在发布之后仍被采用；未申报的案件显示 policy_superseded 并重新绑定。",
+		[]string{"R10", "A3a", "C3b"},
+		[]string{"TestS5RCaseBindsTheRevisionValidAtTheExportDateAndRebindsD23 (R10)"}},
+	"S5R-D22": {"S5R-D22 已冲销的资金记录", "document_bundle.check 与 tax_refund_case.record_result received 拒绝已冲销的资金记录。",
+		[]string{"R13", "R8", "C3a", "C3b"},
+		[]string{"TestS5RD22TheBundleRefusesAReversedFundRecord (R13)", "TestS5RD22TheReceivedRefundRefusesAReversedFundRecord (R13)"}},
 }
 
 // cnatEvidence is one case's record (BRANT_CNAT_EVIDENCE).
@@ -153,8 +163,8 @@ var cnatNotExecuted = []string{
 	"the user interface (中文操作 is outside the API repository)",
 }
 
-// newCNAT starts case id on a fresh tenant: D1's driver (S3 humans, S5 humans, doc.1 with
-// number.issue, the Inbox actors, the relay), its chain record suppressed, sales holding
+// newCNAT starts case id on a fresh tenant: D1's driver (S3 humans, S5 humans with their role
+// templates, the Inbox actors, the relay), its chain record suppressed, sales holding
 // credit_note.request besides its S3 grant (the sales_clerk template's, CN-AT11) — all provisioned
 // before the first command.
 func newCNAT(t *testing.T, id string) *cnat {
@@ -736,11 +746,11 @@ func (c *cnat) statementOf(id string, s *cnatShip) map[string]any {
 }
 
 // receipt has treasury record customer.1's receipt id of amount on the USD account on bank advice
-// evidence (registered by doc.1, as in D1); remitted is what the customer sent.
+// evidence treasury registers (S5R-D26, as in D1); remitted is what the customer sent.
 func (c *cnat) receipt(id, amount, remitted, reference string) map[string]any {
 	c.t.Helper()
 	advice := "advice." + id
-	c.source(brcDocumentation, advice, fmt.Sprintf("合成银行收款通知：customer.1 汇出 %s USD，入账 %s USD，%s。", remitted, amount, reference))
+	c.source(brcTreasury, advice, fmt.Sprintf("合成银行收款通知：customer.1 汇出 %s USD，入账 %s USD，%s。", remitted, amount, reference))
 	return c.ok(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": id, "kind": stlapi.FundReceipt,
 		"counterparty_id": "customer.1", "currency": cfgRef("currency", "USD", 1), "bank_account": c.bank, "received_amount": amount,
 		"remitted_amount": remitted, "value_date": now(), "bank_reference": reference, "evidence_ids": []string{advice}})
@@ -835,12 +845,12 @@ func (c *cnat) cny() (currency, bank map[string]any) {
 	return currency, bank
 }
 
-// fund has treasury record a fund record of kind with the members given, on advice evidence doc.1
-// registers (D1's deviation 14: treasury holds no source.register).
+// fund has treasury record a fund record of kind with the members given, on advice evidence
+// treasury registers (S5R-D26: the treasury template holds source.register).
 func (c *cnat) fund(id, kind string, args map[string]any) map[string]any {
 	c.t.Helper()
 	advice := "advice." + id
-	c.source(brcDocumentation, advice, "合成银行通知："+id+"（"+kind+"，合成，非真实流水）。")
+	c.source(brcTreasury, advice, "合成银行通知："+id+"（"+kind+"，合成，非真实流水）。")
 	a := map[string]any{"fund_record_id": id, "kind": kind, "value_date": now(), "evidence_ids": []string{advice}}
 	for k, v := range args {
 		a[k] = v

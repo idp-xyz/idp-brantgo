@@ -147,7 +147,7 @@ func LoadShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 func loadLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s *shipment.Shipment) error {
 	t, c := scope2(scope)
 	rows, err := exec.Query(ctx, `SELECT line_id, order_line_id, sku_id, spec_revision, unit_id, unit_revision, order_line_quantity::text,
-		quantity::text, delivery_id, delivery_line_id, delivery_version, commitment_id, supplier_id, quality_release_id
+		quantity::text, delivery_id, delivery_line_id, delivery_version, commitment_id, supplier_id, quality_release_id, quality_concession
 		FROM brant_ful.shipment_line WHERE tenant_id = $1 AND company_id = $2 AND shipment_id = $3 ORDER BY line_no`, t, c, s.ID)
 	if err != nil {
 		return err
@@ -156,7 +156,7 @@ func loadLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s
 		var l shipment.Line
 		var ordered, qty string
 		if err := row.Scan(&l.ID, &l.OrderLineID, &l.SkuID, &l.SpecRevision, &l.UnitID, &l.UnitRevision, &ordered, &qty, &l.Delivery.DeliveryID,
-			&l.Delivery.LineID, &l.DeliveryVersion, &l.CommitmentID, &l.SupplierID, &l.ReleaseID); err != nil {
+			&l.Delivery.LineID, &l.DeliveryVersion, &l.CommitmentID, &l.SupplierID, &l.ReleaseID, &l.QualityConcession); err != nil {
 			return l, err
 		}
 		var err error
@@ -269,10 +269,10 @@ func InsertShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	for i, l := range s.Lines {
 		if _, err := exec.Exec(ctx, `INSERT INTO brant_ful.shipment_line (tenant_id, company_id, shipment_id, line_id, line_no, order_line_id,
 			sku_id, spec_revision, unit_id, unit_revision, order_line_quantity, quantity, delivery_id, delivery_line_id, delivery_version,
-			commitment_id, supplier_id, quality_release_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17, $18)`,
+			commitment_id, supplier_id, quality_release_id, quality_concession)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17, $18, $19)`,
 			t, c, s.ID, l.ID, i+1, l.OrderLineID, l.SkuID, l.SpecRevision, l.UnitID, l.UnitRevision, Text(l.OrderQuantity), Text(l.Quantity),
-			l.Delivery.DeliveryID, l.Delivery.LineID, l.DeliveryVersion, l.CommitmentID, l.SupplierID, l.ReleaseID); err != nil {
+			l.Delivery.DeliveryID, l.Delivery.LineID, l.DeliveryVersion, l.CommitmentID, l.SupplierID, l.ReleaseID, l.QualityConcession); err != nil {
 			return err
 		}
 	}
@@ -361,14 +361,15 @@ func ConfirmShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 }
 
 // LoadConsumed returns what FUL's confirmed shipments shipped of order orderID's lines over every
-// revision, of the delivery lines deliveries over every version and under releases, as a statement
-// started now sees them. Called while the order's fulfilment root is held, it sees every
-// confirmation that consumes them (D-3).
+// revision, of each of its purchase commitment lines over every delivery (S5R-D05), of the delivery
+// lines deliveries over every version and under releases, as a statement started now sees them.
+// Called while the order's fulfilment root is held, it sees every confirmation that consumes them
+// (D-3): a commitment line serves one order line.
 func LoadConsumed(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, orderID string, deliveries []shipment.DeliveryRef,
 	releases []string) (shipment.Consumed, error) {
 	t, c := scope2(scope)
 	out := shipment.Consumed{OrderLines: map[string]kernel.Decimal{}, Deliveries: map[shipment.DeliveryRef]kernel.Decimal{},
-		Releases: map[string]kernel.Decimal{}}
+		CommitmentLines: map[shipment.CommitmentLine]kernel.Decimal{}, Releases: map[string]kernel.Decimal{}}
 	collect := func(sql string, args []any, put func(key []string, d kernel.Decimal)) error {
 		rows, err := exec.Query(ctx, sql, args...)
 		if err != nil {
@@ -392,6 +393,12 @@ func LoadConsumed(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 		AND s.shipment_id = l.shipment_id WHERE l.tenant_id = $1 AND l.company_id = $2 AND s.status = 'confirmed' AND `
 	if err := collect(`SELECT l.order_line_id, '', trim_scale(sum(l.quantity))::text`+confirmed+`s.order_id = $3 GROUP BY l.order_line_id`,
 		[]any{t, c, orderID}, func(k []string, d kernel.Decimal) { out.OrderLines[k[0]] = d }); err != nil {
+		return out, err
+	}
+	if err := collect(`SELECT l.commitment_id, l.order_line_id, trim_scale(sum(l.quantity))::text`+confirmed+
+		`s.order_id = $3 GROUP BY l.commitment_id, l.order_line_id`, []any{t, c, orderID}, func(k []string, d kernel.Decimal) {
+		out.CommitmentLines[shipment.CommitmentLine{CommitmentID: k[0], OrderLineID: k[1]}] = d
+	}); err != nil {
 		return out, err
 	}
 	if len(deliveries) > 0 {

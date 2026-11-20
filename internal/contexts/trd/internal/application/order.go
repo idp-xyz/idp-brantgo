@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/order"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -99,11 +100,11 @@ func (h *orderCommand) Prepare(ctx context.Context) error {
 // admit runs the checks every order command starts with: the quote exists and the caller sees it,
 // and the order exists unless the command prepares it (NOT_FOUND at path: an order of a quote the
 // caller does not see is not found either), then the quote root's object control.
-func (h *orderCommand) admit(ctx context.Context, d authorization.Decision, path string) error {
+func (h *orderCommand) admit(ctx context.Context, exec bentopg.Executor, d authorization.Decision, path string) error {
 	if h.q == nil || !d.Sees(h.q.OwnerActor, h.q.OwnerTeam) || (h.o == nil && !h.preparing) {
 		return kernel.Reject(kernel.CodeNotFound, path, "")
 	}
-	return h.q.Control.Admit(claim(ctx), d.Epoch)
+	return h.q.Control.Admit(fence(ctx, exec, d))
 }
 
 // save writes the order and, when the command changed the quote root (order.prepare took its slot),
@@ -150,8 +151,18 @@ func (s Service) standings(ctx context.Context, exec bentopg.Executor, q *quote.
 // conversion slot (order.prepare).
 func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.OrderReceipt, error) {
 	h := &orderCommand{s: s, orderID: cmd.OrderID, quoteID: cmd.QuoteID, preparing: true}
+	var notify *quote.AddressRef
+	if n := cmd.NotifyPartyRef; n != nil {
+		notify = &quote.AddressRef{PartyID: n.PartyID, PartyRevision: n.PartyRevision, AddressID: n.AddressID}
+	}
+	var seal *orderrev.SealFacts
+	h.prepare = func(ctx context.Context) error {
+		var err error
+		seal, err = s.prepareSeal(ctx, cmd.QuoteID, cmd.BusinessRevision, cmd.BusinessHash, notify)
+		return err
+	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/quote_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/quote_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if h.o != nil && h.o.Source.QuoteID != h.q.ID {
@@ -162,9 +173,17 @@ func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.Or
 			return action.Outcome{}, err
 		}
 		o, err := order.Prepare(order.Preparation{OrderID: cmd.OrderID, QuoteID: cmd.QuoteID, Revision: cmd.BusinessRevision,
-			BusinessHash: cmd.BusinessHash, AcceptanceID: cmd.AcceptanceID}, h.q, a, scope(ctx), d.Actor, d.Epoch, s.Clock.Now())
+			BusinessHash: cmd.BusinessHash, AcceptanceID: cmd.AcceptanceID, NotifyParty: notify, Seal: seal}, h.q, a, scope(ctx), d.Actor, d.Epoch,
+			s.Clock.Now())
 		if err != nil {
 			return action.Outcome{}, err
+		}
+		// The notify party (S5R-D40): its address current now, its party row held FOR SHARE until
+		// the order commits (PTY AddressRoleGuard v1, R13).
+		if notify != nil {
+			if err = guardAddress(ctx, exec, ptyRef(*notify), "/args/notify_party_ref"); err != nil {
+				return action.Outcome{}, err
+			}
 		}
 		h.o = o
 		src := o.Source
@@ -174,8 +193,8 @@ func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.Or
 			"quote_expires_at": kernel.FormatTimestamp(src.ExpiresAt), "conversion_slot": o.Slot,
 			"customer_party_id": a.Customer.PartyID, "customer_revision": a.Customer.Revision}))
 	}
-	res, err := s.run(ctx, action.Command{Name: api.CommandPrepareOrder, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID},
-		cmd, cmd.Validate(), h)
+	res, err := s.run(ctx, action.Command{Name: api.CommandPrepareOrder, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID,
+		GrantObject: action.GrantObject{Type: api.ObjectQuote, ID: cmd.QuoteID, Version: cmd.BusinessRevision}}, cmd, cmd.Validate(), h)
 	if err != nil {
 		return api.OrderReceipt{}, err
 	}
@@ -186,7 +205,7 @@ func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.Or
 func (s Service) RequestOrderReview(ctx context.Context, cmd api.RequestOrderReview) (api.OrderReceipt, error) {
 	h := &orderCommand{s: s, orderID: cmd.OrderID, reviewID: cmd.ReviewID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.Check(cmd.ExpectedVersion); err != nil {
@@ -199,8 +218,8 @@ func (s Service) RequestOrderReview(ctx context.Context, cmd api.RequestOrderRev
 		return h.save(ctx, exec, string(r.Status), h.event(api.EventOrderReviewRequested, map[string]any{"review_id": r.ID,
 			"review_status": string(r.Status)}))
 	}
-	res, err := s.run(ctx, action.Command{Name: api.CommandRequestOrderReview, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID},
-		cmd, cmd.Validate(), h)
+	res, err := s.run(ctx, action.Command{Name: api.CommandRequestOrderReview, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID,
+		GrantObject: action.GrantObject{Type: api.ObjectOrder, ID: cmd.OrderID, Version: cmd.ExpectedVersion}}, cmd, cmd.Validate(), h)
 	if err != nil {
 		return api.OrderReceipt{}, err
 	}
@@ -233,7 +252,7 @@ func (s Service) DecideOrderReview(ctx context.Context, cmd api.DecideOrderRevie
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.Check(cmd.ExpectedVersion); err != nil {
@@ -289,7 +308,7 @@ func (s Service) RevokeOrderApproval(ctx context.Context, cmd api.RevokeOrderApp
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		r, err := h.o.Revoke(cmd.ReviewID, quote.Act{By: d.Actor, Epoch: d.Epoch, At: s.Clock.Now(), Reason: cmd.Reason, Evidence: proofs})
@@ -327,7 +346,7 @@ func (s Service) closeOrder(ctx context.Context, name, eventType, key, id string
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.Check(expected); err != nil {
@@ -438,6 +457,12 @@ func orderView(o *order.Order, now time.Time) api.OrderView {
 	}
 	amendmentViews(o, &v)
 	v.Documents = documentViews(o)
+	for _, r := range o.Risks {
+		d := r.Denial
+		v.RiskRecords = append(v.RiskRecords, api.OrderRiskRecordView{RiskID: r.ID, Cause: r.Cause, Code: r.Code, OrderRevision: r.OrderRevision,
+			OrderRowVersion: r.OrderRowVersion, CostSnapshotID: d.SnapshotID, CostSourceID: d.SourceID, AttestationID: d.AttestationID,
+			EventID: d.EventID, RegisteredBy: r.Registered.By, RegisteredAt: r.Registered.At})
+	}
 	return v
 }
 

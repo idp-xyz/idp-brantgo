@@ -15,8 +15,10 @@ import (
 )
 
 // releaseCredit runs credit.release (SM-STL-CREDIT-RESERVATION). A person or an AI agent releases a
-// reserved reservation whose order is not active at its revision (订单未生效即放弃) or that expired.
-// The system (the order-end consumer, PL-13, unit B6) also releases consumed reservations. Inside
+// reserved reservation whose order is not active at its revision (订单未生效即放弃, cause abandoned)
+// or that expired (cause expired). The system also releases consumed reservations: the order-end
+// consumer (PL-13, unit B6; cause order_ended) and, when a later order revision supersedes them, the
+// amendment consumer (cause superseded, S5R-D08). Inside
 // the transaction it locks the customer's credit root FOR UPDATE, then the reservation row FOR
 // UPDATE — which CreditGuard v1 holds FOR SHARE while order.activate or order.amendment.apply runs,
 // so the release waits until TRD's transaction ends — and only then reads TRD's order state
@@ -66,8 +68,19 @@ func (h *releaseCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 			fmt.Sprintf("Order %s is active at revision %d: its reservation is consumed, and released when the order ends", r.Binding.OrderID,
 				h.order.OrderRevision))
 	}
+	cause := h.cmd.Cause
+	switch {
+	case cause == "" && d.Actor.Kind == kernel.ActorSystem:
+		cause = cc.CauseOrderEnded
+	case cause == "" && r.State(now) == cc.StateExpired:
+		cause = cc.CauseExpired
+	case cause == "":
+		cause = cc.CauseAbandoned
+	case cause == cc.CauseExpired && r.State(now) != cc.StateExpired:
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/cause", "The reservation has not expired")
+	}
 	from := r.Version
-	if err := r.Release(cc.Act{By: d.Actor, Epoch: d.Epoch, At: now, Reason: h.cmd.Reason}); err != nil {
+	if err := r.Release(cc.Act{By: d.Actor, Epoch: d.Epoch, At: now, Reason: h.cmd.Reason}, cause); err != nil {
 		return action.Outcome{}, err
 	}
 	if err := h.s.bump(ctx, exec, h.root); err != nil {
@@ -135,9 +148,13 @@ func (h *consumeCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	return action.Outcome{ObjectID: r.ID, RowVersion: r.Version, Status: r.Status, Events: []action.Event{e}}, nil
 }
 
-// ConsumeCredit marks a reservation consumed by its order's activation (credit.consume). System only.
+// ConsumeCredit marks a reservation consumed by its order's activation, or carries an earlier
+// revision's reservation over to an amended one (carried_from, S5R-D08) (credit.consume). System only.
 func (s Service) ConsumeCredit(ctx context.Context, cmd api.ConsumeCredit) (api.ReservationReceipt, error) {
-	h := &consumeCredit{s: s, cmd: cmd}
+	var h action.Handler = &consumeCredit{s: s, cmd: cmd}
+	if cmd.CarriedFrom != "" {
+		h = &carryCredit{s: s, cmd: cmd}
+	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandConsume, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ReservationID}, cmd,
 		cmd.Validate(), h)
 	if err != nil {

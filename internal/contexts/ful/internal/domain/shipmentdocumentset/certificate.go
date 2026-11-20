@@ -58,3 +58,76 @@ func certificateRef(d *Document, c *Certificate, r *CertificateResult) error {
 	d.Sources = append(d.Sources, Entry{Name: CertificateSource, Value: r.Binding})
 	return nil
 }
+
+// The certificate of origin at issue (S5R-D12; FUL-INV-004, SM-FUL-DOCUMENT draft → issued, MD-40):
+//
+//   - a certificate of origin record that names no CNX certificate result is a difference that can
+//     be acknowledged, item co_not_registered: the clerk states why (the customer asked for a copy
+//     only, or arranges the certificate itself) — the certificate is not a CNX result, so CNX's
+//     checks of it never ran;
+//   - a draft that names one is asked of CNX again when the set is issued (CertificateResultRef v1
+//     before the issue's transaction): a certificate that expired, no longer covers the shipment or
+//     was superseded since the draft was prepared is a difference that must be resolved (a new record),
+//     never acknowledged, item certificate_applicability. An issued record was judged at its issue.
+
+// The certificate items of a reconciliation (S5R-D12) and what they are compared with.
+const (
+	ItemCONotRegistered            = "co_not_registered"
+	ItemCertificateApplicability   = "certificate_applicability"
+	AgainstCertificateResult       = "certificate_result"
+	CertificateRecheckSource       = "cnx.certificate_result_ref.v1:recheck"
+	certificateRefPath             = "/certificate_ref"
+	certificateRegisteredExpected  = "a certificate result registered in CNX"
+	certificateApplicableExpected  = "a certificate result that applies to the shipment at issue"
+	certificateNotRecheckedFinding = "not asked of CNX again at issue"
+)
+
+// RecheckKey names the certificate of origin version an issue asked CNX about, with the certificate
+// result it names.
+type RecheckKey struct {
+	Version            int64
+	CertificateID      string
+	CertificateVersion int64
+}
+
+// ToRecheck returns the key of the set's current certificate of origin when it is a draft naming a
+// CNX certificate result — the record an issue asks CNX about again (S5R-D12) — and false otherwise.
+func (s *Set) ToRecheck() (RecheckKey, bool) {
+	d := s.Current(KindCertificateOfOrigin)
+	if d == nil || d.Status != Draft || d.Record == nil || d.Record.Certificate == nil || d.Record.Certificate.CertificateID == "" {
+		return RecheckKey{}, false
+	}
+	c := d.Record.Certificate
+	return RecheckKey{Version: d.Version, CertificateID: c.CertificateID, CertificateVersion: c.CertificateVersion}, true
+}
+
+// certificate adds the certificate of origin's items to a reconciliation (S5R-D12): co_not_registered
+// for a current record naming no certificate result; for a current draft naming one, when the
+// reconciliation is judged with CNX's answers (rechecked non-nil, an issue's or the read's), a
+// required certificate_applicability difference when CNX says it no longer applies or was not asked.
+func certificate(x *diffs, s *Set, rechecked map[RecheckKey]*CertificateResult) {
+	d := s.Current(KindCertificateOfOrigin)
+	if d == nil || d.Record == nil || d.Record.Certificate == nil {
+		return
+	}
+	c := d.Record.Certificate
+	if c.CertificateID == "" {
+		x.add(d, ItemCONotRegistered, certificateRefPath, "", certificateRegisteredExpected, AgainstCertificateResult)
+		return
+	}
+	k, ok := s.ToRecheck()
+	if !ok || rechecked == nil {
+		return
+	}
+	found := certificateNotRecheckedFinding
+	if r, asked := rechecked[k]; asked {
+		if r != nil && r.Code == "" {
+			return
+		}
+		if r != nil {
+			found = r.Code + ": " + r.Reason
+		}
+	}
+	x.out = append(x.out, Difference{Path: "/" + d.Kind + certificateRefPath, Document: d.Kind, Version: d.Version, Item: ItemCertificateApplicability,
+		Found: found, Expected: certificateApplicableExpected, Against: AgainstCertificateResult, Required: true})
+}

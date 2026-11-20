@@ -23,7 +23,7 @@ const (
 		WHERE tenant_id = $1 AND company_id = $2 FOR SHARE`
 	lockGrantShared = `SELECT actor_kind, active, $4 = ANY (permissions), data_scope, coalesce(team_id, '')
 		FROM brant_auth.actor_grant WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3 FOR SHARE`
-	lockGrantHolding = `SELECT actor_kind, active, permissions, data_scope, coalesce(team_id, '')
+	lockGrantHolding = `SELECT actor_kind, active, permissions, data_scope, coalesce(team_id, ''), changed_epoch
 		FROM brant_auth.actor_grant WHERE tenant_id = $1 AND company_id = $2 AND actor_id = $3 FOR SHARE`
 	lockScopeForChange = `SELECT authority_epoch FROM brant_auth.authority_scope
 		WHERE tenant_id = $1 AND company_id = $2 FOR NO KEY UPDATE`
@@ -121,14 +121,19 @@ func (a Authorizer) Access(ctx context.Context, exec bentopg.Executor) (Decision
 }
 
 // Holding is an actor's grant in a scope as Qualify read it: its kind, whether it is active, the
-// permissions it holds and its data scope. A missing grant is an inactive Holding of no
-// permission.
+// permissions it holds, its data scope and the authority epoch of its last change. A missing grant
+// is an inactive Holding of no permission and change epoch 0.
 type Holding struct {
 	Actor       kernel.ActorRef // the actor as granted: its kind is the grant's
 	Active      bool
 	Permissions []string
 	DataScope   DataScope
 	Team        string
+	// ChangedEpoch is the scope's authority epoch at which the grant last changed (actor_grant
+	// .changed_epoch): Put, Revoke and SetDataScope set it whenever they change the grant, so an
+	// equal ChangedEpoch means the grant is as it was. TRD's object control fences a binding on the
+	// changed epochs of the task's initiator and agent (S4 decision D-5).
+	ChangedEpoch int64
 }
 
 // Holds reports whether the grant is active and holds permission.
@@ -163,7 +168,8 @@ func (Authorizer) Qualify(ctx context.Context, exec bentopg.Executor, actorID st
 	}
 	h := Holding{Actor: kernel.ActorRef{ID: actorID}}
 	var kind, dataScope string
-	err = exec.QueryRow(ctx, lockGrantHolding, tenant, company, actorID).Scan(&kind, &h.Active, &h.Permissions, &dataScope, &h.Team)
+	err = exec.QueryRow(ctx, lockGrantHolding, tenant, company, actorID).Scan(&kind, &h.Active, &h.Permissions, &dataScope, &h.Team,
+		&h.ChangedEpoch)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Holding{Actor: kernel.ActorRef{ID: actorID}}, nil
 	}

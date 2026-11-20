@@ -195,7 +195,7 @@ type admitted struct {
 // locked.
 func (s Service) admitFormal(ctx context.Context, exec bentopg.Executor, h *quoteCommand, d authorization.Decision, f formalCmd, fx *salesFX,
 	at time.Time) (admitted, error) {
-	if err := h.admit(ctx, d, false); err != nil {
+	if err := h.admit(ctx, exec, d, false); err != nil {
 		return admitted{}, err
 	}
 	if err := quote.Check(h.q, true, f.expected); err != nil {

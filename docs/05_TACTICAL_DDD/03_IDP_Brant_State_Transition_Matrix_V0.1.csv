@@ -133,13 +133,15 @@ SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,closed_unfulfilled,task.release,close
 SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,cancelled,task.release,cancelled,任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变,human
 SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,failed,task.release,failed,任务已终止；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根；生命周期不变,human
 SM-TSK-TASK,TSK,BusinessTask,TaskLifecycle,paused,task.release,paused,control_mode=manual；无 submitted／unknown 动作；经 TRD object_control.release 释放报价根,human
-SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,credit.consume,consumed,系统消费方处理 OrderActivated（PL-12）；占用未过期，订单、修订与金额一致；按事件 ID 去重,system
-SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,credit.release,released,订单未生效即放弃，或占用到期,human|system
-SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,consumed,credit.release,released,系统消费方处理 OrderCancelled、OrderRemainderClosed 或 OrderClosed（PL-13）；按事件 ID 去重,system
-SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.decide,clear,授权合规人工；法规与名单版本、有效期,human
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,credit.consume,consumed,系统消费方处理 OrderActivated（PL-12）；占用未过期，订单、修订与金额一致；按事件 ID 去重；或 OrderAmended：新修订已有的有效占用（含游离占用：按需要量消耗、差额释放，S5R-D08）,system
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,reserved,credit.release,released,订单未生效即放弃，或占用到期；或系统消费方处理 OrderClosedUnfulfilled（草稿结束）,human|system
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,consumed,credit.release,released,系统消费方处理 OrderCancelled、OrderRemainderClosed、OrderClosed 或 OrderClosedUnfulfilled（PL-13）；按事件 ID 去重,system
+SM-STL-CREDIT-RESERVATION,STL,CustomerCredit,CreditReservation,consumed,credit.release,released,原因 superseded：OrderAmended 生效时上一修订的已消耗占用被释放，新修订由消耗已有占用或承接（来源 carried_over，系统创建的已消耗占用）取得恰一个已消耗占用（S5R-D08）,system
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.decide,clear,授权合规人工；法规与名单版本、有效期；embargo 或 sanctions 的适用发现须附 authorization 种类的例外依据证据与理由，clear 有效期不超过其有效期（INVALID_STATE /args/evidence_ids，S5R-D17）；region_review 发现须人工判断并写理由（S5R-D15）,human
 SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.decide,blocked,授权合规人工；理由与依据,human
-SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,clear,trade_compliance.reopen,pending,新的 screening_regulation 修订发布；结论按订单修订绑定，新订单修订另开待核查（PL-14）,system
-SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,blocked,trade_compliance.evaluate,pending,事实变化后重新核查（如取得许可证、更换收货方）,human|ai
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,pending,trade_compliance.evaluate,pending,替换当前评估；评估有缺口时不能判 clear（TRADE_COMPLIANCE_EVALUATION_INCOMPLETE）,human|ai
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,clear,trade_compliance.reopen,pending,系统重开：新的 screening_regulation 修订（PL-15）、国别项目名单更新 programme_updated（PL-16）或结论到期 expired；order_amended 不是转换，而是为新订单修订开启待核查并链接上一修订的核查（PL-14）,system
+SM-CNX-COMPLIANCE,CNX,TradeComplianceCheck,TradeComplianceCheck,blocked,trade_compliance.evaluate,pending,事实变化后重新核查（如取得许可证、更换收货方）；守卫在新的决定之前仍答 blocked（blocked_under_review，S5R-D10）,human|ai
 SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,credit_exception.decide,released,审批人层级覆盖超额金额且不是销售经办；超过最高阈值须两人,human
 SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,open,credit_exception.decide,rejected,理由必填,human
 SM-STL-CREDIT-DECISION,STL,CustomerCredit,CreditDecision,released,（决定有效期届满）,expired,未在有效期内完成占用,system
@@ -151,48 +153,60 @@ SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,approved,purchase.co
 SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,issued,purchase.supplier_confirmation.record,confirmed,供应商确认的来源证据与时间,human|ai
 SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,confirmed,purchase.commitment.change.apply,issued,获批变更形成承诺新修订，待供应商重新确认（PUR-INV-011）,human
 SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,issued,purchase.commitment.change.apply,issued,获批变更形成承诺新修订,human
-SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,issued,purchase.commitment.cancel,cancelled,授权人工、理由与供应商证据；释放分配,human
+SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,issued,purchase.commitment.cancel,cancelled,授权人工、理由与供应商证据；无未核实的交付声明（INVALID_STATE unverified_delivery_pending，S5R-D41）；释放分配,human
 SM-PUR-COMMITMENT,PUR,PurchaseCommitment,PurchaseCommitment,confirmed,purchase.commitment.cancel,cancelled,同上；已核实交付量保留,human
-SM-PUR-COMMITMENT-CHANGE,PUR,PurchaseCommitment,CommitmentChange,draft,purchase.commitment.change.decide,approved,独立于变更编制人与申请人；重算与偏差确认,human
+SM-PUR-COMMITMENT-CHANGE,PUR,PurchaseCommitment,CommitmentChange,draft,purchase.commitment.change.decide,approved,独立于变更的编制人与原承诺申请人；重算与偏差确认；只减少数量的变更不查供应条件有效期，单价沿用当前修订（S5R-D41）,human
 SM-PUR-COMMITMENT-CHANGE,PUR,PurchaseCommitment,CommitmentChange,draft,purchase.commitment.change.decide,rejected,理由必填,human
 SM-PUR-COMMITMENT-CHANGE,PUR,PurchaseCommitment,CommitmentChange,approved,purchase.commitment.change.apply,applied,承诺修订未变化（PURCHASE_COMMITMENT_CHANGE_STALE）,human
+SM-PUR-COMMITMENT-DISPOSITION,PUR,PurchaseCommitment,CommitmentDisposition,requested,purchase.commitment.disposition.decide,approved,订单审核人，独立于申请人；处置量不超过已核实交付减已出运；return_to_supplier 附退厂证据；写入 DownstreamCommitments v1 的 disposition，不改承诺状态（S5R-D05）,human
+SM-PUR-COMMITMENT-DISPOSITION,PUR,PurchaseCommitment,CommitmentDisposition,requested,purchase.commitment.disposition.decide,rejected,理由必填,human
 SM-PUR-SUPPLIER-DELIVERY,PUR,SupplierDelivery,SupplierDelivery,recorded,supplier_delivery.verify,verified,授权人工核实；累计不超承诺量与获批容差（PUR-INV-008）,human
 SM-PUR-SUPPLIER-DELIVERY,PUR,SupplierDelivery,SupplierDelivery,recorded,supplier_delivery.verify,rejected,证据不足；理由必填,human
 SM-PUR-SUPPLIER-DELIVERY,PUR,SupplierDelivery,SupplierDelivery,verified,supplier_delivery.verify,superseded,核实更正版本时原版本被取代,human
-SM-PUR-ALLOCATION-REVIEW,PUR,DemandAllocation,AllocationReview,open,allocation_review.settle,settled,每项有处置（作废草稿、取消或变更承诺、确认无需处理）与理由,human
-SM-PUR-ALLOCATION-REVIEW,PUR,DemandAllocation,AllocationReview,open,allocation_review.open,superseded,更晚的订单修订开启新复核,system
-SM-QLT-INSPECTION,QLT,Inspection,Inspection,recorded,disposition.decide,disposed,不合格量的处置：返工、让步、退回或报废,human
+SM-PUR-ALLOCATION-REVIEW,PUR,DemandAllocation,AllocationReview,open,allocation_review.settle,settled,每项有处置（draft_voided、commitment_changed、commitment_cancelled、no_action）与理由；一次处置整个复核（S5R-D39）,human
+SM-PUR-ALLOCATION-REVIEW,PUR,DemandAllocation,AllocationReview,open,allocation_review.open,superseded,更晚的订单修订开启新复核；复核按（订单、订单修订、原因）唯一（S5R-D39）,system
+SM-QLT-INSPECTION,QLT,Inspection,Inspection,recorded,disposition.decide,disposed,不合格量的处置：返工、让步、退回或报废；让步接收须附客户同意证据，获批让步的数量可放行（S5R-D18）,human
 SM-QLT-INSPECTION,QLT,Inspection,Inspection,recorded,inspection.record,superseded,复检取代原结果，不累加合格量（BT08）,human|ai
 SM-QLT-INSPECTION,QLT,Inspection,Inspection,disposed,inspection.record,superseded,返工后复检,human|ai
-SM-QLT-RELEASE,QLT,QualityRelease,QualityRelease,granted,quality_release.revoke,revoked,授权人工与理由；冻结未出运部分；重复撤回无变化（QLT-INV-002）,human
+SM-QLT-RELEASE,QLT,QualityRelease,QualityRelease,granted,quality_release.revoke,revoked,授权人工与理由；锁定放行根后经 FUL ReleaseConsumption v1 读取已出运量，记录冻结量；重复撤回无变化（QLT-INV-002，S5R-D18）,human
 SM-QLT-RELEASE,QLT,QualityRelease,QualityRelease,granted,（有效期届满）,granted,派生判断：过期放行不再服务新出运,system
-SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,shipment.confirm,confirmed,本范围放行已授予且本事务重查全部守卫；累计不超订单行数量（FUL-INV-001、002、003）,human
+SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,shipment.confirm,confirmed,本范围放行已授予且本事务重查全部守卫；累计不超订单行数量（FUL-INV-001、002、003）；许可证覆盖可来自出运本身或包含该行的出口批次的分配（S5R-D04）,human
 SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,shipment.cancel,cancelled,未确认；理由必填,human|ai
-SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,blocked,commercial_release.evaluate,granted,CNX、PTY、PUR、QLT、STL、TRD 守卫均满足,human|ai|system
-SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,commercial_release.evaluate,blocked,重新评估时任一守卫不满足,human|ai|system
-SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,blocked,commercial_release.grant_exception,granted,只覆盖付款条件；授权人工绑定订单、出运、阶段与金额,human
+SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,packing.plan,prepared,装箱计划的版本记录，不改状态,human|ai
+SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,packing.record_actual,prepared,实际装箱的版本记录，不改状态,human|ai
+SM-FUL-SHIPMENT,FUL,Shipment,Shipment,prepared,booking.record,prepared,已确认订舱的版本记录，不改状态（S5R-D11：不加订舱状态）,human|ai
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,blocked,commercial_release.evaluate,granted,CNX、PTY、PUR、QLT、STL、TRD 守卫均满足；B0 不设系统重评估（S5R-D29）,human|ai
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,commercial_release.evaluate,blocked,重新评估时任一守卫不满足,human|ai
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,blocked,commercial_release.evaluate,blocked,重新评估仍有守卫不满足：照记评估，版本前进,human|ai
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,commercial_release.evaluate,granted,重新评估全部守卫满足：照记评估，版本前进,human|ai
+SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,blocked,commercial_release.grant_exception,granted,只覆盖付款条件；授权人工绑定订单、出运、阶段与金额；独立于该放行的评估人与订单准备人（S5R-D28）；有效期不超过 credit_policy 的 decision_validity_days（S5R-D09）,human
 SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,shipment.confirm,consumed,scope shipment；本事务重查守卫,human
 SM-FUL-RELEASE,FUL,CommercialRelease,CommercialRelease,granted,document_release.record,consumed,scope documents；正本提单或电放；本事务重查守卫,human
-SM-FUL-DOCUMENT,FUL,ShipmentDocumentSet,ShipmentDocument,draft,shipment_document.issue,issued,差异逐项解决或确认；模板与编号经 ConfigGuard 重查（FUL-INV-004、005）,human
+SM-FUL-DOCUMENT,FUL,ShipmentDocumentSet,ShipmentDocument,draft,shipment_document.issue,issued,差异逐项解决或确认；模板与编号经 ConfigGuard 重查（FUL-INV-004、005）；签发时再查原产地证适用性，未登记的原产地证为可确认差异（S5R-D12）；按出运绑定的订单修订（S5R-D35）,human
 SM-FUL-DOCUMENT,FUL,ShipmentDocumentSet,ShipmentDocument,issued,shipment_document.issue,superseded,签发新版本时取代旧版本,human
 SM-FUL-DOCUMENT,FUL,ShipmentDocumentSet,ShipmentDocument,draft,shipment_document.prepare,superseded,新草稿版本取代,human|ai
-SM-FUL-SHIPMENT-REVIEW,FUL,OrderFulfilment,ShipmentReview,open,shipment_review.settle,settled,装箱、订舱与未签发单证逐项处置；已确认出运保留,human
-SM-FUL-SHIPMENT-REVIEW,FUL,OrderFulfilment,ShipmentReview,open,shipment_review.open,superseded,更晚的订单修订开启新复核,system
+SM-FUL-SHIPMENT-REVIEW,FUL,OrderFulfilment,ShipmentReview,open,shipment_review.settle,settled,装箱、订舱、未签发单证与未消耗放行逐项处置（shipment_cancelled、replaced、reevaluated、no_action）与理由；已确认出运保留；不加改绑命令（S5R-D39）,human
+SM-FUL-SHIPMENT-REVIEW,FUL,OrderFulfilment,ShipmentReview,open,shipment_review.open,superseded,更晚的订单修订开启新复核；复核按（订单、订单修订、原因）唯一（S5R-D39）,system
 SM-STL-SETTLEMENT,STL,SettlementStatement,SettlementStatement,confirmed,settlement.reverse,reversed,无有效核销；独立于确认人；恢复来源明细（STL-INV-009）,human
 SM-STL-CREDIT-NOTE,STL,SettlementStatement,CreditNote,requested,credit.confirm,confirmed,独立于申请人；绑定订单、结算单、类型、金额与依据（STL-INV-008）,human
 SM-STL-CREDIT-NOTE,STL,SettlementStatement,CreditNote,requested,credit.confirm,rejected,理由必填,human
 SM-STL-FUND,STL,FundRecord,FundRecord,recorded,fund.resolve_difference,difference_resolved,独立于资金登记人；我方承担的银行费用或折让及依据（STL-INV-006）,human
+SM-STL-FUND,STL,FundRecord,FundRecord,recorded,fund.reverse,reversed,独立于资金登记人；无有效核销（FUND_RECORD_HAS_APPLICATIONS）；原记录保留，冲销后银行流水键可再用；适用于期初（S5R-D22）,human
+SM-STL-FUND,STL,FundRecord,FundRecord,difference_resolved,fund.reverse,reversed,同上,human
+SM-STL-FUND,STL,FundRecord,FundRecord,recorded,fund.verify_payer,recorded,信用经理核实临时第三方付款：独立于资金登记人，附付款委托书或三方协议；之后可核销到客户应收（S5R-D21）,human
+SM-STL-FUND,STL,FundRecord,FundRecord,difference_resolved,fund.verify_payer,difference_resolved,同上,human
 SM-STL-APPLICATION,STL,Application,Application,applied,application.unapply,unapplied,授权人工与理由；形成新记录，资金事实保留,human
+SM-STL-APPLICATION,STL,Application,Application,applied,settlement.confirm,moved,销售结算单确认时阶段核销移到应收，同时形成替代核销与余额（登记的原则 7 例外）,human
 SM-STL-CREDIT-LIMIT,STL,CustomerCredit,CreditLimitRequest,requested,credit_limit.publish,published,审批人层级覆盖申请额度且独立于申请人；额度来源与有效期,human
 SM-STL-CREDIT-LIMIT,STL,CustomerCredit,CreditLimitRequest,requested,credit_limit.publish,rejected,理由必填,human
 SM-STL-CHARGE,STL,Charge,Charge,estimated,charge.record,pending,收到供应商账单或费用依据,human|ai
 SM-STL-CHARGE,STL,Charge,Charge,pending,charge.confirm,confirmed,授权人工核对账单与依据,human
 SM-STL-CHARGE,STL,Charge,Charge,estimated,charge.confirm,confirmed,同上,human
 SM-STL-ORDER-RESULT,STL,OrderResult,OrderResult,open,order_result.review,reviewed,汇总履约、账款、费用与案件状态,human|ai
-SM-STL-ORDER-RESULT,STL,OrderResult,OrderResult,reviewed,order_result.close,settled,关闭条件全部满足；授权人员（STL-INV-011）,human
+SM-STL-ORDER-RESULT,STL,OrderResult,OrderResult,reviewed,order_result.close,settled,关闭条件全部满足；授权人员（STL-INV-011）；已取消订单有已确认费用或获批 write_off 处置时以 cancelled 标记关闭，收入为零（S5R-D42）,human
 SM-STL-ORDER-RESULT,STL,OrderResult,OrderResult,settled,order_result.reopen,open,关闭后补录费用或调整；理由与留痕（BT24）,human
-SM-STL-PAYMENT-PLAN-REVIEW,STL,OrderAccount,PaymentPlanReview,open,payment_plan_review.settle,settled,付款阶段与信用部分的变化逐项处置,human
-SM-STL-PAYMENT-PLAN-REVIEW,STL,OrderAccount,PaymentPlanReview,open,payment_plan_review.open,superseded,更晚的订单修订开启新复核,system
+SM-STL-PAYMENT-PLAN-REVIEW,STL,OrderAccount,PaymentPlanReview,open,payment_plan_review.settle,settled,不再适配的阶段（stage_removed、stage_over_applied）与信用部分变化（credit_portion_changed）逐项处置（accepted、corrected）；仍适配的变化在账户中可见、不列为条目（S5R-D39）,human
+SM-STL-PAYMENT-PLAN-REVIEW,STL,OrderAccount,PaymentPlanReview,open,payment_plan_review.open,superseded,更晚的订单修订开启新复核；复核按（订单、订单修订）唯一,system
 SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,draft,declaration_case.confirm,confirmed,申报档案已核实，映射有专业依据（CNX-INV-006）,human
 SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,confirmed,declaration_case.record_submission,submitted,人工提交声明与操作引用,human
 SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,submitted,declaration_case.record_receipt,unknown,超时或结果不明；先查证（CNX-INV-003）,human
@@ -204,13 +218,31 @@ SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,received,declaration_case
 SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,accepted,declaration_case.record_receipt,rejected,退回回执,human
 SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,released,declaration_case.record_receipt,amended,改单回执；引用原项与数量（CN-R07）,human
 SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,released,declaration_case.record_receipt,withdrawn,撤销回执,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,submitted,declaration_case.record_receipt,accepted,主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,submitted,declaration_case.record_receipt,released,主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,unknown,declaration_case.record_receipt,accepted,主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,unknown,declaration_case.record_receipt,released,主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,received,declaration_case.record_receipt,released,主线乱序前跳：直接登记查到的更后回执（原文与映射版本）；旧回执不覆盖新结果,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,unknown,declaration_case.record_receipt,not_received,outcome not_received：人工查证并附证据（以海关总署可查询状态为准，如报关数据查询无入库记录或报关行书面确认）与理由；查到海关入库成功或更后状态时只能按回执记录；之后同一出口批次可开启下一次报关尝试（S5R-D13）,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,amended,declaration_case.record_receipt,amended,再次改单回执；引用原项与数量,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,amended,declaration_case.record_receipt,withdrawn,撤销回执,human
+SM-CNX-DECLARATION,CNX,DeclarationCase,DeclarationCase,draft,declaration_case.prepare,draft,资料修订形成新的草稿版本,human|ai
 SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,imported,purchase_invoice.verify,verified,人工核验原件与候选（CNX-INV-005）,human
-SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,imported,purchase_invoice.verify,rejected,重复、无效或主体不符,human
-SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,verified,purchase_invoice.verify,reversed,核验红字发票时原票被冲红，相关匹配待复核,human
-SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,expected,tax_refund_case.record_result,planned,拟申报；政策版本与专业复核人,human
+SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,imported,purchase_invoice.verify,rejected,重复、无效或主体不符；受票主体与本公司不一致直接拒绝，供应商须重开（S5R-D21）,human
+SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,verified,purchase_invoice.verify,reversed,核验全额红字发票时原票被冲红，相关匹配待复核；被冲蓝票已分配到 submitted 或之后的退税案件时，须先登记进货凭证信息回退（INVALID_STATE，S5R-D20）,human
+SM-CNX-INVOICE,CNX,PurchaseInvoice,PurchaseInvoice,verified,purchase_invoice.verify,verified,核验部分红字发票：按红票金额冲减蓝票余额，蓝票余额仍可用于退税分配；回退前置条件同上（S5R-D20）,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,expected,tax_refund_case.record_result,planned,拟申报；政策版本与专业复核人；planned 之后绑定的政策修订不再变化（S5R-D23）,human
 SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,planned,tax_refund_case.record_result,submitted,外部提交引用,human
 SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,submitted,tax_refund_case.record_result,approved,核准结果原文；金额可与预计不同（CN-AT10）,human
 SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,approved,tax_refund_case.record_result,received,到账（引用 STL 资金记录）,human
 SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,submitted,tax_refund_case.record_result,rejected,外部不予核准,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,expected,tax_refund_case.record_result,expected,记录预计金额或依据说明之一；预计不是核准（S5R-D14）,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,expected,tax_refund_case.rebind_policy,expected,读取显示 policy_superseded：更晚发布、同样覆盖出口日期的修订；税务专员重新绑定并写理由（S5R-D23）,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,expected,tax_refund_case.record_result,converted_to_exemption,未在规定期限内申报：转为免税（export_exemption），附逾期依据（S5R-D14，R1 前实现）,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,planned,tax_refund_case.record_result,converted_to_exemption,同上,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,submitted,tax_refund_case.record_result,submitted,evidence_rolled_back：登记进货凭证信息回退的外部结果并附证据，之后被冲蓝票的红票方可核实（S5R-D20）,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,approved,tax_refund_case.record_result,approved,同上,human
+SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,received,tax_refund_case.record_result,received,同上；已到账案件的退税差额经外部对账处理,human
 SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,draft,declaration_profile.verify,verified,授权专业人工，独立于最后编辑人（CAT-INV-002）,human
 SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,verified,declaration_profile.verify,superseded,核实更新修订时取代，历史申报快照不变,human
+SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,draft,declaration_profile.discard_draft,discarded,编辑人或授权专业人工丢弃草稿；已核实修订不撤回，只由更正修订取代（S5R-D47）,human

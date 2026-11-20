@@ -18,11 +18,31 @@ import (
 // Orders is FUL's port to TRD (R27): ActiveOrderRef v1 before FUL's transaction, OrderGuard v1
 // with FUL's executor inside it, and TRD's order state read (brant_trd.order_state_v1, lock-free,
 // no data scope) inside it after FUL's own locks — what the documents release of a confirmed
-// shipment reads the order's current revision and hash from (S5 C1b).
+// shipment reads the order's current revision and hash from (S5 C1b). OrderRevisionRef v1 (S5R-D35)
+// reads any committed revision by (order, revision) before FUL's transaction: the revision a shipment
+// binds, its line prices, terms, Incoterm, addresses with countries and notify party, which a later
+// amendment never rewrites.
 type Orders interface {
 	ResolveActiveOrders(ctx context.Context, orderIDs []string) (map[string]trdapi.ActiveOrderFact, error)
+	ResolveOrderRevisions(ctx context.Context, keys []trdapi.OrderRevisionKey) (map[trdapi.OrderRevisionKey]trdapi.OrderRevisionFact, error)
 	GuardOrder(ctx context.Context, exec bentopg.Executor, b trdapi.OrderBinding) (trdapi.OrderVerdict, error)
 	OrderState(ctx context.Context, exec bentopg.Executor, orderID string) (trdapi.OrderState, error)
+}
+
+// boundRevision asks TRD's OrderRevisionRef v1 for the revision binding b names: the fact, or nil when
+// TRD shows the caller no such revision, the revision is not intact (Code) or its order hash is not
+// b's (a revision never changes: a different hash is not the revision the caller bound).
+func (s Service) boundRevision(ctx context.Context, b trdapi.OrderBinding) (*trdapi.OrderRevisionFact, error) {
+	key := trdapi.OrderRevisionKey{OrderID: b.OrderID, OrderRevision: b.OrderRevision}
+	got, err := s.Upstream.Orders.ResolveOrderRevisions(ctx, []trdapi.OrderRevisionKey{key})
+	if err != nil {
+		return nil, err
+	}
+	f, ok := got[key]
+	if !ok || f.Code != "" || f.Binding != b {
+		return nil, nil
+	}
+	return &f, nil
 }
 
 // Releases is FUL's port to QLT (R26): QualityReleaseRef v1 before FUL's transaction,
@@ -42,28 +62,31 @@ type Screening interface {
 // commitment, supplier, sales order line, SKU specification and unit), the verified quantity and
 // Code — "" when the version is the verified one, else PUR's refusal (SUPPLIER_DELIVERY_UNVERIFIED,
 // REFERENCE_STALE). Known is false in a guard verdict for a delivery, version or line PUR does not
-// have.
+// have. LineVerifiedQuantity and LineDisposedQuantity are what the commitment line adds up to now:
+// its verified deliveries and its approved dispositions (SupplierDeliveryGuard v2, S5R-D05).
 type DeliveryLine struct {
-	Ref              api.DeliveryLineRef
-	Known            bool
-	Status           string
-	VerifiedVersion  int64
-	CommitmentID     string
-	SupplierID       string
-	OrderID          string
-	OrderLineID      string
-	SkuID            string
-	SpecRevision     int64
-	UnitID           string
-	UnitRevision     int64
-	VerifiedQuantity string
-	Code             string
+	Ref                  api.DeliveryLineRef
+	Known                bool
+	Status               string
+	VerifiedVersion      int64
+	CommitmentID         string
+	SupplierID           string
+	OrderID              string
+	OrderLineID          string
+	SkuID                string
+	SpecRevision         int64
+	UnitID               string
+	UnitRevision         int64
+	VerifiedQuantity     string
+	LineVerifiedQuantity string
+	LineDisposedQuantity string
+	Code                 string
 }
 
 // Deliveries is FUL's port to PUR's supplier deliveries (R59): ResolveDeliveryLines before FUL's
-// transaction (only lines the caller reads), GuardDeliveryLine — SupplierDeliveryGuard v1,
-// brant_pur.guard_supplier_delivery_v1(delivery_id, line_id, version), which locks the delivery
-// FOR SHARE — with FUL's executor inside it.
+// transaction (only lines the caller reads), GuardDeliveryLine — SupplierDeliveryGuard v2,
+// brant_pur.guard_supplier_delivery_v2(delivery_id, line_id, version), which locks the line's
+// commitment root FOR SHARE — with FUL's executor inside it.
 type Deliveries interface {
 	ResolveDeliveryLines(ctx context.Context, refs []api.DeliveryLineRef) (map[api.DeliveryLineRef]DeliveryLine, error)
 	GuardDeliveryLine(ctx context.Context, exec bentopg.Executor, ref api.DeliveryLineRef) (DeliveryLine, error)
@@ -89,11 +112,22 @@ func decimal(s string) kernel.Decimal {
 	return d
 }
 
-// orderFact is what the domain judges of TRD's answer.
-func orderFact(f trdapi.ActiveOrderFact) *shipment.OrderFact {
+// orderFact is what the domain judges of TRD's answer: ActiveOrderRef v1 says whether the order
+// serves new work at which binding; the lines, the customer's address roles and the notify party are
+// those of that revision as OrderRevisionRef v1 reads it (rev; S5R-D35, D40) — nil when TRD did not
+// show it, which leaves the order not intact for FUL (REFERENCE_INVALID) unless ActiveOrderRef v1
+// already refused it.
+func orderFact(f trdapi.ActiveOrderFact, rev *trdapi.OrderRevisionFact) *shipment.OrderFact {
 	o := &shipment.OrderFact{Binding: shipment.OrderBinding{OrderID: f.Binding.OrderID, OrderRevision: f.Binding.OrderRevision,
 		OrderHash: f.Binding.OrderHash}, Code: f.Code, CustomerID: f.CustomerRef.PartyID, Customer: f.CustomerRef.Revision}
-	for _, l := range f.Lines {
+	if o.Code != "" {
+		return o
+	}
+	if rev == nil {
+		o.Code = kernel.CodeReferenceInvalid
+		return o
+	}
+	for _, l := range rev.Lines {
 		q, ok := api.Quantity(l.Quantity)
 		if !ok {
 			// A line FUL cannot read never ships: the order is not intact for FUL.
@@ -102,8 +136,11 @@ func orderFact(f trdapi.ActiveOrderFact) *shipment.OrderFact {
 		o.Lines = append(o.Lines, shipment.OrderLine{LineID: l.LineID, SkuID: l.Sku.SkuID, SpecRevision: l.Sku.SpecRevision, UnitID: l.UnitRef.ID,
 			UnitRevision: l.UnitRef.Revision, Quantity: q})
 	}
-	for _, a := range f.Terms.Addresses {
+	for _, a := range rev.Addresses {
 		o.Addresses = append(o.Addresses, shipment.Party{Role: a.Role, PartyID: a.PartyID, PartyRevision: a.PartyRevision, AddressID: a.AddressID})
+	}
+	if n := rev.NotifyParty; n != nil {
+		o.Notify = &shipment.Party{Role: shipment.RoleNotify, PartyID: n.PartyID, PartyRevision: n.PartyRevision, AddressID: n.AddressID}
 	}
 	return o
 }
@@ -115,7 +152,7 @@ func releaseScope(s qltapi.ReleaseScope) shipment.Scope {
 
 func releaseFact(r qltapi.ResolvedRelease) shipment.ReleaseFact {
 	return shipment.ReleaseFact{ID: r.Ref.ReleaseID, Code: r.Code, State: r.State, SubjectKind: r.Scope.Subject.Kind, Scope: releaseScope(r.Scope),
-		Quantity: decimal(r.Quantity)}
+		Quantity: decimal(r.Quantity), Concession: r.Concession}
 }
 
 func releaseVerdict(v qltapi.QualityReleaseVerdict) shipment.ReleaseVerdict {
@@ -128,14 +165,20 @@ func deliveryScope(l DeliveryLine) shipment.Scope {
 		SpecRevision: l.SpecRevision, UnitID: l.UnitID, UnitRevision: l.UnitRevision}
 }
 
+// lineTotals is what PUR stated of the commitment line; a total FUL cannot read is zero, so nothing
+// more ships of it.
+func lineTotals(l DeliveryLine) shipment.CommitmentLineTotals {
+	return shipment.CommitmentLineTotals{Verified: decimal(l.LineVerifiedQuantity), Disposed: decimal(l.LineDisposedQuantity)}
+}
+
 func deliveryFact(l DeliveryLine) shipment.DeliveryFact {
 	return shipment.DeliveryFact{Ref: shipment.DeliveryRef{DeliveryID: l.Ref.DeliveryID, LineID: l.Ref.LineID}, Version: l.Ref.Version,
-		Status: l.Status, Code: l.Code, Scope: deliveryScope(l), Verified: decimal(l.VerifiedQuantity)}
+		Status: l.Status, Code: l.Code, Scope: deliveryScope(l), Verified: decimal(l.VerifiedQuantity), Line: lineTotals(l)}
 }
 
 func deliveryVerdict(l DeliveryLine) shipment.DeliveryVerdict {
 	return shipment.DeliveryVerdict{Known: l.Known, Status: l.Status, VerifiedVersion: l.VerifiedVersion, Scope: deliveryScope(l),
-		Verified: decimal(l.VerifiedQuantity), Code: l.Code}
+		Verified: decimal(l.VerifiedQuantity), Line: lineTotals(l), Code: l.Code}
 }
 
 func orderVerdict(v trdapi.OrderVerdict) shipment.OrderVerdict {

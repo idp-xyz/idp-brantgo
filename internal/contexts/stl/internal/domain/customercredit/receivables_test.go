@@ -3,7 +3,32 @@ package customercredit
 import (
 	"testing"
 	"time"
+
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
+
+var eur = kernel.MustCurrency("EUR", 2)
+
+// rate is a credit rate from → to of value (units of to per unit of from).
+func rate(t *testing.T, from, to kernel.Currency, value string) kernel.ExchangeRate {
+	t.Helper()
+	d, err := kernel.ParseDecimal(value, kernel.FactorFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, err := kernel.NewExchangeRate(from, to, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return x
+}
+
+func path(err error) string {
+	if r, ok := kernel.AsRejection(err); ok && len(r.Fields) > 0 {
+		return r.Fields[0].Path
+	}
+	return ""
+}
 
 // The receivables of settlement statements in the credit exposure (S5-04b; STL-INV-004; S5 plan
 // D-4 "credit exposure = open receivables + Σ max(0, live reservation − receivables formed for that
@@ -20,7 +45,7 @@ func consumed(order string, amount, secured string) Reservation {
 
 func exposure(t *testing.T, owe []OwedInstallment, reservations []Reservation, at time.Time) Verdict {
 	t.Helper()
-	r, err := ReceivablesOf(usd, owe, reservations)
+	r, err := ReceivablesOf(usd, owe, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +76,7 @@ func TestExposureCountsReceivablesOnce(t *testing.T) {
 	}
 	brc := []OwedInstallment{owed("o.1", TriggerOrderConfirmed, "", "288", "288", shipped),
 		owed("o.1", TriggerAfterShipment, "", "672", "0", shipped.AddDate(0, 0, 30))}
-	r, err := ReceivablesOf(usd, brc, res)
+	r, err := ReceivablesOf(usd, brc, nil)
 	if err != nil || r.Open.Amount() != "672.00" || r.FormedBy["o.1"].Amount() != "672.00" || !r.EarliestDue.Equal(shipped.AddDate(0, 0, 30)) {
 		t.Fatalf("receivables %+v %v", r, err)
 	}
@@ -114,25 +139,47 @@ func TestTheEarliestOpenInstallmentFeedsTheOverdueTolerance(t *testing.T) {
 	}
 }
 
-// STL-INV-004 across currencies: a receivable in the order currency (CNY) converts into the limit
-// currency (USD) at the rate its order's reservation was made at (exposure ÷ portion, HALF_UP); with
-// no such reservation an open amount is FX_SCOPE_MISMATCH (fail closed), a zero one converts to zero.
-func TestReceivablesInAnotherCurrencyConvertAtTheReservationRate(t *testing.T) {
-	res := Reservation{ID: "res.c", Binding: Binding{OrderID: "o.c", OrderRevision: 2}, Amount: mc(cny, "7000"), Secured: mc(cny, "0"),
-		Exposure: m("1000"), Status: ReservationConsumed}
+// STL-INV-004 across currencies with S5R-D22: a receivable in another currency than the limit (CNY
+// into USD) converts at the POL credit rate of its currency, HALF_UP once per amount — no longer at the
+// rate its order's reservation was made at (S5 B2b), which an opening receivable does not have and
+// which a reservation of another rate would distort. Without that rate an open amount is
+// FX_SCOPE_MISMATCH at /args/exposure_fx_rates (fail closed); a zero one converts to zero, and
+// Unconverted names the currencies a read cannot state the exposure without.
+func TestReceivablesInAnotherCurrencyConvertAtTheCreditRate(t *testing.T) {
+	credit := Rates{"CNY": rate(t, cny, usd, "0.142857")}
 	owe := []OwedInstallment{{OrderID: "o.c", Trigger: TriggerAfterShipment, Amount: mc(cny, "7000"), Applied: mc(cny, "3500"), DueAt: t0},
 		{OrderID: "o.c", Trigger: TriggerAfterShipment, Amount: mc(cny, "1"), Applied: mc(cny, "0"), DueAt: t0}}
-	r, err := ReceivablesOf(usd, owe, []Reservation{res})
+	r, err := ReceivablesOf(usd, owe, credit)
+	// 3,500.00 × 0.142857 = 499.9995 → 500.00 and 1.00 → 0.14 open; formed 7,000.00 → 999.999 → 1,000.00 and 0.14.
 	if err != nil || r.Open.Amount() != "500.14" || r.FormedBy["o.c"].Amount() != "1000.14" {
 		t.Fatalf("converted %+v %v", r, err)
 	}
-	if _, err = ReceivablesOf(usd, owe, nil); code(err) != CodeFXScopeMismatch {
+	// A reservation of the order at another rate changes nothing (S5 B2b converted at its ratio).
+	if _, err = ReceivablesOf(usd, owe, nil); code(err) != CodeFXScopeMismatch || path(err) != RatesPath {
 		t.Fatalf("no rate: %v", err)
+	}
+	if got := Unconverted(usd, owe, nil); len(got) != 1 || got[0] != "CNY" {
+		t.Fatalf("unconverted %v", got)
+	}
+	if got := Unconverted(usd, owe, credit); len(got) != 0 {
+		t.Fatalf("unconverted with the rate %v", got)
+	}
+	// A rate into another currency than the limit's does not convert (EUR is not the limit).
+	if _, err = ReceivablesOf(usd, owe, Rates{"CNY": rate(t, cny, eur, "0.13")}); code(err) != CodeFXScopeMismatch {
+		t.Fatalf("rate into another currency: %v", err)
 	}
 	owe[0].Applied, owe = owe[0].Amount, owe[:1]
 	owe[0].Trigger = TriggerBeforeShipment
-	if r, err = ReceivablesOf(usd, owe, nil); err != nil || r.Open.Amount() != "0.00" {
+	if r, err = ReceivablesOf(usd, owe, nil); err != nil || r.Open.Amount() != "0.00" || len(Unconverted(usd, owe, nil)) != 0 {
 		t.Fatalf("nothing open: %+v %v", r, err)
+	}
+	// An opening receivable in CNY (S5R-D22 "跨币种期初应收按 credit 汇率计入敞口"): no order, the same rate.
+	opening := []OwedInstallment{{Amount: mc(cny, "70000"), Applied: mc(cny, "0"), DueAt: t0.AddDate(0, 0, 5)}}
+	if r, err = ReceivablesOf(usd, opening, credit); err != nil || r.Open.Amount() != "9999.99" || len(r.FormedBy) != 0 {
+		t.Fatalf("opening receivable in CNY: %+v %v", r, err)
+	}
+	if _, err = ReceivablesOf(usd, opening, nil); code(err) != CodeFXScopeMismatch {
+		t.Fatalf("opening receivable without a rate: %v", err)
 	}
 }
 

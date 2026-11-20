@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +97,16 @@ func TestOrderSnapshotsServeDraftsAndActiveOrders(t *testing.T) {
 	refs, err := q.c.TRD.ResolveActiveOrders(q.author, []string{draft.ObjectID, active.ObjectID})
 	q.must(err)
 	for id, f := range facts {
-		if r := refs[id]; !reflect.DeepEqual(r.Terms, f.OrderTerms) || !reflect.DeepEqual(r.Lines, f.Lines) || r.Binding != f.Binding {
+		// S5R-D33: the line's costing cost (the 660.00 USD snapshot's L1) is OrderCommercialSnapshot v1's,
+		// not ActiveOrderRef v1's; the lines are otherwise the same.
+		lines := slices.Clone(f.Lines)
+		for i := range lines {
+			if lines[i].CostMinor != "66000" {
+				t.Errorf("the costing cost of %s %s: %q", id, lines[i].LineID, lines[i].CostMinor)
+			}
+			lines[i].CostMinor = ""
+		}
+		if r := refs[id]; !reflect.DeepEqual(r.Terms, f.OrderTerms) || !reflect.DeepEqual(r.Lines, lines) || r.Binding != f.Binding {
 			t.Errorf("ActiveOrderRef v1 of %s: %+v", id, r)
 		}
 	}

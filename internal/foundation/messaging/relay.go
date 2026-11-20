@@ -56,6 +56,9 @@ type Relay struct {
 	RetryMax       time.Duration
 	IdleWait       time.Duration
 	Logger         *slog.Logger
+	// Metrics counts claims, publishes with their latency, failures and dead letters (S5R-D07);
+	// nil counts nothing.
+	Metrics *RelayMetrics
 }
 
 // Run relays until ctx is canceled and then returns ctx.Err().
@@ -90,15 +93,17 @@ func (r Relay) RunOnce(ctx context.Context) (int, error) {
 	deliveries, err := r.Outbox.Claim(ctx, eventing.OutboxClaim{
 		Now: r.Clock.Now(), Limit: r.Batch, LeaseFor: r.LeaseFor, MaxAttempts: claimAttemptCeiling,
 	})
-	if err != nil {
-		return 0, err
-	}
-	for _, d := range deliveries {
-		if err := r.settle(ctx, d); err != nil {
-			return len(deliveries), err
+	if err == nil {
+		for _, d := range deliveries {
+			if err = r.settle(ctx, d); err != nil {
+				break
+			}
 		}
 	}
-	return len(deliveries), nil
+	if ctx.Err() == nil {
+		r.Metrics.round(len(deliveries), r.Clock.Now(), err)
+	}
+	return len(deliveries), err
 }
 
 func (r Relay) settle(ctx context.Context, d eventing.Delivery) error {
@@ -115,7 +120,13 @@ func (r Relay) settle(ctx context.Context, d eventing.Delivery) error {
 	cancel()
 	switch {
 	case err == nil:
-		return r.leaseLostIsSettled(d, r.Outbox.MarkPublished(ctx, d.Ref, r.Clock.Now()))
+		at, start := r.Clock.Now(), time.Now()
+		err = r.Outbox.MarkPublished(ctx, d.Ref, at)
+		if err == nil {
+			r.Metrics.published(d.Envelope.Source, at.Sub(d.Envelope.RecordedAt))
+			r.Metrics.settled(time.Since(start))
+		}
+		return r.leaseLostIsSettled(d, err)
 	case ctx.Err() != nil:
 		// Stopping: the lease expires and another worker re-delivers.
 		return ctx.Err()
@@ -128,9 +139,13 @@ func (r Relay) settle(ctx context.Context, d eventing.Delivery) error {
 	default:
 		r.logger().Warn("outbox publish failed", "event_id", d.Envelope.ID, "failures", d.Failures+1, "error", err)
 		failedAt := r.Clock.Now()
-		return r.leaseLostIsSettled(d, r.Outbox.RecordFailure(ctx, d.Ref, eventing.DeliveryFailure{
+		err = r.Outbox.RecordFailure(ctx, d.Ref, eventing.DeliveryFailure{
 			FailedAt: failedAt, RetryAt: failedAt.Add(r.backoff(d.Failures)), Code: FailurePublishFailed, MaxFailures: r.MaxFailures,
-		}))
+		})
+		if err == nil {
+			r.Metrics.failed(FailurePublishFailed)
+		}
+		return r.leaseLostIsSettled(d, err)
 	}
 }
 
@@ -176,6 +191,7 @@ func (r Relay) bury(ctx context.Context, d eventing.Delivery, code eventing.Fail
 	if err != nil {
 		return r.leaseLostIsSettled(d, fmt.Errorf("messaging: abandon %s: %w", d.Ref.EventID, err))
 	}
+	r.Metrics.deadLettered(alert)
 	r.alerter().Alert(context.WithoutCancel(ctx), alert)
 	return nil
 }
@@ -183,6 +199,7 @@ func (r Relay) bury(ctx context.Context, d eventing.Delivery, code eventing.Fail
 // leaseLostIsSettled treats a lost lease as settled: another worker owns the delivery now.
 func (r Relay) leaseLostIsSettled(d eventing.Delivery, err error) error {
 	if errors.Is(err, eventing.ErrLeaseLost) {
+		r.Metrics.lostLease()
 		r.logger().Warn("outbox lease lost", "event_id", d.Envelope.ID)
 		return nil
 	}

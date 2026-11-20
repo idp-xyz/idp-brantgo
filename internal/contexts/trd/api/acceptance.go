@@ -146,15 +146,15 @@ var (
 // TRD-CustomerPO). Human or AI.
 type RecordResponse struct {
 	IdempotencyKey   string
-	ResponseID       string
-	QuoteID          string
-	BusinessRevision int64
-	BusinessHash     string
-	Classification   string
-	Summary          string
-	SourceRef        Evidence
-	ReceivedAt       string
-	ReceivedAtBasis  string
+	ResponseID       string   `contract:"required,id"`
+	QuoteID          string   `contract:"required,id"`
+	BusinessRevision int64    `contract:"required" doc:"the active revision"`
+	BusinessHash     string   `contract:"required,hash" doc:"its business hash"`
+	Classification   string   `contract:"required,enum=full_unconditional|conditional|partial|reject|ambiguous" doc:"conditional: a counter-offer"`
+	Summary          string   `contract:"required"`
+	SourceRef        Evidence `contract:"required" doc:"the customer's message"`
+	ReceivedAt       string   `contract:"instant" doc:"when the message arrived"`
+	ReceivedAtBasis  string   `contract:"enum=channel_server|import_record|source_claimed,with=ReceivedAt"`
 	CustomerPONumber string
 	Evidence         []Evidence
 }

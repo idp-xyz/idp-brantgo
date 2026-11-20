@@ -82,3 +82,58 @@ func ValidateOrderIDs(ids []string) error {
 	}
 	return nil
 }
+
+// ReleaseConsumption v1 (Context Map R79 FUL→QLT, "OHS（事务内无锁读取）", guardLock false: 按质量放行
+// ID 的已出运量; risk 撤回记录的冻结量与实际出运不符; decision S5R-D18). QLT's quality_release.revoke
+// reads what FUL shipped under the release it revokes inside its own transaction, without locks,
+// after it locked the release row FOR UPDATE, and records the frozen quantity (QLT-INV-002). That
+// read is consistent because shipment.confirm — the only command that adds to it — holds the same
+// release row FOR SHARE through QLT's QualityReleaseGuard v1 until it commits: a confirmation either
+// committed before QLT got its lock, and the read sees it, or waits for QLT and then meets the release
+// revoked.
+//
+// It is a SECURITY DEFINER function in FUL's schema with a fixed search_path
+// (migrations/ful/000008_ful_release_consumption.sql):
+//
+//	brant_ful.release_consumption_v1(p_release_id text)
+//	    RETURNS TABLE (unit_id text, unit_revision bigint, shipped_quantity text, shipments bigint)
+//
+// It returns one row per unit of the confirmed shipment lines that name the release in the caller's
+// scope (app.tenant_id and app.company_id), ordered by unit, and no row when nothing shipped under
+// it: shipped_quantity is the sum of those lines (QuantityFormat text), shipments the number of
+// confirmed shipments they came from. Prepared and cancelled shipments never count. FUL keeps every
+// line of a release in the release's unit, so a caller sees at most one row. The function takes no
+// lock and applies no data scope. A caller, after its lock:
+//
+//	rows, err := exec.Query(ctx, fulapi.ReleaseConsumptionSQL, fulapi.ReleaseConsumptionArgs(releaseID)...)
+//	for rows.Next() {
+//		c, err := fulapi.ScanReleaseConsumption(rows.Scan)
+//		...
+//	}
+const (
+	ReleaseConsumptionFunction = "brant_ful.release_consumption_v1"
+	ReleaseConsumptionSQL      = `SELECT unit_id, unit_revision, shipped_quantity, shipments FROM brant_ful.release_consumption_v1($1)`
+)
+
+// ReleaseConsumptionArgs returns the arguments of ReleaseConsumptionSQL for quality release
+// releaseID.
+func ReleaseConsumptionArgs(releaseID string) []any { return []any{releaseID} }
+
+// ReleaseShipped is one row of ReleaseConsumption v1: what the confirmed shipments shipped under a
+// quality release, in the unit named, and how many confirmed shipments that came from.
+type ReleaseShipped struct {
+	UnitID       string
+	UnitRevision int64
+	Quantity     string
+	Shipments    int64
+}
+
+// ScanReleaseConsumption reads one row of ReleaseConsumptionSQL through scan, such as a pgx row's
+// Scan.
+func ScanReleaseConsumption(scan func(dest ...any) error) (ReleaseShipped, error) {
+	var out ReleaseShipped
+	if err := scan(&out.UnitID, &out.UnitRevision, &out.Quantity, &out.Shipments); err != nil {
+		return ReleaseShipped{}, err
+	}
+	return out, nil
+}

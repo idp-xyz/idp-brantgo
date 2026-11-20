@@ -1,0 +1,179 @@
+{
+  "family": "an09",
+  "trial": 4,
+  "trial_id": "an09-4",
+  "design": [
+    "AN09",
+    "AI-INV-003"
+  ],
+  "goal": "the agent loops on a tool call the context keeps refusing (VERSION_CONFLICT); the task's budget allows 4 model calls",
+  "input": {
+    "kind": "text",
+    "file": "inquiry.txt",
+    "mime": "text/plain",
+    "bytes": 365,
+    "sha256": "34544e84a5d65487f9ee37499b34c8ef439b94a817bf064d46be7c4d0bf5dc66"
+  },
+  "expected": "paused budget_exhausted after 4 model calls, the reason naming the spend and the resume condition; the RFQ unchanged by the refused calls",
+  "outcome": "paused/budget_exhausted",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "paused",
+  "goal_completed": false,
+  "automation": "required_review_only",
+  "assertions": [
+    {
+      "name": "TSK lifecycle",
+      "want": "paused",
+      "got": "paused",
+      "pass": true
+    },
+    {
+      "name": "TSK pause cause",
+      "want": "budget_exhausted",
+      "got": "budget_exhausted",
+      "pass": true
+    },
+    {
+      "name": "pause reason names the spend",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "pause names a resume condition",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "model calls in the ledger",
+      "want": "4",
+      "got": "4",
+      "pass": true
+    },
+    {
+      "name": "refused tool calls in the ledger (VERSION_CONFLICT)",
+      "want": "3",
+      "got": "3",
+      "pass": true
+    },
+    {
+      "name": "RFQ unchanged by the refused calls (row version)",
+      "want": "1",
+      "got": "1",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": [
+      "evd/source.register committed src.inquiry.text.4 attempts=1 by agent.q01",
+      "inq/rfq.save_draft committed rfq.q01 attempts=1 by agent.q01",
+      "inq/rfq.save_draft rejected  attempts=1 by agent.q01",
+      "inq/rfq.save_draft rejected  attempts=1 by agent.q01",
+      "inq/rfq.save_draft rejected  attempts=1 by agent.q01"
+    ],
+    "approval_grants": null,
+    "binding": null,
+    "control_epoch": 0,
+    "control_mode": "ai",
+    "delegation_status": "active",
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.pause running→paused system:system:ai.runner"
+    ],
+    "open_actions": 0,
+    "order_status": "absent (NOT_FOUND)",
+    "pause_cause": "budget_exhausted",
+    "pause_reason": "paused by the agent runner: BUDGET_EXHAUSTED at /budget/max_model_calls; spent 4 model calls, 5 tool calls, 0 retries, 7840 tokens, cost 0.00 USD settled and 0.00 USD open of 3.00 USD (limits 4 model calls, 3 retries, task budget)",
+    "rfq_lines": [
+      "L1:ai:agent.q01",
+      "L2:ai:agent.q01",
+      "L3:ai:agent.q01",
+      "L4:ai:agent.q01"
+    ],
+    "rfq_status": "draft",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 4,
+    "wait": null
+  },
+  "corrections": null,
+  "owner_resolutions": null,
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    }
+  ],
+  "cost": {
+    "model_calls": 4,
+    "tool_calls": 5,
+    "retries": 0,
+    "failed_calls": 3,
+    "unavailable_calls": 0,
+    "input_tokens": 7200,
+    "output_tokens": 640,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": [
+      "scripted.v1"
+    ],
+    "model_returned": [
+      "scripted-q01-v1"
+    ]
+  },
+  "phases": [
+    {
+      "name": "loop",
+      "script": "script-01-loop.json",
+      "script_steps": 7,
+      "model_calls": 4,
+      "tool_calls": 5,
+      "writes": 2,
+      "lifecycle_after": "paused",
+      "seconds": 1.1,
+      "started_at": "2026-11-19T10:19:06.599744312Z",
+      "timeout": "2m0s"
+    }
+  ],
+  "budget": {
+    "max_model_calls": 4,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 3.72
+}

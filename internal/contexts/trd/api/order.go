@@ -100,6 +100,14 @@ const (
 	CommandCancelOrder           = "order.cancel"
 	CommandCloseOrderUnfulfilled = "order.close_unfulfilled"
 
+	// ObjectQuote and ObjectOrder are the object types an AI agent's approval grant names (S4
+	// decision D-7, AI-INV-002): order.prepare binds the quote at its business revision,
+	// order.review.request the order at its expected version. Human or AI, as the command catalog
+	// says; an AI agent only through the AI layer's gateway with a grant used for exactly the call,
+	// which TRD's ledger checks whatever the transport (S4 unit F1).
+	ObjectQuote = "trd.quote"
+	ObjectOrder = "trd.order"
+
 	EventOrderPrepared = "idp-brant.trd.order_prepared.v1"
 	// EventOrderReviewRequested is the tactical model's OrderReviewRequested; the event catalog V0.1
 	// does not list it yet.
@@ -195,23 +203,30 @@ var orderCodes = map[string]kernel.Category{
 
 // PrepareOrder converts formal revision BusinessRevision of quote QuoteID, at BusinessHash, accepted
 // by acceptance AcceptanceID, into sales order OrderID (Python order.prepare, with the order ID
-// named rather than derived and the slot always full_v1). Human or AI.
+// named rather than derived and the slot always full_v1). Human or AI; an AI agent with an approval
+// grant (D-7, ObjectQuote at BusinessRevision).
 type PrepareOrder struct {
 	IdempotencyKey   string
-	OrderID          string
-	QuoteID          string
-	BusinessRevision int64
-	BusinessHash     string
-	AcceptanceID     string
+	OrderID          string `contract:"required,id"`
+	QuoteID          string `contract:"required,id"`
+	BusinessRevision int64  `contract:"required"`
+	BusinessHash     string `contract:"required,hash"`
+	AcceptanceID     string `contract:"required,id" doc:"the verified acceptance"`
+	// NotifyPartyRef is the notify party the order binds (S5R-D40; optional, JSON
+	// notify_party_ref): an address of the role notify of a confirmed PTY party revision the caller
+	// sees, current now (AddressRoleRef v1; REFERENCE_INVALID, REFERENCE_STALE, or
+	// INVALID_KNOWN_VALUE for another role, at /args/notify_party_ref). Omitted from the request
+	// hash when absent, so a command stored before S5R replays.
+	NotifyPartyRef *AddressRoleRef `json:",omitempty" doc:"an address with the role notify; leave out when the party has none"`
 }
 
 // RequestOrderReview opens review ReviewID of draft order OrderID (Python order.review.request).
-// Human or AI.
+// Human or AI; an AI agent with an approval grant (D-7, ObjectOrder at ExpectedVersion).
 type RequestOrderReview struct {
 	IdempotencyKey  string
-	OrderID         string
-	ExpectedVersion int64
-	ReviewID        string
+	OrderID         string `contract:"required,id"`
+	ExpectedVersion int64  `contract:"required" doc:"the order's row version"`
+	ReviewID        string `contract:"required,id"`
 }
 
 // RiskAcknowledgement names one upstream risk an approval acknowledges, as the order's reads show
@@ -297,6 +312,20 @@ func (c PrepareOrder) Validate() error {
 		return schema("/args/business_hash")
 	case !kernel.ValidIdentifier(c.AcceptanceID):
 		return schema("/args/acceptance_id")
+	}
+	return notifyRef(c.NotifyPartyRef, "/args/notify_party_ref")
+}
+
+// notifyRef checks the form of an optional notify party reference (S5R-D40).
+func notifyRef(a *AddressRoleRef, path string) error {
+	if a == nil {
+		return nil
+	}
+	if err := idVersion(a.PartyID, a.PartyRevision, path, "/party_id", "/party_revision"); err != nil {
+		return err
+	}
+	if !kernel.ValidIdentifier(a.AddressID) {
+		return schema(path + "/address_id")
 	}
 	return nil
 }
@@ -500,7 +529,26 @@ type OrderView struct {
 	Amendments        []OrderAmendmentView
 	AmendmentCommits  []OrderCommitView
 	End               *OrderEndView
-	Documents         []OrderDocumentView // the S/C and PI of its revisions (orderdoc.go)
+	Documents         []OrderDocumentView   // the S/C and PI of its revisions (orderdoc.go)
+	RiskRecords       []OrderRiskRecordView // what denied cost sources left on the active order (WF-03, D-9)
+}
+
+// OrderRiskRecordView is a risk recorded on an active order after it became active: CST denied a
+// source of the cost snapshot its activation names (cause cost_source_denied, code
+// COST_SOURCE_DENIED). The contract formed, so the record blocks nothing (S4 decision D-9,
+// ADR-BR-013); OrderRevision and OrderRowVersion are the order as the record found it.
+type OrderRiskRecordView struct {
+	RiskID          string
+	Cause           string
+	Code            string
+	OrderRevision   int64
+	OrderRowVersion int64
+	CostSnapshotID  string
+	CostSourceID    string
+	AttestationID   string
+	EventID         string
+	RegisteredBy    kernel.ActorRef
+	RegisteredAt    time.Time
 }
 
 // OrderReviewView is an order review. DecisionState is its state as of the read: pending (open),

@@ -9,8 +9,14 @@ import "go.idp.xyz/idp-brant/internal/kernel"
 // and passes on PTY's REFERENCE_STALE for a service role that no longer serves.
 const (
 	// CodeQualityReleaseExceedsConforming: the release would exceed the conforming quantity of the
-	// subject's valid inspections less what was released before (QLT-INV-001).
+	// subject's valid inspections plus their approved concessions less what the releases before
+	// count — a revoked release's frozen quantity included until it is inspected again (QLT-INV-001,
+	// S5R-D18).
 	CodeQualityReleaseExceedsConforming = "QUALITY_RELEASE_EXCEEDS_CONFORMING"
+	// CodeInspectionQuantityExceeded: the subject's valid inspections would cover more than its
+	// quantity; a re-inspection supersedes the inspection of the same goods (error catalog, S5R;
+	// QLT-INV-001, BT08).
+	CodeInspectionQuantityExceeded = "INSPECTION_QUANTITY_EXCEEDED"
 	// CodeQualityReleaseRequired (409): the release is unknown, revoked or outside its validity at
 	// the instant asked; QualityReleaseGuard v1 answers it to FUL (QLT-INV-002).
 	CodeQualityReleaseRequired = "QUALITY_RELEASE_REQUIRED"
@@ -26,6 +32,7 @@ const (
 
 var codes = map[string]kernel.Category{
 	CodeQualityReleaseExceedsConforming: kernel.CategoryInvalid,
+	CodeInspectionQuantityExceeded:      kernel.CategoryInvalid,
 	CodeQualityReleaseRequired:          kernel.CategoryConflict,
 	CodeReferenceStale:                  kernel.CategoryConflict,
 	CodeBusinessKeyConflict:             kernel.CategoryConflict,

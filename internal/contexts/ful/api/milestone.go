@@ -61,7 +61,11 @@ const (
 )
 
 // Node types (CN-R07, GTC-08: 海关放行、实际离境、物流送达和客户验收分别作为事实). The production nodes
-// follow the supplier's work, the shipping nodes FUL's own.
+// follow the supplier's work, the shipping nodes FUL's own. NodeBookingRequested (S5R-D11) is the
+// booking asked of the forwarder or carrier: its planned date is the deadline for the request before
+// the cut-off, paired with NodeBookingConfirmed. A booking record has no requested state (booking.record
+// records a confirmed booking only; deliberately unlike SAP TM's carrier statuses, Brant has no
+// carrier connection): "requested, not yet confirmed" is followed on the plan.
 const (
 	NodeMaterialReady      = "material_ready"
 	NodeProductionStart    = "production_start"
@@ -69,6 +73,7 @@ const (
 	NodeInspection         = "inspection"
 	NodePackingComplete    = "packing_complete"
 	NodeSupplierHandover   = "supplier_handover"
+	NodeBookingRequested   = "booking_requested"
 	NodeBookingConfirmed   = "booking_confirmed"
 	NodeCargoLoaded        = "cargo_loaded"
 	NodeCustomsRelease     = "customs_release"
@@ -81,7 +86,8 @@ const (
 // NodeTypes returns the node types in their usual order.
 func NodeTypes() []string {
 	return []string{NodeMaterialReady, NodeProductionStart, NodeProductionComplete, NodeInspection, NodePackingComplete, NodeSupplierHandover,
-		NodeBookingConfirmed, NodeCargoLoaded, NodeCustomsRelease, NodeActualDeparture, NodeArrival, NodeDelivery, NodeCustomerAcceptance}
+		NodeBookingRequested, NodeBookingConfirmed, NodeCargoLoaded, NodeCustomsRelease, NodeActualDeparture, NodeArrival, NodeDelivery,
+		NodeCustomerAcceptance}
 }
 
 // NodeType reports whether s is a node type.

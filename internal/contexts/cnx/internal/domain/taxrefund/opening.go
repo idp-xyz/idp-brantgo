@@ -8,7 +8,7 @@ import (
 )
 
 // Opening refund material (S5 unit C10, WBS S5-20; tactical model CNX-AGG-TaxRefundCase value object
-// OpeningPosition; Context Map MD-51; baseline 11.2; CN-R04, CN-R09; CN-AT16 CNX half, BT17).
+// OpeningPosition; Context Map MD-51; baseline 11.2; CN-R04, CN-R09; CN-AT16 CNX half, STL-OB-01).
 //
 // An invoice balance states what refund declarations finished before the cutoff consumed of a verified blue
 // invoice's lines, per purpose: that consumption counts next to the cases' allocations for ever — an external
@@ -100,23 +100,4 @@ type Opening struct {
 	By              kernel.ActorRef
 	Epoch           int64
 	At              time.Time
-}
-
-// ValidAt returns the revision an opening case binds for export date at (CN-AT12, CN-R08 "适用方法变化不追溯覆盖历史"):
-// of the revisions POL has published — active or superseded since (SM-POL-REVISION), never a retired one — the one whose
-// validity contains at, the latest published when several do; 0 when none does. Unlike InForceAt for a FUL lot's
-// case, its publication may follow the export: at the cutover the professional records the policy that applied
-// to exports before it.
-func ValidAt(revisions []Revision, at time.Time) int64 {
-	var best Revision
-	for _, r := range revisions {
-		switch {
-		case r.PublishedAt.IsZero() || (r.Status != "active" && r.Status != "superseded"):
-		case at.Before(r.ValidFrom):
-		case !r.ValidUntil.IsZero() && !at.Before(r.ValidUntil):
-		case best.Revision == 0 || r.PublishedAt.After(best.PublishedAt):
-			best = r
-		}
-	}
-	return best.Revision
 }

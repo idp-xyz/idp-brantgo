@@ -22,29 +22,43 @@ import (
 //	                         classification (code_table_version, commodity_codes) it covers —
 //	                         licensed_quantity in unit, licensed_value in currency (a POL currency
 //	                         revision {id, revision}), destination country, end_user {party_id, name},
-//	                         valid_from, valid_until and file_id, the EVD file of the licence.
+//	                         valid_from, valid_until and file_id, the EVD file of the licence. S5R-D04:
+//	                         usage_mode single_use (一批一证, the legal mode of dual-use export licences
+//	                         and the default) or multi_use with usage_evidence_ids, the EVD sources of
+//	                         the licence face that says so; customs_office, the customs office it is
+//	                         used at (一证一关, required), which a declaration it covers must name.
 //	export_license.allocate  human or AI (documentation): allocation_id of license_id to target
 //	                         {kind shipment|export_lot, id}: every line of
 //	                         a prepared shipment or a registered export lot (FUL, through CNX's port),
-//	                         its destination and end user the licence's, inside the licence's
-//	                         validity, its goods the licence's (EXPORT_LICENSE_EXPIRED otherwise), and
-//	                         Σ allocated quantity and value with it never above the licensed ones
-//	                         (EXPORT_LICENSE_EXCEEDED). A target holds one allocation at a time.
+//	                         its destination and end user the licence's (the end user the shipment
+//	                         states, else the consignee, else the customer, S5R-D40), inside the
+//	                         licence's validity (EXPORT_LICENSE_EXPIRED otherwise), its goods and units
+//	                         the licence's (EXPORT_LICENSE_GOODS_MISMATCH), and Σ allocated quantity and
+//	                         value with it never above the licensed ones (EXPORT_LICENSE_EXCEEDED). A
+//	                         target holds one allocation at a time. S5R-D04: one licence per
+//	                         declaration — a shipment needing two licences is split into export lots,
+//	                         each allocated its own; a shipment never holds its own allocation beside
+//	                         its lots' (INVALID_STATE); a single_use licence holds one live allocation
+//	                         and none once declared (INVALID_STATE); a declaration of the target that
+//	                         names another customs office refuses it (INVALID_KNOWN_VALUE).
 //	export_license.release   human only (documentation): release_id releases allocation_id of
 //	                         license_id at expected_version on an external result only — an amended (quantity and
 //	                         value released) or withdrawn (all that is outstanding) declaration
 //	                         receipt, stated with its declaration_number, receipt_text, received_at
-//	                         and evidence_ids (EVD sources of the receipt) — never on a local
-//	                         cancellation (MD-44 "凭本地取消恢复已申报用量" is forbidden: the contract
-//	                         has no such cause).
+//	                         and evidence_ids (EVD sources of the receipt) — basis external_result,
+//	                         the default — or, S5R-D03, basis local_cancellation: everything
+//	                         outstanding, with a reason, of an allocation whose target FUL cancelled
+//	                         while no declaration case covering it is submitted or later (INVALID_STATE
+//	                         otherwise: declared usage is never restored by a local cancellation,
+//	                         MD-44).
 //
 // Request members in snake_case: export_license.register {license_number, issuer, holder, goods
 // {sku_specs [{sku_id, spec_revision}], classification {code_table_version, commodity_codes}},
 // licensed_quantity, unit, currency {id, revision}, licensed_value, destination, end_user {party_id,
-// name}, valid_from, valid_until, file_id}; export_license.allocate {license_id, allocation_id, target
-// {kind, id}}; export_license.release {license_id, expected_version, allocation_id, release_id,
-// external_result {kind, declaration_number, receipt_text, received_at,
-// evidence_ids}, quantity, value, reason}.
+// name}, valid_from, valid_until, file_id, usage_mode, usage_evidence_ids, customs_office};
+// export_license.allocate {license_id, allocation_id, target {kind, id}}; export_license.release
+// {license_id, expected_version, allocation_id, release_id, basis, external_result {kind, receipt_id,
+// declaration_number, receipt_text, received_at, evidence_ids}, quantity, value, reason}.
 
 // Commands, reads and events of export licences (role template documentation holds the three
 // commands; humanOnlyCommands name register and release).
@@ -68,10 +82,33 @@ const (
 	TargetExportLot = "export_lot"
 )
 
-// Kinds of the external result a release rests on (SM-CNX-DECLARATION amended and withdrawn).
+// Kinds of the external result a release rests on (SM-CNX-DECLARATION amended and withdrawn), and
+// the kind a release on a local cancellation records (S5R-D03).
 const (
 	ExternalAmended   = "amended"
 	ExternalWithdrawn = "withdrawn"
+	ReleaseCancelled  = "cancelled"
+)
+
+// Bases of a release (S5R-D03): an external result (the default when omitted), or the local
+// cancellation of a target never declared.
+const (
+	BasisExternalResult    = "external_result"
+	BasisLocalCancellation = "local_cancellation"
+)
+
+// Usage modes of a licence (S5R-D04): 一批一证 (one live allocation, none once declared) or not.
+const (
+	UsageSingleUse = "single_use"
+	UsageMultiUse  = "multi_use"
+)
+
+// Where an allocation's end user comes from (S5R-D40): stated on the shipment, or derived from its
+// consignee, then its customer.
+const (
+	EndUserStated    = "stated"
+	EndUserConsignee = "consignee"
+	EndUserCustomer  = "customer"
 )
 
 // Sources of an external result: a human states the receipt with the EVD sources it rests on, for
@@ -80,6 +117,8 @@ const (
 const (
 	ResultStated             = "stated"
 	ResultDeclarationReceipt = "declaration_receipt"
+	// ResultLocalCancellation is the source of a release on a local cancellation (S5R-D03).
+	ResultLocalCancellation = "local_cancellation"
 )
 
 // A licence's state at an instant, as the reads derive it from its validity.
@@ -103,7 +142,12 @@ const (
 	MaxCommodityCode  = 32
 	MaxReceiptText    = 4000
 	MaxDeclarationRef = 64
+	MaxCustomsOffice  = 32 // S5R-D04: a customs office code (关区代码), an identifier
 )
+
+// CustomsOffice reports whether s is a customs office code: an identifier of at most
+// MaxCustomsOffice characters (S5R-D04).
+func CustomsOffice(s string) bool { return len(s) <= MaxCustomsOffice && kernel.ValidIdentifier(s) }
 
 // valueFormat bounds a decimal amount before the currency's minor units are known.
 var valueFormat = kernel.DecimalFormat{IntDigits: kernel.MaxMinorDigits - 4, Scale: 4}
@@ -165,6 +209,11 @@ type RegisterLicense struct {
 	ValidFrom        string
 	ValidUntil       string
 	FileID           string
+	// S5R-D04: single_use ("" is single_use) or multi_use with the EVD sources of the licence face
+	// (1 to MaxEvidence), and the customs office (required).
+	UsageMode        string   `json:",omitempty"`
+	UsageEvidenceIDs []string `json:",omitempty"`
+	CustomsOffice    string   `json:",omitempty"`
 }
 
 // Validate checks the closed contract.
@@ -205,6 +254,16 @@ func (c RegisterLicense) Validate() error {
 		return schema("/args/valid_until")
 	case !kernel.ValidIdentifier(c.FileID):
 		return schema("/args/file_id")
+	case c.UsageMode != "" && c.UsageMode != UsageSingleUse && c.UsageMode != UsageMultiUse:
+		return schema("/args/usage_mode")
+	case !CustomsOffice(c.CustomsOffice):
+		return schema("/args/customs_office")
+	}
+	if err := evidence(c.UsageEvidenceIDs, "/args/usage_evidence_ids", 0); err != nil {
+		return err
+	}
+	if (c.UsageMode == UsageMultiUse) != (len(c.UsageEvidenceIDs) > 0) {
+		return schema("/args/usage_evidence_ids")
 	}
 	from, _ := kernel.ParseTimestamp(c.ValidFrom)
 	until, _ := kernel.ParseTimestamp(c.ValidUntil)
@@ -295,7 +354,9 @@ type ExternalResult struct {
 // ReleaseLicense releases, as ReleaseID, allocation AllocationID of licence LicenseID at
 // ExpectedVersion on ExternalResult (human only): amended releases Quantity (in the licence's unit)
 // and Value (in its currency, may be 0); withdrawn releases all that is outstanding and names
-// neither.
+// neither. Basis local_cancellation (S5R-D03) names no external result, quantity or value: it
+// releases all that is outstanding of an allocation whose target FUL cancelled before any
+// declaration of it was submitted.
 type ReleaseLicense struct {
 	IdempotencyKey  string
 	LicenseID       string
@@ -306,9 +367,14 @@ type ReleaseLicense struct {
 	Quantity        string
 	Value           string
 	Reason          string
+	Basis           string `json:",omitempty"` // "" is external_result (S5R-D03)
 }
 
-// Validate checks the closed contract: a release without an external result is not a release.
+// LocalCancellation reports whether the release rests on a local cancellation (S5R-D03).
+func (c ReleaseLicense) LocalCancellation() bool { return c.Basis == BasisLocalCancellation }
+
+// Validate checks the closed contract: a release without an external result is not a release,
+// unless it rests on a local cancellation, which names nothing but its reason.
 func (c ReleaseLicense) Validate() error {
 	switch {
 	case !kernel.ValidIdentifier(c.IdempotencyKey):
@@ -321,7 +387,23 @@ func (c ReleaseLicense) Validate() error {
 		return schema("/args/allocation_id")
 	case !kernel.ValidIdentifier(c.ReleaseID):
 		return schema("/args/release_id")
-	case c.ExternalResult == nil:
+	case c.Basis != "" && c.Basis != BasisExternalResult && c.Basis != BasisLocalCancellation:
+		return schema("/args/basis")
+	}
+	if c.LocalCancellation() {
+		switch {
+		case c.ExternalResult != nil:
+			return schema("/args/external_result")
+		case c.Quantity != "":
+			return schema("/args/quantity")
+		case c.Value != "":
+			return schema("/args/value")
+		case !Text(c.Reason, MaxReason):
+			return schema("/args/reason")
+		}
+		return nil
+	}
+	if c.ExternalResult == nil {
 		return schema("/args/external_result")
 	}
 	r := c.ExternalResult
@@ -419,17 +501,22 @@ type LicenseFileView struct {
 	ContentSHA256 string
 }
 
-// AllocationLineView is a target line an allocation covers.
+// AllocationLineView is a target line an allocation covers; ShipmentLineID is an export lot line's
+// shipment line (S5R-D04).
 type AllocationLineView struct {
-	LineID       string
-	SkuID        string
-	SpecRevision int64
-	Quantity     string
+	LineID         string
+	SkuID          string
+	SpecRevision   int64
+	Quantity       string
+	ShipmentLineID string `json:",omitempty"`
 }
 
-// ReleaseView is a release entry and the external result it rests on.
+// ReleaseView is a release entry and the external result it rests on, or (Basis
+// local_cancellation, Kind cancelled, S5R-D03) the cancelled target's version.
 type ReleaseView struct {
 	ReleaseID         string
+	Basis             string
+	TargetVersion     int64
 	Kind              string
 	Source            string
 	ReceiptID         string
@@ -446,12 +533,15 @@ type ReleaseView struct {
 }
 
 // AllocationView is an allocation entry: the target it covers (with the version, order revision,
-// destination and end user FUL gave), its lines, quantity and value, what remains outstanding after
-// its releases and its state.
+// destination and end user FUL gave, the shipment it ships and where the end user came from,
+// S5R-D04, D40 — "" for an allocation made before), its lines, quantity and value, what remains
+// outstanding after its releases and its state.
 type AllocationView struct {
 	AllocationID          string
 	TargetKind            string
 	TargetID              string
+	ShipmentID            string
+	EndUserSource         string
 	TargetVersion         int64
 	Attempt               int
 	OrderID               string
@@ -488,6 +578,9 @@ type LicenseView struct {
 	ValidFrom        time.Time
 	ValidUntil       time.Time
 	File             LicenseFileView
+	UsageMode        string
+	UsageEvidence    []EvidenceView
+	CustomsOffice    string // "" for a licence registered before S5R-D04
 	Status           string
 	State            string
 	RowVersion       int64
@@ -508,6 +601,8 @@ type LicenseSummary struct {
 	EndUserID     string
 	ValidFrom     time.Time
 	ValidUntil    time.Time
+	UsageMode     string
+	CustomsOffice string
 	State         string
 	RowVersion    int64
 	Usage         Usage

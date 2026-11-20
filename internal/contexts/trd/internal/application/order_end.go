@@ -57,7 +57,7 @@ func (s Service) endOrder(ctx context.Context, name, key, id string, expected in
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/order_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/order_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := h.o.Check(expected); err != nil {

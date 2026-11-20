@@ -1,33 +1,46 @@
-// Package api is QLT's published contract (quality inspection and release, WBS S5-02; tactical model
-// QLT-AGG-Inspection with Disposition, QLT-AGG-QualityRelease with ReleaseRevocation;
-// SM-QLT-INSPECTION, SM-QLT-RELEASE; QLT-INV-001, QLT-INV-002; owner decision D-15; finding F-06).
-// Python V0.50 has no quality context: the rules come from the design, and the tests cite its IDs.
+// Package api is QLT's published contract (quality inspection and release, WBS S5-02, S5R-05;
+// tactical model QLT-AGG-Inspection with Disposition, QLT-AGG-QualityRelease with ReleaseRevocation,
+// FrozenQuantity and ConcessionFlag; SM-QLT-INSPECTION, SM-QLT-RELEASE; QLT-INV-001, QLT-INV-002;
+// owner decision D-15; finding F-06; decisions S5R-D18, S5R-D36). Python V0.50 has no quality
+// context: the rules come from the design, and the tests cite its IDs.
 //
 //	inspection.record      human or AI: the result of an inspection of a subject — a PUR purchase
 //	                       commitment line (InspectionSubject v1, R24) — in the subject's unit:
 //	                       inspected = conforming + nonconforming, the sampling, the standard as an
 //	                       EVD source (SourceRef v1, R72; no POL kind, D-15), the report as an EVD
 //	                       business file (FileRef v1, R72) and the inspector: our own human recorder
-//	                       (internal) or an external inspection agency (PTY service role
-//	                       inspection, ServiceRoleRef v1, R73). The report is evidence only: no
-//	                       inspection releases anything (F-06). A re-inspection or a correction
-//	                       is a new record that supersedes the one it cites, with a reason; it
-//	                       restates that result instead of adding to it (BT08, baseline 7.5), and
-//	                       the valid inspections of a subject never cover more than its quantity.
+//	                       (internal) or an external inspection agency (PTY service role of an
+//	                       inspection agency, ServiceRoleRef v1, R73: verified and current, no route
+//	                       required, S5R-D36). The report is evidence only: no inspection releases
+//	                       anything (F-06). A re-inspection or a correction is a new record that
+//	                       supersedes the one it cites, with a reason; it restates that result —
+//	                       for the goods shipped too — instead of adding to it (BT08, baseline 7.5),
+//	                       and the valid inspections of a subject never cover more than its quantity
+//	                       (INSPECTION_QUANTITY_EXCEEDED).
 //	disposition.decide     human only: the disposition of an inspection's whole nonconforming
 //	                       quantity — rework, concession, return, scrap — with a reason. It never
-//	                       creates supply, credit or a releasable quantity (UL QLT-Disposition).
+//	                       creates supply or credit (UL QLT-Disposition). A concession accepts goods
+//	                       on the customer's consent, which it cites in evidence_ids
+//	                       (SCHEMA_INVALID without); while the inspection is valid, the conceded
+//	                       quantity may be released (S5R-D18).
 //	quality_release.grant  human only (our authorized QC, F-06): a quantity of a subject, at most
 //	                       the conforming quantity of its valid inspections at the subject's
-//	                       specification less every quantity released before, revoked releases
-//	                       included (QLT-INV-001), valid in [valid_from, valid_until); expiry is
-//	                       derived, never written (tactical principle 3).
+//	                       specification plus their approved concessions less what the releases
+//	                       before count (QLT-INV-001), valid in [valid_from, valid_until); expiry is
+//	                       derived, never written (tactical principle 3). A revoked release counts in
+//	                       full until every inspection it was judged on has been inspected again
+//	                       after the revocation, then only what FUL shipped on it (S5R-D18). The
+//	                       part of a release beyond the conforming quantity left is conceded goods:
+//	                       the release carries its concession quantity and flag.
 //	quality_release.revoke human only: revokes a release with a reason. FUL can no longer ship on
 //	                       it, so what it has not shipped is frozen and what it shipped stays
-//	                       (QLT-INV-002, BT21); revoking a revoked release changes nothing.
+//	                       (QLT-INV-002, BT21): the revocation records FUL's shipped quantity
+//	                       (ReleaseConsumption v1, R79) and the frozen quantity. Revoking a revoked
+//	                       release changes nothing.
 //
 // FUL re-checks a release inside its own transaction through QualityReleaseGuard v1 (guard.go,
-// R26) and reads it before through ReleaseLookups; it keeps its own consumption per release.
+// R26) and reads it before through ReleaseLookups; it keeps its own consumption per release, which
+// QLT reads at a revocation through FUL's ReleaseConsumption v1 (R79).
 //
 // Request members in snake_case: inspection.record {inspection_id, subject {kind, id, line_id},
 // inspected_quantity, conforming_quantity, nonconforming_quantity, sampling {method, sample_size,
@@ -150,7 +163,7 @@ type StandardRef struct {
 }
 
 // AgencyRef is an external inspection agency: revision Revision of service role ServiceRoleID of
-// party PartyID, whose role is inspection (PTY ServiceRoleRef v1, R73).
+// party PartyID, whose role is an inspection agency's (PTY ServiceRoleRef v1, R73, S5R-D36).
 type AgencyRef struct {
 	PartyID       string
 	ServiceRoleID string
@@ -194,7 +207,8 @@ type DispositionItem struct {
 }
 
 // DecideDisposition disposes the whole nonconforming quantity of inspection InspectionID at
-// ExpectedVersion, each action at most once, for Reason. Human only.
+// ExpectedVersion, each action at most once, for Reason. A concession cites the customer's consent
+// in EvidenceIDs (S5R-D18). Human only.
 type DecideDisposition struct {
 	IdempotencyKey  string
 	InspectionID    string
@@ -357,7 +371,7 @@ func (c RecordInspection) Validate() error {
 }
 
 // Validate checks the closed contract: 1 to MaxDispositions items of known, distinct actions with
-// positive quantities, and a reason.
+// positive quantities, a reason, and evidence for a concession (the customer's consent, S5R-D18).
 func (c DecideDisposition) Validate() error {
 	switch {
 	case !kernel.ValidIdentifier(c.IdempotencyKey):
@@ -387,6 +401,9 @@ func (c DecideDisposition) Validate() error {
 	}
 	if !Reason(c.Reason) {
 		return schema("/args/reason")
+	}
+	if seen[DispositionConcession] && len(c.EvidenceIDs) == 0 {
+		return kernel.Reject(kernel.CodeSchemaInvalid, "/args/evidence_ids", "A concession cites the customer's consent as evidence")
 	}
 	return evidence(c.EvidenceIDs, "/args/evidence_ids")
 }
@@ -458,15 +475,21 @@ type InspectionReceipt struct {
 }
 
 // ReleaseReceipt answers quality_release.grant and quality_release.revoke: the receipt (ObjectID
-// the release, Status granted or revoked) and what the release binds. A grant answered from the
-// stored release, and a revocation of a release revoked before, are Replayed.
+// the release, Status granted or revoked) and what the release binds — its concession quantity and
+// flag, and for a revocation what FUL had shipped on it and the frozen rest ("" for a revocation
+// recorded before S5R-D18). A grant answered from the stored release, and a revocation of a release
+// revoked before, are Replayed.
 type ReleaseReceipt struct {
 	Receipt
-	Subject    SubjectRef
-	Quantity   string
-	UnitID     string
-	ValidFrom  time.Time
-	ValidUntil time.Time
+	Subject            SubjectRef
+	Quantity           string
+	UnitID             string
+	ValidFrom          time.Time
+	ValidUntil         time.Time
+	Concession         bool
+	ConcessionQuantity string
+	ShippedQuantity    string
+	FrozenQuantity     string
 }
 
 // SubjectBinding is a subject as a record binds it: what PUR said of it when the record was made —
@@ -543,65 +566,87 @@ type InspectionView struct {
 	Disposition            *DispositionView
 }
 
-// RevocationView is the revocation of a release.
+// RevocationView is the revocation of a release: ShippedQuantity is what FUL had shipped on the
+// release when it was revoked (ReleaseConsumption v1, R79) and FrozenQuantity the rest, both "" for a
+// revocation recorded before S5R-D18.
 type RevocationView struct {
-	Reason         string
-	EvidenceIDs    []string
-	RevokedBy      kernel.ActorRef
-	RevokedAt      time.Time
-	AuthorityEpoch int64
+	Reason          string
+	EvidenceIDs     []string
+	RevokedBy       kernel.ActorRef
+	RevokedAt       time.Time
+	AuthorityEpoch  int64
+	ShippedQuantity string
+	FrozenQuantity  string
 }
 
 // ReleaseView is a release as the reads show it: State is decided at CheckedAt (granted,
-// not_yet_valid, expired or revoked); Conforming and ReleasedBefore are the quantities it was
-// judged on, InspectionIDs the valid inspections they came from.
+// not_yet_valid, expired or revoked); Conforming, Conceded and ReleasedBefore are the quantities it
+// was judged on, InspectionIDs the valid inspections they came from; ConcessionQuantity is the part
+// of Quantity that is conceded goods and Concession its flag (S5R-D18).
 type ReleaseView struct {
-	ReleaseID      string
-	Status         string
-	State          string
-	RowVersion     int64
-	Subject        SubjectBinding
-	Quantity       string
-	ValidFrom      time.Time
-	ValidUntil     time.Time
-	Conforming     string
-	ReleasedBefore string
-	InspectionIDs  []string
-	EvidenceIDs    []string
-	GrantedBy      kernel.ActorRef
-	GrantedAt      time.Time
-	AuthorityEpoch int64
-	Revocation     *RevocationView
-	CheckedAt      time.Time
+	ReleaseID          string
+	Status             string
+	State              string
+	RowVersion         int64
+	Subject            SubjectBinding
+	Quantity           string
+	ValidFrom          time.Time
+	ValidUntil         time.Time
+	Conforming         string
+	Conceded           string
+	ReleasedBefore     string
+	Concession         bool
+	ConcessionQuantity string
+	InspectionIDs      []string
+	EvidenceIDs        []string
+	GrantedBy          kernel.ActorRef
+	GrantedAt          time.Time
+	AuthorityEpoch     int64
+	Revocation         *RevocationView
+	CheckedAt          time.Time
 }
 
 // SubjectInspection is one inspection of a subject. InspectionID is empty for one the reader does
-// not see; Counted says whether its result counts for the subject's specification now.
+// not see; Conceded is what its disposition accepts by concession; Counted says whether its result
+// counts for the subject's specification now.
 type SubjectInspection struct {
 	InspectionID string
 	Status       string
 	Inspected    string
 	Conforming   string
+	Conceded     string
 	Counted      bool
 }
 
 // SubjectRelease is one release of a subject. ReleaseID is empty for one the reader does not see.
+// Counted says whether it counts at the subject's specification now and CountedQuantity what it
+// counts: its quantity, or for a revoked release whose frozen quantity was inspected again (Thawed)
+// what FUL shipped on it. Frozen is the quantity its revocation froze; Concession its flag.
 type SubjectRelease struct {
-	ReleaseID string
-	Status    string
-	State     string
-	Quantity  string
-	Counted   bool
+	ReleaseID       string
+	Status          string
+	State           string
+	Quantity        string
+	Counted         bool
+	CountedQuantity string
+	Frozen          string
+	Thawed          bool
+	Concession      bool
 }
 
 // SubjectView is a subject's quality standing now: PUR's subject (its specification and unit), the
-// quantity its valid inspections cover and find conforming at that specification, what was
-// released (revoked releases included), what may still be released, and the records.
+// quantity its valid inspections cover, find conforming and accept by approved concession at that
+// specification, what its releases at it count (Released: a revoked release in full until its
+// frozen quantity is inspected again, then what FUL shipped on it; S5R-D18), the frozen quantity
+// still awaiting a re-inspection (included in Released), what may still be released, and the
+// records.
 type SubjectView struct {
 	Subject     SubjectBinding
 	Inspected   string
 	Conforming  string
+	Conceded    string
 	Released    string
+	Frozen      string
 	Releasable  string
 	Inspections []SubjectInspection
 	Releases    []SubjectRelease

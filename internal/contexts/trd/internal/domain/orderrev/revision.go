@@ -53,12 +53,14 @@ type Source struct {
 }
 
 // Terms are the order's trade terms, named place, payment terms (POL revisions and a place) and
-// delivery.
+// delivery, and the notify party it binds (S5R-D40: a PTY AddressRoleRef v1 of the role notify;
+// absent when none, so terms written before S5R keep their bytes; seal.go).
 type Terms struct {
 	TradeTerms   quote.Ref         `json:"trade_terms_ref"`
 	NamedPlace   quote.BusinessRef `json:"named_place_ref"`
 	PaymentTerms quote.Ref         `json:"payment_terms_ref"`
 	Delivery     quote.Delivery    `json:"delivery"`
+	NotifyParty  *quote.AddressRef `json:"notify_party_ref,omitempty"`
 }
 
 // Tax is the tax a line or charge is taxed by: the POL tax application and the profile it applied,
@@ -136,6 +138,9 @@ type Revision struct {
 	// none. No amendment changes them.
 	LegalTermsRef *quote.Ref        `json:"legal_terms_ref,omitempty"`
 	LegalTerms    *quote.LegalTerms `json:"legal_terms,omitempty"`
+	// What the revision sealed of its trade terms and parties (S5R-D35, D40; seal.go): absent in a
+	// revision written before S5R, whose bytes and order hash never change.
+	Seal *Seal `json:"seal,omitempty"`
 
 	Hash     string `json:"-"`
 	Document []byte `json:"-"`
@@ -197,7 +202,9 @@ type snapshotDoc struct {
 		NamedPlace   quote.BusinessRef `json:"named_place_ref"`
 		PaymentTerms quote.Ref         `json:"payment_terms_ref"`
 		Delivery     quote.Delivery    `json:"delivery"`
+		NotifyParty  *quote.AddressRef `json:"notify_party_ref"`
 	} `json:"terms"`
+	Seal                 *Seal              `json:"seal"`
 	Lines                []quote.Line       `json:"lines"`
 	Charges              []quote.Charge     `json:"charges"`
 	Calculation          *quote.Calculation `json:"calculation"`
@@ -245,7 +252,9 @@ func FromSnapshot(doc []byte, orderHash string) (*Revision, error) {
 			DocumentSHA256: s.SourceDocumentSHA256, AcceptanceID: s.AcceptanceID},
 		Parties: s.Quote.PartySnapshots, Customer: s.Customer, Contact: s.Contact, Currency: s.Currency,
 		LegalTermsRef: s.Quote.Data.LegalTerms, LegalTerms: s.Quote.LegalTerms,
-		Terms: Terms{TradeTerms: s.Terms.TradeTerms, NamedPlace: s.Terms.NamedPlace, PaymentTerms: s.Terms.PaymentTerms, Delivery: s.Terms.Delivery},
+		Terms: Terms{TradeTerms: s.Terms.TradeTerms, NamedPlace: s.Terms.NamedPlace, PaymentTerms: s.Terms.PaymentTerms, Delivery: s.Terms.Delivery,
+			NotifyParty: s.Terms.NotifyParty},
+		Seal:  s.Seal,
 		Lines: []Line{}, Charges: []Charge{},
 		Amounts: Amounts{Lines: []quote.AmountLine{}, Charges: []quote.AmountLine{}, Net: c.NetMinor, Tax: c.TaxMinor,
 			Payable: c.PayableMinor, Payments: slices.Clone(c.Payments)},
@@ -288,6 +297,9 @@ func FromSnapshot(doc []byte, orderHash string) (*Revision, error) {
 	if (r.LegalTerms == nil) != (r.LegalTermsRef == nil) {
 		return bad("/source_quote_snapshot/legal_terms", "seals legal terms without their revision, or a revision without its terms")
 	}
+	if why := checkSeal(r); why != "" {
+		return bad("/seal", why)
+	}
 	sortRevision(r)
 	return r, nil
 }
@@ -323,6 +335,9 @@ func Parse(doc []byte, hash string) (*Revision, error) {
 	}
 	if r.Contract != RevisionContract || r.Number < 2 || r.Previous == nil || r.Previous.Revision != r.Number-1 || r.Amendment == nil {
 		return bad("is not a later revision of an order")
+	}
+	if why := checkSeal(&r); why != "" {
+		return bad(why)
 	}
 	canonical, _, err := encode(&r)
 	if err != nil || !bytes.Equal(canonical, doc) {

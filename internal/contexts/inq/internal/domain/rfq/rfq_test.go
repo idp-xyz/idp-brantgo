@@ -23,8 +23,15 @@ var facts = Facts{
 func ready() *Rfq {
 	r := New("rfq.1", "alice", "")
 	r.ReplaceDraft(Content{CustomerID: "customer.1", ContactID: "contact.1", SourceIDs: []string{"src.1"},
-		Lines: []Line{{ID: "L1", SkuID: "sku.1", Quantity: "120", UOM: "PCS", SourceID: "src.1", Locator: "第1段"}}})
+		Lines: []Line{{ID: "L1", SkuID: "sku.1", Quantity: "120", UOM: "PCS", SourceID: "src.1", Locator: "第1段"}}},
+		kernel.ActorRef{Kind: kernel.ActorHuman, ID: "alice"})
 	return r
+}
+
+// confirm confirms r without line verifications and returns only the error.
+func confirm(r *Rfq, evidence []string, by kernel.ActorRef, epoch int64) error {
+	_, err := r.Confirm(evidence, nil, facts, by, epoch)
+	return err
 }
 
 // Python test_duplicate_line_and_zero_quantity_have_exact_codes and
@@ -55,31 +62,31 @@ func TestDraftChecksHaveExactCodesAndPaths(t *testing.T) {
 func TestConfirmationNeedsCompleteCurrentContentAndCoveringEvidence(t *testing.T) {
 	r := ready()
 	r.Sources = append(r.Sources, "src.2")
-	if got := code(r.Confirm([]string{"src.1"}, facts, kernel.ActorRef{}, 1)); got != "DRAFT_NOT_READY /args/evidence_ids" {
+	if got := code(confirm(r, []string{"src.1"}, kernel.ActorRef{}, 1)); got != "DRAFT_NOT_READY /args/evidence_ids" {
 		t.Fatal(got)
 	}
 	r = ready()
 	r.Unresolved = []string{"交期尚未澄清"}
-	if got := code(r.Confirm([]string{"src.1"}, facts, kernel.ActorRef{}, 1)); got != "DRAFT_NOT_READY /args/unresolved_fields" {
+	if got := code(confirm(r, []string{"src.1"}, kernel.ActorRef{}, 1)); got != "DRAFT_NOT_READY /args/unresolved_fields" {
 		t.Fatal(got)
 	}
 	r = ready()
 	r.Lines[0].Locator = ""
-	if got := code(r.Confirm([]string{"src.1"}, facts, kernel.ActorRef{}, 1)); got != "DRAFT_NOT_READY /args/lines/0/locator" {
+	if got := code(confirm(r, []string{"src.1"}, kernel.ActorRef{}, 1)); got != "DRAFT_NOT_READY /args/lines/0/locator" {
 		t.Fatal(got)
 	}
 	r = ready()
 	r.Lines[0].SkuID = "sku.draft"
-	if got := code(r.Confirm([]string{"src.1"}, facts, kernel.ActorRef{}, 1)); got != "REFERENCE_INVALID /args/lines/0/sku_id" {
+	if got := code(confirm(r, []string{"src.1"}, kernel.ActorRef{}, 1)); got != "REFERENCE_INVALID /args/lines/0/sku_id" {
 		t.Fatal(got)
 	}
 	r = ready()
-	if got := code(r.Confirm([]string{"src.1", "src.9"}, facts, kernel.ActorRef{}, 1)); got != "REFERENCE_INVALID /args/evidence_ids/1" {
+	if got := code(confirm(r, []string{"src.1", "src.9"}, kernel.ActorRef{}, 1)); got != "REFERENCE_INVALID /args/evidence_ids/1" {
 		t.Fatal(got)
 	}
 	r = ready()
 	human := kernel.ActorRef{Kind: kernel.ActorHuman, ID: "alice"}
-	if err := r.Confirm([]string{"src.2", "src.1"}, facts, human, 7); err != nil {
+	if err := confirm(r, []string{"src.2", "src.1"}, human, 7); err != nil {
 		t.Fatal(err)
 	}
 	if r.Status != Ready || r.RowVersion != 2 || r.Lines[0].SkuSpecRevision != 1 || len(r.Sources) != 2 ||

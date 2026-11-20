@@ -85,25 +85,26 @@ BT10,TRD／PUR／FUL／STL,SalesOrder／DemandAllocation／OrderFulfilment／Ord
 BT11,FUL,Shipment,shipment.confirm,按 200／800 两批装箱出运，重做一次相同提交,箱至订单数量一致；累计不超可发量；重试不重复出运,Integration,基线 9.3,SPEC
 BT12,FUL,ShipmentDocumentSet,shipment_document.issue,商业发票、装箱单或提单草稿含版本或数量差异,逐项显示差异与修订；版本与来源可追溯；缺必需核对不能签发（SHIPMENT_DOCUMENTS_UNRECONCILED）,Domain,基线 9.3,SPEC
 BT13,FUL／STL／QLT,CommercialRelease,commercial_release.evaluate,合同要求的预付款、信用或质检条件未满足,按政策等待或拒绝；例外绑定规则与对象，不以普通备注放行,Integration,基线 9.3,SPEC
-BT17,STL／CNX,SettlementStatement／TaxRefundCase,opening_balance.record／tax_refund_case.record_opening,导入未结应收应付、未核销预收与未退税资料,截止时点可对账；上线后不重建同一账款或用途（OPENING_BALANCE_DUPLICATE）,Domain,基线 9.3,SPEC
+STL-OB-01,STL／CNX,SettlementStatement／TaxRefundCase,opening_balance.record／tax_refund_case.record_opening,导入未结应收应付、未核销预收与未退税资料,截止时点可对账；上线后不重建同一账款或用途（OPENING_BALANCE_DUPLICATE）,Domain,基线 24.3 CN-AT16 的配套用例（原误编为 BT17，S5R-D45）,SPEC
+BT17,MFG／STK,CollaborationPlan／StockLedger,—（条件能力 F23、F24）,导入外厂材料、在制品、未完委外单及未结加工费,截止时点可对账；上线后不重建同一库存、费用或应付,Domain,基线 9.3,CONDITIONAL（F23、F24）
 BT18,STL,OrderResult,order_result.close,发货完成但有未结费用或未决事项,显示各维度状态与待办；不因发货完成宣告结清（ORDER_RESULT_NOT_SETTLED）,Domain,基线 9.3,SPEC
-BT21,QLT／FUL,QualityRelease,quality_release.revoke,放行 200 件后 100 件已出运，再撤回放行并重放事件,未发部分冻结；已发部分保留；重复撤回无重复扣量,Concurrency-PG16,基线 9.4,SPEC
+BT21,QLT／FUL,QualityRelease,quality_release.revoke,放行 200 件后 100 件已出运，再撤回放行并重放事件,未发部分冻结；已发部分保留；重复撤回无重复扣量；撤回记录冻结量，冻结量复检后可再放行（S5R-D18）,Concurrency-PG16,基线 9.4,SPEC
 BT24,STL,OrderResult／Charge,order_result.reopen,订单关闭后补入次月运费，并尝试改写上期快照,记录发生、录入与分析日期及重新打开；历史快照不被覆盖,Domain,基线 9.4,SPEC
 CN-AT01,CNX／PUR／FUL／STL,—,—,单主体、自营一般贸易的普通出口,采购、交付、购进票、两批出运、报关结果、收汇与退税资料贯通；无虚构外部成功,E2E,基线 24.3,SPEC
 CN-AT02,FUL／CNX,—,—,一单分批出口、同次出口包含多销售行,销售、出运与报关项映射可核对，累计不超有效业务范围,Integration,基线 24.3,SPEC
 CN-AT03,CNX／CAT,—,—,票据品名或单位与报关资料不同,须受控映射或换算及专业依据；无法证实时阻断申报资料确认（DECLARATION_MAPPING_UNVERIFIED）,Domain,基线 24.3,SPEC
 CN-AT04,CNX,—,—,同一购进凭证部分用于多批业务,按用途核对剩余；并发与重试不重复占用（TAX_EVIDENCE_EXCEEDED）,Concurrency-PG16,基线 24.3,SPEC
-CN-AT05,CNX／STL,—,—,先出运后到票，原票随后红冲,交付事实保留；应付与退税资料分别处理影响，匹配待复核,Integration,基线 24.3,SPEC
+CN-AT05,CNX／STL,—,—,先出运后到票，原票随后红冲,交付事实保留；应付读取显示 invoice_reversed 标记，应付只经交付更正或 payable_adjustment 变化；部分红冲按红票金额冲减蓝票余额；已用于已提交退税案件的蓝票先登记进货凭证信息回退；匹配待复核（S5R-D20）,Integration,基线 24.3,SPEC
 CN-AT06,CNX,—,—,改单或撤销后重复、乱序回执,保留版本链，旧结果不覆盖新状态（DECLARATION_RECEIPT_STALE），不重复恢复凭证用途,Domain,基线 24.3,SPEC
 CN-AT07,STL,—,—,客户合并付款，银行有扣费,原币资金与多单核销守恒，费用另有依据，未解释差额待处理,Integration,基线 24.3,SPEC
-CN-AT08,STL,—,—,付款方不同，或发生退汇／退款,核实付款依据与责任；实际资金与商业调整分别记录（PARTY_ENTITY_MISMATCH 待复核）,Domain,基线 24.3,SPEC
+CN-AT08,STL,—,—,付款方不同，或发生退汇／退款,许可付款人的收款可核销；临时第三方付款经 fund.verify_payer 核实（信用经理，独立于资金登记人，附证据）后可核销；未核实前 PARTY_ENTITY_MISMATCH 待核；实际资金与商业调整分别记录（S5R-D21）,Domain,基线 24.3,SPEC
 CN-AT09,STL,—,—,外币结汇，再导入人民币入账,只形成一次资金转换；不新增销售收入或第二次客户回款,Domain,基线 24.3,SPEC
 CN-AT10,CNX,—,—,预计退税、核准与到账金额不同,三者分开记录；差异按冻结政策解释,Domain,基线 24.3,SPEC
 CN-AT11,STL／CNX,—,—,出口后折让或退运,销售、报关与税务影响分别形成受控记录；贷项不自动完成退税调整,Integration,基线 24.3,SPEC
-CN-AT12,CNX／POL,—,—,企业适用政策变化且有历史未结业务,按有效期与专业核实结果处理，旧业务不被新配置覆盖,Domain,基线 24.3,SPEC
+CN-AT12,CNX／POL,—,—,企业适用政策变化且有历史未结业务,退税案件绑定有效期包含出口日期的 export_tax_policy 修订，与发布时间无关；planned 之前出现更晚发布的覆盖修订时显示 policy_superseded 并可重新绑定；有效期不覆盖时 CONFIG_NOT_ACTIVE；旧业务不被新配置覆盖（S5R-D23）,Domain,基线 24.3,SPEC
 CN-AT13,CNX,—,—,提交超时，随后收到专业结果,先核实再重试，原业务操作唯一；无回执时不宣称办理成功（EXTERNAL_RESULT_UNKNOWN）,Domain,基线 24.3,SPEC
 CN-AT14,CNX／FUL,—,—,单证缺件或证书不适用,列缺件、适用对象、责任人与期限；已上传文件不直接满足要求（CERTIFICATE_NOT_APPLICABLE）,Domain,基线 24.3,SPEC
-CN-AT15,CNX／STL,—,—,出口主体、受票或收款主体不一致,发现差异并转获准模式复核；不能通过外部主体字段绕过公司隔离,Security,基线 24.3,SPEC
+CN-AT15,CNX／STL,—,—,出口主体、受票或收款主体不一致,受票主体不一致的购进发票直接拒绝（PARTY_ENTITY_MISMATCH，S5R-D21）；收款主体不一致按许可付款人或付款人核实处理；不能通过外部主体字段绕过公司隔离,Security,基线 24.3,SPEC
 CN-AT16,STL／CNX,—,—,业务期初、未退税资料及未达账款导入,截止、来源余额与已办状态可核对；上线不重复生成现金、应付或用途占用,Domain,基线 24.3,SPEC
 CN-AT17,FUL／CNX,—,—,中文操作、双语单证与盖章件修订,币种、金额、品名与条款对应；保存签署版本，草稿不能冒充已签署,Integration,基线 24.3,SPEC
 CN-AT18,CNX,—,—,AI 读取票据或报关资料后误匹配,显示来源与差异；候选须人工核实后进入同一业务命令，AI 身份不能核验或过账（PERMISSION_DENIED）,Security,基线 24.3,SPEC

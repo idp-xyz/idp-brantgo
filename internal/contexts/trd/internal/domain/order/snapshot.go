@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/acceptance"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/orderrev"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -20,14 +21,23 @@ const SnapshotContract = "brant.order-commercial-snapshot/0.1.0"
 // document's).
 var termKeys = []string{"trade_terms_ref", "named_place_ref", "payment_terms_ref", "delivery", "expires_at"}
 
+// Sealing is what order.prepare seals with revision 1 beyond the copy of its source (S5R-D35,
+// S5R-D40; orderrev/seal.go): the notify party the order binds (a term, terms.notify_party_ref) and
+// the seal (seal). The zero value seals neither: the snapshot of an order prepared before S5R,
+// which Python's build also writes.
+type Sealing struct {
+	NotifyParty *quote.AddressRef
+	Seal        *orderrev.Seal
+}
+
 // BuildSnapshot builds the commercial snapshot of order id in scope, converting the revision of src
 // whose sealed commercial document is commercial (checked against src.BusinessHash) on acceptance a
 // (Python t03_order_snapshot.build, T03 A25: copy the entire frozen input and result; do not
-// reprice and do not fill in missing terms). It is canonical JSON of:
+// reprice and do not fill in missing terms), with what sealing adds. It is canonical JSON of:
 //
 //	snapshot_contract, scope {tenant, company}, order_id, conversion_slot,
 //	customer_ref, contact_ref, currency_ref, terms {trade_terms_ref, named_place_ref,
-//	payment_terms_ref, delivery, issued_at, expires_at}, lines, charges, calculation,
+//	payment_terms_ref, delivery, issued_at, expires_at, notify_party_ref?}, seal?, lines, charges, calculation,
 //	source_quote_id, source_quote_revision, source_quote_hash, source_quote_number,
 //	source_document_sha256,
 //	acceptance_id, acceptance {acceptance_id, effectivity_version, arrival_at, arrival_basis,
@@ -37,7 +47,7 @@ var termKeys = []string{"trade_terms_ref", "named_place_ref", "payment_terms_ref
 // with every copied value exactly as the commercial document holds it. A document that does not
 // hash to its business hash is BUSINESS_HASH_MISMATCH; one without a calculation, lines or the terms
 // DRAFT_NOT_READY (the freeze seals neither).
-func BuildSnapshot(scope kernel.Scope, id string, src Source, commercial []byte, a *acceptance.Acceptance) ([]byte, error) {
+func BuildSnapshot(scope kernel.Scope, id string, src Source, commercial []byte, a *acceptance.Acceptance, sealing Sealing) ([]byte, error) {
 	if _, err := quote.ParseCommercial(commercial, src.BusinessHash); err != nil {
 		return nil, err
 	}
@@ -85,6 +95,16 @@ func BuildSnapshot(scope kernel.Scope, id string, src Source, commercial []byte,
 			"line_ids":     lines},
 		"source_quote_snapshot": tree,
 	}
+	if n := sealing.NotifyParty; n != nil {
+		if terms["notify_party_ref"], err = quote.TreeOf(n); err != nil {
+			return nil, err
+		}
+	}
+	if sealing.Seal != nil {
+		if body["seal"], err = quote.TreeOf(sealing.Seal); err != nil {
+			return nil, err
+		}
+	}
 	return quote.Canonical(body)
 }
 
@@ -101,7 +121,14 @@ type Snapshot struct {
 	AcceptanceID         string            `json:"acceptance_id"`
 	Scope                map[string]string `json:"scope"`
 	Commercial           quote.Commercial  `json:"source_quote_snapshot"`
+	Terms                struct {
+		NotifyParty *quote.AddressRef `json:"notify_party_ref"`
+	} `json:"terms"`
+	Seal *orderrev.Seal `json:"seal"`
 }
+
+// Sealing is what the snapshot sealed beyond the copy of its source (S5R-D35, D40).
+func (s Snapshot) Sealing() Sealing { return Sealing{NotifyParty: s.Terms.NotifyParty, Seal: s.Seal} }
 
 // Verify checks the stored order against its snapshot before the order is used (Python
 // validate_order_snapshot): the snapshot hashes to the order hash, names the order, its slot and its
@@ -139,14 +166,16 @@ func (o *Order) Verify(scope kernel.Scope, path string) (Snapshot, error) {
 		return bad("holds a commercial document that is not its source's")
 	}
 	// Every other member is what the source and the acceptance give (the acceptance restated the
-	// revision's customer, contact and complete line set): rebuilt, the snapshot is the same bytes.
+	// revision's customer, contact and complete line set), with what order.prepare sealed:
+	// rebuilt, the snapshot is the same bytes.
 	d := s.Commercial.Data
 	lines := make([]string, len(d.Lines))
 	for i, l := range d.Lines {
 		lines[i] = l.LineID
 	}
 	slices.Sort(lines)
-	rebuilt, err := BuildSnapshot(scope, o.ID, src, commercial, &acceptance.Acceptance{Customer: d.Customer, Contact: d.Contact, LineIDs: lines})
+	rebuilt, err := BuildSnapshot(scope, o.ID, src, commercial, &acceptance.Acceptance{Customer: d.Customer, Contact: d.Contact, LineIDs: lines},
+		s.Sealing())
 	if err != nil || !bytes.Equal(rebuilt, o.Snapshot) {
 		return bad("is not the copy of its source")
 	}

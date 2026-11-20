@@ -1,0 +1,95 @@
+{
+  "recorded_at": "2026-11-20T03:32:43+00:00",
+  "recorded_by": "S4 unit E2 (archive), Claude Sonnet 5.5 in Cursor on WSL2; no database and no model run of its own",
+  "host": {
+    "os": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "kernel": "6.18.58.1-microsoft-standard-WSL2",
+    "nproc": "20"
+  },
+  "git": {
+    "branch": "s4/e2-archive",
+    "head_when_recorded": "eb08fce12428d7e371f92643d18cfcc4587c1a4a",
+    "base": "1aa0290 (s4/tasks-ai, the S4 tree the evidence describes)",
+    "repository": "idp-xyz/idp-brantgo"
+  },
+  "go": {
+    "toolchain": "go version go1.26.8 linux/amd64",
+    "go_mod_toolchain": "go1.26.5 (go.mod); CI runs go1.26.5"
+  },
+  "modules": [
+    "go.idp.xyz/idp-brant",
+    "github.com/cespare/xxhash/v2 v2.3.0",
+    "github.com/davecgh/go-spew v1.1.1",
+    "github.com/digitorus/pdf v0.3.0",
+    "github.com/go-jose/go-jose/v4 v4.1.9",
+    "github.com/go-logr/logr v1.4.3",
+    "github.com/go-logr/stdr v1.2.2",
+    "github.com/google/go-cmp v0.7.0",
+    "github.com/jackc/pgpassfile v1.0.0",
+    "github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761",
+    "github.com/jackc/pgx/v5 v5.10.0",
+    "github.com/jackc/puddle/v2 v2.2.2",
+    "github.com/kr/pretty v0.3.0",
+    "github.com/kr/text v0.2.0",
+    "github.com/pmezard/go-difflib v1.0.0",
+    "github.com/stretchr/objx v0.1.0",
+    "github.com/stretchr/testify v1.11.1",
+    "go.idp.xyz/idp-bento-go v0.1.0-rc.2",
+    "go.opentelemetry.io/auto/sdk v1.2.1",
+    "go.opentelemetry.io/otel v1.44.0",
+    "go.opentelemetry.io/otel/metric v1.44.0",
+    "go.opentelemetry.io/otel/trace v1.44.0",
+    "golang.org/x/exp v0.0.0-20260727155853-b88d891fe743",
+    "golang.org/x/mod v0.38.0",
+    "golang.org/x/sync v0.22.0",
+    "golang.org/x/text v0.29.0",
+    "golang.org/x/tools v0.48.0",
+    "gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c",
+    "gopkg.in/yaml.v3 v3.0.1"
+  ],
+  "runs_in_this_folder": [
+    {
+      "files": "03_make_check.txt",
+      "by": "E2",
+      "where": "worktree s4-e2, WSL2 Ubuntu-24.04",
+      "database": "none (make check needs none)",
+      "tree": "the Go sources are those of 1aa0290; the changes of E2 are under docs/ (and the generated header of tools/dependency-check/allowlist.txt)"
+    },
+    {
+      "files": "04_gate_results.md",
+      "by": "lead",
+      "when": "2026-11-13 08:10Z to 2026-11-19 10:19Z (per row)",
+      "where": "lead checkout /home/tops/workspace/idp-brantgo on branch s4/tasks-ai, WSL2 Ubuntu-24.04",
+      "database": "PostgreSQL 16.12 containers brant-pg16 (127.0.0.1:55471, max_connections 300) and brant-pg16-ci100 (127.0.0.1:56310, max_connections 100)"
+    },
+    {
+      "files": "05_github_actions_runs.json.txt",
+      "by": "GitHub Actions (brant-ci) on idp-xyz/idp-brantgo",
+      "database": "PostgreSQL 16 service of the workflow, migrated from empty in every run"
+    },
+    {
+      "files": "06_evaluation_runs.md, 07_evaluation_runs/",
+      "by": "lead (scripted gates and live trials, tests/ai-evaluation)",
+      "when": "2026-11-17 10:23Z to 2026-11-19 11:08Z (per run)",
+      "where": "lead checkout, WSL2 Ubuntu-24.04, Go 1.26.8 linux/amd64, 20 CPUs",
+      "database": "PostgreSQL 16 at 127.0.0.1:55471 or 127.0.0.1:56310 (per run report)",
+      "model": "scripted model (CI suite) or the local OpenAI-compatible service, model qwen3.8-flash-next-iq3_xxs, profile strata.local.v1 (live runs)"
+    },
+    {
+      "files": "08_s5r_regression/",
+      "by": "unit R12",
+      "when": "2026-11-17, evidence run 19:3x to 19:4x (+08:00)",
+      "where": "worktree s4-r12, WSL2 Ubuntu-24.04, Go 1.26.8 linux/amd64",
+      "database": "PostgreSQL 16.12 container brant-pg16-r12, 127.0.0.1:56220",
+      "tree": "the tree squashed into 6ab1aa2 on 82c49f6"
+    },
+    {
+      "files": "09_d2_eer_live/README.md (a summary; the raw outputs of the three runs are not in the archive, see that README)",
+      "by": "unit D2",
+      "when": "2026-11-13 13:49:02Z to 13:49:26Z (make eer-live); the two earlier live-adapter runs about 13:41Z",
+      "where": "D2's worktree, WSL2 Ubuntu-24.04",
+      "database": "PostgreSQL 16 on 127.0.0.1:56290 for the end-to-end test; the EER platform of the TELOS stack ran locally as D2's report describes",
+      "tree": "wip 4dc57c3 plus the runner change; not run again on c0facac (D2's report)"
+    }
+  ]
+}

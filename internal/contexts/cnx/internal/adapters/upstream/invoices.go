@@ -69,7 +69,7 @@ func (s STL) ResolveFundRecords(ctx context.Context, ids []string) (map[string]a
 	}
 	for id, f := range got {
 		out[id] = application.FundRecord{ID: f.FundRecordID, Kind: f.Kind, Direction: f.Direction, Status: f.Status, Currency: f.Currency,
-			ReceivedMinor: f.ReceivedMinor}
+			ReceivedMinor: f.ReceivedMinor, Reversed: f.Reversed()}
 	}
 	return out, nil
 }

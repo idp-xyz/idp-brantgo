@@ -137,7 +137,7 @@
           "event": "CostSnapshotFrozen",
           "policy": "verified＋comparable＋依赖当前有效",
           "hotspot": "跨上下文依赖重查（ADR-BR-004）",
-          "evidence": "600＋60＝660 USD；选定理由"
+          "evidence": "600＋60＝660 USD（60.00 为 FCA 交货前的内陆运输与出口清关，成本组件 pre_carriage；买方指定货代的主运费不计入，S5R-D24）；选定理由"
         },
         {
           "n": 11,
@@ -233,7 +233,8 @@
       "counterexamples": [
         "任一核实或审批由 AI 执行",
         "报价覆盖部分询价行",
-        "成本快照来自 what_if 上下文"
+        "成本快照来自 what_if 上下文",
+        "FCA、FOB 订单把买方承担的主运费记为我方费用（S5R-D24：main_carriage 被拒，除非标为 recharged）"
       ],
       "openQuestions": [
         "真实客户的报价审核与订单审核是否由同一岗位兼任（BC-D02）"
@@ -705,11 +706,11 @@
         },
         {
           "n": 4,
-          "actor": "单证员",
+          "actor": "跟单员",
           "command": "shipment.confirm",
           "aggregate": "FUL·Shipment",
           "event": "ShipmentConfirmed",
-          "policy": "有效放行",
+          "policy": "有效放行；出运确认是“货已交承运人”的物流事实，由跟单确认；单证员负责放行评估与放单（S5R-D01）",
           "hotspot": "",
           "evidence": ""
         },
@@ -850,13 +851,13 @@
           "command": "export_license.allocate",
           "aggregate": "CNX·ExportLicense",
           "event": "ExportLicenseAllocated",
-          "policy": "需要许可证的商品；有效期内且不超额度",
+          "policy": "需要许可证的商品；有效期内且不超额度；一份报关单一张许可证，需要两张时按许可证分出口批次（S5R-D04）",
           "hotspot": "",
           "evidence": ""
         },
         {
           "n": 4,
-          "actor": "单证员",
+          "actor": "跟单员",
           "command": "shipment.confirm",
           "aggregate": "FUL·Shipment",
           "event": "ShipmentConfirmed",
@@ -999,8 +1000,8 @@
     },
     {
       "id": "PL-09",
-      "when": "OrderAmended",
-      "then": "PUR、FUL、STL 按订单修订复核受影响的分配、承诺、装箱、订舱与付款计划",
+      "when": "OrderAmended、OrderCancelled、OrderRemainderClosed",
+      "then": "PUR、FUL、STL 按订单修订复核受影响的分配、承诺、装箱、订舱与付款计划；订单结束时 PUR、FUL 复核未处置的分配与已准备出运；PUR、FUL 按（订单、订单修订、原因）开启一次复核（S5R-D39）",
       "owner": "PUR／FUL／STL"
     },
     {
@@ -1017,20 +1018,32 @@
     },
     {
       "id": "PL-12",
-      "when": "OrderActivated",
-      "then": "STL 把对应信用占用转为已使用",
+      "when": "OrderActivated／OrderAmended",
+      "then": "STL 把对应信用占用转为已使用；OrderAmended 时调整为新修订的信用部分：消耗已有占用或承接上一修订的占用（S5R-D08）",
       "owner": "STL"
     },
     {
       "id": "PL-13",
-      "when": "OrderCancelled／OrderClosed／结清",
-      "then": "STL 释放信用占用",
+      "when": "OrderCancelled／OrderRemainderClosed／OrderClosed／OrderClosedUnfulfilled（草稿结束）",
+      "then": "STL 释放信用占用；修订生效时上一修订的已消耗占用以 superseded 释放（S5R-D08）",
       "owner": "STL"
     },
     {
       "id": "PL-14",
-      "when": "OrderAmended（目的国、交易方或商品变化）",
+      "when": "OrderAmended（每个新修订）",
       "then": "CNX 对新订单修订重新核查贸易合规",
+      "owner": "CNX"
+    },
+    {
+      "id": "PL-15",
+      "when": "POL screening_regulation 新修订发布（ConfigPublished）",
+      "then": "CNX 重开同一法规较低修订下的 clear 结论（trade_compliance.reopen，系统）",
+      "owner": "CNX"
+    },
+    {
+      "id": "PL-16",
+      "when": "国别项目名单新版本导入（idp-brant.ref.country_programmes_imported.v1）",
+      "then": "CNX 守卫派生 pending/list_updated；消费方重开受影响结论（MD-47；经 R81 登记，S5R-D34）",
       "owner": "CNX"
     }
   ],

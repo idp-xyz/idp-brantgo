@@ -7,6 +7,7 @@ import (
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // The read responses. Unknown values are omitted, never null.
@@ -47,6 +48,26 @@ type sourceJSON struct {
 	ContentText       string       `json:"content_text"`
 	RegisteredAt      string       `json:"registered_at"`
 	Imports           []importView `json:"imports"`
+	Extract           *extractRef  `json:"extract,omitempty"` // file_extract: the file and the reader
+}
+
+// extractRef identifies a file extract (S4 B4): the file it was read from and the reader that read
+// it, whose version defines the locators.
+type extractRef struct {
+	FileID     string   `json:"file_id"`
+	FileSHA256 string   `json:"file_sha256"`
+	Kind       string   `json:"kind"`
+	Extractor  string   `json:"extractor"`
+	Profile    string   `json:"profile"`
+	Characters int      `json:"characters"`
+	Pages      int      `json:"pages,omitempty"`
+	Sheets     []string `json:"sheets,omitempty"`
+	SHA256     string   `json:"extract_sha256"`
+}
+
+func extractRefView(r evdapi.ExtractRef) *extractRef {
+	return &extractRef{FileID: r.FileID, FileSHA256: r.FileSHA256, Kind: r.Kind, Extractor: r.Extractor, Profile: r.Profile,
+		Characters: r.Characters, Pages: r.Pages, Sheets: r.Sheets, SHA256: r.SHA256}
 }
 
 func sourceView(v evdapi.SourceView) sourceJSON {
@@ -56,7 +77,25 @@ func sourceView(v evdapi.SourceView) sourceJSON {
 	for _, i := range v.Imports {
 		out.Imports = append(out.Imports, importView{ImportID: i.ImportID, Actor: actorView{string(i.Actor.Kind), i.Actor.ID}, ImportedAt: timestamp(i.ImportedAt)})
 	}
+	if v.Extract != nil {
+		out.Extract = extractRefView(*v.Extract)
+	}
 	return out
+}
+
+// extractJSON is the located form of a file_extract source (brant-extract/1: a header line, then
+// tab-separated records "segment <locator> <text>" and "note <kind> <locator>", values escaped).
+type extractJSON struct {
+	OK           bool        `json:"ok"`
+	SourceID     string      `json:"source_id"`
+	Extract      *extractRef `json:"extract"`
+	LocatedForm  string      `json:"located_form"`
+	RegisteredAt string      `json:"registered_at"`
+}
+
+func extractView(v evdapi.ExtractView) extractJSON {
+	return extractJSON{OK: true, SourceID: v.SourceID, Extract: extractRefView(v.ExtractRef), LocatedForm: v.LocatedForm,
+		RegisteredAt: timestamp(v.RegisteredAt)}
 }
 
 type fileJSON struct {
@@ -151,14 +190,47 @@ func skuView(v catapi.SkuView) skuJSON {
 }
 
 type lineJSON struct {
-	LineID          string `json:"line_id"`
-	SkuID           string `json:"sku_id,omitempty"`
-	Quantity        string `json:"quantity,omitempty"`
-	UOM             string `json:"uom,omitempty"`
-	RequestedItem   string `json:"requested_item,omitempty"`
-	SourceID        string `json:"source_id,omitempty"`
-	Locator         string `json:"locator,omitempty"`
-	SkuSpecRevision int64  `json:"sku_spec_revision,omitempty"`
+	LineID          string             `json:"line_id"`
+	SkuID           string             `json:"sku_id,omitempty"`
+	Quantity        string             `json:"quantity,omitempty"`
+	UOM             string             `json:"uom,omitempty"`
+	RequestedItem   string             `json:"requested_item,omitempty"`
+	SourceID        string             `json:"source_id,omitempty"`
+	Locator         string             `json:"locator,omitempty"`
+	SkuSpecRevision int64              `json:"sku_spec_revision,omitempty"`
+	Locators        []fieldLocatorJSON `json:"locators,omitempty"`
+	Pending         []pendingFieldJSON `json:"pending,omitempty"`
+	ProposedBy      *actorView         `json:"proposed_by,omitempty"`
+	QuotesWithheld  bool               `json:"quotes_withheld,omitempty"` // CT16: the source is not readable now
+}
+
+type fieldLocatorJSON struct {
+	Field   string `json:"field"`
+	Locator string `json:"locator"`
+	Quote   string `json:"quote,omitempty"`
+}
+
+type pendingFieldJSON struct {
+	Field      string   `json:"field"`
+	Reason     string   `json:"reason"`
+	Candidates []string `json:"candidates,omitempty"`
+}
+
+type correctionJSON struct {
+	Seq         int64      `json:"seq"`
+	RowVersion  int64      `json:"row_version"`
+	Command     string     `json:"command"`
+	LineID      string     `json:"line_id"`
+	Field       string     `json:"field,omitempty"`
+	Kind        string     `json:"kind"`
+	From        string     `json:"from,omitempty"`
+	To          string     `json:"to,omitempty"`
+	Locator     string     `json:"locator,omitempty"`
+	Reason      string     `json:"reason,omitempty"`
+	Candidates  []string   `json:"candidates,omitempty"`
+	ProposedBy  *actorView `json:"proposed_by,omitempty"`
+	CorrectedBy actorView  `json:"corrected_by"`
+	RecordedAt  string     `json:"recorded_at"`
 }
 
 type confirmationJSON struct {
@@ -180,14 +252,37 @@ type rfqJSON struct {
 	SourceIDs        []string          `json:"source_ids"`
 	UnresolvedFields []string          `json:"unresolved_fields"`
 	Confirmation     *confirmationJSON `json:"confirmation,omitempty"`
+	Corrections      []correctionJSON  `json:"corrections"`
+}
+
+// actorRef is the view of an actor, nil for an unknown one.
+func actorRef(a kernel.ActorRef) *actorView {
+	if a.ID == "" {
+		return nil
+	}
+	return &actorView{string(a.Kind), a.ID}
 }
 
 func rfqView(v inqapi.RfqView) rfqJSON {
 	out := rfqJSON{OK: true, RfqID: v.RfqID, Status: v.Status, RowVersion: v.RowVersion, CustomerID: v.CustomerID, ContactID: v.ContactID,
-		Lines: []lineJSON{}, SourceIDs: v.SourceIDs, UnresolvedFields: v.UnresolvedFields}
+		Lines: []lineJSON{}, SourceIDs: v.SourceIDs, UnresolvedFields: v.UnresolvedFields, Corrections: []correctionJSON{}}
 	for _, l := range v.Lines {
-		out.Lines = append(out.Lines, lineJSON{LineID: l.LineID, SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem,
-			SourceID: l.SourceID, Locator: l.Locator, SkuSpecRevision: l.SkuSpecRevision})
+		line := lineJSON{LineID: l.LineID, SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem,
+			SourceID: l.SourceID, Locator: l.Locator, SkuSpecRevision: l.SkuSpecRevision, ProposedBy: actorRef(l.ProposedBy),
+			QuotesWithheld: l.QuotesWithheld}
+		for _, x := range l.Locators {
+			line.Locators = append(line.Locators, fieldLocatorJSON(x))
+		}
+		for _, x := range l.Pending {
+			line.Pending = append(line.Pending, pendingFieldJSON(x))
+		}
+		out.Lines = append(out.Lines, line)
+	}
+	for _, c := range v.Corrections {
+		out.Corrections = append(out.Corrections, correctionJSON{Seq: c.Seq, RowVersion: c.RowVersion, Command: c.Command, LineID: c.LineID,
+			Field: c.Field, Kind: c.Kind, From: c.From, To: c.To, Locator: c.Locator, Reason: c.Reason, Candidates: c.Candidates,
+			ProposedBy: actorRef(c.ProposedBy), CorrectedBy: actorView{string(c.CorrectedBy.Kind), c.CorrectedBy.ID},
+			RecordedAt: timestamp(c.RecordedAt)})
 	}
 	if c := v.Confirmation; c != nil {
 		out.Confirmation = &confirmationJSON{CustomerRowVersion: c.CustomerRowVersion, ContactRowVersion: c.ContactRowVersion, EvidenceIDs: c.EvidenceIDs,

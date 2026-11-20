@@ -26,11 +26,15 @@ import (
 //	                                 and numbered by POL NumberIssue from a number_sequence revision
 //	                                 (document type invoice for a CI, packing_list for a PL; business
 //	                                 reference the set ID, so every version of a kind keeps its
-//	                                 number). The CI's lines are the shipment lines at the prices the
-//	                                 shipment keeps; the PL's packages are the shipment's actual
-//	                                 packing unless stated (the factory's list, say). The
-//	                                 particulars — consignee (default: the order's consignee address,
-//	                                 else the buyer), notify, marks, ports (default: the booking's)
+//	                                 number). The CI prints the order revision the shipment binds
+//	                                 (TRD OrderRevisionRef v1, S5R-D35): its trade and payment terms
+//	                                 and its lines' prices — with the price basis quantity and discount
+//	                                 ratio when they are not 1 and 0 — while the prices the shipment
+//	                                 keeps stay the reconciliation value; the PL's packages are the
+//	                                 shipment's actual packing unless stated (the factory's list,
+//	                                 say). The particulars — consignee (default: the order's consignee
+//	                                 address, else the buyer), notify (default: the notify party the
+//	                                 order revision binds, S5R-D40), marks, ports (default: the booking's)
 //	                                 and the goods' names per SKU and language — are stated per
 //	                                 version. A B/L or CO is a record of an external document: its
 //	                                 data and an EVD file. The draft the kind had before is
@@ -41,8 +45,12 @@ import (
 //	                                 BT12) — an earlier issue's acknowledgement of the very same
 //	                                 difference is carried; the templates, number sequences and seller profiles of the
 //	                                 drafts are re-checked in force by POL's ConfigGuard at the content
-//	                                 hashes they were rendered from. The version a kind had issued
-//	                                 before is superseded; an issued version never changes.
+//	                                 hashes they were rendered from. Before its transaction CNX is asked
+//	                                 again whether the certificate result a CO draft names applies to
+//	                                 the shipment now (S5R-D12): expired, no longer covering or
+//	                                 superseded is a required difference (never acknowledged). The
+//	                                 version a kind had issued before is superseded; an issued version
+//	                                 never changes.
 //	shipment_document.record_signed  human only: registers the signed or stamped copy of one language
 //	                                 of an issued CI or PL version, an EVD file the caller reads; the
 //	                                 generated, unsigned bytes are never the signed copy.
@@ -50,8 +58,12 @@ import (
 // The reconciliation compares, item by item, the current version of every kind (the draft, else the
 // issued one) with the shipment lines, the order lines' prices the shipment keeps, the actual
 // packing, the booking and each other: SKU, quantity, unit, unit price and amount of every line,
-// quantity totals, cartons, weights and volume, consignee, notify, marks, ports, vessel and voyage,
-// and the sources a version was prepared from. Every difference has a path into the document
+// quantity totals, cartons, weights and volume, consignee, notify (the CI's against the order's notify
+// party, S5R-D40), marks, ports, vessel and voyage, and the sources a version was prepared from; the
+// insurance policy (S5-16, S5R-D06: a missing one on CIF/CIP, its clauses against the Incoterm); and
+// the certificate of origin (S5R-D12: a record naming no CNX certificate result is co_not_registered,
+// acknowledged with a reason; at issue and in the set's read, a draft's certificate result no longer
+// applying is certificate_applicability, required). Every difference has a path into the document
 // (/packing_list/totals/quantity/PCS) and names what it was compared with.
 //
 // Request members in snake_case: shipment_document.prepare {document_set_id, shipment_id,
@@ -699,6 +711,9 @@ type DocumentSetView struct {
 	CreatedBy      kernel.ActorRef
 	CreatedAt      time.Time
 	AuthorityEpoch int64
+	// QualityConcessions are the shipment lines whose quality release QLT granted on an approved
+	// concession (S5R-D18: the concession is visible on the shipment and its document set).
+	QualityConcessions []string
 }
 
 // DocumentFile is the rendition of one language of a version with its bytes, verified against the

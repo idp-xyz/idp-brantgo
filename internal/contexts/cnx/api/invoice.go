@@ -24,11 +24,18 @@ import (
 //	                         (supplier, buyer entity, kind, colour, number, issue date, currency,
 //	                         lines with quantities, net and tax amounts as stated, totals, and for a
 //	                         red invoice the blue one it reverses) and the matches of its lines to
-//	                         PUR commitment lines (PurchaseLineRef v1, R37); or decision reject with
-//	                         a reason. A buyer that is not the company's entity (POL company_profile)
-//	                         is PARTY_ENTITY_MISMATCH and the invoice stays imported, under review.
-//	                         Verifying a red invoice reverses the blue one: its matches and the tax
-//	                         evidence allocated from it return to review (CN-R06, CN-AT05).
+//	                         PUR commitment lines (PurchaseLineRef v1, R37; Σ standing matches of a
+//	                         commitment line above what it buys is PURCHASE_INVOICE_MATCH_EXCEEDED); or
+//	                         decision reject with a reason. A buyer that is not the company's entity (POL
+//	                         company_profile) is PARTY_ENTITY_MISMATCH: refused outright, no approved mode;
+//	                         the supplier reissues the invoice (S5R-D21) and this one is rejected.
+//	                         A red invoice reverses the blue one wholly or in part (S5R-D20): each red line
+//	                         names the blue line it reverses by its line_no, in its unit, at most what
+//	                         remains of it; its matches name the blue matches it takes back. One that
+//	                         reverses what remained reverses the blue one: its matches and the tax evidence
+//	                         allocated from it return to review (CN-R06, CN-AT05); a partial one leaves it
+//	                         verified with less evidence. A blue invoice whose evidence a filed tax refund
+//	                         case uses needs that case's evidence_rolled_back first (INVALID_STATE).
 //
 // Amounts are magnitudes in the invoice's currency (a POL currency revision); a red invoice states
 // what it reverses. The totals must be the sums of the lines and net + tax the gross: CNX adds, it
@@ -36,7 +43,8 @@ import (
 //
 // Request members in snake_case: purchase_invoice.import {file_id, candidate}; purchase_invoice.verify
 // {purchase_invoice_id, expected_version, decision, facts, matches [{line_no, commitment_id,
-// order_line_id, quantity}], reason}; facts and candidate {kind, colour, number, issued_on, supplier
+// order_line_id, quantity}] (for a red invoice: the blue matches it takes back), reason}; facts and candidate {kind,
+// colour, number, issued_on, supplier
 // {party_id, name, tax_id}, buyer {name, tax_id}, currency {id, revision}, lines [{line_no,
 // description, quantity, unit, net_amount, tax_rate, tax_amount}], net_total, tax_total, gross_total,
 // red_of {kind, number}}.
@@ -79,10 +87,18 @@ const (
 	DecisionReject = "reject"
 )
 
-// States of a match: standing, or review once the invoice was reversed by a red one.
+// States of a match: standing, or review once the invoice was reversed by a red one or a red one took back part of
+// it; a red invoice's match is a reversal (it takes back a blue match, S5R-D20).
 const (
 	MatchStanding = "standing"
 	MatchReview   = "review"
+	MatchReversal = "reversal"
+)
+
+// How much of a blue invoice red invoices reversed (S5R-D20): part of it (it stays verified) or all (reversed).
+const (
+	ReversalPartial = "partial"
+	ReversalFull    = "full"
 )
 
 // Limits of the invoice contract.
@@ -257,8 +273,8 @@ type InvoiceMatch struct {
 }
 
 // VerifyInvoice decides invoice PurchaseInvoiceID at ExpectedVersion (human only): Decision verify
-// with the verified Facts and, for a blue invoice, its Matches (optional, at most
-// MaxInvoiceMatches); or reject with Reason, without facts or matches.
+// with the verified Facts and its Matches (optional, at most MaxInvoiceMatches: a blue invoice's to PUR commitment
+// lines, a red invoice's the blue matches it takes back, S5R-D20); or reject with Reason, without facts or matches.
 type VerifyInvoice struct {
 	IdempotencyKey    string
 	PurchaseInvoiceID string
@@ -300,7 +316,7 @@ func (c VerifyInvoice) Validate() error {
 	if err := c.Facts.validate("/args/facts"); err != nil {
 		return err
 	}
-	if len(c.Matches) > MaxInvoiceMatches || (c.Facts.Colour == ColourRed && len(c.Matches) != 0) {
+	if len(c.Matches) > MaxInvoiceMatches {
 		return schema("/args/matches")
 	}
 	lines := map[int]bool{}
@@ -376,12 +392,14 @@ type DifferenceView struct {
 }
 
 // MatchView is a match of an invoice line to a PUR commitment line: what PUR said at the match (the
-// supplier, purchase order number, quantity bought and verified as delivered) and its state now.
+// supplier, purchase order number, quantity bought and verified as delivered) and its state now; TakenBack is what red
+// invoices took back of a blue match (S5R-D20). A red invoice's matches are what it took back (state reversal).
 type MatchView struct {
 	LineNo            int
 	CommitmentID      string
 	OrderLineID       string
 	Quantity          string
+	TakenBack         string
 	Unit              string
 	SupplierID        string
 	PONumber          string
@@ -399,6 +417,7 @@ type EvidenceBalanceView struct {
 	Unit            string
 	Purpose         string
 	Quantity        string
+	Reversed        string // what verified red invoices reversed of the line (S5R-D20); Available is net of it
 	Allocated       string
 	OpeningConsumed string
 	Available       string
@@ -425,7 +444,9 @@ type InvoiceView struct {
 	Matches           []MatchView
 	Balances          []EvidenceBalanceView
 	ReversesInvoiceID string
-	ReversedByID      string
+	ReversedByID      string   // the red invoice that reversed what remained (state reversed)
+	ReversedByIDs     []string // every verified red invoice that reverses it, oldest first (S5R-D20)
+	Reversal          string   // "" none, partial or full (S5R-D20)
 	AuthorityEpoch    int64
 	CheckedAt         time.Time
 }

@@ -27,8 +27,11 @@ import (
 // hash (POL's ConfigGuard v1 FOR SHARE: CONFIG_NOT_ACTIVE, CONFIG_EXPIRED, REFERENCE_STALE), then
 // every programme list it used still at the version it used (reference data's list guard FOR
 // SHARE, list-code order: REFERENCE_STALE — evaluate again). A blocked conclusion relies on no
-// regulation or list being current. The decision is written with the
-// check, then TradeComplianceDecided.
+// regulation or list being current. S5R-D17: a clear decision names among its evidence the
+// authorizations an applying embargo or sanctions finding is cleared on (authorizations), and its
+// validity never passes theirs; the domain refuses without them (INVALID_STATE /args/evidence_ids),
+// and TRADE_COMPLIANCE_EVALUATION_INCOMPLETE replaces INVALID_STATE for an incomplete evaluation.
+// The decision is written with the check, then TradeComplianceDecided.
 
 type decideCommand struct {
 	s       Service
@@ -73,6 +76,12 @@ func (h *decideCommand) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	now := kernel.Instant(h.s.Clock.Now())
 	in := tcc.DecideInput{ID: action.NewID("tcd", now), EvaluationID: cmd.EvaluationID, Conclusion: tcc.Status(cmd.Conclusion), Reason: cmd.Reason,
 		Evidence: evidence, By: d.Actor, Epoch: d.Epoch, At: now}
+	for _, a := range cmd.Authorizations {
+		src := h.sources[a.EvidenceID] // among the evidence just resolved (the contract)
+		until, _ := kernel.ParseTimestamp(a.ValidUntil)
+		in.Authorizations = append(in.Authorizations, tcc.Authorization{Evidence: tcc.Evidence{SourceID: src.SourceID,
+			ContentSHA256: src.ContentSHA256}, Kind: a.Kind, ValidUntil: until})
+	}
 	if cmd.LicenseRequired != nil {
 		in.LicenseRequired = *cmd.LicenseRequired
 	}

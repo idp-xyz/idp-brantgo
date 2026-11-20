@@ -50,7 +50,7 @@ func shipmentView(s *shipment.Shipment) api.ShipmentView {
 		v.Lines = append(v.Lines, api.ShipmentLineView{LineID: l.ID, OrderLineID: l.OrderLineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision,
 			UnitID: l.UnitID, UnitRevision: l.UnitRevision, OrderLineQuantity: postgres.Text(l.OrderQuantity), Quantity: postgres.Text(l.Quantity),
 			SupplierDelivery: api.DeliveryLineRef{DeliveryID: l.Delivery.DeliveryID, LineID: l.Delivery.LineID, Version: l.DeliveryVersion},
-			CommitmentID:     l.CommitmentID, SupplierID: l.SupplierID, QualityReleaseID: l.ReleaseID})
+			CommitmentID:     l.CommitmentID, SupplierID: l.SupplierID, QualityReleaseID: l.ReleaseID, QualityConcession: l.QualityConcession})
 	}
 	for _, p := range s.Parties {
 		v.Parties = append(v.Parties, api.ShipmentParty(p))

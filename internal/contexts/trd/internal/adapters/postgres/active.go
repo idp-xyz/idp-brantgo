@@ -353,3 +353,19 @@ func writeAmendment(ctx context.Context, exec bentopg.Executor, t, c string, a *
 	a.Changed = false
 	return nil
 }
+
+// LoadRevision returns revision rev (after the first) of order id as stored, unlocked: nil when the
+// order has no such revision; a stored document that is not a revision it hashes to is the
+// refusal of orderrev.Parse (OrderRevisionRef v1, S5R-D35).
+func LoadRevision(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string, rev int64) (*orderrev.Revision, error) {
+	var doc, hash string
+	err := exec.QueryRow(ctx, `SELECT document, order_hash FROM brant_trd.sales_order_revision WHERE tenant_id = $1 AND company_id = $2
+		AND order_id = $3 AND order_revision = $4`, string(scope.Tenant), string(scope.Company), id, rev).Scan(&doc, &hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return orderrev.Parse([]byte(doc), hash)
+}

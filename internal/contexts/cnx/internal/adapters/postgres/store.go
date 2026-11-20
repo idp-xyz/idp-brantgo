@@ -178,6 +178,14 @@ func Evaluations(ctx context.Context, exec bentopg.Executor, scope kernel.Scope,
 	return out, rows.Err()
 }
 
+// authorizationDoc is an authorization as a decision stores it (cnx 000008, S5R-D17).
+type authorizationDoc struct {
+	SourceID      string `json:"source_id"`
+	ContentSHA256 string `json:"content_sha256"`
+	Kind          string `json:"kind"`
+	ValidUntil    string `json:"valid_until"`
+}
+
 // InsertDecision appends a decision.
 func InsertDecision(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, d *tcc.Decision) error {
 	evidence, err := json.Marshal(d.Evidence)
@@ -189,18 +197,33 @@ func InsertDecision(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 		t := kernel.Instant(d.ValidUntil)
 		until = &t
 	}
+	var authorizations *string
+	if len(d.Authorizations) > 0 {
+		docs := make([]authorizationDoc, 0, len(d.Authorizations))
+		for _, a := range d.Authorizations {
+			docs = append(docs, authorizationDoc{SourceID: a.SourceID, ContentSHA256: a.ContentSHA256, Kind: a.Kind,
+				ValidUntil: kernel.FormatTimestamp(a.ValidUntil)})
+		}
+		b, err := json.Marshal(docs)
+		if err != nil {
+			return err
+		}
+		text := string(b)
+		authorizations = &text
+	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.trade_compliance_decision (tenant_id, company_id, decision_id, check_id, evaluation_id,
 		conclusion, reason, license_required, regulation_id, regulation_revision, regulation_hash, valid_until, evidence, decided_by_kind,
-		decided_by_id, authority_epoch, decided_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		decided_by_id, authority_epoch, decided_at, authorizations)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
 		scoped(scope, d.ID, d.CheckID, d.EvaluationID, string(d.Conclusion), d.Reason, d.LicenseRequired, d.Regulation.ID, d.Regulation.Revision,
-			d.Regulation.ContentHash, until, string(evidence), string(d.By.Kind), d.By.ID, d.Epoch, kernel.Instant(d.At))...)
+			d.Regulation.ContentHash, until, string(evidence), string(d.By.Kind), d.By.ID, d.Epoch, kernel.Instant(d.At), authorizations)...)
 	return err
 }
 
 // Decisions returns a check's decisions oldest first; with decisionID only that one.
 func Decisions(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, checkID, decisionID string) ([]*tcc.Decision, error) {
 	rows, err := exec.Query(ctx, `SELECT decision_id, evaluation_id, conclusion, reason, license_required, regulation_id, regulation_revision,
-		regulation_hash, valid_until, evidence, decided_by_kind, decided_by_id, authority_epoch, decided_at
+		regulation_hash, valid_until, evidence, decided_by_kind, decided_by_id, authority_epoch, decided_at, authorizations
 		FROM brant_cnx.trade_compliance_decision WHERE tenant_id = $1 AND company_id = $2 AND check_id = $3 AND ($4 = '' OR decision_id = $4)
 		ORDER BY decided_at, decision_id`, scoped(scope, checkID, decisionID)...)
 	if err != nil {
@@ -212,12 +235,27 @@ func Decisions(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, c
 		d := tcc.Decision{CheckID: checkID}
 		var conclusion, evidence, kind string
 		var until *time.Time
+		var authorizations *string
 		if err := rows.Scan(&d.ID, &d.EvaluationID, &conclusion, &d.Reason, &d.LicenseRequired, &d.Regulation.ID, &d.Regulation.Revision,
-			&d.Regulation.ContentHash, &until, &evidence, &kind, &d.By.ID, &d.Epoch, &d.At); err != nil {
+			&d.Regulation.ContentHash, &until, &evidence, &kind, &d.By.ID, &d.Epoch, &d.At, &authorizations); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(evidence), &d.Evidence); err != nil {
 			return nil, err
+		}
+		if authorizations != nil {
+			var docs []authorizationDoc
+			if err := json.Unmarshal([]byte(*authorizations), &docs); err != nil {
+				return nil, err
+			}
+			for _, a := range docs {
+				t, err := kernel.ParseTimestamp(a.ValidUntil)
+				if err != nil {
+					return nil, err
+				}
+				d.Authorizations = append(d.Authorizations, tcc.Authorization{Evidence: tcc.Evidence{SourceID: a.SourceID,
+					ContentSHA256: a.ContentSHA256}, Kind: a.Kind, ValidUntil: t})
+			}
 		}
 		d.Conclusion, d.By.Kind, d.At = tcc.Status(conclusion), kernel.ActorKind(kind), kernel.Instant(d.At)
 		if until != nil {

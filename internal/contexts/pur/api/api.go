@@ -3,8 +3,9 @@
 // and PUR-AGG-DemandAllocation, SM-PUR-DRAFT, PUR-INV-001 to 007; Python t04_purchase, T04 A46),
 // purchase commitments with supplier confirmations (WBS S5-01, commitment.go; PUR-INV-009, 010) and
 // supplier deliveries on the direct delivery route (WBS S5-15, delivery.go; PUR-INV-008),
-// commitment changes and cancellation (WBS S5-19, change.go; PUR-INV-011) and the allocation reviews
-// that follow an order change (WBS S5-09b, review.go; SM-PUR-ALLOCATION-REVIEW).
+// commitment changes and cancellation (WBS S5-19, change.go; PUR-INV-011), the allocation reviews
+// that follow an order change (WBS S5-09b, review.go; SM-PUR-ALLOCATION-REVIEW) and the dispositions
+// of delivered goods (WBS S5R-04, disposition.go; S5R-D05, SM-PUR-COMMITMENT-DISPOSITION, PUR-INV-013).
 //
 //	purchase.draft.prepare  human only: binds lines of an active order, whose activating order
 //	                        approval is not revoked, each with an explicitly allocated quantity, to
@@ -353,6 +354,7 @@ type Commands interface {
 	DeliveryCommands
 	ChangeCommands
 	ReviewCommands
+	DispositionCommands
 }
 
 // Queries is PUR's audited read side.

@@ -48,17 +48,21 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 		api.CommandBindControl:    {kernel.ActorHuman, kernel.ActorSystem},
 		api.CommandStopControl:    {kernel.ActorHuman},
 		api.CommandReleaseControl: {kernel.ActorHuman},
-		api.CommandSubmitReview:   {kernel.ActorHuman},
-		api.CommandDecideReview:   {kernel.ActorHuman},
-		api.CommandRevokeApproval: {kernel.ActorHuman},
-		api.CommandActivate:       {kernel.ActorHuman},
-		api.CommandReplace:        {kernel.ActorHuman},
-		api.CommandWithdraw:       {kernel.ActorHuman},
-		api.CommandCancel:         {kernel.ActorHuman},
-		CommandGetQuote:           {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
-		CommandCheckApproval:      {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
-		CommandGetFormalDocument:  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
-		CommandGetActiveRevision:  {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		// TSK's barrier completion (S4 decision D-4): the command catalog's 系统, the role
+		// templates' sales clerk and merchandiser; never an AI agent.
+		api.CommandEnterManualControl: {kernel.ActorHuman, kernel.ActorSystem},
+		api.CommandHandoffControl:     {kernel.ActorHuman, kernel.ActorSystem},
+		api.CommandSubmitReview:       {kernel.ActorHuman},
+		api.CommandDecideReview:       {kernel.ActorHuman},
+		api.CommandRevokeApproval:     {kernel.ActorHuman},
+		api.CommandActivate:           {kernel.ActorHuman},
+		api.CommandReplace:            {kernel.ActorHuman},
+		api.CommandWithdraw:           {kernel.ActorHuman},
+		api.CommandCancel:             {kernel.ActorHuman},
+		CommandGetQuote:               {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandCheckApproval:          {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandGetFormalDocument:      {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
+		CommandGetActiveRevision:      {kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem},
 		// Customer responses and acceptance: the command catalog's 人工或 AI for the record, the
 		// tactical model's humanOnlyCommands for the rest.
 		api.CommandRecordResponse:       {kernel.ActorHuman, kernel.ActorAI},
@@ -133,6 +137,17 @@ func TestRulesFollowTheCatalog(t *testing.T) {
 	}
 	if !slices.Equal(amendment.Areas(), api.ImpactAreas()) {
 		t.Error("impact areas differ")
+	}
+	// S4 decision D-7 (unit F1): exactly order.prepare and order.review.request need an approval
+	// grant from an AI actor (the AI layer's capability.Q01 says the same).
+	var granted []string
+	for _, r := range Rules() {
+		if r.AIApprovalGrant {
+			granted = append(granted, r.Command)
+		}
+	}
+	if slices.Sort(granted); !slices.Equal(granted, []string{api.CommandPrepareOrder, api.CommandRequestOrderReview}) {
+		t.Errorf("commands needing an approval grant from AI actors: %v", granted)
 	}
 	// The order documents' kinds and signed copies are the api's.
 	if orderdoc.KindSalesContract != api.DocumentSalesContract || orderdoc.KindProformaInvoice != api.DocumentProformaInvoice ||

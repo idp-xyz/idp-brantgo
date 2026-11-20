@@ -5,6 +5,7 @@ package bootstrap_test
 import (
 	"context"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,6 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/kernel"
-	refapi "go.idp.xyz/idp-brant/internal/reference/api"
 )
 
 // CNX's trade compliance check (S5 A7, WBS S5-13; tactical model CNX-AGG-TradeComplianceCheck,
@@ -35,6 +35,11 @@ import (
 // (CAT-INV-002). CNX is the composed process's: TRD's order snapshots, PTY's address countries,
 // reference data's programme lists and CAT's declaration profiles are all read through their real
 // contracts.
+
+// syntheticProgrammes are the country programme lists the order world's screening_regulation
+// enables (S5R-D38: CNX's evaluation reads them from the bound regulation revision).
+var syntheticProgrammes = []polapi.ScreeningList{{ListCode: cnProgrammeList, Jurisdiction: polapi.JurisdictionCN},
+	{ListCode: unProgrammeList, Jurisdiction: polapi.JurisdictionUN}}
 
 // cnxCompliancePermissions is what the compliance role template holds for the check, with the
 // reads, the evidence registration and the programme import the suite needs.
@@ -128,14 +133,14 @@ func (w *cnxWorld) binding(orderID string) cnxapi.OrderBinding {
 	return cnxapi.OrderBinding{OrderID: orderID, OrderRevision: v.OrderRevision, OrderHash: v.OrderHash}
 }
 
-// evaluateCmd evaluates order at rev under the world's regulation, both synthetic lists and the
-// code table CN-2026, with destination entered (with evidence, D-8), the buyer address hq's country
-// entered (PTY has none) and the end use stated.
+// evaluateCmd evaluates order at rev under the world's regulation, which enables both synthetic
+// lists (S5R-D38: the evaluation names none of its own), and the code table CN-2026, with
+// destination entered (with evidence, D-8), the buyer address hq's country entered (PTY has none)
+// and the end use stated.
 func (w *cnxWorld) evaluateCmd(order string, rev, expected int64, destination string) cnxapi.Evaluate {
 	ev := []string{"cnx.evidence"}
 	return cnxapi.Evaluate{IdempotencyKey: w.key(), OrderID: order, OrderRevision: rev, ExpectedVersion: expected,
-		RegulationID: w.regulation.ConfigID, RegulationRevision: w.regulation.Revision, ProgrammeLists: []string{cnProgrammeList, unProgrammeList},
-		CodeTableVersion: codeTable,
+		RegulationID: w.regulation.ConfigID, RegulationRevision: w.regulation.Revision, CodeTableVersion: codeTable,
 		Destination:      &cnxapi.Destination{Country: destination, Reason: "提单与客户 PO 载明的卸货国（合成）", EvidenceIDs: ev},
 		AddressCountries: []cnxapi.AddressCountry{{PartyID: "customer.1", AddressID: "hq", Country: syntheticClear, EvidenceIDs: ev}},
 		EndUse:           &cnxapi.EndUse{Statement: "服装零售（合成）", EvidenceIDs: ev}}
@@ -246,7 +251,8 @@ func TestTradeComplianceEvaluateDecideAndGuard(t *testing.T) {
 	_, err = w.cnx.Decide(w.agent, w.decideCmd(first, cnxapi.ConclusionClear, false))
 	w.want(err, kernel.CodePermissionDenied)
 	_, err = w.cnx.Decide(w.compliance, w.decideCmd(first, cnxapi.ConclusionClear, false))
-	if code(err) != kernel.CodeInvalidState || path(err) != "/args/evaluation_id" {
+	// S5R registered TRADE_COMPLIANCE_EVALUATION_INCOMPLETE for CNX-INV-001 in place of INVALID_STATE.
+	if code(err) != cnxapi.CodeTradeComplianceEvaluationIncomplete || path(err) != "/args/evaluation_id" {
 		t.Fatalf("clear on an incomplete evaluation: %s %s", code(err), path(err))
 	}
 	_, err = w.cnx.Evaluate(w.compliance, w.evaluateCmd(o.ObjectID, 1, 0, syntheticClear))
@@ -328,7 +334,8 @@ func TestTradeComplianceEvaluateDecideAndGuard(t *testing.T) {
 		trail = append(trail, e.Command+"/"+e.Outcome+"/"+e.Code)
 	}
 	for _, want := range []string{"trade_compliance.evaluate/succeeded/", "trade_compliance.decide/rejected/PERMISSION_DENIED",
-		"trade_compliance.decide/rejected/INVALID_STATE", "trade_compliance.decide/succeeded/", "trade_compliance.decide/replayed/",
+		"trade_compliance.decide/rejected/TRADE_COMPLIANCE_EVALUATION_INCOMPLETE", // S5R: in place of INVALID_STATE
+		"trade_compliance.decide/succeeded/", "trade_compliance.decide/replayed/",
 		"trade_compliance.get/read/"} {
 		if !strings.Contains(strings.Join(trail, " "), want) {
 			t.Fatalf("audit lacks %s: %v", want, trail)
@@ -403,7 +410,10 @@ func TestTDAT12EmbargoedDestinationIsBlocked(t *testing.T) {
 	if again.Status != cnxapi.StatusPending || again.Outcome != cnxapi.OutcomeNoMatch || again.DecisionID != "" {
 		t.Fatalf("%+v", again)
 	}
-	w.wantVerdict(b, cnxapi.StatusPending, cnxapi.ReasonAwaitingDecision)
+	// S5R-D10: the blocked conclusion under re-evaluation still answers blocked until a new decision.
+	if v := w.wantVerdict(b, cnxapi.StatusBlocked, cnxapi.ReasonBlockedUnderReview); v.DecisionID != blocked.DecisionID {
+		t.Fatalf("the blocked decision under review %+v", v)
+	}
 }
 
 // CNX-INV-001 "订单变更后旧结论不适用", D-9, PL-14 (TD-AT12's binding): an active order cleared at
@@ -541,32 +551,34 @@ func TestReopeningsAndWhatAClearConclusionNeeds(t *testing.T) {
 	cfg, err := w.c.POL.GetConfig(w.author, polapi.KindScreeningRegulation, "screening")
 	w.must(err)
 	reg2 := w.configure(w.author, w.reviewer, polapi.KindScreeningRegulation, "screening", cfg.RootVersion, w.win.from, time.Time{},
-		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 14}}, true)
+		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 14,
+			Programmes: syntheticProgrammes}}, true)
 	r, err = reopen(w.system, cnxapi.CauseRegulationRevised, c.RowVersion, &reg2)
 	w.must(err)
 	stale := w.evaluateCmd(o.ObjectID, 1, r.RowVersion, syntheticClear)
 	_, err = w.cnx.Evaluate(w.compliance, stale)
 	w.want(err, polapi.CodeConfigNotActive)
 	w.regulation = reg2
+	// S5R-D38: a regulation enabling a list never imported (a gap, never a clear one);
+	// programme_lists is accepted only naming exactly the enabled lists.
+	missingReg := w.configure(w.author, w.reviewer, polapi.KindScreeningRegulation, "screening.missing", 0, w.win.from, time.Time{},
+		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 14,
+			Programmes: append(slices.Clone(syntheticProgrammes), polapi.ScreeningList{ListCode: "cn.never_imported", Jurisdiction: polapi.JurisdictionCN})}}, true)
 	missing := w.evaluateCmd(o.ObjectID, 1, r.RowVersion, syntheticClear)
-	missing.ProgrammeLists = append(missing.ProgrammeLists, "cn.never_imported")
+	missing.RegulationID, missing.RegulationRevision = missingReg.ConfigID, missingReg.Revision
 	e, err = w.cnx.Evaluate(w.compliance, missing)
 	w.must(err)
 	if e.Outcome != cnxapi.OutcomeIncomplete {
 		t.Fatalf("a missing list: %+v", e)
 	}
 	_, err = w.cnx.Decide(w.compliance, w.decideCmd(e, cnxapi.ConclusionClear, false))
-	w.want(err, kernel.CodeInvalidState)
+	w.want(err, cnxapi.CodeTradeComplianceEvaluationIncomplete) // S5R: replaces INVALID_STATE
 
-	foreign := syntheticCountryProgrammes(unProgrammeList, "v1", "2026-11-01")
-	foreign.IdempotencyKey, foreign.ListCode, foreign.Jurisdiction = w.key(), "foreign.programmes", refapi.JurisdictionForeign
-	_, err = w.c.REF.ImportCountryProgrammes(w.compliance, foreign)
-	w.must(err)
 	withForeign := w.evaluateCmd(o.ObjectID, 1, e.RowVersion, syntheticClear)
 	withForeign.ProgrammeLists = []string{cnProgrammeList, "foreign.programmes"}
 	_, err = w.cnx.Evaluate(w.compliance, withForeign)
-	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/programme_lists/1" {
-		t.Fatalf("a foreign list: %s %s", code(err), path(err))
+	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/programme_lists" {
+		t.Fatalf("lists the regulation does not enable (S5R-D38): %s %s", code(err), path(err))
 	}
 
 	// CAT-INV-002 through R39. Under a code table CAT keeps no profile for, the line's classification
@@ -687,7 +699,8 @@ func TestTradeComplianceGuardDecidesEveryCommitOrder(t *testing.T) {
 	cfg, err := w.c.POL.GetConfig(w.author, polapi.KindScreeningRegulation, "screening")
 	w.must(err)
 	reg2 := w.configure(w.author, w.reviewer, polapi.KindScreeningRegulation, "screening", cfg.RootVersion, w.win.from, time.Time{},
-		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 30}}, true)
+		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 30,
+			Programmes: syntheticProgrammes}}, true)
 	held(func() error {
 		var err error
 		r, err = w.cnx.Reopen(w.system, cnxapi.Reopen{IdempotencyKey: w.key(), Cause: cnxapi.CauseRegulationRevised, CheckID: d.CheckID,

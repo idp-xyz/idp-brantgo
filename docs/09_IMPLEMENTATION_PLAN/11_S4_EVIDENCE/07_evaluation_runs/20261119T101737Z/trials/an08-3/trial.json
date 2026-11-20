@@ -1,0 +1,465 @@
+{
+  "family": "an08",
+  "trial": 3,
+  "trial_id": "an08-3",
+  "design": [
+    "AN08",
+    "BC-AT26",
+    "TSK-INV-002",
+    "C1 take-over"
+  ],
+  "goal": "the model stays unavailable; the owner takes over and finishes the order by hand",
+  "input": {
+    "kind": "pdf",
+    "file": "inquiry.pdf",
+    "mime": "application/pdf",
+    "bytes": 1144,
+    "sha256": "12a64b790b8e8cfc50beb7ea0b74a6d9113de2b9305b6e6353754fddeb1da2e0"
+  },
+  "expected": "paused model_unavailable after the retries; take-over to manual; completed with completion actor manual; no model call after the take-over",
+  "outcome": "completed/manual",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "completed",
+  "completion_actor": "manual",
+  "goal_completed": true,
+  "automation": "human_takeover",
+  "assertions": [
+    {
+      "name": "BC-AT27: the agent's locators stand in the extract",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "paused for the model",
+      "want": "model_unavailable",
+      "got": "model_unavailable",
+      "pass": true
+    },
+    {
+      "name": "control mode after the barrier",
+      "want": "manual",
+      "got": "manual",
+      "pass": true
+    },
+    {
+      "name": "model calls after the take-over",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    },
+    {
+      "name": "TSK lifecycle",
+      "want": "completed",
+      "got": "completed",
+      "pass": true
+    },
+    {
+      "name": "TSK completion actor",
+      "want": "manual",
+      "got": "manual",
+      "pass": true
+    },
+    {
+      "name": "TSK last verification",
+      "want": "satisfied",
+      "got": "satisfied",
+      "pass": true
+    },
+    {
+      "name": "TSK actions settled",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    },
+    {
+      "name": "TRD goal readiness order_active",
+      "want": "satisfied",
+      "got": "satisfied",
+      "pass": true
+    },
+    {
+      "name": "TRD order status",
+      "want": "active",
+      "got": "active",
+      "pass": true
+    },
+    {
+      "name": "TRD order prepared by",
+      "want": "human:clerk.1",
+      "got": "human:clerk.1",
+      "pass": true
+    },
+    {
+      "name": "unavailable model calls in the ledger",
+      "want": "4",
+      "got": "4",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": [
+      "evd/source.register committed src.inquiry.pdf.3 attempts=1 by agent.q01",
+      "inq/rfq.save_draft committed rfq.q01 attempts=1 by agent.q01",
+      "inq/rfq.confirm_scope committed rfq.q01 attempts=1 by clerk.1",
+      "trd/quote.save_draft committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.freeze committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.submit_review committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.review.decide committed quote.q01 attempts=1 by quote.reviewer",
+      "trd/quote.activate committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.response.record committed response.q01 attempts=1 by clerk.1",
+      "trd/quote.response.verify committed acceptance.q01 attempts=1 by clerk.1",
+      "trd/order.prepare committed order.q01 attempts=1 by clerk.1",
+      "trd/order.review.request committed order.q01 attempts=1 by clerk.1",
+      "trd/order.review.decide committed order.q01 attempts=1 by order.reviewer",
+      "trd/order.activate committed order.q01 attempts=1 by clerk.1"
+    ],
+    "approval_grants": null,
+    "binding": null,
+    "control_epoch": 0,
+    "control_mode": "manual",
+    "delegation_status": "active",
+    "extract": {
+      "characters": 364,
+      "extract_sha256": "a3ff4465b52c130dd67ecef6571eda7ccc22349f75ea387becff405f4333d8a1",
+      "extractor": "brant.ingest.pdf/1",
+      "file_sha256": "12a64b790b8e8cfc50beb7ea0b74a6d9113de2b9305b6e6353754fddeb1da2e0",
+      "kind": "pdf"
+    },
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.pause running→paused system:system:ai.runner",
+      "task.take_control paused→stopping human:clerk.1",
+      "task.finish_stop stopping→paused system:system:ai.runner",
+      "task.resume paused→running human:clerk.1",
+      "task.verify running→verifying system:inbox.tsk.task_progress",
+      "goal.verify verifying→completed system:eval.platform"
+    ],
+    "open_actions": 0,
+    "order_prepared_by": "human:clerk.1",
+    "order_status": "active",
+    "pause_cause": "",
+    "pause_reason": "",
+    "prepared_order": "order.q01",
+    "quote_control": {
+      "changed_by": {},
+      "control_epoch": 0,
+      "state": "unbound"
+    },
+    "quote_revision_1_payable_minor": "96000",
+    "registered_source": {
+      "file_id": "file.inquiry",
+      "learned_from": "the task's committed source.register action (TSK) and EVD's read of its source",
+      "registered_by": {
+        "id": "agent.q01",
+        "kind": "ai"
+      },
+      "source_id": "src.inquiry.pdf.3",
+      "source_kind": "file_extract"
+    },
+    "rfq_lines": [
+      "L1:ai:agent.q01",
+      "L2:ai:agent.q01",
+      "L3:ai:agent.q01",
+      "L4:ai:agent.q01"
+    ],
+    "rfq_status": "ready",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 12,
+    "wait": null
+  },
+  "corrections": null,
+  "owner_resolutions": null,
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "rfq.confirm_scope",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "buyer",
+      "command": "costing (supplier RFQ, offers, costing context, scenario)",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "cost.checker",
+      "command": "cost_snapshot.freeze",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.take_control",
+      "route": "plain",
+      "required": false,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.resume",
+      "route": "plain",
+      "required": false,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.save_draft",
+      "route": "step",
+      "required": false,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.freeze",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.submit_review",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "quote.reviewer",
+      "command": "quote.review.decide",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.activate",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "source.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.response.record",
+      "route": "step",
+      "required": false,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.response.verify",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "order.prepare",
+      "route": "step",
+      "required": false,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "order.review.request",
+      "route": "step",
+      "required": false,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "order.reviewer",
+      "command": "order.review.decide",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "compliance",
+      "command": "trade_compliance.evaluate",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "compliance",
+      "command": "trade_compliance.decide",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "credit.reserve",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "order.activate",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    }
+  ],
+  "cost": {
+    "model_calls": 6,
+    "tool_calls": 2,
+    "retries": 3,
+    "failed_calls": 0,
+    "unavailable_calls": 4,
+    "input_tokens": 3300,
+    "output_tokens": 200,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": [
+      "scripted.v1"
+    ],
+    "model_returned": [
+      "scripted-q01-v1"
+    ]
+  },
+  "phases": [
+    {
+      "name": "rfq",
+      "script": "script-01-rfq.json",
+      "script_steps": 2,
+      "model_calls": 2,
+      "tool_calls": 2,
+      "writes": 2,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.68,
+      "started_at": "2026-11-19T10:18:55.623452476Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "quote-unavailable",
+      "script": "script-02-quote-unavailable.json",
+      "script_steps": 4,
+      "model_calls": 4,
+      "tool_calls": 0,
+      "writes": 0,
+      "lifecycle_after": "paused",
+      "seconds": 0.22,
+      "started_at": "2026-11-19T10:18:57.305345851Z",
+      "timeout": "2m0s",
+      "diagnosis": "no write: the phase ended with the task paused after 4 model calls and 0 tool calls, and committed no action",
+      "last_calls": [
+        "#5 model unavailable 0ms TOOL_UNAVAILABLE",
+        "#6 model unavailable 0ms TOOL_UNAVAILABLE retry",
+        "#7 model unavailable 0ms TOOL_UNAVAILABLE retry",
+        "#8 model unavailable 0ms TOOL_UNAVAILABLE retry"
+      ]
+    },
+    {
+      "name": "barrier",
+      "script": "script-03-barrier.json",
+      "script_steps": 0,
+      "model_calls": 0,
+      "tool_calls": 0,
+      "writes": 0,
+      "lifecycle_after": "paused",
+      "seconds": 0.12,
+      "started_at": "2026-11-19T10:18:57.656874267Z",
+      "timeout": "2m0s"
+    }
+  ],
+  "verifications": [
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NOT_FOUND"
+      ]
+    },
+    {
+      "code": null,
+      "lifecycle": "completed",
+      "outcome": "satisfied",
+      "unmet": null,
+      "unmet_codes": null
+    }
+  ],
+  "budget": {
+    "max_model_calls": 40,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 7.27
+}

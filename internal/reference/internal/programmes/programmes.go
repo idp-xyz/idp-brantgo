@@ -15,14 +15,15 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// Programme is an imported programme in canonical form: countries sorted, the content hash over
-// the canonical content.
+// Programme is an imported programme in canonical form: countries sorted, regions sorted (none
+// when it lists none, S5R-D15), the content hash over the canonical content.
 type Programme struct {
 	ID        string
 	Name      string
 	Measure   string
 	Countries []string
-	Scope     string // empty: the source states none
+	Scope     string   // empty: the source states none
+	Regions   []string // ISO 3166-2 codes of some of its countries; nil: none
 	Hash      string
 }
 
@@ -36,8 +37,20 @@ func NewProgramme(id, name, measure string, countries []string, scope string) Pr
 	return p
 }
 
+// WithRegions returns p with regions in canonical form, sorted, none for an empty list, and its
+// content hash over them (S5R-D15).
+func (p Programme) WithRegions(regions []string) Programme {
+	p.Regions = nil
+	if len(regions) > 0 {
+		p.Regions = slices.Sorted(slices.Values(regions))
+	}
+	p.Hash = p.contentHash()
+	return p
+}
+
 // contentHash is the SHA-256 of the canonical JSON of the programme; field order is fixed by the
-// type, countries are sorted and an absent scope is the empty string.
+// type, countries and regions are sorted, an absent scope is the empty string and no regions are
+// left out, so a programme without regions hashes as it did before they existed (S5R-D15).
 func (p Programme) contentHash() string {
 	doc, _ := json.Marshal(struct {
 		ProgrammeID string   `json:"programme_id"`
@@ -45,7 +58,8 @@ func (p Programme) contentHash() string {
 		Measure     string   `json:"measure"`
 		Countries   []string `json:"countries"`
 		Scope       string   `json:"scope"`
-	}{p.ID, p.Name, p.Measure, p.Countries, p.Scope})
+		Regions     []string `json:"regions,omitempty"`
+	}{p.ID, p.Name, p.Measure, p.Countries, p.Scope, p.Regions})
 	sum := sha256.Sum256(doc)
 	return hex.EncodeToString(sum[:])
 }

@@ -74,6 +74,9 @@ func loadOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, w
 	if err = loadActive(ctx, exec, t, c, o); err != nil {
 		return nil, err
 	}
+	if o.Risks, err = loadOrderRisks(ctx, exec, t, c, o.ID); err != nil {
+		return nil, err
+	}
 	return o, nil
 }
 

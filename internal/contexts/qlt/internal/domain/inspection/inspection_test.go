@@ -39,7 +39,7 @@ func inputs(existing ...*Inspection) Inputs {
 	s := subject
 	return Inputs{Subject: &s, Existing: existing, Sources: map[string]string{"standard": "std-sha", "ev": "ev-sha"},
 		Report: &Binding{ID: "report", SHA256: "rep-sha", MimeType: "application/pdf"},
-		Agency: &Agency{Role: ServiceInspection, Check: func(string) error { return nil }}, Recorder: human, Epoch: 3, Team: "qc", Now: now}
+		Agency: &Agency{InspectionAgency: true, Check: func(string) error { return nil }}, Recorder: human, Epoch: 3, Team: "qc", Now: now}
 }
 
 // QLT-INV-001 positive (F-06): an external agency's report of 120 conforming is recorded as an
@@ -88,12 +88,14 @@ func TestRecordRefusals(t *testing.T) {
 			}, "REFERENCE_INVALID /args/supersedes_inspection_id"},
 		{"supersedes a superseded one", func(r *Request) { r.Supersedes, r.Reason = "insp.s", "复检" },
 			func(in *Inputs) { in.Existing = []*Inspection{superseded} }, "INVALID_STATE /args/supersedes_inspection_id"},
+		// The error catalog's INSPECTION_QUANTITY_EXCEEDED (S5R, adopted by R5) replaces INVALID_KNOWN_VALUE.
 		{"covers more than the subject", func(r *Request) { r.Inspected, r.Conforming = q("20.000001"), q("20.000001") },
-			func(in *Inputs) { in.Existing = []*Inspection{valid} }, "INVALID_KNOWN_VALUE /args/inspected_quantity"},
+			func(in *Inputs) { in.Existing = []*Inspection{valid} }, "INSPECTION_QUANTITY_EXCEEDED /args/inspected_quantity"},
 		{"more than the subject", func(r *Request) { r.Inspected, r.Conforming = q("121"), q("121") }, nil,
-			"INVALID_KNOWN_VALUE /args/inspected_quantity"},
+			"INSPECTION_QUANTITY_EXCEEDED /args/inspected_quantity"},
 		{"no agency", nil, func(in *Inputs) { in.Agency = nil }, "REFERENCE_INVALID /args/inspector/agency"},
-		{"a forwarder", nil, func(in *Inputs) { in.Agency.Role = "forwarder" }, "REFERENCE_INVALID /args/inspector/agency"},
+		{"not an inspection agency (a forwarder, S5R-D36)", nil, func(in *Inputs) { in.Agency.InspectionAgency = false },
+			"REFERENCE_INVALID /args/inspector/agency"},
 		{"agency not current", nil, func(in *Inputs) {
 			in.Agency.Check = func(p string) error {
 				return kernel.RejectAs("REFERENCE_STALE", kernel.CategoryConflict, p, "superseded")
@@ -104,7 +106,7 @@ func TestRecordRefusals(t *testing.T) {
 		{"report not read", nil, func(in *Inputs) { in.Report = nil }, "REFERENCE_INVALID /args/report_file_id"},
 	} {
 		req, in := request("insp.1", "20", "20"), inputs()
-		in.Agency = &Agency{Role: ServiceInspection, Check: func(string) error { return nil }}
+		in.Agency = &Agency{InspectionAgency: true, Check: func(string) error { return nil }}
 		if c.req != nil {
 			c.req(&req)
 		}
@@ -138,7 +140,7 @@ func TestReinspectionSupersedesNeverAdds(t *testing.T) {
 	if err != nil || first.Status != StatusDisposed || first.RowVersion != 2 {
 		t.Fatalf("disposed %+v, %v", first, err)
 	}
-	if _, _, err = Record(request("insp.extra", "20", "20"), inputs(first)); outcome(err) != "INVALID_KNOWN_VALUE /args/inspected_quantity" {
+	if _, _, err = Record(request("insp.extra", "20", "20"), inputs(first)); outcome(err) != "INSPECTION_QUANTITY_EXCEEDED /args/inspected_quantity" {
 		t.Fatalf("an extra inspection of the reworked 20: %s", outcome(err))
 	}
 	again := request("insp.2", "120", "120")
@@ -190,6 +192,9 @@ func TestDecideRefusals(t *testing.T) {
 		{mk("0"), 1, items, nil, "INVALID_STATE /args/inspection_id"},
 		{mk("20"), 1, items[:1], nil, "INVALID_KNOWN_VALUE /args/items"},
 		{mk("20"), 1, items, []string{"secret"}, "REFERENCE_INVALID /args/evidence_ids/0"},
+		// S5R-D18: a concession cites the customer's consent.
+		{mk("20"), 1, []Item{{Action: ActionConcession, Quantity: q("20")}}, nil, "SCHEMA_INVALID /args/evidence_ids"},
+		{mk("20"), 1, []Item{{Action: ActionConcession, Quantity: q("20")}}, []string{"ev"}, "OK"},
 	} {
 		err := c.i.Decide(c.expected, c.items, "处置", c.evidence, map[string]string{"ev": "x"}, Act{By: human, Epoch: 1, At: now})
 		if outcome(err) != c.want {
@@ -210,5 +215,69 @@ func TestAnswer(t *testing.T) {
 	if i.Answer("rh", human) != nil || outcome(i.Answer("other", human)) != "BUSINESS_KEY_CONFLICT /args/inspection_id" ||
 		outcome(i.Answer("rh", agent)) != "BUSINESS_KEY_CONFLICT /args/inspection_id" {
 		t.Fatal("answer")
+	}
+}
+
+// S5R-D18 and QLT-INV-001: the approved concession of a subject is what the dispositions of its valid
+// inspections at the specification accept by concession; a superseded inspection's concession and
+// one at another specification do not count.
+func TestConcessions(t *testing.T) {
+	disposed := func(id, status string, items ...Item) *Inspection {
+		i := &Inspection{ID: id, Status: status, Subject: subject, Inspected: q("120"), Conforming: q("100"), Nonconforming: q("20")}
+		if items != nil {
+			i.Disposition = &Disposition{Items: items}
+		}
+		return i
+	}
+	spec := subject.Spec()
+	a := disposed("insp.a", StatusDisposed, Item{Action: ActionConcession, Quantity: q("15")}, Item{Action: ActionScrap, Quantity: q("5")})
+	b := disposed("insp.b", StatusSuperseded, Item{Action: ActionConcession, Quantity: q("20")})
+	c := disposed("insp.c", StatusDisposed, Item{Action: ActionRework, Quantity: q("20")})
+	d := disposed("insp.d", StatusDisposed, Item{Action: ActionConcession, Quantity: q("7")})
+	d.Subject.SpecRevision = 3
+	if !a.Conceded().Equal(q("15")) || !c.Conceded().IsZero() || !disposed("insp.e", StatusRecorded).Conceded().IsZero() {
+		t.Fatal("conceded")
+	}
+	if got := Concessions([]*Inspection{a, b, c, d}, spec); !got.Equal(q("15")) {
+		t.Fatalf("concessions %s", got)
+	}
+	if !ConsentRequired([]Item{{Action: ActionScrap}, {Action: ActionConcession}}) || ConsentRequired([]Item{{Action: ActionRework}}) {
+		t.Fatal("consent")
+	}
+}
+
+// QLT-INV-002 and S5R-D18 ("冻结量须复检后才能再放行"): an inspection counts as inspected again since
+// an instant when it is superseded and the inspection valid now at the end of its chain was recorded
+// at or after that instant.
+func TestReinspected(t *testing.T) {
+	at := now.Add(time.Hour)
+	mk := func(id, status, by string, recorded time.Time) *Inspection {
+		return &Inspection{ID: id, Status: status, SupersededBy: by, Recorded: Act{At: recorded}}
+	}
+	i1 := mk("i1", StatusSuperseded, "i2", now)
+	i2 := mk("i2", StatusSuperseded, "i3", now.Add(time.Minute)) // a correction before the instant
+	i3 := mk("i3", StatusRecorded, "", at)                       // the re-inspection at the instant
+	j1 := mk("j1", StatusDisposed, "", now)
+	k1 := mk("k1", StatusSuperseded, "k2", now)
+	k2 := mk("k2", StatusRecorded, "", at.Add(-time.Microsecond))
+	all := []*Inspection{i1, i2, i3, j1, k1, k2}
+	for _, c := range []struct {
+		ids  []string
+		want bool
+	}{
+		{[]string{"i1"}, true},
+		{[]string{"i2"}, true},
+		{[]string{"i1", "j1"}, false}, // j1 is still valid: not inspected again
+		{[]string{"k1"}, false},       // superseded before the instant only
+		{[]string{"x"}, false},
+		{nil, false},
+	} {
+		if got := Reinspected(all, c.ids, at); got != c.want {
+			t.Errorf("%v: %v", c.ids, got)
+		}
+	}
+	broken := []*Inspection{mk("b1", StatusSuperseded, "b2", now)}
+	if Reinspected(broken, []string{"b1"}, now) {
+		t.Fatal("a chain that ends nowhere")
 	}
 }

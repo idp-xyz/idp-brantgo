@@ -13,11 +13,12 @@
 //	                           order_revision — its current revision in TRD (SalesOrderRef v1, R46),
 //	                           a draft or an active order — against the screening_regulation revision
 //	                           regulation_id/regulation_revision in force (POL, R50, re-checked by
-//	                           ConfigGuard v1 in the transaction) and the country programme lists
-//	                           programme_lists names (reference data, ADR-BR-017; S5 A3b: until POL's
-//	                           screening_regulation names them, the evaluation does, and a foreign
-//	                           list is refused for want of the regulation's legal confirmation; a
-//	                           list never imported is a gap, never a clear one): the destination
+//	                           ConfigGuard v1 in the transaction) and the country programme lists that
+//	                           regulation revision enables (its programmes, S5R-D38: POL publishes them,
+//	                           a foreign one with its legal confirmation, ADR-BR-017; programme_lists, now
+//	                           optional, is only accepted naming exactly those; a revision naming none is
+//	                           the gap programmes_missing, a list never imported the gap
+//	                           programme_list_missing, never a clear one) against reference data: the destination
 //	                           country (the consignee address's country unless destination enters
 //	                           another with a
 //	                           reason and evidence, D-8), the countries of the order's party addresses
@@ -30,12 +31,23 @@
 //	                           does not guess) and the end use with evidence. It opens the check of the order
 //	                           revision (expected_version 0) or re-evaluates a pending or blocked one;
 //	                           a clear one is reopened first. A missing fact is a gap: the check stays
-//	                           pending and cannot conclude clear.
+//	                           pending and cannot conclude clear. A programme that affects only some
+//	                           regions of a country (reference data's regions, ISO 3166-2) is the finding
+//	                           region_review, for compliance to judge from the address (S5R-D15).
 //	trade_compliance.decide    human only, compliance-exclusive: clear (license_required stated) or
 //	                           blocked, with a reason and optional evidence, on the check's current
 //	                           evaluation (evaluation_id), binding the regulation revision (ConfigGuard
 //	                           v1 in the transaction) and, for clear, a validity of the regulation's
 //	                           rescreen interval from the evaluation, never past the regulation's own.
+//	                           Clear needs a complete evaluation (TRADE_COMPLIANCE_EVALUATION_INCOMPLETE;
+//	                           DECLARATION_PROFILE_UNVERIFIED for a line's classification). S5R-D17: an
+//	                           embargo or sanctions finding that applies is cleared only on an
+//	                           authorization — authorizations names evidence_ids that are a licence, an
+//	                           exemption or the authority's approval, each valid_until — and the clear
+//	                           conclusion's validity never passes the earliest (INVALID_STATE
+//	                           /args/evidence_ids without one); an arms_embargo, export_control or
+//	                           controlled_goods finding that applies needs evidence that the goods are
+//	                           not controlled (INVALID_STATE /args/evidence_ids without any).
 //	trade_compliance.reopen    human (compliance) or system (S5 D-18 consumers): cause
 //	                           regulation_revised (check_id, a regulation revision in force other than
 //	                           the one the clear conclusion follows), programme_updated (check_id, a
@@ -54,7 +66,8 @@
 // destination {country, reason,
 // evidence_ids}, address_countries [{party_id, address_id, country, evidence_ids}], end_use
 // {statement, evidence_ids}}; trade_compliance.decide {check_id, expected_version, evaluation_id,
-// conclusion, reason, license_required, evidence_ids}; trade_compliance.reopen {cause, check_id,
+// conclusion, reason, license_required, evidence_ids, authorizations [{evidence_id, kind,
+// valid_until}]}; trade_compliance.reopen {cause, check_id,
 // order_id, order_revision, expected_version, regulation_id, regulation_revision, reason}.
 package api
 
@@ -115,8 +128,11 @@ const (
 	ReasonAwaitingDecision = "awaiting_decision" // pending: evaluated, no conclusion
 	ReasonListUpdated      = "list_updated"      // pending: a programme list the clear conclusion used has a new version (MD-47)
 	ReasonBlocked          = "blocked"           // blocked by compliance; no business approval overrides it
-	ReasonExpired          = "expired"           // expired: the clear conclusion's validity has ended
-	ReasonCleared          = "cleared"           // clear and valid
+	// blocked: the check is evaluated again after a blocked conclusion and compliance has not decided
+	// since — the block stands until a new decision (S5R-D10).
+	ReasonBlockedUnderReview = "blocked_under_review"
+	ReasonExpired            = "expired" // expired: the clear conclusion's validity has ended
+	ReasonCleared            = "cleared" // clear and valid
 )
 
 // Conclusions of trade_compliance.decide.
@@ -131,6 +147,22 @@ const (
 	CauseProgrammeUpdated  = "programme_updated"
 	CauseExpired           = "expired"
 	CauseOrderAmended      = "order_amended"
+)
+
+// Kinds of an authorization a clear decision rests on (S5R-D17: 许可证、豁免或主管机关批复).
+const (
+	AuthorizationLicense           = "license"
+	AuthorizationExemption         = "exemption"
+	AuthorizationAuthorityApproval = "authority_approval"
+)
+
+// Kinds of an evaluation's findings: a programme naming a country examined, a line's controlled
+// goods, and a programme affecting only regions of a country examined, for compliance to judge
+// (S5R-D15).
+const (
+	FindingProgrammeMatch  = "programme_match"
+	FindingControlledGoods = "controlled_goods"
+	FindingRegionReview    = "region_review"
 )
 
 // Outcomes of an evaluation (candidates, not conclusions).
@@ -212,7 +244,8 @@ type EndUse struct {
 
 // Evaluate evaluates order OrderID at OrderRevision under the screening_regulation revision
 // (RegulationID, RegulationRevision) against the current versions of the country programme lists
-// ProgrammeLists (1 to MaxProgrammeLists codes), classifying its lines under the customs commodity
+// the revision enables (S5R-D38; ProgrammeLists, 0 to MaxProgrammeLists codes, is accepted only
+// naming exactly those), classifying its lines under the customs commodity
 // code table version CodeTableVersion (an identifier such as CN-2026, as CAT keys its declaration
 // profiles). ExpectedVersion is the check's row version, 0 when the order revision has none.
 type Evaluate struct {
@@ -244,7 +277,7 @@ func (c Evaluate) Validate() error {
 	if err := regulation(c.RegulationID, c.RegulationRevision); err != nil {
 		return err
 	}
-	if len(c.ProgrammeLists) < 1 || len(c.ProgrammeLists) > MaxProgrammeLists {
+	if len(c.ProgrammeLists) > MaxProgrammeLists {
 		return schema("/args/programme_lists")
 	}
 	for i, code := range c.ProgrammeLists {
@@ -294,9 +327,19 @@ func (c Evaluate) Validate() error {
 	return nil
 }
 
+// Authorization names one of a clear decision's evidence sources as an authorization an embargo or
+// sanctions finding is cleared on (S5R-D17): Kind license, exemption or authority_approval, valid
+// until ValidUntil (a UTC timestamp).
+type Authorization struct {
+	EvidenceID string
+	Kind       string
+	ValidUntil string
+}
+
 // Decide concludes check CheckID at ExpectedVersion on its current evaluation EvaluationID:
 // Conclusion clear (LicenseRequired stated) or blocked (LicenseRequired omitted), with Reason and
-// optional evidence. Human only.
+// optional evidence. Human only. Authorizations (clear only, S5R-D17) names evidence among
+// EvidenceIDs as authorizations.
 type Decide struct {
 	IdempotencyKey  string
 	CheckID         string
@@ -306,6 +349,7 @@ type Decide struct {
 	Reason          string
 	LicenseRequired *bool
 	EvidenceIDs     []string
+	Authorizations  []Authorization `json:",omitempty"`
 }
 
 // Validate checks the closed contract.
@@ -326,7 +370,25 @@ func (c Decide) Validate() error {
 	case (c.Conclusion == ConclusionClear) != (c.LicenseRequired != nil):
 		return schema("/args/license_required")
 	}
-	return evidence(c.EvidenceIDs, "/args/evidence_ids", 0)
+	if err := evidence(c.EvidenceIDs, "/args/evidence_ids", 0); err != nil {
+		return err
+	}
+	if len(c.Authorizations) > 0 && c.Conclusion != ConclusionClear || len(c.Authorizations) > MaxEvidence {
+		return schema("/args/authorizations")
+	}
+	for i, a := range c.Authorizations {
+		p := "/args/authorizations/" + strconv.Itoa(i)
+		switch {
+		case !slices.Contains(c.EvidenceIDs, a.EvidenceID) ||
+			slices.IndexFunc(c.Authorizations, func(b Authorization) bool { return b.EvidenceID == a.EvidenceID }) != i:
+			return schema(p + "/evidence_id")
+		case a.Kind != AuthorizationLicense && a.Kind != AuthorizationExemption && a.Kind != AuthorizationAuthorityApproval:
+			return schema(p + "/kind")
+		case !timestamp(a.ValidUntil):
+			return schema(p + "/valid_until")
+		}
+	}
+	return nil
 }
 
 // Reopen returns a clear conclusion to pending, or opens a pending check for a new order revision:
@@ -504,8 +566,9 @@ type ProgrammeView struct {
 // FindingView is a candidate: kind programme_match (programme ProgrammeID of list version
 // ListCode/Version names Country, which the destination or the parties in Roles have; Goods is what
 // its measure covers — all for embargo and sanctions, controlled for arms_embargo and
-// export_control — and Applies whether it applies to these goods) or controlled_goods (LineID's
-// goods are on a control list).
+// export_control — and Applies whether it applies to these goods), region_review (such a programme,
+// whose measure covers these goods, affects only the Regions of Country: compliance judges from the
+// address, Applies false; S5R-D15) or controlled_goods (LineID's goods are on a control list).
 type FindingView struct {
 	Kind          string
 	ListCode      string
@@ -522,6 +585,7 @@ type FindingView struct {
 	LineID        string
 	ListReference string
 	Applies       bool
+	Regions       []string `json:",omitempty"`
 }
 
 // GapView is a missing fact: its kind and the address (party/address) or line it concerns.
@@ -554,7 +618,15 @@ type EvaluationView struct {
 	AuthorityEpoch   int64
 }
 
-// DecisionView is a conclusion.
+// AuthorizationView is an authorization a clear decision rests on (S5R-D17).
+type AuthorizationView struct {
+	SourceID      string
+	ContentSHA256 string
+	Kind          string
+	ValidUntil    time.Time
+}
+
+// DecisionView is a conclusion; Authorizations are the authorizations a clear one rests on.
 type DecisionView struct {
 	DecisionID      string
 	EvaluationID    string
@@ -567,6 +639,7 @@ type DecisionView struct {
 	DecidedBy       kernel.ActorRef
 	DecidedAt       time.Time
 	AuthorityEpoch  int64
+	Authorizations  []AuthorizationView `json:",omitempty"`
 }
 
 // ReopeningView is a reopening: its cause, the decision it reopened ("" for order_amended) and the

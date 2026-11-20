@@ -34,7 +34,7 @@ foot: Engineering Contracts V0.1 · 2026-11-06 · 主档案 V1.0
 | C1 | 上下文之间的进程内契约以 api/ 的 Go 类型为准：命令、回执、查询、引用类型、事件名与载荷、错误类别 | 必须 |
 | C2 | 进程外契约以 contracts/ 中的 OpenAPI、AsyncAPI、JSON Schema 为准；对应 Go 类型或由 tools/codegen 生成，或由 tools/contract-check 校验，二者择一并写入 ADR | 必须 |
 | C3 | 事件类型名带主版本后缀，如 idp-brant.trd.quote_activated.v1；破坏性变更发布新主版本并并行一段时间 | 必须 |
-| C4 | 事件来源统一为 idp-brant.<bc>；载荷只含标识与版本，不含法定标识或个人数据 | 必须 |
+| C4 | 事件来源统一为 idp-brant.<bc>；载荷含标识、版本与战术模型 eventPayloads 登记的业务值（数量、金额、期限、结论），不含法定标识、个人数据与文件内容（S5R-D43） | 必须 |
 | C5 | 入站协议只依据 api 错误类别映射状态码，不依据内部错误原因 | 必须 |
 | C6 | 行业标准与中国专业系统报文先经 foundation/interop 编解码，再由上下文 adapters/external 转为本上下文模型 | 必须 |
 | C7 | 封闭结构：拒绝额外字段、重复 JSON 键、浮点数、科学计数法、NaN／Infinity 与无效 UTF-8；业务小数一律用字符串 | 必须 |
@@ -82,13 +82,13 @@ foot: Engineering Contracts V0.1 · 2026-11-06 · 主档案 V1.0
 
 {{ec_kpis}}
 
-“执行身份”：05 阶段 humanOnlyCommands 清单中的命令为“仅人工”（唯一来源，构建器校验状态机与之一致）；其余由状态机转换的执行者推导，未出现在状态机中的命令为“人工或 AI（按动作权限）”；“Python 对应”列给出 V0.50 中的命令或本地接口名，未实现的标为 Python 未实现。候选路由形如 POST /api/brant/v1/<bc>/commands/<command>，最终路由在 OpenAPI 发布时确定。
+“执行身份”：05 阶段 humanOnlyCommands 清单中的命令为“仅人工”（唯一来源，构建器校验状态机与之一致）；其余由状态机转换的执行者推导（没有状态机的命令可在战术模型 commandActors 中写明，如 order_account.open 为人工或系统，S5R-D02），未出现在状态机中的命令为“人工或 AI（按动作权限）”；结汇是 fund.record 的 kind=fx_conversion，没有单独命令；“Python 对应”列给出 V0.50 中的命令或本地接口名，未实现的标为 Python 未实现。候选路由形如 POST /api/brant/v1/<bc>/commands/<command>，最终路由在 OpenAPI 发布时确定。
 
 {{ec_commands}}
 
 ## 04 集成事件目录 {#s4}
 
-事件表达已经提交的事实，不是对其他上下文的远程更新。投递语义为至少一次；消费方按事件 ID 去重，不宣称 exactly-once。信封的 partitionKey 为 aggregateType:aggregateId，同一聚合的事件按 aggregateVersion 顺序投递。预算耗尽的消息进入死信并告警，由授权运维按事件 ID 重放；撤销、否认与风险类事件不得静默放弃（ADR-BR-015）。
+事件表达已经提交的事实，不是对其他上下文的远程更新。“登记的载荷字段”取自战术模型各聚合的 eventPayloads（S5R-D43）：S5 的上下文按代码登记，新增事件的载荷为设计，其余上下文由 S4 E2 补登。投递语义为至少一次；消费方按事件 ID 去重，不宣称 exactly-once。信封的 partitionKey 为 aggregateType:aggregateId，同一聚合的事件按 aggregateVersion 顺序投递。预算耗尽的消息进入死信并告警，由授权运维按事件 ID 重放；撤销、否认与风险类事件不得静默放弃（ADR-BR-015）。
 
 {{ec_events}}
 
@@ -129,6 +129,10 @@ foot: Engineering Contracts V0.1 · 2026-11-06 · 主档案 V1.0
 | 动作对账 | committed、payload_conflict 或 not_committed；不重新执行 | A22、A23、A43 |
 
 读取、重放与对账都必须重查当前调用方权限与对象范围；来源权限撤回后，查询、同键写重放与对账均不能返回成功事实。
+
+读取目录（S5R-D43）：每个上下文与平台提供方的读取登记在 Context Map 的 queries 中，名称取 OpenAPI 候选的 operationId，权限为 <bc>.read，全部审计；POL 的 fx.convert、unit.convert、tax.preview 是进程内查询。构建器校验目录与 contracts/openapi 的 GET 路由一一对应（通用审计路由 /api/brant/v1/{bc}/audit 与 healthz 除外），并生成 02_CONTRACT_CATALOG/06_Query_Catalog_V0.1.csv。
+
+{{ec_queries}}
 
 ## 08 Go 进程内契约示意 {#s8}
 

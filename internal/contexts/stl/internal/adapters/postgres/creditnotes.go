@@ -84,7 +84,7 @@ func InsertCreditNote(ctx context.Context, exec bentopg.Executor, sc kernel.Scop
 	_, err := exec.Exec(ctx, `INSERT INTO brant_stl.credit_note (tenant_id, company_id, credit_note_id, statement_id, order_id, kind, status, version,
 		currency, minor_units, amount_minor, basis, evidence_ids, owner_actor_id, owner_team_id, requested_by_kind, requested_by_id, request_epoch,
 		requested_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::numeric, $12, $13, $14, $15, $16, $17, $18, $19, $19)`,
-		t, c, n.ID, n.StatementID, n.OrderID, n.Kind, n.Status, n.Version, cur.Code(), int16(cur.MinorUnits()), n.Amount.MinorString(), n.Basis,
+		t, c, n.ID, n.StatementID, nullable(n.OrderID), n.Kind, n.Status, n.Version, cur.Code(), int16(cur.MinorUnits()), n.Amount.MinorString(), n.Basis,
 		n.EvidenceIDs, n.OwnerActor, team(n.OwnerTeam), kind, id, epoch, at)
 	return err
 }
@@ -102,7 +102,7 @@ func SaveCreditDecision(ctx context.Context, exec bentopg.Executor, sc kernel.Sc
 	return err
 }
 
-const creditNoteColumns = `credit_note_id, statement_id, order_id, kind, status, version, currency, minor_units, amount_minor::text, basis,
+const creditNoteColumns = `credit_note_id, statement_id, coalesce(order_id, ''), kind, status, version, currency, minor_units, amount_minor::text, basis,
 	evidence_ids, owner_actor_id, coalesce(owner_team_id, ''), requested_by_kind, requested_by_id, request_epoch, requested_at, decided_by_kind,
 	decided_by_id, decide_epoch, decided_at, decision_reason`
 

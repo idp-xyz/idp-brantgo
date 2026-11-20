@@ -72,7 +72,7 @@ func (s Service) endRevision(ctx context.Context, name, key, quoteID, reason str
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		rev, event, err := end(h, d, evidenced)

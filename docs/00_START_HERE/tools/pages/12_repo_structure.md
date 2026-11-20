@@ -82,7 +82,7 @@ foot: Repository Structure Baseline V1.0 · 2026-11-06
 | 入口 | cmd/ | brant-api、brant-worker、brant-migrate、brant-cli | internal/bootstrap |
 | 组合根 | internal/bootstrap | 读取配置、建立连接池、为每个上下文创建独立 bentopg.DB、装配模块、注册入站协议与订阅 | 全部内部包（唯一例外） |
 | 入站与编排 | internal/transport · internal/ai · internal/processes | 协议适配；AI 能力网关；无单一 Owner 的流程 | 各上下文 api/、reference/api、kernel、foundation |
-| 业务 | internal/contexts/<bc> | 18 个候选上下文 | 已登记上游的 api/、kernel、reference/api、foundation |
+| 业务 | internal/contexts/<bc> | 18 个候选上下文 | 已登记上游的 api/、kernel、foundation；reference/api 只限以 REF 为上游登记了关系的上下文（S5R-D34，R1 收紧检查） |
 | 共享 | internal/kernel · internal/reference | 共享值对象；外部机构代码表 | kernel 只依赖标准库（或已批准的十进制库） |
 | 技术基础 | internal/foundation | bento、identity、authorization、database、messaging、configuration、telemetry、interop | 外部 Module、标准库、kernel；禁止依赖任何上下文 |
 
@@ -173,7 +173,7 @@ Go 的 internal 规则只阻止越界导入，不限制方向；方向由 Contex
 
 | 编号 | 规则 | 级别 | 检查 |
 |---|---|---|---|
-| D1 | 上下文只能导入已登记上游的 api/，也只订阅这些上游的事件 | 必须 | dependency-check |
+| D1 | 上下文只能导入已登记上游的 api/，也只订阅这些上游的事件；参考数据（平台提供方 REF）同样须有登记的关系（S5R-D34） | 必须 | dependency-check |
 | D2 | api 包只导入标准库与 kernel，不导入其他上下文的 api | 必须 | dependency-check |
 | D3 | api 包不得以类型别名、嵌入或返回值暴露内部类型 | 必须 | dependency-check＋评审 |
 | D4 | 上下文不得导入 transport、ai、processes、bootstrap | 必须 | dependency-check |

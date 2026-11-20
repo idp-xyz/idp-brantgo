@@ -136,6 +136,14 @@ func TestCNXCommandsDecodeTheirMembers(t *testing.T) {
 	if d := cnx.decided[0]; d.LicenseRequired == nil || *d.LicenseRequired || d.Conclusion != "clear" {
 		t.Fatalf("%+v", d)
 	}
+	// S5R-D17: authorizations decode by the reflective mapping.
+	call(t, h, http.MethodPost, "/api/brant/v1/cnx/commands/trade_compliance.decide", "Bearer good", envelope("trade_compliance.decide",
+		`{"check_id":"tcc-1","expected_version":1,"evaluation_id":"tce-1","conclusion":"clear","reason":"凭许可证","license_required":false,`+
+			`"evidence_ids":["lic.1"],"authorizations":[{"evidence_id":"lic.1","kind":"license","valid_until":"2027-01-01T00:00:00Z"}]}`))
+	if d := cnx.decided[1]; len(d.Authorizations) != 1 || d.Authorizations[0].EvidenceID != "lic.1" || d.Authorizations[0].Kind != cnxapi.AuthorizationLicense ||
+		d.Authorizations[0].ValidUntil != "2027-01-01T00:00:00Z" {
+		t.Fatalf("%+v", d)
+	}
 
 	a = call(t, h, http.MethodPost, "/api/brant/v1/cnx/commands/trade_compliance.reopen", "Bearer good", envelope("trade_compliance.reopen",
 		`{"cause":"order_amended","order_id":"o1","order_revision":2,"expected_version":0,"reason":"OrderAmended"}`))

@@ -38,6 +38,7 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 	}
 	out := map[string]api.OrderSnapshotFact{}
 	orders := map[string]*order.Order{}
+	reads := map[string]revisionRead{}
 	shipped := map[string]fulfilmentRead{}
 	err := s.lookupAcceptances(ctx, func(ctx context.Context, exec bentopg.Executor, sees func(quoteID string) (bool, error)) error {
 		for _, id := range ids {
@@ -54,6 +55,9 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 			}
 			if ok {
 				out[id], orders[id] = orderSnapshotFact(o, scope(ctx)), o
+				if x, ok := currentRead(ctx, o); ok {
+					reads[id] = x
+				}
 				if shipped[id], err = s.readFulfilment(ctx, exec, o); err != nil {
 					return err
 				}
@@ -67,7 +71,46 @@ func (s Service) ResolveOrderSnapshots(ctx context.Context, ids []string) (map[s
 	if err = s.stateSnapshotTrade(ctx, out); err != nil {
 		return nil, err
 	}
+	if err = s.stateSnapshotCosts(ctx, reads, out); err != nil {
+		return nil, err
+	}
 	return out, s.stateProposed(ctx, orders, shipped, out)
+}
+
+// currentRead is order o's snapshot and current revision as TRD's read transaction (ctx) reads
+// them, when both are intact.
+func currentRead(ctx context.Context, o *order.Order) (revisionRead, bool) {
+	snap, err := o.Verify(scope(ctx), "/order_ids")
+	if err != nil {
+		return revisionRead{}, false
+	}
+	r, err := o.Revision()
+	if err != nil {
+		return revisionRead{}, false
+	}
+	return revisionRead{snap: snap, r: r}, true
+}
+
+// stateSnapshotCosts states, after TRD's read transaction, the costing cost of the lines of every
+// intact fact (S5R-D33, OrderLine.CostMinor; lineCosts) from the revisions that transaction read.
+func (s Service) stateSnapshotCosts(ctx context.Context, reads map[string]revisionRead, facts map[string]api.OrderSnapshotFact) error {
+	for id := range reads {
+		if facts[id].Code != "" {
+			delete(reads, id)
+		}
+	}
+	costs, err := lineCosts(ctx, s, reads)
+	if err != nil {
+		return err
+	}
+	for id, c := range costs {
+		f := facts[id]
+		for i, l := range f.Lines {
+			f.Lines[i].CostMinor = c[l.LineID]
+		}
+		facts[id] = f
+	}
+	return nil
 }
 
 // fulfilmentRead is what FUL confirmed of an order, or the rejection that says TRD cannot compare
@@ -96,6 +139,7 @@ func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnap
 	var f api.OrderSnapshotFact
 	var loaded *order.Order
 	var shipped fulfilmentRead
+	reads := map[string]revisionRead{}
 	err := s.Ledger.Read(ctx, CommandGetOrderSnapshot, id, func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
 		o, err := postgres.LoadOrder(ctx, exec, scope(ctx), id, postgres.NoLock)
 		loaded = o
@@ -113,6 +157,9 @@ func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnap
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		f = orderSnapshotFact(o, scope(ctx))
+		if x, ok := currentRead(ctx, o); ok {
+			reads[id] = x
+		}
 		shipped, err = s.readFulfilment(ctx, exec, o)
 		return err
 	})
@@ -121,6 +168,9 @@ func (s Service) GetOrderSnapshot(ctx context.Context, id string) (api.OrderSnap
 	}
 	facts := map[string]api.OrderSnapshotFact{id: f}
 	if err = s.stateSnapshotTrade(ctx, facts); err != nil {
+		return api.OrderSnapshotFact{}, err
+	}
+	if err = s.stateSnapshotCosts(ctx, reads, facts); err != nil {
 		return api.OrderSnapshotFact{}, err
 	}
 	if err = s.stateProposed(ctx, map[string]*order.Order{id: loaded}, map[string]fulfilmentRead{id: shipped}, facts); err != nil {
@@ -225,12 +275,7 @@ func orderSnapshotFact(o *order.Order, sc kernel.Scope) api.OrderSnapshotFact {
 	f.OrderTerms = terms
 	f.Delivery = apiDelivery(r.Terms.Delivery)
 	f.Lines = orderLines(r)
-	for _, c := range r.Charges {
-		a, _ := r.ChargeAmounts(c.ChargeID)
-		f.Charges = append(f.Charges, api.OrderCharge{ChargeID: c.ChargeID, FeeCategoryRef: apiRef(c.FeeCategory), ObligationKey: c.ObligationKey,
-			Amount: c.Amount, Inclusion: c.Inclusion, IncludedLineID: c.IncludedLineID, NetMinor: a.NetMinor, TaxMinor: a.TaxMinor,
-			PayableMinor: a.PayableMinor})
-	}
+	f.Charges = orderCharges(r)
 	f.NetMinor, f.TaxMinor, f.PayableMinor = r.Amounts.Net, r.Amounts.Tax, r.Amounts.Payable
 	for _, d := range o.Documents {
 		b := d.Binding
@@ -256,7 +301,8 @@ func orderLines(r *orderrev.Revision) []api.OrderLine {
 		a, _ := r.LineAmounts(l.LineID)
 		out = append(out, api.OrderLine{LineID: l.LineID, RfqLineID: l.RfqLineID, Sku: api.SkuRef{SkuID: l.Sku.SkuID,
 			SpecRevision: l.Sku.SpecRevision}, Quantity: l.Quantity, UnitRef: apiRef(l.Unit), NormalizedQuantity: l.NormalizedQuantity,
-			CostUnit: l.CostUnit, UnitPrice: l.UnitPrice, NetMinor: a.NetMinor, TaxMinor: a.TaxMinor, PayableMinor: a.PayableMinor})
+			CostUnit: l.CostUnit, UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
+			NetMinor: a.NetMinor, TaxMinor: a.TaxMinor, PayableMinor: a.PayableMinor})
 	}
 	return out
 }
@@ -264,7 +310,9 @@ func orderLines(r *orderrev.Revision) []api.OrderLine {
 // orderTerms are the terms of revision r of the order whose snapshot is snap (api.OrderTerms): its
 // trade terms reference and named place, the customer addresses the source revision sealed with
 // their roles, its payment terms reference and the payment plan its amounts hold, with the credit
-// portion of that plan (orderrev.CreditPortion). The Incoterm and edition are POL's
+// portion of that plan (orderrev.CreditPortion), and the notify party it binds. What r sealed
+// (S5R-D35, D40) gives the Incoterm and edition, the countries and the notify party's address; a
+// revision written before S5R seals none, and the Incoterm and edition are then POL's
 // (stateTradeTerms).
 func orderTerms(snap order.Snapshot, r *orderrev.Revision) (api.OrderTerms, error) {
 	addresses, err := snap.Addresses("/order_ids")
@@ -278,8 +326,16 @@ func orderTerms(snap order.Snapshot, r *orderrev.Revision) (api.OrderTerms, erro
 	t := api.OrderTerms{TradeTerms: api.TradeTerms{Ref: apiRef(r.Terms.TradeTerms), NamedPlace: apiBusiness(r.Terms.NamedPlace)},
 		PaymentTerms: apiRef(r.Terms.PaymentTerms), Stages: stages, CreditPortionMinor: portion}
 	for _, a := range addresses {
+		country, _ := r.Seal.Country(a.Ref.AddressID)
 		t.Addresses = append(t.Addresses, api.OrderAddress{Role: a.Role, PartyID: a.Ref.PartyID, PartyRevision: a.Ref.PartyRevision,
-			AddressID: a.Ref.AddressID, Address: a.Address})
+			AddressID: a.Ref.AddressID, Address: a.Address, Country: country})
+	}
+	if seal := r.Seal; seal != nil {
+		t.TradeTerms.Incoterm, t.TradeTerms.Edition = seal.Incoterm, seal.Edition
+		if n := r.Terms.NotifyParty; n != nil && seal.Notify != nil {
+			t.NotifyParty = &api.OrderAddress{Role: orderrev.RoleNotify, PartyID: n.PartyID, PartyRevision: n.PartyRevision, AddressID: n.AddressID,
+				Address: seal.Notify.Address, Country: seal.Notify.Country}
+		}
 	}
 	return t, nil
 }
@@ -290,7 +346,7 @@ func orderTerms(snap order.Snapshot, r *orderrev.Revision) (api.OrderTerms, erro
 func (s Service) stateSnapshotTrade(ctx context.Context, facts map[string]api.OrderSnapshotFact) error {
 	var refs []api.ConfigRef
 	for _, f := range facts {
-		if f.Code == "" {
+		if f.Code == "" && f.TradeTerms.Incoterm == "" {
 			refs = append(refs, f.TradeTerms.Ref)
 		}
 	}
@@ -299,7 +355,7 @@ func (s Service) stateSnapshotTrade(ctx context.Context, facts map[string]api.Or
 		return err
 	}
 	for id, f := range facts {
-		if f.Code != "" {
+		if f.Code != "" || f.TradeTerms.Incoterm != "" {
 			continue
 		}
 		if !stateTradeTerms(&f.TradeTerms, known) {
@@ -316,7 +372,7 @@ func (s Service) stateSnapshotTrade(ctx context.Context, facts map[string]api.Or
 func (s Service) stateActiveTrade(ctx context.Context, facts map[string]api.ActiveOrderFact) error {
 	var refs []api.ConfigRef
 	for _, f := range facts {
-		if f.Terms.TradeTerms.Ref.Kind != "" {
+		if f.Terms.TradeTerms.Ref.Kind != "" && f.Terms.TradeTerms.Incoterm == "" {
 			refs = append(refs, f.Terms.TradeTerms.Ref)
 		}
 	}
@@ -325,7 +381,7 @@ func (s Service) stateActiveTrade(ctx context.Context, facts map[string]api.Acti
 		return err
 	}
 	for id, f := range facts {
-		if f.Terms.TradeTerms.Ref.Kind == "" {
+		if f.Terms.TradeTerms.Ref.Kind == "" || f.Terms.TradeTerms.Incoterm != "" {
 			continue
 		}
 		if !stateTradeTerms(&f.Terms.TradeTerms, known) {

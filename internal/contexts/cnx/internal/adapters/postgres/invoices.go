@@ -123,6 +123,108 @@ func DecideInvoice(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	return err
 }
 
+// TouchInvoice moves verified blue invoice i, which a red invoice reversed part of, from row version from to its row
+// version, still verified (S5R-D20).
+func TouchInvoice(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, i *pin.Invoice, from int64, at time.Time) error {
+	tag, err := exec.Exec(ctx, `UPDATE brant_cnx.purchase_invoice SET row_version = $4, updated_at = $5 WHERE tenant_id = $1 AND company_id = $2
+		AND purchase_invoice_id = $3 AND row_version = $6 AND status = 'verified'`, scoped(scope, i.ID, i.RowVersion, kernel.Instant(at), from)...)
+	if err == nil && tag.RowsAffected() != 1 {
+		err = ErrConflict
+	}
+	return err
+}
+
+// RedInvoices returns the verified red invoices that reverse blue invoice id, oldest first.
+func RedInvoices(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) ([]*pin.Invoice, error) {
+	rows, err := exec.Query(ctx, `SELECT `+invoiceColumns+` FROM brant_cnx.purchase_invoice WHERE tenant_id = $1 AND company_id = $2
+		AND red_of_invoice_id = $3 AND status = 'verified' ORDER BY decided_at, purchase_invoice_id`, scoped(scope, id)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*pin.Invoice
+	for rows.Next() {
+		i, err := scanInvoice(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+// TakeBacks returns the matches of the verified red invoices that reverse blue invoice id: what they took back of its
+// matches (S5R-D20).
+func TakeBacks(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) ([]pin.Match, error) {
+	reds, err := RedInvoices(ctx, exec, scope, id)
+	if err != nil {
+		return nil, err
+	}
+	var out []pin.Match
+	for _, r := range reds {
+		ms, err := Matches(ctx, exec, scope, r.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ms...)
+	}
+	return out, nil
+}
+
+// InvoicesOfCommitments returns the IDs of the verified blue invoices (verified or reversed) with a match to a line of
+// one of commitments, and of the verified red invoices that reverse them (PurchaseInvoiceRef v1, S5R-D20).
+func InvoicesOfCommitments(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, commitments []string) ([]string, error) {
+	if len(commitments) == 0 {
+		return []string{}, nil
+	}
+	rows, err := exec.Query(ctx, `WITH blue AS (SELECT DISTINCT i.purchase_invoice_id FROM brant_cnx.purchase_invoice_match m
+			JOIN brant_cnx.purchase_invoice i ON i.tenant_id = m.tenant_id AND i.company_id = m.company_id AND i.purchase_invoice_id = m.purchase_invoice_id
+			WHERE m.tenant_id = $1 AND m.company_id = $2 AND m.commitment_id = ANY($3) AND i.colour = 'blue' AND i.status IN ('verified', 'reversed'))
+		SELECT purchase_invoice_id FROM blue
+		UNION SELECT r.purchase_invoice_id FROM brant_cnx.purchase_invoice r WHERE r.tenant_id = $1 AND r.company_id = $2 AND r.status = 'verified'
+			AND r.red_of_invoice_id IN (SELECT purchase_invoice_id FROM blue)
+		ORDER BY 1`, scoped(scope, commitments)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// FiledCasesWithoutRollback returns the tax refund cases, filed (submitted, approved or received), whose counting
+// allocations use invoice id and which recorded no evidence_rolled_back of it (S5R-D20: a red invoice reversing it
+// waits for the rollback), in ID order.
+func FiledCasesWithoutRollback(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) ([]string, error) {
+	rows, err := exec.Query(ctx, `SELECT c.case_id || ' (' || c.status || ')' FROM brant_cnx.tax_refund_case c
+		WHERE c.tenant_id = $1 AND c.company_id = $2 AND c.status IN ('submitted', 'approved', 'received')
+		AND EXISTS (SELECT 1 FROM brant_cnx.tax_evidence_allocation a WHERE a.tenant_id = c.tenant_id AND a.company_id = c.company_id
+			AND a.case_id = c.case_id AND a.purchase_invoice_id = $3 AND `+counts+`)
+		AND NOT EXISTS (SELECT 1 FROM brant_cnx.tax_refund_result r WHERE r.tenant_id = c.tenant_id AND r.company_id = c.company_id
+			AND r.case_id = c.case_id AND r.stage = 'evidence_rolled_back' AND r.purchase_invoice_id = $3)
+		ORDER BY c.case_id`, scoped(scope, id)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 // ReverseInvoice marks verified blue invoice i reversed by red invoice redID, moving it from row
 // version from.
 func ReverseInvoice(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, i *pin.Invoice, redID string, from int64, at time.Time) error {
@@ -162,16 +264,19 @@ func LockMatchLines(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	return nil
 }
 
-// StandingMatched returns, for each of refs, the quantity standing matches (of invoices not
-// reversed) take of it, other than invoice except's.
+// StandingMatched returns, for each of refs, the quantity standing matches take of it, other than invoice except's:
+// the matches of verified blue invoices (not reversed) less what verified red invoices took back of them (S5R-D20).
 func StandingMatched(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, refs []pin.LineRef, except string) (map[pin.LineRef]kernel.Decimal, error) {
 	out := map[pin.LineRef]kernel.Decimal{}
 	for _, r := range refs {
 		var q string
-		if err := exec.QueryRow(ctx, `SELECT coalesce(trim_scale(sum(m.quantity)), 0)::text FROM brant_cnx.purchase_invoice_match m
+		if err := exec.QueryRow(ctx, `SELECT coalesce(trim_scale(sum(CASE WHEN i.colour = 'blue' THEN m.quantity ELSE -m.quantity END)), 0)::text
+			FROM brant_cnx.purchase_invoice_match m
 			JOIN brant_cnx.purchase_invoice i ON i.tenant_id = m.tenant_id AND i.company_id = m.company_id AND i.purchase_invoice_id = m.purchase_invoice_id
+			LEFT JOIN brant_cnx.purchase_invoice b ON b.tenant_id = i.tenant_id AND b.company_id = i.company_id AND b.purchase_invoice_id = i.red_of_invoice_id
 			WHERE m.tenant_id = $1 AND m.company_id = $2 AND m.commitment_id = $3 AND m.order_line_id = $4 AND i.status = 'verified'
-			AND m.purchase_invoice_id <> $5`, scoped(scope, r.CommitmentID, r.OrderLineID, except)...).Scan(&q); err != nil {
+			AND (i.colour = 'blue' OR b.status = 'verified') AND m.purchase_invoice_id <> $5`,
+			scoped(scope, r.CommitmentID, r.OrderLineID, except)...).Scan(&q); err != nil {
 			return nil, err
 		}
 		d, err := decimal(q)

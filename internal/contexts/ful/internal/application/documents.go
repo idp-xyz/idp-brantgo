@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
 	docs "go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipmentdocumentset"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -30,9 +31,11 @@ import (
 //     a certificate result, asks CNX whether it applies to the shipment (CertificateResultRef v1, R56,
 //     S5 C5);
 //  3. for a CI or PL reads from POL the templates, the number sequence, the seller's company profile
-//     (in force now) and the order currency (whatever its state), from TRD the order's current
-//     revision with its terms and address roles (OrderCommercialSnapshot v1), from PTY the names of
-//     the customer and the order's consignee at the revisions bound (audited, pty.read);
+//     (in force now) and the order currency (whatever its state), from TRD the order revision the
+//     shipment binds with its terms, prices, address roles and notify party (OrderRevisionRef v1,
+//     S5R-D35, D40; before S5R the order's current revision, OrderCommercialSnapshot v1), from PTY the
+//     names of the customer, the order's consignee and its notify party at the revisions bound
+//     (audited, pty.read);
 //  4. has POL issue the number (number.issue as the acting actor, NumberIssue v1, R49; business
 //     reference the set ID, so a retry and every later version of the kind get the same number back;
 //     a refusal after it leaves the number issued to the set's ID: a gap if the set never comes, never
@@ -298,23 +301,43 @@ func (h *prepareDocumentCommand) rendered(ctx context.Context, ship *shipment.Sh
 	return nil
 }
 
-// order reads the shipment's order from TRD and the names of its customer and consignee from PTY.
-func (h *prepareDocumentCommand) order(ctx context.Context, ship *shipment.Shipment) error {
-	facts, err := h.s.Upstream.Documents.Orders.ResolveOrderSnapshots(ctx, []string{ship.Order.OrderID})
+// orderFacts reads the order revision ship binds from TRD (OrderRevisionRef v1, S5R-D35): nil when TRD
+// shows the actor no such revision (the domain refuses the document then).
+func (s Service) orderFacts(ctx context.Context, ship *shipment.Shipment) (*docs.OrderFacts, error) {
+	key := trdapi.OrderRevisionKey{OrderID: ship.Order.OrderID, OrderRevision: ship.Order.OrderRevision}
+	facts, err := s.Upstream.Documents.Orders.ResolveOrderRevisions(ctx, []trdapi.OrderRevisionKey{key})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	f, ok := facts[ship.Order.OrderID]
+	f, ok := facts[key]
 	if !ok || f.Code != "" {
-		return nil
+		return nil, nil
 	}
 	o := &docs.OrderFacts{Binding: docs.OrderBinding{OrderID: f.Binding.OrderID, OrderRevision: f.Binding.OrderRevision, OrderHash: f.Binding.OrderHash},
-		Incoterm: f.TradeTerms.Incoterm, Edition: f.TradeTerms.Edition, NamedPlace: f.TradeTerms.NamedPlace.ID}
+		Incoterm: f.TradeTerms.Incoterm, Edition: f.TradeTerms.Edition, NamedPlace: f.TradeTerms.NamedPlace.ID, Lines: map[string]docs.LinePrice{},
+		NetMinor: f.NetMinor}
 	for _, st := range f.Stages {
 		o.Stages = append(o.Stages, docs.Stage{StageID: st.StageID, Percent: st.Percent, Trigger: st.Trigger, Days: st.Days, DayBasis: st.DayBasis})
 	}
 	for _, a := range f.Addresses {
 		o.Addresses = append(o.Addresses, docs.Address{Role: a.Role, PartyID: a.PartyID, PartyRevision: a.PartyRevision, Text: a.Address})
+	}
+	if n := f.NotifyParty; n != nil {
+		o.Notify = &docs.Address{Role: n.Role, PartyID: n.PartyID, PartyRevision: n.PartyRevision, Text: n.Address}
+	}
+	for _, l := range f.Lines {
+		o.Lines[l.LineID] = docs.LinePrice{UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
+			NetMinor: l.NetMinor, TaxMinor: l.TaxMinor, PayableMinor: l.PayableMinor}
+	}
+	return o, nil
+}
+
+// order reads the order revision the shipment binds from TRD (OrderRevisionRef v1, S5R-D35) and the
+// names of its customer, consignee and notify party (S5R-D40) from PTY.
+func (h *prepareDocumentCommand) order(ctx context.Context, ship *shipment.Shipment) error {
+	o, err := h.s.orderFacts(ctx, ship)
+	if err != nil || o == nil {
+		return err
 	}
 	h.up.Order = o
 	h.up.Names = map[docs.PartyKey]string{}
@@ -325,6 +348,9 @@ func (h *prepareDocumentCommand) order(ctx context.Context, ship *shipment.Shipm
 		}
 	}
 	if a := o.Address("consignee"); a != nil {
+		keys = append(keys, docs.PartyKey{PartyID: a.PartyID, Revision: a.PartyRevision})
+	}
+	if a := o.Notify; a != nil {
 		keys = append(keys, docs.PartyKey{PartyID: a.PartyID, Revision: a.PartyRevision})
 	}
 	for _, k := range keys {
@@ -538,13 +564,39 @@ func (s Service) PrepareShipmentDocument(ctx context.Context, cmd api.PrepareShi
 	return out, err
 }
 
-// issueCommand runs shipment_document.issue (human only).
+// issueCommand runs shipment_document.issue (human only). Before its transaction it reads the set in
+// a FUL transaction of its own and asks CNX again whether the certificate result its current
+// certificate of origin draft names applies to the shipment now (S5R-D12; CertificateResultRef v1,
+// R56, a lookup: a certificate's revisions never change, so what CNX answers stays true; a draft
+// prepared after this read was not asked about and is a required difference — fail closed).
 type issueCommand struct {
-	s      Service
-	cmd    api.IssueShipmentDocuments
-	set    *docs.Set
-	facts  docs.Facts
-	result *docs.Issue
+	s         Service
+	cmd       api.IssueShipmentDocuments
+	rechecked map[docs.RecheckKey]*docs.CertificateResult
+	set       *docs.Set
+	facts     docs.Facts
+	result    *docs.Issue
+}
+
+func (h *issueCommand) Prepare(ctx context.Context) error {
+	var set *docs.Set
+	err := h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		var err error
+		set, err = postgres.LoadSet(ctx, exec, scope(ctx), h.cmd.DocumentSetID, postgres.NoLock)
+		if err == nil && set != nil && !d.Sees(set.OwnerActor, set.OwnerTeam) {
+			set = nil // the transaction refuses it
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	h.rechecked = map[docs.RecheckKey]*docs.CertificateResult{}
+	if set == nil {
+		return nil
+	}
+	h.rechecked, err = h.s.recheck(ctx, set, h.s.Clock.Now())
+	return err
 }
 
 func (h *issueCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -557,6 +609,7 @@ func (h *issueCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
 	if err = loadFacts(ctx, exec, sc, shipmentID, &h.facts); err != nil {
 		return err
 	}
+	h.facts.Rechecked = h.rechecked
 	h.set, err = postgres.LoadSet(ctx, exec, sc, h.cmd.DocumentSetID, postgres.ForUpdate)
 	return err
 }
@@ -613,6 +666,11 @@ func (h *issueCommand) Apply(ctx context.Context, exec bentopg.Executor, d autho
 	}
 	iss.Entries = append(iss.Entries, docs.Entry{Name: "upstream_checked_at", Value: kernel.FormatTimestamp(now)})
 	iss.Entries = append(iss.Entries, upstream...)
+	for k, r := range h.facts.Rechecked { // S5R-D12: at most one, the current certificate of origin draft
+		if r != nil {
+			iss.Entries = append(iss.Entries, docs.Entry{Name: docs.CertificateRecheckSource + ":v" + strconv.FormatInt(k.Version, 10), Value: r.Binding})
+		}
+	}
 	iss.Entries = append(iss.Entries, docs.Entry{Name: "issued_by", Value: d.Actor.String()}, docs.Entry{Name: "authority_epoch",
 		Value: strconv.FormatInt(d.Epoch, 10)}, docs.Entry{Name: "issued_at", Value: kernel.FormatTimestamp(now)})
 	iss.EntriesJSON, iss.EntriesSHA256 = shipment.Seal(iss.Entries)

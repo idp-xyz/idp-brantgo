@@ -2,13 +2,16 @@
  "artifact": "IDP Brant Role Templates and Separation of Duties",
  "version": "0.1",
  "date": "2026-11-10",
- "status": "岗位模板与职责分离规则按模拟评审 SR-32（BC-D02）接受；岗位到命令权限的映射为候选（E0），真实客户开通时由租户确认或合并岗位",
+ "status": "岗位模板与职责分离规则按模拟评审 SR-32（BC-D02）接受；岗位到命令权限的映射为候选（E0），真实客户开通时由租户确认或合并岗位；2026-11-13 按 S5R 模拟签核（E0，不是真人签核）修订：S5R-D01、D02、D05、D20—D23、D25、D26、D28—D30、D32、D47",
  "source": "10_M0_ENGINEERING_BASELINE/07_IDP_Brant_Simulated_Review_V0.1.json SR-32",
  "principles": [
   "权限即命令名；读取与审计为 <bc>.read、<bc>.audit；能力权限（如毛利例外）由命令内部检查。",
   "岗位模板是产品默认；租户可把多个模板合并为自己的岗位，但不得合并禁止组合，也不得给操作者分配构成禁止组合的岗位。",
   "人工专属命令仍只接受人工身份：岗位不会让 AI 或 system 身份获得人工专属命令。",
-  "同一对象的编制与审核分开由命令自身检查（independence），岗位层面的禁止组合是第二道防线。"
+  "同一对象的编制与审核分开由命令自身检查（independence），岗位层面的禁止组合是第二道防线。",
+  "系统操作者 system:inbox.<bc>.<purpose> 不用岗位模板：其权限即 Context Map consumers 登记的 permissions，由 brant-admin inbox 授予；只由系统执行的命令（shipment_review.open、allocation_review.open）不进人工模板（S5R-D29）。",
+  "按种类的配置发布：credit_policy、export_tax_policy、screening_regulation 的发布须同时持有 config.publish 与对应的 config.publish.<kind>；其余种类只需 config.publish（S5R-D30）。",
+  "AI 模板的读取权限按委托的任务目标最小化，随该模板的能力一起授予；不为某个测试扩大现有 AI 模板（ai_q01_agent 不加 ful.read，S5R-D32）。"
  ],
  "templates": [
   {
@@ -112,7 +115,7 @@
   {
    "code": "merchandiser",
    "name": "跟单",
-   "duties": "订单履约跟进：里程碑、装箱、订舱、出运确认、供应交付登记、生产进度、订单关闭；出运准备与取消、实际装箱、订单变更的出运复核",
+   "duties": "订单履约跟进：里程碑、装箱、订舱、出运确认（货已交承运人的物流事实；商业放行评估、单证签发与放单属单证，S5R-D01）、供应交付登记、生产进度、订单关闭；出运准备与取消、实际装箱、订单变更的出运复核",
    "permissions": [
     "action.reconcile",
     "action.record_attempt",
@@ -163,7 +166,6 @@
     "shipment.cancel",
     "shipment.confirm",
     "shipment.prepare",
-    "shipment_review.open",
     "shipment_review.settle",
     "source.register",
     "source.use",
@@ -192,14 +194,13 @@
   {
    "code": "purchaser",
    "name": "采购",
-   "duties": "供应商询价与报价核实、采购条款、采购草稿与承诺申请、供应商确认与交付、供应商主体与 SKU 草稿；承诺变更编制与应用、承诺取消、订单变更的分配复核；发出采购承诺时取采购订单编号（负责人决定 2026-11-12）",
+   "duties": "供应商询价与报价核实、采购条款、采购草稿与承诺申请、供应商确认与交付、供应商主体与 SKU 草稿；承诺变更编制与应用、承诺取消、订单变更的分配复核；发出采购承诺时取采购订单编号（负责人决定 2026-11-12）；已交付未出运承诺行的处置申请（S5R-D05）",
    "permissions": [
     "action.reconcile",
     "action.record_attempt",
     "ai.delegation.grant",
     "ai.delegation.revoke",
     "ai.read",
-    "allocation_review.open",
     "allocation_review.settle",
     "cat.read",
     "clm.read",
@@ -229,6 +230,7 @@
     "purchase.commitment.cancel",
     "purchase.commitment.change.apply",
     "purchase.commitment.change.prepare",
+    "purchase.commitment.dispose",
     "purchase.commitment.issue",
     "purchase.commitment.request",
     "purchase.draft.prepare",
@@ -373,7 +375,7 @@
   {
    "code": "order_reviewer",
    "name": "订单审核人",
-   "duties": "订单与订单变更审核、撤销批准、合同成立的否认处理；采购承诺审批与承诺变更裁决（A47）",
+   "duties": "订单与订单变更审核、撤销批准、合同成立的否认处理；采购承诺审批与承诺变更裁决（A47）；承诺行获批处置的批准（S5R-D05）",
    "permissions": [
     "acceptance.invalidate",
     "cat.read",
@@ -394,6 +396,7 @@
     "pur.read",
     "purchase.commitment.change.decide",
     "purchase.commitment.decide",
+    "purchase.commitment.disposition.decide",
     "purchase.commitment.revoke",
     "qlt.read",
     "ref.read",
@@ -435,7 +438,7 @@
   {
    "code": "credit_officer",
    "name": "信用专员",
-   "duties": "信用占用与释放、费用登记与分摊；在 credit_policy 信用专员层级内裁决信用例外（S5 D-6，负责人决定 2026-11-12）",
+   "duties": "信用占用与释放、费用登记与分摊；在 credit_policy 信用专员层级内裁决信用例外（S5 D-6，负责人决定 2026-11-12）；登记本岗位决定所依据的证据（S5R-D26）",
    "permissions": [
     "cat.read",
     "charge.allocate",
@@ -449,6 +452,7 @@
     "crm.read",
     "cst.read",
     "evd.read",
+    "file.register",
     "ful.read",
     "inq.read",
     "mfg.read",
@@ -457,6 +461,7 @@
     "pur.read",
     "qlt.read",
     "ref.read",
+    "source.register",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -467,28 +472,35 @@
   {
    "code": "credit_manager",
    "name": "信用经理",
-   "duties": "信用额度发布、信用例外（最高层级）、贷项确认、结算冲销与资金差额批准、商业放行例外",
+   "duties": "信用额度发布、信用例外（最高层级）、贷项确认、结算冲销与资金差额批准、商业放行例外；应付调整确认、临时第三方付款人核实、资金记录冲销（S5R-D20—D22）；信用政策发布（S5R-D30）；登记本岗位决定所依据的证据（S5R-D26）",
    "permissions": [
     "cat.read",
     "clm.read",
     "cnx.read",
     "commercial_release.grant_exception",
+    "config.publish",
+    "config.publish.credit_policy",
     "credit.confirm",
     "credit_exception.decide",
     "credit_limit.publish",
     "crm.read",
     "cst.read",
     "evd.read",
+    "file.register",
     "ful.read",
     "fund.resolve_difference",
+    "fund.reverse",
+    "fund.verify_payer",
     "inq.read",
     "mfg.read",
+    "payable_adjustment.confirm",
     "pol.read",
     "pty.read",
     "pur.read",
     "qlt.read",
     "ref.read",
     "settlement.reverse",
+    "source.register",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -533,7 +545,7 @@
   {
    "code": "documentation",
    "name": "单证",
-   "duties": "出运单证、单证放行、商业放行评估、报关案件与资料包、出口许可、商品申报档案；出运单证编制与签发、保险单记录、报关资料确认与人工提交、外部回执登记、官方证书登记",
+   "duties": "出运单证、单证放行、商业放行评估、报关案件与资料包、出口许可、商品申报档案；出运单证编制与签发、保险单记录、报关资料确认与人工提交、外部回执登记、官方证书登记；商业发票与装箱单取号（S5R-D25）；申报档案草稿丢弃（S5R-D47）",
    "permissions": [
     "cat.read",
     "certificate.register",
@@ -546,6 +558,7 @@
     "declaration_case.prepare",
     "declaration_case.record_receipt",
     "declaration_case.record_submission",
+    "declaration_profile.discard_draft",
     "declaration_profile.save_draft",
     "declaration_profile.verify",
     "document_bundle.check",
@@ -559,6 +572,7 @@
     "inq.read",
     "insurance.record",
     "mfg.read",
+    "number.issue",
     "order.document.generate",
     "pol.read",
     "pty.read",
@@ -580,7 +594,7 @@
   {
    "code": "treasury",
    "name": "资金",
-   "duties": "收付款登记与核销、结算确认、期初余额、费用确认、付款计划复核、订单经营结果复核、关闭与重新打开",
+   "duties": "收付款登记与核销、结算确认、期初余额、费用确认、付款计划复核、订单经营结果复核、关闭与重新打开；订单账户补建（系统消费方上线前已生效的订单等，S5R-D02）、采购应付调整申请（S5R-D20）；登记本岗位决定所依据的证据（S5R-D26）",
    "permissions": [
     "application.apply",
     "application.unapply",
@@ -591,14 +605,17 @@
     "crm.read",
     "cst.read",
     "evd.read",
+    "file.register",
     "ful.read",
     "fund.record",
     "inq.read",
     "mfg.read",
     "opening_balance.record",
+    "order_account.open",
     "order_result.close",
     "order_result.reopen",
     "order_result.review",
+    "payable_adjustment.request",
     "payment_plan_review.open",
     "payment_plan_review.settle",
     "pol.read",
@@ -608,6 +625,7 @@
     "qlt.read",
     "ref.read",
     "settlement.confirm",
+    "source.register",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -618,7 +636,7 @@
   {
    "code": "compliance",
    "name": "合规",
-   "duties": "主体筛查记录、裁决与阻断，贸易合规评估与决定；只由本岗位给出合规结论",
+   "duties": "主体筛查记录、裁决与阻断，贸易合规评估与决定；只由本岗位给出合规结论；筛查与合规法规配置的发布（S5R-D30）；登记本岗位决定所依据的证据（S5R-D26）",
    "permissions": [
     "ai.audit",
     "ai.read",
@@ -628,6 +646,8 @@
     "clm.read",
     "cnx.audit",
     "cnx.read",
+    "config.publish",
+    "config.publish.screening_regulation",
     "costing.attest_source",
     "country_programme.import",
     "crm.audit",
@@ -636,6 +656,7 @@
     "cst.read",
     "evd.audit",
     "evd.read",
+    "file.register",
     "ful.audit",
     "ful.read",
     "inq.audit",
@@ -656,6 +677,7 @@
     "ref.audit",
     "ref.read",
     "screening_list.import",
+    "source.register",
     "stk.audit",
     "stk.read",
     "stl.audit",
@@ -674,16 +696,19 @@
   {
    "code": "tax_specialist",
    "name": "税务专员",
-   "duties": "进项票、退税分配、外部对账；税务配置草稿；购进发票核验、退税结果与期初资料登记",
+   "duties": "进项票、退税分配、外部对账；税务配置草稿；购进发票核验、退税结果与期初资料登记；退税案件政策修订的重新绑定（S5R-D23）；出口退税政策发布（S5R-D30）；登记本岗位决定所依据的证据（S5R-D26）",
    "permissions": [
     "cat.read",
     "clm.read",
     "cnx.read",
+    "config.publish",
+    "config.publish.export_tax_policy",
     "config.save_draft",
     "crm.read",
     "cst.read",
     "evd.read",
     "external_reconciliation.resolve",
+    "file.register",
     "ful.read",
     "inq.read",
     "mfg.read",
@@ -694,10 +719,12 @@
     "purchase_invoice.verify",
     "qlt.read",
     "ref.read",
+    "source.register",
     "stk.read",
     "stl.read",
     "sup.read",
     "tax_refund_case.allocate",
+    "tax_refund_case.rebind_policy",
     "tax_refund_case.record_opening",
     "tax_refund_case.record_result",
     "trd.read",
@@ -982,6 +1009,18 @@
   {
    "permission": "country_programme.import",
    "meaning": "参考数据命令：导入一个国别禁运与制裁项目版本（来源、发布日期、文件 SHA-256、国家与项目数；人工专属；ADR-BR-017），供 CNX 贸易合规核查生成候选"
+  },
+  {
+   "permission": "config.publish.credit_policy",
+   "meaning": "发布 credit_policy 修订另需此能力（POL 在 config.publish 中按种类检查；S5R-D30），信用经理专属"
+  },
+  {
+   "permission": "config.publish.export_tax_policy",
+   "meaning": "发布 export_tax_policy 修订另需此能力（S5R-D30），税务专员持有"
+  },
+  {
+   "permission": "config.publish.screening_regulation",
+   "meaning": "发布 screening_regulation 修订另需此能力（S5R-D30），合规专属"
   }
  ],
  "forbiddenCombinations": [
@@ -1075,6 +1114,16 @@
    "permission": "country_programme.import",
    "template": "compliance",
    "rule": "国别项目与制裁名单来源由合规负责人确认（ADR-BR-017）"
+  },
+  {
+   "permission": "config.publish.credit_policy",
+   "template": "credit_manager",
+   "rule": "信用政策由信用负责人发布（S5R-D30）"
+  },
+  {
+   "permission": "config.publish.screening_regulation",
+   "template": "compliance",
+   "rule": "合规法规与名单启用由合规负责人发布（S5R-D30）"
   }
  ],
  "independence": [
@@ -1146,7 +1195,7 @@
   },
   {
    "command": "purchase.commitment.change.decide",
-   "independentOf": "变更的编制人与申请人",
+   "independentOf": "变更的编制人与原承诺申请人",
    "context": "PUR",
    "state": "SPEC"
   },
@@ -1184,6 +1233,36 @@
    "command": "declaration_profile.verify",
    "independentOf": "该修订的最后编辑人",
    "context": "CAT",
+   "state": "SPEC"
+  },
+  {
+   "command": "commercial_release.grant_exception",
+   "independentOf": "该放行的评估人与订单准备人（S5R-D28）",
+   "context": "FUL",
+   "state": "SPEC"
+  },
+  {
+   "command": "purchase.commitment.disposition.decide",
+   "independentOf": "处置申请人（S5R-D05）",
+   "context": "PUR",
+   "state": "SPEC"
+  },
+  {
+   "command": "payable_adjustment.confirm",
+   "independentOf": "调整申请人（S5R-D20）",
+   "context": "STL",
+   "state": "SPEC"
+  },
+  {
+   "command": "fund.verify_payer",
+   "independentOf": "资金登记人（S5R-D21）",
+   "context": "STL",
+   "state": "SPEC"
+  },
+  {
+   "command": "fund.reverse",
+   "independentOf": "资金登记人（S5R-D22）",
+   "context": "STL",
    "state": "SPEC"
   }
  ]

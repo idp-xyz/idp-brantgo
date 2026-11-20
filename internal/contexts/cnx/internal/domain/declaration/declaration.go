@@ -58,6 +58,9 @@ const (
 	Rejected  = "rejected"
 	Amended   = "amended"
 	Withdrawn = "withdrawn"
+	// NotReceived (S5R-D13): verified after an unknown result, customs never received the declaration (by the status
+	// customs' own query shows, or the broker's written confirmation). Final: the lot's next attempt may then be prepared.
+	NotReceived = "not_received"
 )
 
 // Kinds of a version, mapping states, submitters and conversion sources.
@@ -86,17 +89,19 @@ const (
 // from it.
 const BaseUnit kernel.UnitCode = "PCS"
 
-// Terminal reports whether a case in status s takes no further receipt.
-func Terminal(s string) bool { return s == Rejected || s == Withdrawn }
+// Terminal reports whether a case in status s takes no further receipt: rejected, withdrawn or not received (S5R-D13).
+// The lot's next attempt may then be prepared.
+func Terminal(s string) bool { return s == Rejected || s == Withdrawn || s == NotReceived }
 
 // next lists the outcomes a receipt may record in each state. SM-CNX-DECLARATION draws the main
 // path one step at a time; receipts arrive out of order (CN-AT06, baseline 23.3), so a receipt may
 // move the case forward past results whose receipts are still missing, never back. The SM draws
 // nothing after amended: another amendment and a withdrawal after an amendment are admitted (a gap
-// reported for the design).
+// reported for the design). An unknown result is verified: customs' result is recorded as it is found, or not_received
+// when customs never received the declaration (S5R-D13).
 var next = map[string][]string{
 	Submitted: {Unknown, Received, Accepted, Released, Rejected},
-	Unknown:   {Received, Accepted, Released, Rejected},
+	Unknown:   {Received, Accepted, Released, Rejected, NotReceived},
 	Received:  {Accepted, Released, Rejected},
 	Accepted:  {Released, Rejected},
 	Released:  {Amended, Withdrawn},
@@ -104,7 +109,12 @@ var next = map[string][]string{
 }
 
 // Outcomes are the outcomes a receipt records.
-var Outcomes = []string{Unknown, Received, Accepted, Released, Rejected, Amended, Withdrawn}
+var Outcomes = []string{Unknown, Received, Accepted, Released, Rejected, Amended, Withdrawn, NotReceived}
+
+// External reports whether a receipt of outcome o states an external result (sequence, status code, original text,
+// mapping version, declaration number): every outcome but unknown and not_received, which record a verification's
+// conclusion without a result of customs.
+func External(o string) bool { return o != Unknown && o != NotReceived }
 
 // Exported reports whether a case in status s stands as exported by customs: released, or amended
 // after its release. Its export date is the one the receipts state.
@@ -484,6 +494,7 @@ type ReceiptInput struct {
 	ExportedAt        time.Time
 	ReceivedAt        time.Time
 	AmendedItems      map[int]bool
+	Evidence          int // the evidence sources the receipt names
 	At                time.Time
 }
 
@@ -493,18 +504,24 @@ type ReceiptInput struct {
 // CN-AT06); an outcome that does not follow from the state (INVALID_STATE; nothing follows a
 // rejection or a withdrawal); a declaration number other than the one recorded, an export date after
 // the receipt was received or recorded, an amended item the version does not have
-// (INVALID_KNOWN_VALUE). An unknown result follows a submission only and carries no sequence.
+// (INVALID_KNOWN_VALUE). An unknown result follows a submission only and carries no sequence. A not_received
+// verification follows an unknown result only, carries no sequence and rests on evidence of the verification
+// (INVALID_KNOWN_VALUE /args/evidence_ids without; CNX-INV-003, S5R-D13).
 func CheckReceipt(c *Case, items []Item, in ReceiptInput) error {
 	const path = "/args/outcome"
 	if c.Status == Draft || c.Status == Confirmed {
 		return kernel.Reject(kernel.CodeInvalidState, "/args/declaration_id", "Nothing was submitted")
 	}
-	if in.Outcome != Unknown && in.Sequence <= c.LastSequence {
+	if External(in.Outcome) && in.Sequence <= c.LastSequence {
 		return reject(CodeDeclarationReceiptStale, "/args/external/sequence", "The receipt is not after the result recorded at sequence "+
 			strconv.FormatInt(c.LastSequence, 10))
 	}
 	if !slices.Contains(next[c.Status], in.Outcome) {
 		return kernel.Reject(kernel.CodeInvalidState, path, "A "+in.Outcome+" result does not follow a "+c.Status+" declaration")
+	}
+	if in.Outcome == NotReceived && in.Evidence == 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/evidence_ids",
+			"That customs never received the declaration rests on the verification's evidence (the status customs' query shows, or the broker's written confirmation)")
 	}
 	if c.DeclarationNumber != "" && in.DeclarationNumber != "" && in.DeclarationNumber != c.DeclarationNumber {
 		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/declaration_number", "The declaration's number is "+c.DeclarationNumber)
@@ -526,7 +543,7 @@ func CheckReceipt(c *Case, items []Item, in ReceiptInput) error {
 func (c *Case) Apply(in ReceiptInput) {
 	c.Status = in.Outcome
 	c.Receipts++
-	if in.Outcome != Unknown {
+	if External(in.Outcome) {
 		c.LastSequence = in.Sequence
 	}
 	if c.DeclarationNumber == "" {

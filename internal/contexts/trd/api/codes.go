@@ -14,6 +14,7 @@ import "go.idp.xyz/idp-brant/internal/kernel"
 const (
 	CodeObjectControlConflict = "OBJECT_CONTROL_CONFLICT"    // 409: the root is bound to another task or the write lacks the current control
 	CodeControlEpochStale     = "CONTROL_EPOCH_STALE"        // 409: the write claims an earlier control epoch
+	CodeControlModeMismatch   = "CONTROL_MODE_MISMATCH"      // 409: the root is under manual control and the writer is not a human (S4 D-3)
 	CodeQuoteExpired          = "QUOTE_EXPIRED"              // as_of ≥ expires_at
 	CodeQuoteValidityInvalid  = "QUOTE_VALIDITY_INVALID"     // the validity exceeds the pricing policy's
 	CodeCostSnapshotMissing   = "COST_SNAPSHOT_MISSING"      // no cost snapshot bound
@@ -29,6 +30,7 @@ const (
 	CodeNoActiveRevision             = "NO_ACTIVE_REVISION"              // the root has no active revision to replace
 	CodeApprovalRequired             = "APPROVAL_REQUIRED"               // no approval of the revision
 	CodeApprovalRevoked              = "APPROVAL_REVOKED"                // the approval was revoked
+	CodeCostSourceDenied             = "COST_SOURCE_DENIED"              // a risk hold pauses the revision: CST denied a source of its cost snapshot (WF-03)
 	CodeApprovalExpired              = "APPROVAL_EXPIRED"                // the approval lapsed, or would outlive the quote
 	CodeApprovalStale                = "APPROVAL_STALE"                  // 409: the approval's rules or its reviewer's qualification changed
 	CodeApprovalReferenceMismatch    = "APPROVAL_REFERENCE_MISMATCH"     // the approval or exception names another revision, target or margin fact
@@ -55,6 +57,7 @@ const (
 var codes = map[string]kernel.Category{
 	CodeObjectControlConflict: kernel.CategoryConflict,
 	CodeControlEpochStale:     kernel.CategoryConflict,
+	CodeControlModeMismatch:   kernel.CategoryConflict,
 	CodeQuoteExpired:          kernel.CategoryInvalid,
 	CodeQuoteValidityInvalid:  kernel.CategoryInvalid,
 	CodeCostSnapshotMissing:   kernel.CategoryInvalid,
@@ -69,6 +72,7 @@ var codes = map[string]kernel.Category{
 	CodeNoActiveRevision:             kernel.CategoryInvalid,
 	CodeApprovalRequired:             kernel.CategoryInvalid,
 	CodeApprovalRevoked:              kernel.CategoryInvalid,
+	CodeCostSourceDenied:             kernel.CategoryInvalid,
 	CodeApprovalExpired:              kernel.CategoryInvalid,
 	CodeApprovalStale:                kernel.CategoryConflict,
 	CodeApprovalReferenceMismatch:    kernel.CategoryInvalid,
@@ -106,6 +110,9 @@ func Category(code string) (kernel.Category, bool) {
 		return c, true
 	}
 	if c, ok := QueryCategory(code); ok {
+		return c, true
+	}
+	if c, ok := GoalCategory(code); ok {
 		return c, true
 	}
 	return DocumentCategory(code)

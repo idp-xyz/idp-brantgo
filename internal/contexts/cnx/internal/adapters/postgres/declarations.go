@@ -221,18 +221,25 @@ func InsertSubmission(ctx context.Context, exec bentopg.Executor, scope kernel.S
 	if err != nil {
 		return err
 	}
+	var revision *int64
+	if s.ServiceRoleID != "" {
+		revision = &s.ServiceRoleRevision
+	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.declaration_submission (tenant_id, company_id, declaration_id, submission_no, version_no,
 		operation_reference, submitter_kind, submitter_party_id, submitter_name, submitted_at, evidence, note, recorded_by_kind, recorded_by_id,
-		authority_epoch, recorded_at) VALUES ($1, $2, $3, $4, $5, $6, $7, nullif($8, ''), $9, $10, $11, nullif($12, ''), $13, $14, $15, $16)`,
+		authority_epoch, recorded_at, service_role_id, service_role_revision, service_role_kind)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, nullif($8, ''), $9, $10, $11, nullif($12, ''), $13, $14, $15, $16, nullif($17, ''), $18, nullif($19, ''))`,
 		scoped(scope, s.DeclarationID, s.No, s.Version, s.OperationReference, s.SubmitterKind, s.SubmitterPartyID, s.SubmitterName,
-			kernel.Instant(s.SubmittedAt), evidence, s.Note, string(s.By.Kind), s.By.ID, s.Epoch, kernel.Instant(s.At))...)
+			kernel.Instant(s.SubmittedAt), evidence, s.Note, string(s.By.Kind), s.By.ID, s.Epoch, kernel.Instant(s.At), s.ServiceRoleID, revision,
+			s.ServiceRoleKind)...)
 	return err
 }
 
 // Submissions returns the submissions of case id, oldest first.
 func Submissions(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) ([]*dcl.Submission, error) {
 	rows, err := exec.Query(ctx, `SELECT submission_no, version_no, operation_reference, submitter_kind, coalesce(submitter_party_id, ''),
-		submitter_name, submitted_at, evidence, coalesce(note, ''), recorded_by_kind, recorded_by_id, authority_epoch, recorded_at
+		submitter_name, submitted_at, evidence, coalesce(note, ''), recorded_by_kind, recorded_by_id, authority_epoch, recorded_at,
+		coalesce(service_role_id, ''), coalesce(service_role_revision, 0), coalesce(service_role_kind, '')
 		FROM brant_cnx.declaration_submission WHERE tenant_id = $1 AND company_id = $2 AND declaration_id = $3 ORDER BY submission_no`,
 		scoped(scope, id)...)
 	if err != nil {
@@ -244,7 +251,7 @@ func Submissions(ctx context.Context, exec bentopg.Executor, scope kernel.Scope,
 		s := dcl.Submission{DeclarationID: id}
 		var evidence, kind string
 		if err := rows.Scan(&s.No, &s.Version, &s.OperationReference, &s.SubmitterKind, &s.SubmitterPartyID, &s.SubmitterName, &s.SubmittedAt,
-			&evidence, &s.Note, &kind, &s.By.ID, &s.Epoch, &s.At); err != nil {
+			&evidence, &s.Note, &kind, &s.By.ID, &s.Epoch, &s.At, &s.ServiceRoleID, &s.ServiceRoleRevision, &s.ServiceRoleKind); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(evidence), &s.Evidence); err != nil {

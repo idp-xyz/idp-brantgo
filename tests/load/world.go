@@ -57,6 +57,8 @@ var allPermissions = []string{
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "item_code_mapping.save_draft", "item_code_mapping.publish",
 	"cat.read", "cat.audit",
 	"config.save_draft", "config.discard_draft", "config.publish", "config.retire", "number.issue", "foundation.snapshot",
+	// S5R-D30: publication by kind (polapi.PublishCapability).
+	"config.publish.credit_policy", "config.publish.export_tax_policy", "config.publish.screening_regulation",
 	"pol.read", "pol.audit", "pol.read_sensitive",
 	"rfq.save_draft", "rfq.confirm_scope", "rfq.cancel", "rfq.close", "inq.read", "inq.audit",
 	"party_screening.record", "party_screening.decide", "party_screening.block",
@@ -261,8 +263,10 @@ func (s *setupRun) foundation(w *world) {
 		"footer_note": "合成测试，不构成要约"})
 	w.seq = s.config(w, "number_sequence", "quote.seq", map[string]any{"document_type": "quote", "prefix": "QT-", "width": 6,
 		"reset": "annual", "time_zone": "Asia/Shanghai"})
+	// S5R-D38: the regulation enables the country programme lists CNX evaluates against.
 	s.config(w, "screening_regulation", "screening", map[string]any{"lists": []any{map[string]any{"list_code": "cn.uel", "jurisdiction": "CN"}},
-		"rescreen_interval_days": 30})
+		"rescreen_interval_days": 30, "programmes": []any{map[string]any{"list_code": cnProgrammes, "jurisdiction": "CN"},
+			map[string]any{"list_code": unProgrammes, "jurisdiction": "UN"}}})
 }
 
 func (s *setupRun) front(w *world) {

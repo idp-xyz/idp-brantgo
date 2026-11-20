@@ -9,8 +9,14 @@
 // its releases', and Σ outstanding never exceeds the licensed quantity or value. Every allocation
 // and release moves the root's row version by one under its FOR UPDATE lock, so two allocations
 // that exceed the licence together are serialized and the second is refused. A release rests on an
-// external result only (an amended or withdrawn declaration receipt): there is no release on a
-// local cancellation (MD-44: "凭本地取消恢复已申报用量" is forbidden).
+// external result (an amended or withdrawn declaration receipt), or, S5R-D03, on the local
+// cancellation of a target never declared (MD-44 forbids only restoring declared usage that way).
+//
+// S5R-D04 (one licence per declaration): a licence states its usage mode — single_use (一批一证,
+// the legal mode of dual-use licences and the default: one live allocation, none once declared) or
+// multi_use — and its customs office (一证一关). A shipment needing two licences is split into
+// export lots, each allocated its own licence. A licence's goods or unit that are not the target's
+// are EXPORT_LICENSE_GOODS_MISMATCH (S5R registered it; B5 answered EXPORT_LICENSE_EXPIRED).
 package exportlicense
 
 import (
@@ -26,14 +32,16 @@ import (
 
 // Codes the domain decides with besides the kernel's, and their categories (error catalog V0.1).
 const (
-	CodeExportLicenseExceeded = "EXPORT_LICENSE_EXCEEDED"
-	CodeExportLicenseExpired  = "EXPORT_LICENSE_EXPIRED"
+	CodeExportLicenseExceeded      = "EXPORT_LICENSE_EXCEEDED"
+	CodeExportLicenseExpired       = "EXPORT_LICENSE_EXPIRED"
+	CodeExportLicenseGoodsMismatch = "EXPORT_LICENSE_GOODS_MISMATCH"
 )
 
 // Categories are the categories of the domain's own codes.
 var Categories = map[string]kernel.Category{
-	CodeExportLicenseExceeded: kernel.CategoryConflict,
-	CodeExportLicenseExpired:  kernel.CategoryConflict,
+	CodeExportLicenseExceeded:      kernel.CategoryConflict,
+	CodeExportLicenseExpired:       kernel.CategoryConflict,
+	CodeExportLicenseGoodsMismatch: kernel.CategoryConflict,
 }
 
 func reject(code, path, reason string) *kernel.Rejection {
@@ -59,6 +67,14 @@ const (
 
 	Allocated = "allocated"
 	Released  = "released"
+
+	// S5R-D04 usage modes.
+	SingleUse = "single_use"
+	MultiUse  = "multi_use"
+	// S5R-D03: the basis of a release, and the kind and source of one on a local cancellation.
+	ExternalResult    = "external_result"
+	LocalCancellation = "local_cancellation"
+	Cancelled         = "cancelled"
 )
 
 // Spec is a SKU specification revision.
@@ -106,6 +122,9 @@ type License struct {
 	Validity       kernel.ValidityInterval
 	FileID         string
 	FileSHA256     string
+	UsageMode      string     // S5R-D04: SingleUse or MultiUse
+	UsageEvidence  []Evidence // multi_use: the licence face that says so
+	CustomsOffice  string     // S5R-D04 一证一关; "" for a licence registered before
 	RowVersion     int64
 	RegisteredBy   kernel.ActorRef
 	Epoch          int64
@@ -133,14 +152,16 @@ func CheckVersion(l *License, expected int64) error {
 
 // Line is a line of an allocation's target: its SKU specification revision, quantity and unit, and,
 // for a licence by classification, the commodity code of the line's verified declaration profile
-// ("" when none is verified).
+// ("" when none is verified). ShipmentLineID is an export lot line's shipment line (S5R-D04: what
+// ExportLicenseGuard v1 covers of the shipment).
 type Line struct {
-	LineID        string
-	SkuID         string
-	SpecRevision  int64
-	Quantity      kernel.Decimal
-	Unit          kernel.UnitCode
-	CommodityCode string
+	LineID         string
+	SkuID          string
+	SpecRevision   int64
+	Quantity       kernel.Decimal
+	Unit           kernel.UnitCode
+	CommodityCode  string
+	ShipmentLineID string
 }
 
 // LinesHash is the hash an allocation records of the lines it covers (the published LinesHash of
@@ -158,7 +179,9 @@ func LinesHash(lines []Line) string {
 }
 
 // Target is what FUL says of a shipment or export lot an allocation covers: its version, order
-// revision, destination, end user, lines and value.
+// revision, destination, end user (and where it came from: stated, consignee or customer,
+// S5R-D40), lines and value, and the shipment it ships (S5R-D04: the lot's shipment, a shipment
+// itself; "" for an allocation made before).
 type Target struct {
 	Kind           string
 	ID             string
@@ -167,6 +190,8 @@ type Target struct {
 	OrderRevision  int64
 	Destination    string
 	EndUserPartyID string
+	EndUserSource  string
+	ShipmentID     string
 	Lines          []Line
 	Value          kernel.Money
 }
@@ -233,28 +258,46 @@ func UsageOf(l *License, allocations []*Allocation) (Usage, error) {
 	return u, err
 }
 
-// AllocateInput is an allocation as the command asks it.
+// AllocateInput is an allocation as the command asks it. Declared is whether an allocation of the
+// licence was declared (a declaration case covering its target submitted or later, or an amended
+// receipt released part of it; S5R-D04), which the caller reads under the licence's lock.
 type AllocateInput struct {
-	ID      string
-	Target  Target
-	Attempt int
-	By      kernel.ActorRef
-	Epoch   int64
-	At      time.Time
+	ID       string
+	Target   Target
+	Attempt  int
+	Declared bool
+	By       kernel.ActorRef
+	Epoch    int64
+	At       time.Time
 }
 
-// Allocate allocates l to in.Target (CNX-INV-002): l is valid at in.At, its destination and end
-// user are the target's and every line is goods it covers (EXPORT_LICENSE_EXPIRED otherwise), the
-// lines are in its unit and the value in its currency (INVALID_KNOWN_VALUE), and the outstanding
-// allocations with this one hold no more than the licensed quantity, then value
-// (EXPORT_LICENSE_EXCEEDED). The caller has locked l FOR UPDATE and read all its allocations.
+// Allocate allocates l to in.Target (CNX-INV-002): l is valid at in.At (EXPORT_LICENSE_EXPIRED
+// otherwise); a single_use licence holds no other live allocation and was never declared
+// (INVALID_STATE, S5R-D04); its destination and end user are the target's (EXPORT_LICENSE_EXPIRED);
+// every line is goods it covers, in its unit (EXPORT_LICENSE_GOODS_MISMATCH), the value in its
+// currency (INVALID_KNOWN_VALUE); and the outstanding allocations with this one hold no more than the
+// licensed quantity, then value (EXPORT_LICENSE_EXCEEDED). The caller has locked l FOR UPDATE and
+// read all its allocations.
 func Allocate(l *License, allocations []*Allocation, in AllocateInput) (*Allocation, error) {
 	t := in.Target
-	switch state := l.State(in.At); {
-	case state == NotYetValid:
+	switch l.State(in.At) {
+	case NotYetValid:
 		return nil, reject(CodeExportLicenseExpired, "/args/license_id", "The licence is not valid yet")
-	case state == Expired:
+	case Expired:
 		return nil, reject(CodeExportLicenseExpired, "/args/license_id", "The licence has expired")
+	}
+	if l.UsageMode == SingleUse {
+		for _, a := range allocations {
+			if a.Status() == Allocated {
+				return nil, kernel.Reject(kernel.CodeInvalidState, "/args/license_id", "The single_use licence is allocated to "+a.Target.Kind+" "+
+					a.Target.ID+" (一批一证)")
+			}
+		}
+		if in.Declared {
+			return nil, kernel.Reject(kernel.CodeInvalidState, "/args/license_id", "The single_use licence was declared (一批一证)")
+		}
+	}
+	switch {
 	case t.Destination != l.Destination:
 		return nil, reject(CodeExportLicenseExpired, "/args/target/id", "The target's destination "+t.Destination+" is not the licence's "+l.Destination)
 	case t.EndUserPartyID != l.EndUserPartyID:
@@ -265,10 +308,10 @@ func Allocate(l *License, allocations []*Allocation, in AllocateInput) (*Allocat
 	quantity := kernel.DecimalFromInt(0)
 	for _, line := range t.Lines {
 		if !l.covers(line) {
-			return nil, reject(CodeExportLicenseExpired, "/args/target/id", "Line "+line.LineID+"'s goods are not the licence's")
+			return nil, reject(CodeExportLicenseGoodsMismatch, "/args/target/id", "Line "+line.LineID+"'s goods are not the licence's")
 		}
 		if line.Unit != l.Unit {
-			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/target/id", "Line "+line.LineID+" is in "+string(line.Unit)+", the licence in "+string(l.Unit))
+			return nil, reject(CodeExportLicenseGoodsMismatch, "/args/target/id", "Line "+line.LineID+" is in "+string(line.Unit)+", the licence in "+string(l.Unit))
 		}
 		quantity = quantity.Add(line.Quantity)
 	}
@@ -310,12 +353,15 @@ type Evidence struct {
 	ContentSHA256 string `json:"content_sha256"`
 }
 
-// Release is a release entry: the external result it rests on and what it releases of its
+// Release is a release entry: the external result it rests on, or (Basis local_cancellation, Kind
+// cancelled, S5R-D03) the version of the target FUL cancelled, and what it releases of its
 // allocation.
 type Release struct {
 	ID                string
 	LicenseID         string
 	AllocationID      string
+	Basis             string
+	TargetVersion     int64
 	Kind              string
 	Source            string
 	ReceiptID         string
@@ -331,9 +377,13 @@ type Release struct {
 	At                time.Time
 }
 
-// ReleaseInput is a release as the command asks it: Quantity and Value for amended only.
+// ReleaseInput is a release as the command asks it: Quantity and Value for amended only. Basis
+// local_cancellation (S5R-D03) names TargetVersion, the cancelled target's version, instead of a
+// result.
 type ReleaseInput struct {
 	ID                string
+	Basis             string
+	TargetVersion     int64
 	Kind              string
 	ReceiptID         string // the declaration receipt recorded in CNX; "" for a stated result
 	DeclarationNumber string
@@ -353,6 +403,8 @@ type ReleaseInput struct {
 // names, never more than is outstanding (INVALID_STATE); an allocation with nothing outstanding is
 // not released again (INVALID_STATE). The result is a declaration receipt CNX recorded, or the
 // human's statement of a receipt with its evidence where no declaration in CNX covers the target.
+// On basis local_cancellation (S5R-D03) it releases everything outstanding; the caller has checked
+// that FUL cancelled the target and that no declaration of it was submitted.
 func ReleaseAllocation(a *Allocation, in ReleaseInput) (*Release, error) {
 	q, v, err := a.Outstanding()
 	if err != nil {
@@ -361,11 +413,16 @@ func ReleaseAllocation(a *Allocation, in ReleaseInput) (*Release, error) {
 	if q.Sign() <= 0 {
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/allocation_id", "Nothing of the allocation is outstanding")
 	}
+	if in.Basis == LocalCancellation {
+		return &Release{ID: in.ID, LicenseID: a.LicenseID, AllocationID: a.ID, Basis: LocalCancellation, TargetVersion: in.TargetVersion,
+			Kind: Cancelled, Source: LocalCancellation, Evidence: []Evidence{}, Quantity: q, Value: v, Reason: in.Reason, By: in.By, Epoch: in.Epoch,
+			At: kernel.Instant(in.At)}, nil
+	}
 	source := Stated
 	if in.ReceiptID != "" {
 		source = DeclarationReceipt
 	}
-	r := &Release{ID: in.ID, LicenseID: a.LicenseID, AllocationID: a.ID, Kind: in.Kind, Source: source, ReceiptID: in.ReceiptID,
+	r := &Release{ID: in.ID, LicenseID: a.LicenseID, AllocationID: a.ID, Basis: ExternalResult, Kind: in.Kind, Source: source, ReceiptID: in.ReceiptID,
 		DeclarationNumber: in.DeclarationNumber,
 		ReceiptText:       in.ReceiptText, ReceivedAt: kernel.Instant(in.ReceivedAt), Evidence: in.Evidence, Quantity: q, Value: v, Reason: in.Reason,
 		By: in.By, Epoch: in.Epoch, At: kernel.Instant(in.At)}

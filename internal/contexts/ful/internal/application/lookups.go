@@ -12,10 +12,15 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// priceFact is what TRD's ActiveOrderRef v1 says of the order's prices at its current revision.
-func priceFact(f trdapi.ActiveOrderFact) shipment.PriceFact {
-	out := shipment.PriceFact{CurrencyID: f.CurrencyRef.ID, CurrencyRevision: f.CurrencyRef.Revision, Lines: map[string]shipment.LinePriceFact{}}
-	for _, l := range f.Lines {
+// priceFact is what TRD's OrderRevisionRef v1 says of the order's prices at the revision the
+// shipment binds (S5R-D35): FUL keeps them with the shipment as the reconciliation value of its
+// documents. rev nil: no prices (the order is not intact for FUL).
+func priceFact(rev *trdapi.OrderRevisionFact) shipment.PriceFact {
+	if rev == nil {
+		return shipment.PriceFact{}
+	}
+	out := shipment.PriceFact{CurrencyID: rev.CurrencyRef.ID, CurrencyRevision: rev.CurrencyRef.Revision, Lines: map[string]shipment.LinePriceFact{}}
+	for _, l := range rev.Lines {
 		out.Lines[l.LineID] = shipment.LinePriceFact{UnitPrice: l.UnitPrice, NetMinor: l.NetMinor, TaxMinor: l.TaxMinor, PayableMinor: l.PayableMinor}
 	}
 	return out

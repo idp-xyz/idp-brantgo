@@ -35,7 +35,9 @@ func TestAPICodesAreTheRulesCodes(t *testing.T) {
 // purchase.commitment.decide, purchase.commitment.revoke, purchase.commitment.issue (A47 #2:
 // AI is PERMISSION_DENIED) and supplier_delivery.verify (PUR-INV-008: 经授权人工核实); the command
 // catalog, SM-PUR-COMMITMENT and ES-12 let a human or an AI request a commitment, record a supplier
-// confirmation and record a supplier delivery, never a system actor.
+// confirmation and record a supplier delivery, never a system actor. S5R-D05 adds
+// purchase.commitment.dispose and purchase.commitment.disposition.decide to humanOnlyCommands
+// (PUR-INV-013: an AI agent's request is PERMISSION_DENIED).
 func TestHumanOnlyCommands(t *testing.T) {
 	policy, err := authorization.NewPolicy(Rules()...)
 	if err != nil {
@@ -43,7 +45,7 @@ func TestHumanOnlyCommands(t *testing.T) {
 	}
 	for _, c := range []string{api.CommandPrepareDraft, api.CommandVoidDraft, api.CommandDecideCommitment, api.CommandRevokeCommitment,
 		api.CommandIssueCommitment, api.CommandVerifySupplierDelivery, api.CommandDecideCommitmentChange, api.CommandApplyCommitmentChange,
-		api.CommandCancelCommitment} {
+		api.CommandCancelCommitment, api.CommandDisposeCommitment, api.CommandDecideDisposition} {
 		r, err := policy.Rule(c)
 		if err != nil || len(r.ActorKinds) != 1 || r.ActorKinds[0] != kernel.ActorHuman || r.Permission != c {
 			t.Errorf("%s: %+v, %v", c, r, err)
@@ -89,6 +91,9 @@ func TestRequestHashIgnoresKeyAndVersion(t *testing.T) {
 			api.DecideCommitmentChange{IdempotencyKey: "k2", ExpectedVersion: 2, Decision: "approve"}},
 		{api.ApplyCommitmentChange{IdempotencyKey: "k1", ChangeID: "x", ExpectedVersion: 2}, api.ApplyCommitmentChange{IdempotencyKey: "k2", ChangeID: "x", ExpectedVersion: 3}},
 		{api.CancelCommitment{IdempotencyKey: "k1", CommitmentID: "c", ExpectedVersion: 3}, api.CancelCommitment{IdempotencyKey: "k2", CommitmentID: "c", ExpectedVersion: 4}},
+		{api.DisposeCommitment{IdempotencyKey: "k1", DispositionID: "x", Quantity: "1"}, api.DisposeCommitment{IdempotencyKey: "k2", DispositionID: "x", Quantity: "1"}},
+		{api.DecideDisposition{IdempotencyKey: "k1", DispositionID: "x", ExpectedVersion: 1, Decision: "approve"},
+			api.DecideDisposition{IdempotencyKey: "k2", DispositionID: "x", ExpectedVersion: 2, Decision: "approve"}},
 	} {
 		na, ka, x := request(c.a)
 		nb, kb, y := request(c.b)

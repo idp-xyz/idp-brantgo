@@ -20,7 +20,7 @@ type Outcome string
 
 const (
 	NoMatch    Outcome = "no_match"   // complete facts, no programme or control finding applies
-	Match      Outcome = "match"      // at least one applying finding: compliance judges it
+	Match      Outcome = "match"      // at least one applying or region_review finding: compliance judges it
 	Incomplete Outcome = "incomplete" // a fact is missing: the check cannot conclude clear
 )
 
@@ -64,6 +64,10 @@ func GoodsOf(measure string) string {
 const (
 	FindingProgramme  = "programme_match" // a country examined is named by a programme
 	FindingControlled = "controlled_goods"
+	// A programme whose measure covers these goods affects only some regions (ISO 3166-2) of a
+	// country examined: whether the address lies in one is compliance's judgement, never the
+	// system's (S5R-D15; PTY's addresses carry no subdivision).
+	FindingRegionReview = "region_review"
 
 	GapDestinationUnknown       = "destination_unknown"   // no consignee address, or its country is unknown
 	GapDestinationAmbiguous     = "destination_ambiguous" // consignee addresses in different countries
@@ -138,7 +142,8 @@ type ListVersion struct {
 	ContentHash  string
 }
 
-// ProgrammeHit is a programme of a list version naming a country the evaluation asked about.
+// ProgrammeHit is a programme of a list version naming a country the evaluation asked about;
+// Regions are the regions of that country it is limited to (none: the whole country; S5R-D15).
 type ProgrammeHit struct {
 	ListCode     string
 	Jurisdiction string
@@ -149,6 +154,7 @@ type ProgrammeHit struct {
 	Measure      string
 	Scope        string
 	ContentHash  string
+	Regions      []string
 }
 
 // Regulation is the screening_regulation revision an evaluation follows (POL ConfigRef v1, R50):
@@ -286,7 +292,9 @@ type DocActor struct {
 
 // Finding is a candidate for the compliance decision: a programme naming a country the evaluation
 // examined (the destination or a party's), with the roles it matched, the goods its measure covers
-// and whether it applies to these goods, or a line with controlled goods.
+// and whether it applies to these goods, or a line with controlled goods. A programme limited to
+// Regions of the country is a region_review when its measure covers these goods (S5R-D15): it does
+// not apply by itself, compliance judges it from the address.
 type Finding struct {
 	Kind          string   `json:"kind"`
 	ListCode      string   `json:"list_code,omitempty"`
@@ -303,6 +311,7 @@ type Finding struct {
 	LineID        string   `json:"line_id,omitempty"`
 	ListReference string   `json:"list_reference,omitempty"`
 	Applies       bool     `json:"applies"`
+	Regions       []string `json:"regions,omitempty"`
 }
 
 // Gap is a missing fact: its kind and what it concerns (party/address, a line, a list code).
@@ -492,9 +501,16 @@ func Evaluate(in Input) (*Evaluation, error) {
 			continue
 		}
 		goods := GoodsOf(h.Measure)
-		doc.Findings = append(doc.Findings, Finding{Kind: FindingProgramme, ListCode: h.ListCode, Jurisdiction: h.Jurisdiction, Version: h.Version,
+		f := Finding{Kind: FindingProgramme, ListCode: h.ListCode, Jurisdiction: h.Jurisdiction, Version: h.Version,
 			ProgrammeID: h.ProgrammeID, ProgrammeName: h.Name, ProgrammeHash: h.ContentHash, Country: h.Country, Measure: h.Measure,
-			Goods: goods, Scope: h.Scope, Roles: slices.Clone(roles), Applies: goods == GoodsAll || controlled || unclassified})
+			Goods: goods, Scope: h.Scope, Roles: slices.Clone(roles), Applies: goods == GoodsAll || controlled || unclassified}
+		if len(h.Regions) > 0 {
+			f.Regions = slices.Sorted(slices.Values(h.Regions))
+			if f.Applies {
+				f.Kind, f.Applies = FindingRegionReview, false
+			}
+		}
+		doc.Findings = append(doc.Findings, f)
 	}
 	for _, l := range doc.Lines {
 		if l.Classification == Controlled {
@@ -507,7 +523,7 @@ func Evaluate(in Input) (*Evaluation, error) {
 	switch {
 	case len(doc.Gaps) > 0:
 		doc.Outcome = Incomplete
-	case slices.ContainsFunc(doc.Findings, func(f Finding) bool { return f.Applies }):
+	case slices.ContainsFunc(doc.Findings, func(f Finding) bool { return f.Applies || f.Kind == FindingRegionReview }):
 		doc.Outcome = Match
 	default:
 		doc.Outcome = NoMatch

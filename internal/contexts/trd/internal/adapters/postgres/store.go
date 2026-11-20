@@ -32,7 +32,8 @@ const (
 
 const rootColumns = `root_version, last_revision, owner_actor_id, coalesce(owner_team_id, ''), labels, internal_note, control_state,
 	control_epoch, coalesce(control_task_id, ''), coalesce(control_authority_epoch, 0), coalesce(control_by_kind, ''),
-	coalesce(control_by_id, ''), control_changed_at`
+	coalesce(control_by_id, ''), control_changed_at, coalesce(control_initiator_id, ''), coalesce(control_initiator_epoch, 0),
+	coalesce(control_agent_id, ''), coalesce(control_agent_epoch, 0)`
 
 // LoadRoot returns the root id without its revisions, or nil, unlocked: what visibility and the
 // object control fence of a replay need.
@@ -44,10 +45,12 @@ func loadRoot(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id
 	q := quote.New(id, "", "")
 	var state, byKind string
 	var changed *time.Time
+	d := &q.Control.Delegation
 	err := exec.QueryRow(ctx, `SELECT `+rootColumns+` FROM brant_trd.quote_root
 		WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3`+string(lock), string(scope.Tenant), string(scope.Company), id).
 		Scan(&q.RootVersion, &q.LastRevision, &q.OwnerActor, &q.OwnerTeam, &q.Labels, &q.InternalNote, &state, &q.Control.Epoch,
-			&q.Control.TaskID, &q.Control.AuthorityEpoch, &byKind, &q.Control.By.ID, &changed)
+			&q.Control.TaskID, &q.Control.AuthorityEpoch, &byKind, &q.Control.By.ID, &changed, &d.Initiator, &d.InitiatorEpoch, &d.Agent,
+			&d.AgentEpoch)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -133,8 +136,12 @@ func SaveQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, q
 	ctl := q.Control
 	var task, byKind, byID any
 	var authority, changed any
+	var initiator, initiatorEpoch, agent, agentEpoch any // the delegation (S4 D-5): NULL when unbound or bound before TRD 000009
 	if ctl.State != quote.Unbound {
 		task, authority = ctl.TaskID, ctl.AuthorityEpoch
+		if d := ctl.Delegation; d.Initiator != "" {
+			initiator, initiatorEpoch, agent, agentEpoch = d.Initiator, d.InitiatorEpoch, d.Agent, d.AgentEpoch
+		}
 	}
 	if ctl.Epoch > 0 {
 		byKind, byID, changed = string(ctl.By.Kind), ctl.By.ID, ctl.At
@@ -146,20 +153,22 @@ func SaveQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, q
 	if created {
 		_, err := exec.Exec(ctx, `INSERT INTO brant_trd.quote_root (tenant_id, company_id, quote_id, root_version, last_revision,
 			owner_actor_id, owner_team_id, labels, internal_note, control_state, control_epoch, control_task_id, control_authority_epoch,
-			control_by_kind, control_by_id, control_changed_at, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)`,
+			control_by_kind, control_by_id, control_changed_at, created_at, updated_at, control_initiator_id, control_initiator_epoch,
+			control_agent_id, control_agent_epoch)
+			VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17, $18, $19, $20, $21)`,
 			t, c, q.ID, q.RootVersion, q.LastRevision, q.OwnerActor, q.OwnerTeam, labels, q.InternalNote, string(ctl.State), ctl.Epoch,
-			task, authority, byKind, byID, changed, at)
+			task, authority, byKind, byID, changed, at, initiator, initiatorEpoch, agent, agentEpoch)
 		if err != nil {
 			return err
 		}
 	} else {
 		tag, err := exec.Exec(ctx, `UPDATE brant_trd.quote_root SET root_version = $4, last_revision = $5, labels = $6, internal_note = $7,
 			control_state = $8, control_epoch = $9, control_task_id = $10, control_authority_epoch = $11, control_by_kind = $12,
-			control_by_id = $13, control_changed_at = $14, updated_at = $15
+			control_by_id = $13, control_changed_at = $14, updated_at = $15, control_initiator_id = $18, control_initiator_epoch = $19,
+			control_agent_id = $20, control_agent_epoch = $21
 			WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3 AND root_version = $16 AND control_epoch = $17`,
 			t, c, q.ID, q.RootVersion, q.LastRevision, labels, q.InternalNote, string(ctl.State), ctl.Epoch, task, authority, byKind, byID,
-			changed, at, from, fromEpoch)
+			changed, at, from, fromEpoch, initiator, initiatorEpoch, agent, agentEpoch)
 		if err != nil {
 			return err
 		}

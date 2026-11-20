@@ -144,12 +144,17 @@ func (f Fulfilment) Any() bool {
 }
 
 // The kinds of PUR's objects DownstreamCommitments v1 (Context Map R71) lists against an order, and
-// the state of a commitment every line of which was verified delivered in full.
+// the state of a commitment every line of which was verified delivered in full. Since S5R-D05 PUR
+// also lists every approved disposition of delivered goods (KindCommitmentDisposition, with its
+// disposition: return_to_supplier, write_off or hold_for_reuse) and states each allocation net of
+// the approved dispositions of its line: TRD counts a row with a disposition as settled and never
+// subtracts a disposition from an allocation itself (R4 report: PUR nets it once).
 const (
-	KindPurchaseCommitment = "purchase_commitment"
-	KindPurchaseDraft      = "purchase_draft"
-	KindDemandAllocation   = "demand_allocation"
-	StateFulfilled         = "fulfilled"
+	KindPurchaseCommitment    = "purchase_commitment"
+	KindPurchaseDraft         = "purchase_draft"
+	KindDemandAllocation      = "demand_allocation"
+	KindCommitmentDisposition = "commitment_disposition"
+	StateFulfilled            = "fulfilled"
 )
 
 // Commitment is a downstream object made against the order that its end would leave without a

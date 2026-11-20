@@ -44,8 +44,9 @@ func inputs() Inputs {
 				PartyRevision: 1, AddressID: "ap"}}},
 		Releases: map[string]ReleaseFact{"rel.1": {ID: "rel.1", State: "granted", SubjectKind: SubjectCommitmentLine, Scope: scopeOf("commitment.1"),
 			Quantity: dec("600")}},
-		Deliveries: map[DeliveryRef]DeliveryFact{ref1: {Ref: ref1, Version: 1, Status: "verified", Scope: scopeOf("commitment.1"), Verified: dec("800")}},
-		Preparer:   merch, Epoch: 7, Team: "trade", Now: now,
+		Deliveries: map[DeliveryRef]DeliveryFact{ref1: {Ref: ref1, Version: 1, Status: "verified", Scope: scopeOf("commitment.1"), Verified: dec("800"),
+			Line: CommitmentLineTotals{Verified: dec("800")}}},
+		Preparer: merch, Epoch: 7, Team: "trade", Now: now,
 	}
 }
 
@@ -364,5 +365,54 @@ func TestUpstreamCodes(t *testing.T) {
 	}
 	if r := Reject(kernel.CodeVersionConflict, "/x", ""); r.Category != kernel.CategoryConflict {
 		t.Fatal(r.Category)
+	}
+}
+
+// S5R-D40 (R44, CNX-INV-002) and S5R-D18: shipment.prepare binds the order revision's notify party
+// (role notify, screened with the other parties) and the end user the request states (role end_user,
+// a confirmed PTY party at its latest confirmed revision, no address); a stated end user the preparer
+// does not read or that is not confirmed is REFERENCE_INVALID, one at an older revision
+// REFERENCE_STALE. A line records whether its quality release was granted on a concession.
+func TestS5RD40NotifyPartyAndEndUserAreParties(t *testing.T) {
+	in := inputs()
+	in.Order.Notify = &Party{Role: "notify", PartyID: "notify.1", PartyRevision: 2, AddressID: "office"}
+	r := in.Releases["rel.1"]
+	r.Concession = true
+	in.Releases["rel.1"] = r
+	in.EndUser = &PartyFact{PartyID: "enduser.1", Status: PartyConfirmed, Revision: 4}
+	req := request()
+	req.EndUser = &PartyRef{PartyID: "enduser.1", Revision: 4}
+	s, err := Prepare(req, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Parties) != 5 || s.Parties[3] != (Party{Role: RoleNotify, PartyID: "notify.1", PartyRevision: 2, AddressID: "office"}) ||
+		s.Parties[4] != (Party{Role: RoleEndUser, PartyID: "enduser.1", PartyRevision: 4}) || s.EndUser() == nil || s.EndUser().PartyID != "enduser.1" {
+		t.Fatalf("parties %+v", s.Parties)
+	}
+	if got := strings.Join(s.ScreenedParties(), " "); got != "customer.1 enduser.1 notify.1 payer.1" {
+		t.Fatalf("screened %s", got)
+	}
+	if !s.Lines[0].QualityConcession {
+		t.Fatal("the concession flag")
+	}
+	if s, err := Prepare(request(), inputs()); err != nil || s.EndUser() != nil || len(s.Parties) != 3 || s.Lines[0].QualityConcession {
+		t.Fatalf("no notify party, no end user %+v %v", s, err)
+	}
+	for _, c := range []struct {
+		name string
+		fact *PartyFact
+		want string
+	}{
+		{"not read", nil, "REFERENCE_INVALID /args/end_user_party"},
+		{"another party", &PartyFact{PartyID: "enduser.2", Status: PartyConfirmed, Revision: 4}, "REFERENCE_INVALID /args/end_user_party"},
+		{"not confirmed", &PartyFact{PartyID: "enduser.1", Status: "draft", Revision: 4}, "REFERENCE_INVALID /args/end_user_party"},
+		{"revised since", &PartyFact{PartyID: "enduser.1", Status: PartyConfirmed, Revision: 5}, "REFERENCE_STALE /args/end_user_party/revision"},
+	} {
+		in := inputs()
+		in.EndUser = c.fact
+		if _, err := Prepare(req, in); outcome(err) != c.want {
+			t.Errorf("%s: %s", c.name, outcome(err))
+		}
 	}
 }

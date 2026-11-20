@@ -1,0 +1,97 @@
+== D1 BRC-001
+  steps: 301 -> 301
+== d2a cn-at01.json result passed -> passed
+  requests: {'GET': 80, 'POST': 236} -> {'GET': 80, 'POST': 236}
+== d2a cn-at02.json result passed -> passed
+  requests: {'GET': 52, 'POST': 185} -> {'GET': 52, 'POST': 185}
+== d2a cn-at03.json result passed -> passed
+  requests: {'GET': 32, 'POST': 187} -> {'GET': 32, 'POST': 187}
+== d2a cn-at04.json result passed -> passed
+  requests: {'GET': 57, 'POST': 202} -> {'GET': 57, 'POST': 202}
+== d2a cn-at05.json result passed -> passed
+  requests: {'GET': 71, 'POST': 210} -> {'GET': 71, 'POST': 210}
+== d2a cn-at06.json result passed -> passed
+  requests: {'GET': 64, 'POST': 212} -> {'GET': 64, 'POST': 212}
+== d2a cn-at07.json result passed -> passed
+  requests: {'GET': 64, 'POST': 195} -> {'GET': 64, 'POST': 195}
+== d2a cn-at08.json result passed -> passed
+  - observed: 付款方不同: payer.X's 672.00 recorded; applying it to customer.1's receivable → PARTY_ENTITY_MISMATCH (The fund's party payer.X is not the statement's customer.1): pending, the receivable stays open 672.00
+  + observed: 付款方不同: payer.X's 672.00 recorded; applying it to customer.1's receivable → PARTY_ENTITY_MISMATCH (The payer payer.X is not the customer customer.1, nor a permitted payer of its trading profile: verify the third-party payment first (fund.verify_payer)): pending, the receivable stays open 672.00
+  requests: {'GET': 61, 'POST': 198} -> {'GET': 61, 'POST': 198}
+== d2a cn-at09.json result passed -> passed
+  requests: {'GET': 65, 'POST': 203} -> {'GET': 65, 'POST': 203}
+== d2a cn-at10.json result passed -> passed
+  + observed: the submission and approval papers are EVD sources tax.officer registers itself (S5R-D26: the tax_specialist template holds source.register)
+  - deviations: the tax bureau is a synthetic PTY party of role supplier (PTY has customer and supplier roles only); the submission and approval papers are EVD sources registered by admin (the tax_specialist template holds no source.register: D1's gap)
+  + deviations: the tax bureau is a synthetic PTY party of role supplier (PTY has customer and supplier roles only)
+  requests: {'GET': 61, 'POST': 218} -> {'GET': 61, 'POST': 218}
+== d2a cn-at11.json result passed -> passed
+  requests: {'GET': 73, 'POST': 207} -> {'GET': 73, 'POST': 207}
+== d2a cn-at12.json result passed -> passed
+  - observed: 政策变化: export.tax revision 2 (not_applicable) published on its professional review while lot.a's case is open under revision 1 (exempt_credit_refund)
+  + observed: 政策变化: export.tax revision 2 (exempt) published on its professional review while lot.a's case is open under revision 1 (exempt_credit_refund)
+  requests: {'GET': 57, 'POST': 200} -> {'GET': 57, 'POST': 200}
+== d2a cn-at13.json result passed -> passed
+  requests: {'GET': 58, 'POST': 203} -> {'GET': 58, 'POST': 203}
+== d2a cn-at14.json result passed -> passed
+  - observed: 缺件: certificate_of_origin listed missing with owner role documentation and due date 2026-12-13; bundle incomplete
+  + observed: 缺件: certificate_of_origin listed missing with owner role documentation and due date 2026-12-17; bundle incomplete
+  requests: {'GET': 62, 'POST': 204} -> {'GET': 62, 'POST': 204}
+== d2a cn-at15.json result passed -> passed
+  requests: {'GET': 58, 'POST': 197} -> {'GET': 58, 'POST': 197}
+== d2a cn-at16.json result passed -> passed
+  requests: {'GET': 68, 'POST': 222} -> {'GET': 68, 'POST': 222}
+== d2a cn-at17.json result passed -> passed
+  requests: {'GET': 59, 'POST': 196} -> {'GET': 59, 'POST': 196}
+== d2a cn-at18.json result passed -> passed
+  requests: {'GET': 57, 'POST': 196} -> {'GET': 57, 'POST': 196}
+== d2a cnat_matrix.json: new
+== d2a s5r-d20.json: new
+== d2a s5r-d22.json: new
+== d2a s5r-d23.json: new
+== d2b BT10.json result passed -> passed
+  figures.reservation_after_amendment: 'consumed' -> 'released superseded'
+  figures.reservation_carried_over: None -> 'r2 consumed carried_over from res.order.1 60480'
+  requests: 257 -> 258
+== d2b BT12.json result passed -> passed
+  requests: 237 -> 237
+== d2b BT18-BT24.json result passed -> passed
+  requests: 285 -> 285
+== d2b BT21.json result passed -> passed
+  figures.release_the_frozen_24_after_recheck: None -> 'granted'
+  figures.revocation_shipped_frozen: None -> '24 24'
+  figures.shipment_3_release: None -> 'granted'
+  figures.shipped_after_recheck: None -> 'L4 48, 48 in all'
+  figures.subject_L4: 'conforming 48 released 48 releasable 0' -> 'conforming 48 released 48 frozen 24 releasable 0'
+  figures.subject_L4_after_recheck: None -> 'conforming 48 released 24 frozen 0 releasable 24'
+  + unit_tests: TestFrozenQuantityReleasedAgainAfterReinspectionBT21 (R5)
+  + unit_tests: TestFrozenQuantityReleasedAgainAfterReinspection (R5)
+  title: 放行后部分出运再撤回 (BT21): the unshipped rest frozen, the shipped kept, a repeated revoke deducts nothing -> 放行后部分出运再撤回 (BT21): the unshipped rest frozen, the shipped kept, a repeated revoke deducts nothing; the frozen rest released again after a re-inspection (S5R-D18)
+  requests: 228 -> 237
+== d2b PUR-CANCEL.json result passed -> passed
+  requests: 221 -> 221
+== d2b S-A.json result passed -> passed
+  requests: 179 -> 179
+== d2b S-B.json result passed -> passed
+  requests: 164 -> 164
+== d2b S5R-D03.json: new
+== d2b S5R-D04.json: new
+== d2b S5R-D05.json: new
+== d2b S5R-D10.json: new
+== d2b S5R-D19.json: new
+== d2b SC-08.json result passed -> passed
+  requests: 248 -> 248
+== d2b SC-09.json result passed -> passed
+  requests: 157 -> 157
+== d2b SIM-02.json result passed -> passed
+  figures.exposure_after_amendment: '1620000' -> '1528000'
+  requests: 200 -> 200
+== d2b STL-CROSS-CURRENCY.json result passed -> passed
+  requests: 245 -> 245
+== d2b STL-REVERSAL.json result passed -> passed
+  requests: 243 -> 243
+== d2b TD-AT13.json result passed -> passed
+  requests: 167 -> 170
+== d2b TD-AT14.json result passed -> passed
+  requests: 223 -> 223
+== d2b s5_scenarios.json: new

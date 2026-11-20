@@ -36,6 +36,8 @@ import (
 //	            Port of loading: <UN/LOCODE> | Port of discharge: <UN/LOCODE>          ("-" for none)
 //	lines       Lines (amounts in <currency>):                                          (CI)
 //	            <line_id> | <sku_id> r<spec> | <name> | <quantity> <unit> | price <unit price> | net <amount> | tax <amount> | total <amount>
+//	            (S5R-D35: "price <unit price> per <basis> <unit>" when the price basis quantity is not 1, and
+//	            "| discount <ratio>" after it when the discount ratio is not 0)
 //	packages    Packages (per carton):                                                  (PL)
 //	            <from>-<to> | <cartons> ctns | <line_id> <sku_id> <name> <quantity per carton> <unit>[; ...] | N.W. <kg> kg | G.W. <kg> kg | <cbm> cbm
 //	totals      Currency: <code>                                                        (CI)
@@ -62,7 +64,7 @@ type labels struct {
 	seller, registration, country, buyer, consignee, notify, sameAsConsignee           string
 	number, version, documentSet, shipment, order, orderHash, date                     string
 	booking, noBooking, vessel, voyage, etd, loading, discharge                        string
-	linesHead, price, net, tax, total, packagesHead, ctns, nw, gw, cbm                 string
+	linesHead, price, per, discount, net, tax, total, packagesHead, ctns, nw, gw, cbm  string
 	currency, quantity, netTotal, taxTotal, totalTotal, cartons, nwTotal, gwTotal, vol string
 	terms, namedPlace, payment, days, marks, clauses, signatures, sellerSign           string
 	sep                                                                                string
@@ -74,8 +76,9 @@ var layouts = map[string]labels{
 		notify: "Notify: ", sameAsConsignee: "Notify: same as consignee", number: "Number: ", version: "Version: ", documentSet: "Document set: ",
 		shipment: "Shipment: ", order: "Order: ", orderHash: "Order SHA-256: ", date: "Date: ", booking: "Booking: ", noBooking: "Booking: none",
 		vessel: "Vessel: ", voyage: "Voyage: ", etd: "ETD: ", loading: "Port of loading: ", discharge: "Port of discharge: ",
-		linesHead: "Lines (amounts in %s):", price: "price ", net: "net ", tax: "tax ", total: "total ", packagesHead: "Packages (per carton):",
-		ctns: " ctns", nw: "N.W. ", gw: "G.W. ", cbm: " cbm", currency: "Currency: ", quantity: "Quantity: ", netTotal: "Net: ", taxTotal: "Tax: ",
+		linesHead: "Lines (amounts in %s):", price: "price ", per: " per ", discount: "discount ", net: "net ", tax: "tax ", total: "total ",
+		packagesHead: "Packages (per carton):",
+		ctns:         " ctns", nw: "N.W. ", gw: "G.W. ", cbm: " cbm", currency: "Currency: ", quantity: "Quantity: ", netTotal: "Net: ", taxTotal: "Tax: ",
 		totalTotal: "Total: ", cartons: "Cartons: ", nwTotal: "N.W.: ", gwTotal: "G.W.: ", vol: "Volume: ", terms: "Terms: ",
 		namedPlace: "Named place: ", payment: "Payment: ", days: " days", marks: "Marks:", clauses: "Clauses:",
 		signatures: "Signatures (this generated copy is unsigned; signed or stamped copies are recorded as evidence):", sellerSign: "Seller: ",
@@ -83,7 +86,8 @@ var layouts = map[string]labels{
 	LanguageZhCN: {seller: "卖方：", registration: "注册号：", country: "国家：", buyer: "买方：", consignee: "收货人：", notify: "通知方：",
 		sameAsConsignee: "通知方：同收货人", number: "编号：", version: "版本：", documentSet: "单证套：", shipment: "出运：", order: "订单：",
 		orderHash: "订单 SHA-256：", date: "日期：", booking: "订舱号：", noBooking: "订舱号：无", vessel: "船名：", voyage: "航次：",
-		etd: "预计开航：", loading: "装运港：", discharge: "目的港：", linesHead: "明细（金额币种 %s）：", price: "单价 ", net: "净额 ",
+		etd: "预计开航：", loading: "装运港：", discharge: "目的港：", linesHead: "明细（金额币种 %s）：", price: "单价 ", per: " 每 ",
+		discount: "折扣 ", net: "净额 ",
 		tax: "税额 ", total: "合计 ", packagesHead: "包装（每箱）：", ctns: " 箱", nw: "净重 ", gw: "毛重 ", cbm: " 立方米",
 		currency: "币种：", quantity: "数量：", netTotal: "净额：", taxTotal: "税额：", totalTotal: "合计：", cartons: "箱数：", nwTotal: "净重：",
 		gwTotal: "毛重：", vol: "体积：", terms: "贸易术语：", namedPlace: "指定地点：", payment: "付款：", days: "", marks: "唛头：",
@@ -167,9 +171,17 @@ func section(l labels, t Template, c *Content, name string) string {
 	case "lines":
 		out := []string{strings.Replace(l.linesHead, "%s", currencyCode(c), 1)}
 		for _, x := range c.Lines {
-			out = append(out, strings.Join([]string{x.LineID, x.SkuID + " r" + strconv.FormatInt(x.SpecRevision, 10), x.Names[t.Language],
-				x.Quantity + " " + x.UnitID, l.price + x.UnitPrice, l.net + amount(c, x.NetMinor), l.tax + amount(c, x.TaxMinor),
-				l.total + amount(c, x.PayableMinor)}, l.sep))
+			price := []string{l.price + x.UnitPrice}
+			if x.PriceBasisQuantity != "" {
+				price[0] += l.per + x.PriceBasisQuantity + " " + x.UnitID
+			}
+			if x.DiscountRatio != "" {
+				price = append(price, l.discount+x.DiscountRatio)
+			}
+			cells := append([]string{x.LineID, x.SkuID + " r" + strconv.FormatInt(x.SpecRevision, 10), x.Names[t.Language], x.Quantity + " " + x.UnitID},
+				price...)
+			out = append(out, strings.Join(append(cells, l.net+amount(c, x.NetMinor), l.tax+amount(c, x.TaxMinor), l.total+amount(c, x.PayableMinor)),
+				l.sep))
 		}
 		return strings.Join(out, "\n")
 	case "packages":

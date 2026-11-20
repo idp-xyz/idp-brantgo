@@ -46,7 +46,9 @@ var (
 // Rules is PUR's authorization policy. The tactical model's humanOnlyCommands name
 // purchase.draft.prepare, purchase.draft.void, purchase.commitment.decide, purchase.commitment.revoke,
 // purchase.commitment.issue, supplier_delivery.verify, purchase.commitment.change.decide,
-// purchase.commitment.change.apply, purchase.commitment.cancel and allocation_review.settle;
+// purchase.commitment.change.apply, purchase.commitment.cancel, allocation_review.settle,
+// purchase.commitment.dispose and purchase.commitment.disposition.decide (S5R-D05; PUR-INV-013: an AI
+// agent's request is PERMISSION_DENIED);
 // purchase.commitment.request, purchase.supplier_confirmation.record, supplier_delivery.record and
 // purchase.commitment.change.prepare are human or AI (command catalog, SM-PUR-COMMITMENT,
 // SM-PUR-COMMITMENT-CHANGE, ES-12); allocation_review.open is the system's
@@ -69,6 +71,8 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandCancelCommitment, api.CommandCancelCommitment),
 		{Command: api.CommandOpenAllocationReview, Permission: api.CommandOpenAllocationReview, ActorKinds: []kernel.ActorKind{kernel.ActorSystem}},
 		authorization.HumanOnly(api.CommandSettleAllocationReview, api.CommandSettleAllocationReview),
+		authorization.HumanOnly(api.CommandDisposeCommitment, api.CommandDisposeCommitment),
+		authorization.HumanOnly(api.CommandDecideDisposition, api.CommandDecideDisposition),
 		{Command: api.CommandGetDraft, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetAllocations, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetCommitment, Permission: api.PermissionRead, ActorKinds: anyActor},
@@ -129,6 +133,14 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	if slices.Contains(reviewCmds, command) {
 		r, err := postgres.LoadReview(ctx, exec, sc, id, postgres.NoLock)
 		return err == nil && r != nil, err
+	}
+	if slices.Contains(dispositionCmds, command) {
+		cid, err := postgres.DispositionCommitment(ctx, exec, sc, id)
+		if err != nil || cid == "" {
+			return false, err
+		}
+		c, err := postgres.LoadCommitment(ctx, exec, sc, cid, postgres.NoLock)
+		return err == nil && c != nil && d.Sees(c.OwnerActor, c.OwnerTeam), err
 	}
 	if slices.Contains(changeCmds, command) {
 		cid, err := postgres.ChangeCommitment(ctx, exec, sc, id)
@@ -213,6 +225,12 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.SettleAllocationReview:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandSettleAllocationReview, key, c
+	case api.DisposeCommitment:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandDisposeCommitment, key, c
+	case api.DecideDisposition:
+		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
+		return api.CommandDecideDisposition, key, c
 	}
 	return "", "", nil
 }

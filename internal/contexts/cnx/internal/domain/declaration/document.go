@@ -32,6 +32,9 @@ type Document struct {
 	PreparedBy       DocActor       `json:"prepared_by"`
 	AuthorityEpoch   int64          `json:"authority_epoch"`
 	PreparedAt       string         `json:"prepared_at"`
+	// CustomsOffice is the customs office declared at (申报地海关; S5R-D04 一证一关), "" when not
+	// stated; omitted then, so versions stored before keep their bytes.
+	CustomsOffice string `json:"customs_office,omitempty"`
 }
 
 // DocLot is the export lot as FUL showed it.

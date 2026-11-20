@@ -145,7 +145,9 @@ type adoption struct{ Status, Code, Input string }
 // for the cost snapshot (recorded, never blocking: R21), POL's ConfigGuard v1 for each
 // configuration, PTY's PartyGuard v1 for the supplier at the row version the supply conditions bind
 // (with the supplier role), SUP's SupplyConditionGuard v1 for each supply condition revision (its
-// dependent source offer included) and TRD's OrderGuard v1 for the order at its revision and hash.
+// dependent source offer included; for a decrease-only commitment change its verdict that the
+// condition lapsed — not current or expired — is no refusal, S5R-D41) and TRD's OrderGuard v1 for the
+// order at its revision and hash.
 // Each locks its rows FOR SHARE until PUR commits, so an upstream change either committed first and
 // is refused here, or waits. A configuration or supply condition whose content hash moved since the
 // lookup is REFERENCE_STALE.
@@ -213,7 +215,7 @@ func (s Service) guard(ctx context.Context, exec bentopg.Executor, p *draft.Prep
 		if err != nil {
 			return adoption{}, err
 		}
-		if err = v.Check(use.Path); err != nil {
+		if err = v.Check(use.Path); err != nil && (!p.DecreaseOnly || !v.Known || !draft.Lapsed(err)) {
 			return adoption{}, err
 		}
 		if v.ContentHash != use.ContentHash {

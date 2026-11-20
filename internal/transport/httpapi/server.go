@@ -42,6 +42,9 @@ type (
 	EVD interface {
 		evdapi.Commands
 		evdapi.Queries
+		evdapi.ExtractQueries
+		evdapi.Reconciler
+		evdapi.ActionReconciler
 		evdapi.Auditor
 	}
 	PTY interface {
@@ -64,6 +67,7 @@ type (
 		inqapi.Commands
 		inqapi.Queries
 		inqapi.Reconciler
+		inqapi.ActionReconciler
 		inqapi.Auditor
 	}
 	REF interface {
@@ -99,6 +103,8 @@ type Config struct {
 	STL      STL
 	CNX      CNX
 	FUL      FUL
+	TSK      TSK // S4, optional as well: TSK's commands and reads
+	AI       AI  // S4, optional: the AI layer's commands and reads and the task-step route (unit C3)
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -144,6 +150,12 @@ func New(cfg Config) (http.Handler, error) {
 	if cfg.FUL != nil {
 		s.contexts["ful"] = fulCommands(cfg.FUL)
 	}
+	if cfg.TSK != nil {
+		s.contexts["tsk"] = tskCommands(cfg.TSK)
+	}
+	if cfg.AI != nil {
+		s.contexts["ai"] = aiCommands(cfg.AI)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/", "no such route"))
@@ -159,6 +171,7 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	mux.Handle("GET /api/brant/v1/evd/sources/{id}", s.authenticated(read(s, cfg.EVD.GetSource, sourceView)))
 	mux.Handle("GET /api/brant/v1/evd/files/{id}", s.authenticated(read(s, cfg.EVD.GetFile, fileView)))
+	mux.Handle("GET /api/brant/v1/evd/sources/{id}/extract", s.authenticated(read(s, cfg.EVD.GetExtract, extractView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}", s.authenticated(read(s, cfg.PTY.GetParty, partyView)))
 	mux.Handle("GET /api/brant/v1/pty/parties/{id}/screening", s.authenticated(read(s, cfg.PTY.GetScreening, okView[ptyapi.ScreeningView])))
 	mux.Handle("GET /api/brant/v1/pty/screenings/due", s.authenticated(s.screeningsDue))
@@ -190,6 +203,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check", s.authenticated(s.approvalCheck))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/document", s.authenticated(s.formalDocument))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/ready", s.authenticated(s.quoteReady))
+	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/goal_readiness", s.authenticated(s.goalReadiness))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/history", s.authenticated(quoteHistory(s, cfg.TRD.QuoteHistory)))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/approvals", s.authenticated(quoteHistory(s, cfg.TRD.ApprovalHistory)))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/documents", s.authenticated(quoteHistory(s, cfg.TRD.DocumentHistory)))
@@ -201,6 +215,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/trd/orders/{id}/check", s.authenticated(s.orderCheck))
 	mux.Handle("GET /api/brant/v1/trd/orders/{id}/snapshot", s.authenticated(read(s, cfg.TRD.GetOrderSnapshot, okView[trdapi.OrderSnapshotFact])))
 	mux.Handle("GET /api/brant/v1/trd/orders/{id}/revisions/{revision}/documents/{kind}", s.authenticated(s.orderDocument))
+	mux.Handle("GET /api/brant/v1/trd/rfqs/{id}/price_proposal", s.authenticated(s.priceProposal))
 	mux.Handle("GET /api/brant/v1/trd/customer_responses/{id}", s.authenticated(read(s, cfg.TRD.GetCustomerResponse, okView[trdapi.CustomerResponseView])))
 	mux.Handle("GET /api/brant/v1/trd/acceptances/{id}", s.authenticated(read(s, cfg.TRD.GetAcceptance, okView[trdapi.AcceptanceView])))
 	mux.Handle("GET /api/brant/v1/pur/purchase_drafts/{id}", s.authenticated(read(s, cfg.PUR.GetDraft, okView[purapi.DraftView])))
@@ -230,6 +245,12 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.FUL != nil {
 		s.fulRoutes(mux)
+	}
+	if cfg.TSK != nil {
+		s.tskRoutes(mux)
+	}
+	if cfg.AI != nil {
+		s.aiRoutes(mux)
 	}
 	return s.correlated(mux), nil
 }

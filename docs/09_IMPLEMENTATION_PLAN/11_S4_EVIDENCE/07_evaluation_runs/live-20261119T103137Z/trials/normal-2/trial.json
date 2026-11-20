@@ -1,0 +1,558 @@
+{
+  "family": "normal",
+  "trial": 2,
+  "trial_id": "normal-2",
+  "design": [
+    "BRC-001",
+    "BC-AT27",
+    "BC-AT28",
+    "D-2",
+    "D-7",
+    "AI-INV-002",
+    "AI-INV-004",
+    "TSK-INV-001"
+  ],
+  "goal": "Q01 from the customer's inquiry file to an active order",
+  "input": {
+    "kind": "xlsx",
+    "file": "inquiry.xlsx",
+    "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "bytes": 2010,
+    "sha256": "ea129ecdc09874bf21f03ee12ff968c3a992bff6886ebed89c7aad62160bfcee"
+  },
+  "expected": "completed, completion actor ai_with_required_review; order active, prepared by the agent with two approval grants; quote 960.00 USD",
+  "outcome": "completed/ai_with_required_review",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "completed",
+  "completion_actor": "ai_with_required_review",
+  "goal_completed": true,
+  "automation": "required_review_only",
+  "assertions": [
+    {
+      "name": "BC-AT27: the agent's locators stand in the extract",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "quote root bound to the task",
+      "want": "bound quote.q01",
+      "got": "bound quote.q01",
+      "pass": true
+    },
+    {
+      "name": "TSK lifecycle",
+      "want": "completed",
+      "got": "completed",
+      "pass": true
+    },
+    {
+      "name": "TSK completion actor",
+      "want": "ai_with_required_review",
+      "got": "ai_with_required_review",
+      "pass": true
+    },
+    {
+      "name": "TSK last verification",
+      "want": "satisfied",
+      "got": "satisfied",
+      "pass": true
+    },
+    {
+      "name": "TSK actions settled",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    },
+    {
+      "name": "TRD goal readiness order_active",
+      "want": "satisfied",
+      "got": "satisfied",
+      "pass": true
+    },
+    {
+      "name": "TRD order status",
+      "want": "active",
+      "got": "active",
+      "pass": true
+    },
+    {
+      "name": "TRD order prepared by",
+      "want": "ai:agent.q01",
+      "got": "ai:agent.q01",
+      "pass": true
+    },
+    {
+      "name": "TRD active revision 1 payable (minor units)",
+      "want": "96000",
+      "got": "96000",
+      "pass": true
+    },
+    {
+      "name": "approval grants issued by the owner",
+      "want": "2",
+      "got": "2",
+      "pass": true
+    },
+    {
+      "name": "committed order.prepare actions",
+      "want": "1",
+      "got": "1",
+      "pass": true
+    },
+    {
+      "name": "approval waits recorded as waiting",
+      "want": "2",
+      "got": "2",
+      "pass": true
+    },
+    {
+      "name": "no approval wait recorded as GRANT_INVALID",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    },
+    {
+      "name": "INQ corrections",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": [
+      "evd/source.register committed src.inquiry.q01 attempts=1 by agent.q01",
+      "inq/rfq.save_draft committed rfq.q01 attempts=1 by agent.q01",
+      "inq/rfq.confirm_scope committed rfq.q01 attempts=1 by clerk.1",
+      "trd/quote.save_draft committed quote.q01 attempts=1 by agent.q01",
+      "trd/quote.freeze committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.submit_review committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.review.decide committed quote.q01 attempts=1 by quote.reviewer",
+      "trd/quote.activate committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.response.record committed resp.q01.1 attempts=1 by agent.q01",
+      "trd/quote.response.verify committed acceptance.q01 attempts=1 by clerk.1",
+      "trd/order.prepare committed order.q01 attempts=1 by agent.q01",
+      "trd/order.review.request committed order.q01 attempts=1 by agent.q01",
+      "trd/order.review.decide committed order.q01 attempts=1 by order.reviewer",
+      "trd/order.activate committed order.q01 attempts=1 by clerk.1"
+    ],
+    "approval_grants": [
+      "grant.1 order.prepare quote.q01@1 used",
+      "grant.2 order.review.request order.q01@1 used"
+    ],
+    "binding": {
+      "bound_at": "2026-11-19T10:42:30.249585Z",
+      "control_epoch": 1,
+      "quote_id": "quote.q01",
+      "state": "bound"
+    },
+    "control_epoch": 1,
+    "control_mode": "ai",
+    "delegation_status": "active",
+    "extract": {
+      "characters": 334,
+      "extract_sha256": "6853a90b25af149064a32caa84e4c721b3b84eb33962f3b902b5a3a6f6c411f5",
+      "extractor": "brant.ingest.xlsx/1",
+      "file_sha256": "ea129ecdc09874bf21f03ee12ff968c3a992bff6886ebed89c7aad62160bfcee",
+      "kind": "xlsx"
+    },
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.bind_object running→running system:system:ai.runner",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.wait running→waiting_approval system:system:ai.runner",
+      "task.resume waiting_approval→running system:system:ai.runner",
+      "task.wait running→waiting_approval system:system:ai.runner",
+      "task.resume waiting_approval→running system:system:ai.runner",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:inbox.tsk.task_progress",
+      "task.verify running→verifying system:inbox.tsk.task_progress",
+      "goal.verify verifying→completed system:system:ai.runner"
+    ],
+    "open_actions": 0,
+    "order_prepared_by": "ai:agent.q01",
+    "order_status": "active",
+    "pause_cause": "",
+    "pause_reason": "",
+    "prepared_order": "order.q01",
+    "proposals_read": 2,
+    "quote_control": {
+      "agent_id": "agent.q01",
+      "changed_at": "2026-11-19T10:42:30.239505Z",
+      "changed_by": {
+        "id": "system:ai.runner",
+        "kind": "system"
+      },
+      "control_epoch": 1,
+      "initiator_id": "clerk.1",
+      "state": "bound",
+      "task_id": "task.q01"
+    },
+    "quote_revision_1_payable_minor": "96000",
+    "recorded_response": "resp.q01.1",
+    "registered_source": {
+      "file_id": "file.inquiry",
+      "learned_from": "the task's committed source.register action (TSK) and EVD's read of its source",
+      "registered_by": {
+        "id": "agent.q01",
+        "kind": "ai"
+      },
+      "source_id": "src.inquiry.q01",
+      "source_kind": "file_extract"
+    },
+    "rfq_lines": [
+      "L1:ai:agent.q01",
+      "L2:ai:agent.q01",
+      "L3:ai:agent.q01",
+      "L4:ai:agent.q01"
+    ],
+    "rfq_status": "ready",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 22,
+    "wait": null
+  },
+  "corrections": null,
+  "owner_resolutions": null,
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "rfq.confirm_scope",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "buyer",
+      "command": "costing (supplier RFQ, offers, costing context, scenario)",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "cost.checker",
+      "command": "cost_snapshot.freeze",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.freeze",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.submit_review",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "quote.reviewer",
+      "command": "quote.review.decide",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.activate",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "source.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.response.verify",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.approval_grant.issue",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.approval_grant.issue",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "order.reviewer",
+      "command": "order.review.decide",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "compliance",
+      "command": "trade_compliance.evaluate",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "compliance",
+      "command": "trade_compliance.decide",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "credit.reserve",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "order.activate",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    }
+  ],
+  "cost": {
+    "model_calls": 24,
+    "tool_calls": 37,
+    "retries": 0,
+    "failed_calls": 1,
+    "unavailable_calls": 0,
+    "input_tokens": 207633,
+    "output_tokens": 8190,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": [
+      "strata.local.v1"
+    ],
+    "model_returned": [
+      "qwen3.8-flash-next-iq3_xxs"
+    ]
+  },
+  "phases": [
+    {
+      "name": "rfq",
+      "script_steps": 2,
+      "model_calls": 6,
+      "tool_calls": 10,
+      "writes": 2,
+      "lifecycle_after": "waiting_input",
+      "seconds": 132.47,
+      "started_at": "2026-11-19T10:39:50.485729896Z",
+      "timeout": "25m0s",
+      "trace": "trace/01-rfq"
+    },
+    {
+      "name": "quote",
+      "script_steps": 3,
+      "model_calls": 7,
+      "tool_calls": 14,
+      "writes": 1,
+      "lifecycle_after": "waiting_input",
+      "seconds": 32.32,
+      "started_at": "2026-11-19T10:42:03.504778872Z",
+      "timeout": "25m0s",
+      "trace": "trace/02-quote"
+    },
+    {
+      "name": "response",
+      "script_steps": 2,
+      "model_calls": 4,
+      "tool_calls": 4,
+      "writes": 1,
+      "lifecycle_after": "waiting_input",
+      "seconds": 10.78,
+      "started_at": "2026-11-19T10:42:36.297360905Z",
+      "timeout": "25m0s",
+      "trace": "trace/03-response"
+    },
+    {
+      "name": "order",
+      "script_steps": 3,
+      "model_calls": 7,
+      "tool_calls": 9,
+      "writes": 2,
+      "lifecycle_after": "waiting_input",
+      "seconds": 13.16,
+      "started_at": "2026-11-19T10:42:47.236911902Z",
+      "timeout": "25m0s",
+      "trace": "trace/04-order"
+    },
+    {
+      "name": "verify",
+      "script_steps": 1,
+      "model_calls": 0,
+      "tool_calls": 0,
+      "writes": 0,
+      "lifecycle_after": "completed",
+      "seconds": 0.32,
+      "started_at": "2026-11-19T10:43:00.73494678Z",
+      "timeout": "25m0s",
+      "trace": "trace/05-verify"
+    }
+  ],
+  "verifications": [
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NOT_FOUND"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope",
+        "Q01.quote",
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.document",
+        "Q01.industry",
+        "Q01.acceptance",
+        "Q01.order"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NO_ACTIVE_REVISION",
+        "Q01.quote unsatisfied NO_ACTIVE_REVISION",
+        "Q01.lines unsatisfied ORDER_MISSING",
+        "Q01.approval unsatisfied ORDER_MISSING",
+        "Q01.document unsatisfied NO_ACTIVE_REVISION",
+        "Q01.industry unsatisfied NO_ACTIVE_REVISION",
+        "Q01.acceptance unsatisfied ORDER_MISSING",
+        "Q01.order unsatisfied ORDER_MISSING"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.acceptance",
+        "Q01.order"
+      ],
+      "unmet_codes": [
+        "Q01.lines unsatisfied ORDER_MISSING",
+        "Q01.approval unsatisfied ORDER_MISSING",
+        "Q01.acceptance unsatisfied ORDER_MISSING",
+        "Q01.order unsatisfied ORDER_MISSING"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.approval",
+        "Q01.order"
+      ],
+      "unmet_codes": [
+        "Q01.approval unsatisfied ORDER_APPROVAL_REQUIRED",
+        "Q01.order unsatisfied ORDER_NOT_ACTIVE"
+      ]
+    },
+    {
+      "code": null,
+      "lifecycle": "completed",
+      "outcome": "satisfied",
+      "unmet": null,
+      "unmet_codes": null
+    }
+  ],
+  "budget": {
+    "max_model_calls": 40,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 193.06,
+  "notes": [
+    "the approver read the proposal agp.9d64824b1547e724876e70f06d772c0b20b254a5 before the grant: order.prepare on order.q01",
+    "the approver read the proposal agp.df318b58b75641279c0d1e660306ce4e032ce6fd before the grant: order.review.request on order.q01"
+  ]
+}

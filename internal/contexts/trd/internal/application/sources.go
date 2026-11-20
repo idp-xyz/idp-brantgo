@@ -16,8 +16,9 @@ import (
 // Map R16's risk; Python test_t04_a45 test_source_revocation_blocks_query_both_replays_and_both_hashes
 // and test_source_scope_change_is_rechecked_independently_of_quote).
 //
-// EVD is asked before TRD's transaction (storedSources, called by run and Reconcile; no other
-// context is called inside TRD's transaction) and only when the key has a stored result; the
+// EVD is asked before TRD's transaction (storedSources, called by run and Reconcile, and sourcesOf,
+// called by ReconcileHash; no other context is called inside TRD's transaction) and only when the
+// key has a stored result; the
 // ledger's visibility check, which every replay and reconciliation passes inside the transaction,
 // judges the answer (sourcesRead): REFERENCE_INVALID when the caller no longer reads a source, and
 // EVD's own refusal (PERMISSION_DENIED without evd.read) as a read answers it, for a matching and a
@@ -27,7 +28,10 @@ import (
 // customer response its stored result names (the message and the evidence the response was
 // recorded with), so a conflicting hash reveals nothing either. A first execution is not concerned:
 // its own checks read the sources it cites. A replay racing the first commit of its own key finds
-// no answer and is refused; the caller sends the key again.
+// no answer and is refused; the caller sends the key again. A reconciliation by request hash
+// (ActionReconciliation v1, ReconcileHash) has no request: it re-checks the customer response's
+// sources, which TRD stored, and no others (S4 unit A3 decision; Python's reconcile re-checks only
+// those).
 
 // sourcesKey carries EVD's answer for the command a call runs or reconciles.
 type sourcesKey struct{}
@@ -115,10 +119,16 @@ func cited(cmd api.Command) (ids []string, ofResponse bool) {
 // ledger, which refuses the caller the same way.
 func (s Service) storedSources(ctx context.Context, cmd api.Command) (context.Context, error) {
 	name, key, _ := request(cmd)
+	ids, ofResponse := cited(cmd)
+	return s.sourcesOf(ctx, name, key, ids, ofResponse)
+}
+
+// sourcesOf is storedSources for command name under key citing ids, or, when ofResponse, the
+// sources of the customer response its stored result names.
+func (s Service) sourcesOf(ctx context.Context, name, key string, ids []string, ofResponse bool) (context.Context, error) {
 	if !citing[name] {
 		return ctx, nil
 	}
-	ids, ofResponse := cited(cmd)
 	stored := false
 	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
 		act, err := postgres.LoadAction(ctx, exec, scope(ctx), name, key)

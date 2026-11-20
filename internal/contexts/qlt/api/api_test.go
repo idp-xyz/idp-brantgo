@@ -91,6 +91,11 @@ func TestDispositionContract(t *testing.T) {
 		{func(c *DecideDisposition) { c.Items[0].Quantity = "0" }, "SCHEMA_INVALID /args/items/0/quantity"},
 		{func(c *DecideDisposition) { c.Items[1].Action = DispositionRework }, "DUPLICATE_LINE_ID /args/items/1/action"},
 		{func(c *DecideDisposition) { c.Reason = "" }, "SCHEMA_INVALID /args/reason"},
+		// S5R-D18: a concession cites the customer's consent as evidence.
+		{func(c *DecideDisposition) { c.Items[0].Action = DispositionConcession }, "SCHEMA_INVALID /args/evidence_ids"},
+		{func(c *DecideDisposition) {
+			c.Items[0].Action, c.EvidenceIDs = DispositionConcession, []string{"consent"}
+		}, "OK"},
 	} {
 		cmd := ok
 		cmd.Items = append([]DispositionItem{}, ok.Items...)
@@ -137,12 +142,13 @@ func TestReleaseContracts(t *testing.T) {
 func TestCodes(t *testing.T) {
 	for code, want := range map[string]kernel.Category{CodeQualityReleaseExceedsConforming: kernel.CategoryInvalid,
 		CodeQualityReleaseRequired: kernel.CategoryConflict, CodeReferenceStale: kernel.CategoryConflict,
-		CodeBusinessKeyConflict: kernel.CategoryConflict, CodeDependencyNotSupported: kernel.CategoryInvalid} {
+		CodeBusinessKeyConflict: kernel.CategoryConflict, CodeDependencyNotSupported: kernel.CategoryInvalid,
+		CodeInspectionQuantityExceeded: kernel.CategoryInvalid} {
 		if c, ok := Category(code); !ok || c != want {
 			t.Errorf("%s: %s", code, c)
 		}
 	}
-	if len(Codes()) != 5 {
+	if len(Codes()) != 6 {
 		t.Fatal(Codes())
 	}
 	defer func() {

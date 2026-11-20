@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/api"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt/internal/domain/inspection"
@@ -110,4 +111,46 @@ func TestSubjectOf(t *testing.T) {
 	if rej, ok := kernel.AsRejection(factErr(kernel.Reject(kernel.CodePermissionDenied, "/", ""), "/p")); !ok || rej.Code != kernel.CodePermissionDenied {
 		t.Fatal("denied")
 	}
+}
+
+// S5R-D18 (QLT-INV-002): FUL's answers for a release are summed in the release's unit; an answer in
+// another unit or that is no quantity is an error, never a smaller frozen quantity.
+func TestShippedOnRelease(t *testing.T) {
+	r := &release.Release{ID: "rel.1", Subject: inspection.Subject{UnitID: "pcs", UnitRevision: 1}}
+	if got, err := shippedOn(r, nil); err != nil || !got.IsZero() {
+		t.Fatalf("nothing shipped %s %v", got, err)
+	}
+	got, err := shippedOn(r, []Consumed{{UnitID: "pcs", UnitRevision: 1, Quantity: "24", Shipments: 1}, {UnitID: "pcs", UnitRevision: 1, Quantity: "0.5"}})
+	if err != nil || got.String() != "24.5" {
+		t.Fatalf("%s %v", got, err)
+	}
+	for _, c := range []Consumed{{UnitID: "kg", UnitRevision: 1, Quantity: "1"}, {UnitID: "pcs", UnitRevision: 2, Quantity: "1"},
+		{UnitID: "pcs", UnitRevision: 1, Quantity: "x"}} {
+		if _, err := shippedOn(r, []Consumed{c}); err == nil {
+			t.Errorf("%+v", c)
+		}
+	}
+}
+
+// S5R-D36: the port's verdict on an agency passes PTY's code on at the path, in QLT's category.
+func TestAgencyCheck(t *testing.T) {
+	if (Agency{InspectionAgency: true}).Check("/p") != nil {
+		t.Fatal("serves")
+	}
+	rej, ok := kernel.AsRejection(Agency{Code: api.CodeReferenceStale, Stale: "superseded"}.Check("/args/inspector/agency"))
+	if !ok || rej.Code != api.CodeReferenceStale || rej.Category != kernel.CategoryConflict || rej.Fields[0].Path != "/args/inspector/agency" {
+		t.Fatalf("%+v", rej)
+	}
+	if rej, ok := kernel.AsRejection(Agency{Code: kernel.CodeReferenceInvalid}.Check("/p")); !ok || rej.Code != kernel.CodeReferenceInvalid {
+		t.Fatal("another code")
+	}
+	if (Upstream{Subjects: NotWired{}, Agencies: noAgencies{}}).Complete() {
+		t.Fatal("complete without FUL's ReleaseConsumption and EVD")
+	}
+}
+
+type noAgencies struct{}
+
+func (noAgencies) ResolveAgencies(context.Context, []api.AgencyRef, time.Time) (map[api.AgencyRef]Agency, error) {
+	return nil, nil
 }

@@ -1,6 +1,7 @@
 // Package action runs the write commands and audited reads of a bounded context in the order the
 // engineering contracts fix (Python Core.execute): contract and structure, current identity and
-// permission, a stored result of the same idempotency key, then the context's own checks. One
+// permission (for an AI actor, with the approval grant a command may need: S4 decision D-7,
+// foundation/aigrant), a stored result of the same idempotency key, then the context's own checks. One
 // successful command commits its business change, its action result, its audit entry and its
 // Outbox events in one transaction; a rejected command leaves only a rejection audit entry.
 //
@@ -21,6 +22,7 @@ import (
 	"go.idp.xyz/idp-bento-go/application"
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-brant/internal/foundation/aigrant"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
@@ -34,7 +36,14 @@ type Command struct {
 	RequestHash    string // RequestHash of the business arguments
 	ObjectID       string // the object the request names, for the audit trail
 	Reason         string // the reason a cancelling or closing command records in the audit trail
+	// GrantObject is the object and version an approval grant binds, for a command whose rule
+	// needs one from AI actors (authorization.Rule.AIApprovalGrant; S4 decision D-7): the owning
+	// context names it, as the AI layer's capability does (capability.ObjectRef).
+	GrantObject GrantObject
 }
+
+// GrantObject is the object and version of a command an approval grant binds (aigrant.Object).
+type GrantObject = aigrant.Object
 
 // Event is an integration event a command publishes through the Outbox. Its payload carries
 // identifiers and versions only (contract C4).
@@ -98,6 +107,10 @@ type Ledger struct {
 	// (Python authorizes "read" before returning a stored result).
 	ReplayRead string
 	Visible    Visibility
+	// ReconcileAudit is the name reconciliations have in the audit trail; empty means
+	// ReconcileQuery. A context whose own command is named action.reconcile (TSK's ActionExecution,
+	// S4 unit B1) names its reconciliations otherwise, so its audit trail tells them apart.
+	ReconcileAudit string
 }
 
 var (
@@ -202,8 +215,21 @@ func (l *Ledger) execute(ctx context.Context, p identity.Principal, cmd Command,
 	if !kernel.ValidIdentifier(cmd.IdempotencyKey) || !hashPattern.MatchString(cmd.RequestHash) || cmd.Name == "" {
 		return Result{}, kernel.Reject(kernel.CodeSchemaInvalid, "/idempotency_key", "")
 	}
-	if _, err := l.Authorizer.Policy.Admit(p, cmd.Name); err != nil {
+	rule, err := l.Authorizer.Policy.Admit(p, cmd.Name)
+	if err != nil {
 		return Result{}, denied(err)
+	}
+	if rule.AIApprovalGrant {
+		// S4 decision D-7, AI-INV-002 (unit F1): an AI actor's call carries the gateway's proof of an
+		// approval grant used for exactly this call, whatever the transport; a stored result is no
+		// exception, so this comes before the replay.
+		if cmd.GrantObject == (GrantObject{}) {
+			return Result{}, fmt.Errorf("action: %s needs an approval grant from AI actors and names no object", cmd.Name)
+		}
+		if err = aigrant.Check(ctx, aigrant.Call{Scope: p.Scope, Actor: p.Actor, Command: cmd.Name, RequestHash: cmd.RequestHash,
+			Key: cmd.IdempotencyKey, Object: cmd.GrantObject}); err != nil {
+			return Result{}, err
+		}
 	}
 	if prep, ok := h.(Preparer); ok {
 		var res Result
@@ -343,7 +369,7 @@ func (l *Ledger) stored(ctx context.Context, exec bentopg.Executor, p identity.P
 }
 
 // ReconcileQuery is the name a reconciliation has in the audit trail (Python audits
-// quote.query.action_reconciliation).
+// quote.query.action_reconciliation), unless the ledger names it otherwise (ReconcileAudit).
 const ReconcileQuery = "action.reconcile"
 
 // Reconciliation is what became of a command whose caller lost the answer.
@@ -382,11 +408,18 @@ func (l *Ledger) Reconcile(ctx context.Context, command, idempotencyKey, request
 		return rec, nil
 	}
 	if rej, ok := kernel.AsRejection(err); ok {
-		if auditErr := l.auditRejected(ctx, p, ReconcileQuery, "", rej.Code); auditErr != nil {
+		if auditErr := l.auditRejected(ctx, p, l.reconcileAudit(), "", rej.Code); auditErr != nil {
 			return Reconciliation{}, errors.Join(rej, auditErr)
 		}
 	}
 	return Reconciliation{}, err
+}
+
+func (l *Ledger) reconcileAudit() string {
+	if l.ReconcileAudit != "" {
+		return l.ReconcileAudit
+	}
+	return ReconcileQuery
 }
 
 func (l *Ledger) reconcile(ctx context.Context, p identity.Principal, command, key, hash string) (Reconciliation, error) {
@@ -425,7 +458,7 @@ func (l *Ledger) reconcile(ctx context.Context, p identity.Principal, command, k
 				rec.State, rec.Result = kernel.ReconcileCommitted, &res
 			}
 		}
-		return l.audit(ctx, exec, p, ReconcileQuery, rec.ObjectID, "read", "", "", d.Epoch)
+		return l.audit(ctx, exec, p, l.reconcileAudit(), rec.ObjectID, "read", "", "", d.Epoch)
 	})
 	if err != nil {
 		return Reconciliation{}, err

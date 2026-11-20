@@ -35,7 +35,9 @@ func TestOrderReviewRulesAndIndependence(t *testing.T) {
 	agent := q.actorOf(kernel.ActorAI, "agent.1")
 	_, o := q.prepared("quote.1")
 	id, hash := o.ObjectID, o.OrderHash
-	r, err := q.c.TRD.RequestOrderReview(agent, q.requestCmd(id, 1, "review.1"))
+	// The AI agent requests the review with an approval grant (S4 decision D-7; without one it is
+	// PERMISSION_DENIED, TestAIAgentCannotSkipTheApprovalGrantOnThePlainRoutes).
+	r, err := newGrantedAI(q).requestReview(agent, q.requestCmd(id, 1, "review.1"))
 	q.must(err)
 	_, err = q.c.TRD.RequestOrderReview(q.author, q.requestCmd(id, r.RowVersion, "review.2"))
 	q.want(err, kernel.CodeInvalidState)
@@ -203,7 +205,7 @@ func TestOrderActivationGate(t *testing.T) {
 
 	// A task bound to the quote root fences the activation (PYT-0197).
 	tsk := q.actorOf(kernel.ActorSystem, "tsk.1")
-	_, err = q.c.TRD.BindControl(tsk, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	_, err = q.bindTask(tsk, "quote.1", "task.1", 0)
 	q.must(err)
 	activate.IdempotencyKey = q.key()
 	_, err = q.c.TRD.ActivateOrder(q.author, activate)

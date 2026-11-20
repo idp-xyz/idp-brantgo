@@ -13,10 +13,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
-	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/kernel"
-
-	bentopg "go.idp.xyz/idp-bento-go/postgres"
 )
 
 // The read side of TRD (WBS S3-09; X-INV-003) on the TRD world: "editor" (the author) drafts,
@@ -45,8 +42,8 @@ func reasonsOf(rs []trdapi.Reason) []string {
 // scalar runs a query of one text value as the application role in company.A's scope.
 func (q *trdWorld) scalar(sql string) string {
 	q.t.Helper()
-	db, err := bentopg.NewDB(pgtest.AppPool(q.t))
-	q.must(err)
+	db, done := q.helperDB()
+	defer done()
 	var v string
 	q.must(bento.ScopeTransactor{DB: db, Scope: q.scope("company.A")}.WithinTransaction(context.Background(), func(ctx context.Context) error {
 		exec, err := db.RequireExecutor(ctx)
@@ -172,8 +169,7 @@ func TestQuoteReadyReflectsTheActiveRevisionNow(t *testing.T) {
 	}
 
 	// Object control: a root bound to a task is ready for the task's claim only.
-	bound, err := q.c.TRD.BindControl(q.author, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.goal",
-		ExpectedControlEpoch: 0})
+	bound, err := q.bindTask(q.author, "quote.1", "task.goal", 0)
 	q.must(err)
 	if r = q.readiness(q.author, "quote.1", 0); r.Ready || !slices.Equal(reasonsOf(r.Reasons), []string{"object_control:OBJECT_CONTROL_CONFLICT"}) ||
 		r.ControlState != "bound" {
@@ -184,7 +180,7 @@ func TestQuoteReadyReflectsTheActiveRevisionNow(t *testing.T) {
 	if r = q.readiness(claimed, "quote.1", 0); !r.Ready {
 		t.Fatalf("bound, with the task's claim: %+v", r)
 	}
-	_, err = q.c.TRD.ReleaseControl(q.author, trdapi.ReleaseControl{IdempotencyKey: q.key(), QuoteID: "quote.1",
+	_, err = q.c.TRD.ReleaseControl(claimed, trdapi.ReleaseControl{IdempotencyKey: q.key(), QuoteID: "quote.1",
 		ExpectedControlEpoch: bound.RowVersion, Reason: "目标核验完成"})
 	q.must(err)
 
@@ -274,7 +270,7 @@ func TestQuoteReadyFollowsTheCommittedApprovalNow(t *testing.T) {
 // revision's approval is spent (owner decision 2026-11-11).
 func TestQuoteReadyComparesInstants(t *testing.T) {
 	q := newTrdWorld(t)
-	_, expires := q.shortlyActivated("quote.1", 6*time.Second)
+	_, expires := q.shortlyActivated("quote.1", 10*time.Second)
 	if r := q.readiness(q.author, "quote.1", 0); !r.Ready || !r.ExpiresAt.Equal(expires) {
 		t.Fatalf("before the expiry: %+v", r)
 	}

@@ -16,9 +16,11 @@
 // data}; quote.revise {quote_id, expected_version, base_revision}; quote.discard_draft {quote_id,
 // expected_version, working_revision, reason, evidence}; quote.freeze {quote_id, expected_version,
 // working_revision}; quote.metadata.update {quote_id, expected_version, labels, internal_note};
-// object_control.bind {quote_id, task_id, expected_control_epoch}; object_control.stop and
-// object_control.release {quote_id, expected_control_epoch, reason}. The members of data are the
-// JSON names of QuoteData's fields as documented there.
+// object_control.bind {quote_id, task_id, initiator_id, agent_id, expected_control_epoch};
+// object_control.stop, object_control.enter_manual and object_control.release {quote_id,
+// expected_control_epoch, reason}; object_control.handoff {quote_id, expected_control_epoch,
+// initiator_id, agent_id, reason} (control.go). The members of data are the JSON names of
+// QuoteData's fields as documented there.
 //
 // The freeze computes the quote's amounts on the server (WBS S3-02: internal/domain/calc) and seals
 // them in the commercial document's calculation. A frozen revision is reviewed (WBS S3-03, S3-14;
@@ -140,66 +142,73 @@ const (
 
 var hash64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+// The contract and doc tags on the members of the command types below state, for a caller that
+// learns a command from a description (the AI layer's tool schemas, internal/ai/capability Rule; S4
+// G3), what Validate enforces: which members are required, the values one takes, the kind a
+// reference names, the format of a decimal, a ratio, a date, an instant and a hash, and a few
+// words where a name does not explain itself. Validate decides; the tags describe it, and the
+// tests of internal/ai/capability keep each one true against Validate.
+
 // ConfigRef is a POL ConfigRef v1 {kind, id, revision}. Each field of QuoteData names the kind it
 // takes.
 type ConfigRef struct {
-	Kind     string
-	ID       string
-	Revision int64
+	Kind     string `contract:"required,id"`
+	ID       string `contract:"required,id"`
+	Revision int64  `contract:"required"`
 }
 
 // PartyRef is PTY PartyRef v1 as a quote binds it {party_id, revision}: the customer at its
 // confirmed revision.
 type PartyRef struct {
-	PartyID  string
-	Revision int64
+	PartyID  string `contract:"required,id"`
+	Revision int64  `contract:"required"`
 }
 
 // ContactRef is a contact of the customer {contact_id, row_version}.
 type ContactRef struct {
-	ContactID  string
-	RowVersion int64
+	ContactID  string `contract:"required,id"`
+	RowVersion int64  `contract:"required"`
 }
 
 // TradingProfileRef is PTY TradingProfileRef v1 {party_id, revision}: a published revision of the
 // customer's trading profile.
 type TradingProfileRef struct {
-	PartyID  string
-	Revision int64
+	PartyID  string `contract:"required,id"`
+	Revision int64  `contract:"required"`
 }
 
 // AddressRoleRef is PTY AddressRoleRef v1 {party_id, party_revision, address_id}.
 type AddressRoleRef struct {
-	PartyID       string
-	PartyRevision int64
-	AddressID     string
+	PartyID       string `contract:"required,id"`
+	PartyRevision int64  `contract:"required"`
+	AddressID     string `contract:"required,id"`
 }
 
 // RfqRef is INQ RfqRef v1 as a draft names it {rfq_id, row_version}.
 type RfqRef struct {
-	RfqID      string
-	RowVersion int64
+	RfqID      string `contract:"required,id"`
+	RowVersion int64  `contract:"required"`
 }
 
 // CostSnapshotRef is CST CostSnapshotRef v1 {snapshot_id, result_hash}.
 type CostSnapshotRef struct {
-	SnapshotID string
-	ResultHash string
+	SnapshotID string `contract:"required,id"`
+	ResultHash string `contract:"required,hash"`
 }
 
 // SkuRef is a CAT SKU at a specification revision {sku_id, spec_revision}.
 type SkuRef struct {
-	SkuID        string
-	SpecRevision int64
+	SkuID        string `contract:"required,id"`
+	SpecRevision int64  `contract:"required"`
 }
 
 // BusinessRef names a revision of a business object no Brant context owns yet {kind, id,
 // revision}: a place (kind location) or a delivery anchor (kind delivery_anchor), compared as
 // identities, as CST compares them.
 type BusinessRef struct {
-	Kind     string
-	ID       string
-	Revision int64
+	Kind     string `contract:"required,id"`
+	ID       string `contract:"required,id"`
+	Revision int64  `contract:"required"`
 }
 
 // Delivery is the customer's delivery requirement a quote states {kind, date, anchor_ref, days,
@@ -209,22 +218,22 @@ type BusinessRef struct {
 // the event anchor_ref (kind delivery_anchor) names, counted on the POL calendar calendar_ref (kind
 // lead_time). The freeze requires it to be the adopted costing's delivery exactly.
 type Delivery struct {
-	Kind        string
-	Date        string
-	AnchorRef   *BusinessRef
-	Days        int
-	DayBasis    string
-	CalendarRef *ConfigRef
-	Milestone   string
-	PlaceRef    BusinessRef
-	TimeZone    string
+	Kind        string       `contract:"required,enum=fixed|lead_time" doc:"fixed: on Date; lead_time: Days after the event AnchorRef names"`
+	Date        string       `contract:"date,when=Kind:fixed"`
+	AnchorRef   *BusinessRef `contract:"kind=delivery_anchor,when=Kind:lead_time"`
+	Days        int          `contract:"min=0,max=3650,when=Kind:lead_time,optional"`
+	DayBasis    string       `contract:"enum=calendar|working,when=Kind:lead_time"`
+	CalendarRef *ConfigRef   `contract:"kind=calendar,when=Kind:lead_time"`
+	Milestone   string       `contract:"required,enum=goods_ready|handover|arrival" doc:"what is due at PlaceRef"`
+	PlaceRef    BusinessRef  `contract:"required,kind=location"`
+	TimeZone    string       `contract:"required" doc:"IANA zone, such as Asia/Shanghai"`
 }
 
 // Evidence is an EVD source and a locator in it {source_id, locator}; the actor of the command
 // reads the source (REFERENCE_INVALID at its source_id otherwise).
 type Evidence struct {
-	SourceID string
-	Locator  string
+	SourceID string `contract:"required,id"`
+	Locator  string `contract:"required"`
 }
 
 // Line is one quoted line {line_id, rfq_line_id, sku_ref, quantity, unit_ref (unit),
@@ -235,32 +244,32 @@ type Evidence struct {
 // the author states it ("" when not stated): the freeze converts the quantity anyway and refuses a
 // stated one that differs (BASE_QUANTITY_MISMATCH, BC-AT04).
 type Line struct {
-	LineID             string
-	RfqLineID          string
-	Sku                SkuRef `json:"sku_ref"`
-	Quantity           string
-	UnitRef            ConfigRef
-	ConversionRef      *ConfigRef
-	BaseQuantity       string
-	UnitPrice          string
-	PriceBasisQuantity string
-	DiscountRatio      string
-	TaxApplicationRef  ConfigRef
-	Evidence           []Evidence
+	LineID             string     `contract:"required,id"`
+	RfqLineID          string     `contract:"required,id"`
+	Sku                SkuRef     `json:"sku_ref" contract:"required"`
+	Quantity           string     `contract:"required,decimal=quantity,positive"`
+	UnitRef            ConfigRef  `contract:"required,kind=unit"`
+	ConversionRef      *ConfigRef `contract:"kind=unit_conversion" doc:"when the unit differs from the costing's"`
+	BaseQuantity       string     `contract:"decimal=quantity,positive"`
+	UnitPrice          string     `contract:"required,decimal=price" doc:"for PriceBasisQuantity units, before discount"`
+	PriceBasisQuantity string     `contract:"required,decimal=quantity,positive" doc:"units UnitPrice is for; 1 = per unit"`
+	DiscountRatio      string     `contract:"required,ratio" doc:"0 = no discount"`
+	TaxApplicationRef  ConfigRef  `contract:"required,kind=tax_application"`
+	Evidence           []Evidence `contract:"required"`
 }
 
 // Charge is a sales charge {charge_id, fee_category_ref (fee_category, sales_charge side),
 // obligation_key, amount, inclusion (separate or included_in_line), included_line_id (with
 // included_in_line only), tax_application_ref, evidence}.
 type Charge struct {
-	ChargeID          string
-	FeeCategoryRef    ConfigRef
-	ObligationKey     string
-	Amount            string
-	Inclusion         string
-	IncludedLineID    string
-	TaxApplicationRef ConfigRef
-	Evidence          []Evidence
+	ChargeID          string     `contract:"required,id"`
+	FeeCategoryRef    ConfigRef  `contract:"required,kind=fee_category"`
+	ObligationKey     string     `contract:"required,id"`
+	Amount            string     `contract:"required,decimal=price,positive"`
+	Inclusion         string     `contract:"required,enum=separate|included_in_line"`
+	IncludedLineID    string     `contract:"id,when=Inclusion:included_in_line"`
+	TaxApplicationRef ConfigRef  `contract:"required,kind=tax_application"`
+	Evidence          []Evidence `contract:"required"`
 }
 
 // QuoteData is the content of a working revision {issuer_ref (company_profile of the company),
@@ -277,28 +286,28 @@ type Charge struct {
 // business hash. LegalTermsRef (legal_terms, optional) names the quote's legal terms; without it
 // the freeze adopts the issuer's default legal terms, if its company profile names one.
 type QuoteData struct {
-	IssuerRef           *ConfigRef
+	IssuerRef           *ConfigRef `contract:"kind=company_profile"`
 	CustomerRef         *PartyRef
 	ContactRef          *ContactRef
 	TradingProfileRef   *TradingProfileRef
-	CustomerAddressRefs []AddressRoleRef
+	CustomerAddressRefs []AddressRoleRef `contract:"min=1"`
 	RfqRef              *RfqRef
 	CostSnapshotRef     *CostSnapshotRef
-	Lines               []Line
+	Lines               []Line `contract:"min=1"`
 	Charges             []Charge
-	CurrencyRef         *ConfigRef
-	PricingPolicyRef    *ConfigRef
-	SalesFXRef          *ConfigRef
-	TradeTermsRef       *ConfigRef
-	NamedPlaceRef       *BusinessRef
-	PaymentTermsRef     *ConfigRef
-	Delivery            *Delivery
-	DocumentTemplateRef *ConfigRef
-	SequenceRef         *ConfigRef
-	ExpiresAt           string
-	CustomerNotes       *string
-	Evidence            []Evidence
-	LegalTermsRef       *ConfigRef
+	CurrencyRef         *ConfigRef   `contract:"kind=currency"`
+	PricingPolicyRef    *ConfigRef   `contract:"kind=pricing_policy"`
+	SalesFXRef          *ConfigRef   `contract:"kind=fx_rate" doc:"only for a currency other than the pricing policy's"`
+	TradeTermsRef       *ConfigRef   `contract:"kind=trade_terms"`
+	NamedPlaceRef       *BusinessRef `contract:"kind=location"`
+	PaymentTermsRef     *ConfigRef   `contract:"kind=payment_terms"`
+	Delivery            *Delivery    `doc:"the costing's delivery, exactly"`
+	DocumentTemplateRef *ConfigRef   `contract:"kind=quote_document_template"`
+	SequenceRef         *ConfigRef   `contract:"kind=number_sequence"`
+	ExpiresAt           string       `contract:"instant" doc:"when the offer lapses; not after quote.price_proposal's ExpiresAtLatest"`
+	CustomerNotes       *string      `doc:"shown to the customer"`
+	Evidence            []Evidence   `contract:"min=1"`
+	LegalTermsRef       *ConfigRef   `contract:"kind=legal_terms"`
 }
 
 // SaveDraft creates a quote root with working revision 1 at ExpectedVersion 0, or replaces the
@@ -306,18 +315,18 @@ type QuoteData struct {
 // working revision is revised first (INVALID_STATE). Human or AI.
 type SaveDraft struct {
 	IdempotencyKey  string
-	QuoteID         string
-	ExpectedVersion int64
-	Data            QuoteData
+	QuoteID         string    `contract:"required,id"`
+	ExpectedVersion int64     `contract:"min=0" doc:"0 creates the quote; else its root version"`
+	Data            QuoteData `doc:"the whole working revision"`
 }
 
 // Revise copies frozen revision BaseRevision into a new working revision (Python quote.revise).
 // Human or AI.
 type Revise struct {
 	IdempotencyKey  string
-	QuoteID         string
-	ExpectedVersion int64
-	BaseRevision    int64
+	QuoteID         string `contract:"required,id"`
+	ExpectedVersion int64  `contract:"required" doc:"the root version"`
+	BaseRevision    int64  `contract:"required" doc:"a frozen revision"`
 }
 
 // DiscardDraft ends working revision WorkingRevision with a reason and evidence (Python
@@ -343,8 +352,8 @@ type Freeze struct {
 // revision or of the business hash. Human or AI.
 type UpdateMetadata struct {
 	IdempotencyKey  string
-	QuoteID         string
-	ExpectedVersion int64
+	QuoteID         string `contract:"required,id"`
+	ExpectedVersion int64  `contract:"required"`
 	Labels          []string
 	InternalNote    string
 }
@@ -632,8 +641,8 @@ type Auditor interface {
 // Commands is TRD's command entry point for QuoteRoot. Errors are *kernel.Rejection for refusals.
 // An error that is application.ErrCommitUncertain from IDP-Bento-Go means the outcome is unknown:
 // the caller sends the same command with the same idempotency key again (or reconciles), which
-// returns the stored receipt if the command committed. A write on a root bound to a task carries the
-// task's control claim in its context (WithControl).
+// returns the stored receipt if the command committed. A write on a root bound to a task, and every
+// control change but the bind, carries the task's control claim in its context (WithControl).
 type Commands interface {
 	SaveDraft(ctx context.Context, cmd SaveDraft) (Receipt, error)
 	Revise(ctx context.Context, cmd Revise) (Receipt, error)
@@ -642,6 +651,8 @@ type Commands interface {
 	UpdateMetadata(ctx context.Context, cmd UpdateMetadata) (Receipt, error)
 	BindControl(ctx context.Context, cmd BindControl) (Receipt, error)
 	StopControl(ctx context.Context, cmd StopControl) (Receipt, error)
+	EnterManualControl(ctx context.Context, cmd EnterManualControl) (Receipt, error)
+	HandoffControl(ctx context.Context, cmd HandoffControl) (Receipt, error)
 	ReleaseControl(ctx context.Context, cmd ReleaseControl) (Receipt, error)
 	SubmitReview(ctx context.Context, cmd SubmitReview) (ReviewReceipt, error)
 	DecideReview(ctx context.Context, cmd DecideReview) (ReviewReceipt, error)
@@ -681,21 +692,23 @@ type Queries interface {
 // Command is one of TRD's commands.
 type Command interface{ trdCommand() }
 
-func (SaveDraft) trdCommand()      {}
-func (Revise) trdCommand()         {}
-func (DiscardDraft) trdCommand()   {}
-func (Freeze) trdCommand()         {}
-func (UpdateMetadata) trdCommand() {}
-func (BindControl) trdCommand()    {}
-func (StopControl) trdCommand()    {}
-func (ReleaseControl) trdCommand() {}
-func (SubmitReview) trdCommand()   {}
-func (DecideReview) trdCommand()   {}
-func (RevokeApproval) trdCommand() {}
-func (Activate) trdCommand()       {}
-func (Replace) trdCommand()        {}
-func (Withdraw) trdCommand()       {}
-func (Cancel) trdCommand()         {}
+func (SaveDraft) trdCommand()          {}
+func (Revise) trdCommand()             {}
+func (DiscardDraft) trdCommand()       {}
+func (Freeze) trdCommand()             {}
+func (UpdateMetadata) trdCommand()     {}
+func (BindControl) trdCommand()        {}
+func (StopControl) trdCommand()        {}
+func (EnterManualControl) trdCommand() {}
+func (HandoffControl) trdCommand()     {}
+func (ReleaseControl) trdCommand()     {}
+func (SubmitReview) trdCommand()       {}
+func (DecideReview) trdCommand()       {}
+func (RevokeApproval) trdCommand()     {}
+func (Activate) trdCommand()           {}
+func (Replace) trdCommand()            {}
+func (Withdraw) trdCommand()           {}
+func (Cancel) trdCommand()             {}
 
 // Reconciliation is what became of a command whose answer the caller lost.
 type Reconciliation struct {
@@ -711,6 +724,26 @@ type Reconciliation struct {
 // caller's data scope now; it stays available while the root is bound.
 type Reconciler interface {
 	Reconcile(ctx context.Context, cmd Command) (Reconciliation, error)
+}
+
+// ActionReconciler is TRD's ActionReconciliation v1 (Context Map R18 TRD→TSK, S4 decision D-11):
+// reconciliation by the ledger identity of a command, for a caller that kept the request rather
+// than the command (TSK's ActionExecution, which records it before the command is sent). This is
+// Python t03_reconciliation.reconcile's own form (command, idempotency_key, request_hash).
+//
+// RequestOf returns the command name, idempotency key and request hash TRD's ledger records for cmd
+// — hashed exactly as executing it hashes it — and executes and reads nothing; a command TRD does
+// not know is SCHEMA_INVALID. ReconcileHash answers what Reconcile answers for the command that
+// hashes to requestHash: committed with the stored receipt, payload_conflict or not_committed,
+// after the same checks (trd.read, the caller's data scope now and, for quote.response.record and
+// quote.response.verify, the sources of the customer response the stored result names; X-INV-003),
+// audited the same way (action.reconcile), executing nothing and unfenced by the object control.
+// The sources another command cited are part of its request only, which a reconciliation by hash
+// does not have; they are not re-checked. An unknown command name, an invalid key or a request hash
+// that is not 64 lower-case hexadecimal digits is SCHEMA_INVALID.
+type ActionReconciler interface {
+	RequestOf(cmd Command) (kernel.ActionRequest, error)
+	ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (Reconciliation, error)
 }
 
 func head(key, id string, expected, minVersion int64) error {

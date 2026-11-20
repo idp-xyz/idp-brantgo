@@ -8,7 +8,7 @@ ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,6,采购／核价�
 ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,7,采购／核价经办,supplier_offer.verify ×2,SUP·SupplierOffer,SupplierOfferVerified,MOQ 100 按 ST01 款号合计,,supplier.A 5.00、supplier.B 5.30
 ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,8,采购／核价经办,costing_context.verify,CST·CostingContext,CostingContextVerified,覆盖完整询价行；客户要求与假设分开,,计算币种 USD
 ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,9,采购／核价经办,cost_scenario.evaluate ×2,CST·CostScenario,CostScenarioEvaluated,comparable 不等于最佳；高价候选保留,,A 660、B 696
-ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,10,采购／核价经办,cost_snapshot.freeze,CST·CostSnapshot,CostSnapshotFrozen,verified＋comparable＋依赖当前有效,跨上下文依赖重查（ADR-BR-004）,600＋60＝660 USD；选定理由
+ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,10,采购／核价经办,cost_snapshot.freeze,CST·CostSnapshot,CostSnapshotFrozen,verified＋comparable＋依赖当前有效,跨上下文依赖重查（ADR-BR-004）,600＋60＝660 USD（60.00 为 FCA 交货前的内陆运输与出口清关，成本组件 pre_carriage；买方指定货代的主运费不计入，S5R-D24）；选定理由
 ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,11,销售经办,quote.save_draft → quote.freeze,TRD·QuoteRoot,QuoteFrozen,服务端计算；issued_at、expires_at 入哈希,,960.00 USD；毛利 31.25%；288＋672
 ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,12,销售经办,quote.submit_review,TRD·QuoteRoot,QuoteReviewRequested,目标 activate；毛利 ≥ 25%,,审核请求
 ES-01,BRC-001 正常主链：询价到采购草稿,happy-path,13,报价审核人,quote.review.decide(approve),TRD·QuoteRoot,QuoteReviewDecided,审核人独立于编制人；批准到期 ≤ 报价到期,,批准记录
@@ -49,7 +49,7 @@ ES-09,生效订单变更与短交关闭,change,6,销售经办,order.close_remain
 ES-10,出运与单证放行,control,1,质检人员,quality_release.grant,QLT·QualityRelease,QualityReleased,放行数量与范围,,
 ES-10,出运与单证放行,control,2,资金人员,fund.record → application.apply,STL·Application,Applied,出运前尾款到账并核销,,银行入账 672.00
 ES-10,出运与单证放行,control,3,单证员,commercial_release.evaluate,FUL·CommercialRelease,CommercialReleaseGranted,质量、付款条件与筛查守卫均满足,,
-ES-10,出运与单证放行,control,4,单证员,shipment.confirm,FUL·Shipment,ShipmentConfirmed,有效放行,,
+ES-10,出运与单证放行,control,4,跟单员,shipment.confirm,FUL·Shipment,ShipmentConfirmed,有效放行；出运确认是“货已交承运人”的物流事实，由跟单确认；单证员负责放行评估与放单（S5R-D01）,,
 ES-10,出运与单证放行,control,5,单证员,document_release.record,FUL·CommercialRelease,DocumentsReleased,正本提单或电放,,
 ES-11,订单生效前的信用占用与合规核查,control,1,销售经办,order.prepare,TRD·SalesOrder,OrderPrepared,合同已成立,,出运后 30 天付 70%
 ES-11,订单生效前的信用占用与合规核查,control,2,销售经办,credit.reserve,STL·CustomerCredit,CreditDecisionOpened,"未结 7,000＋本次 4,000 超过额度 10,000：生成信用决定，暂不占用",,
@@ -59,5 +59,5 @@ ES-11,订单生效前的信用占用与合规核查,control,5,合规人员,trade
 ES-11,订单生效前的信用占用与合规核查,control,6,订单审核人,order.activate,TRD·SalesOrder,OrderActivated,读取 CreditGuard 与 TradeComplianceGuard,,
 ES-12,直发交付与许可证用量,control,1,跟单员,supplier_delivery.record,PUR·SupplierDelivery,—（声明，待核实）,供应商上报 120 件已交货代,,工厂装箱照片与货代收货单
 ES-12,直发交付与许可证用量,control,2,采购编制人,supplier_delivery.verify,PUR·SupplierDelivery,SupplierDeliveryVerified,货代收货单只证实 100 件,,
-ES-12,直发交付与许可证用量,control,3,单证员,export_license.allocate,CNX·ExportLicense,ExportLicenseAllocated,需要许可证的商品；有效期内且不超额度,,
-ES-12,直发交付与许可证用量,control,4,单证员,shipment.confirm,FUL·Shipment,ShipmentConfirmed,出运 100 件，不超核实交付量,,
+ES-12,直发交付与许可证用量,control,3,单证员,export_license.allocate,CNX·ExportLicense,ExportLicenseAllocated,需要许可证的商品；有效期内且不超额度；一份报关单一张许可证，需要两张时按许可证分出口批次（S5R-D04）,,
+ES-12,直发交付与许可证用量,control,4,跟单员,shipment.confirm,FUL·Shipment,ShipmentConfirmed,出运 100 件，不超核实交付量,,

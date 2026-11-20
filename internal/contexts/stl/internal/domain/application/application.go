@@ -8,8 +8,9 @@
 // statement moves the order's stage applications to its receivable (Move). An application
 // never exceeds what the receipt has available (APPLICATION_EXCEEDS_AVAILABLE, or
 // FUND_DIFFERENCE_UNEXPLAINED when only the unexplained difference would cover it) nor what is open
-// on the target (APPLICATION_EXCEEDS_OPEN); the payer must be the order's customer
-// (PARTY_ENTITY_MISMATCH: pending verification, CN-AT08); other currencies are STL-INV-007's
+// on the target (APPLICATION_EXCEEDS_OPEN); the payer must be the order's customer, one of its
+// permitted payers or a payer verified for it (S5R-D21; otherwise PARTY_ENTITY_MISMATCH: pending
+// verification, CN-AT08); other currencies are STL-INV-007's
 // cross-currency write-off (unit C8). Unapplying writes a new record and keeps the fund fact. This
 // is commercial allocation, never the administrative 出口收汇核销 (CN-R11).
 package application
@@ -20,11 +21,44 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
+// The basis on which an application's fund pays the target's customer (S5R-D21).
+const (
+	PayerCustomer  = "customer"        // the fund's counterparty is the customer
+	PayerPermitted = "permitted_payer" // a permitted payer of the customer's PTY trading profile
+	PayerVerified  = "verified_payer"  // fund.verify_payer verified the third-party payment for the customer
+)
+
+// Payers is what may let a fund of another party than the target's customer pay it (S5R-D21): the
+// verifications of the fund's payer, and Permitted, the revision of the customer's active PTY
+// trading profile when it lists the fund's counterparty as a permitted payer that PTY shows
+// confirmed (0: it does not).
+type Payers struct {
+	Verified  []fundrecord.PayerVerification
+	Permitted int64
+}
+
+// payerOf returns the basis on which fund f pays customer: the customer itself, a payer verified for
+// the customer, or a permitted payer of the customer's trading profile; any other payer is
+// PARTY_ENTITY_MISMATCH, pending verification (STL-INV-006, CN-AT08).
+func payerOf(f *fundrecord.FundRecord, customer string, p Payers) (string, int64, error) {
+	switch {
+	case f.CounterpartyID == customer:
+		return PayerCustomer, 0, nil
+	case fundrecord.VerifiedFor(p.Verified, customer):
+		return PayerVerified, 0, nil
+	case p.Permitted > 0:
+		return PayerPermitted, p.Permitted, nil
+	}
+	return "", 0, fundrecord.Reject(fundrecord.CodePartyEntityMismatch, "/args/fund_record_id", "The payer "+f.CounterpartyID+
+		" is not the customer "+customer+", nor a permitted payer of its trading profile: verify the third-party payment first (fund.verify_payer)")
+}
+
 // Target kinds and states (SM-STL-APPLICATION).
 const (
 	TargetOrderStage = "order_stage"
 	TargetReceivable = "receivable"
 	TargetPayable    = "payable"
+	TargetCharge     = "charge" // S5R-D19: a payment to a confirmed charge (charge.go)
 	StatusApplied    = "applied"
 	StatusUnapplied  = "unapplied"
 	StatusMoved      = "moved"
@@ -42,14 +76,22 @@ type Application struct {
 	InstallmentSeq int
 	MovedFrom      string       // a replacement or remainder: the moved application it comes from
 	CreditNoteID   string       // the source is a confirmed credit note instead of a fund record (C8, source.go)
+	ChargeID       string       // S5R-D19: the charge a payment pays (target kind charge)
 	Amount         kernel.Money // what the target receives, in the target's currency
 	Conversion     *Conversion  // a fund in another currency: what it gives and at which rate (STL-INV-007)
-	Status         string
-	Version        int64
-	OwnerActor     string
-	OwnerTeam      string
-	Applied        fundrecord.Act
-	Unapplied      *fundrecord.Act
+	// Settlement is the POL settlement rate from the order's currency into its analysis currency that a receipt in the
+	// order's currency recorded when it was applied (S5R-D19): it values what of the receipt is not converted yet.
+	Settlement *SettlementRate
+	Status     string
+	Version    int64
+	OwnerActor string
+	OwnerTeam  string
+	Applied    fundrecord.Act
+	Unapplied  *fundrecord.Act
+	// PayerBasis says why the fund's payer pays the target's customer (S5R-D21; "" reads as customer);
+	// PayerProfileRevision is the trading profile revision of a permitted payer.
+	PayerBasis           string
+	PayerProfileRevision int64
 }
 
 // Stands reports whether the application counts.
@@ -66,7 +108,9 @@ type ApplyInput struct {
 	StageID      string
 	StageApplied kernel.Money
 	Amount       kernel.Money
-	FX           *FXInput // the settlement rate for a receipt in another currency than the order's (nil: none)
+	FX           *FXInput         // the settlement rate for a receipt in another currency than the order's (nil: none)
+	Settlement   *SettlementInput // S5R-D19: the settlement rate into the analysis currency of a receipt in the order's currency
+	Payers       Payers           // S5R-D21: what lets another payer than the customer pay
 	By           fundrecord.Act
 	Team         string
 }
@@ -75,15 +119,18 @@ type ApplyInput struct {
 func Apply(in ApplyInput) (*Application, error) {
 	f, acc := in.Fund, in.Account
 	switch {
+	case f.Reversed():
+		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/fund_record_id", "The fund record is reversed (S5R-D22)")
 	case !f.Applicable():
 		return nil, kernel.Reject(kernel.CodeInvalidState, "/args/fund_record_id",
 			"A "+f.Kind+" is not applied to orders: only receipts are (non-goods money waits for verification)")
 	case f.Currency() != acc.Currency() && in.FX == nil:
 		return nil, fundrecord.Reject(fundrecord.CodeFXScopeMismatch, "/args/fx_rate",
 			"The receipt is in "+f.Currency().Code()+", the order in "+acc.Currency().Code()+": cross-currency write-off needs a settlement rate")
-	case f.CounterpartyID != acc.PartyID:
-		return nil, fundrecord.Reject(fundrecord.CodePartyEntityMismatch, "/args/fund_record_id",
-			"The payer "+f.CounterpartyID+" is not the order's customer "+acc.PartyID+": verify the payment basis first")
+	}
+	payer, profile, err := payerOf(f, acc.PartyID, in.Payers)
+	if err != nil {
+		return nil, err
 	}
 	stage := acc.Stage(in.StageID)
 	if stage == nil {
@@ -96,6 +143,10 @@ func Apply(in ApplyInput) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+	settlement, err := settlementRate(conv, acc.Currency(), in.Settlement)
+	if err != nil {
+		return nil, err
+	}
 	if err = withinAvailable(in.Amount, f, in.FundEntries); err != nil {
 		return nil, err
 	}
@@ -104,8 +155,8 @@ func Apply(in ApplyInput) (*Application, error) {
 		return nil, fundrecord.Reject(fundrecord.CodeApplicationExceedsOpen, "/args/amount", "Only "+open.String()+" of stage "+stage.StageID+" is open")
 	}
 	return &Application{ID: in.ID, FundRecordID: f.ID, TargetKind: TargetOrderStage, OrderID: acc.OrderID, OrderRevision: acc.OrderRevision,
-		StageID: stage.StageID, Amount: amount, Conversion: conv, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID, OwnerTeam: in.Team,
-		Applied: in.By}, nil
+		StageID: stage.StageID, Amount: amount, Conversion: conv, Settlement: settlement, Status: StatusApplied, Version: 1, OwnerActor: in.By.By.ID,
+		OwnerTeam: in.Team, Applied: in.By, PayerBasis: payer, PayerProfileRevision: profile}, nil
 }
 
 // Unapply undoes a standing application (SM-STL-APPLICATION: authorised person and reason). A moved

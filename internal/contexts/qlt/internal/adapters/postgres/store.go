@@ -277,12 +277,12 @@ const releaseColumns = `release_id, status, row_version, subject_kind, subject_i
 	order_id, order_revision, order_hash, order_line_id, sku_id, spec_revision, unit_id, unit_revision, subject_quantity::text, quantity::text,
 	conforming::text, released_before::text, inspection_ids, valid_from, valid_until, evidence_ids, request_hash, owner_actor_id,
 	coalesce(owner_team_id, ''), granted_by_kind, granted_by_id, grant_epoch, granted_at, revoked_by_kind, revoked_by_id, revoke_epoch,
-	revoked_at, revoke_reason, revoke_evidence_ids`
+	revoked_at, revoke_reason, revoke_evidence_ids, conceded::text, concession_quantity::text, shipped_quantity::text`
 
 func scanRelease(row pgx.Row) (*release.Release, error) {
 	var r release.Release
-	var subjectQty, qty, conforming, before, grantedKind string
-	var rKind, rID, rReason *string
+	var subjectQty, qty, conforming, before, grantedKind, conceded, concession string
+	var rKind, rID, rReason, shipped *string
 	var rEpoch *int64
 	var rAt *time.Time
 	var rEvidence []string
@@ -290,14 +290,15 @@ func scanRelease(row pgx.Row) (*release.Release, error) {
 	err := row.Scan(&r.ID, &r.Status, &r.RowVersion, &s.Ref.Kind, &s.Ref.ID, &s.Ref.LineID, &s.Revision, &s.Hash, &s.SupplierID, &s.OrderID,
 		&s.OrderRevision, &s.OrderHash, &s.OrderLineID, &s.SkuID, &s.SpecRevision, &s.UnitID, &s.UnitRevision, &subjectQty, &qty, &conforming,
 		&before, &r.InspectionIDs, &r.ValidFrom, &r.ValidUntil, &r.Evidence, &r.RequestHash, &r.OwnerActor, &r.OwnerTeam, &grantedKind,
-		&r.Granted.By.ID, &r.Granted.Epoch, &r.Granted.At, &rKind, &rID, &rEpoch, &rAt, &rReason, &rEvidence)
+		&r.Granted.By.ID, &r.Granted.Epoch, &r.Granted.At, &rKind, &rID, &rEpoch, &rAt, &rReason, &rEvidence, &conceded, &concession, &shipped)
 	if err != nil {
 		return nil, err
 	}
 	for _, q := range []struct {
 		text string
 		to   *kernel.Decimal
-	}{{subjectQty, &s.Quantity}, {qty, &r.Quantity}, {conforming, &r.Conforming}, {before, &r.ReleasedBefore}} {
+	}{{subjectQty, &s.Quantity}, {qty, &r.Quantity}, {conforming, &r.Conforming}, {before, &r.ReleasedBefore}, {conceded, &r.Conceded},
+		{concession, &r.ConcessionQuantity}} {
 		if *q.to, err = quantity(q.text); err != nil {
 			return nil, err
 		}
@@ -313,6 +314,13 @@ func scanRelease(row pgx.Row) (*release.Release, error) {
 		}
 		r.Revocation = &release.Revocation{Reason: *rReason, Evidence: rEvidence,
 			Revoked: inspection.Act{By: kernel.ActorRef{Kind: kernel.ActorKind(*rKind), ID: *rID}, Epoch: *rEpoch, At: kernel.Instant(*rAt)}}
+		if shipped != nil {
+			d, err := quantity(*shipped)
+			if err != nil {
+				return nil, err
+			}
+			r.Revocation.Shipped = &d
+		}
 	}
 	return &r, nil
 }
@@ -366,17 +374,19 @@ func InsertRelease(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	_, err := exec.Exec(ctx, `INSERT INTO brant_qlt.quality_release (tenant_id, company_id, release_id, status, row_version, subject_kind,
 		subject_id, subject_line_id, subject_revision, subject_hash, supplier_id, order_id, order_revision, order_hash, order_line_id, sku_id,
 		spec_revision, unit_id, unit_revision, subject_quantity, quantity, conforming, released_before, inspection_ids, valid_from,
-		valid_until, evidence_ids, request_hash, owner_actor_id, owner_team_id, granted_by_kind, granted_by_id, grant_epoch, granted_at)
+		valid_until, evidence_ids, request_hash, owner_actor_id, owner_team_id, granted_by_kind, granted_by_id, grant_epoch, granted_at, conceded,
+		concession_quantity)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::numeric, $21::numeric,
-		$22::numeric, $23::numeric, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
+		$22::numeric, $23::numeric, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35::numeric, $36::numeric)`,
 		t, c, r.ID, r.Status, r.RowVersion, s.Ref.Kind, s.Ref.ID, s.Ref.LineID, s.Revision, s.Hash, s.SupplierID, s.OrderID, s.OrderRevision,
 		s.OrderHash, s.OrderLineID, s.SkuID, s.SpecRevision, s.UnitID, s.UnitRevision, Text(s.Quantity), Text(r.Quantity), Text(r.Conforming),
 		Text(r.ReleasedBefore), r.InspectionIDs, r.ValidFrom, r.ValidUntil, evidence, r.RequestHash, r.OwnerActor, nullable(r.OwnerTeam),
-		string(r.Granted.By.Kind), r.Granted.By.ID, r.Granted.Epoch, r.Granted.At)
+		string(r.Granted.By.Kind), r.Granted.By.ID, r.Granted.Epoch, r.Granted.At, Text(r.Conceded), Text(r.ConcessionQuantity))
 	return err
 }
 
-// RevokeRelease writes r's revocation if the stored row is still at version from.
+// RevokeRelease writes r's revocation, with the shipped and frozen quantities it recorded, if the
+// stored row is still at version from.
 func RevokeRelease(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *release.Release, from int64) error {
 	t, c := scope2(scope)
 	v := r.Revocation
@@ -384,10 +394,15 @@ func RevokeRelease(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	if evidence == nil {
 		evidence = []string{}
 	}
+	if v.Shipped == nil {
+		return errors.New("qlt: a revocation records what FUL shipped")
+	}
 	tag, err := exec.Exec(ctx, `UPDATE brant_qlt.quality_release SET status = $4, row_version = $5, revoked_by_kind = $6, revoked_by_id = $7,
-		revoke_epoch = $8, revoked_at = $9, revoke_reason = $10, revoke_evidence_ids = $11
+		revoke_epoch = $8, revoked_at = $9, revoke_reason = $10, revoke_evidence_ids = $11, shipped_quantity = $13::numeric,
+		frozen_quantity = $14::numeric
 		WHERE tenant_id = $1 AND company_id = $2 AND release_id = $3 AND row_version = $12`,
-		t, c, r.ID, r.Status, r.RowVersion, string(v.Revoked.By.Kind), v.Revoked.By.ID, v.Revoked.Epoch, v.Revoked.At, v.Reason, evidence, from)
+		t, c, r.ID, r.Status, r.RowVersion, string(v.Revoked.By.Kind), v.Revoked.By.ID, v.Revoked.Epoch, v.Revoked.At, v.Reason, evidence, from,
+		Text(*v.Shipped), Text(r.Frozen()))
 	if err == nil && tag.RowsAffected() != 1 {
 		err = ErrConflict
 	}

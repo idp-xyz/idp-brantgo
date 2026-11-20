@@ -74,6 +74,7 @@ func reservationView(r *cc.Reservation, now time.Time) api.ReservationView {
 	}
 	v.ConsumedBy, v.ConsumedAt, _ = actorOf(r.Consumed)
 	v.ReleasedBy, v.ReleasedAt, v.ReleaseReason = actorOf(r.Released)
+	v.ReleaseCause, v.CarriedFrom = r.ReleaseCause, r.CarriedFrom
 	return v
 }
 
@@ -153,7 +154,13 @@ func (s Service) GetCustomerCredit(ctx context.Context, partyID string) (api.Cus
 			c = owed[0].Amount.Currency()
 		}
 		if !c.IsZero() && (len(held) > 0 || len(owed) > 0) {
-			receivables, err := cc.ReceivablesOf(c, owed, reservations)
+			// Receivables in another currency convert at a credit rate only (S5R-D22), which a read
+			// names none of: the exposure is left out and the currencies are named.
+			if missing := cc.Unconverted(c, owed, nil); len(missing) > 0 {
+				v.ExposureCurrency, v.UnconvertedCurrencies = c.Code(), missing
+				return s.listDecisions(ctx, exec, d, partyID, now, &v)
+			}
+			receivables, err := cc.ReceivablesOf(c, owed, nil)
 			if err != nil {
 				return err
 			}
@@ -164,18 +171,24 @@ func (s Service) GetCustomerCredit(ctx context.Context, partyID string) (api.Cus
 			}
 			v.ExposureCurrency, v.ExposureMinor = c.Code(), exposure.Exposure.MinorString()
 		}
-		decisions, err := postgres.LoadDecisions(ctx, exec, sc, partyID)
-		if err != nil {
-			return err
-		}
-		for i := range decisions {
-			if x := &decisions[i]; d.Sees(x.OwnerActor, x.OwnerTeam) {
-				v.Decisions = append(v.Decisions, decisionView(x, now))
-			}
-		}
-		return nil
+		return s.listDecisions(ctx, exec, d, partyID, now, &v)
 	})
 	return v, err
+}
+
+// listDecisions adds the customer's decisions the caller sees to v.
+func (s Service) listDecisions(ctx context.Context, exec bentopg.Executor, d authorization.Decision, partyID string, now time.Time,
+	v *api.CustomerCreditView) error {
+	decisions, err := postgres.LoadDecisions(ctx, exec, scope(ctx), partyID)
+	if err != nil {
+		return err
+	}
+	for i := range decisions {
+		if x := &decisions[i]; d.Sees(x.OwnerActor, x.OwnerTeam) {
+			v.Decisions = append(v.Decisions, decisionView(x, now))
+		}
+	}
+	return nil
 }
 
 // GetReservation returns a reservation (credit_reservation.get).

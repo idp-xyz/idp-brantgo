@@ -57,10 +57,17 @@ func (s Service) VerifyServiceRole(ctx context.Context, cmd api.VerifyServiceRol
 			return action.Outcome{}, err
 		}
 		h.p.Touch()
-		out, err := h.save(ctx, exec, &action.Event{Type: api.EventServiceRoleVerified, Fields: map[string]any{
-			"service_role_id": verified.ID, "service_role_revision": verified.Revision, "role": string(verified.Kind),
-			"service_code": verified.ServiceCode, "origin": verified.Origin, "destination": verified.Destination,
-			"valid_from": kernel.FormatTimestamp(verified.Validity.From), "valid_until": kernel.FormatTimestamp(verified.Validity.Until)}})
+		fields := map[string]any{"service_role_id": verified.ID, "service_role_revision": verified.Revision, "role": string(verified.Kind),
+			"service_code": verified.ServiceCode, "valid_from": kernel.FormatTimestamp(verified.Validity.From),
+			"valid_until": kernel.FormatTimestamp(verified.Validity.Until)}
+		// A role without a route states no origin and no destination (S5R-D36).
+		if verified.Origin != "" {
+			fields["origin"] = verified.Origin
+		}
+		if verified.Destination != "" {
+			fields["destination"] = verified.Destination
+		}
+		out, err := h.save(ctx, exec, &action.Event{Type: api.EventServiceRoleVerified, Fields: fields})
 		out.Status = api.StatusVerified
 		return out, err
 	}
@@ -105,8 +112,8 @@ func (h *profileCommand) party(ctx context.Context, exec bentopg.Executor, d aut
 	return profile.PartyFact{Visible: true, Confirmed: p.Status == lifecycle.Confirmed, Revision: p.Revision}, nil
 }
 
-// references holds the content's contacts FOR SHARE, in ID order, and checks the party and the
-// contacts (profile.CheckReferences).
+// references holds the content's contacts FOR SHARE, in ID order, then its permitted payers FOR
+// SHARE, in ID order, and checks the party, the contacts and the payers (profile.CheckReferences).
 func (h *profileCommand) references(ctx context.Context, exec bentopg.Executor, d authorization.Decision, c profile.Content, party profile.PartyFact) error {
 	ids := make([]string, len(c.Contacts))
 	for i, ref := range c.Contacts {
@@ -116,10 +123,22 @@ func (h *profileCommand) references(ctx context.Context, exec bentopg.Executor, 
 	if err != nil {
 		return err
 	}
-	f := profile.Facts{Party: party, Contacts: map[string]profile.ContactFact{}}
+	f := profile.Facts{Party: party, Contacts: map[string]profile.ContactFact{}, Payers: map[string]profile.PayerFact{}}
 	for _, ct := range contacts {
 		if d.Sees(ct.OwnerActor, ct.OwnerTeam) {
 			f.Contacts[ct.ID] = profile.ContactFact{PartyID: ct.PartyID, Confirmed: ct.Status == lifecycle.Confirmed, RowVersion: ct.RowVersion}
+		}
+	}
+	for _, id := range slices.Sorted(slices.Values(c.PermittedPayers)) {
+		if id == h.partyID {
+			continue // already held; CheckReferences refuses it
+		}
+		p, err := postgres.LoadParty(ctx, exec, scope(ctx), id, postgres.ForShare)
+		if err != nil {
+			return err
+		}
+		if p != nil && d.Sees(p.OwnerActor, p.OwnerTeam) {
+			f.Payers[id] = profile.PayerFact{Confirmed: p.Status == lifecycle.Confirmed}
 		}
 	}
 	return profile.CheckReferences(h.partyID, c, f)
@@ -169,9 +188,10 @@ func (s Service) SaveTradingProfile(ctx context.Context, cmd api.SaveTradingProf
 		contacts[i] = profile.ContactRef{ContactID: c.ContactID, RowVersion: c.RowVersion}
 	}
 	content := profile.Content{PartyRevision: cmd.PartyRevision, Contacts: contacts,
-		PaymentTerms: profile.TermsRef{Kind: cmd.PaymentTerms.Kind, ConfigID: cmd.PaymentTerms.ConfigID, Revision: cmd.PaymentTerms.Revision},
-		TradeTerms:   profile.TermsRef{Kind: cmd.TradeTerms.Kind, ConfigID: cmd.TradeTerms.ConfigID, Revision: cmd.TradeTerms.Revision},
-		Owner:        profile.Owner{ActorID: cmd.Owner.ActorID, TeamID: cmd.Owner.TeamID}}
+		PaymentTerms:    profile.TermsRef{Kind: cmd.PaymentTerms.Kind, ConfigID: cmd.PaymentTerms.ConfigID, Revision: cmd.PaymentTerms.Revision},
+		TradeTerms:      profile.TermsRef{Kind: cmd.TradeTerms.Kind, ConfigID: cmd.TradeTerms.ConfigID, Revision: cmd.TradeTerms.Revision},
+		Owner:           profile.Owner{ActorID: cmd.Owner.ActorID, TeamID: cmd.Owner.TeamID},
+		PermittedPayers: slices.Clone(cmd.PermittedPayers)}
 	h := &profileCommand{s: s, partyID: cmd.PartyID}
 	var terms map[polapi.ConfigRef]polapi.ResolvedConfig
 	h.prepare = func(ctx context.Context) (err error) {
@@ -211,11 +231,13 @@ func (s Service) SaveTradingProfile(ctx context.Context, cmd api.SaveTradingProf
 		}
 		return h.outcome(rev), err
 	}
+	// The request hash is over the canonical content; without permitted payers it is the hash of
+	// the same request before they existed (S5R-D21).
 	return s.run(ctx, action.Command{Name: api.CommandSaveTradingProfile, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.PartyID},
 		struct {
 			ID      string
 			Content profile.Content
-		}{cmd.PartyID, profile.NewContent(content.PartyRevision, content.PaymentTerms, content.TradeTerms, content.Owner, content.Contacts)},
+		}{cmd.PartyID, content.Canonical()},
 		cmd.Validate(), h)
 }
 
@@ -360,7 +382,8 @@ func profileRevisionView(r *profile.Revision) api.TradingProfileRevisionView {
 	c := r.Content
 	v := api.TradingProfileRevisionView{Revision: r.Number, Status: string(r.Status), ContentHash: r.Hash, PartyRevision: c.PartyRevision,
 		PaymentTerms: termsView(c.PaymentTerms), TradeTerms: termsView(c.TradeTerms), Owner: api.OwnerRef{ActorID: c.Owner.ActorID, TeamID: c.Owner.TeamID},
-		ContactRefs: contactViews(c.Contacts), SavedBy: r.SavedBy, SavedAt: r.SavedAt, EndedAt: r.EndedAt}
+		ContactRefs: contactViews(c.Contacts), PermittedPayers: slices.Clone(c.PermittedPayers), SavedBy: r.SavedBy, SavedAt: r.SavedAt,
+		EndedAt: r.EndedAt}
 	if p := r.Publication; p != nil {
 		v.PublishedBy, v.PublishedAt, v.EvidenceIDs = p.By, p.At, p.EvidenceIDs
 	}
@@ -536,7 +559,7 @@ func (s Service) ResolveTradingProfiles(ctx context.Context, refs []api.TradingP
 			r := api.ResolvedTradingProfile{Ref: api.TradingProfileRef{PartyID: ref.PartyID, Revision: rev.Number}, Status: string(rev.Status),
 				ActiveRevision: active[ref.PartyID], ContentHash: rev.Hash, PartyRevision: c.PartyRevision, PaymentTerms: termsView(c.PaymentTerms),
 				TradeTerms: termsView(c.TradeTerms), Owner: api.OwnerRef{ActorID: c.Owner.ActorID, TeamID: c.Owner.TeamID},
-				ContactRefs: contactViews(c.Contacts)}
+				ContactRefs: contactViews(c.Contacts), PermittedPayers: slices.Clone(c.PermittedPayers)}
 			r.Code, r.Stale = stale(string(use))
 			out[ref] = r
 		}

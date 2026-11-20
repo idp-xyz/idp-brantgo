@@ -2,11 +2,13 @@ package application
 
 import (
 	"context"
+	"maps"
 	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/api"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/adapters/postgres"
+	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/commitment"
 	"go.idp.xyz/idp-brant/internal/contexts/pur/internal/domain/supplierdelivery"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -273,9 +275,10 @@ func (h *verifyDelivery) Lock(ctx context.Context, exec bentopg.Executor) error 
 
 // Apply refuses, in this order: a delivery the verifier does not see (NOT_FOUND), Decidable's
 // refusals (VERSION_CONFLICT, INVALID_STATE, INDEPENDENT_REVIEW_REQUIRED); then a rejection is
-// recorded; a verification goes on with a draft not intact (REFERENCE_INVALID) and Verify's
-// refusals, measured against what the commitment's other deliveries verified, read under the
-// commitment root's lock.
+// recorded; a verification goes on with a draft not intact (REFERENCE_INVALID), Verify's refusals,
+// measured against what the commitment's other deliveries verified, and a line it would leave verified
+// below its approved dispositions (INVALID_STATE; PUR-INV-013, S5R-D05: a correction never takes away
+// goods already disposed of), both read under the commitment root's lock.
 func (h *verifyDelivery) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
 	sc := scope(ctx)
 	dl := h.h.d
@@ -313,6 +316,9 @@ func (h *verifyDelivery) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	if err = dl.Verify(x, act); err != nil {
 		return action.Outcome{}, err
 	}
+	if err = keepsDispositions(ctx, exec, dl, elsewhere, h.cmd.Lines); err != nil {
+		return action.Outcome{}, err
+	}
 	if err = postgres.SaveDelivery(ctx, exec, sc, dl, now); err != nil {
 		return action.Outcome{}, err
 	}
@@ -331,6 +337,34 @@ func (h *verifyDelivery) Apply(ctx context.Context, exec bentopg.Executor, d aut
 			"handover_place": v.HandoverPlace, "handed_over_at": kernel.FormatTimestamp(v.HandedOverAt), "verified_by": d.Actor.ID,
 			"lines": lines}}
 	return deliveryOutcome(dl, supplierdelivery.StatusVerified, event), nil
+}
+
+// keepsDispositions refuses a verification of dl that would leave a line of its commitment verified
+// below the line's approved dispositions (INVALID_STATE at the line's verified quantity): what the
+// commitment's other deliveries verified (elsewhere) and this version's verified quantities against the
+// commitment's dispositions, read under the commitment root's lock.
+func keepsDispositions(ctx context.Context, exec bentopg.Executor, dl *supplierdelivery.Delivery, elsewhere map[string]kernel.Decimal,
+	lines []api.DeliveryVerifiedLine) error {
+	xs, err := postgres.DispositionsOfCommitment(ctx, exec, scope(ctx), dl.CommitmentID)
+	if err != nil || len(xs) == 0 {
+		return err
+	}
+	after := maps.Clone(elsewhere)
+	var touched []string
+	for _, l := range dl.Current().Lines {
+		after[l.OrderLineID] = after[l.OrderLineID].Add(l.Verified)
+		touched = append(touched, l.OrderLineID)
+	}
+	line := commitment.Undercut(xs, after, touched)
+	if line == "" {
+		return nil
+	}
+	path := "/args/lines"
+	if i := slices.IndexFunc(lines, func(l api.DeliveryVerifiedLine) bool { return l.OrderLineID == line }); i >= 0 {
+		path = "/args/lines/" + itoa(int64(i)) + "/verified_quantity"
+	}
+	return kernel.Reject(kernel.CodeInvalidState, path, "Line "+line+" is disposed of "+commitment.Disposed(xs)[line].String()+
+		" by approved dispositions; a verification leaves it verified no less (PUR-INV-013)")
 }
 
 // VerifySupplierDelivery verifies or rejects the claim of a delivery that awaits verification

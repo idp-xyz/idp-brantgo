@@ -3,7 +3,7 @@
 //
 // FUL's upstream contexts are TRD (Context Map R27: ActiveOrderRef v1 before the transaction,
 // OrderGuard v1 inside it), QLT (R26: QualityReleaseRef v1, QualityReleaseGuard v1), PUR (R59:
-// supplier delivery lines and SupplierDeliveryGuard v1, through FUL's port Deliveries), PTY (R44:
+// supplier delivery lines and SupplierDeliveryGuard v2, through FUL's port Deliveries), PTY (R44:
 // PartyScreeningGuard v1), CNX (R56: TradeComplianceGuard v1, ExportLicenseGuard v1), STL (R45:
 // PaymentConditionGuard v1) and EVD (R74: SourceRef v1 for evidence). A command reads them before
 // its transaction (the ledger's Preparer step); inside it, it calls their guard functions with FUL's
@@ -17,8 +17,8 @@
 // release of the scope FOR UPDATE (FUL's own roots before the authority guard); then the company
 // authority guard FOR SHARE (the ledger); then, in shipment.confirm and the release commands, the
 // upstream guard rows FOR SHARE in context code order (judge.go) — CNX's trade compliance check and
-// export licence, PTY's screening per party in party ID order, PUR's delivery per delivery line in
-// (delivery, line) order, QLT's release per release in ID order, STL's order account, TRD's order.
+// export licence, PTY's screening per party in party ID order, PUR's commitment root per delivery
+// line in (delivery, line) order (SupplierDeliveryGuard v2, S5R-D05), QLT's release per release in ID order, STL's order account, TRD's order.
 // shipment.prepare calls TRD's OrderGuard only. packing.plan, packing.record_actual and
 // shipment.cancel lock the shipment alone: they change nothing an order's other shipments are
 // judged on.
@@ -62,7 +62,8 @@ var (
 // shipment.confirm, commercial_release.grant_exception and document_release.record: an AI or system
 // actor is PERMISSION_DENIED. shipment.prepare, packing.plan, packing.record_actual and
 // shipment.cancel are human or AI (SM-FUL-SHIPMENT: cancel "human|ai");
-// commercial_release.evaluate is human, AI or system (SM-FUL-RELEASE). The permission of a command
+// commercial_release.evaluate is human or AI (SM-FUL-RELEASE; S5R-D29: B0 has no system
+// re-evaluation, a system actor is PERMISSION_DENIED). The permission of a command
 // is its name (role templates merchandiser, documentation, and credit_manager, which holds
 // commercial_release.grant_exception exclusively). Reads need ful.read, the audit trail ful.audit.
 func Rules() []authorization.Rule {
@@ -72,7 +73,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandRecordPacking, Permission: api.CommandRecordPacking, ActorKinds: humanOrAgent},
 		{Command: api.CommandCancelShipment, Permission: api.CommandCancelShipment, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandConfirmShipment, api.CommandConfirmShipment),
-		{Command: api.CommandEvaluateRelease, Permission: api.CommandEvaluateRelease, ActorKinds: anyActor},
+		{Command: api.CommandEvaluateRelease, Permission: api.CommandEvaluateRelease, ActorKinds: humanOrAgent}, // S5R-D29
 		authorization.HumanOnly(api.CommandGrantReleaseException, api.CommandGrantReleaseException),
 		authorization.HumanOnly(api.CommandRecordDocumentRelease, api.CommandRecordDocumentRelease),
 		{Command: api.CommandGetShipment, Permission: api.PermissionRead, ActorKinds: anyActor},
@@ -95,7 +96,7 @@ func Rules() []authorization.Rule {
 type Upstream struct {
 	Orders     Orders         // TRD ActiveOrderRef v1 and OrderGuard v1 (R27)
 	Releases   Releases       // QLT QualityReleaseRef v1 and QualityReleaseGuard v1 (R26)
-	Deliveries Deliveries     // PUR supplier delivery lines and SupplierDeliveryGuard v1 (R59), FUL's port
+	Deliveries Deliveries     // PUR supplier delivery lines and SupplierDeliveryGuard v2 (R59), FUL's port
 	Screening  Screening      // PTY PartyScreeningGuard v1 (R44)
 	Sources    evdapi.Queries // EVD SourceRef v1 (R74)
 	Compliance Compliance     // CNX TradeComplianceGuard v1 and ExportLicenseGuard v1 (R56)

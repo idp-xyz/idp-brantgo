@@ -40,7 +40,8 @@ const (
 	// verdict an exception can cover.
 	PaymentStageUnpaid = "stage_unpaid"
 
-	// MaxExceptionValidity bounds an exception's validity.
+	// MaxExceptionValidity bounds an exception's validity whatever the credit policy says: FUL's hard
+	// cap, kept as the protection against a policy parameter out of the ordinary (S5R-D09).
 	MaxExceptionValidity = 90 * 24 * time.Hour
 )
 
@@ -203,10 +204,28 @@ type Evaluation struct {
 	Evaluated      Act
 }
 
+// CreditPolicy is the POL credit_policy revision an exception's validity is bounded by (S5R-D09,
+// FUL-INV-002, R49): in force for the company when the exception is granted, its content hash and
+// its decision_validity_days — the period a credit decision of the same policy stays valid, which
+// the exception, the same kind of "goods or documents before the money" decision, may not exceed.
+type CreditPolicy struct {
+	ID                   string
+	Revision             int64
+	Hash                 string
+	DecisionValidityDays int
+}
+
+// MaxValidity is how long an exception bounded by p may run: p's decision validity, never more than
+// MaxExceptionValidity.
+func (p CreditPolicy) MaxValidity() time.Duration {
+	return min(time.Duration(p.DecisionValidityDays)*24*time.Hour, MaxExceptionValidity)
+}
+
 // Exception is a payment-condition exception: one unpaid stage of the order revision the payment
 // condition was judged on (Order: the revision the shipment binds, or the order's current revision
 // for the documents release of a confirmed shipment), short ShortfallMinor of Currency in the
-// release's scope, until ValidUntil.
+// release's scope, until ValidUntil. Policy is the credit_policy revision its validity was bounded by
+// (S5R-D09; nil for an exception granted before S5R).
 type Exception struct {
 	Seq            int64
 	ReleaseVersion int64
@@ -215,6 +234,7 @@ type Exception struct {
 	Currency       string
 	ShortfallMinor string
 	ValidUntil     time.Time
+	Policy         *CreditPolicy
 	Reason         string
 	Evidence       []string
 	Entries        []Entry
@@ -348,7 +368,8 @@ func (r *Release) Latest() *Evaluation {
 }
 
 // ExceptionRequest is what a credit manager states for an exception, with the order binding the
-// payment condition was judged on (Order; zero: the release's).
+// payment condition was judged on (Order; zero: the release's) and the credit_policy revision POL
+// showed in force before the transaction (Policy; S5R-D09).
 type ExceptionRequest struct {
 	Order           shipment.OrderBinding
 	ExpectedVersion int64
@@ -358,6 +379,17 @@ type ExceptionRequest struct {
 	ValidUntil      time.Time
 	Reason          string
 	Evidence        []string
+	Policy          *CreditPolicy
+}
+
+// Evaluator reports whether actor recorded an evaluation of r.
+func (r *Release) Evaluator(actor kernel.ActorRef) bool {
+	for _, e := range r.Evaluations {
+		if e.Evaluated.By == actor {
+			return true
+		}
+	}
+	return false
 }
 
 // Exceptable refuses an exception for a release that was never evaluated or is not blocked
@@ -375,16 +407,24 @@ func (r *Release) Exceptable(expected int64) error {
 // GrantException decides commercial_release.grant_exception on what the guards answer in its
 // transaction (FUL-INV-002, BT13, SM-FUL-RELEASE blocked → granted): other is the first unmet guard
 // other than the payment condition (nil when all are satisfied) and p STL's payment verdict. It
-// refuses, in this order: any other unmet guard, with its own code (quality, screening, trade
-// compliance, licence, delivery and order are never excepted); a met payment condition
-// (INVALID_STATE: evaluate instead); an unmet condition that is not an unpaid stage — no account, a
-// pending payment plan review — or more than one unpaid stage (COMMERCIAL_RELEASE_BLOCKED); and a
-// request that is not what STL says now: another stage, currency or shortfall, or a validity that
-// ended or exceeds MaxExceptionValidity (INVALID_KNOWN_VALUE). It grants the release by the new
-// exception, bound to req.Order (the release's order when zero). The caller has run Exceptable.
+// refuses, in this order: an actor who evaluated the release (INDEPENDENT_REVIEW_REQUIRED, S5R-D28:
+// the exception is independent of the release's evaluators); any other unmet guard, with its own
+// code (quality, screening, trade compliance, licence, delivery and order are never excepted); a met
+// payment condition (INVALID_STATE: evaluate instead); an unmet condition that is not an unpaid
+// stage — no account, a pending payment plan review — or more than one unpaid stage
+// (COMMERCIAL_RELEASE_BLOCKED); and a request that is not what STL says now: another stage,
+// currency or shortfall (INVALID_KNOWN_VALUE); a request without the credit policy that bounds it
+// (REFERENCE_INVALID at /args/credit_policy: fail closed); a validity that ended or exceeds the
+// policy's decision_validity_days or MaxExceptionValidity (INVALID_KNOWN_VALUE at /args/valid_until,
+// S5R-D09). It grants the release by the new exception, bound to req.Order (the release's order when
+// zero) and to the policy. The caller has run Exceptable.
 func (r *Release) GrantException(req ExceptionRequest, other *kernel.Rejection, p PaymentVerdict, entries []Entry, act Act) (*Exception, error) {
 	if !act.By.IsHuman() {
 		return nil, Reject(kernel.CodePermissionDenied, "/", "")
+	}
+	if r.Evaluator(act.By) {
+		return nil, Reject(shipment.CodeIndependentReviewRequired, "/args/scope",
+			"The credit manager evaluated the "+r.Scope+" release; its exception is granted by someone independent of its evaluators")
 	}
 	switch {
 	case other != nil:
@@ -403,19 +443,26 @@ func (r *Release) GrantException(req ExceptionRequest, other *kernel.Rejection, 
 	case minor(req.ShortfallMinor).Cmp(minor(p.ShortfallMinor)) != 0:
 		return nil, Reject(kernel.CodeInvalidKnownValue, "/args/shortfall_minor", "The stage is "+p.ShortfallMinor+" short")
 	}
+	pol := req.Policy
+	if pol == nil || pol.DecisionValidityDays < 1 {
+		return nil, Reject(kernel.CodeReferenceInvalid, "/args/credit_policy", "No credit policy in force states the decision validity")
+	}
 	act.At = kernel.Instant(act.At)
 	until := kernel.Instant(req.ValidUntil)
-	if !until.After(act.At) || until.Sub(act.At) > MaxExceptionValidity {
-		return nil, Reject(kernel.CodeInvalidKnownValue, "/args/valid_until", "An exception is valid from now for at most 90 days")
+	if !until.After(act.At) || until.Sub(act.At) > pol.MaxValidity() {
+		return nil, Reject(kernel.CodeInvalidKnownValue, "/args/valid_until", "An exception is valid from now for at most "+
+			strconv.Itoa(int(pol.MaxValidity()/(24*time.Hour)))+" days (credit_policy "+pol.ID+" revision "+strconv.FormatInt(pol.Revision, 10)+
+			": decision_validity_days "+strconv.Itoa(pol.DecisionValidityDays)+"; FUL's cap 90)")
 	}
+	bound := *pol
 	order := r.Order
 	if req.Order.OrderID != "" {
 		order = req.Order
 	}
 	doc, sum := shipment.Seal(entries)
 	x := Exception{Seq: int64(len(r.Exceptions)) + 1, ReleaseVersion: r.RowVersion + 1, Order: order, StageID: p.StageID, Currency: p.Currency,
-		ShortfallMinor: p.ShortfallMinor, ValidUntil: until, Reason: req.Reason, Evidence: req.Evidence, Entries: entries, EntriesJSON: doc,
-		EntriesSHA256: sum, Granted: act}
+		ShortfallMinor: p.ShortfallMinor, ValidUntil: until, Policy: &bound, Reason: req.Reason, Evidence: req.Evidence, Entries: entries,
+		EntriesJSON: doc, EntriesSHA256: sum, Granted: act}
 	if x.Evidence == nil {
 		x.Evidence = []string{}
 	}

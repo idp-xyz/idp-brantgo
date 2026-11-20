@@ -103,7 +103,7 @@ func (w *fulWorld) paidOrder(quote, id string, conclude func(order string)) trda
 func (w *fulWorld) exceptionCmd(id string, version int64, stage string) fulapi.GrantReleaseException {
 	return fulapi.GrantReleaseException{IdempotencyKey: w.key(), ShipmentID: id, Scope: fulapi.ScopeShipment, ExpectedVersion: version, StageID: stage,
 		Currency: "USD", ShortfallMinor: "100", ValidUntil: kernel.FormatTimestamp(time.Now().Add(time.Hour)), Reason: "业务例外申请",
-		EvidenceIDs: []string{"evidence"}}
+		EvidenceIDs: []string{"evidence"}, CreditPolicy: w.creditPolicy()}
 }
 
 // TD-AT12, FUL half ("出运放行均返回 TRADE_COMPLIANCE_NOT_CLEAR；普通审批不能覆盖"), CNX-INV-001, FUL-INV-002, D-9:
@@ -199,7 +199,8 @@ func TestExportLicenseGatesTheRelease(t *testing.T) {
 	w.must(err)
 	cx, err := cnx.New(db, cnx.Upstream{Orders: cnx.TRDOrders(w.c.TRD), Countries: cnx.PTYCountries(w.c.PTY), Profiles: cnx.CATProfiles(w.c.CAT),
 		Programmes: cnx.REFProgrammes(w.c.REF), Configs: w.c.POL, Sources: w.c.EVD, Exports: exports, Purchases: cnx.PURLines(w.c.PUR),
-		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL)})
+		Funds: cnx.STLFunds(w.c.STL), CreditNotes: cnx.STLCreditNotes(w.c.STL),
+		Brokers: cnx.PTYBrokers(w.c.PTY)}) // S5R-D36
 	w.must(err)
 	_, err = w.file(w.doc, "licence.1", "licence.txt", evdapi.MimeText, "合成出口许可证（测试数据）", "")
 	w.must(err)
@@ -208,7 +209,8 @@ func TestExportLicenseGatesTheRelease(t *testing.T) {
 		Holder: "合成出口商（测试）", Goods: cnxapi.LicensedGoods{SkuSpecs: []cnxapi.SpecRef{{SkuID: w.line.Sku.SkuID, SpecRevision: w.line.Sku.SpecRevision}}},
 		LicensedQuantity: "1000", Unit: w.line.UnitRef.ID, Currency: cnxapi.CurrencyRef{ID: w.usd.ConfigID, Revision: w.usd.Revision},
 		LicensedValue: "10000.00", Destination: "DE", EndUser: cnxapi.EndUser{PartyID: "customer.1", Name: "合成最终用户"},
-		ValidFrom: kernel.FormatTimestamp(now.Add(-time.Hour)), ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: "licence.1"})
+		ValidFrom: kernel.FormatTimestamp(now.Add(-time.Hour)), ValidUntil: kernel.FormatTimestamp(now.Add(30 * 24 * time.Hour)), FileID: "licence.1",
+		CustomsOffice: "2248"}) // S5R-D04: 一证一关
 	w.must(err)
 	value, err := kernel.RoundMoney(kernel.MustCurrency("USD", 2), kernel.MustDecimal("960"))
 	w.must(err)
@@ -362,9 +364,10 @@ func TestUnapplyAndDocumentReleaseInBothCommitOrders(t *testing.T) {
 
 // The release tables only grow (SM-FUL-RELEASE; D-3): neither the application role nor the schema
 // owner may change an evaluation or an exception, move a release but by its commands, delete one, or
-// confirm a shipment around its release (FUL-INV-002, checked at commit); evaluations by an AI agent
-// and by the system are commands like a human's (SM-FUL-RELEASE "human|ai|system") and replay; a
-// merchandiser with own data scope does not see another's release; company.B sees no row.
+// confirm a shipment around its release (FUL-INV-002, checked at commit); an evaluation by an AI
+// agent is a command like a human's and replays; a system actor is PERMISSION_DENIED (S5R-D29:
+// SM-FUL-RELEASE "human|ai", B0 has no system re-evaluation — before S5R the system evaluated too);
+// a merchandiser with own data scope does not see another's release; company.B sees no row.
 func TestReleaseRecordsAreImmutable(t *testing.T) {
 	w := newFulWorld(t)
 	rel, d := w.released("commitment.1", "100"), w.delivered("commitment.1", "100")
@@ -382,8 +385,10 @@ func TestReleaseRecordsAreImmutable(t *testing.T) {
 	if again, err := w.ful.EvaluateRelease(ai, cmd); err != nil || !again.Replayed || again.ActionID != first.ActionID {
 		t.Fatalf("replay %+v %v", again, err)
 	}
-	if r, err := w.ful.EvaluateRelease(sys, w.releaseCmd("shipment.1", fulapi.ScopeShipment)); err != nil || r.RowVersion != 2 {
-		t.Fatalf("system %+v %v", r, err)
+	_, err = w.ful.EvaluateRelease(sys, w.releaseCmd("shipment.1", fulapi.ScopeShipment))
+	w.want(err, kernel.CodePermissionDenied)
+	if r, err := w.ful.EvaluateRelease(w.doc, w.releaseCmd("shipment.1", fulapi.ScopeShipment)); err != nil || r.RowVersion != 2 {
+		t.Fatalf("the documentation clerk %+v %v", r, err)
 	}
 	_, err = w.confirm(w.merch, "shipment.1", 1)
 	w.must(err)
@@ -414,7 +419,7 @@ func TestReleaseRecordsAreImmutable(t *testing.T) {
 		t.Fatal("rows")
 	}
 	if v := w.releaseView(first.ReleaseID); v.Status != fulapi.ReleaseConsumed || v.Evaluations[0].EvaluatedBy.Kind != kernel.ActorAI ||
-		v.Evaluations[1].EvaluatedBy.Kind != kernel.ActorSystem {
+		v.Evaluations[1].EvaluatedBy != actorRef("human", "doc.1") {
 		t.Fatalf("after the refused edits %+v", v)
 	}
 }

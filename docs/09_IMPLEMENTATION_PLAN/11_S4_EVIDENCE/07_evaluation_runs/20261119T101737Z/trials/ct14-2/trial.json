@@ -1,0 +1,145 @@
+{
+  "family": "ct14",
+  "trial": 2,
+  "trial_id": "ct14-2",
+  "design": [
+    "CT14",
+    "baseline 17.3",
+    "Q01 V0.1 tests/test_execution.py::test_incompatible_persisted_bundle_stops_actions"
+  ],
+  "goal": "the task names an ExecutionBundle the runner does not run",
+  "input": {
+    "kind": "xlsx",
+    "file": "inquiry.xlsx",
+    "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "bytes": 2010,
+    "sha256": "ea129ecdc09874bf21f03ee12ff968c3a992bff6886ebed89c7aad62160bfcee"
+  },
+  "expected": "paused (conflict) with EXECUTION_BUNDLE_INCOMPATIBLE before any model call",
+  "outcome": "paused/conflict",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "paused",
+  "goal_completed": false,
+  "automation": "required_review_only",
+  "assertions": [
+    {
+      "name": "TSK lifecycle",
+      "want": "paused",
+      "got": "paused",
+      "pass": true
+    },
+    {
+      "name": "TSK pause cause",
+      "want": "conflict",
+      "got": "conflict",
+      "pass": true
+    },
+    {
+      "name": "pause reason",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "model calls",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": null,
+    "approval_grants": null,
+    "binding": null,
+    "control_epoch": 0,
+    "control_mode": "ai",
+    "delegation_status": "active",
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.pause running→paused system:system:ai.runner"
+    ],
+    "open_actions": 0,
+    "order_status": "absent (NOT_FOUND)",
+    "pause_cause": "conflict",
+    "pause_reason": "paused by the agent runner: EXECUTION_BUNDLE_INCOMPATIBLE at /execution_bundle/sha256",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 4,
+    "wait": null
+  },
+  "corrections": null,
+  "owner_resolutions": null,
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    }
+  ],
+  "cost": {
+    "model_calls": 0,
+    "tool_calls": 0,
+    "retries": 0,
+    "failed_calls": 0,
+    "unavailable_calls": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": null,
+    "model_returned": null
+  },
+  "phases": [
+    {
+      "name": "incompatible",
+      "script": "script-01-incompatible.json",
+      "script_steps": 0,
+      "model_calls": 0,
+      "tool_calls": 0,
+      "writes": 0,
+      "lifecycle_after": "paused",
+      "seconds": 0.12,
+      "started_at": "2026-11-19T10:19:20.546773575Z",
+      "timeout": "2m0s"
+    }
+  ],
+  "budget": {
+    "max_model_calls": 40,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 3
+}

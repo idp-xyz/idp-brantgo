@@ -120,8 +120,12 @@ func (s Service) proposalFacts(ctx context.Context, r commitment.ChangeRequest, 
 // pointed at the change under prefix: the order (REFERENCE_INVALID when the actor does not read it,
 // TRD's verdict), the draft's preparation (SUP's, CAT's, POL's, PTY's verdicts, PURCHASE_ALLOCATION_EXCEEDED
 // for an increase beyond the line's room ...), another supplier (SUPPLIER_MISMATCH) or currency
-// (PURCHASE_TERMS_INCONSISTENT) than the commitment's, and a line whose specification revision or unit
-// is not the draft's (SPECIFICATION_MISMATCH).
+// (PURCHASE_TERMS_INCONSISTENT) than the commitment's, a line whose specification revision is not the
+// draft's (SPECIFICATION_MISMATCH) and one whose unit is not the draft line's, the order line's
+// (UNIT_SCOPE_MISMATCH, PUR-INV-012, S5R-D41). A proposal that only buys less than the revision in force
+// is prepared as decrease-only (S5R-D41): SUP's verdicts that its condition lapsed do not refuse it and its
+// price groups keep the revision in force's unit prices. c is still at the revision the change is bound
+// to (Proposable, Decidable, Appliable), so a preparation, a decision and an application judge alike.
 func (s Service) revise(ctx context.Context, f revisionFacts, c *commitment.Commitment, dr *draft.Draft, roots map[allocation.Key]*allocation.Allocation,
 	preparer kernel.ActorRef, epoch int64, now time.Time, prefix string) (*draft.Prepared, error) {
 	if !f.read {
@@ -134,9 +138,16 @@ func (s Service) revise(ctx context.Context, f revisionFacts, c *commitment.Comm
 	for k, a := range roots {
 		alloc[k] = a.Without(dr.ID)
 	}
+	current, err := c.Document(dr)
+	if err != nil {
+		return nil, kernel.Reject(kernel.CodeReferenceInvalid, "/args/commitment_id", "The commitment's revision is not intact")
+	}
 	in := f.in
 	in.Scope, in.Now, in.Preparer, in.Epoch, in.Allocations = scope(ctx), kernel.Instant(now), preparer, epoch, alloc
 	in.Change = &draft.Change{Revision: c.Revision + 1, Dates: f.proposal.Dates}
+	if f.proposal.DecreaseOnly(current) {
+		in.Change.DecreaseOnly, in.Change.Prices = true, draft.KeptPrices(current)
+	}
 	p, err := draft.Prepare(f.proposal.Request, in)
 	if err != nil {
 		return nil, proposed(err, f.proposal.Index, prefix)
@@ -159,6 +170,9 @@ func (s Service) revise(ctx context.Context, f revisionFacts, c *commitment.Comm
 			at := prefix + "lines"
 			if n >= 0 {
 				at = prefix + "lines/" + strconv.Itoa(f.proposal.Index[n])
+			}
+			if i >= 0 && doc.Lines[i].Sku == l.Sku {
+				return nil, rejectAs(api.CodeUnitScopeMismatch, at, "A commitment line's unit is its order line's, the unit its draft line buys in (PUR-INV-012)")
 			}
 			return nil, rejectAs(api.CodeSpecificationMismatch, at, "A revision buys the specification revision and unit its draft line buys")
 		}
@@ -411,7 +425,7 @@ func (h *prepareChange) Apply(ctx context.Context, exec bentopg.Executor, d auth
 		return action.Outcome{}, err
 	}
 	doc, hash, err := p.SealRevision(draft.DocRevision{CommitmentID: c.ID, ChangeID: h.req.ChangeID, BaseRevision: c.Revision,
-		Revision: c.Revision + 1}, adopt.Status, adopt.Code, adopt.Input)
+		Revision: c.Revision + 1, DecreaseOnly: p.DecreaseOnly}, adopt.Status, adopt.Code, adopt.Input)
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -669,7 +683,9 @@ func (h *cancelCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
 }
 
 // Apply refuses, in this order: a commitment the canceller does not see (NOT_FOUND), a draft not
-// intact (REFERENCE_INVALID), Cancel's refusals (VERSION_CONFLICT, INVALID_STATE) and evidence the
+// intact (REFERENCE_INVALID), Cancel's refusals (VERSION_CONFLICT, INVALID_STATE — reason
+// unverified_delivery_pending while a claim awaits its verification, S5R-D41; the claims are read under
+// the commitment root's lock, which every delivery command takes before it writes) and evidence the
 // canceller does not read (REFERENCE_INVALID). Then each line keeps what was verified delivered of it
 // and the allocation of the rest is released.
 func (h *cancelCommand) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
@@ -686,9 +702,13 @@ func (h *cancelCommand) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	pending, err := postgres.PendingDeliveries(ctx, exec, sc, c.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	now := kernel.Instant(h.s.Clock.Now())
-	r, err := c.Cancel(h.cmd.ExpectedVersion, current, verified, commitment.Act{By: d.Actor, Epoch: d.Epoch, At: now, Reason: h.cmd.Reason},
-		evidenceOf(h.cmd.Evidence))
+	r, err := c.Cancel(h.cmd.ExpectedVersion, current, verified, pending, commitment.Act{By: d.Actor, Epoch: d.Epoch, At: now,
+		Reason: h.cmd.Reason}, evidenceOf(h.cmd.Evidence))
 	if err != nil {
 		return action.Outcome{}, err
 	}

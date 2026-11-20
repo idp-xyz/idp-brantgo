@@ -270,6 +270,15 @@ func (h *reverseSettlement) Apply(ctx context.Context, exec bentopg.Executor, d 
 			pending = append(pending, n.ID)
 		}
 	}
+	adjustments, err := postgres.Adjustments(ctx, exec, sc, st.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	for _, a := range adjustments {
+		if a.Status == settlement.AdjustmentRequested { // S5R-D20: decide a pending payable adjustment first
+			pending = append(pending, a.ID)
+		}
+	}
 	r := settlement.Reversal{Reason: c.Reason, EvidenceIDs: c.EvidenceIDs, By: fundAct(d, now, c.Reason)}
 	from := st.Version
 	if err = st.Reverse(standing, pending, r); err != nil {
@@ -401,6 +410,8 @@ func creditNoteRef(ctx context.Context, exec bentopg.Executor, n *settlement.Cre
 		StatementStatus: st.Status, OrderID: n.OrderID, CounterpartyID: st.CounterpartyID, Currency: n.Amount.Currency().Code(),
 		AmountMinor: n.Amount.MinorString(), Effective: n.Effective(st), Basis: n.Basis, EvidenceIDs: n.EvidenceIDs,
 		Applications: []api.AllocationView{}, Sources: []api.SettlementSourceRef{}, RequestedBy: n.Requested.By, RequestedAt: n.Requested.At}
+	net, tax := n.Split(st) // S5R-D46(2)
+	r.NetMinor, r.TaxMinor = net.MinorString(), tax.MinorString()
 	for _, l := range st.Lines {
 		r.Sources = append(r.Sources, api.SettlementSourceRef{ShipmentID: l.Source.ID, LineID: l.Source.LineID})
 	}

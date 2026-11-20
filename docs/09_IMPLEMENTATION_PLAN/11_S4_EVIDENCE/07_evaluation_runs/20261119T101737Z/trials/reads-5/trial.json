@@ -1,0 +1,235 @@
+{
+  "family": "reads",
+  "trial": 5,
+  "trial_id": "reads-5",
+  "design": [
+    "S4-03",
+    "D-7",
+    "G1",
+    "AI-INV-001",
+    "X-INV-003"
+  ],
+  "goal": "the scripted model is offered the Q01 reads, calls them, and is refused a read outside its delegation and a read of an object it cannot see",
+  "input": {
+    "kind": "xlsx",
+    "file": "inquiry.xlsx",
+    "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "bytes": 2010,
+    "sha256": "ea129ecdc09874bf21f03ee12ff968c3a992bff6886ebed89c7aad62160bfcee"
+  },
+  "expected": "delegated reads succeed, are hashed in the ledger and are not TSK actions; an undelegated read and a foreign object are refused; bank_account is refused; the bundle lists the reads",
+  "outcome": "waiting_input",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "waiting_input",
+  "goal_completed": false,
+  "automation": "required_review_only",
+  "assertions": [
+    {
+      "name": "TSK lifecycle",
+      "want": "waiting_input",
+      "got": "waiting_input",
+      "pass": true
+    },
+    {
+      "name": "read rfq.get",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read party.get",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read sku.get",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read source.get",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read cost_snapshot.list",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read config.lookup",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read bank_account",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read undelegated",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "read foreign",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "bundle lists the eleven reads",
+      "want": "11",
+      "got": "11",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": [
+      "evd/source.register committed src.inquiry.xlsx.5 attempts=1 by agent.q01",
+      "inq/rfq.save_draft committed rfq.q01 attempts=1 by agent.q01"
+    ],
+    "approval_grants": null,
+    "binding": null,
+    "control_epoch": 0,
+    "control_mode": "ai",
+    "delegation_status": "active",
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner"
+    ],
+    "open_actions": 0,
+    "order_status": "absent (NOT_FOUND)",
+    "pause_cause": "",
+    "pause_reason": "",
+    "registered_source": {
+      "file_id": "file.inquiry",
+      "learned_from": "the task's committed source.register action (TSK) and EVD's read of its source",
+      "registered_by": {
+        "id": "agent.q01",
+        "kind": "ai"
+      },
+      "source_id": "src.inquiry.xlsx.5",
+      "source_kind": "file_extract"
+    },
+    "rfq_lines": [
+      "L1:ai:agent.q01",
+      "L2:ai:agent.q01",
+      "L3:ai:agent.q01",
+      "L4:ai:agent.q01"
+    ],
+    "rfq_status": "draft",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 5,
+    "wait": {
+      "items": [
+        "Q01.scope"
+      ],
+      "reason": "Goal quote_ready not met: Q01.scope unsatisfied NOT_FOUND. The owner deals with them; goal.verify judges the goal again once the task resumes.",
+      "responsible_id": "clerk.1",
+      "since": "2026-11-19T10:19:30.030763Z",
+      "wait": "input"
+    }
+  },
+  "corrections": null,
+  "owner_resolutions": null,
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    }
+  ],
+  "cost": {
+    "model_calls": 4,
+    "tool_calls": 11,
+    "retries": 0,
+    "failed_calls": 3,
+    "unavailable_calls": 0,
+    "input_tokens": 6900,
+    "output_tokens": 520,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": [
+      "scripted.v1"
+    ],
+    "model_returned": [
+      "scripted-q01-v1"
+    ]
+  },
+  "phases": [
+    {
+      "name": "rfq",
+      "script": "script-01-rfq.json",
+      "script_steps": 4,
+      "model_calls": 4,
+      "tool_calls": 11,
+      "writes": 2,
+      "lifecycle_after": "waiting_input",
+      "seconds": 1.12,
+      "started_at": "2026-11-19T10:19:29.010111903Z",
+      "timeout": "2m0s"
+    }
+  ],
+  "verifications": [
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NOT_FOUND"
+      ]
+    }
+  ],
+  "budget": {
+    "max_model_calls": 40,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 3.85
+}

@@ -125,7 +125,7 @@ func (r REF) ResolveProgrammes(ctx context.Context, lists []string, countries []
 	for _, h := range got.Hits {
 		out.Hits = append(out.Hits, tcc.ProgrammeHit{ListCode: h.ListCode, Jurisdiction: h.Jurisdiction, Version: h.Version, Country: h.Country,
 			ProgrammeID: h.Programme.ProgrammeID, Name: h.Programme.Name, Measure: h.Programme.Measure, Scope: h.Programme.Scope,
-			ContentHash: h.Programme.ContentHash})
+			ContentHash: h.Programme.ContentHash, Regions: h.Programme.RegionsOf(h.Country)}) // S5R-D15: region_review
 	}
 	return out, nil
 }

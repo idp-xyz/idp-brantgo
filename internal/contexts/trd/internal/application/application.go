@@ -60,12 +60,18 @@ var (
 // quote.response.verify, acceptance.invalidate, acceptance.mark_disputed, object_control.stop and
 // object_control.release; each needs the permission of its own name. The command catalog gives
 // object_control.bind to the system (TSK claims a root for a task) and the role templates give it to
-// the sales clerk, so a human or the system binds, never an AI agent (it would fence humans out). An
+// the sales clerk, so a human or the system binds, never an AI agent (it would fence humans out).
+// object_control.enter_manual and object_control.handoff complete TSK's barrier: the command catalog
+// gives them to the system and the role templates to the sales clerk and the merchandiser (S4
+// decision D-4: TSK calls TRD as the acting human), so a human or the system, never an AI agent. An
 // AI agent prepares, revises and discards drafts, edits the internal metadata and records customer
 // responses (quote.response.record: 人工或 AI; its classification is a candidate a human verifies),
 // prepares orders and requests their review (order.prepare, order.review.request: 人工或 AI（按动作权限）)
-// through the same command path. order.review.decide, order.activate, order.approval.revoke,
-// order.cancel and order.close_unfulfilled are human only (humanOnlyCommands).
+// through the same command path, but only with an approval grant a person issued for exactly the
+// call (S4 decision D-7, AI-INV-002): the ledger refuses an AI actor's call without the AI layer's
+// proof of the grant's use, whatever the transport (S4 unit F1). order.review.decide,
+// order.activate, order.approval.revoke, order.cancel and order.close_unfulfilled are human only
+// (humanOnlyCommands).
 func Rules() []authorization.Rule {
 	return append([]authorization.Rule{
 		{Command: api.CommandSaveDraft, Permission: api.CommandSaveDraft, ActorKinds: humanOrAgent},
@@ -75,6 +81,8 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandUpdateMetadata, Permission: api.CommandUpdateMetadata, ActorKinds: humanOrAgent},
 		{Command: api.CommandBindControl, Permission: api.CommandBindControl, ActorKinds: humanOrSystem},
 		authorization.HumanOnly(api.CommandStopControl, api.CommandStopControl),
+		{Command: api.CommandEnterManualControl, Permission: api.CommandEnterManualControl, ActorKinds: humanOrSystem},
+		{Command: api.CommandHandoffControl, Permission: api.CommandHandoffControl, ActorKinds: humanOrSystem},
 		authorization.HumanOnly(api.CommandReleaseControl, api.CommandReleaseControl),
 		authorization.HumanOnly(api.CommandSubmitReview, api.CommandSubmitReview),
 		authorization.HumanOnly(api.CommandDecideReview, api.CommandDecideReview),
@@ -94,8 +102,8 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandDisputeAcceptance, api.CommandDisputeAcceptance),
 		{Command: CommandGetResponse, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetAcceptance, Permission: PermissionRead, ActorKinds: anyActor},
-		{Command: api.CommandPrepareOrder, Permission: api.CommandPrepareOrder, ActorKinds: humanOrAgent},
-		{Command: api.CommandRequestOrderReview, Permission: api.CommandRequestOrderReview, ActorKinds: humanOrAgent},
+		authorization.HumanOrGrantedAI(api.CommandPrepareOrder, api.CommandPrepareOrder),
+		authorization.HumanOrGrantedAI(api.CommandRequestOrderReview, api.CommandRequestOrderReview),
 		authorization.HumanOnly(api.CommandDecideOrderReview, api.CommandDecideOrderReview),
 		authorization.HumanOnly(api.CommandActivateOrder, api.CommandActivateOrder),
 		authorization.HumanOnly(api.CommandRevokeOrderApproval, api.CommandRevokeOrderApproval),
@@ -119,7 +127,7 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetOrderDocument, Permission: PermissionRead, ActorKinds: anyActor},
 		// The order's snapshot fact (S5 unit A2) as OrderSnapshotLookups gives it, read and audited.
 		{Command: CommandGetOrderSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
-	}, readRules()...)
+	}, append(append(readRules(), costRules()...), checkRules()...)...)
 }
 
 // Upstream are the contexts TRD reads references from.
@@ -133,6 +141,8 @@ type Upstream struct {
 	Rfqs      inqapi.RfqLookups      // RfqRef v1 (R12)
 	Snapshots cstapi.SnapshotLookups // CostSnapshotRef v1 (R11)
 	Contexts  cstapi.Lookups         // the costing context a snapshot froze (R11)
+	// Prices is POL's sales price list as the price proposal reads it (R15; owner decision 2026-11-18).
+	Prices polapi.SalesPriceQueries
 }
 
 // Numbers is POL's NumberIssue v1 (Context Map R15): number.issue, which POL runs as the actor in
@@ -214,6 +224,12 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.StopControl:
 		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
 		return api.CommandStopControl, key, c
+	case api.EnterManualControl:
+		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
+		return api.CommandEnterManualControl, key, c
+	case api.HandoffControl:
+		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
+		return api.CommandHandoffControl, key, c
 	case api.ReleaseControl:
 		key, c.IdempotencyKey, c.ExpectedControlEpoch = c.IdempotencyKey, "", 0
 		return api.CommandReleaseControl, key, c
@@ -311,9 +327,10 @@ var quoteWrites = []string{api.CommandSaveDraft, api.CommandRevise, api.CommandD
 // acceptance.invalidate, acceptance.mark_disputed) or order (the order commands) belongs to. On the write path (a replay) of a
 // quote write or one of those it also passes the root's object control as it is now (Python
 // test_committed_public_replay_and_local_replay_cannot_bypass_new_binding): a stored success is
-// never handed to a caller the binding now fences out. Reconciliation is not fenced. A replay or
-// reconciliation of a command that cited EVD sources also needs the caller to read them now
-// (sourcesRead).
+// never handed to a caller the binding now fences out. Reconciliation is not fenced, nor is the
+// replay of a control change (control.go): TSK retries its step by key after the epoch moved. A
+// replay or reconciliation of a command that cited EVD sources also needs the caller to read them
+// now (sourcesRead).
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	quoteID := id
 	switch command {
@@ -330,7 +347,7 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 		}
 		quoteID = a.QuoteID
 	default:
-		if slices.Contains(orderWrites, command) {
+		if slices.Contains(orderWrites, command) || command == CommandRecordOrderRisk {
 			id, err := postgres.OrderQuote(ctx, exec, scope(ctx), id)
 			if err != nil || id == "" {
 				return false, err
@@ -344,43 +361,61 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	}
 	if ctx.Value(writing{}) != nil && (slices.Contains(quoteWrites, command) || slices.Contains(acceptanceWrites, command) ||
 		slices.Contains(orderWrites, command)) {
-		if err = q.Control.Admit(claim(ctx), d.Epoch); err != nil {
+		if err = q.Control.Admit(fence(ctx, exec, d)); err != nil {
 			return false, err
 		}
 	}
 	return true, sourcesRead(ctx, command)
 }
 
-// claim returns the control claim the trusted adapter put into ctx, or nil.
-func claim(ctx context.Context) *quote.Claim {
-	c, ok := api.ControlFromContext(ctx)
-	if !ok {
-		return nil
-	}
-	return &quote.Claim{TaskID: c.TaskID, Epoch: c.ControlEpoch}
-}
-
 // Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
 // it (api.Reconciler; contract 06, 动作对账).
 func (s Service) Reconcile(ctx context.Context, cmd api.Command) (api.Reconciliation, error) {
+	r, err := s.RequestOf(cmd)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	ids, ofResponse := cited(cmd)
+	return s.reconcile(ctx, r, ids, ofResponse)
+}
+
+// RequestOf returns the ledger identity of cmd, hashed as executing it hashes it
+// (api.ActionReconciler; ActionReconciliation v1, Context Map R18).
+func (s Service) RequestOf(cmd api.Command) (kernel.ActionRequest, error) {
 	name, key, args := request(cmd)
 	if name == "" {
-		return api.Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
+		return kernel.ActionRequest{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
 	}
 	hash, err := action.RequestHash(args)
 	if err != nil {
-		return api.Reconciliation{}, err
+		return kernel.ActionRequest{}, err
 	}
-	if ctx, err = s.storedSources(ctx, cmd); err != nil {
-		return api.Reconciliation{}, err
-	}
-	r, err := s.Ledger.Reconcile(ctx, name, key, hash)
+	return kernel.ActionRequest{Command: name, IdempotencyKey: key, RequestHash: hash}, nil
+}
+
+// ReconcileHash reports what became of the command the ledger identity names, without executing
+// anything (api.ActionReconciler; ActionReconciliation v1, Context Map R18). Without the request,
+// the sources re-checked are those TRD stored with the result: the customer response's, for
+// quote.response.record and quote.response.verify (as Python's reconcile re-checks them).
+func (s Service) ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (api.Reconciliation, error) {
+	ofResponse := command == api.CommandRecordResponse || command == api.CommandVerifyResponse
+	return s.reconcile(ctx, kernel.ActionRequest{Command: command, IdempotencyKey: idempotencyKey, RequestHash: requestHash}, nil, ofResponse)
+}
+
+// reconcile asks EVD whether the caller reads the sources (ids, or the customer response's when
+// ofResponse) of a stored result of r, then the ledger what became of r.
+func (s Service) reconcile(ctx context.Context, r kernel.ActionRequest, ids []string, ofResponse bool) (api.Reconciliation, error) {
+	ctx, err := s.sourcesOf(ctx, r.Command, r.IdempotencyKey, ids, ofResponse)
 	if err != nil {
 		return api.Reconciliation{}, err
 	}
-	out := api.Reconciliation{State: r.State, ActionID: r.ActionID, ObjectID: r.ObjectID}
-	if r.Result != nil {
-		receipt := api.Receipt(*r.Result)
+	rec, err := s.Ledger.Reconcile(ctx, r.Command, r.IdempotencyKey, r.RequestHash)
+	if err != nil {
+		return api.Reconciliation{}, err
+	}
+	out := api.Reconciliation{State: rec.State, ActionID: rec.ActionID, ObjectID: rec.ObjectID}
+	if rec.Result != nil {
+		receipt := api.Receipt(*rec.Result)
 		out.Receipt = &receipt
 	}
 	return out, nil
@@ -417,14 +452,14 @@ func (h *quoteCommand) visible(d authorization.Decision) bool {
 
 // admit runs the checks every quote write starts with: the root exists and the caller sees it
 // (NOT_FOUND; a new root only where create allows it), then the object control fence.
-func (h *quoteCommand) admit(ctx context.Context, d authorization.Decision, create bool) error {
+func (h *quoteCommand) admit(ctx context.Context, exec bentopg.Executor, d authorization.Decision, create bool) error {
 	if h.q == nil && create {
-		return quote.Control{State: quote.Unbound}.Admit(claim(ctx), d.Epoch)
+		return quote.Control{State: quote.Unbound}.Admit(fence(ctx, exec, d))
 	}
 	if !h.visible(d) {
 		return kernel.Reject(kernel.CodeNotFound, "/args/quote_id", "")
 	}
-	return h.q.Control.Admit(claim(ctx), d.Epoch)
+	return h.q.Control.Admit(fence(ctx, exec, d))
 }
 
 func (h *quoteCommand) save(ctx context.Context, exec bentopg.Executor, created bool, status string, events ...action.Event) (action.Outcome, error) {
@@ -472,7 +507,7 @@ func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt,
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, cmd.ExpectedVersion == 0); err != nil {
+		if err := h.admit(ctx, exec, d, cmd.ExpectedVersion == 0); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.CheckSave(h.q, h.visible(d), cmd.ExpectedVersion); err != nil {
@@ -496,7 +531,7 @@ func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt,
 func (s Service) Revise(ctx context.Context, cmd api.Revise) (api.Receipt, error) {
 	h := &quoteCommand{s: s, id: cmd.QuoteID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
@@ -527,7 +562,7 @@ func (s Service) DiscardDraft(ctx context.Context, cmd api.DiscardDraft) (api.Re
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
@@ -550,7 +585,7 @@ func (s Service) DiscardDraft(ctx context.Context, cmd api.DiscardDraft) (api.Re
 func (s Service) UpdateMetadata(ctx context.Context, cmd api.UpdateMetadata) (api.Receipt, error) {
 	h := &quoteCommand{s: s, id: cmd.QuoteID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {

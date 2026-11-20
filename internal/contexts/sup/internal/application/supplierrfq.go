@@ -104,10 +104,7 @@ func (s Service) SaveSupplierRfq(ctx context.Context, cmd api.SaveSupplierRfq) (
 		h.rfq.Replace(data, hash, d.Actor, d.Epoch, now)
 		return h.outcome(""), postgres.UpdateSupplierRfq(ctx, exec, sc, h.rfq, h.from, now)
 	}
-	args := struct {
-		ID   string
-		Data api.SupplierRfq
-	}{cmd.SupplierRfqID, cmd.Data}
+	_, _, args := request(cmd)
 	return s.run(ctx, action.Command{Name: api.CommandSaveSupplierRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.SupplierRfqID},
 		args, cmd.Validate(), prepared{h, prepare})
 }
@@ -163,11 +160,7 @@ func (s Service) RecordSupplierRfqIssued(ctx context.Context, cmd api.RecordSupp
 		h.rfq.RecordIssued(d.Actor, d.Epoch, cmd.Reason, toEvidence(cmd.Evidence), now)
 		return h.outcome(api.EventSupplierRfqIssued), postgres.UpdateSupplierRfq(ctx, exec, scope(ctx), h.rfq, h.from, now)
 	}
-	args := struct {
-		ID       string
-		Evidence []api.Evidence
-		Reason   string
-	}{cmd.SupplierRfqID, cmd.Evidence, cmd.Reason}
+	_, _, args := request(cmd)
 	return s.run(ctx, action.Command{Name: api.CommandIssueSupplierRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.SupplierRfqID,
 		Reason: cmd.Reason}, args, cmd.Validate(), prepared{h, prepare})
 }
@@ -193,11 +186,7 @@ func (s Service) CloseSupplierRfq(ctx context.Context, cmd api.CloseSupplierRfq)
 		h.rfq.Close(d.Actor, d.Epoch, cmd.Reason, toEvidence(cmd.Evidence), now)
 		return h.outcome(""), postgres.UpdateSupplierRfq(ctx, exec, scope(ctx), h.rfq, h.from, now)
 	}
-	args := struct {
-		ID       string
-		Evidence []api.Evidence
-		Reason   string
-	}{cmd.SupplierRfqID, cmd.Evidence, cmd.Reason}
+	_, _, args := request(cmd)
 	return s.run(ctx, action.Command{Name: api.CommandCloseSupplierRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.SupplierRfqID,
 		Reason: cmd.Reason}, args, cmd.Validate(), prepared{h, prepare})
 }

@@ -396,13 +396,14 @@ func TestReservationTransitions(t *testing.T) {
 	if err := r.Consume(binding("o", 1), t0.Add(time.Minute), now); err != nil || r.Status != ReservationConsumed || r.Version != 2 || !r.Live(t0.Add(365*24*time.Hour)) {
 		t.Fatalf("consumed: %+v %v", r, err)
 	}
-	if err := r.Release(by("officer.1", kernel.ActorHuman, t0.Add(2*time.Hour))); code(err) != kernel.CodeInvalidState {
+	if err := r.Release(by("officer.1", kernel.ActorHuman, t0.Add(2*time.Hour)), CauseAbandoned); code(err) != kernel.CodeInvalidState {
 		t.Fatalf("a person releases a consumed reservation: %v", err)
 	}
-	if err := r.Release(Act{By: system, Epoch: 1, At: t0.Add(2 * time.Hour), Reason: "order closed"}); err != nil || r.Status != ReservationReleased || r.Version != 3 {
+	if err := r.Release(Act{By: system, Epoch: 1, At: t0.Add(2 * time.Hour), Reason: "order closed"}, CauseOrderEnded); err != nil ||
+		r.Status != ReservationReleased || r.Version != 3 || r.ReleaseCause != CauseOrderEnded {
 		t.Fatalf("the system releases it on the order's end: %v", err)
 	}
-	if err := r.Release(Act{By: system, Epoch: 1, At: t0.Add(3 * time.Hour)}); code(err) != kernel.CodeInvalidState {
+	if err := r.Release(Act{By: system, Epoch: 1, At: t0.Add(3 * time.Hour)}, CauseOrderEnded); code(err) != kernel.CodeInvalidState {
 		t.Fatalf("released twice: %v", err)
 	}
 	if x := reserved(); x.State(t0.Add(30*24*time.Hour)) != StateExpired || x.Live(t0.Add(30*24*time.Hour)) {

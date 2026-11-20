@@ -48,6 +48,59 @@ const (
 	ConversionFXRate        = "fx_rate"
 )
 
+// Cost components of a charge (S5R-D24; STL-INV-010): which part of the carriage and the export the charge pays for.
+const (
+	ComponentPreCarriage     = "pre_carriage"
+	ComponentExportClearance = "export_clearance"
+	ComponentMainCarriage    = "main_carriage"
+	ComponentInsurance       = "insurance"
+	ComponentOther           = "other"
+)
+
+// Components are the cost components in their order.
+var Components = []string{ComponentPreCarriage, ComponentExportClearance, ComponentMainCarriage, ComponentInsurance, ComponentOther}
+
+// buyerCarries are the Incoterms under which the buyer contracts and pays the main carriage: EXW and the F group (ICC
+// Incoterms 2020: FCA, FAS, FOB; S5R-D24 "FCA、FOB（以及 EXW）下，主运费由买方承担"; the register's "F 组术语" covers FAS).
+var buyerCarries = []string{"EXW", "FCA", "FAS", "FOB"}
+
+// BuyerCarries reports whether the buyer bears the main carriage under incoterm.
+func BuyerCarries(incoterm string) bool { return slices.Contains(buyerCarries, incoterm) }
+
+// CheckComponent is charge.record's rule on a charge's cost component for an order bound to incoterm (S5R-D24,
+// STL-INV-010): the main carriage of an order whose buyer bears it is not our direct cost — refused
+// (INVALID_KNOWN_VALUE /args/cost_component) unless the charge is recharged (we advance it and recover it from the
+// buyer: it stays out of the order result).
+func CheckComponent(component string, recharged bool, incoterm, orderID string) error {
+	if component == ComponentMainCarriage && !recharged && BuyerCarries(incoterm) {
+		return invalid("/args/cost_component", "Order "+orderID+" is "+incoterm+": the buyer bears the main carriage; record it as recharged "+
+			"if we advance it, or name the cost before delivery (pre_carriage, export_clearance)")
+	}
+	return nil
+}
+
+// Payment states of a charge, derived from the payments applied to it (S5R-D19, STL-INV-010 "费用的已付状态由核销派生").
+const (
+	PaymentUnpaid     = "unpaid"
+	PaymentPartlyPaid = "partly_paid"
+	PaymentPaid       = "paid"
+)
+
+// PaymentStatus is the charge's payment state given paid, what stands applied to it: paid once nothing of a positive
+// amount is open.
+func (c *Charge) PaymentStatus(paid kernel.Money) string {
+	switch {
+	case paid.Sign() <= 0:
+		return PaymentUnpaid
+	case paid.Equal(c.Amount):
+		return PaymentPaid
+	}
+	if cmp, _ := paid.Cmp(c.Amount); cmp > 0 {
+		return PaymentPaid
+	}
+	return PaymentPartlyPaid
+}
+
 // CodeAllocationInvalid: the allocation basis does not hold — a weight missing or negative, or the weights sum
 // to zero (STL-INV-010; error catalog ALLOCATION_INVALID, 422).
 const CodeAllocationInvalid = "ALLOCATION_INVALID"
@@ -114,6 +167,8 @@ type Charge struct {
 	Estimate          *kernel.Money // the estimated amount, when the charge began as an estimate
 	Amount            kernel.Money  // the amount now: the estimate, or the bill's
 	Conversion        Conversion
+	CostComponent     string    // S5R-D24: pre_carriage, export_clearance, main_carriage, insurance or other
+	Recharged         bool      // S5R-D24: advanced for the buyer and recovered from it: not in the order result
 	OccurredOn        time.Time // business dates (calendar dates at UTC midnight): when it was incurred,
 	AnalysisOn        time.Time // and the date it is analysed at (baseline 4.13)
 	Basis             string
@@ -196,6 +251,8 @@ type RecordInput struct {
 	CurrencyRevision int64
 	Amount           kernel.Money
 	Conversion       Conversion
+	CostComponent    string
+	Recharged        bool
 	OccurredOn       time.Time
 	AnalysisOn       time.Time
 	Basis            string
@@ -215,6 +272,8 @@ func Record(in RecordInput) (*Charge, error) {
 		return nil, invalid("/args/amount", "A charge amounts to something other than zero")
 	case len(in.Beneficiaries) == 0:
 		return nil, invalid("/args/beneficiaries", "A charge benefits an order or a shipment")
+	case !slices.Contains(Components, in.CostComponent):
+		return nil, invalid("/args/cost_component", "A charge's cost component is pre_carriage, export_clearance, main_carriage, insurance or other")
 	}
 	seen := map[string]bool{}
 	for i, b := range in.Beneficiaries {
@@ -224,7 +283,8 @@ func Record(in RecordInput) (*Charge, error) {
 		seen[b.Key()] = true
 	}
 	c := &Charge{ID: in.ID, Status: in.Status, Version: 1, Source: in.Source, FeeCategory: in.FeeCategory, CurrencyRevision: in.CurrencyRevision,
-		Amount: in.Amount, Conversion: in.Conversion, OccurredOn: in.OccurredOn, AnalysisOn: in.AnalysisOn, Basis: in.Basis,
+		Amount: in.Amount, Conversion: in.Conversion, CostComponent: in.CostComponent, Recharged: in.Recharged, OccurredOn: in.OccurredOn,
+		AnalysisOn: in.AnalysisOn, Basis: in.Basis,
 		EvidenceIDs: in.EvidenceIDs, Beneficiaries: in.Beneficiaries, OwnerActor: in.By.By.ID, OwnerTeam: in.Team, Recorded: in.By}
 	if in.Status == StatusEstimated {
 		e := in.Amount

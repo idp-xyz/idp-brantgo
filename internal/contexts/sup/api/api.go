@@ -447,6 +447,56 @@ type Commands interface {
 	End(ctx context.Context, cmd End) (Receipt, error)
 }
 
+// CommandRequest is one of SUP's commands: SaveSupplierRfq, RecordSupplierRfqIssued,
+// CloseSupplierRfq, SaveSupplierOffer, SavePurchaseTerms, SaveLogisticsOffer, Revise, DiscardDraft,
+// Seal or End (Command names a command by kind and action).
+type CommandRequest interface{ supCommand() }
+
+func (SaveSupplierRfq) supCommand()         {}
+func (RecordSupplierRfqIssued) supCommand() {}
+func (CloseSupplierRfq) supCommand()        {}
+func (SaveSupplierOffer) supCommand()       {}
+func (SavePurchaseTerms) supCommand()       {}
+func (SaveLogisticsOffer) supCommand()      {}
+func (Revise) supCommand()                  {}
+func (DiscardDraft) supCommand()            {}
+func (Seal) supCommand()                    {}
+func (End) supCommand()                     {}
+
+// Reconciliation is what became of a command whose answer the caller lost.
+type Reconciliation struct {
+	State    kernel.ReconcileState
+	ActionID string   // committed and payload_conflict
+	ObjectID string   // committed and payload_conflict
+	Receipt  *Receipt // the stored receipt; committed only
+}
+
+// Reconciler recovers from an unknown outcome without executing anything (contract 06, 动作对账;
+// WBS S4-02 closes the S3 gap "动作对账：SUP 尚无"). The caller passes the command exactly as it
+// sent it, idempotency key included; SUP hashes it as the command did. Reconciling needs sup.read,
+// not the command's own permission, and re-checks it and the caller's data scope over the supplier
+// RFQ or supply condition the stored result names now (X-INV-003): PERMISSION_DENIED and NOT_FOUND
+// as for a read.
+type Reconciler interface {
+	Reconcile(ctx context.Context, cmd CommandRequest) (Reconciliation, error)
+}
+
+// ActionReconciler is SUP's ActionReconciliation v1 (Context Map R68 SUP→TSK, S4 decision D-11):
+// reconciliation by the ledger identity of a command, for a caller that kept the request rather
+// than the command (TSK's ActionExecution, which records it before the command is sent).
+//
+// RequestOf returns the command name, idempotency key and request hash SUP's ledger records for cmd
+// — hashed exactly as executing it hashes it — and executes and reads nothing; a command SUP does
+// not know (or a supply condition kind it does not know) is SCHEMA_INVALID. ReconcileHash answers
+// what Reconcile answers for the command that hashes to requestHash: committed with the stored
+// receipt, payload_conflict or not_committed, after the same checks, audited the same way
+// (action.reconcile), executing nothing. An unknown command name, an invalid key or a request hash
+// that is not 64 lower-case hexadecimal digits is SCHEMA_INVALID.
+type ActionReconciler interface {
+	RequestOf(cmd CommandRequest) (kernel.ActionRequest, error)
+	ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (Reconciliation, error)
+}
+
 // Act is a recorded human act on a document: who, under which authority epoch, when, why and on
 // which evidence.
 type Act struct {

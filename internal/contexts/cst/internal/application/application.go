@@ -166,15 +166,31 @@ func request(cmd api.Command) (name, key string, args any) {
 // Reconcile reports what became of cmd, sent earlier with its idempotency key, without executing
 // it (api.Reconciler; contract 06, 动作对账).
 func (s Service) Reconcile(ctx context.Context, cmd api.Command) (api.Reconciliation, error) {
-	name, key, args := request(cmd)
-	if name == "" {
-		return api.Reconciliation{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
-	}
-	hash, err := action.RequestHash(args)
+	r, err := s.RequestOf(cmd)
 	if err != nil {
 		return api.Reconciliation{}, err
 	}
-	r, err := s.Ledger.Reconcile(ctx, name, key, hash)
+	return s.ReconcileHash(ctx, r.Command, r.IdempotencyKey, r.RequestHash)
+}
+
+// RequestOf returns the ledger identity of cmd, hashed as executing it hashes it
+// (api.ActionReconciler; ActionReconciliation v1, Context Map R69).
+func (s Service) RequestOf(cmd api.Command) (kernel.ActionRequest, error) {
+	name, key, args := request(cmd)
+	if name == "" {
+		return kernel.ActionRequest{}, kernel.Reject(kernel.CodeSchemaInvalid, "/command", "")
+	}
+	hash, err := action.RequestHash(args)
+	if err != nil {
+		return kernel.ActionRequest{}, err
+	}
+	return kernel.ActionRequest{Command: name, IdempotencyKey: key, RequestHash: hash}, nil
+}
+
+// ReconcileHash reports what became of the command the ledger identity names, without executing
+// anything (api.ActionReconciler; ActionReconciliation v1, Context Map R69).
+func (s Service) ReconcileHash(ctx context.Context, command, idempotencyKey, requestHash string) (api.Reconciliation, error) {
+	r, err := s.Ledger.Reconcile(ctx, command, idempotencyKey, requestHash)
 	if err != nil {
 		return api.Reconciliation{}, err
 	}

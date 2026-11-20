@@ -82,7 +82,8 @@ func bundleEvidence(sources map[string]evdapi.SourceRef, ids []string, path stri
 // FOR UPDATE: the bundle's row version (VERSION_CONFLICT; 0 for a lot without one), a lot FUL does
 // not resolve or whose record is not intact (REFERENCE_INVALID), a cancelled lot (INVALID_STATE), an
 // attachment (REFERENCE_INVALID), a declaration that is not one of the lot's (REFERENCE_INVALID), a
-// fund record STL does not resolve (REFERENCE_INVALID), a certificate result CNX lacks
+// fund record STL does not resolve (REFERENCE_INVALID) or shows reversed (REFERENCE_STALE, S5R-D22:
+// a check that states the requirement again drops it), a certificate result CNX lacks
 // (REFERENCE_INVALID) or that does not apply to the lot (CERTIFICATE_NOT_APPLICABLE; S5 C5,
 // requirementCertificates), then db.Check (PERMISSION_DENIED for a verification by an AI agent,
 // DOCUMENT_REQUIREMENT_UNVERIFIED, CERTIFICATE_NOT_APPLICABLE for a verified requirement its
@@ -179,6 +180,9 @@ func (h *checkBundle) Apply(ctx context.Context, exec bentopg.Executor, d author
 			f, ok := h.funds[id]
 			if !ok {
 				return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, p+"/fund_record_ids/"+strconv.Itoa(j), "STL resolves no such fund record")
+			}
+			if err := fundReversed(f, p+"/fund_record_ids/"+strconv.Itoa(j)); err != nil {
+				return action.Outcome{}, err
 			}
 			req.FundRecords = append(req.FundRecords, db.FundRef{FundRecordID: f.ID, Kind: f.Kind, Direction: f.Direction, Currency: f.Currency,
 				ReceivedMinor: f.ReceivedMinor, Label: db.CommercialAllocation})

@@ -17,7 +17,7 @@ import (
 
 // CNX opening refund material (S5 unit C10, WBS S5-20; tactical model CNX-AGG-TaxRefundCase value object
 // OpeningPosition; SM-CNX-TAXCASE; CNX-INV-004; Context Map MD-51; baseline 11.2 期初、防重、切换; CN-R04, CN-R08,
-// CN-R09, CN-E01; CN-AT16 CNX half, BT17) on PostgreSQL 16, in C3b's invoice world (purchase invoices imported by
+// CN-R09, CN-E01; CN-AT16 CNX half, STL-OB-01) on PostgreSQL 16, in C3b's invoice world (purchase invoices imported by
 // the purchaser and verified by the tax specialist tax.1, POL's CNY and export tax policy, STL's fund records). The
 // export tax policy export.tax.hist is valid from 400 days ago, published now: at the cutover the professional
 // records the policy that applied to exports before it. Every quantity and amount is synthetic; no refund is

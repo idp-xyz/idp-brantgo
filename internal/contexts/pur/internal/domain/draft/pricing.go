@@ -161,6 +161,45 @@ func (s schedule) amount(q kernel.Decimal, path string) (kernel.Decimal, []Appli
 	return total, applied, nil
 }
 
+// keptPrice returns the tier a decrease-only change keeps the unit price of for the price group of
+// condition line src priced by s (S5R-D41: 单价沿用当前修订): the one the revision in force applied, for
+// every mode but graduated, whose bands keep their prices by themselves.
+func (in Inputs) keptPrice(src Source, s schedule) (DocTier, bool) {
+	if in.Change == nil || !in.Change.DecreaseOnly || s.mode == ModeGraduated {
+		return DocTier{}, false
+	}
+	t, ok := in.Change.Prices[src]
+	return t, ok
+}
+
+// at prices quantity q exactly at the unit price of tier pin of the schedule, whatever tier contains q
+// (S5R-D41: a decrease keeps the unit price of the revision in force). A pin the schedule does not have
+// is REFERENCE_INVALID: the condition line is the revision in force's own, so it has every tier.
+func (s schedule) at(q kernel.Decimal, pin DocTier, path string) (kernel.Decimal, []AppliedTier, error) {
+	for _, t := range s.tiers {
+		if t.raw.Lower == pin.LowerInclusive && t.raw.Upper == pin.UpperExclusive && t.raw.UnitPrice == pin.UnitPrice {
+			v, _ := q.Quo(s.basis) // the basis is positive
+			return v.Mul(t.price), []AppliedTier{{Tier: t.raw, Quantity: q}}, nil
+		}
+	}
+	return kernel.Decimal{}, nil, fail(kernel.CodeReferenceInvalid, path, "The revision in force priced under a tier the condition line does not have")
+}
+
+// KeptPrices returns, by condition line, the tier each price group of doc — the document of a
+// commitment's revision in force — other than a graduated one applied: the unit prices a decrease-only
+// change keeps (S5R-D41).
+func KeptPrices(doc Document) map[Source]DocTier {
+	out := map[Source]DocTier{}
+	for _, g := range doc.PriceGroups {
+		if g.PricingMode == ModeGraduated || len(g.AppliedTiers) != 1 {
+			continue
+		}
+		src := Source{Ref: Ref{Kind: g.Source.Kind, ID: g.Source.ID, Revision: g.Source.Revision}, ConditionLineID: g.Source.ConditionLineID}
+		out[src] = g.AppliedTiers[0]
+	}
+	return out
+}
+
 // taxSplit splits amount by the tax profile (Python split_tax, CST TaxTreatment.Cost without
 // partial recovery, which POL's tax profiles do not have): an inclusive amount is rounded as the
 // gross, an exclusive or not applicable one as the net, every rounding HALF_UP to the currency's

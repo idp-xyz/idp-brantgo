@@ -4,7 +4,7 @@
   "date": "2026-11-10",
   "status": "CANDIDATE — reference for process coverage only; not reviewed by an SAP practitioner; G0 NO-GO",
   "purpose": "以 SAP 标准流程为流程覆盖基准，逐步核对 Brant 是否遗漏步骤、异常与逆向流程。参照只用来查漏，不决定 Brant 必须怎么做；最终以 G0 真实业务为准。",
-  "caveat": "SAP 流程与模块取公开、通用的名称（SD、LE、FSCM、FI-AR、FI-AP、MM、QM、PP、TM、GTS），未核对具体 SAP 版本的范围项编号，须由熟悉 SAP 的人员复核。不复制 SAP Best Practices 或 Signavio 的原文模型，对外不宣称与 SAP 兼容。中国出口本地流程 SAP 标准产品没有，另列为本地补充，以中国法规与 05 阶段 CN 规则为准。",
+  "caveat": "SAP 流程与模块取公开、通用的名称（SD、LE、FSCM、FI-AR、FI-AP、MM、QM、PP、TM、GTS），未核对具体 SAP 版本的范围项编号，须由熟悉 SAP 的人员复核。不复制 SAP Best Practices 或 Signavio 的原文模型，对外不宣称与 SAP 兼容。中国出口本地流程 SAP 标准产品没有，另列为本地补充，以中国法规与 05 阶段 CN 规则为准。 2026-11-13 的 S5R 模拟签核引用的 SAP 做法同样来自公开资料（SAP 帮助、SAP Learning、GTS 用户指南与 KBA 公开预览），仍未经 SAP 从业人员复核。",
   "statuses": {
     "COVERED": "已设计覆盖（候选设计，尚未实现）",
     "PARTIAL": "部分覆盖；followUp 写明缺什么及在哪个切片补",
@@ -174,7 +174,7 @@
         "CommercialReleaseGranted"
       ],
       "status": "COVERED",
-      "note": "订单生效前在 STL 占用额度；超额或逾期超限生成信用决定，按金额层级由非销售的信用人员放行；额度申请分级审批；出运与单证放行再核对付款条件。",
+      "note": "订单生效前在 STL 占用额度；超额或逾期超限生成信用决定，按金额层级由非销售的信用人员放行；额度申请分级审批；出运与单证放行再核对付款条件。S5R：订单修订生效时占用调整为新修订的信用部分（S5R-D08，结果与 SAP 未结订单值随订单下降一致）；付款条件例外的有效期取信用政策参数（S5R-D09）。",
       "refs": "STL-INV-004／005；TRD-INV-022；FUL-INV-002；ADR-BR-016",
       "followUp": ""
     },
@@ -219,10 +219,10 @@
         "ShipmentConfirmed",
         "StockIssued"
       ],
-      "status": "PARTIAL",
-      "note": "本仓发货是条件能力（F06）；默认成品供应商直发，不虚构本仓出库。",
+      "status": "COVERED",
+      "note": "直发路线已覆盖（S5）：装箱计划与实际、出运确认引用核实交付；本仓发货（stock.issue）仍是条件能力（F06，S6-01），不虚构本仓出库。",
       "refs": "基线 F06、F27",
-      "followUp": "S5 细化 FUL 状态机与装箱核对规则。"
+      "followUp": ""
     },
     {
       "id": "O2C-10",
@@ -258,15 +258,16 @@
       ],
       "commands": [
         "booking.record",
+        "milestone.plan",
         "milestone.record_actual"
       ],
       "events": [
         "MilestoneActualRecorded"
       ],
-      "status": "PARTIAL",
-      "note": "记录订舱与节点；不做运输路线与运力优化。",
+      "status": "COVERED",
+      "note": "订舱记录只登记已确认的订舱（船期、截关、箱型、承运人确认）；“已申请订舱”是节点 booking_requested；不加订舱状态，有意不同于 SAP TM 的承运人确认状态（S5R-D11）；不做运输路线与运力优化。",
       "refs": "补齐矩阵 INT-03／04",
-      "followUp": "S5 细化订舱记录字段（船期、截关、箱型、承运人确认）。"
+      "followUp": ""
     },
     {
       "id": "O2C-12",
@@ -277,6 +278,7 @@
         "FUL"
       ],
       "commands": [
+        "shipment_document.prepare",
         "shipment_document.issue",
         "document_release.record"
       ],
@@ -284,10 +286,10 @@
         "ShipmentDocumentIssued",
         "DocumentsReleased"
       ],
-      "status": "PARTIAL",
-      "note": "出运单证套目前是轮廓聚合；正本提单与电放受商业条件放行控制。",
+      "status": "COVERED",
+      "note": "商业发票与装箱单按模板渲染并取号，提单、原产地证与保险单为外部单证记录，与订单行、出运行、包装行逐项核对后签发；签发时再查原产地证（S5R-D12）；正本提单与电放受商业条件放行控制。",
       "refs": "BT12；INT-05；FUL-INV-002",
-      "followUp": "S5 定义单证字段映射与差异核对。"
+      "followUp": ""
     },
     {
       "id": "O2C-13",
@@ -327,7 +329,7 @@
         "Unapplied"
       ],
       "status": "COVERED",
-      "note": "原币到账、银行费用与核销分别记录；首期同币种核销。",
+      "note": "原币到账、银行费用与核销分别记录；同币种直接核销，跨币种按 settlement 用途显式汇率（S5-18）；第三方付款按许可付款人或付款人核实（S5R-D21，对应 SAP 替代付款人）；资金记录可冲销（S5R-D22）。",
       "refs": "STL-INV-002；CN-AT07",
       "followUp": ""
     },
@@ -342,6 +344,7 @@
       ],
       "commands": [
         "return.register",
+        "credit_note.request",
         "credit.confirm"
       ],
       "events": [
@@ -349,9 +352,9 @@
         "CreditConfirmed"
       ],
       "status": "PARTIAL",
-      "note": "售后为首发最小能力。",
+      "note": "贷项已覆盖（S5-18：申请与独立确认、冲减应收；期初结算单也可开贷项，S5R-D22）；退货与退款属售后首发最小能力。",
       "refs": "基线 F28、4.7",
-      "followUp": "S6 细化退货、贷项与退款的状态机。"
+      "followUp": "退货、补发与退款的状态机在 S6-03；贷项拆税在 R1 前（S5R-D46）。"
     },
     {
       "id": "O2C-16",
@@ -381,7 +384,7 @@
         "OrderResultClosed"
       ],
       "status": "DEVIATION",
-      "note": "业务结算汇率差额单列，不做会计汇兑损益。",
+      "note": "业务结算汇率差额单列，不做会计汇兑损益。S5R-D19：订单汇差先用实际结汇汇率，未结汇部分按核销日汇率并标 unrealized（未结汇部分与 SAP 清账时的已实现差额口径一致）。",
       "refs": "基线 4.5",
       "followUp": ""
     },
@@ -516,17 +519,19 @@
       "commands": [
         "stock.receive",
         "inspection.record",
-        "quality_release.grant"
+        "disposition.decide",
+        "quality_release.grant",
+        "quality_release.revoke"
       ],
       "events": [
         "StockReceived",
         "InspectionRecorded",
         "QualityReleased"
       ],
-      "status": "PARTIAL",
-      "note": "本仓收货是条件能力；验货与放行已建模，但只有轮廓。",
+      "status": "COVERED",
+      "note": "直发路线的验货、处置、质量放行与撤回已覆盖（S5）：撤回记录冻结量，冻结量复检后再放行，获批让步可放行（S5R-D18，对应 SAP 使用决策与冻结库存转回）；本仓收货（stock.receive）仍是条件能力。",
       "refs": "基线 F26；7.5",
-      "followUp": "S5 细化 QLT 状态机与放行撤回。"
+      "followUp": ""
     },
     {
       "id": "P2P-08",
@@ -539,16 +544,18 @@
       ],
       "commands": [
         "settlement.confirm",
-        "purchase_invoice.import"
+        "purchase_invoice.import",
+        "purchase_invoice.verify",
+        "payable_adjustment.confirm"
       ],
       "events": [
         "SettlementConfirmed",
         "PurchaseInvoiceVerified"
       ],
-      "status": "PARTIAL",
-      "note": "采购结算单按合同、收货或直发证据与供应商账单匹配；增值税专用发票由 CNX 核验。",
+      "status": "COVERED",
+      "note": "采购结算单按核实交付与供应商账单确认；增值税专用发票由 CNX 核验并匹配承诺行；红字发票只触发应付复核，价格折让经应付调整（S5R-D20，对应 SAP 后续贷项）。",
       "refs": "基线 4.12；CN-R06",
-      "followUp": "S5 定义采购结算匹配规则与差异处理。"
+      "followUp": ""
     },
     {
       "id": "P2P-09",
@@ -629,7 +636,7 @@
         "TradeComplianceDecided"
       ],
       "status": "COVERED",
-      "note": "贸易合规核查按目的国与交易方所在国判断禁运与制裁项目；订单生效与出运放行以守卫读取。",
+      "note": "贸易合规核查按目的国与交易方所在国判断禁运与制裁项目；订单生效与出运放行以守卫读取。S5R：带区域的项目由合规人工复核（region_review），不按区域自动匹配（SAP GTS 2025 可按区域检查；PTY 地址没有行政区编码，S5R-D15）；全面禁运或制裁命中判 clear 须附授权文件证据，比 SAP 更严（S5R-D17）；重新评估中的 blocked 仍答 blocked（S5R-D10）。",
       "refs": "CNX-INV-001；TRD-INV-023；ADR-BR-014",
       "followUp": ""
     },
@@ -654,7 +661,7 @@
         "DeclarationProfileVerified"
       ],
       "status": "COVERED",
-      "note": "出口管制分类与许可证要求由专业人员核实；许可证按出运分配用量，不超额度、不过期。",
+      "note": "出口管制分类与许可证要求由专业人员核实；许可证按出运或出口批次分配用量，不超额度、不过期；一份报关单一张许可证，多证经出口批次，许可证登记一批一证与一证一关（S5R-D04，按中国法规而非 SAP）；未报关即取消的目标可凭人工释放分配（S5R-D03）。",
       "refs": "CNX-INV-001／002；CN-R14",
       "followUp": ""
     },
@@ -687,15 +694,18 @@
         "CAT"
       ],
       "commands": [
-        "document_bundle.check"
+        "certificate.register",
+        "document_bundle.check",
+        "shipment_document.issue"
       ],
       "events": [
+        "CertificateRegistered",
         "DocumentBundleChecked"
       ],
-      "status": "PARTIAL",
-      "note": "登记原产地证结果与原产地依据；优惠原产地自动判定在首发以外。",
+      "status": "COVERED",
+      "note": "登记外部签发的原产地证与优惠原产地证结果（协定代码、签发机构，S5R-D12）与原产地依据；出运单证签发时再查；优惠原产地自动判定仍在首发以外（GTC-05 判定部分不做）。",
       "refs": "补齐矩阵 7.4",
-      "followUp": "按目的市场需要决定是否引入优惠原产地判定。"
+      "followUp": ""
     },
     {
       "id": "GTC-06",
@@ -739,15 +749,16 @@
         "FUL"
       ],
       "commands": [
+        "milestone.plan",
         "milestone.record_actual"
       ],
       "events": [
         "MilestoneActualRecorded"
       ],
-      "status": "PARTIAL",
-      "note": "海关放行、实际离境、送达与客户验收分别记录。",
+      "status": "COVERED",
+      "note": "节点类型区分供应商自报、内部核实与已验收；海关放行、实际离境、送达与客户验收分别记录（CN-R07）；booking_requested 与 booking_confirmed 配对（S5R-D11）。",
       "refs": "CN-R07",
-      "followUp": "S5 定义节点类型与证据要求。"
+      "followUp": ""
     },
     {
       "id": "CN-01",
@@ -764,7 +775,7 @@
         "PurchaseInvoiceVerified"
       ],
       "status": "LOCAL",
-      "note": "票据原件、核验状态与红蓝关系分别记录。",
+      "note": "票据原件、核验状态与红蓝关系分别记录。部分红冲按红票金额冲减蓝票；已用于退税申报的蓝票先登记进货凭证信息回退；受票主体不一致直接拒绝（S5R-D20、D21）。",
       "refs": "CN-F02；CN-R06",
       "followUp": ""
     },
@@ -783,7 +794,7 @@
         "TaxEvidenceAllocated"
       ],
       "status": "LOCAL",
-      "note": "预计、拟申报、已提交、核准与到账分别记录；核价按经核实的可回收率计算成本。",
+      "note": "预计、拟申报、已提交、核准与到账分别记录；核价按经核实的可回收率计算成本。退（免）税方式按法定四类，征税批次不开案件（S5R-D14）；政策修订按出口日期所在有效期绑定（S5R-D23）。",
       "refs": "CN-F04；CN-R08／R09；CST-INV-007",
       "followUp": ""
     },
@@ -803,7 +814,7 @@
         "DeclarationReceiptRecorded"
       ],
       "status": "LOCAL",
-      "note": "回执原文与映射版本保存；unknown 先查证，不盲目重申报。",
+      "note": "回执原文与映射版本保存；unknown 先查证，不盲目重申报。unknown 查证后可记 not_received（以海关总署可查询状态为准），之后可再次报关（S5R-D13）。",
       "refs": "CN-F03；CN-R05",
       "followUp": ""
     },

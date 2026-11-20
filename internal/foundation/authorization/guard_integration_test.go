@@ -470,6 +470,68 @@ func TestQualifyReadsAnotherActorsCurrentGrant(t *testing.T) {
 	}
 }
 
+// S4 decision D-5 (TRD's object control fences a binding on the grants of the task's initiator and
+// agent): Holding.ChangedEpoch is the authority epoch of the grant's last change. A change of another
+// grant, or a Put that changes nothing, keeps it; a new data scope, new permissions and a revocation
+// each move it to the scope's new epoch; a missing grant has 0.
+func TestHoldingCarriesTheGrantsChangedEpoch(t *testing.T) {
+	f := newFixture(t)
+	g := authorization.Grants{}
+	change := func(fn func(ctx context.Context, exec bentopg.Executor) (int64, error)) int64 {
+		t.Helper()
+		var epoch int64
+		if err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			epoch, err = fn(ctx, exec)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return epoch
+	}
+	changed := func(actor string) int64 {
+		t.Helper()
+		var h authorization.Holding
+		if err := f.inScope(f.scope, func(ctx context.Context, exec bentopg.Executor) error {
+			var err error
+			h, err = f.auth.Qualify(ctx, exec, actor)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return h.ChangedEpoch
+	}
+	start, agentStart := changed(alice.ID), changed(agent.ID)
+	if start < 1 || agentStart <= start || changed(bob.ID) != 0 {
+		t.Fatalf("alice %d, agent %d, bob %d", start, agentStart, changed(bob.ID))
+	}
+	others := change(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.Put(ctx, exec, f.scope, bob, []string{"quote.write"}, time.Now())
+	})
+	same := change(func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+		return g.Put(ctx, exec, f.scope, alice, []string{"quote.activate", "quote.write"}, time.Now())
+	})
+	if others <= agentStart || same != others || changed(alice.ID) != start || changed(agent.ID) != agentStart {
+		t.Fatalf("after another grant's change (%d, %d): alice %d, agent %d", others, same, changed(alice.ID), changed(agent.ID))
+	}
+	for name, fn := range map[string]func(ctx context.Context, exec bentopg.Executor) (int64, error){
+		"data scope": func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+			return g.SetDataScope(ctx, exec, f.scope, alice.ID, authorization.DataScopeCompany, "", time.Now())
+		},
+		"permissions": func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+			return g.Put(ctx, exec, f.scope, alice, []string{"quote.write"}, time.Now())
+		},
+		"revocation": func(ctx context.Context, exec bentopg.Executor) (int64, error) {
+			return g.Revoke(ctx, exec, f.scope, alice.ID, time.Now())
+		},
+	} {
+		before := changed(alice.ID)
+		if epoch := change(fn); epoch <= before || changed(alice.ID) != epoch || changed(agent.ID) != agentStart {
+			t.Errorf("%s: epoch %d, alice %d (was %d), agent %d", name, epoch, changed(alice.ID), before, changed(agent.ID))
+		}
+	}
+}
+
 // BC-D02: roles derive permissions; tenant roles merge templates; forbidden combinations are
 // refused at definition and at assignment; assignments keep their history.
 func TestRolesDerivePermissionsAndKeepSeparationOfDuties(t *testing.T) {

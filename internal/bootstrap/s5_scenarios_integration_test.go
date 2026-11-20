@@ -155,10 +155,10 @@ func (s *s5sc) evaluate(scope string) (map[string]any, map[string]any) {
 	return r, s.releaseEvaluation(brcStr(r["object_id"]))
 }
 
-// fund has treasury record a receipt of customer.1 on bank.usd, its advice registered by doc.1.
+// fund has treasury record a receipt of customer.1 on bank.usd on the advice it registers (S5R-D26).
 func (s *s5sc) fund(id, received, remitted, reference, advice string) map[string]any {
 	s.t.Helper()
-	s.source(brcDocumentation, "bank."+id, advice)
+	s.source(brcTreasury, "bank."+id, advice)
 	args := map[string]any{"fund_record_id": id, "kind": stlapi.FundReceipt, "counterparty_id": "customer.1",
 		"currency": cfgRef("currency", "USD", 1), "bank_account": s.bank, "received_amount": received, "value_date": now(),
 		"bank_reference": reference, "evidence_ids": []string{"bank." + id}}
@@ -792,7 +792,7 @@ func TestS5SCCrossCurrencyWriteOffAtTheSettlementRateOverHTTP(t *testing.T) {
 	settle, credit := rate("fx.cny.usd", polapi.PurposeSettlement), rate("fx.cny.usd.credit", polapi.PurposeCredit)
 
 	s.phase = "STL: the CNY receipt"
-	s.source(brcDocumentation, "bank.cny.p2", "合成银行收款通知：customer.1 以人民币支付 P2，入账 CNY 4,620.00，MT103-BRC-CNY。")
+	s.source(brcTreasury, "bank.cny.p2", "合成银行收款通知：customer.1 以人民币支付 P2，入账 CNY 4,620.00，MT103-BRC-CNY。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": "fund.cny.p2", "kind": stlapi.FundReceipt,
 		"counterparty_id": "customer.1", "currency": cny, "bank_account": bank, "received_amount": "4620.00", "value_date": now(),
 		"bank_reference": "MT103-BRC-CNY", "evidence_ids": []string{"bank.cny.p2"}})
@@ -842,7 +842,8 @@ func (s *s5sc) recordCharge(id, status, amount, occurred string, source map[stri
 	s.t.Helper()
 	args := map[string]any{"charge_id": id, "expected_version": 0, "status": status, "source": source,
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": "order.1"}}, "fee_category": s.freight, "currency": s.usd,
-		"conversion": map[string]any{"kind": "same_currency"}, "amount": amount, "occurred_on": occurred, "analysis_on": occurred, "basis": basis}
+		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": amount, "occurred_on": occurred,
+		"analysis_on": occurred, "basis": basis}
 	if len(evidence) > 0 {
 		args["evidence_ids"] = evidence
 	}
@@ -885,7 +886,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 
 	s.phase = "BT18: shipped, not settled"
 	r := s.recordCharge("freight.brc", "estimated", "60.00", today(), map[string]any{"kind": "logistics_offer", "party_id": "provider.1",
-		"reference": "log.1"}, nil, "provider.1 海运报价 log.1：F1 60.00 USD")
+		"reference": "log.1"}, nil, "provider.1 交货前内陆运费报价 log.1：F1 60.00 USD（pre_carriage）")
 	s.want("freight_recorded", r["status"], "estimated")
 	r = s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandReviewOrderResult, map[string]any{"order_id": "order.1", "expected_version": 0,
 		"note": "出运完成后复核：应收、采购与运费尚未结清（合成）"})
@@ -911,7 +912,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 	s.refused(brcTreasury, "stl", stlapi.Contract, stlapi.CommandCloseOrderResult, map[string]any{"order_id": "order.1",
 		"expected_version": r["row_version"], "reason": "订单已关闭"}, http.StatusConflict, stlapi.CodeOrderResultNotSettled)
 	s.want("close_with_estimated_freight", s.unmet(), "/conditions/direct_charges")
-	s.source(brcMerchandiser, "freight.bill", "合成货代账单：provider.1 海运费 60.00 USD，order.1 / shipment.1。")
+	s.source(brcTreasury, "freight.bill", "合成货代账单：provider.1 交货前内陆运费 60.00 USD（pre_carriage），order.1 / shipment.1。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight.brc", "expected_version": 1,
 		"evidence_ids": []string{"freight.bill"}})
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandAllocateCharge, s.allocateCharge("freight.brc", 2))
@@ -926,7 +927,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 	s.phase = "BT24: next month's freight"
 	month := time.Now().UTC().AddDate(0, 1, 0)
 	late := time.Date(month.Year(), month.Month(), 5, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
-	s.source(brcMerchandiser, "freight.bill.late", "合成货代补充账单：provider.1 次月港杂费 20.00 USD，order.1 / shipment.1，BILL-NEXT。")
+	s.source(brcTreasury, "freight.bill.late", "合成货代补充账单：provider.1 次月港杂费 20.00 USD，order.1 / shipment.1，BILL-NEXT。")
 	r = s.recordCharge("freight.late", "pending", "20.00", late, map[string]any{"kind": "supplier_bill", "party_id": "provider.1",
 		"reference": "BILL-NEXT"}, []string{"freight.bill.late"}, "次月补入：provider.1 账单 BILL-NEXT 20.00 USD")
 	s.want("late_freight", fmt.Sprint(r["status"], " occurred ", late), "pending occurred "+late)
@@ -1080,13 +1081,19 @@ func TestS5SCCommitmentCancellationOverHTTP(t *testing.T) {
 // new evaluation is recorded blocked with it, shipment.1 stays confirmed and FUL's fulfilment keeps
 // L4's 24 shipped; a further revocation is answered replayed and publishes nothing; the relay
 // delivers the one QualityReleaseRevoked and its redelivery changes nothing; QLT's subject shows
-// 48 conforming, 48 released (the revoked release counts in full) and 0 releasable, so a new release
-// of the frozen 24 is QUALITY_RELEASE_EXCEEDS_CONFORMING. Unit test: A8 TestRevocationFreezesTheUnshippedRestBT21.
+// 48 conforming, 48 released (the revoked release counts in full while its frozen 24 awaits a
+// re-inspection) and 0 releasable, so a new release of the frozen 24 is
+// QUALITY_RELEASE_EXCEEDS_CONFORMING. S5R-D18 (R5): the revocation recorded 24 shipped and 24 frozen
+// from FUL's ReleaseConsumption v1 (R79); qc re-inspects L4 after the revocation, superseding
+// insp.L4 and restating all 48 conforming; the revoked release then counts its 24 shipped, the frozen
+// 24 is released again (rel.L4.again) and ships, and L4 has shipped its 48. Unit tests: A8
+// TestRevocationFreezesTheUnshippedRestBT21, R5 TestFrozenQuantityReleasedAgainAfterReinspectionBT21.
 func TestS5SCBT21RevocationAfterPartialShipmentOverHTTP(t *testing.T) {
-	s := newS5SC(t, s5scMeta{ID: "BT21", Title: "放行后部分出运再撤回 (BT21): the unshipped rest frozen, the shipped kept, a repeated revoke deducts nothing",
-		Design:    []string{"BT21", "QLT-INV-002", "FUL-INV-002", "R26"},
-		RestsOn:   []string{"A8", "B1a", "C1", "D1"},
-		UnitTests: []string{"TestRevocationFreezesTheUnshippedRestBT21 (A8)", "TestQualityReleaseGuardDecidesEveryCommitOrder (A8)"},
+	s := newS5SC(t, s5scMeta{ID: "BT21", Title: "放行后部分出运再撤回 (BT21): the unshipped rest frozen, the shipped kept, a repeated revoke deducts nothing; the frozen rest released again after a re-inspection (S5R-D18)",
+		Design:  []string{"BT21", "QLT-INV-001", "QLT-INV-002", "FUL-INV-002", "R26", "R79", "S5R-D18"},
+		RestsOn: []string{"A8", "B1a", "C1", "D1", "R5"},
+		UnitTests: []string{"TestRevocationFreezesTheUnshippedRestBT21 (A8)", "TestQualityReleaseGuardDecidesEveryCommitOrder (A8)",
+			"TestFrozenQuantityReleasedAgainAfterReinspectionBT21 (R5)", "TestFrozenQuantityReleasedAgainAfterReinspection (R5)"},
 		Deviations: []string{
 			"BRC-001's L4 release of 48 PCS with 24 shipped stands for the baseline's 200 released / 100 shipped (the same half).",
 		}})
@@ -1143,22 +1150,51 @@ func TestS5SCBT21RevocationAfterPartialShipmentOverHTTP(t *testing.T) {
 	s.want("quality_release_revoked_events", n, "1")
 	rel := s.get(brcQC, "/api/brant/v1/qlt/quality_releases/rel.L4")
 	s.want("release", fmt.Sprint(rel["state"], " by ", brcDig(rel, "revocation", "revoked_by", "id")), "revoked by qc")
-	st := s.get(brcQC, "/api/brant/v1/qlt/subjects/"+qltapi.SubjectCommitmentLine+"/commitment.1/lines/L4")
-	s.want("subject_L4", fmt.Sprint("conforming ", st["conforming"], " released ", st["released"], " releasable ", st["releasable"]),
-		"conforming 48 released 48 releasable 0")
-	s.refused(brcQC, "qlt", qltapi.Contract, qltapi.CommandGrantRelease, map[string]any{"release_id": "rel.L4.again",
-		"subject": map[string]any{"kind": qltapi.SubjectCommitmentLine, "id": "commitment.1", "line_id": "L4"}, "quantity": "24",
-		"valid_until": kernel.FormatTimestamp(time.Now().Add(30 * 24 * time.Hour))}, http.StatusUnprocessableEntity,
-		qltapi.CodeQualityReleaseExceedsConforming)
+	s.want("revocation_shipped_frozen", fmt.Sprint(brcDig(rel, "revocation", "shipped_quantity"), " ", brcDig(rel, "revocation", "frozen_quantity")),
+		"24 24")
+	subjectL4 := "/api/brant/v1/qlt/subjects/" + qltapi.SubjectCommitmentLine + "/commitment.1/lines/L4"
+	st := s.get(brcQC, subjectL4)
+	s.want("subject_L4", fmt.Sprint("conforming ", st["conforming"], " released ", st["released"], " frozen ", st["frozen"], " releasable ",
+		st["releasable"]), "conforming 48 released 48 frozen 24 releasable 0")
+	subject := map[string]any{"kind": qltapi.SubjectCommitmentLine, "id": "commitment.1", "line_id": "L4"}
+	again := map[string]any{"release_id": "rel.L4.again", "subject": subject, "quantity": "24",
+		"valid_until": kernel.FormatTimestamp(time.Now().Add(30 * 24 * time.Hour))}
+	s.refused(brcQC, "qlt", qltapi.Contract, qltapi.CommandGrantRelease, again, http.StatusUnprocessableEntity, qltapi.CodeQualityReleaseExceedsConforming)
 	s.figure("release_the_frozen_24_again", qltapi.CodeQualityReleaseExceedsConforming)
+
+	s.phase = "BT21: re-inspection and release of the frozen 24 (S5R-D18)"
+	s.fileOf(brcQC, "report.recheck", "recheck-ST01-L4.txt", "合成复检报告：L4 ST01 蓝/M 48 件（已出运 24 件按原检验、冻结 24 件复检），色差在标样范围内，全部合格。")
+	s.cmd(brcQC, "qlt", qltapi.Contract, qltapi.CommandRecordInspection, map[string]any{"inspection_id": "insp.L4.recheck", "subject": subject,
+		"inspected_quantity": "48", "conforming_quantity": "48", "nonconforming_quantity": "0", "sampling": map[string]any{"method": qltapi.SamplingFull},
+		"standard": map[string]any{"source_id": "standard"}, "inspector": map[string]any{"kind": qltapi.InspectorInternal},
+		"report_file_id": "report.recheck", "inspected_at": now(), "supersedes_inspection_id": "insp.L4", "reason": "撤回后复检冻结的 24 件"})
+	st = s.get(brcQC, subjectL4)
+	s.want("subject_L4_after_recheck", fmt.Sprint("conforming ", st["conforming"], " released ", st["released"], " frozen ", st["frozen"],
+		" releasable ", st["releasable"]), "conforming 48 released 24 frozen 0 releasable 24")
+	r = s.cmd(brcQC, "qlt", qltapi.Contract, qltapi.CommandGrantRelease, again)
+	s.want("release_the_frozen_24_after_recheck", r["status"], qltapi.StatusGranted)
+	shipLines := s.shipmentLines([]s5scShipLine{{"S1", "L4", "24", "delivery.1"}})
+	shipLines[0].(map[string]any)["quality_release_id"] = "rel.L4.again"
+	status, out = s.post(brcMerchandiser, "ful", fulapi.Contract, fulapi.CommandPrepareShipment, map[string]any{"shipment_id": "shipment.3",
+		"order_id": "order.1", "route": fulapi.RouteSupplierDirect, "lines": shipLines})
+	if status != http.StatusOK {
+		t.Fatalf("shipment.3 %d %v", status, out)
+	}
+	s.shipmentID = "shipment.3"
+	r, _ = s.evaluate(fulapi.ScopeShipment)
+	s.want("shipment_3_release", r["status"], fulapi.ReleaseGranted)
+	s.cmd(brcMerchandiser, "ful", fulapi.Contract, fulapi.CommandConfirmShipment, map[string]any{"shipment_id": "shipment.3", "expected_version": 1,
+		"evidence_ids": []string{"forwarder.receipt"}})
+	lines2, total2 := s.shipped()
+	s.want("shipped_after_recheck", fmt.Sprintf("L4 %s, %d in all", lines2["L4"], total2), "L4 48, 48 in all")
 }
 
 // openingReceivable has treasury record C10's opening receivable of customer.1 at the cutoff (a
-// prior order's statement, open at go-live), on the legacy ledger's extract registered by doc.1.
+// prior order's statement, open at go-live), on the legacy ledger's extract treasury registers (S5R-D26).
 func (s *s5sc) openingReceivable(id, document, amount string, dueDays int) map[string]any {
 	s.t.Helper()
 	s.phase = "STL opening balance"
-	s.source(brcDocumentation, "ledger."+id, "合成旧系统应收余额表：customer.1 "+document+" 未结 "+amount+" USD（切换日）。")
+	s.source(brcTreasury, "ledger."+id, "合成旧系统应收余额表：customer.1 "+document+" 未结 "+amount+" USD（切换日）。")
 	cutoff := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
 	return s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordOpening, map[string]any{"opening_id": id, "kind": stlapi.OpeningReceivable,
 		"cutoff_at": kernel.FormatTimestamp(cutoff), "source": map[string]any{"document": document,
@@ -1299,7 +1335,7 @@ func (s *s5sc) payPurchase(d *s5scDeal, currency string, account map[string]any,
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmSettlement, map[string]any{"statement_id": id, "kind": stlapi.StatementPurchase,
 		"sources": sources, "evidence_ids": []string{"supplier.ack." + d.id}})
 	v := s.get(brcTreasury, "/api/brant/v1/stl/payables/"+id)
-	s.source(brcDocumentation, "bank.pay."+d.id, "合成银行付款回单：向 "+d.supplierID()+" 付款 "+amount+" "+currency+"。")
+	s.source(brcTreasury, "bank.pay."+d.id, "合成银行付款回单：向 "+d.supplierID()+" 付款 "+amount+" "+currency+"。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": "fund.pay." + d.id, "kind": stlapi.FundPayment,
 		"counterparty_id": d.supplierID(), "currency": s.money(currency), "bank_account": account, "received_amount": amount, "value_date": now(),
 		"bank_reference": "TT-PAY-" + strings.ToUpper(d.id), "evidence_ids": []string{"bank.pay." + d.id}})
@@ -1316,9 +1352,9 @@ func (s *s5sc) freightOf(d *s5scDeal, currency, amount string) {
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 0,
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "log." + d.id},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money(currency),
-		"conversion": map[string]any{"kind": "same_currency"}, "amount": amount, "occurred_on": today(), "analysis_on": today(),
-		"basis": "provider.1 海运报价 log." + d.id})
-	s.source(brcMerchandiser, "freight.bill."+d.id, "合成货代账单：provider.1 海运费 "+amount+" "+currency+"，"+d.order()+"。")
+		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": amount, "occurred_on": today(),
+		"analysis_on": today(), "basis": "provider.1 交货前内陆运费报价 log." + d.id})
+	s.source(brcTreasury, "freight.bill."+d.id, "合成货代账单：provider.1 交货前内陆运费 "+amount+" "+currency+"，"+d.order()+"。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandConfirmCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 1,
 		"evidence_ids": []string{"freight.bill." + d.id}})
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandAllocateCharge, map[string]any{"charge_id": "freight." + d.id, "expected_version": 2,
@@ -1417,6 +1453,9 @@ func TestS5SCSBCreditNoteOverHTTP(t *testing.T) {
 func (s *s5sc) registerLicence(number, quantity, value string, skus []string, from, until time.Time) string {
 	s.t.Helper()
 	s.fileOf(brcDocumentation, "licence."+number, "licence-"+number+".txt", "合成出口许可证扫描件："+number+"（测试数据，非真实许可证）。")
+	// S5R-D04: TD-AT13's 600 + 500 on one licence is a multi_use licence (CNX-INV-002 positive), stated on
+	// the licence face's evidence; every licence names its customs office (一证一关).
+	s.source(brcDocumentation, "licence.face."+number, "合成许可证证面："+number+" 非一批一证（测试数据）。")
 	var specs []any
 	for _, sku := range skus {
 		specs = append(specs, map[string]any{"sku_id": sku, "spec_revision": 1})
@@ -1425,7 +1464,8 @@ func (s *s5sc) registerLicence(number, quantity, value string, skus []string, fr
 		"issuer": "合成发证机关（测试）", "holder": "合成企业", "goods": map[string]any{"sku_specs": specs}, "licensed_quantity": quantity,
 		"unit": "PCS", "currency": map[string]any{"id": "USD", "revision": 1}, "licensed_value": value, "destination": syntheticClear,
 		"end_user": map[string]any{"party_id": "customer.1", "name": "customer.1"}, "valid_from": kernel.FormatTimestamp(from),
-		"valid_until": kernel.FormatTimestamp(until), "file_id": "licence." + number})
+		"valid_until": kernel.FormatTimestamp(until), "file_id": "licence." + number, "usage_mode": cnxapi.UsageMultiUse,
+		"usage_evidence_ids": []string{"licence.face." + number}, "customs_office": "2248"})
 	return brcStr(r["object_id"])
 }
 
@@ -1624,9 +1664,9 @@ func TestS5SCSABaseline46OverHTTP(t *testing.T) {
 	s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.sa", "expected_version": 0,
 		"status": "estimated", "source": map[string]any{"kind": "logistics_offer", "party_id": "provider.1", "reference": "log.sa"},
 		"beneficiaries": []any{map[string]any{"kind": "order", "order_id": d.order()}}, "fee_category": s.freight, "currency": s.money("CNY"),
-		"conversion": map[string]any{"kind": "same_currency"}, "amount": "500.00", "occurred_on": today(), "analysis_on": today(),
-		"basis": "provider.1 海运报价 log.sa：预计 CNY 500.00"})
-	s.source(brcMerchandiser, "freight.bill.sa", "合成货代账单 BILL-SA：provider.1 海运费 CNY 650.00，shipment.60 与 shipment.40。")
+		"conversion": map[string]any{"kind": "same_currency"}, "cost_component": "pre_carriage", "amount": "500.00", "occurred_on": today(),
+		"analysis_on": today(), "basis": "provider.1 交货前内陆运费报价 log.sa：预计 CNY 500.00"})
+	s.source(brcTreasury, "freight.bill.sa", "合成货代账单 BILL-SA：provider.1 交货前内陆运费 CNY 650.00（pre_carriage），shipment.60 与 shipment.40。")
 	r := s.cmd(brcCreditOfficer, "stl", stlapi.Contract, stlapi.CommandRecordCharge, map[string]any{"charge_id": "freight.sa", "expected_version": 1,
 		"status": "pending", "source": map[string]any{"kind": "supplier_bill", "party_id": "provider.1", "reference": "BILL-SA"}, "amount": "650.00",
 		"occurred_on": today(), "analysis_on": today(), "basis": "货代账单 BILL-SA", "evidence_ids": []string{"freight.bill.sa"}})
@@ -1704,7 +1744,8 @@ func (s *s5sc) amendment(id string, rev int64, hash string, quantities map[strin
 // every consumer, once: PUR opens an allocation review (L4: 48 held by commitment.1, target 36), FUL
 // a shipment review (shipment.2, bound to revision 1: its shipment, packing and release items), STL a
 // payment plan review (the account moved to revision 2: P1 259.20 with 288.00 applied, P2 604.80) and
-// CNX a pending check for revision 2; STL's credit consumer changes nothing. Each responsible role
+// CNX a pending check for revision 2; STL's credit consumer carries the reservation over to revision 2 at
+// 604.80 and releases revision 1's as superseded (S5R-D08). Each responsible role
 // settles its review on what it did: the purchaser changes commitment.1 (L4 → 36; the order reviewer
 // decides it independently, the purchaser applies it) and settles commitment_changed; compliance
 // concludes revision 2 clear; the merchandiser cancels shipment.2, prepares shipment.3 of L3 at
@@ -1717,7 +1758,7 @@ func (s *s5sc) amendment(id string, rev int64, hash string, quantities map[strin
 func TestS5SCBT10OrderChangeAfterPartialShipmentOverHTTP(t *testing.T) {
 	s := newS5SC(t, s5scMeta{ID: "BT10", Title: "部分出运后减量 (BT10): PUR, FUL, STL and CNX each review the amendment; what shipped stays",
 		Design: []string{"BT10", "WF-06", "PL-09", "PL-14", "D-9", "D-18", "D-21", "TRD-INV-016", "TRD-INV-018", "PUR-INV-011", "SM-PUR-ALLOCATION-REVIEW",
-			"SM-FUL-SHIPMENT-REVIEW", "SM-STL-PAYMENT-PLAN-REVIEW"},
+			"SM-FUL-SHIPMENT-REVIEW", "SM-STL-PAYMENT-PLAN-REVIEW", "S5R-D08"},
 		RestsOn: []string{"C4a", "C4b-PUR", "C4b-FUL", "C4b-STL", "C4b-CNX", "C11", "D1"},
 		UnitTests: []string{"TestAllocationReviewFollowsAReducedOrderBT10 (C4b-PUR)", "TestShipmentReviewFollowsAReducedOrderBT10 (C4b-FUL)",
 			"TestAmendedOrderMovesItsAccountThroughTheRelay (C4b-STL)", "TestOrderAmendedOpensOnePendingCheckPerRevision (C4b-CNX)",
@@ -1793,7 +1834,18 @@ func TestS5SCBT10OrderChangeAfterPartialShipmentOverHTTP(t *testing.T) {
 	s.want("order_amended_consumers", strings.Join(consumers, "; "), "cnx.trade_compliance ← "+trdapi.EventOrderAmended+"; ful.shipment_review ← "+
 		trdapi.EventOrderAmended+"; pur.allocation_review ← "+trdapi.EventOrderAmended+"; stl.order_account ← "+trdapi.EventOrderAmended+
 		"; stl.order_credit ← "+trdapi.EventOrderAmended)
-	s.want("reservation_after_amendment", s.reservation()["status"], stlapi.ReservationConsumed)
+	// S5R-D08 (S5 kept res.order.1 consumed here until the order ended): the credit follows revision 2 — res.order.1
+	// is released as superseded and carried over at revision 2's credit portion 604.80.
+	r1 := s.reservation()
+	s.want("reservation_after_amendment", fmt.Sprint(r1["status"], " ", r1["release_cause"]), stlapi.ReservationReleased+" "+stlapi.CauseSuperseded)
+	var carried []string
+	for _, r := range brcList(s.get(brcCreditOfficer, "/api/brant/v1/stl/customers/customer.1/credit")["reservations"]) {
+		if brcDig(r, "order_id") == "order.1" && brcDig(r, "status") != stlapi.ReservationReleased {
+			carried = append(carried, fmt.Sprint("r", brcDig(r, "order_revision"), " ", brcDig(r, "status"), " ", brcDig(r, "basis"), " from ",
+				brcDig(r, "carried_from"), " ", brcDig(r, "portion_minor")))
+		}
+	}
+	s.want("reservation_carried_over", strings.Join(carried, "; "), "r2 consumed carried_over from res.order.1 60480")
 
 	s.phase = "BT10: the reviews"
 	pr := brcMap(brcDig(s.get(brcPurchaser, "/api/brant/v1/pur/orders/order.1/allocation_reviews"), "allocation_reviews", 0))
@@ -1955,14 +2007,16 @@ func (s *s5sc) decideException(id, reason string) map[string]any {
 // order is activated on the reservation and the purchaser drafts 1,000 PCS. The customer reduces
 // both styles by 10 % (450 + 450 = 8,280.00): the amendment is applied (credit not increased); the
 // relay opens PUR's allocation review (the draft and both lines held 50 above the target), STL's
-// payment plan review (credit portion 9,200.00 → 8,280.00) and CNX's pending check of revision 2.
+// payment plan review (credit portion 9,200.00 → 8,280.00) and CNX's pending check of revision 2; STL's
+// credit consumer carries the reservation over to revision 2 at 8,280.00 (S5R-D08: exposure 15,280.00).
 // The purchaser voids the draft (PurchaseDraftVoided), drafts 900 and settles the review
 // draft_voided; treasury accepts the portion change; compliance concludes revision 2 clear. The 900
 // are committed, inspected and released; the factory delivers 850 (450 + 400), verified, and the
 // purchaser's short-receipt change to 850 (order reviewer's decision) makes the commitment fulfilled.
 // The merchandiser packs, books and ships 850; doc.1 prepares the CIF commercial invoice (7,820.00)
 // and the packing list: issuing without the insurance policy is SHIPMENT_DOCUMENTS_UNRECONCILED at
-// /insurance_policy, a policy insuring 8,601.99 is INSURANCE_COVERAGE_INSUFFICIENT (110 % of 7,820.00
+// /insurance_policy (S5R-D06: a missing policy is that code; INSURANCE_COVERAGE_INSUFFICIENT is the
+// short cover only), a policy insuring 8,601.99 is INSURANCE_COVERAGE_INSUFFICIENT (110 % of 7,820.00
 // = 8,602.00), the policy of 8,602.00 is recorded and the set issued. Treasury confirms the
 // receivable of 7,820.00; the merchandiser closes the remainder of 50 (order.close_remainder,
 // OrderRemainderClosed), and STL's consumer releases the reservation: the exposure is the opening
@@ -1972,7 +2026,7 @@ func (s *s5sc) decideException(id, reason string) map[string]any {
 func TestS5SCSIM02VariantOverHTTP(t *testing.T) {
 	s := newS5SC(t, s5scMeta{ID: "SIM-02", Title: "SIM-02 变体: CIF Hamburg 1,000 × 9.20, O/A 60, −10 %, insurance 110 %, 850 of 900, close_remainder 50",
 		Design: []string{"SIM-02", "WF-06", "ES-09", "F-03", "FUL-INV-005", "PUR-INV-008", "PUR-INV-011", "STL-INV-004", "D-9", "D-13", "D-14",
-			"D-18", "D-19"},
+			"D-18", "D-19", "S5R-D06", "S5R-D08"},
 		RestsOn: []string{"C6", "C11", "C4a", "C4b-PUR", "C4b-STL", "C4b-CNX", "C10", "A6", "B6", "D1"},
 		UnitTests: []string{"TestCommitmentShortReceiptSIM02 (C11)", "TestInsuranceOnTheCIFInvoiceSIM02Step8 (C6)", "TestAllocationReviewFollowsAReducedOrderBT10 (C4b-PUR)",
 			"TestAmendedOrderMovesItsAccountThroughTheRelay (C4b-STL)"},
@@ -2076,14 +2130,16 @@ func TestS5SCSIM02VariantOverHTTP(t *testing.T) {
 	var stlItems, stlDispositions []any
 	for _, it := range brcList(sr["items"]) {
 		stlItems = append(stlItems, fmt.Sprint(brcDig(it, "kind"), " ", brcDig(it, "from_minor"), "→", brcDig(it, "to_minor")))
-		stlDispositions = append(stlDispositions, map[string]any{"seq": brcDig(it, "seq"), "disposition": "accepted", "note": "减量后信用占用随订单结束释放"})
+		stlDispositions = append(stlDispositions, map[string]any{"seq": brcDig(it, "seq"), "disposition": "accepted", "note": "减量后信用占用随修订降为 8,280.00（S5R-D08）"})
 	}
 	s.want("stl_review", fmt.Sprint(stlItems), "[credit_portion_changed 920000→828000]")
 	acc := s.get(brcTreasury, "/api/brant/v1/stl/order_accounts/"+d.order())
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandSettleReview, map[string]any{"order_id": d.order(), "order_revision": 2,
 		"expected_version": acc["version"], "reason": "付款计划影响已复核", "items": stlDispositions})
 	s.clear(d, false)
-	s.want("exposure_after_amendment", s.exposure(brcCreditOfficer), "1620000")
+	// S5R-D08 (simulated sign-off E0; S5 recorded 1620000 here: the 9,200.00 stayed until the order ended): the
+	// amendment carries the credit over at revision 2's 8,280.00, so the exposure is 7,000.00 + 8,280.00.
+	s.want("exposure_after_amendment", s.exposure(brcCreditOfficer), "1528000")
 
 	s.phase = "SIM-02 step 9: 850 of 900"
 	s.commit(d, "purchase.sim.2")

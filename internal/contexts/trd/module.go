@@ -8,7 +8,8 @@
 // the contract when they arrived in time, and the acceptances' effectivity ledger; then the sales
 // order an accepted revision converts into, its review and activation (ActiveOrderRef v1 for PUR),
 // its amendments and end, and the S/C and PI of its revisions with their signed copies; and, for
-// STL, CNX and FUL, OrderCommercialSnapshot v1 of drafts and active orders (OrderSnapshotLookups).
+// STL, CNX and FUL, OrderCommercialSnapshot v1 of drafts and active orders (OrderSnapshotLookups)
+// and, since S5R-D35, OrderRevisionRef v1 of any committed revision (OrderRevisionLookups).
 // Since S5 an order activates only on a clear trade compliance conclusion of CNX and, when its
 // payment plan has a stage due after shipment or invoice, a credit reservation of STL; an amendment
 // that asks for more credit applies only on a reservation for the revision it produces.
@@ -27,6 +28,7 @@ import (
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/events"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/facts"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/guards"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/adapters/postgres"
@@ -34,6 +36,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/messaging"
 )
 
 // Module is TRD wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -48,10 +51,15 @@ var (
 	_ api.AcceptanceLookups     = (*Module)(nil)
 	_ api.ActiveOrderLookups    = (*Module)(nil)
 	_ api.OrderSnapshotLookups  = (*Module)(nil)
+	_ api.OrderRevisionLookups  = (*Module)(nil)
 	_ api.ActiveOrderCommands   = (*Module)(nil)
 	_ api.OrderDocumentCommands = (*Module)(nil)
 	_ api.Auditor               = (*Module)(nil)
 	_ api.Reconciler            = (*Module)(nil)
+	_ api.ActionReconciler      = (*Module)(nil)
+	_ api.GoalQueries           = (*Module)(nil)
+	_ api.PriceProposalQueries  = (*Module)(nil)
+	_ api.OrderRequestChecks    = (*Module)(nil)
 )
 
 // Upstream are the lookups of TRD's upstream contexts: EVD (SourceRef v1, R16), PTY (PartyRef,
@@ -69,6 +77,9 @@ type Upstream struct {
 	Rfqs      inqapi.RfqLookups
 	Snapshots cstapi.SnapshotLookups
 	Contexts  cstapi.Lookups
+	// Prices is POL's lookup of the sales price list (polapi.SalesPriceQueries), which the price
+	// proposal reads before TRD's transaction (R15; owner decision 2026-11-18).
+	Prices polapi.SalesPriceQueries
 	// Credit is STL's CreditGuard v1 (STLCreditGuard) and TradeCompliance CNX's
 	// TradeComplianceGuard v1 (CNXTradeComplianceGuard). Both are guard functions run with TRD's
 	// own executor, so TRD is composed before STL and CNX exist as modules (S5 decision D-2).
@@ -123,8 +134,8 @@ func CNXTradeComplianceGuard() TradeComplianceGuard { return guards.CNXTradeComp
 // activate with a recorded gap where TRD-INV-022 and TRD-INV-023 ask for a verdict.
 func New(db *bentopg.DB, up Upstream) (*Module, error) {
 	if up.Sources == nil || up.Parties == nil || up.Profiles == nil || up.Skus == nil || up.Configs == nil || up.Numbers == nil ||
-		up.Rfqs == nil || up.Snapshots == nil || up.Contexts == nil {
-		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL, INQ and CST and POL's number.issue")
+		up.Rfqs == nil || up.Snapshots == nil || up.Contexts == nil || up.Prices == nil {
+		return nil, errors.New("trd: module needs the lookups of EVD, PTY, CAT, POL (with its sales price list), INQ and CST and POL's number.issue")
 	}
 	if up.Credit == nil || up.TradeCompliance == nil {
 		return nil, errors.New("trd: module needs STL's CreditGuard and CNX's TradeComplianceGuard")
@@ -145,9 +156,17 @@ func New(db *bentopg.DB, up Upstream) (*Module, error) {
 		Orders: application.OrderGuards{Credit: up.Credit, TradeCompliance: up.TradeCompliance},
 		Facts:  application.OrderFacts{Shipments: up.Shipments, Commitments: up.Commitments},
 		Upstream: application.Upstream{Sources: up.Sources, Parties: up.Parties, Profiles: up.Profiles, Skus: up.Skus, Configs: up.Configs,
-			Numbers: up.Numbers, Rfqs: up.Rfqs, Snapshots: up.Snapshots, Contexts: up.Contexts},
+			Numbers: up.Numbers, Rfqs: up.Rfqs, Snapshots: up.Snapshots, Contexts: up.Contexts, Prices: up.Prices},
 		Ledger: &action.Ledger{
 			DB: db, Schema: postgres.Schema, Source: api.Source, Authorizer: authorization.Authorizer{Policy: policy},
 			Outbox: outbox, Clock: clock, ReplayRead: application.CommandGetQuote, Visible: application.Visible,
 		}}}, nil
+}
+
+// Subscriptions are TRD's Inbox consumers on its own transaction owner (repository structure §07):
+// trd.cost_source_holds, which has CST's CostSourceDenied hold the active revisions resting on the
+// denied source before a contract formed on them and record a risk on the active orders (Context Map
+// R11; WF-03, PL-07, SC-04; S4 decision D-9).
+func (m *Module) Subscriptions() []messaging.Subscription {
+	return events.Subscriptions(m.Ledger.DB, m.Service)
 }

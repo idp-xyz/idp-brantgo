@@ -22,9 +22,11 @@ type Module struct {
 }
 
 var (
-	_ api.Commands = (*Module)(nil)
-	_ api.Queries  = (*Module)(nil)
-	_ api.Auditor  = (*Module)(nil)
+	_ api.Commands         = (*Module)(nil)
+	_ api.Queries          = (*Module)(nil)
+	_ api.Auditor          = (*Module)(nil)
+	_ api.Reconciler       = (*Module)(nil)
+	_ api.ActionReconciler = (*Module)(nil)
 )
 
 // Upstream are the queries of SUP's upstream contexts: EVD's sources (R53), PTY's parties and

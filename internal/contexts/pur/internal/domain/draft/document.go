@@ -55,11 +55,16 @@ const RevisionContract = "brant.purchase-commitment-revision/0.1.0"
 
 // DocRevision is what a revision's document binds: the commitment, the change that proposes it, the
 // commitment revision the change is bound to and the revision it makes.
+//
+// DecreaseOnly marks a revision that only buys less than the one it changes (S5R-D41): its supply
+// conditions' validity was not checked and its price groups kept the unit prices of the revision it
+// changes (DocGroup.PriceKept).
 type DocRevision struct {
 	CommitmentID string `json:"commitment_id"`
 	ChangeID     string `json:"change_id"`
 	BaseRevision int64  `json:"base_revision"`
 	Revision     int64  `json:"revision"`
+	DecreaseOnly bool   `json:"decrease_only,omitempty"`
 }
 
 // DocScope is the tenant and company the draft belongs to.
@@ -169,7 +174,9 @@ type DocTier struct {
 	Quantity       string `json:"quantity"`
 }
 
-// DocGroup is one condition line priced once over the draft lines it serves (T02 §13.3).
+// DocGroup is one condition line priced once over the draft lines it serves (T02 §13.3). PriceKept
+// marks a group of a decrease-only commitment revision priced at the tier the revision it changes
+// applied (S5R-D41: 单价沿用当前修订), whatever tier contains its quantity now.
 type DocGroup struct {
 	GroupID            string        `json:"group_id"`
 	Source             DocLineSource `json:"source"`
@@ -187,6 +194,7 @@ type DocGroup struct {
 	NetMinor           string        `json:"net_minor"`
 	TaxMinor           string        `json:"tax_minor"`
 	GrossMinor         string        `json:"gross_minor"`
+	PriceKept          bool          `json:"price_kept,omitempty"`
 }
 
 // DocSku is a SKU specification revision.

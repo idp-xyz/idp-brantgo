@@ -46,6 +46,7 @@ func cnxCommands(c CNX) *commandSet {
 			cnxapi.CommandVerifyInvoice:       reflected("", "", receiptOf[cnxapi.Receipt](c.VerifyInvoice)),
 			cnxapi.CommandAllocateTaxEvidence: reflected("", "", receiptOf[cnxapi.Receipt](c.AllocateTaxEvidence)),
 			cnxapi.CommandRecordTaxResult:     reflected("", "", receiptOf[cnxapi.Receipt](c.RecordTaxResult)),
+			cnxapi.CommandRebindPolicy:        reflected("", "", receiptOf[cnxapi.Receipt](c.RebindPolicy)), // S5R-D23
 			// Declarations and document bundles name declaration_id, export_lot_id, bundle_id.
 			cnxapi.CommandPrepareDeclaration:    reflected("", "", receiptOf[cnxapi.Receipt](c.PrepareDeclaration)),
 			cnxapi.CommandConfirmDeclaration:    reflected("", "", receiptOf[cnxapi.Receipt](c.ConfirmDeclaration)),

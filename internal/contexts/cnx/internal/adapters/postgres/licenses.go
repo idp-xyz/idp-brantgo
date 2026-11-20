@@ -19,7 +19,8 @@ import (
 
 const licenseColumns = `license_id, license_number, issuer, holder, goods, unit, trim_scale(licensed_quantity)::text, currency_id,
 	currency_revision, currency_code, currency_minor_units, licensed_value_minor::text, destination, end_user_party_id, end_user_name,
-	valid_from, valid_until, file_id, file_sha256, row_version, registered_by_kind, registered_by_id, authority_epoch, registered_at`
+	valid_from, valid_until, file_id, file_sha256, row_version, registered_by_kind, registered_by_id, authority_epoch, registered_at,
+	usage_mode, usage_evidence, coalesce(customs_office, '')`
 
 func decimal(s string) (kernel.Decimal, error) {
 	d, err := kernel.ParseDecimal(s, kernel.DecimalFormat{IntDigits: kernel.MaxMinorDigits, Scale: 6})
@@ -37,9 +38,11 @@ func minor(c kernel.Currency, s string) (kernel.Money, error) {
 func scanLicense(row pgx.Row) (*el.License, error) {
 	var l el.License
 	var goods, unit, quantity, value, kind string
+	var usageEvidence *string
 	err := row.Scan(&l.ID, &l.Number, &l.Issuer, &l.Holder, &goods, &unit, &quantity, &l.Currency.ConfigID, &l.Currency.Revision,
 		&l.Currency.Code, &l.Currency.MinorUnits, &value, &l.Destination, &l.EndUserPartyID, &l.EndUserName, &l.Validity.From,
-		&l.Validity.Until, &l.FileID, &l.FileSHA256, &l.RowVersion, &kind, &l.RegisteredBy.ID, &l.Epoch, &l.RegisteredAt)
+		&l.Validity.Until, &l.FileID, &l.FileSHA256, &l.RowVersion, &kind, &l.RegisteredBy.ID, &l.Epoch, &l.RegisteredAt,
+		&l.UsageMode, &usageEvidence, &l.CustomsOffice)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -48,6 +51,11 @@ func scanLicense(row pgx.Row) (*el.License, error) {
 	}
 	if err = json.Unmarshal([]byte(goods), &l.Goods); err != nil {
 		return nil, err
+	}
+	if usageEvidence != nil {
+		if err = json.Unmarshal([]byte(*usageEvidence), &l.UsageEvidence); err != nil {
+			return nil, err
+		}
 	}
 	l.Unit, l.RegisteredBy.Kind = kernel.UnitCode(unit), kernel.ActorKind(kind)
 	l.Validity.From, l.Validity.Until, l.RegisteredAt = kernel.Instant(l.Validity.From), kernel.Instant(l.Validity.Until), kernel.Instant(l.RegisteredAt)
@@ -106,16 +114,25 @@ func InsertLicense(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	if err != nil {
 		return err
 	}
+	var usageEvidence *string
+	if len(l.UsageEvidence) > 0 {
+		b, err := json.Marshal(l.UsageEvidence)
+		if err != nil {
+			return err
+		}
+		text := string(b)
+		usageEvidence = &text
+	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.export_license (tenant_id, company_id, license_id, license_number, issuer, holder, goods,
 		unit, licensed_quantity, currency_id, currency_revision, currency_code, currency_minor_units, licensed_value_minor, destination,
 		end_user_party_id, end_user_name, valid_from, valid_until, file_id, file_sha256, status, row_version, registered_by_kind,
-		registered_by_id, authority_epoch, registered_at, updated_at)
+		registered_by_id, authority_epoch, registered_at, updated_at, usage_mode, usage_evidence, customs_office)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10, $11, $12, $13, $14::numeric, $15, $16, $17, $18, $19, $20, $21, 'registered',
-			1, $22, $23, $24, $25, $25)`,
+			1, $22, $23, $24, $25, $25, $26, $27, nullif($28, ''))`,
 		scoped(scope, l.ID, l.Number, l.Issuer, l.Holder, string(goods), string(l.Unit), l.Quantity.String(), l.Currency.ConfigID,
 			l.Currency.Revision, l.Currency.Code, l.Currency.MinorUnits, l.Value.MinorString(), l.Destination, l.EndUserPartyID, l.EndUserName,
 			kernel.Instant(l.Validity.From), kernel.Instant(l.Validity.Until), l.FileID, l.FileSHA256, string(l.RegisteredBy.Kind),
-			l.RegisteredBy.ID, l.Epoch, kernel.Instant(l.RegisteredAt))...)
+			l.RegisteredBy.ID, l.Epoch, kernel.Instant(l.RegisteredAt), l.UsageMode, usageEvidence, l.CustomsOffice)...)
 	return err
 }
 
@@ -131,17 +148,18 @@ func TouchLicense(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 }
 
 type lineDoc struct {
-	LineID        string `json:"line_id"`
-	SkuID         string `json:"sku_id"`
-	SpecRevision  int64  `json:"spec_revision"`
-	Quantity      string `json:"quantity"`
-	Unit          string `json:"unit"`
-	CommodityCode string `json:"commodity_code,omitempty"`
+	LineID         string `json:"line_id"`
+	SkuID          string `json:"sku_id"`
+	SpecRevision   int64  `json:"spec_revision"`
+	Quantity       string `json:"quantity"`
+	Unit           string `json:"unit"`
+	CommodityCode  string `json:"commodity_code,omitempty"`
+	ShipmentLineID string `json:"shipment_line_id,omitempty"` // an export lot line's (S5R-D04; ExportLicenseGuard v1 reads it)
 }
 
 const allocationColumns = `a.allocation_id, a.license_id, a.target_kind, a.target_id, a.target_version, a.attempt, a.order_id, a.order_revision,
 	a.destination, a.end_user_party_id, a.lines, a.lines_hash, trim_scale(a.quantity)::text, a.value_minor::text, a.allocated_by_kind,
-	a.allocated_by_id, a.authority_epoch, a.allocated_at,
+	a.allocated_by_id, a.authority_epoch, a.allocated_at, coalesce(a.shipment_id, ''), coalesce(a.end_user_source, ''),
 	coalesce((SELECT trim_scale(sum(r.quantity))::text FROM brant_cnx.export_license_release r WHERE r.tenant_id = a.tenant_id
 		AND r.company_id = a.company_id AND r.allocation_id = a.allocation_id), '0'),
 	coalesce((SELECT sum(r.value_minor)::text FROM brant_cnx.export_license_release r WHERE r.tenant_id = a.tenant_id
@@ -167,7 +185,7 @@ func Allocations(ctx context.Context, exec bentopg.Executor, scope kernel.Scope,
 		var lines, quantity, value, kind, released, releasedValue string
 		if err := rows.Scan(&a.ID, &a.LicenseID, &a.Target.Kind, &a.Target.ID, &a.Target.Version, &a.Attempt, &a.Target.OrderID,
 			&a.Target.OrderRevision, &a.Target.Destination, &a.Target.EndUserPartyID, &lines, &a.LinesHash, &quantity, &value, &kind, &a.By.ID,
-			&a.Epoch, &a.At, &released, &releasedValue); err != nil {
+			&a.Epoch, &a.At, &a.Target.ShipmentID, &a.Target.EndUserSource, &released, &releasedValue); err != nil {
 			return nil, err
 		}
 		var docs []lineDoc
@@ -180,7 +198,7 @@ func Allocations(ctx context.Context, exec bentopg.Executor, scope kernel.Scope,
 				return nil, err
 			}
 			a.Target.Lines = append(a.Target.Lines, el.Line{LineID: d.LineID, SkuID: d.SkuID, SpecRevision: d.SpecRevision, Quantity: q,
-				Unit: kernel.UnitCode(d.Unit), CommodityCode: d.CommodityCode})
+				Unit: kernel.UnitCode(d.Unit), CommodityCode: d.CommodityCode, ShipmentLineID: d.ShipmentLineID})
 		}
 		if a.Quantity, err = decimal(quantity); err != nil {
 			return nil, err
@@ -229,7 +247,7 @@ func InsertAllocation(ctx context.Context, exec bentopg.Executor, scope kernel.S
 	docs := []lineDoc{}
 	for _, l := range a.Target.Lines {
 		docs = append(docs, lineDoc{LineID: l.LineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision, Quantity: l.Quantity.String(),
-			Unit: string(l.Unit), CommodityCode: l.CommodityCode})
+			Unit: string(l.Unit), CommodityCode: l.CommodityCode, ShipmentLineID: l.ShipmentLineID})
 	}
 	lines, err := json.Marshal(docs)
 	if err != nil {
@@ -238,11 +256,12 @@ func InsertAllocation(ctx context.Context, exec bentopg.Executor, scope kernel.S
 	t := a.Target
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.export_license_allocation (tenant_id, company_id, allocation_id, license_id, target_kind,
 		target_id, target_version, attempt, order_id, order_revision, destination, end_user_party_id, lines, lines_hash, quantity, value_minor,
-		currency_code, allocated_by_kind, allocated_by_id, authority_epoch, allocated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::numeric, $16::numeric, $17, $18, $19, $20, $21)`,
+		currency_code, allocated_by_kind, allocated_by_id, authority_epoch, allocated_at, shipment_id, end_user_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::numeric, $16::numeric, $17, $18, $19, $20, $21,
+			nullif($22, ''), nullif($23, ''))`,
 		scoped(scope, a.ID, a.LicenseID, t.Kind, t.ID, t.Version, a.Attempt, t.OrderID, t.OrderRevision, t.Destination, t.EndUserPartyID,
 			string(lines), a.LinesHash, a.Quantity.String(), a.Value.MinorString(), a.Value.Currency().Code(), string(a.By.Kind), a.By.ID, a.Epoch,
-			kernel.Instant(a.At))...)
+			kernel.Instant(a.At), t.ShipmentID, t.EndUserSource)...)
 	return err
 }
 
@@ -252,8 +271,9 @@ func Releases(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, l 
 	if err != nil {
 		return nil, err
 	}
-	rows, err := exec.Query(ctx, `SELECT release_id, allocation_id, kind, result_source, coalesce(receipt_id, ''), declaration_number, receipt_text, received_at, evidence,
-		trim_scale(quantity)::text, value_minor::text, reason, released_by_kind, released_by_id, authority_epoch, released_at
+	rows, err := exec.Query(ctx, `SELECT release_id, allocation_id, kind, result_source, coalesce(receipt_id, ''), coalesce(declaration_number, ''),
+		coalesce(receipt_text, ''), received_at, evidence, trim_scale(quantity)::text, value_minor::text, reason, released_by_kind, released_by_id,
+		authority_epoch, released_at, basis, coalesce(target_version, 0)
 		FROM brant_cnx.export_license_release WHERE tenant_id = $1 AND company_id = $2 AND license_id = $3 ORDER BY released_at, release_id`,
 		scoped(scope, l.ID)...)
 	if err != nil {
@@ -264,9 +284,13 @@ func Releases(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, l 
 	for rows.Next() {
 		r := el.Release{LicenseID: l.ID}
 		var evidence, quantity, value, kind string
-		if err := rows.Scan(&r.ID, &r.AllocationID, &r.Kind, &r.Source, &r.ReceiptID, &r.DeclarationNumber, &r.ReceiptText, &r.ReceivedAt, &evidence,
-			&quantity, &value, &r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At); err != nil {
+		var received *time.Time
+		if err := rows.Scan(&r.ID, &r.AllocationID, &r.Kind, &r.Source, &r.ReceiptID, &r.DeclarationNumber, &r.ReceiptText, &received, &evidence,
+			&quantity, &value, &r.Reason, &kind, &r.By.ID, &r.Epoch, &r.At, &r.Basis, &r.TargetVersion); err != nil {
 			return nil, err
+		}
+		if received != nil {
+			r.ReceivedAt = *received
 		}
 		if err := json.Unmarshal([]byte(evidence), &r.Evidence); err != nil {
 			return nil, err
@@ -277,7 +301,10 @@ func Releases(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, l 
 		if r.Value, err = minor(c, value); err != nil {
 			return nil, err
 		}
-		r.By.Kind, r.ReceivedAt, r.At = kernel.ActorKind(kind), kernel.Instant(r.ReceivedAt), kernel.Instant(r.At)
+		r.By.Kind, r.At = kernel.ActorKind(kind), kernel.Instant(r.At)
+		if !r.ReceivedAt.IsZero() {
+			r.ReceivedAt = kernel.Instant(r.ReceivedAt)
+		}
 		out = append(out, &r)
 	}
 	return out, rows.Err()
@@ -297,13 +324,27 @@ func InsertRelease(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 	if err != nil {
 		return err
 	}
+	var received *time.Time
+	if !r.ReceivedAt.IsZero() {
+		t := kernel.Instant(r.ReceivedAt)
+		received = &t
+	}
+	var targetVersion *int64
+	if r.Basis == el.LocalCancellation {
+		targetVersion = &r.TargetVersion
+	}
+	basis := r.Basis
+	if basis == "" {
+		basis = el.ExternalResult
+	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.export_license_release (tenant_id, company_id, release_id, license_id, allocation_id, kind,
 		result_source, declaration_number, receipt_text, received_at, evidence, quantity, value_minor, reason, released_by_kind, released_by_id,
-		authority_epoch, released_at, receipt_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13::numeric, $14, $15, $16, $17, $18, nullif($19, ''))`,
-		scoped(scope, r.ID, r.LicenseID, r.AllocationID, r.Kind, r.Source, r.DeclarationNumber, r.ReceiptText, kernel.Instant(r.ReceivedAt),
+		authority_epoch, released_at, receipt_id, basis, target_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, nullif($8, ''), nullif($9, ''), $10, $11, $12::numeric, $13::numeric, $14, $15, $16, $17, $18,
+			nullif($19, ''), $20, $21)`,
+		scoped(scope, r.ID, r.LicenseID, r.AllocationID, r.Kind, r.Source, r.DeclarationNumber, r.ReceiptText, received,
 			string(evidence), r.Quantity.String(), r.Value.MinorString(), r.Reason, string(r.By.Kind), r.By.ID, r.Epoch, kernel.Instant(r.At),
-			r.ReceiptID)...)
+			r.ReceiptID, basis, targetVersion)...)
 	return err
 }
 
@@ -311,3 +352,54 @@ func InsertRelease(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 // guard's columns (brant_cnx.export_license_state).
 const ShipmentStateSQL = `SELECT covered, status, reason, license_id, allocation_id, quantity, unit, value_minor, currency, lines_hash,
 	valid_until, code FROM brant_cnx.export_license_state($1, $2, false)`
+
+// TargetDeclared reports whether a declaration case covering a shipment or export lot is submitted
+// or later (S5R-D03: brant_cnx.export_target_declared).
+func TargetDeclared(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, kind, id string) (bool, error) {
+	var declared bool
+	err := exec.QueryRow(ctx, `SELECT brant_cnx.export_target_declared($1, $2, $3, $4)`, scoped(scope, kind, id)...).Scan(&declared)
+	return declared, err
+}
+
+// LicenseDeclared reports whether an allocation of a licence was declared (S5R-D04:
+// brant_cnx.export_license_declared).
+func LicenseDeclared(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, licenseID string) (bool, error) {
+	var declared bool
+	err := exec.QueryRow(ctx, `SELECT brant_cnx.export_license_declared($1, $2, $3)`, scoped(scope, licenseID)...).Scan(&declared)
+	return declared, err
+}
+
+// MixedAllocation returns the live allocation that keeps a shipment from holding its own allocation
+// beside its export lots' (S5R-D04), "" when none: for an export lot of shipment shipmentID the
+// shipment's own, for a shipment any of its lots'.
+func MixedAllocation(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, kind, targetID, shipmentID string) (string, error) {
+	var id string
+	err := exec.QueryRow(ctx, `SELECT a.allocation_id FROM brant_cnx.export_license_allocation a WHERE a.tenant_id = $1 AND a.company_id = $2
+		AND (($3 = 'export_lot' AND a.target_kind = 'shipment' AND a.target_id = $5)
+			OR ($3 = 'shipment' AND a.target_kind = 'export_lot' AND a.shipment_id = $4))
+		AND brant_cnx.export_allocation_outstanding(a.tenant_id, a.company_id, a.allocation_id) > 0
+		ORDER BY a.allocation_id LIMIT 1`, scoped(scope, kind, targetID, shipmentID)...).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+// CoveringLicense returns the licence whose live allocation covers an export lot of shipment
+// shipmentID — the lot's own, else the shipment's — with the allocation's target kind, or nil
+// (S5R-D04: the licence a declaration of the lot uses). It takes lock on the licence row.
+func CoveringLicense(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, lotID, shipmentID string, lock Lock) (*el.License, string, error) {
+	var licenseID, kind string
+	err := exec.QueryRow(ctx, `SELECT a.license_id, a.target_kind FROM brant_cnx.export_license_allocation a WHERE a.tenant_id = $1
+		AND a.company_id = $2 AND ((a.target_kind = 'export_lot' AND a.target_id = $3) OR (a.target_kind = 'shipment' AND a.target_id = $4))
+		AND brant_cnx.export_allocation_outstanding(a.tenant_id, a.company_id, a.allocation_id) > 0
+		ORDER BY a.target_kind = 'export_lot' DESC, a.attempt DESC LIMIT 1`, scoped(scope, lotID, shipmentID)...).Scan(&licenseID, &kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	l, err := LoadLicense(ctx, exec, scope, licenseID, lock)
+	return l, kind, err
+}

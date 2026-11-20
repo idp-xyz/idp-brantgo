@@ -26,11 +26,23 @@ type Rule struct {
 	Command    string
 	Permission string
 	ActorKinds []kernel.ActorKind
+	// AIApprovalGrant: an AI actor issues the command only with the AI layer's proof that a
+	// human-issued approval grant was used for exactly this call (S4 decision D-7, AI-INV-002;
+	// foundation/aigrant, checked by foundation/action before anything else is decided). People
+	// are unaffected. Only a rule that admits AI actors sets it.
+	AIApprovalGrant bool
 }
 
 // HumanOnly returns a rule that only human actors satisfy, whatever their grants say.
 func HumanOnly(command, permission string) Rule {
 	return Rule{Command: command, Permission: permission, ActorKinds: []kernel.ActorKind{kernel.ActorHuman}}
+}
+
+// HumanOrGrantedAI returns a rule that human actors satisfy by their grants, and AI actors by their
+// grants and an approval grant used for exactly the call (D-7: order.prepare, order.review.request).
+func HumanOrGrantedAI(command, permission string) Rule {
+	return Rule{Command: command, Permission: permission, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI},
+		AIApprovalGrant: true}
 }
 
 // Admits reports whether the rule allows actors of kind.
@@ -44,6 +56,9 @@ func (r Rule) validate() error {
 		if !k.Valid() {
 			return fmt.Errorf("%w: command %s allows unknown actor kind %q", ErrInvalidPolicy, r.Command, k)
 		}
+	}
+	if r.AIApprovalGrant && !r.Admits(kernel.ActorAI) {
+		return fmt.Errorf("%w: command %s needs an approval grant from AI actors it does not admit", ErrInvalidPolicy, r.Command)
 	}
 	return nil
 }

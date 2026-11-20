@@ -130,7 +130,8 @@ func (h *registerCertificate) Apply(ctx context.Context, exec bentopg.Executor, 
 		return action.Outcome{}, api.Reject(api.CodeBusinessKeyConflict, "/args/number", "The issuer's "+cmd.CertificateKind+" number is certificate "+owner+"'s")
 	}
 	content := cert.Content{Kind: cmd.CertificateKind, Number: cmd.Number, Issuer: cmd.Issuer, IssuedOn: cmd.IssuedOn, Market: cmd.Market,
-		LicenseID: cmd.LicenseID, Basis: cmd.Basis, Evidence: []cert.Evidence{}}
+		LicenseID: cmd.LicenseID, Basis: cmd.Basis, Evidence: []cert.Evidence{}, AgreementCode: cmd.AgreementCode, OriginForm: cmd.OriginForm,
+		IssuingBody: cmd.IssuingBody}
 	if content.Object, err = h.objectOf(); err != nil {
 		return action.Outcome{}, err
 	}
@@ -344,6 +345,7 @@ func judgeCertificate(ctx context.Context, exec bentopg.Executor, sc kernel.Scop
 func fillResult(out *api.CertificateResult, c *cert.Certificate, r *cert.Revision, at time.Time) {
 	out.Revision, out.CurrentRevision, out.ContentSHA256 = int64(r.Revision), int64(c.CurrentRevision), r.SHA256
 	out.Kind, out.Number, out.Issuer, out.IssuedOn, out.Market = r.Kind, r.Number, r.Issuer, r.IssuedOn, r.Market
+	out.AgreementCode, out.OriginForm, out.IssuingBody = r.AgreementCode, r.OriginForm, r.IssuingBody
 	out.ValidFrom, out.ValidUntil, out.State = r.Validity.From, r.Validity.Until, r.State(kernel.Instant(at))
 	out.ObjectKind, out.ObjectID, out.FileID, out.FileSHA256 = r.Object.Kind, r.Object.ID, r.File.SourceID, r.File.ContentSHA256
 	out.VerifiedBy = kernel.ActorRef{Kind: kernel.ActorKind(r.VerifiedBy.Kind), ID: r.VerifiedBy.ID}
@@ -448,6 +450,7 @@ func revisionView(r *cert.Revision, at time.Time) api.CertificateRevisionView {
 			OrderRevision: r.Object.OrderRevision, SkuSpecs: []api.SpecRef{}, Lines: []api.CertificateLineView{}},
 		Market: r.Market, ValidFrom: r.Validity.From, ValidUntil: r.Validity.Until, State: r.State(at), File: api.EvidenceView(r.File),
 		LicenseID: r.LicenseID, Basis: r.Basis, Evidence: []api.EvidenceView{}, Supersedes: int64(r.Supersedes), Reason: r.Reason,
+		AgreementCode: r.AgreementCode, OriginForm: r.OriginForm, IssuingBody: r.IssuingBody,
 		DocumentSHA256: r.SHA256, VerifiedBy: kernel.ActorRef{Kind: kernel.ActorKind(r.VerifiedBy.Kind), ID: r.VerifiedBy.ID},
 		AuthorityEpoch: r.AuthorityEpoch}
 	for _, s := range r.Object.Specs {
@@ -520,7 +523,7 @@ func (s Service) Certificates(ctx context.Context) ([]api.CertificateSummary, er
 				return kernel.Reject(kernel.CodeReferenceInvalid, "/certificates", "A certificate stands on no revision")
 			}
 			r := revisions[i]
-			out = append(out, api.CertificateSummary{CertificateID: c.ID, Kind: c.Kind, Number: r.Number, Issuer: r.Issuer, Market: r.Market,
+			out = append(out, api.CertificateSummary{CertificateID: c.ID, Kind: c.Kind, AgreementCode: r.AgreementCode, Number: r.Number, Issuer: r.Issuer, Market: r.Market,
 				ObjectKind: r.Object.Kind, ObjectID: r.Object.ID, ValidFrom: r.Validity.From, ValidUntil: r.Validity.Until, State: r.State(now),
 				CurrentRevision: int64(c.CurrentRevision), RowVersion: c.RowVersion, CheckedAt: now})
 		}

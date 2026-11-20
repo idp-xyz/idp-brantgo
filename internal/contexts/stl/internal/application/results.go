@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
@@ -168,9 +169,65 @@ func (s Service) input(ctx context.Context, exec bentopg.Executor, f resultFacts
 		for _, d := range l.Deliveries {
 			line.Deliveries = append(line.Deliveries, orderresult.Delivery{DeliveryID: d.DeliveryID, LineID: d.LineID, Version: d.Version})
 		}
+		// S5R-D42: the quantities and approved dispositions of the line (a quantity PUR states in another form counts as none).
+		line.Purchased, _ = kernel.ParseDecimal(l.PurchaseQuantity, kernel.QuantityFormat)
+		line.Verified, _ = kernel.ParseDecimal(l.VerifiedQuantity, kernel.QuantityFormat)
+		for _, d := range l.Dispositions {
+			if q, err := kernel.ParseDecimal(d.Quantity, kernel.QuantityFormat); err == nil {
+				line.Dispositions = append(line.Dispositions, orderresult.Disposition{ID: d.DispositionID, Kind: d.Disposition, Quantity: q})
+			}
+		}
 		in.Commitments = append(in.Commitments, line)
 	}
-	return in, nil
+	return in, s.s5rInput(ctx, exec, &in)
+}
+
+// s5rInput completes the order result's input with what the S5R decisions count (R8): the funds applied to the order
+// with their conversions (S5R-D19), the payments applied to its charges (S5R-D19) and the payable adjustments of its
+// purchase statements (S5R-D20).
+func (s Service) s5rInput(ctx context.Context, exec bentopg.Executor, in *orderresult.Input) error {
+	sc := scope(ctx)
+	in.Funds, in.PayableAdjustments = map[string]orderresult.FundBasis{}, map[string][]settlement.PayableAdjustment{}
+	var fundIDs []string
+	for _, x := range in.Applications {
+		if x.FundRecordID == "" || x.Conversion != nil || slices.Contains(fundIDs, x.FundRecordID) {
+			continue
+		}
+		f, err := postgres.LoadFund(ctx, exec, sc, x.FundRecordID, false)
+		if err != nil {
+			return err
+		}
+		if f != nil {
+			fundIDs = append(fundIDs, f.ID)
+			in.Funds[f.ID] = orderresult.FundBasis{Received: f.Received}
+		}
+	}
+	conversions, err := postgres.FundConversions(ctx, exec, sc, fundIDs)
+	if err != nil {
+		return err
+	}
+	for id, list := range conversions {
+		fb := in.Funds[id]
+		for _, c := range list {
+			if c.FX != nil {
+				fb.Conversions = append(fb.Conversions, orderresult.FundConversion{ID: c.ID, Sold: c.FX.Sold, Rate: c.FX.Rate, Currency: c.Currency()})
+			}
+		}
+		in.Funds[id] = fb
+	}
+	var chargeIDs []string
+	for _, c := range in.Charges {
+		chargeIDs = append(chargeIDs, c.ID)
+	}
+	if in.ChargePayments, err = postgres.ChargeApplications(ctx, exec, sc, chargeIDs); err != nil {
+		return err
+	}
+	for _, st := range in.Purchases {
+		if in.PayableAdjustments[st.ID], err = postgres.Adjustments(ctx, exec, sc, st.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // derived is an order result's figures and close conditions as one command or read derived them.
@@ -227,9 +284,13 @@ func figuresView(f orderresult.Figures, orderCurrency kernel.Currency) api.Resul
 		AnalysisRate: f.Rate, Forecast: figureView(f.Forecast), Executing: figureView(f.Executing),
 		Confirmed: api.ConfirmedResultView{FigureView: figureView(f.Confirmed.Figure), Batches: []api.BatchView{},
 			OrderLevelChargesMinor: f.Confirmed.OrderLevelCharges.MinorString(), UnsoldPurchaseCostMinor: f.Confirmed.UnsoldPurchaseCost.MinorString()},
-		FXDifference: api.FXResultView{DifferenceMinor: f.FX.Difference.MinorString(), Items: []api.FXItemView{}, Gaps: gapsOf(f.FX.Gaps)},
+		FXDifference: api.FXResultView{DifferenceMinor: f.FX.Difference.MinorString(), RealizedMinor: f.FX.Realized.MinorString(),
+			UnrealizedMinor: f.FX.Unrealized.MinorString(), Items: []api.FXItemView{}, Gaps: gapsOf(f.FX.Gaps)},
 		NetCash: api.CashView{ReceiptsMinor: f.Cash.Receipts.MinorString(), PaymentsMinor: f.Cash.Payments.MinorString(),
-			NetMinor: f.Cash.Net.MinorString(), Sources: sourcesView(f.Cash.Sources), Gaps: gapsOf(f.Cash.Gaps)}}
+			ChargePaymentsMinor: f.Cash.ChargePayments.MinorString(), NetMinor: f.Cash.Net.MinorString(), UnpaidChargesMinor: f.Cash.Unpaid.MinorString(),
+			Sources: sourcesView(f.Cash.Sources), Unpaid: sourcesView(f.Cash.UnpaidSources), Gaps: gapsOf(f.Cash.Gaps)},
+		Cancelled: f.Cancelled, SunkCost: f.SunkCost, Recharged: sourcesView(f.Recharged)}
+	v.Confirmed.WriteOffCostMinor = f.Confirmed.WriteOffCost.MinorString()
 	for _, b := range f.Confirmed.Batches {
 		v.Confirmed.Batches = append(v.Confirmed.Batches, api.BatchView{ShipmentID: b.ShipmentID, StatementIDs: b.StatementIDs,
 			NetSalesMinor: b.NetSales.MinorString(), CreditsMinor: b.Credits.MinorString(), CostOfSalesMinor: b.CostOfSales.MinorString(),
@@ -238,7 +299,8 @@ func figuresView(f orderresult.Figures, orderCurrency kernel.Currency) api.Resul
 	for _, x := range f.FX.Items {
 		v.FXDifference.Items = append(v.FXDifference.Items, api.FXItemView{ApplicationID: x.ApplicationID, TargetKind: x.TargetKind,
 			StatementID: x.StatementID, StageID: x.StageID, SourceCurrency: x.Source.Currency().Code(), SourceAmountMinor: x.Source.MinorString(),
-			TargetCurrency: x.Target.Currency().Code(), TargetAmountMinor: x.Target.MinorString(), DifferenceMinor: x.Difference.MinorString()})
+			TargetCurrency: x.Target.Currency().Code(), TargetAmountMinor: x.Target.MinorString(), DifferenceMinor: x.Difference.MinorString(),
+			Basis: x.Basis, FundRecordID: x.FundRecordID, Rate: x.Rate, ConversionIDs: nonNilStrings(x.ConversionIDs), Unrealized: x.Unrealized})
 	}
 	return v
 }
@@ -323,6 +385,10 @@ func (h *reviewResult) Apply(ctx context.Context, exec bentopg.Executor, d autho
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	if x.figures.Cancelled && !x.figures.SunkCost {
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, "/args/order_id",
+			"The order is cancelled without charges or write-offs: it has no operating result (S5R-D42)")
+	}
 	from := r.Version
 	if err = r.Review(orderresult.Review{OrderRevision: h.facts.order.Binding.OrderRevision, Summary: x.json, SummarySHA256: x.sha256,
 		Note: h.cmd.Note, By: fundAct(d, now, "")}); err != nil {
@@ -390,7 +456,7 @@ func (h *closeResult) Apply(ctx context.Context, exec bentopg.Executor, d author
 	conf := x.figures.Confirmed
 	snap := orderresult.Snapshot{OrderRevision: h.facts.order.Binding.OrderRevision, OrderHash: h.facts.order.Binding.OrderHash,
 		Currency: x.figures.Currency, NetSales: conf.NetSales, Result: conf.Result, Content: x.json, ContentSHA256: x.sha256, Reason: h.cmd.Reason,
-		By: fundAct(d, now, h.cmd.Reason)}
+		By: fundAct(d, now, h.cmd.Reason), Cancelled: x.figures.Cancelled}
 	if err = r.Close(x.dims, snap); err != nil {
 		return action.Outcome{}, err
 	}
@@ -531,7 +597,8 @@ func (s Service) GetOrderResult(ctx context.Context, orderID string) (api.OrderR
 			return err
 		}
 		v = api.OrderResultView{OrderID: orderID, Status: orderresult.StatusOpen, OrderRevision: facts.order.Binding.OrderRevision,
-			OrderStatus: facts.order.Status, OrderEnded: facts.order.Ended, Live: x.content.Figures, Conditions: x.content.Conditions,
+			OrderStatus: facts.order.Status, OrderEnded: facts.order.Ended, Cancelled: x.figures.Cancelled, Live: x.content.Figures,
+			Conditions: x.content.Conditions,
 			Settleable: orderresult.NotSettled(x.dims) == nil, Snapshots: []api.SnapshotView{}, Reviews: []api.ReviewView{},
 			Reopenings: []api.ReopeningView{}, CheckedAt: kernel.Instant(s.Clock.Now())}
 		r, err := postgres.LoadResult(ctx, exec, scope(ctx), orderID, postgres.NoLock)

@@ -62,7 +62,7 @@ func TestCommercialReleaseOverHTTP(t *testing.T) {
 	}
 	exception := map[string]any{"shipment_id": "shipment.sc08", "scope": "shipment", "expected_version": 1, "stage_id": stage, "currency": "USD",
 		"shortfall_minor": "200", "valid_until": kernel.FormatTimestamp(time.Now().Add(48 * time.Hour)), "reason": "客户书面承诺差额随下批支付",
-		"evidence_ids": []any{"evidence"}}
+		"evidence_ids": []any{"evidence"}, "credit_policy": w.creditPolicyArg()}
 	if status, out := sales.try("ful", fulapi.Contract, fulapi.CommandGrantReleaseException, exception); status != http.StatusForbidden ||
 		out["code"] != kernel.CodePermissionDenied {
 		t.Fatalf("sales clerk %d %v", status, out)

@@ -39,7 +39,7 @@ func (s Service) GetFormalDocument(ctx context.Context, quoteID string, revision
 			return err
 		}
 		v = api.FormalDocument{QuoteID: q.ID, BusinessRevision: rev.Number, BusinessHash: rev.Seal.BusinessHash, Status: string(rev.Status),
-			Content: content}
+			Content: content, OwnerActorID: q.OwnerActor, OwnerTeamID: q.OwnerTeam}
 		if f := formalView(rev.Formal); f != nil {
 			v.Formal = *f
 		}

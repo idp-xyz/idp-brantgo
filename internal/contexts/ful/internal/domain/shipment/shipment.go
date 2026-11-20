@@ -25,6 +25,13 @@ const (
 	RouteStock          = "stock"
 
 	RoleCustomer = "customer"
+	// RoleNotify is the order's notify party (S5R-D40: the address role notify the order revision
+	// binds), screened like every party of the shipment (R44).
+	RoleNotify = "notify"
+	// RoleEndUser is the end user the shipment states (S5R-D40: a PTY party at a confirmed revision,
+	// no address), screened like every party of the shipment; CNX's licence check takes it before the
+	// consignee and the customer (CNX-INV-002).
+	RoleEndUser = "end_user"
 
 	// SubjectCommitmentLine is the kind of a quality release's subject that is a line of a PUR
 	// purchase commitment (QLT SubjectRef).
@@ -71,25 +78,29 @@ func (r DeliveryRef) Compare(o DeliveryRef) int {
 // Line ships Quantity of order line OrderLineID, in the order line's unit, from supplier delivery
 // line Delivery at DeliveryVersion under quality release ReleaseID. OrderQuantity is the order
 // line's quantity at the order revision the shipment binds; CommitmentID and SupplierID are the
-// purchase commitment and supplier the delivery and the release are of.
+// purchase commitment and supplier the delivery and the release are of; QualityConcession says that
+// QLT granted the release on an approved concession (S5R-D18: shown on the shipment and its
+// documents).
 type Line struct {
-	ID              string
-	OrderLineID     string
-	SkuID           string
-	SpecRevision    int64
-	UnitID          string
-	UnitRevision    int64
-	OrderQuantity   kernel.Decimal
-	Quantity        kernel.Decimal
-	Delivery        DeliveryRef
-	DeliveryVersion int64
-	CommitmentID    string
-	SupplierID      string
-	ReleaseID       string
+	ID                string
+	OrderLineID       string
+	SkuID             string
+	SpecRevision      int64
+	UnitID            string
+	UnitRevision      int64
+	OrderQuantity     kernel.Decimal
+	Quantity          kernel.Decimal
+	Delivery          DeliveryRef
+	DeliveryVersion   int64
+	CommitmentID      string
+	SupplierID        string
+	ReleaseID         string
+	QualityConcession bool
 }
 
 // Party is a party the confirmation screens (R44): the order's customer (Role RoleCustomer, no
-// address) or the party of an address role the order binds.
+// address), the party of an address role the order binds, its notify party (RoleNotify, S5R-D40) or
+// the end user the shipment states (RoleEndUser, no address, S5R-D40).
 type Party struct {
 	Role          string
 	PartyID       string
@@ -136,8 +147,9 @@ type OrderLine struct {
 }
 
 // OrderFact is what TRD says of the order now (ActiveOrderRef v1, R27): its binding, Code — "" when
-// it serves new downstream work, otherwise TRD's reason — its customer, its lines and the parties
-// of the address roles it binds.
+// it serves new downstream work, otherwise TRD's reason — its customer, and, as OrderRevisionRef v1
+// reads that revision (S5R-D35), its lines, the parties of the address roles it binds and its notify
+// party (nil: none; S5R-D40).
 type OrderFact struct {
 	Binding    OrderBinding
 	Code       string
@@ -145,7 +157,25 @@ type OrderFact struct {
 	Customer   int64 // the customer's party revision
 	Lines      []OrderLine
 	Addresses  []Party
+	Notify     *Party
 }
+
+// PartyRef names a PTY party at a confirmed revision (PartyRef v1).
+type PartyRef struct {
+	PartyID  string
+	Revision int64
+}
+
+// PartyFact is what PTY says of a party now (PartyRef v1, R44): its state and latest confirmed
+// revision. A party the actor does not read is absent.
+type PartyFact struct {
+	PartyID  string
+	Status   string
+	Revision int64
+}
+
+// PartyConfirmed is PTY's state of a confirmed party.
+const PartyConfirmed = "confirmed"
 
 // Scope is what a quality release or a supplier delivery line is of: the purchase commitment and
 // its supplier, the sales order line it serves, the SKU specification and the unit of its quantity.
@@ -170,11 +200,12 @@ type ReleaseFact struct {
 	SubjectKind string
 	Scope       Scope
 	Quantity    kernel.Decimal
+	Concession  bool // granted on an approved concession (S5R-D18)
 }
 
 // DeliveryFact is what PUR says of a supplier delivery line at the version asked (R59): Status,
 // Code — "" when that version is the delivery's verified one and serves a shipment —, what it is
-// of and the Verified quantity.
+// of, the Verified quantity and what its purchase commitment line adds up to (S5R-D05).
 type DeliveryFact struct {
 	Ref      DeliveryRef
 	Version  int64
@@ -182,6 +213,23 @@ type DeliveryFact struct {
 	Code     string
 	Scope    Scope
 	Verified kernel.Decimal
+	Line     CommitmentLineTotals
+}
+
+// CommitmentLine names a purchase commitment line: the commitment and the sales order line it buys.
+// Every supplier delivery line of it serves that order line.
+type CommitmentLine struct {
+	CommitmentID string
+	OrderLineID  string
+}
+
+// CommitmentLineTotals is what PUR's SupplierDeliveryGuard v2 states of a commitment line (R59,
+// S5R-D05): the verified quantity of the versions verified now of all its deliveries, and what its
+// approved dispositions took out of the order (returned to the supplier, written off or held for
+// reuse).
+type CommitmentLineTotals struct {
+	Verified kernel.Decimal
+	Disposed kernel.Decimal
 }
 
 // RequestLine is a line of a preparation: Delivery at Version.
@@ -196,30 +244,35 @@ type RequestLine struct {
 
 // Consumed is what FUL's confirmed shipments shipped before, as a transaction holding the order's
 // fulfilment root reads it: of each order line over every order revision, of each supplier
-// delivery line over every version, and under each quality release (FUL-INV-001, FUL-INV-003).
+// delivery line over every version, of each purchase commitment line over all its deliveries and
+// under each quality release (FUL-INV-001, FUL-INV-003).
 type Consumed struct {
-	OrderLines map[string]kernel.Decimal
-	Deliveries map[DeliveryRef]kernel.Decimal
-	Releases   map[string]kernel.Decimal
+	OrderLines      map[string]kernel.Decimal
+	Deliveries      map[DeliveryRef]kernel.Decimal
+	CommitmentLines map[CommitmentLine]kernel.Decimal
+	Releases        map[string]kernel.Decimal
 }
 
-// Request is a preparation: the shipment's ID, its order and route, its lines and the hash of the
-// request.
+// Request is a preparation: the shipment's ID, its order and route, its lines, the end user it
+// states (nil: none; S5R-D40) and the hash of the request.
 type Request struct {
 	ID          string
 	OrderID     string
 	Route       string
 	Lines       []RequestLine
+	EndUser     *PartyRef
 	RequestHash string
 }
 
 // Inputs are what a preparation is judged on: the order as TRD shows it (nil: no order the preparer
-// reads), the releases and delivery lines the preparer reads, by ID, what the order's confirmed
-// shipments consumed, and who prepares when.
+// reads), the releases and delivery lines the preparer reads, by ID, what PTY says of the end user
+// the request states (nil: none the preparer reads), what the order's confirmed shipments consumed,
+// and who prepares when.
 type Inputs struct {
 	Order      *OrderFact
 	Releases   map[string]ReleaseFact
 	Deliveries map[DeliveryRef]DeliveryFact
+	EndUser    *PartyFact
 	Consumed   Consumed
 	Preparer   kernel.ActorRef
 	Epoch      int64
@@ -243,8 +296,11 @@ func linePath(i int, member string) string {
 // order's confirmed shipments consumed ship more of an order line than it orders
 // (SHIPMENT_QUANTITY_EXCEEDED, FUL-INV-001), more of a delivery line than PUR verified
 // (SUPPLIER_DELIVERY_INSUFFICIENT, FUL-INV-003) or more under a release than it released
-// (QUALITY_RELEASE_INSUFFICIENT). Nothing is reserved: the confirmation decides again under its
-// locks and guards.
+// (QUALITY_RELEASE_INSUFFICIENT); then a stated end user the preparer does not read or that is not
+// confirmed (REFERENCE_INVALID at /args/end_user_party) or at another revision than PTY's latest
+// confirmed one (REFERENCE_STALE at /args/end_user_party/revision; S5R-D40). Nothing is reserved: the
+// confirmation decides again under its locks and guards. The shipment binds the customer, the order's
+// address roles, its notify party and the stated end user as its parties (R44: each is screened).
 func Prepare(req Request, in Inputs) (*Shipment, error) {
 	if req.Route != RouteSupplierDirect {
 		return nil, Reject(CodeDependencyNotSupported, "/args/route", "Only the supplier direct delivery route is delivered; the stock route waits for STK")
@@ -264,6 +320,7 @@ func Prepare(req Request, in Inputs) (*Shipment, error) {
 		RequestHash: req.RequestHash, OwnerActor: in.Preparer.ID, OwnerTeam: in.Team,
 		Prepared: Act{By: in.Preparer, Epoch: in.Epoch, At: now}}
 	shipping, fromDelivery, underRelease := map[string]kernel.Decimal{}, map[DeliveryRef]kernel.Decimal{}, map[string]kernel.Decimal{}
+	fromCommitment := map[CommitmentLine]kernel.Decimal{}
 	versions := map[DeliveryRef]int64{}
 	for i, l := range req.Lines {
 		at := slices.IndexFunc(o.Lines, func(ol OrderLine) bool { return ol.LineID == l.OrderLineID })
@@ -310,19 +367,52 @@ func Prepare(req Request, in Inputs) (*Shipment, error) {
 		if err := WithinDelivery(in.Consumed.Deliveries[l.Delivery], fromDelivery[l.Delivery], d.Verified, linePath(i, "quantity")); err != nil {
 			return nil, err
 		}
+		cl := CommitmentLine{CommitmentID: d.Scope.CommitmentID, OrderLineID: ol.LineID}
+		fromCommitment[cl] = fromCommitment[cl].Add(l.Quantity)
+		if err := WithinCommitmentLine(cl, in.Consumed.CommitmentLines[cl], fromCommitment[cl], d.Line, linePath(i, "quantity")); err != nil {
+			return nil, err
+		}
 		underRelease[l.ReleaseID] = underRelease[l.ReleaseID].Add(l.Quantity)
 		if err := WithinRelease(in.Consumed.Releases[l.ReleaseID], underRelease[l.ReleaseID], r.Quantity, linePath(i, "quantity")); err != nil {
 			return nil, err
 		}
 		s.Lines = append(s.Lines, Line{ID: l.ID, OrderLineID: ol.LineID, SkuID: ol.SkuID, SpecRevision: ol.SpecRevision, UnitID: ol.UnitID,
 			UnitRevision: ol.UnitRevision, OrderQuantity: ol.Quantity, Quantity: l.Quantity, Delivery: l.Delivery, DeliveryVersion: l.Version,
-			CommitmentID: d.Scope.CommitmentID, SupplierID: d.Scope.SupplierID, ReleaseID: l.ReleaseID})
+			CommitmentID: d.Scope.CommitmentID, SupplierID: d.Scope.SupplierID, ReleaseID: l.ReleaseID, QualityConcession: r.Concession})
 	}
 	if len(s.Lines) == 0 {
 		return nil, Reject(kernel.CodeSchemaInvalid, "/args/lines", "")
 	}
 	s.Parties = append([]Party{{Role: RoleCustomer, PartyID: o.CustomerID, PartyRevision: o.Customer}}, o.Addresses...)
+	if o.Notify != nil {
+		n := *o.Notify
+		n.Role = RoleNotify
+		s.Parties = append(s.Parties, n)
+	}
+	if u := req.EndUser; u != nil {
+		f := in.EndUser
+		switch {
+		case f == nil || f.PartyID != u.PartyID:
+			return nil, Reject(kernel.CodeReferenceInvalid, "/args/end_user_party", "No party the actor reads")
+		case f.Status != PartyConfirmed:
+			return nil, Reject(kernel.CodeReferenceInvalid, "/args/end_user_party", "The party is "+f.Status+", not confirmed")
+		case f.Revision != u.Revision:
+			return nil, Reject(CodeReferenceStale, "/args/end_user_party/revision", "The party's confirmed revision is "+
+				strconv.FormatInt(f.Revision, 10))
+		}
+		s.Parties = append(s.Parties, Party{Role: RoleEndUser, PartyID: u.PartyID, PartyRevision: u.Revision})
+	}
 	return s, nil
+}
+
+// EndUser returns the end user the shipment states (S5R-D40), or nil.
+func (s *Shipment) EndUser() *Party {
+	for i := range s.Parties {
+		if s.Parties[i].Role == RoleEndUser {
+			return &s.Parties[i]
+		}
+	}
+	return nil
 }
 
 // covers refuses a release or delivery line whose scope got is not of the order line want

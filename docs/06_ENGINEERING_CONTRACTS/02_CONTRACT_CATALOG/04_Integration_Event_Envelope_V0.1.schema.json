@@ -155,7 +155,7 @@
     },
     "payload": {
       "type": "object",
-      "description": "只含标识与版本，不含法定标识或个人数据；按 eventType 另有封闭 schema"
+      "description": "含标识、版本与战术模型 eventPayloads 登记的业务值（数量、金额、期限、结论）；不含法定标识、个人数据与文件内容；按 eventType 另有封闭 schema（S5R-D43）"
     }
   }
 }

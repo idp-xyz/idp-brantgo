@@ -70,6 +70,7 @@ func valid() map[string]ConfigData {
 		KindLegalTerms: {LegalTerms: &LegalTerms{Name: "CISG with PRC law", GoverningLaw: GoverningLawCN, CISG: CISGApplies,
 			FormationRule: FormationArrival, DisputeResolution: DisputeResolution{Method: DisputeArbitration,
 				Institution: "China International Economic and Trade Arbitration Commission", Seat: "Shanghai", Language: "en"}}},
+		KindSalesPrice: {SalesPrice: &SalesPrice{SkuID: "ST01.red.S", Currency: "USD", Unit: "PCS", UnitPrice: "8.00", PriceBasisQuantity: "1"}},
 	}
 }
 

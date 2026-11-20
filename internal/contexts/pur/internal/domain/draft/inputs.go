@@ -299,9 +299,19 @@ type Inputs struct {
 // preparation, the change records what a draft refuses and its decision acknowledges instead: a
 // stated date that is not the condition's, one after the order's required date, one already passed
 // (the goods may be delivered), and an MOQ or order multiple the supplier agreed to waive.
+//
+// DecreaseOnly marks a change that only buys less than the revision in force (S5R-D41; PUR-INV-009
+// "只减少数量（含整行降为零）的变更不查供应条件有效期，单价沿用当前修订"): the supply condition's validity is not
+// checked — SUP's SUPPLY_CONDITION_EXPIRED and SUPPLY_CONDITION_NOT_CURRENT are not refusals, the
+// supplier's price commitment stands as issued — and each price group other than a graduated one is
+// priced at the unit price the revision in force applied to it (Prices, by condition line; KeptPrices);
+// a graduated group keeps its band prices by itself. Anything else a change proposes is judged on a
+// supply condition in force.
 type Change struct {
-	Revision int64
-	Dates    map[string]string
+	Revision     int64
+	Dates        map[string]string
+	DecreaseOnly bool
+	Prices       map[Source]DocTier
 }
 
 func index(path string, i int) string { return fmt.Sprintf("%s/%d", path, i) }

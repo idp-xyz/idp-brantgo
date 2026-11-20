@@ -160,6 +160,9 @@ func appEvent(typ string, x *fa.Application) action.Event {
 	if x.CreditNoteID != "" {
 		e.Fields["credit_note_id"] = x.CreditNoteID
 	}
+	if x.ChargeID != "" {
+		e.Fields["charge_id"] = x.ChargeID // S5R-D19
+	}
 	if c := x.Conversion; c != nil {
 		e.Fields["fx_rate_id"], e.Fields["fx_rate_revision"] = c.Rate.ID, c.Rate.Revision
 	}
@@ -171,13 +174,15 @@ func appEvent(typ string, x *fa.Application) action.Event {
 // order and derives the fund's available balance and the stage's open amount from the immutable
 // applications and draws under those locks (D-3), then writes the application.
 type applyFund struct {
-	s       Service
-	cmd     api.Apply
-	order   *Order
-	rate    settlementRate
-	fund    *fr.FundRecord
-	account *oa.Account
-	taken   bool
+	s         Service
+	cmd       api.Apply
+	order     *Order
+	rate      settlementRate
+	settle    settlementRate // S5R-D19: the settlement rate into the order's analysis currency it names
+	permitted int64          // S5R-D21: the customer's trading profile revision when it permits the fund's payer
+	fund      *fr.FundRecord
+	account   *oa.Account
+	taken     bool
 }
 
 func (h *applyFund) Prepare(ctx context.Context) error {
@@ -187,9 +192,15 @@ func (h *applyFund) Prepare(ctx context.Context) error {
 	}
 	if o, ok := orders[h.cmd.Target.OrderID]; ok {
 		h.order = &o
+		if h.permitted, err = h.s.permittedPayer(ctx, h.cmd.FundRecordID, o.CustomerID); err != nil {
+			return err
+		}
 	}
-	if h.cmd.FXRate == nil || h.order == nil {
+	if h.order == nil {
 		return nil
+	}
+	if h.settle, err = h.s.settlementLookup(ctx, h.cmd.SettlementFXRate, h.order); err != nil || h.cmd.FXRate == nil {
+		return err
 	}
 	from, err := h.s.fundCurrency(ctx, h.cmd.FundRecordID)
 	if err == nil {
@@ -244,8 +255,17 @@ func (h *applyFund) Apply(ctx context.Context, exec bentopg.Executor, d authoriz
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	settle, err := h.settle.settlementInput(ctx, exec, now, o)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	verified, err := postgres.PayerVerifications(ctx, exec, sc, f.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
 	x, err := fa.Apply(fa.ApplyInput{ID: c.ApplicationID, Fund: f, FundEntries: entries, Account: a, StageID: c.Target.StageID,
-		StageApplied: stageApplied, Amount: amount, FX: fx, By: fundAct(d, now, ""), Team: d.Team})
+		StageApplied: stageApplied, Amount: amount, FX: fx, Settlement: settle, Payers: fa.Payers{Verified: verified, Permitted: h.permitted},
+		By: fundAct(d, now, ""), Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -263,6 +283,8 @@ func (s Service) Apply(ctx context.Context, cmd api.Apply) (api.ApplicationRecei
 		h = &applyCreditNote{s: s, cmd: cmd}
 	case cmd.Target.Kind == api.TargetReceivable || cmd.Target.Kind == api.TargetPayable:
 		h = &applyStatement{s: s, cmd: cmd}
+	case cmd.Target.Kind == api.TargetCharge:
+		h = &applyCharge{s: s, cmd: cmd}
 	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandApply, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ApplicationID}, cmd,
 		cmd.Validate(), h)
@@ -337,7 +359,20 @@ func (s Service) applicationReceipt(ctx context.Context, res api.Receipt) (api.A
 		out.FundRecordID, out.OrderID, out.OrderRevision, out.StageID = x.FundRecordID, x.OrderID, x.OrderRevision, x.StageID
 		out.Currency, out.AmountMinor = x.Amount.Currency().Code(), x.Amount.MinorString()
 		out.CreditNoteID, out.Conversion = x.CreditNoteID, conversionView(x.Conversion)
+		out.PayerBasis, out.PayerProfileRevision = payerBasis(x), x.PayerProfileRevision
 		out.TargetKind, out.StatementID, out.InstallmentSeq = x.TargetKind, x.StatementID, x.InstallmentSeq
+		out.ChargeID, out.SettlementRate = x.ChargeID, settlementView(x.Settlement)
+		if x.ChargeID != "" {
+			ch, err := postgres.LoadCharge(ctx, exec, sc, x.ChargeID, false)
+			if err != nil || ch == nil {
+				return err
+			}
+			paid, err := chargePaid(ctx, exec, sc, ch)
+			if err != nil {
+				return err
+			}
+			out.ChargeOpenMinor = fa.ChargeOpen(ch, paid).MinorString()
+		}
 		if x.StatementID != "" {
 			st, err := postgres.LoadStatement(ctx, exec, sc, x.StatementID, false)
 			if err != nil || st == nil {

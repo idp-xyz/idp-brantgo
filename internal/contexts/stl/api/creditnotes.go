@@ -74,7 +74,7 @@ type RequestCreditNote struct {
 	IdempotencyKey string
 	CreditNoteID   string
 	CreditKind     string `json:"kind"`
-	OrderID        string
+	OrderID        string // the statement's order; empty for an opening receivable, which binds none (S5R-D22)
 	StatementID    string
 	Amount         string
 	Basis          string
@@ -114,7 +114,7 @@ func (c RequestCreditNote) Validate() error {
 		return schema("/args/credit_note_id")
 	case c.CreditKind != CreditPriceAllowance && c.CreditKind != CreditReturn && c.CreditKind != CreditClaim:
 		return schema("/args/kind")
-	case !kernel.ValidIdentifier(c.OrderID):
+	case c.OrderID != "" && !kernel.ValidIdentifier(c.OrderID): // S5R-D22: none for an opening receivable
 		return schema("/args/order_id")
 	case !kernel.ValidIdentifier(c.StatementID):
 		return schema("/args/statement_id")
@@ -171,7 +171,15 @@ func (c Apply) validateSource() error {
 	case c.CreditNoteID != "" && (c.Target.Kind != TargetReceivable || c.FXRate != nil):
 		return schema("/args/credit_note_id")
 	case c.FXRate != nil:
-		return c.FXRate.Validate(KindFXRate, "/args/fx_rate")
+		if err := c.FXRate.Validate(KindFXRate, "/args/fx_rate"); err != nil {
+			return err
+		}
+	}
+	if r := c.SettlementFXRate; r != nil {
+		if c.CreditNoteID != "" || (c.Target.Kind != TargetOrderStage && c.Target.Kind != TargetReceivable) {
+			return schema("/args/settlement_fx_rate")
+		}
+		return r.Validate(KindFXRate, "/args/settlement_fx_rate")
 	}
 	return nil
 }
@@ -232,6 +240,8 @@ type CreditNoteRef struct {
 	CounterpartyID  string
 	Currency        string
 	AmountMinor     string
+	NetMinor        string // S5R-D46(2): the amount's net part by the statement's net and tax (HALF_UP once)
+	TaxMinor        string // S5R-D46(2): the rest, the tax part; 0 on a statement without tax
 	AppliedMinor    string
 	RestMinor       string
 	Effective       bool

@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"strconv"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
@@ -15,9 +17,10 @@ import (
 
 // reserveCredit runs credit.reserve. Before the transaction it reads the order (TRD), the credit
 // policy and the order's currency (POL) and, when the order is in another currency than the policy,
-// the credit rate (POL LookupFX). Inside it, it locks the customer's credit root FOR UPDATE
-// (creating it), re-checks the policy and the rate with ConfigGuard, and decides on the customer's
-// limit versions, reservations, receivables and the order's decisions, all read under that lock.
+// the credit rate (POL LookupFX), and the credit rates exposure_fx_rates names for receivables in
+// other currencies (S5R-D22). Inside it, it locks the customer's credit root FOR UPDATE (creating
+// it), re-checks the policy and every rate with ConfigGuard, and decides on the customer's limit
+// versions, reservations, receivables and the order's decisions, all read under that lock.
 // The order revision reserved is TRD's current revision or, for an active order, a revision one of
 // its amendments proposes (S5 D-9: order.amendment.apply asks CreditGuard v1 for that revision when
 // it asks more credit); the stages and credit portion are that revision's.
@@ -30,8 +33,15 @@ type reserveCredit struct {
 	policyCur kernel.Currency
 	fxMissing bool
 	rate      *polapi.ExchangeRate
+	exposure  []exposureRate // S5R-D22: the credit rates of other currencies' receivables
 	root      *cc.Root
 	out       cc.ReserveOutcome
+}
+
+// exposureRate is a credit rate exposure_fx_rates names, as LookupFX answered it, with its path.
+type exposureRate struct {
+	path string
+	rate polapi.ExchangeRate
 }
 
 func (h *reserveCredit) Prepare(ctx context.Context) error {
@@ -64,20 +74,69 @@ func (h *reserveCredit) Prepare(ctx context.Context) error {
 	}
 	if p.Currency == oc.Code {
 		h.policyCur = h.orderCur
-		return nil
-	}
-	if c.FXRate == nil {
+	} else if c.FXRate == nil {
 		h.fxMissing = true
-		return nil
+	} else {
+		ref := polRef(*c.FXRate)
+		x, err := h.s.Upstream.Configs.LookupFX(ctx, polapi.FXQuery{FromCurrency: oc.Code, ToCurrency: p.Currency, Purpose: polapi.PurposeCredit,
+			At: now, Rate: &ref})
+		if err != nil {
+			return err
+		}
+		h.rate, h.policyCur = &x, x.Value.To()
 	}
-	ref := polRef(*c.FXRate)
-	x, err := h.s.Upstream.Configs.LookupFX(ctx, polapi.FXQuery{FromCurrency: oc.Code, ToCurrency: p.Currency, Purpose: polapi.PurposeCredit, At: now,
-		Rate: &ref})
+	h.exposure, err = h.s.exposureRates(ctx, now, c.ExposureFXRates, p.Currency, oc.Code)
+	return err
+}
+
+// exposureRates reads, before the transaction, the credit rates refs names for the exposure
+// (S5R-D22): each a POL fx_rate revision whose data names the currency it converts, which POL's
+// LookupFX then judges for purpose credit into the policy's currency at now (POL-INV-003). A rate
+// from the policy's or the order's currency, or a second rate from one currency, is
+// INVALID_KNOWN_VALUE; POL's verdicts are refused at the rate's path.
+func (s Service) exposureRates(ctx context.Context, now time.Time, refs []api.ConfigRef, policyCur, orderCur string) ([]exposureRate, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	paths := map[string]polapi.ConfigRef{}
+	for i, r := range refs {
+		paths["/args/exposure_fx_rates/"+strconv.Itoa(i)] = polRef(r)
+	}
+	configs, err := s.resolveConfigs(ctx, now, paths)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	h.rate, h.policyCur = &x, x.Value.To()
-	return nil
+	out := make([]exposureRate, 0, len(refs))
+	seen := map[string]bool{}
+	for i, r := range refs {
+		path := "/args/exposure_fx_rates/" + strconv.Itoa(i)
+		rc := configs[path]
+		if err = rc.Check(path); err != nil {
+			return nil, err
+		}
+		x := rc.Data.FXRate
+		switch {
+		case x == nil:
+			return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "Not an fx_rate")
+		case x.FromCurrency == policyCur || x.FromCurrency == orderCur:
+			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, path, "The rate converts "+x.FromCurrency+
+				", which the credit policy's currency or the order's fx_rate covers")
+		case seen[x.FromCurrency]:
+			return nil, kernel.Reject(kernel.CodeInvalidKnownValue, path, "A second rate from "+x.FromCurrency)
+		}
+		seen[x.FromCurrency] = true
+		ref := polRef(r)
+		v, err := s.Upstream.Configs.LookupFX(ctx, polapi.FXQuery{FromCurrency: x.FromCurrency, ToCurrency: policyCur, Purpose: polapi.PurposeCredit,
+			At: now, Rate: &ref})
+		if rej, ok := kernel.AsRejection(err); ok {
+			return nil, kernel.RejectAs(rej.Code, rej.Category, path, rejectionReason(rej))
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, exposureRate{path: path, rate: v})
+	}
+	return out, nil
 }
 
 func (h *reserveCredit) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -114,9 +173,17 @@ func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if err := guardConfig(ctx, exec, polRef(c.CreditPolicy), h.policy.ContentHash, now, "/args/credit_policy"); err != nil {
 		return action.Outcome{}, err
 	}
+	rates := cc.Rates{}
+	for _, x := range h.exposure {
+		if err := guardConfig(ctx, exec, x.rate.Rate, x.rate.ContentHash, now, x.path); err != nil {
+			return action.Outcome{}, err
+		}
+		rates[x.rate.Value.From().Code()] = x.rate.Value
+	}
 	var fx *cc.ConfigUse
 	var convert func(kernel.Money) (kernel.Money, error)
 	if h.rate != nil {
+		rates[h.rate.Value.From().Code()] = h.rate.Value
 		if err := guardConfig(ctx, exec, h.rate.Rate, h.rate.ContentHash, now, "/args/fx_rate"); err != nil {
 			return action.Outcome{}, err
 		}
@@ -153,7 +220,7 @@ func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	if err != nil {
 		return action.Outcome{}, err
 	}
-	receivables, err := receivablesOf(ctx, exec, sc, h.root.PartyID, policy.Currency, reservations)
+	receivables, err := receivablesOf(ctx, exec, sc, h.root.PartyID, policy.Currency, rates)
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -185,7 +252,7 @@ func (h *reserveCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	var events []action.Event
 	if r := out.Expired; r != nil {
 		from := r.Version
-		if err = r.Release(cc.Act{By: d.Actor, Epoch: d.Epoch, At: now, Reason: cc.ReleaseExpired}); err != nil {
+		if err = r.Release(cc.Act{By: d.Actor, Epoch: d.Epoch, At: now, Reason: cc.ReleaseExpired}, cc.CauseExpired); err != nil {
 			return action.Outcome{}, err
 		}
 		if err = postgres.UpdateReservation(ctx, exec, sc, r, from); err != nil {

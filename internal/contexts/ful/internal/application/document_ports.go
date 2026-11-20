@@ -24,16 +24,19 @@ type Numbers interface {
 }
 
 // Parties is FUL's port to PTY (R44): a party's name at a confirmed revision (the audited party
-// read, pty.read; ok false for a party or revision the actor does not see) and ServiceRoleRef v1.
+// read, pty.read; ok false for a party or revision the actor does not see), PartyRef v1 (the end
+// user a shipment states, S5R-D40; an active grant only) and ServiceRoleRef v1.
 type Parties interface {
 	PartyName(ctx context.Context, partyID string, revision int64) (name string, ok bool, err error)
+	ResolveParties(ctx context.Context, q ptyapi.Resolve) (ptyapi.Resolved, error)
 	ResolveServiceRoles(ctx context.Context, refs []ptyapi.ServiceRoleRef, at time.Time) (map[ptyapi.ServiceRoleRef]ptyapi.ResolvedServiceRole, error)
 }
 
-// OrderSnapshots is FUL's port to TRD's OrderCommercialSnapshot v1 (R27): an order's current
-// revision with its terms and address roles, in every order state.
+// OrderSnapshots is FUL's port to TRD's order revisions for its documents (R27): OrderRevisionRef v1
+// (S5R-D35), the revision the shipment binds with its terms, prices, addresses and notify party, in
+// every order state — what a document prints, which a later amendment never rewrites.
 type OrderSnapshots interface {
-	ResolveOrderSnapshots(ctx context.Context, orderIDs []string) (map[string]trdapi.OrderSnapshotFact, error)
+	ResolveOrderRevisions(ctx context.Context, keys []trdapi.OrderRevisionKey) (map[trdapi.OrderRevisionKey]trdapi.OrderRevisionFact, error)
 }
 
 // DocumentUpstream are the upstreams of booking.record and the shipment document commands (WBS

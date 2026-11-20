@@ -29,7 +29,7 @@ func commitmentView(c *commitment.Commitment, now time.Time) api.CommitmentView 
 		DraftHash: c.DraftHash, OrderID: c.OrderID, OrderRevision: c.OrderRevision, OrderHash: c.OrderHash, SupplierID: c.SupplierID,
 		Currency: c.Currency, SupplyValidUntil: c.SupplyValidUntil, RequestedBy: c.Requested.By, RequestedAt: c.Requested.At,
 		RequestEpoch: c.Requested.Epoch, Acknowledgements: []api.AcknowledgementView{}, IssueEvidence: []api.Evidence{},
-		Confirmations: []api.ConfirmationView{}, CheckedAt: at}
+		Confirmations: []api.ConfirmationView{}, Dispositions: []api.DispositionView{}, CheckedAt: at}
 	if d := c.Decision; d != nil {
 		v.Decision, v.DecidedBy, v.DecidedAt, v.DecideEpoch, v.DecisionReason = api.DecisionReject, d.By, d.At, d.Epoch, d.Reason
 		if d.Approve {
@@ -74,11 +74,17 @@ func revisionLines(ls []commitment.LineQuantity) []api.RevisionLineView {
 	return out
 }
 
-// withLines completes v, the view of commitment c, with what it buys of each line at its revision in
-// force, what the verified deliveries add up to and whether it is fulfilled; a draft that is not
-// intact leaves the lines out.
+// withLines completes v, the view of commitment c, with its dispositions (S5R-D05), what it buys of each
+// line at its revision in force, what the verified deliveries add up to, what the approved dispositions
+// dispose of and whether it is fulfilled; a draft that is not intact leaves the lines out.
 func withLines(ctx context.Context, exec bentopg.Executor, c *commitment.Commitment, v *api.CommitmentView) error {
 	sc := scope(ctx)
+	xs, err := postgres.DispositionsOfCommitment(ctx, exec, sc, c.ID)
+	if err != nil {
+		return err
+	}
+	v.Dispositions = dispositionViews(xs)
+	disposed := commitment.Disposed(xs)
 	dr, err := postgres.LoadDraft(ctx, exec, sc, c.DraftID, postgres.NoLock)
 	if err != nil || dr == nil || dr.Verify(sc, "/") != nil {
 		return err
@@ -94,7 +100,7 @@ func withLines(ctx context.Context, exec bentopg.Executor, c *commitment.Commitm
 	for _, l := range lines {
 		v.Lines = append(v.Lines, api.CommitmentLineView{OrderLineID: l.OrderLineID, AllocatedQuantity: text(l.Allocated),
 			OverbuyQuantity: text(l.Overbuy), PurchaseQuantity: text(l.Purchased()), VerifiedQuantity: text(verified[l.OrderLineID]),
-			SupplierDate: l.SupplierDate})
+			SupplierDate: l.SupplierDate, DisposedQuantity: text(disposed[l.OrderLineID])})
 	}
 	v.Fulfilled = commitment.IsOpen(c.Status) && commitment.Fulfilled(lines, verified)
 	return nil

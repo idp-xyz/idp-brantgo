@@ -265,8 +265,9 @@ func TestClearBindsRegulationLicenceAndValidity(t *testing.T) {
 
 // CNX-INV-001 negatives: AI or system conclusions are PERMISSION_DENIED; another evaluation is
 // REFERENCE_STALE; an incomplete evaluation never concludes clear (DECLARATION_PROFILE_UNVERIFIED
-// for a line without a verified profile, INVALID_STATE otherwise) but may be blocked; an evaluation
-// older than the rescreen interval no longer supports clear.
+// for a line without a verified profile, TRADE_COMPLIANCE_EVALUATION_INCOMPLETE otherwise — the code
+// S5R registered in place of INVALID_STATE) but may be blocked; an evaluation older than the
+// rescreen interval no longer supports clear.
 func TestDecisionRefusals(t *testing.T) {
 	c, ev := openEvaluated(t, baseInput())
 	if _, err := Decide(c, ev, DecideInput{ID: "x", EvaluationID: ev.EvaluationID, Conclusion: Clear, By: agent, At: at}); code(err) != "PERMISSION_DENIED /" {
@@ -291,7 +292,7 @@ func TestDecisionRefusals(t *testing.T) {
 	in = baseInput()
 	in.EndUse = nil
 	c, ev = openEvaluated(t, in)
-	if _, err := decided(t, c, ev, Clear, false, at); code(err) != "INVALID_STATE /args/evaluation_id" {
+	if _, err := decided(t, c, ev, Clear, false, at); code(err) != "TRADE_COMPLIANCE_EVALUATION_INCOMPLETE /args/evaluation_id" {
 		t.Fatal(code(err))
 	}
 	d, err := decided(t, c, ev, Blocked, false, at)
@@ -369,5 +370,118 @@ func TestReopenCauses(t *testing.T) {
 	}
 	if err := CheckVersion(c, 2); code(err) != "VERSION_CONFLICT /args/expected_version" {
 		t.Fatal(code(err))
+	}
+}
+
+// S5R-D15 (CNX-INV-001, UL PLATFORM-CountryProgrammeVersion): a programme limited to regions of a
+// country examined is not matched by the system: when its measure covers the goods it is a
+// region_review finding (applies false, the regions listed) that makes the outcome match for
+// compliance to judge; when it does not, it stays a programme_match that does not apply. The
+// officer may conclude clear with the reason every decision gives.
+func TestS5RD15RegionalProgrammeIsARegionReview(t *testing.T) {
+	in := baseInput()
+	in.Addresses[1].Country = "UA"
+	in.Hits = []ProgrammeHit{
+		{ListCode: "cn.embargo", Jurisdiction: "CN", Version: "v1", Country: "UA", ProgrammeID: "R1", Name: "合成区域禁运", Measure: MeasureEmbargo,
+			ContentHash: strings.Repeat("3", 64), Regions: []string{"UA-43", "UA-14"}},
+		{ListCode: "un.sc", Jurisdiction: "UN", Version: "2026-11", Country: "UA", ProgrammeID: "R2", Name: "Synthetic regional arms embargo",
+			Measure: MeasureArmsEmbargo, ContentHash: strings.Repeat("4", 64), Regions: []string{"UA-09"}},
+	}
+	c, ev := openEvaluated(t, in)
+	d := ev.Document
+	if d.Outcome != Match || len(d.Findings) != 2 {
+		t.Fatalf("%+v", d)
+	}
+	review, other := d.Findings[0], d.Findings[1]
+	if review.Kind != FindingRegionReview || review.Applies || strings.Join(review.Regions, ",") != "UA-14,UA-43" || review.Country != "UA" ||
+		other.Kind != FindingProgramme || other.Applies || strings.Join(other.Regions, ",") != "UA-09" {
+		t.Fatalf("%+v", d.Findings)
+	}
+	again, err := Parse(ev.Bytes, ev.FactsHash)
+	if err != nil || again.Findings[0].Kind != FindingRegionReview || len(again.Findings[0].Regions) != 2 {
+		t.Fatalf("%+v %v", again, err)
+	}
+	dec, err := decided(t, c, ev, Clear, false, at)
+	if err != nil || dec.Reason == "" {
+		t.Fatalf("the officer judges the address: %+v %v", dec, err)
+	}
+	// Controlled goods: the regional arms embargo is a region_review too.
+	in.Lines[0].Profile.ExportControl = Controlled
+	if d := mustEvaluate(t, in).Document; d.Findings[1].Kind != FindingRegionReview || d.Findings[2].Kind != FindingControlled {
+		t.Fatalf("%+v", d.Findings)
+	}
+	// A programme of the whole country stays a match that applies.
+	in = baseInput()
+	in.Addresses[1].Country = "KP"
+	in.Hits = hits("KP")
+	if f := mustEvaluate(t, in).Findings[0]; f.Kind != FindingProgramme || !f.Applies || len(f.Regions) != 0 {
+		t.Fatalf("%+v", f)
+	}
+}
+
+// S5R-D17 (CNX-INV-001; SM-CNX-COMPLIANCE pending → clear): an applying embargo or sanctions finding
+// is cleared only on an authorization valid at the decision (INVALID_STATE /args/evidence_ids
+// without one), and the clear conclusion's validity is capped by the earliest; an applying
+// arms_embargo, export_control or controlled_goods finding needs evidence that the goods are not
+// controlled. Blocked needs neither.
+func TestS5RD17EmbargoClearNeedsAnAuthorization(t *testing.T) {
+	in := baseInput()
+	in.Addresses[1].Country = "KP"
+	in.Hits = hits("KP")
+	c, ev := openEvaluated(t, in)
+	clear := func(evidence []Evidence, auths []Authorization) (*Decision, error) {
+		return Decide(c, ev, DecideInput{ID: "tcd.1", EvaluationID: ev.EvaluationID, Conclusion: Clear, Reason: "凭许可证放行", Evidence: evidence,
+			Authorizations: auths, By: human, Epoch: 4, At: at})
+	}
+	if _, err := clear(nil, nil); code(err) != "INVALID_STATE /args/evidence_ids" {
+		t.Fatalf("an embargo hit without an authorization: %s", code(err))
+	}
+	if _, err := clear([]Evidence{evidence1}, nil); code(err) != "INVALID_STATE /args/evidence_ids" {
+		t.Fatalf("evidence is no authorization: %s", code(err))
+	}
+	lapsed := []Authorization{{Evidence: evidence1, Kind: AuthorizationLicense, ValidUntil: at}}
+	if _, err := clear([]Evidence{evidence1}, lapsed); code(err) != "INVALID_STATE /args/authorizations/0/valid_until" {
+		t.Fatalf("a lapsed authorization: %s", code(err))
+	}
+	second := Evidence{SourceID: "src.0", ContentSHA256: strings.Repeat("0", 64)}
+	auths := []Authorization{{Evidence: evidence1, Kind: AuthorizationLicense, ValidUntil: at.AddDate(0, 0, 20)},
+		{Evidence: second, Kind: AuthorizationExemption, ValidUntil: at.AddDate(0, 0, 10)}}
+	d, err := clear([]Evidence{evidence1, second}, auths)
+	if err != nil || !d.ValidUntil.Equal(at.AddDate(0, 0, 10)) || len(d.Authorizations) != 2 || d.Authorizations[0].SourceID != "src.0" {
+		t.Fatalf("capped by the earliest authorization: %+v %v", d, err)
+	}
+	long := []Authorization{{Evidence: evidence1, Kind: AuthorizationAuthorityApproval, ValidUntil: at.AddDate(1, 0, 0)}}
+	if d, err := clear([]Evidence{evidence1}, long); err != nil || d.ValidUntil.Format(time.RFC3339) != ev.ValidUntil[:19]+"Z" {
+		t.Fatalf("never past the evaluation's validity: %+v %v", d, err)
+	}
+	if _, err := decided(t, c, ev, Blocked, false, at); err != nil {
+		t.Fatalf("blocked needs no authorization: %v", err)
+	}
+
+	// Sanctions are treated as an embargo.
+	in.Hits[0].Measure = MeasureSanctions
+	c, ev = openEvaluated(t, in)
+	if _, err := clear(nil, nil); code(err) != "INVALID_STATE /args/evidence_ids" {
+		t.Fatalf("sanctions: %s", code(err))
+	}
+
+	// An arms embargo on a party's country applies to controlled goods: evidence, not an
+	// authorization.
+	in = baseInput()
+	in.Addresses[0].Country = "IR"
+	in.Hits = hits("IR")
+	in.Lines[0].Profile.ExportControl, in.Lines[0].Profile.ListReference = Controlled, "SYN-CL-1"
+	c, ev = openEvaluated(t, in)
+	if _, err := clear(nil, nil); code(err) != "INVALID_STATE /args/evidence_ids" {
+		t.Fatalf("controlled goods without evidence: %s", code(err))
+	}
+	if _, err := clear([]Evidence{evidence1}, nil); err != nil {
+		t.Fatalf("with evidence: %v", err)
+	}
+	// Findings that do not apply need neither.
+	in.Lines[0].Profile.ExportControl, in.Lines[0].Profile.ListReference = NotControlled, ""
+	c, ev = openEvaluated(t, in)
+	if _, err := clear(nil, nil); err != nil {
+		t.Fatalf("an arms embargo on goods not controlled: %v", err)
 	}
 }

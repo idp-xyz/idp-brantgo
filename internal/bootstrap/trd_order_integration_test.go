@@ -46,7 +46,8 @@ func newOrderWorld(t *testing.T, entries ...refapi.ScreeningEntry) *trdWorld {
 		PublishedOn: "2026-11-01", FileSHA256: hex.EncodeToString(sum[:]), EntryCount: len(entries), Entries: entries})
 	q.must(err)
 	reg := q.configure(q.author, q.reviewer, polapi.KindScreeningRegulation, "screening", 0, q.win.from, time.Time{},
-		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 30}}, true)
+		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 30,
+			Programmes: syntheticProgrammes}}, true)
 	_, err = q.c.PTY.RecordScreening(q.author, ptyapi.RecordScreening{IdempotencyKey: q.key(), PartyID: "customer.1", ExpectedVersion: 0,
 		RegulationID: reg.ConfigID, RegulationRevision: reg.Revision})
 	q.must(err)
@@ -167,9 +168,10 @@ func (q *trdWorld) orderRows() (orders, reviews, commits int) {
 // test_new_public_response_feeds_existing_order_workflow (PYT-0550: the same key returns the same
 // order; another key is CONVERSION_SLOT_CONFLICT, TestOnePreparationPerRoot); TRD-INV-010, 013, 016,
 // SM-TRD-ORDER: an AI agent prepares the order of the accepted
-// revision (人工或 AI), taking the quote's conversion slot; the snapshot copies the sealed commercial
-// document whole, with the acceptance it binds, and hashes to the order hash; an AI agent requests
-// the review, the reviewer approves it; until compliance concludes clear order.check answers
+// revision (人工或 AI; with an approval grant through the AI layer's gateway, S4 decision D-7),
+// taking the quote's conversion slot; the snapshot copies the sealed commercial document whole, with
+// the acceptance it binds, and hashes to the order hash; an AI agent requests the review (with a
+// grant too), the reviewer approves it; until compliance concludes clear order.check answers
 // TRADE_COMPLIANCE_NOT_CLEAR (S5 B4, TRD-INV-023); then the author activates: the order is active
 // with its commit evidence (the acceptance's arrival, the quote's expires_at as bound, the review,
 // the risks acknowledged, the formalization approval, CST's verdict, the screening, CNX's clear
@@ -177,15 +179,15 @@ func (q *trdWorld) orderRows() (orders, reviews, commits int) {
 // order; every key replays; the reads and the lookup tell PUR what it binds.
 func TestOrderPrepareReviewAndActivate(t *testing.T) {
 	q := newOrderWorld(t)
-	agent := q.actorOf(kernel.ActorAI, "agent.1")
+	agent, granted := q.actorOf(kernel.ActorAI, "agent.1"), newGrantedAI(q)
 	_, a := q.accepted("quote.1")
 	prepare := q.prepareCmd("order.1", a)
-	o, err := q.c.TRD.PrepareOrder(agent, prepare)
+	o, err := granted.prepare(agent, prepare)
 	if err != nil || o.ObjectID != "order.1" || o.RowVersion != 1 || o.Status != trdapi.OrderDraft || o.QuoteID != "quote.1" ||
 		o.BusinessRevision != 1 || o.BusinessHash != a.BusinessHash || o.AcceptanceID != a.ObjectID || o.OrderRevision != 1 || len(o.OrderHash) != 64 {
 		t.Fatalf("prepared %+v %v", o, err)
 	}
-	if again, err := q.c.TRD.PrepareOrder(agent, prepare); err != nil || !again.Replayed || again.ActionID != o.ActionID || again.OrderHash != o.OrderHash {
+	if again, err := granted.prepare(agent, prepare); err != nil || !again.Replayed || again.ActionID != o.ActionID || again.OrderHash != o.OrderHash {
 		t.Fatalf("the same key %+v %v", again, err)
 	}
 	quoteView := q.getQuote("quote.1")
@@ -225,11 +227,11 @@ func TestOrderPrepareReviewAndActivate(t *testing.T) {
 	}
 
 	request := q.requestCmd("order.1", 1, "review.1")
-	r, err := q.c.TRD.RequestOrderReview(agent, request)
+	r, err := granted.requestReview(agent, request)
 	if err != nil || r.Status != trdapi.OrderReviewOpen || r.RowVersion != 2 || r.ReviewID != "review.1" || r.OrderStatus != trdapi.OrderDraft {
 		t.Fatalf("requested %+v %v", r, err)
 	}
-	if again, err := q.c.TRD.RequestOrderReview(agent, request); err != nil || !again.Replayed || again.ActionID != r.ActionID {
+	if again, err := granted.requestReview(agent, request); err != nil || !again.Replayed || again.ActionID != r.ActionID {
 		t.Fatalf("the same key %+v %v", again, err)
 	}
 	if got := q.getOrder("order.1").Reviews; len(got) != 1 || got[0].DecisionState != "pending" || got[0].RequestedBy.ID != "agent.1" {

@@ -242,7 +242,7 @@ func TestExceptionCoversOnlyThePaymentCondition(t *testing.T) {
 	}
 	until := kernel.FormatTimestamp(time.Now().Add(72 * time.Hour))
 	ex := fulapi.GrantReleaseException{IdempotencyKey: w.key(), ShipmentID: "shipment.sc08", Scope: fulapi.ScopeShipment, ExpectedVersion: 1,
-		StageID: "P2", Currency: "USD", ShortfallMinor: "200", ValidUntil: until, Reason: "客户书面承诺 2.00 差额随下批货款支付", EvidenceIDs: []string{"evidence"}}
+		StageID: "P2", Currency: "USD", ShortfallMinor: "200", ValidUntil: until, Reason: "客户书面承诺 2.00 差额随下批货款支付", EvidenceIDs: []string{"evidence"}, CreditPolicy: w.creditPolicy()}
 	_, err = w.ful.GrantReleaseException(sales, ex)
 	w.want(err, kernel.CodePermissionDenied)
 	_, err = w.ful.GrantReleaseException(w.agent, ex)
@@ -290,7 +290,7 @@ func TestExceptionCoversOnlyThePaymentCondition(t *testing.T) {
 	}
 	ex = fulapi.GrantReleaseException{IdempotencyKey: w.key(), ShipmentID: "shipment.bt13", Scope: fulapi.ScopeShipment, ExpectedVersion: 2,
 		StageID: w.snapshots(w.author, bt13.ObjectID)[bt13.ObjectID].Stages[0].StageID, Currency: "USD", ShortfallMinor: "100",
-		ValidUntil: kernel.FormatTimestamp(time.Now().Add(time.Hour)), Reason: "普通备注放行", EvidenceIDs: []string{"evidence"}}
+		ValidUntil: kernel.FormatTimestamp(time.Now().Add(time.Hour)), Reason: "普通备注放行", EvidenceIDs: []string{"evidence"}, CreditPolicy: w.creditPolicy()}
 	_, err = w.ful.GrantReleaseException(w.manager, ex)
 	w.want(err, fulapi.CodeQualityReleaseRequired)
 

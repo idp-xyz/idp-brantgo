@@ -23,11 +23,15 @@ type QuoteView struct {
 	Conversion      *ConversionView
 }
 
-// ControlView is the root's object control.
+// ControlView is the root's object control (control.go). A root that is not unbound names its task
+// and, when bound from TRD 000009 on, the delegation its last bind or handoff recorded: the task's
+// initiator and AI agent (S4 decision D-5).
 type ControlView struct {
-	State        string // unbound, bound or stopping
+	State        string // unbound, bound, stopping or manual
 	ControlEpoch int64
-	TaskID       string // bound and stopping
+	TaskID       string // bound, stopping and manual
+	InitiatorID  string
+	AgentID      string
 	ChangedBy    kernel.ActorRef
 	ChangedAt    time.Time
 }

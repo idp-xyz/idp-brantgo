@@ -133,8 +133,10 @@ func (s *s5sc) dealFoundation(t s5scTenant) {
 		"renderer_version": polapi.QuoteRendererVersion, "title": "Quotation", "sections": polapi.QuoteSections(), "footer_note": "合成测试，不构成要约"})
 	b.seq = b.config("number_sequence", "quote.seq", map[string]any{"document_type": polapi.DocumentTypeQuote, "prefix": "QT-", "width": 5,
 		"reset": polapi.ResetAnnual, "time_zone": "Asia/Shanghai"})
+	// S5R-D38: the regulation enables the country programme lists CNX evaluates against.
 	b.config("screening_regulation", "screening", map[string]any{"lists": []any{map[string]any{"list_code": "cn.uel", "jurisdiction": polapi.JurisdictionCN}},
-		"rescreen_interval_days": 30})
+		"rescreen_interval_days": 30, "programmes": []any{map[string]any{"list_code": cnProgrammeList, "jurisdiction": polapi.JurisdictionCN},
+			map[string]any{"list_code": unProgrammeList, "jurisdiction": polapi.JurisdictionUN}}})
 	if t.calc != "USD" {
 		// The quotation rate is observed a minute ago: the pricing policy allows it 3,600 s at the freeze.
 		at := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
@@ -574,10 +576,10 @@ func (s *s5sc) ship(d *s5scDeal, id string, lines [][2]string) {
 		"evidence_ids": []string{"receipt." + d.delivery}})
 }
 
-// fundOf has treasury record a receipt of customer.1 in currency on account, its advice registered by doc.1.
+// fundOf has treasury record a receipt of customer.1 in currency on account on the advice it registers (S5R-D26).
 func (s *s5sc) fundOf(id, currency string, account map[string]any, received, reference string) {
 	s.t.Helper()
-	s.source(brcDocumentation, "bank."+id, "合成银行收款通知："+id+"，customer.1 汇入 "+received+" "+currency+"，"+reference+"。")
+	s.source(brcTreasury, "bank."+id, "合成银行收款通知："+id+"，customer.1 汇入 "+received+" "+currency+"，"+reference+"。")
 	s.cmd(brcTreasury, "stl", stlapi.Contract, stlapi.CommandRecordFund, map[string]any{"fund_record_id": id, "kind": stlapi.FundReceipt,
 		"counterparty_id": "customer.1", "currency": s.money(currency), "bank_account": account, "received_amount": received, "value_date": now(),
 		"bank_reference": reference, "evidence_ids": []string{"bank." + id}})

@@ -321,6 +321,51 @@ func (r ChangeRequest) Propose(d *draft.Draft) Proposal {
 	return out
 }
 
+// DecreaseOnly reports whether p only buys less than current, the document of the commitment's revision
+// in force (S5R-D41; PUR-INV-009 "只减少数量（含整行降为零）的变更不查供应条件有效期，单价沿用当前修订；增加数量或改价仍
+// 须有效的已核实供应条件"; SM-PUR-COMMITMENT-CHANGE decide guard): no line buys more than current — allocated or
+// overbuy, a line current does not buy is an increase —, every line p buys keeps current's condition line
+// and supplier date (the date it states, or none where current's is the condition's own), and some line
+// buys less, or nothing any more. Such a change is prepared, decided and applied without the supply
+// condition's validity and at the unit prices of the revision in force (draft.Change.DecreaseOnly).
+func (p Proposal) DecreaseOnly(current draft.Document) bool {
+	byLine := map[string]draft.DocLine{}
+	for _, l := range current.Lines {
+		byLine[l.OrderLineID] = l
+	}
+	less := false
+	kept := map[string]bool{}
+	for _, l := range p.Request.Lines {
+		x, ok := byLine[l.OrderLineID]
+		if !ok {
+			return false
+		}
+		kept[l.OrderLineID] = true
+		allocated, err1 := kernel.ParseDecimal(x.AllocatedQuantity, kernel.QuantityFormat)
+		overbuy, err2 := kernel.ParseDecimal(x.OverbuyQuantity, kernel.QuantityFormat)
+		if err1 != nil || err2 != nil {
+			return false
+		}
+		var ob kernel.Decimal
+		if l.Overbuy != nil {
+			ob = l.Overbuy.Quantity
+		}
+		src := draft.DocLineSource{Kind: l.Source.Kind, ID: l.Source.ID, Revision: l.Source.Revision, ConditionLineID: l.Source.ConditionLineID}
+		stated := p.Dates[l.OrderLineID]
+		switch {
+		case l.Quantity.Cmp(allocated) > 0, ob.Cmp(overbuy) > 0, src != x.Source:
+			return false
+		case stated != x.Delivery.SupplierDate && (stated != "" || x.Delivery.ConditionDate != ""):
+			return false
+		}
+		less = less || l.Quantity.Cmp(allocated) < 0 || ob.Cmp(overbuy) < 0
+	}
+	for _, x := range current.Lines {
+		less = less || !kept[x.OrderLineID]
+	}
+	return less
+}
+
 // Proposable decides, before anything upstream is asked, whether r may be prepared on commitment c
 // (purchase.commitment.change.prepare; SM-PUR-COMMITMENT-CHANGE, PUR-INV-011), whose draft is d and
 // whose document of what it buys now is current, in this order: an issued or confirmed commitment
@@ -545,14 +590,21 @@ func (c *Commitment) Apply(x *Change, act Act) *Revision {
 	return &c.Revisions[len(c.Revisions)-1]
 }
 
+// UnverifiedDeliveryPending is the reason a cancellation is refused while a claim of the commitment's
+// deliveries awaits its verification (S5R-D41; SM-PUR-COMMITMENT cancel guard; INVALID_STATE).
+const UnverifiedDeliveryPending = "unverified_delivery_pending"
+
 // Cancel cancels the commitment by act with the supplier's evidence (purchase.commitment.cancel;
 // SM-PUR-COMMITMENT issued | confirmed → cancelled; PUR-INV-011), at the version (VERSION_CONFLICT),
-// of an issued or confirmed commitment (INVALID_STATE). Its next revision keeps of each line of
-// current, what it buys now, exactly what was verified delivered (verified; the allocated quantity
-// first, the rest as overbuy): the allocation of the undelivered quantity is released and the
-// verified deliveries stay settlement and shipment sources. The version moves. It returns the new
-// revision.
-func (c *Commitment) Cancel(expected int64, current []LineQuantity, verified map[string]kernel.Decimal, act Act, evidence []Evidence) (*Revision, error) {
+// of an issued or confirmed commitment (INVALID_STATE) none of whose deliveries, pending, has a claim
+// awaiting its verification (INVALID_STATE, reason unverified_delivery_pending; S5R-D41: the claim is
+// verified or rejected first, so goods that arrived never vanish with the cancellation). Its next
+// revision keeps of each line of current, what it buys now, exactly what was verified delivered
+// (verified; the allocated quantity first, the rest as overbuy): the allocation of the undelivered
+// quantity is released and the verified deliveries stay settlement and shipment sources. The version
+// moves. It returns the new revision.
+func (c *Commitment) Cancel(expected int64, current []LineQuantity, verified map[string]kernel.Decimal, pending []string, act Act,
+	evidence []Evidence) (*Revision, error) {
 	if err := c.version(expected); err != nil {
 		return nil, err
 	}
@@ -561,6 +613,9 @@ func (c *Commitment) Cancel(expected int64, current []LineQuantity, verified map
 		return nil, fail(kernel.CodeInvalidState, "/args/commitment_id", "The commitment is cancelled already")
 	case !IsOpen(c.Status):
 		return nil, fail(kernel.CodeInvalidState, "/args/commitment_id", "The commitment is "+c.Status+"; one not issued is revoked or left")
+	case len(pending) > 0:
+		return nil, fail(kernel.CodeInvalidState, "/args/commitment_id", UnverifiedDeliveryPending+": the claim of supplier delivery "+
+			strings.Join(pending, ", ")+" awaits its verification; verify or reject it first")
 	}
 	act.At = kernel.Instant(act.At)
 	orderRevision, orderHash := c.OrderBinding()

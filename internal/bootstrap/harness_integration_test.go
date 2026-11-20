@@ -32,6 +32,8 @@ var allPermissions = []string{
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "item_code_mapping.save_draft", "item_code_mapping.publish",
 	"cat.read", "cat.audit",
 	"config.save_draft", "config.discard_draft", "config.publish", "config.retire", "number.issue", "foundation.snapshot",
+	// S5R-D30: publication by kind (polapi.PublishCapability).
+	"config.publish.credit_policy", "config.publish.export_tax_policy", "config.publish.screening_regulation",
 	"pol.read", "pol.audit", "pol.read_sensitive",
 	"rfq.save_draft", "rfq.confirm_scope", "rfq.cancel", "rfq.close", "inq.read", "inq.audit",
 	"party_screening.record", "party_screening.decide", "party_screening.block",
@@ -45,7 +47,8 @@ var allPermissions = []string{
 	"logistics_offer.save_draft", "logistics_offer.revise", "logistics_offer.discard_draft", "logistics_offer.verify",
 	"logistics_offer.withdraw", "sup.read", "sup.audit",
 	"quote.save_draft", "quote.revise", "quote.discard_draft", "quote.freeze", "quote.metadata.update",
-	"object_control.bind", "object_control.stop", "object_control.release", "trd.read", "trd.audit",
+	"object_control.bind", "object_control.stop", "object_control.enter_manual", "object_control.handoff", "object_control.release",
+	"trd.read", "trd.audit",
 	"quote.submit_review", "quote.review.decide", "quote.approval.revoke", "quote.margin_exception.approve",
 	"quote.activate", "quote.replace", "quote.withdraw", "quote.cancel",
 	"quote.response.record", "quote.response.verify", "acceptance.invalidate", "acceptance.mark_disputed",
@@ -56,7 +59,7 @@ var allPermissions = []string{
 	"purchase.commitment.request", "purchase.commitment.decide", "purchase.commitment.revoke", "purchase.commitment.issue",
 	"purchase.supplier_confirmation.record", "supplier_delivery.record", "supplier_delivery.verify",
 	"purchase.commitment.change.prepare", "purchase.commitment.change.decide", "purchase.commitment.change.apply", "purchase.commitment.cancel",
-	"allocation_review.settle",
+	"allocation_review.settle", "purchase.commitment.dispose", "purchase.commitment.disposition.decide",
 }
 
 type world struct {
@@ -150,12 +153,25 @@ func actorRef(kind, id string) kernel.ActorRef {
 	return kernel.ActorRef{Kind: kernel.ActorKind(kind), ID: id}
 }
 
-// exec runs sql as the application role in company's scope.
-func (w *world) exec(company, sql string) error {
-	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
+// helperDB opens the application role's database for one statement of a test helper and returns it
+// with the function that closes its pool; the helper defers it. pgtest closes a pool only when the
+// test ends, so a helper that left its pool open held one connection per call until then, and a
+// test with many reads needed more than the 100 connections of a stock PostgreSQL 16, which is what
+// each CI job runs against (TestGoalReadinessJudgesQuoteReady: SQLSTATE 53300 there).
+func (w *world) helperDB() (*bentopg.DB, func()) {
+	w.t.Helper()
+	pool := pgtest.AppPool(w.t)
+	db, err := bentopg.NewDB(pool)
 	if err != nil {
 		w.t.Fatal(err)
 	}
+	return db, pool.Close
+}
+
+// exec runs sql as the application role in company's scope.
+func (w *world) exec(company, sql string) error {
+	db, done := w.helperDB()
+	defer done()
 	return bento.ScopeTransactor{DB: db, Scope: w.scope(company)}.WithinTransaction(context.Background(), func(ctx context.Context) error {
 		exec, err := db.RequireExecutor(ctx)
 		if err != nil {
@@ -174,10 +190,8 @@ type event struct {
 // events returns the Outbox events of source in company, oldest first.
 func (w *world) events(company, source string) []event {
 	w.t.Helper()
-	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
-	if err != nil {
-		w.t.Fatal(err)
-	}
+	db, done := w.helperDB()
+	defer done()
 	q, err := db.ReadExecutor(context.Background())
 	if err != nil {
 		w.t.Fatal(err)
@@ -201,12 +215,10 @@ func (w *world) events(company, source string) []event {
 // RLS.
 func (w *world) count(company, table string) int {
 	w.t.Helper()
-	db, err := bentopg.NewDB(pgtest.AppPool(w.t))
-	if err != nil {
-		w.t.Fatal(err)
-	}
+	db, done := w.helperDB()
+	defer done()
 	var n int
-	err = bento.ScopeTransactor{DB: db, Scope: w.scope(company)}.WithinTransaction(context.Background(), func(ctx context.Context) error {
+	err := bento.ScopeTransactor{DB: db, Scope: w.scope(company)}.WithinTransaction(context.Background(), func(ctx context.Context) error {
 		exec, err := db.RequireExecutor(ctx)
 		if err != nil {
 			return err

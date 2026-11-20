@@ -14,6 +14,35 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
+// ConfigsInForce returns the revisions of kind in force now, audited as config.lookup (S4 G1). The
+// revision body is never read. bank_account is refused: its content is pol.read_sensitive, which an
+// agent read does not return even as an account number.
+func (s Service) ConfigsInForce(ctx context.Context, kind string) (api.ConfigsInForce, error) {
+	var out api.ConfigsInForce
+	err := s.Ledger.Read(ctx, CommandLookupConfig, kind, func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		switch {
+		case kind == api.KindBankAccount:
+			return kernel.Reject(kernel.CodePermissionDenied, "/args/Kind", "a bank account is pol.read_sensitive content, which this read never returns")
+		case !api.KindKnown(kind):
+			return kernel.Reject(kernel.CodeSchemaInvalid, "/args/Kind", "")
+		}
+		rows, err := postgres.ConfigsInForce(ctx, exec, scope(ctx), kind, kernel.Instant(s.Clock.Now()), api.MaxConfigsInForce+1)
+		if err != nil {
+			return err
+		}
+		out = api.ConfigsInForce{Kind: kind, Configs: []api.ConfigInForce{}}
+		for _, row := range rows {
+			if len(out.Configs) == api.MaxConfigsInForce {
+				out.Truncated = true
+				break
+			}
+			out.Configs = append(out.Configs, api.ConfigInForce{ID: row.ID, Revision: row.Revision})
+		}
+		return nil
+	})
+	return out, err
+}
+
 // GetConfig returns a configuration and all its revisions, audited (Python foundation_get). Bank
 // account revisions are filtered and masked (accounts).
 func (s Service) GetConfig(ctx context.Context, kind, id string) (api.ConfigView, error) {
@@ -155,6 +184,47 @@ func (s Service) ResolveConfigs(ctx context.Context, refs []api.ConfigRef, at ti
 		return nil
 	})
 	return out, err
+}
+
+// ConfigAt answers ConfigAt v1 (S5R-D23, POL-INV-007): the revision of a configuration that applies
+// at an instant by its validity, published before or after it (config.At). It reads every revision
+// of the configuration without locks: published revisions never change. Bank accounts follow the
+// read rules of GetConfig; one the reader may not see is not known to it.
+func (s Service) ConfigAt(ctx context.Context, q api.ConfigAtQuery) (api.RevisionAt, error) {
+	if err := q.Validate(); err != nil {
+		return api.RevisionAt{}, err
+	}
+	at := kernel.Instant(q.At)
+	unknown := api.RevisionAt{Ref: api.ConfigRef{Kind: q.Kind, ConfigID: q.ConfigID}, Code: kernel.CodeReferenceInvalid}
+	out := unknown
+	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		stored, err := postgres.Revisions(ctx, exec, scope(ctx), q.Kind, q.ConfigID)
+		if err != nil || len(stored) == 0 {
+			return err
+		}
+		revisions := make([]*config.Revision, len(stored))
+		for i, r := range stored {
+			revisions[i] = r.Rev
+		}
+		rev := config.At(revisions, at)
+		if rev == nil {
+			out = api.RevisionAt{Ref: unknown.Ref, Code: config.CodeConfigNotActive}
+			return nil
+		}
+		out = api.RevisionAt{Ref: api.ConfigRef{Kind: q.Kind, ConfigID: q.ConfigID, Revision: rev.Number}, Status: string(rev.Status),
+			ContentHash: rev.Hash, ValidFrom: rev.Content.ValidFrom, ValidUntil: rev.Content.ValidUntil, PublishedAt: rev.Publication.At,
+			EndedAt: rev.EndedAt, Data: data(rev.Content)}
+		reader := accounts{s: s, d: d}
+		visible, err := reader.show(ctx, exec, &out.Data)
+		if err == nil && !visible {
+			out = unknown
+		}
+		return err
+	})
+	if err != nil {
+		return api.RevisionAt{}, err
+	}
+	return out, nil
 }
 
 // LookupFX applies POL-INV-003 to one use of an exchange rate (Python foundation.fx.convert without

@@ -65,6 +65,11 @@ const (
 	// HoldApprovalRevoked is the cause of a risk hold registered by revoking the approval an active
 	// revision was formalized with.
 	HoldApprovalRevoked = "approval_revoked"
+	// HoldCostSourceDenied is the cause of a risk hold TRD's consumer of CST's CostSourceDenied
+	// registers on an active revision whose commit evidence names a snapshot resting on the denied
+	// source, before a contract formed on it (WF-03, S4 decision D-9); its code is
+	// COST_SOURCE_DENIED.
+	HoldCostSourceDenied = "cost_source_denied"
 )
 
 // Activate formalizes approved revision BusinessRevision as the root's first active revision
@@ -227,12 +232,18 @@ type ClosureView struct {
 	RootVersion int64
 }
 
-// HoldView is a risk hold on a formal revision.
+// HoldView is a risk hold on a formal revision: of a revoked approval (ApprovalID) or of a denied
+// cost source (CST's attestation, the source, the snapshot the revision's commit evidence names and
+// the event that carried the denial).
 type HoldView struct {
 	HoldID           string
 	BusinessRevision int64
-	Cause            string // approval_revoked
+	Cause            string // approval_revoked, cost_source_denied
 	ApprovalID       string
+	CostSnapshotID   string
+	CostSourceID     string
+	AttestationID    string
+	EventID          string
 	Code             string // the code a use of the revision is refused with
 	RegisteredBy     kernel.ActorRef
 	RegisteredAt     time.Time
@@ -260,6 +271,10 @@ type FormalDocument struct {
 	Status           string
 	Formal           FormalView
 	Content          []byte
+	// OwnerActorID and OwnerTeamID are the quote root's owner, by whom TRD decides who sees the root
+	// and its documents (data scope): EVD files the document under them (Context Map R65, S4 C4).
+	OwnerActorID string
+	OwnerTeamID  string
 }
 
 // QuoteRevisionRef names a business revision of a quote {quote_id, business_revision}

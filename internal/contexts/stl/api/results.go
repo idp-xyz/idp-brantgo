@@ -39,7 +39,15 @@ import (
 //	                     snapshot stays, the next close appends the next one (BT24).
 //
 // While an order's result is settled, charge.confirm and charge.allocate of a charge that benefits that order are
-// INVALID_STATE (reopen first; charge.record of a late charge is allowed). Request members: charge.record
+// INVALID_STATE (reopen first; charge.record of a late charge is allowed).
+//
+// S5R unit R8: a new charge states its cost_component and whether it is recharged (S5R-D24: the main carriage of an
+// EXW, FCA, FAS or FOB order is the buyer's — INVALID_KNOWN_VALUE unless recharged; a recharged charge is not in the
+// result); a confirmed charge is paid by application.apply {target {kind: "charge"}} (S5R-D19: charge.get derives its
+// payment state; net cash counts the payments, unpaid charges are listed); the FX difference of a receipt in the
+// order's currency is realised by its fund's conversions and unrealised at the settlement rate its application
+// recorded (S5R-D19); write-offs are sunk cost and a cancelled order with sunk costs closes settled, marked cancelled;
+// one without has no result (S5R-D42). Request members: charge.record
 // {charge_id, expected_version, status, source {kind, party_id, reference}, beneficiaries [{kind, order_id,
 // shipment_id}], fee_category {kind, id, revision}, currency {kind, id, revision}, conversion {kind, fx_rate},
 // amount, occurred_on, analysis_on, basis, evidence_ids}; charge.confirm {charge_id, expected_version,
@@ -86,10 +94,20 @@ const (
 	DimensionPurchaseCosts   = "purchase_costs"
 	DimensionDirectCharges   = "direct_charges"
 	DimensionClaims          = "claims"
-	MaxBeneficiaries         = 50
-	MaxAllocationLines       = 200
-	maxReference             = 128
-	dateLayout               = "2006-01-02"
+	// Cost components of a charge (S5R-D24): whom the cost is for depends on the order's Incoterm.
+	ComponentPreCarriage     = "pre_carriage"
+	ComponentExportClearance = "export_clearance"
+	ComponentMainCarriage    = "main_carriage"
+	ComponentInsurance       = "insurance"
+	ComponentOther           = "other"
+	// Payment states of a charge, derived from the payments applied to it (S5R-D19).
+	ChargeUnpaid       = "unpaid"
+	ChargePartlyPaid   = "partly_paid"
+	ChargePaid         = "paid"
+	MaxBeneficiaries   = 50
+	MaxAllocationLines = 200
+	maxReference       = 128
+	dateLayout         = "2006-01-02"
 )
 
 // ChargeSource is where a charge comes from: Kind supplier_bill or logistics_offer of PartyID (PTY) with its
@@ -117,6 +135,10 @@ type ChargeConversion struct {
 }
 
 // RecordCharge records a new charge (ExpectedVersion 0) or the bill of an estimated one (its version). Human or AI.
+// A new charge states its CostComponent (S5R-D24: pre_carriage, export_clearance, main_carriage, insurance or
+// other; the main carriage of an order whose Incoterm is EXW, FCA, FAS or FOB is the buyer's: INVALID_KNOWN_VALUE
+// unless Recharged) and whether it is Recharged (advanced for the buyer and recovered from it: not in the order
+// result); a bill names neither. Both are left out of the request hash while empty.
 type RecordCharge struct {
 	IdempotencyKey  string
 	ChargeID        string
@@ -127,6 +149,8 @@ type RecordCharge struct {
 	FeeCategory     *ConfigRef
 	Currency        *ConfigRef
 	Conversion      *ChargeConversion
+	CostComponent   string `json:",omitempty"`
+	Recharged       bool   `json:",omitempty"`
 	Amount          string
 	OccurredOn      string
 	AnalysisOn      string
@@ -272,6 +296,8 @@ func (c RecordCharge) Validate() error {
 		switch {
 		case len(c.Beneficiaries) > 0:
 			return schema("/args/beneficiaries")
+		case c.CostComponent != "" || c.Recharged:
+			return schema("/args/cost_component")
 		case c.FeeCategory != nil:
 			return schema("/args/fee_category")
 		case c.Currency != nil:
@@ -289,6 +315,9 @@ func (c RecordCharge) Validate() error {
 			}
 		}
 		switch {
+		case c.CostComponent != ComponentPreCarriage && c.CostComponent != ComponentExportClearance && c.CostComponent != ComponentMainCarriage &&
+			c.CostComponent != ComponentInsurance && c.CostComponent != ComponentOther:
+			return schema("/args/cost_component")
 		case c.FeeCategory == nil:
 			return schema("/args/fee_category")
 		case c.Currency == nil:
@@ -493,22 +522,30 @@ type ChargeAllocationView struct {
 
 // ChargeView is a charge as charge.get shows it, as of CheckedAt.
 type ChargeView struct {
-	ChargeID           string
-	Status             string
-	Version            int64
-	Source             ChargeSource
-	EstimateReference  string
-	FeeCategory        ConfigRef
-	Currency           string
-	CurrencyRevision   int64
-	EstimateMinor      string
-	AmountMinor        string
-	Conversion         ChargeConversionView
-	OccurredOn         string
-	AnalysisOn         string
-	Basis              string
-	EvidenceIDs        []string
-	Beneficiaries      []ChargeTarget
+	ChargeID          string
+	Status            string
+	Version           int64
+	Source            ChargeSource
+	EstimateReference string
+	FeeCategory       ConfigRef
+	Currency          string
+	CurrencyRevision  int64
+	EstimateMinor     string
+	AmountMinor       string
+	Conversion        ChargeConversionView
+	CostComponent     string // S5R-D24
+	Recharged         bool   // S5R-D24
+	OccurredOn        string
+	AnalysisOn        string
+	Basis             string
+	EvidenceIDs       []string
+	Beneficiaries     []ChargeTarget
+	// S5R-D19: what the payments applied to the charge paid, what is open, its payment state (unpaid, partly_paid,
+	// paid) and the payments.
+	PaidMinor          string
+	OpenMinor          string
+	PaymentStatus      string
+	Payments           []AllocationView
 	AllocationSeq      int
 	Allocations        []ChargeAllocationView
 	RecordedBy         kernel.ActorRef
@@ -568,9 +605,16 @@ type ConfirmedResultView struct {
 	Batches                 []BatchView
 	OrderLevelChargesMinor  string
 	UnsoldPurchaseCostMinor string
+	WriteOffCostMinor       string // S5R-D42: the cost of written-off goods, part of the purchase cost (sunk cost)
 }
 
 // FXItemView is one cross-currency receipt of the order with its business settlement FX difference.
+//
+// S5R-D19: Basis says how it is valued — settlement_rate (a receipt in another currency converted at a POL settlement
+// rate when applied, C8), conversion (the part of a receipt in the order's currency its fx_conversion records
+// realised, at their bank rates weighted by the amounts sold: Rate, ConversionIDs) or unrealized (the part not
+// converted yet, at the settlement rate recorded when it was applied). Source is that part in the receipt's currency,
+// Target its value.
 type FXItemView struct {
 	ApplicationID     string
 	TargetKind        string
@@ -581,22 +625,35 @@ type FXItemView struct {
 	TargetCurrency    string
 	TargetAmountMinor string
 	DifferenceMinor   string
+	Basis             string
+	FundRecordID      string
+	Rate              string
+	ConversionIDs     []string
+	Unrealized        bool
 }
 
 // FXResultView is the business settlement FX difference (never a receipt or revenue).
 type FXResultView struct {
 	DifferenceMinor string
+	RealizedMinor   string // S5R-D19
+	UnrealizedMinor string // S5R-D19
 	Items           []FXItemView
 	Gaps            []string
 }
 
 // CashView is the net cash result: receipts less payments, its sources and scope.
+//
+// S5R-D19: payments include what was paid on the order's charges (ChargePaymentsMinor, the order's share);
+// UnpaidChargesMinor and Unpaid are the order's part of its charges not paid through STL.
 type CashView struct {
-	ReceiptsMinor string
-	PaymentsMinor string
-	NetMinor      string
-	Sources       []ResultSourceView
-	Gaps          []string
+	ReceiptsMinor       string
+	PaymentsMinor       string
+	ChargePaymentsMinor string
+	NetMinor            string
+	UnpaidChargesMinor  string
+	Sources             []ResultSourceView
+	Unpaid              []ResultSourceView
+	Gaps                []string
 }
 
 // ResultFiguresView are an order's result figures as of AsOf in Currency (MinorUnits), converted from the order's
@@ -612,6 +669,11 @@ type ResultFiguresView struct {
 	Confirmed     ConfirmedResultView
 	FXDifference  FXResultView
 	NetCash       CashView
+	// S5R-D42: the order is cancelled (no revenue: the result is its sunk cost) and has sunk costs at all; S5R-D24:
+	// the recharged charges the result leaves out.
+	Cancelled bool
+	SunkCost  bool
+	Recharged []ResultSourceView
 }
 
 // SnapshotContent is what a closing snapshot holds: the order binding, the figures and the close conditions.
@@ -665,6 +727,7 @@ type OrderResultView struct {
 	OrderRevision int64
 	OrderStatus   string
 	OrderEnded    string
+	Cancelled     bool // S5R-D42: the result of a cancelled order (closes settled, marked cancelled)
 	Live          ResultFiguresView
 	Conditions    []CloseConditionView
 	Settleable    bool

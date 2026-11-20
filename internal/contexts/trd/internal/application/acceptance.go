@@ -91,11 +91,11 @@ func (h *rootCommand) Prepare(ctx context.Context) error {
 
 // admit runs the checks every write under a root starts with: the root exists and the caller sees
 // it (NOT_FOUND at path), then its object control.
-func (h *rootCommand) admit(ctx context.Context, d authorization.Decision, path string) error {
+func (h *rootCommand) admit(ctx context.Context, exec bentopg.Executor, d authorization.Decision, path string) error {
 	if h.q == nil || !d.Sees(h.q.OwnerActor, h.q.OwnerTeam) {
 		return kernel.Reject(kernel.CodeNotFound, path, "")
 	}
-	return h.q.Control.Admit(claim(ctx), d.Epoch)
+	return h.q.Control.Admit(fence(ctx, exec, d))
 }
 
 // readEvidence reads, before the transaction, which of ids the actor reads.
@@ -135,7 +135,7 @@ func (s Service) RecordResponse(ctx context.Context, cmd api.RecordResponse) (ap
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, "/args/quote_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/quote_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		r, replay, err := response.Record(h.q, stored, draft, readable, d.Actor, d.Epoch, s.Clock.Now())
@@ -239,7 +239,7 @@ func (s Service) VerifyResponse(ctx context.Context, cmd api.VerifyResponse) (ap
 		if r == nil {
 			return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/response_id", "")
 		}
-		if err := h.admit(ctx, d, "/args/response_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/response_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		a, replay, err := acceptance.Verify(r, h.q, v, known, readable, d.Actor, d.Epoch, s.Clock.Now())
@@ -325,7 +325,7 @@ func (s Service) changeAcceptance(ctx context.Context, name, eventType, key, id 
 		if a == nil {
 			return action.Outcome{}, kernel.Reject(kernel.CodeNotFound, "/args/acceptance_id", "")
 		}
-		if err := h.admit(ctx, d, "/args/acceptance_id"); err != nil {
+		if err := h.admit(ctx, exec, d, "/args/acceptance_id"); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := change(a, expected, quote.Act{By: d.Actor, Epoch: d.Epoch, At: s.Clock.Now(), Reason: reason, Evidence: evidenced}); err != nil {

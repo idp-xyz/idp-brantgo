@@ -111,6 +111,7 @@ type Content struct {
 	OrderDocumentTemplate    *OrderDocumentTemplate
 	ShipmentDocumentTemplate *ShipmentDocumentTemplate
 	ExportTaxPolicy          *ExportTaxPolicy
+	SalesPrice               *SalesPrice
 }
 
 // Validity returns the revision's validity interval.
@@ -173,6 +174,8 @@ func (c Content) Data() any {
 		return present(c.ShipmentDocumentTemplate)
 	case KindExportTaxPolicy:
 		return present(c.ExportTaxPolicy)
+	case KindSalesPrice:
+		return present(c.SalesPrice)
 	}
 	return nil
 }
@@ -266,6 +269,8 @@ func (c *Content) DecodeData(raw []byte) error {
 		return decode(raw, &c.ShipmentDocumentTemplate)
 	case KindExportTaxPolicy:
 		return decode(raw, &c.ExportTaxPolicy)
+	case KindSalesPrice:
+		return decode(raw, &c.SalesPrice)
 	}
 	return fmt.Errorf("pol: no data of kind %q", c.Kind)
 }
@@ -391,8 +396,9 @@ func (r *Root) Publish(number int64, f Facts, by kernel.ActorRef, epoch int64, e
 	return superseded, nil
 }
 
-// sameDefinition reports whether b keeps the meaning of a (POL-INV-002); other kinds have no
-// immutable definition.
+// sameDefinition reports whether b keeps the meaning of a (POL-INV-002), and whether a sales price
+// keeps its subject — its SKU, customer and currency — so a configuration of the price list stays
+// one price with its history (owner decision 2026-11-18); other kinds have no immutable definition.
 func sameDefinition(a, b Content) bool {
 	switch a.Kind {
 	case KindCurrency:
@@ -401,6 +407,9 @@ func sameDefinition(a, b Content) bool {
 	case KindUnit:
 		x, y := a.Unit, b.Unit
 		return x.Code == y.Code && x.Dimension == y.Dimension && x.Precision == y.Precision
+	case KindSalesPrice:
+		x, y := a.SalesPrice, b.SalesPrice
+		return x.SkuID == y.SkuID && x.PartyID == y.PartyID && x.Currency == y.Currency
 	}
 	return true
 }
@@ -446,6 +455,39 @@ func InForce(rev *Revision, at time.Time) error {
 		return reject(CodeConfigExpired, "/")
 	}
 	return nil
+}
+
+// At returns the revision of one configuration that applies at instant at by its validity (ConfigAt
+// v1, S5R-D23, POL-INV-007), or nil: among revisions, every revision of the configuration, the one
+// published last of those ever published whose validity contains at. A retirement ends the
+// configuration: once a revision is retired, at or before at, no revision published before that
+// retirement applies at at, so an older superseded revision does not come back; one published after
+// it does. Publication time is otherwise no condition: a revision published after at applies to it
+// when its validity covers it (财税〔2012〕39号: the export date decides). brant_pol.config_at_v1
+// (migrations/pol/000006) decides the same in SQL.
+func At(revisions []*Revision, at time.Time) *Revision {
+	var retiredAt time.Time // the latest retirement at or before at
+	for _, r := range revisions {
+		if r.Status == Retired && !r.EndedAt.After(at) && r.EndedAt.After(retiredAt) {
+			retiredAt = r.EndedAt
+		}
+	}
+	var applies *Revision
+	for _, r := range revisions {
+		p := r.Publication
+		switch {
+		case p == nil || (r.Status != Active && r.Status != Superseded && r.Status != Retired):
+			continue
+		case !retiredAt.IsZero() && !p.At.After(retiredAt):
+			continue
+		case !r.Content.Validity().Contains(at):
+			continue
+		}
+		if applies == nil || p.At.After(applies.Publication.At) || (p.At.Equal(applies.Publication.At) && r.Number > applies.Number) {
+			applies = r
+		}
+	}
+	return applies
 }
 
 // FXUse is one use of an exchange rate: converting From into To for Purpose at instant At, with

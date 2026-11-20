@@ -37,6 +37,8 @@ const (
 	// D-12) and the export tax refund method (CN-AT12).
 	KindShipmentDocumentTemplate Kind = "shipment_document_template"
 	KindExportTaxPolicy          Kind = "export_tax_policy"
+	// One price of the sales price list (owner decision 2026-11-18).
+	KindSalesPrice Kind = "sales_price"
 )
 
 // Closed values the rules below compare.
@@ -60,7 +62,20 @@ const (
 	// A payment stage paid against the shipping documents (S5 D-5) is due after shipment.
 	ReleaseControlDocuments = "documents"
 	TriggerAfterShipment    = "after_shipment"
+
+	// RefundNotApplicable is the refund method of S5 that a new export_tax_policy revision may not
+	// state (S5R-D14): exempt and taxable say which of the two it meant.
+	RefundNotApplicable = "not_applicable"
 )
+
+// MinInsurancePercent is the lowest contract insurance percentage trade terms may state: 110 % of
+// the invoice value (Incoterms 2020 A5, UCP 600 Art. 28; S5R-D06, POL-INV-006).
+var MinInsurancePercent = kernel.DecimalFromInt(110)
+
+// CreditApprovalLevels are the levels a credit_policy's approval tiers may name: the role templates
+// that decide credit (credit_exception.decide), whose holders STL gives the tier of their template
+// (S5 D-6; S5R-D30, POL-INV-001).
+var CreditApprovalLevels = []string{"credit_officer", "credit_manager"}
 
 // Ref is a ConfigRef v1 inside configuration data: the exact revision of another configuration.
 // Its fields match package api's ConfigRef.
@@ -129,13 +144,16 @@ type Calendar struct {
 	Holidays        []string `json:"holidays"`
 }
 
-// TradeTerms are an Incoterms rule with its named place and how delivery is dated.
+// TradeTerms are an Incoterms rule with its named place and how delivery is dated. InsurancePercent,
+// the contract insurance percentage (S5R-D06), is omitted when the terms state none (110 % then), so
+// terms published before it existed keep their content hash.
 type TradeTerms struct {
 	Incoterm           string   `json:"incoterm"`
 	Edition            string   `json:"edition"`
 	NamedPlace         string   `json:"named_place"`
 	ResponsibilityNote string   `json:"responsibility_note"`
 	Delivery           Delivery `json:"delivery"`
+	InsurancePercent   string   `json:"insurance_percent,omitempty"`
 }
 
 // Delivery is a fixed date, or a lead time of Days after an anchor event, counted on a day basis
@@ -205,7 +223,9 @@ type FeeCategory struct {
 
 // PricingPolicy is the basis of cost estimates and quotations: the calculation currency, the
 // minimum margin, how long a quotation is valid, how old an exchange rate may be and the tax
-// profile revision.
+// profile revision. TargetMargin, the margin a price is proposed for when no sales price is in
+// force (owner decision 2026-11-18), is omitted when the policy states none, so a policy published
+// before it existed keeps its content hash.
 type PricingPolicy struct {
 	Name                string `json:"name"`
 	CalculationCurrency string `json:"calculation_currency"`
@@ -213,7 +233,25 @@ type PricingPolicy struct {
 	QuoteValidDays      int    `json:"quote_valid_days"`
 	MaxFXAgeSeconds     int64  `json:"max_fx_age_seconds"`
 	TaxProfile          Ref    `json:"tax_profile"`
+	TargetMargin        string `json:"target_margin,omitempty"`
 }
+
+// SalesPrice is one price of the sales price list (owner decision 2026-11-18): UnitPrice of
+// Currency for PriceBasisQuantity of Unit of one SKU (CAT's, stored as given), for every customer or,
+// with PartyID, for one (PTY's, stored as given). SkuID, PartyID and Currency are its subject, which
+// its first publication fixes.
+type SalesPrice struct {
+	SkuID              string `json:"sku_id"`
+	PartyID            string `json:"party_id,omitempty"`
+	Currency           string `json:"currency"`
+	Unit               string `json:"unit"`
+	UnitPrice          string `json:"unit_price"`
+	PriceBasisQuantity string `json:"price_basis_quantity"`
+}
+
+// Subject returns what the price is the price of: its SKU, its customer ("" for every customer)
+// and its currency.
+func (p SalesPrice) Subject() (sku, party, currency string) { return p.SkuID, p.PartyID, p.Currency }
 
 // BankAccount is an account of the company or of a party (PTY's, stored as given). The account
 // number is sensitive.
@@ -346,10 +384,13 @@ type DisputeResolution struct {
 	Court       string `json:"court,omitempty"`
 }
 
-// ScreeningRegulation is the screening lists a company enables and its re-screening interval.
+// ScreeningRegulation is the screening lists a company enables, its re-screening interval and the
+// country programme lists it enables (S5R-D38), which are omitted when there are none, so a
+// regulation published before they existed keeps its content hash.
 type ScreeningRegulation struct {
 	Lists                []ScreeningList `json:"lists"`
 	RescreenIntervalDays int             `json:"rescreen_interval_days"`
+	Programmes           []ScreeningList `json:"programmes,omitempty"`
 }
 
 // ScreeningList is one enabled list; a foreign list carries the EVD source of the tenant's legal
@@ -375,8 +416,16 @@ type ExportTaxPolicy struct {
 // currencies with a positive rate observed no later than it becomes valid; a conversion between
 // two units with a positive factor; payment stages with distinct IDs and positive percentages
 // summing to 100, held against the shipping documents only when due after shipment; time zones that
-// exist; tax rates and margins in [0, 1], no rate where tax does not apply; a template whose
-// placeholders are exactly its fixed fields; credit tiers ascending.
+// exist; tax rates and margins in [0, 1], no rate where tax does not apply; a target margin below 1
+// and not below the minimum margin; a positive sales price for a positive basis quantity; a
+// template whose placeholders are exactly its fixed fields; credit tiers ascending, at known levels.
+//
+// It judges the content of a revision being saved or published, never a stored revision that is
+// read: since S5R (POL-INV-006) a new revision states officially assigned country codes (S5R-D15),
+// a contract insurance percentage of at least 110 (S5R-D06) and one of the four statutory refund
+// methods (S5R-D14), and its foreign programme lists carry their legal confirmation (S5R-D38);
+// credit tiers name the role templates that decide credit (S5R-D30). A revision published before
+// stays readable as it is.
 func Validate(id string, c Content) error {
 	if c.Data() == nil {
 		return kernel.Reject(kernel.CodeSchemaInvalid, "/args/data", "")
@@ -387,6 +436,9 @@ func Validate(id string, c Content) error {
 	invalid := func(path string) error { return kernel.Reject(kernel.CodeInvalidKnownValue, path, "") }
 	switch c.Kind {
 	case KindCompanyProfile:
+		if !kernel.ValidCountryCode(c.CompanyProfile.Country) {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/country", "Not an officially assigned ISO 3166-1 code")
+		}
 		if !zone(c.CompanyProfile.TimeZone) {
 			return invalid("/args/data/time_zone")
 		}
@@ -425,6 +477,8 @@ func Validate(id string, c Content) error {
 		if !zone(c.Calendar.TimeZone) {
 			return invalid("/args/data/time_zone")
 		}
+	case KindTradeTerms:
+		return checkInsurance(c.TradeTerms)
 	case KindPaymentTerms:
 		if err := checkStages(c.PaymentTerms.Stages); err != nil {
 			return err
@@ -442,6 +496,9 @@ func Validate(id string, c Content) error {
 		if !ratio(c.PricingPolicy.MinimumMargin) {
 			return invalid("/args/data/minimum_margin")
 		}
+		return checkTargetMargin(c.PricingPolicy)
+	case KindSalesPrice:
+		return checkSalesPrice(c.SalesPrice)
 	case KindNumberSequence:
 		if !zone(c.NumberSequence.TimeZone) {
 			return invalid("/args/data/time_zone")
@@ -451,14 +508,77 @@ func Validate(id string, c Content) error {
 	case KindCreditPolicy:
 		return checkCredit(c.CreditPolicy)
 	case KindScreeningRegulation:
-		for i, l := range c.ScreeningRegulation.Lists {
-			if l.Jurisdiction == JurisdictionForeign && l.LegalConfirmationEvidenceID == "" {
-				return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/lists/"+strconv.Itoa(i)+"/legal_confirmation_evidence_id",
-					"A foreign list needs the tenant's legal confirmation")
-			}
+		r := c.ScreeningRegulation
+		if err := checkConfirmations(r.Lists, "/args/data/lists"); err != nil {
+			return err
 		}
+		return checkConfirmations(r.Programmes, "/args/data/programmes")
 	case KindLegalTerms:
+		law, _, _ := strings.Cut(c.LegalTerms.GoverningLaw, "-")
+		if !kernel.ValidCountryCode(law) {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/governing_law", "Not an officially assigned ISO 3166-1 code")
+		}
 		return checkFormation(c.LegalTerms)
+	case KindExportTaxPolicy:
+		if c.ExportTaxPolicy.RefundMethod == RefundNotApplicable {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/refund_method",
+				"State exempt or taxable: not_applicable is kept for revisions published before S5R only")
+		}
+	}
+	return nil
+}
+
+// checkTargetMargin requires a target margin, when the policy states one, from 0 up to but excluding
+// 1 and not below the minimum margin (owner decision 2026-11-18): a price is the cost divided by one
+// minus the target margin, which a margin of 1 does not define, and a target under the floor would
+// propose prices that need the margin exception.
+func checkTargetMargin(p *PricingPolicy) error {
+	if p.TargetMargin == "" {
+		return nil
+	}
+	target, err := kernel.ParseDecimal(p.TargetMargin, kernel.FactorFormat)
+	if err != nil || target.Cmp(kernel.DecimalFromInt(1)) >= 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/target_margin", "A target margin is at least 0 and below 1")
+	}
+	if minimum, err := kernel.ParseDecimal(p.MinimumMargin, kernel.FactorFormat); err != nil || target.Cmp(minimum) < 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/target_margin", "A target margin is not below the minimum margin")
+	}
+	return nil
+}
+
+// checkSalesPrice requires a positive unit price and a positive price basis quantity (owner decision
+// 2026-11-18): a price of zero is no price, and a price is for some quantity.
+func checkSalesPrice(p *SalesPrice) error {
+	if price, err := kernel.ParseDecimal(p.UnitPrice, kernel.PriceFormat); err != nil || price.Sign() <= 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/unit_price", "A sales price is positive")
+	}
+	if basis, err := kernel.ParseDecimal(p.PriceBasisQuantity, kernel.QuantityFormat); err != nil || basis.Sign() <= 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/price_basis_quantity", "A price basis quantity is positive")
+	}
+	return nil
+}
+
+// checkConfirmations requires the tenant's legal confirmation of every foreign list at path
+// (ADR-BR-017, SR-19): a foreign screening list or programme list is off without it.
+func checkConfirmations(lists []ScreeningList, path string) error {
+	for i, l := range lists {
+		if l.Jurisdiction == JurisdictionForeign && l.LegalConfirmationEvidenceID == "" {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, path+"/"+strconv.Itoa(i)+"/legal_confirmation_evidence_id",
+				"A foreign list needs the tenant's legal confirmation")
+		}
+	}
+	return nil
+}
+
+// checkInsurance requires a contract insurance percentage, when the terms state one, of at least
+// 110 % of the invoice value (S5R-D06).
+func checkInsurance(t *TradeTerms) error {
+	if t.InsurancePercent == "" {
+		return nil
+	}
+	p, err := kernel.ParseDecimal(t.InsurancePercent, kernel.FactorFormat)
+	if err != nil || p.Cmp(MinInsurancePercent) < 0 {
+		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/insurance_percent", "The insured amount is at least 110 % of the invoice value")
 	}
 	return nil
 }
@@ -477,12 +597,13 @@ func checkFormation(l *LegalTerms) error {
 
 // CheckCitedEvidence requires a publication to cite, among its evidence, the sources the content
 // rests on, so the publisher must be able to read them like the rest of the evidence (Context Map
-// R63): a screening regulation's legal confirmation of every list that has one (ADR-BR-017), and an
-// export tax policy's professional review (CN-D02).
+// R63): a screening regulation's legal confirmation of every list and programme list that has one
+// (ADR-BR-017, S5R-D38), and an export tax policy's professional review (CN-D02).
 func CheckCitedEvidence(c Content, evidence []string) error {
 	switch c.Kind {
 	case KindScreeningRegulation:
-		for _, l := range c.ScreeningRegulation.Lists {
+		r := c.ScreeningRegulation
+		for _, l := range slices.Concat(r.Lists, r.Programmes) {
 			if id := l.LegalConfirmationEvidenceID; id != "" && !slices.Contains(evidence, id) {
 				return kernel.Reject(kernel.CodeReferenceInvalid, "/args/evidence_ids",
 					"Cite the legal confirmation of screening list "+l.ListCode)
@@ -587,7 +708,8 @@ func TemplateFieldNames(text string) ([]string, bool) {
 }
 
 // checkCredit requires a non-negative default limit, positive tier amounts that strictly ascend and
-// distinct tier levels. The currency's minor units are checked with the references.
+// distinct tier levels, each one of CreditApprovalLevels (S5R-D30: a level that matches no role
+// template would give nobody its tier). The currency's minor units are checked with the references.
 func checkCredit(p *CreditPolicy) error {
 	if _, err := kernel.ParseDecimal(p.DefaultLimit, amountFormat); err != nil {
 		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/default_limit", "")
@@ -605,6 +727,12 @@ func checkCredit(p *CreditPolicy) error {
 			return kernel.Reject(kernel.CodeInvalidKnownValue, at+"/max_amount", "Tier amounts are positive and ascend")
 		}
 		previous = amount
+	}
+	for i, t := range p.ApprovalTiers {
+		if !slices.Contains(CreditApprovalLevels, t.Level) {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/approval_tiers/"+strconv.Itoa(i)+"/level",
+				"An approval level is a role template that decides credit: "+strings.Join(CreditApprovalLevels, ", "))
+		}
 	}
 	return nil
 }
@@ -663,6 +791,9 @@ func (c Content) References() []Reference {
 		byID("/args/data/currency", KindCurrency, c.BankAccount.Currency)
 	case KindCreditPolicy:
 		byID("/args/data/currency", KindCurrency, c.CreditPolicy.Currency)
+	case KindSalesPrice:
+		byID("/args/data/currency", KindCurrency, c.SalesPrice.Currency)
+		byID("/args/data/unit", KindUnit, c.SalesPrice.Unit)
 	}
 	return out
 }
@@ -740,6 +871,12 @@ func CheckReferences(id string, c Content, f Facts) error {
 				return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/approval_tiers/"+strconv.Itoa(i)+"/max_amount",
 					"More digits than the currency's minor units")
 			}
+		}
+	case KindSalesPrice:
+		p := c.SalesPrice
+		unit := f.Configs[Target{Kind: KindUnit, ID: p.Unit}].Rev.Content.Unit
+		if basis, err := kernel.ParseDecimal(p.PriceBasisQuantity, kernel.QuantityFormat); err != nil || !basis.RoundHalfUp(unit.Precision).Equal(basis) {
+			return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/data/price_basis_quantity", "More digits than the unit's precision")
 		}
 	}
 	return nil

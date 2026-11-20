@@ -87,7 +87,9 @@ func declarationEvidence(sources map[string]evdapi.SourceRef, ids []string, path
 // (REFERENCE_INVALID), a cancelled lot (INVALID_STATE); an order TRD does not show or whose sealed
 // revision is not intact (REFERENCE_INVALID), an order TRD moved to another revision or hash than
 // the lot ships (REFERENCE_STALE, R46's risk "报关资料引用旧订单修订"); then the item mapping
-// (dcl.Prepare). Nothing is published.
+// (dcl.Prepare); then, S5R-D04, the licence covering the lot held FOR SHARE: a customs_office other
+// than its (INVALID_KNOWN_VALUE), a single_use licence of the whole shipment another lot's
+// declaration uses (INVALID_STATE). Nothing is published.
 type prepareDeclaration struct {
 	s           Service
 	cmd         api.PrepareDeclaration
@@ -232,6 +234,15 @@ func (h *prepareDeclaration) Apply(ctx context.Context, exec bentopg.Executor, d
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	shipmentID := ""
+	if len(x.Lines) > 0 {
+		shipmentID = x.Lines[0].ShipmentID
+	}
+	// S5R-D04 (license_office.go): the customs office of the licence covering the lot.
+	if err = declarationLicense(ctx, exec, sc, cmd.DeclarationID, cmd.ExportLotID, shipmentID, cmd.CustomsOffice, "/args/customs_office",
+		lotPath); err != nil {
+		return action.Outcome{}, err
+	}
 	now := kernel.Instant(h.s.Clock.Now())
 	if revise {
 		c.Version++
@@ -254,7 +265,8 @@ func (h *prepareDeclaration) Apply(ctx context.Context, exec bentopg.Executor, d
 			OrderRevision: x.OrderRevision, Currency: x.Value.Currency().Code(), ValueMinor: x.Value.MinorString()},
 		Order:            dcl.DocOrder{OrderID: o.Binding.OrderID, OrderRevision: o.Binding.OrderRevision, OrderHash: o.Binding.OrderHash, Status: o.Status},
 		CodeTableVersion: cmd.CodeTableVersion, Mapping: mapping, Items: dcl.DocItems(items),
-		PreparedBy: dcl.DocActor{Kind: string(d.Actor.Kind), ID: d.Actor.ID}, AuthorityEpoch: d.Epoch, PreparedAt: kernel.FormatTimestamp(now)}
+		PreparedBy: dcl.DocActor{Kind: string(d.Actor.Kind), ID: d.Actor.ID}, AuthorityEpoch: d.Epoch, PreparedAt: kernel.FormatTimestamp(now),
+		CustomsOffice: cmd.CustomsOffice}
 	for _, sd := range o.Documents {
 		doc.Order.Documents = append(doc.Order.Documents, dcl.DocSalesRecord{Kind: sd.Kind, Number: sd.Number, OrderRevision: sd.OrderRevision,
 			DocumentSHA256: sd.DocumentSHA256, Current: sd.Current, Signatures: sd.Signatures})
@@ -291,7 +303,9 @@ func (s Service) PrepareDeclaration(ctx context.Context, cmd api.PrepareDeclarat
 // (EVD). In the transaction, after the case FOR UPDATE: NOT_FOUND, VERSION_CONFLICT, then
 // dcl.CheckConfirm (INVALID_STATE, REFERENCE_STALE, DECLARATION_MAPPING_UNVERIFIED), a line whose
 // profile CAT verified anew or no longer answers verified (REFERENCE_STALE: prepare again), the
-// evidence (REFERENCE_INVALID). Nothing is published.
+// evidence (REFERENCE_INVALID), then, S5R-D04, the licence covering the lot held FOR SHARE: the
+// version names another customs office (INVALID_KNOWN_VALUE /args/version), a single_use licence of
+// the whole shipment another lot's declaration uses (INVALID_STATE). Nothing is published.
 type confirmDeclaration struct {
 	s           Service
 	cmd         api.ConfirmDeclaration
@@ -375,6 +389,11 @@ func (h *confirmDeclaration) Apply(ctx context.Context, exec bentopg.Executor, d
 	if err != nil {
 		return action.Outcome{}, err
 	}
+	// S5R-D04 (license_office.go): the version handed over names the licence's customs office.
+	if err = declarationLicense(ctx, exec, sc, c.ID, c.ExportLotID, c.ShipmentID, v.CustomsOffice, "/args/version",
+		"/args/declaration_id"); err != nil {
+		return action.Outcome{}, err
+	}
 	now := kernel.Instant(h.s.Clock.Now())
 	from := c.RowVersion
 	c.RowVersion++
@@ -400,19 +419,63 @@ func (s Service) ConfirmDeclaration(ctx context.Context, cmd api.ConfirmDeclarat
 // evidence (EVD). In the transaction, after the case FOR UPDATE: NOT_FOUND, VERSION_CONFLICT,
 // dcl.CheckSubmission (EXTERNAL_RESULT_UNKNOWN while the result is unknown, CN-AT13; INVALID_STATE
 // unless confirmed), the operation reference taken (BUSINESS_KEY_CONFLICT: one business operation),
-// a submission instant in the future (INVALID_KNOWN_VALUE), the evidence (REFERENCE_INVALID).
-// Nothing is published. The broker's party is recorded as stated (no PTY read: no PTY→CNX
-// relationship covers service providers).
+// a submission instant in the future (INVALID_KNOWN_VALUE), a broker's service role (S5R-D36: PTY shows the party no
+// such role revision, REFERENCE_INVALID; of another kind than customs_broker, INVALID_KNOWN_VALUE; PTY's REFERENCE_STALE
+// when it did not serve at the submission instant), the evidence (REFERENCE_INVALID). Nothing is published. A broker's
+// service role is read from PTY before CNX's transaction (ServiceRoleRef v1, R77, no guard lock) at the submission
+// instant, and recorded with the submission.
 type recordSubmission struct {
 	s           Service
 	cmd         api.RecordSubmission
 	sources     map[string]evdapi.SourceRef
+	broker      *Broker
 	declaration *dcl.Case
 }
 
+func (h *recordSubmission) brokerRef() (BrokerRef, bool) {
+	s := h.cmd.Submitter
+	if s.Kind != api.SubmitterBroker || s.ServiceRole == nil {
+		return BrokerRef{}, false
+	}
+	return BrokerRef{PartyID: s.PartyID, ServiceRoleID: s.ServiceRole.ID, Revision: s.ServiceRole.Revision}, true
+}
+
 func (h *recordSubmission) Prepare(ctx context.Context) (err error) {
-	h.sources, err = h.s.sources(ctx, h.cmd.EvidenceIDs)
-	return err
+	h.broker = nil
+	if h.sources, err = h.s.sources(ctx, h.cmd.EvidenceIDs); err != nil {
+		return err
+	}
+	ref, ok := h.brokerRef()
+	if !ok {
+		return nil
+	}
+	submitted, _ := kernel.ParseTimestamp(h.cmd.SubmittedAt)
+	got, err := h.s.Upstream.Brokers.ResolveBrokers(ctx, []BrokerRef{ref}, kernel.Instant(submitted))
+	if err != nil {
+		return err
+	}
+	if b, ok := got[ref]; ok {
+		h.broker = &b
+	}
+	return nil
+}
+
+// checkBroker judges a broker's service role as PTY answered it (S5R-D36).
+func (h *recordSubmission) checkBroker() error {
+	if _, ok := h.brokerRef(); !ok {
+		return nil
+	}
+	const path = "/args/submitter/service_role"
+	b := h.broker
+	switch {
+	case b == nil:
+		return kernel.Reject(kernel.CodeReferenceInvalid, path, "PTY shows the party no such service role revision")
+	case !b.CustomsBroker:
+		return kernel.Reject(kernel.CodeInvalidKnownValue, path, "The service role is a "+b.Kind+", not a customs_broker")
+	case b.Code != "":
+		return kernel.RejectAs(b.Code, kernel.CategoryConflict, path, "The customs broker's service role is "+b.Stale+" at the submission")
+	}
+	return nil
 }
 
 func (h *recordSubmission) Lock(ctx context.Context, exec bentopg.Executor) error {
@@ -444,6 +507,9 @@ func (h *recordSubmission) Apply(ctx context.Context, exec bentopg.Executor, d a
 	if kernel.Instant(submitted).After(now) {
 		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/submitted_at", "The submission is in the future")
 	}
+	if err = h.checkBroker(); err != nil {
+		return action.Outcome{}, err
+	}
 	evidence, err := declarationEvidence(h.sources, cmd.EvidenceIDs, "/args/evidence_ids")
 	if err != nil {
 		return action.Outcome{}, err
@@ -452,10 +518,14 @@ func (h *recordSubmission) Apply(ctx context.Context, exec bentopg.Executor, d a
 	c.RowVersion++
 	c.Status = dcl.Submitted
 	c.Submissions++
-	if err = postgres.InsertSubmission(ctx, exec, sc, &dcl.Submission{DeclarationID: c.ID, No: c.Submissions, Version: c.Version,
+	sub := &dcl.Submission{DeclarationID: c.ID, No: c.Submissions, Version: c.Version,
 		OperationReference: cmd.OperationReference, SubmitterKind: cmd.Submitter.Kind, SubmitterPartyID: cmd.Submitter.PartyID,
 		SubmitterName: cmd.Submitter.Name, SubmittedAt: kernel.Instant(submitted), Evidence: evidence, Note: cmd.Note, By: d.Actor, Epoch: d.Epoch,
-		At: now}); err == nil {
+		At: now}
+	if r, ok := h.brokerRef(); ok {
+		sub.ServiceRoleID, sub.ServiceRoleRevision, sub.ServiceRoleKind = r.ServiceRoleID, r.Revision, h.broker.Kind
+	}
+	if err = postgres.InsertSubmission(ctx, exec, sc, sub); err == nil {
 		err = postgres.SaveDeclaration(ctx, exec, sc, c, from, now)
 	}
 	if err != nil {
@@ -475,8 +545,8 @@ func (s Service) RecordSubmission(ctx context.Context, cmd api.RecordSubmission)
 // evidence (EVD). In the transaction, after the case FOR UPDATE: NOT_FOUND, VERSION_CONFLICT, the
 // receipt ID taken (BUSINESS_KEY_CONFLICT), then dcl.CheckReceipt (INVALID_STATE, then
 // DECLARATION_RECEIPT_STALE for a receipt not after the result recorded, INVALID_STATE for an
-// outcome that does not follow, INVALID_KNOWN_VALUE), the evidence (REFERENCE_INVALID). An amendment
-// that names items makes the next version (kind amended). DeclarationReceiptRecorded is published.
+// outcome that does not follow, INVALID_KNOWN_VALUE — not_received without evidence, S5R-D13), the evidence
+// (REFERENCE_INVALID). An amendment that names items makes the next version (kind amended). DeclarationReceiptRecorded is published.
 type recordReceipt struct {
 	s           Service
 	cmd         api.RecordReceipt
@@ -519,7 +589,8 @@ func (h *recordReceipt) Apply(ctx context.Context, exec bentopg.Executor, d auth
 	}
 	current := vs[0]
 	now := kernel.Instant(h.s.Clock.Now())
-	in := dcl.ReceiptInput{Outcome: cmd.Outcome, DeclarationNumber: cmd.DeclarationNumber, At: now, AmendedItems: map[int]bool{}}
+	in := dcl.ReceiptInput{Outcome: cmd.Outcome, DeclarationNumber: cmd.DeclarationNumber, At: now, AmendedItems: map[int]bool{},
+		Evidence: len(cmd.EvidenceIDs)}
 	r := &dcl.Receipt{ID: cmd.ReceiptID, DeclarationID: c.ID, No: c.Receipts + 1, Outcome: cmd.Outcome, From: c.Status,
 		MappingVersion: cmd.MappingVersion, DeclarationNumber: cmd.DeclarationNumber, Reason: cmd.Reason, By: d.Actor, Epoch: d.Epoch, At: now}
 	if x := cmd.External; x != nil {

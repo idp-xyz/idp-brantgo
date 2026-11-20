@@ -14,7 +14,13 @@
 //	                       the delivery line and the release must be of that order line, its SKU
 //	                       specification and its supplier. Route supplier_direct only: the stock route
 //	                       waits for STK (D-10, DEPENDENCY_NOT_SUPPORTED). A shipment line never
-//	                       exceeds its order line; nothing is reserved by preparing.
+//	                       exceeds its order line; nothing is reserved by preparing. S5R: the lines'
+//	                       prices, the address roles and the notify party are read from that revision
+//	                       (OrderRevisionRef v1, D35); the shipment's parties — screened at every
+//	                       release (R44) — are the customer, the address roles, the order's notify
+//	                       party and the end user the request may state (end_user_party, D40), which
+//	                       CNX's licence check takes first; a line records whether its quality release
+//	                       was granted on a concession (D18).
 //	packing.plan           human or AI: the planned packing of a prepared shipment — groups of equal
 //	                       cartons with their contents per shipment line.
 //	packing.record_actual  human or AI: the actual packing — carton numbers, contents per carton (the
@@ -39,7 +45,8 @@
 // TRD reads what an order shipped through ShipmentFacts v1 (facts.go, R70).
 //
 // Request members in snake_case: shipment.prepare {shipment_id, order_id, route, lines [{line_id,
-// order_line_id, quantity, supplier_delivery {delivery_id, line_id, version}, quality_release_id}]};
+// order_line_id, quantity, supplier_delivery {delivery_id, line_id, version}, quality_release_id}],
+// end_user_party {party_id, revision} (optional, S5R-D40)};
 // packing.plan and packing.record_actual {shipment_id, expected_version, packages [{cartons,
 // carton_from, contents [{line_id, quantity_per_carton}], gross_weight_kg, net_weight_kg,
 // volume_cbm}], evidence_ids}; shipment.cancel {shipment_id, expected_version, reason};
@@ -102,7 +109,7 @@ const (
 	GuardExportLicense     = "cnx.export_license_guard.v1"
 	GuardPaymentCondition  = "stl.payment_condition_guard.v1"
 	GuardPartyScreening    = "pty.party_screening_guard.v1"
-	GuardSupplierDelivery  = "pur.supplier_delivery_guard.v1"
+	GuardSupplierDelivery  = "pur.supplier_delivery_guard.v2"
 	GuardQualityRelease    = "qlt.quality_release_guard.v1"
 	GuardOrder             = "trd.order_guard.v1"
 	NotWired               = "not_wired"
@@ -129,7 +136,7 @@ const (
 )
 
 // DeliveryLineRef names a line of a PUR supplier delivery at a version of the delivery, as PUR's
-// SupplierDeliveryGuard v1 takes it (R59): LineID is the order line the delivery line's commitment
+// SupplierDeliveryGuard v1 and v2 take it (R59): LineID is the order line the delivery line's commitment
 // line buys, Version the delivery's verified version the shipment ships from.
 type DeliveryLineRef struct {
 	DeliveryID string
@@ -147,13 +154,42 @@ type ShipmentLine struct {
 	QualityReleaseID string
 }
 
-// PrepareShipment prepares shipment ShipmentID of order OrderID by Route. Human or AI.
+// Roles of a shipment's parties (ShipmentParty.Role) besides the address roles the order binds: the
+// order's customer, its notify party and the end user the shipment states (S5R-D40).
+const (
+	PartyRoleCustomer = "customer"
+	PartyRoleNotify   = "notify"
+	PartyRoleEndUser  = "end_user"
+)
+
+// PartyRef names a PTY party at a confirmed revision (PartyRef v1, R44).
+type PartyRef struct {
+	PartyID  string
+	Revision int64
+}
+
+func (r PartyRef) validate(path string) error {
+	switch {
+	case !kernel.ValidIdentifier(r.PartyID):
+		return schema(path + "/party_id")
+	case r.Revision < 1 || r.Revision > maxVersion:
+		return schema(path + "/revision")
+	}
+	return nil
+}
+
+// PrepareShipment prepares shipment ShipmentID of order OrderID by Route. Human or AI. EndUserParty is
+// the end user the shipment states (S5R-D40, optional): a confirmed PTY party at its latest confirmed
+// revision, screened with the shipment's other parties (R44) and taken by CNX's licence check before
+// the consignee and the customer (CNX-INV-002). JSON end_user_party {party_id, revision}; omitempty so
+// that the request hash of a shipment prepared before S5R stays what it was.
 type PrepareShipment struct {
 	IdempotencyKey string
 	ShipmentID     string
 	OrderID        string
 	Route          string
 	Lines          []ShipmentLine
+	EndUserParty   *PartyRef `json:",omitempty"`
 }
 
 // PackageContent is what each carton of a package holds of shipment line LineID.
@@ -310,6 +346,9 @@ func (c PrepareShipment) Validate() error {
 		case !kernel.ValidIdentifier(l.QualityReleaseID):
 			return schema(p + "/quality_release_id")
 		}
+	}
+	if c.EndUserParty != nil {
+		return c.EndUserParty.validate("/args/end_user_party")
 	}
 	return nil
 }
@@ -491,10 +530,15 @@ type ShipmentLineView struct {
 	CommitmentID      string
 	SupplierID        string
 	QualityReleaseID  string
+	// QualityConcession: QLT granted the line's quality release on an approved concession (S5R-D18,
+	// recorded when the shipment was prepared; false for a shipment prepared before S5R).
+	QualityConcession bool
 }
 
 // ShipmentParty is a party the confirmation screens (R44): the order's customer (Role customer, no
-// address) or the party of an address role the order binds (buyer, payer, consignee, …).
+// address), the party of an address role the order binds (buyer, payer, consignee, …), the order's
+// notify party (Role notify, S5R-D40) or the end user the shipment states (Role end_user, no address,
+// S5R-D40).
 type ShipmentParty struct {
 	Role          string
 	PartyID       string

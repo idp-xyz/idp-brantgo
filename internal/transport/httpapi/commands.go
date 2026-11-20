@@ -128,21 +128,36 @@ func unwrapExecuted(err error) error {
 // decodeCommand checks the request against the command's contract and returns the context's
 // command: size and closed JSON, contract and command, the structure of the arguments.
 func (s *server) decodeCommand(r *http.Request, set *commandSet, name string, run commandFunc) (any, error) {
-	limit, values := s.cfg.MaxBodyBytes, strictjson.DefaultMaxValues
+	raw, limit, values, err := s.readBody(r, set, name)
+	if err != nil {
+		return nil, err
+	}
+	return decodeEnvelope(raw, set, name, run, limit, values)
+}
+
+// readBody reads the body of a request of command name within its ingress limits: the bytes, and
+// the limits that apply to them.
+func (s *server) readBody(r *http.Request, set *commandSet, name string) (raw []byte, limit int64, values int, err error) {
+	limit, values = s.cfg.MaxBodyBytes, strictjson.DefaultMaxValues
 	if l := set.limits[name]; l.MaxBytes > limit {
 		limit, values = l.MaxBytes, max(l.MaxValues, values)
 	}
 	body := http.MaxBytesReader(nil, r.Body, limit+1)
-	raw, err := io.ReadAll(body)
+	raw, err = io.ReadAll(body)
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return nil, kernel.Reject(kernel.CodeRequestTooLarge, "/", "")
+			return nil, 0, 0, kernel.Reject(kernel.CodeRequestTooLarge, "/", "")
 		}
-		return nil, err
+		return nil, 0, 0, err
 	}
+	return raw, limit, values, nil
+}
+
+// decodeEnvelope decodes raw, the body of a request of command name, into the context's command.
+func decodeEnvelope(raw []byte, set *commandSet, name string, run commandFunc, limit int64, values int) (any, error) {
 	var env envelope
-	if err = strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit, MaxValues: values}); err != nil {
+	if err := strictjson.Decode(bytes.NewReader(raw), &env, strictjson.Limits{MaxBytes: limit, MaxValues: values}); err != nil {
 		return nil, err
 	}
 	switch {
@@ -295,6 +310,7 @@ func evdCommands(c EVD) *commandSet {
 		AccountRef        string `json:"account_ref"`
 		ExternalMessageID string `json:"external_message_id"`
 		AuthorClaim       string `json:"author_claim"`
+		FileID            string `json:"file_id"` // file_extract: the business file EVD has the extractor read
 	}
 	type registerFile struct {
 		ID               string `json:"id"`
@@ -303,13 +319,14 @@ func evdCommands(c EVD) *commandSet {
 		ContentBase64    string `json:"content_base64"`
 		SupersedesFileID string `json:"supersedes_file_id"`
 	}
-	return &commandSet{bc: "evd", contract: evdapi.Contract, auditor: c, audit: c.Audit,
+	return &commandSet{bc: "evd", contract: evdapi.Contract, auditor: c, audit: c.Audit, reconcile: hashReconciler(c.Reconcile, c.ReconcileHash),
 		// A 10 MiB file is about 13.4 MiB of Base64 (Python allows 15 MiB for this contract).
 		limits: map[string]strictjson.Limits{evdapi.CommandRegisterFile: {MaxBytes: MaxFileBody}},
 		commands: map[string]commandFunc{
 			evdapi.CommandRegisterSource: handle(func(key string, a registerSource) (evdapi.RegisterSource, error) {
 				return evdapi.RegisterSource{IdempotencyKey: key, SourceID: a.ID, ContentText: a.ContentText, SourceKind: a.SourceKind,
-					Provider: a.Provider, AccountRef: a.AccountRef, ExternalMessageID: a.ExternalMessageID, AuthorClaim: a.AuthorClaim}, nil
+					Provider: a.Provider, AccountRef: a.AccountRef, ExternalMessageID: a.ExternalMessageID, AuthorClaim: a.AuthorClaim,
+					FileID: a.FileID}, nil
 			}, c.RegisterSource),
 			evdapi.CommandRegisterFile: handle(func(key string, a registerFile) (evdapi.RegisterFile, error) {
 				return evdapi.RegisterFile{IdempotencyKey: key, FileID: a.ID, FileName: a.FileName, MimeType: a.MimeType,
@@ -396,6 +413,7 @@ func ptyCommands(c PTY) *commandSet {
 			for _, r := range a.ContactRefs {
 				cmd.ContactRefs = append(cmd.ContactRefs, ptyapi.PinnedContact(r))
 			}
+			cmd.PermittedPayers = a.PermittedPayers
 			return cmd, err
 		}, c.SaveTradingProfile),
 		ptyapi.CommandPublishTradingProfile: handle(func(key string, a publishRevision) (ptyapi.PublishTradingProfile, error) {
@@ -453,6 +471,7 @@ type saveTradingProfile struct {
 		ContactID  string `json:"id"`
 		RowVersion int64  `json:"row_version"`
 	} `json:"contact_refs"`
+	PermittedPayers []string `json:"permitted_payers"` // S5R-D21
 }
 
 // publishRevision publishes one revision of a versioned root on evidence (trading profiles, item
@@ -578,14 +597,41 @@ type saveItemCodeMapping struct {
 }
 
 func inqCommands(c INQ) *commandSet {
+	type fieldLocator struct {
+		Field   string `json:"field"`
+		Locator string `json:"locator"`
+		Quote   string `json:"quote"`
+	}
+	type pendingField struct {
+		Field      string   `json:"field"`
+		Reason     string   `json:"reason"`
+		Candidates []string `json:"candidates"`
+	}
 	type line struct {
-		LineID        string `json:"line_id"`
-		SkuID         string `json:"sku_id"`
-		Quantity      string `json:"quantity"`
-		UOM           string `json:"uom"`
-		RequestedItem string `json:"requested_item"`
-		SourceID      string `json:"source_id"`
-		Locator       string `json:"locator"`
+		LineID        string         `json:"line_id"`
+		SkuID         string         `json:"sku_id"`
+		Quantity      string         `json:"quantity"`
+		UOM           string         `json:"uom"`
+		RequestedItem string         `json:"requested_item"`
+		SourceID      string         `json:"source_id"`
+		Locator       string         `json:"locator"`
+		Locators      []fieldLocator `json:"locators"` // where in a file extract each field stands (S4 B4)
+		Pending       []pendingField `json:"pending"`  // fields the source does not settle
+	}
+	type verifiedField struct {
+		Field   string `json:"field"`
+		Value   string `json:"value"`
+		Locator string `json:"locator"`
+	}
+	type lineVerification struct {
+		LineID string          `json:"line_id"`
+		Fields []verifiedField `json:"fields"`
+	}
+	type confirmRfq struct {
+		ID              string             `json:"id"`
+		ExpectedVersion *int64             `json:"expected_version"`
+		EvidenceIDs     []string           `json:"evidence_ids"`
+		VerifiedLines   []lineVerification `json:"verified_lines"` // the human's line-by-line verification (S4 B4)
 	}
 	type saveRfq struct {
 		ID               string   `json:"id"`
@@ -596,7 +642,7 @@ func inqCommands(c INQ) *commandSet {
 		SourceIDs        []string `json:"source_ids"`
 		UnresolvedFields []string `json:"unresolved_fields"`
 	}
-	return &commandSet{bc: "inq", contract: inqapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
+	return &commandSet{bc: "inq", contract: inqapi.Contract, auditor: c, audit: c.Audit, reconcile: hashReconciler(c.Reconcile, c.ReconcileHash), commands: map[string]commandFunc{
 		inqapi.CommandSaveRfq: handle(func(key string, a saveRfq) (inqapi.SaveRfq, error) {
 			v, err := version(a.ExpectedVersion)
 			cmd := inqapi.SaveRfq{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, CustomerID: a.CustomerID, ContactID: a.ContactID,
@@ -604,14 +650,29 @@ func inqCommands(c INQ) *commandSet {
 			if a.Lines != nil {
 				cmd.Lines = make([]inqapi.RfqLine, len(a.Lines))
 				for i, l := range a.Lines {
-					cmd.Lines[i] = inqapi.RfqLine(l)
+					cmd.Lines[i] = inqapi.RfqLine{LineID: l.LineID, SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM,
+						RequestedItem: l.RequestedItem, SourceID: l.SourceID, Locator: l.Locator}
+					for _, x := range l.Locators {
+						cmd.Lines[i].Locators = append(cmd.Lines[i].Locators, inqapi.FieldLocator(x))
+					}
+					for _, x := range l.Pending {
+						cmd.Lines[i].Pending = append(cmd.Lines[i].Pending, inqapi.PendingField(x))
+					}
 				}
 			}
 			return cmd, err
 		}, c.SaveRfq),
-		inqapi.CommandConfirmRfq: handle(func(key string, a evidenced) (inqapi.ConfirmRfqScope, error) {
+		inqapi.CommandConfirmRfq: handle(func(key string, a confirmRfq) (inqapi.ConfirmRfqScope, error) {
 			v, err := version(a.ExpectedVersion)
-			return inqapi.ConfirmRfqScope{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, EvidenceIDs: a.EvidenceIDs}, err
+			cmd := inqapi.ConfirmRfqScope{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, EvidenceIDs: a.EvidenceIDs}
+			for _, l := range a.VerifiedLines {
+				lv := inqapi.LineVerification{LineID: l.LineID}
+				for _, f := range l.Fields {
+					lv.Fields = append(lv.Fields, inqapi.VerifiedField(f))
+				}
+				cmd.VerifiedLines = append(cmd.VerifiedLines, lv)
+			}
+			return cmd, err
 		}, c.ConfirmRfqScope),
 		inqapi.CommandCancelRfq: handle(func(key string, a reasoned) (inqapi.CancelRfq, error) {
 			v, err := version(a.ExpectedVersion)

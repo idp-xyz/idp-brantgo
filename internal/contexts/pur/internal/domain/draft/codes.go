@@ -16,6 +16,7 @@ const (
 	CodePurchaseTermsInconsistent  = "PURCHASE_TERMS_INCONSISTENT"  // currency, payment or trade terms differ within the draft
 	CodeSupplyScopeMismatch        = "SUPPLY_SCOPE_MISMATCH"        // the offer does not answer the order's RFQ line
 	CodeSpecificationMismatch      = "SPECIFICATION_MISMATCH"       // the condition line's specification revision is not the order line's
+	CodeUnitScopeMismatch          = "UNIT_SCOPE_MISMATCH"          // a purchase, price, tier or MOQ unit is not the order line's (PUR-INV-012, S5R-D41)
 	CodeDeliveryNotComparable      = "DELIVERY_NOT_COMPARABLE"      // milestone, place or time zone differ, or the order's is not a fixed date
 	CodeDeliveryLate               = "DELIVERY_LATE"                // the supplier's date is after the order's
 	CodeDeliveryDatePassed         = "DELIVERY_DATE_PASSED"         // the supplier's date is before today, locally
@@ -46,6 +47,7 @@ var Codes = map[string]kernel.Category{
 	CodePurchaseTermsInconsistent:  kernel.CategoryInvalid,
 	CodeSupplyScopeMismatch:        kernel.CategoryInvalid,
 	CodeSpecificationMismatch:      kernel.CategoryInvalid,
+	CodeUnitScopeMismatch:          kernel.CategoryInvalid,
 	CodeDeliveryNotComparable:      kernel.CategoryInvalid,
 	CodeDeliveryLate:               kernel.CategoryInvalid,
 	CodeDeliveryDatePassed:         kernel.CategoryInvalid,

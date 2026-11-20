@@ -64,11 +64,15 @@ func TestMilestoneAndLotRequests(t *testing.T) {
 	}
 }
 
-// What FUL keeps of TRD's prices when it prepares a shipment.
+// What FUL keeps of TRD's prices when it prepares a shipment: the bound revision's, as
+// OrderRevisionRef v1 reads it (S5R-D35); none without it.
 func TestPriceFact(t *testing.T) {
-	f := priceFact(trdapi.ActiveOrderFact{CurrencyRef: trdapi.ConfigRef{Kind: "currency", ID: "USD", Revision: 2},
+	f := priceFact(&trdapi.OrderRevisionFact{CurrencyRef: trdapi.ConfigRef{Kind: "currency", ID: "USD", Revision: 2},
 		Lines: []trdapi.OrderLine{{LineID: "L1", UnitPrice: "8.0000", NetMinor: "96000", TaxMinor: "0", PayableMinor: "96000"}}})
 	if f.CurrencyID != "USD" || f.CurrencyRevision != 2 || f.Lines["L1"].UnitPrice != "8.0000" || f.Lines["L1"].NetMinor != "96000" {
+		t.Fatalf("%+v", f)
+	}
+	if f := priceFact(nil); f.CurrencyID != "" || f.Lines != nil {
 		t.Fatalf("%+v", f)
 	}
 }

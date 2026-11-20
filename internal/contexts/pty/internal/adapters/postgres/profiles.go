@@ -56,8 +56,10 @@ func RevisionAddresses(ctx context.Context, exec bentopg.Executor, scope kernel.
 	return out, err
 }
 
-const serviceRoleColumns = `s.party_id, s.service_role_id, s.revision, s.party_revision, s.role, s.service_code, s.origin, s.destination,
-	s.valid_from, s.valid_until, s.evidence_ids, s.verified_by_kind, s.verified_by_id, s.authority_epoch, s.verified_at`
+// A role without a route stores no origin and no destination (S5R-D36); they read as empty.
+const serviceRoleColumns = `s.party_id, s.service_role_id, s.revision, s.party_revision, s.role, s.service_code, coalesce(s.origin, ''),
+	coalesce(s.destination, ''), s.valid_from, s.valid_until, s.evidence_ids, s.verified_by_kind, s.verified_by_id, s.authority_epoch,
+	s.verified_at`
 
 // StoredServiceRole is a verified service role revision with its party and the latest revision of
 // its role.
@@ -94,7 +96,7 @@ func LatestServiceRole(ctx context.Context, exec bentopg.Executor, scope kernel.
 func InsertServiceRole(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, partyID string, r party.ServiceRole) error {
 	_, err := exec.Exec(ctx, `INSERT INTO brant_pty.service_role (tenant_id, company_id, party_id, service_role_id, revision, party_revision,
 		role, service_code, origin, destination, valid_from, valid_until, evidence_ids, verified_by_kind, verified_by_id, authority_epoch,
-		verified_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		verified_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11, $12, $13, $14, $15, $16, $17)`,
 		scoped(scope, partyID, r.ID, r.Revision, r.PartyRevision, string(r.Kind), r.ServiceCode, r.Origin, r.Destination, r.Validity.From,
 			r.Validity.Until, r.EvidenceIDs, string(r.VerifiedBy.Kind), r.VerifiedBy.ID, r.Epoch, r.At)...)
 	return err
@@ -208,6 +210,25 @@ func profileRevisions(ctx context.Context, exec bentopg.Executor, scope kernel.S
 		err := row.Scan(&k.PartyID, &k.Revision, &c.ContactID, &c.RowVersion)
 		if r := out[k]; err == nil && r != nil {
 			r.Content.Contacts = append(r.Content.Contacts, c)
+		}
+		return struct{}{}, err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	// Permitted payers (S5R-D21), in ID order; a revision without any keeps none.
+	rows, err = exec.Query(ctx, `SELECT party_id, revision, payer_party_id FROM brant_pty.trading_profile_payer
+		WHERE tenant_id = $1 AND company_id = $2 AND (party_id, revision) IN (SELECT * FROM unnest($3::text[], $4::bigint[]))
+		ORDER BY party_id, revision, payer_party_id COLLATE "C"`, scoped(scope, parties, revisions)...)
+	if err != nil {
+		return nil, nil, err
+	}
+	_, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (struct{}, error) {
+		var k ProfileKey
+		var payer string
+		err := row.Scan(&k.PartyID, &k.Revision, &payer)
+		if r := out[k]; err == nil && r != nil {
+			r.Content.PermittedPayers = append(r.Content.PermittedPayers, payer)
 		}
 		return struct{}{}, err
 	})
@@ -341,6 +362,7 @@ func InsertProfileRevision(ctx context.Context, exec bentopg.Executor, scope ker
 	return insertProfileContacts(ctx, exec, scope, partyID, rev)
 }
 
+// insertProfileContacts stores the contacts and the permitted payers of rev.
 func insertProfileContacts(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, partyID string, rev *profile.Revision) error {
 	for _, c := range rev.Content.Contacts {
 		_, err := exec.Exec(ctx, `INSERT INTO brant_pty.trading_profile_contact (tenant_id, company_id, party_id, revision, contact_id,
@@ -349,10 +371,18 @@ func insertProfileContacts(ctx context.Context, exec bentopg.Executor, scope ker
 			return err
 		}
 	}
+	for _, payer := range rev.Content.PermittedPayers {
+		_, err := exec.Exec(ctx, `INSERT INTO brant_pty.trading_profile_payer (tenant_id, company_id, party_id, revision, payer_party_id)
+			VALUES ($1, $2, $3, $4, $5)`, scoped(scope, partyID, rev.Number, payer)...)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// UpdateProfileRevision writes rev; a working revision's contacts are replaced with its content's.
+// UpdateProfileRevision writes rev; a working revision's contacts and permitted payers are replaced
+// with its content's.
 func UpdateProfileRevision(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, partyID string, rev *profile.Revision) error {
 	w, c := profileRowOf(rev), rev.Content
 	tag, err := exec.Exec(ctx, `UPDATE brant_pty.trading_profile_revision SET status = $5, content_hash = $6, party_revision = $7,
@@ -371,6 +401,10 @@ func UpdateProfileRevision(ctx context.Context, exec bentopg.Executor, scope ker
 	}
 	_, err = exec.Exec(ctx, `DELETE FROM brant_pty.trading_profile_contact WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3
 		AND revision = $4`, scoped(scope, partyID, rev.Number)...)
+	if err == nil {
+		_, err = exec.Exec(ctx, `DELETE FROM brant_pty.trading_profile_payer WHERE tenant_id = $1 AND company_id = $2 AND party_id = $3
+			AND revision = $4`, scoped(scope, partyID, rev.Number)...)
+	}
 	if err != nil {
 		return err
 	}

@@ -19,8 +19,11 @@ import (
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	"go.idp.xyz/idp-brant/internal/ai"
+	"go.idp.xyz/idp-brant/internal/ai/ingest"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/ful"
@@ -33,6 +36,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/stl"
 	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/contexts/trd"
+	"go.idp.xyz/idp-brant/internal/contexts/tsk"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/database"
@@ -105,6 +109,9 @@ type RelayConfig struct {
 	// Critical marks revocation, repudiation and risk event types; nil means
 	// messaging.CriticalEventType.
 	Critical func(eventing.EventType) bool
+	// Metrics counts the relay's deliveries, latency, failures and dead letters (S5R-D07); nil
+	// counts nothing. See NewRelayMetrics.
+	Metrics *messaging.RelayMetrics
 }
 
 // Relay assembles the Outbox relay on a transaction owner of its own. The dead letters share it,
@@ -127,7 +134,7 @@ func (p *Platform) Relay(cfg RelayConfig) (messaging.Relay, error) {
 		Publisher: publisher, Clock: bento.SystemClock{},
 		Batch: cfg.Batch, LeaseFor: cfg.LeaseFor, PublishTimeout: cfg.PublishTimeout,
 		MaxAttempts: cfg.MaxAttempts, MaxFailures: cfg.MaxFailures,
-		RetryBase: cfg.RetryBase, RetryMax: cfg.RetryMax, IdleWait: cfg.IdleWait, Logger: cfg.Logger,
+		RetryBase: cfg.RetryBase, RetryMax: cfg.RetryMax, IdleWait: cfg.IdleWait, Logger: cfg.Logger, Metrics: cfg.Metrics,
 	}, nil
 }
 
@@ -181,6 +188,8 @@ type Contexts struct {
 	STL *stl.Module
 	CNX *cnx.Module
 	FUL *ful.Module
+	TSK *tsk.Module
+	AI  *ai.Layer // internal/ai: not a bounded context (ADR-BR-003)
 }
 
 // Contexts wires reference data and every bounded context, upstream first. Call it once per
@@ -195,7 +204,16 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		c.EVD, err = evd.New(db)
+		// EVD reads file_extract sources with the AI layer's extractor under Q01.upload.v0.1 (S4 B4).
+		// Its consumer evd.formal_files reads TRD's formal documents (R65, S4 C4); TRD is composed
+		// later (it reads EVD, R16), so its read is bound when an event arrives (D-2).
+		c.EVD, err = evd.New(db, evd.WithExtractor(ingest.EVD{Profile: ingest.Q01Upload}),
+			evd.WithFormalDocuments(func() evd.FormalDocuments {
+				if c.TRD == nil {
+					return nil
+				}
+				return c.TRD
+			}))
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -240,7 +258,7 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		// STL's CreditGuard v1 (R57) and CNX's TradeComplianceGuard v1 (R58) are guard functions TRD
 		// runs with its own executor: TRD is composed before STL and CNX, which read its orders.
 		c.TRD, err = trd.New(db, trd.Upstream{Sources: c.EVD, Parties: c.PTY, Profiles: c.PTY, Skus: c.CAT, Configs: c.POL, Numbers: c.POL,
-			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST, Credit: trd.STLCreditGuard(), TradeCompliance: trd.CNXTradeComplianceGuard(),
+			Rfqs: c.INQ, Snapshots: c.CST, Contexts: c.CST, Prices: c.POL, Credit: trd.STLCreditGuard(), TradeCompliance: trd.CNXTradeComplianceGuard(),
 			Shipments: trd.FULShipmentFacts(), Commitments: trd.PURDownstreamCommitments()})
 	}
 	if err == nil {
@@ -255,8 +273,10 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	}
 	if err == nil {
 		// PUR publishes no InspectionSubject v1 yet (S5 unit A4): QLT's port to it answers
-		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup.
-		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Parties: c.PTY})
+		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup. FUL's ReleaseConsumption v1
+		// (R79) is a SQL function QLT's revocation reads; FUL is composed later (S5R-D18).
+		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Agencies: qlt.PTYAgencies(c.PTY),
+			Consumption: qlt.FULReleaseConsumption()})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -270,7 +290,15 @@ func (p *Platform) Contexts() (*Contexts, error) {
 					return nil
 				}
 				return c.FUL
-			}), Deliveries: stl.PURSettlementSources(c.PUR)})
+			}), Deliveries: stl.PURSettlementSources(c.PUR),
+			// CNX's PurchaseInvoiceRef v1 for the invoice_reversed flag and payable adjustments (R55, S5R-D20): CNX is
+			// composed after STL, so its lookups are bound when STL asks.
+			Invoices: stl.CNXPurchaseInvoices(func() cnxapi.PurchaseInvoiceLookups {
+				if c.CNX == nil {
+					return nil
+				}
+				return c.CNX
+			})})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -283,7 +311,9 @@ func (p *Platform) Contexts() (*Contexts, error) {
 			// bound when CNX asks (S5 D-2).
 			Exports: cnx.FULExports(func() cnx.FULLookups { return c.FUL }, c.POL, cnx.PTYCountries(c.PTY)), Purchases: cnx.PURLines(c.PUR),
 			// STL's fund records and credit notes (R38 STL→CNX; CreditNoteRef v1 for CN-AT11, S5 C10).
-			Funds: cnx.STLFunds(c.STL), CreditNotes: cnx.STLCreditNotes(c.STL)})
+			Funds: cnx.STLFunds(c.STL), CreditNotes: cnx.STLCreditNotes(c.STL),
+			// PTY's customs brokers (R77, ServiceRoleRef v1; S5R-D36).
+			Brokers: cnx.PTYBrokers(c.PTY)})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -296,6 +326,24 @@ func (p *Platform) Contexts() (*Contexts, error) {
 			Documents: ful.DocumentPorts(c.POL, c.PTY, c.TRD).WithCertificates(c.CNX),
 			Costs:     c.CST, // S5-16: the costing's insurance component (R78)
 		})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// TSK (S4) after TRD: it calls TRD's object control (R17) and its GoalReadiness v1 (R18; S4
+		// unit B2: goal.verify) before its own transactions, and the ActionReconciliation v1 of the
+		// contexts a task step writes (R18, R66–R69; S4 unit B1).
+		c.TSK, err = tsk.New(db, tsk.Upstream{Control: tsk.TRDControl(c.TRD), Readiness: tsk.TRDReadiness(c.TRD),
+			Reconcilers: tsk.ActionReconciliation(tsk.ActionReconcilers{EVD: c.EVD, INQ: c.INQ, SUP: c.SUP, CST: c.CST, TRD: c.TRD})})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// internal/ai (S4) last: the Q01 capabilities over the contexts' api and the execution entry
+		// of task-bound steps over TSK (unit C2, ai.go).
+		c.AI, err = newAI(db, &c)
 	}
 	if err != nil {
 		return nil, err
@@ -396,6 +444,8 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	tc.STL = c.STL
 	tc.CNX = c.CNX
 	tc.FUL = c.FUL
+	tc.TSK = c.TSK
+	tc.AI = c.AI
 	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {
 		rc := ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout}
 		if cfg.ReplayDispatch {

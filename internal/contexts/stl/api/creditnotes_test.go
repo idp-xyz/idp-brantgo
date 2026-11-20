@@ -20,8 +20,10 @@ func TestCreditNoteAndReversalContracts(t *testing.T) {
 		mutate func(*RequestCreditNote)
 		path   string
 	}{
-		"kind":        {func(c *RequestCreditNote) { c.CreditKind = "refund" }, "/args/kind"},
-		"order":       {func(c *RequestCreditNote) { c.OrderID = "" }, "/args/order_id"},
+		"kind": {func(c *RequestCreditNote) { c.CreditKind = "refund" }, "/args/kind"},
+		// S5R-D22: order_id may be left out (a credit note of an opening receivable binds no order); one that is no
+		// identifier is refused.
+		"order":       {func(c *RequestCreditNote) { c.OrderID = "order 1" }, "/args/order_id"},
 		"statement":   {func(c *RequestCreditNote) { c.StatementID = "" }, "/args/statement_id"},
 		"amount":      {func(c *RequestCreditNote) { c.Amount = "-1" }, "/args/amount"},
 		"basis":       {func(c *RequestCreditNote) { c.Basis = " " }, "/args/basis"},

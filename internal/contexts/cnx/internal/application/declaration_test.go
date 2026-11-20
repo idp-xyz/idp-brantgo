@@ -80,7 +80,8 @@ func TestDeclarationAndBundleDomainsAreTheContract(t *testing.T) {
 	for domain, contract := range map[string]string{dcl.Draft: api.DeclarationDraft, dcl.Confirmed: api.DeclarationConfirmed,
 		dcl.Submitted: api.DeclarationSubmitted, dcl.Unknown: api.DeclarationUnknown, dcl.Received: api.DeclarationReceived,
 		dcl.Accepted: api.DeclarationAccepted, dcl.Released: api.DeclarationReleased, dcl.Rejected: api.DeclarationRejected,
-		dcl.Amended: api.DeclarationAmended, dcl.Withdrawn: api.DeclarationWithdrawn, dcl.MappingVerified: api.MappingVerified,
+		dcl.Amended: api.DeclarationAmended, dcl.Withdrawn: api.DeclarationWithdrawn, dcl.NotReceived: api.DeclarationNotReceived,
+		dcl.MappingVerified:         api.MappingVerified,
 		dcl.MappingUnverified + "m": api.MappingUnverified + "m", dcl.SubmitterBroker: api.SubmitterBroker, dcl.SubmitterOwnClerk: api.SubmitterOwnClerk,
 		string(dcl.BaseUnit): api.DeclarationBaseUnit, db.Missing: api.RequirementMissing, db.Present: api.RequirementPresent,
 		db.Verified + "r": api.RequirementVerified + "r", db.Complete: api.BundleComplete, db.Incomplete: api.BundleIncomplete,
@@ -91,7 +92,7 @@ func TestDeclarationAndBundleDomainsAreTheContract(t *testing.T) {
 			t.Errorf("domain %q, api %q", domain, contract)
 		}
 	}
-	if len(db.Kinds) != 12 || len(db.Responsibilities) != 9 || len(dcl.Outcomes) != 7 {
+	if len(db.Kinds) != 12 || len(db.Responsibilities) != 9 || len(dcl.Outcomes) != 8 {
 		t.Errorf("closed lists %v %v %v", db.Kinds, db.Responsibilities, dcl.Outcomes)
 	}
 }

@@ -410,7 +410,8 @@ func TestRegulationPublicationReopensTheConclusionsOfEarlierRevisions(t *testing
 	cfg, err := w.c.POL.GetConfig(w.author, polapi.KindScreeningRegulation, "screening")
 	w.must(err)
 	reg2 := w.configure(w.author, w.reviewer, polapi.KindScreeningRegulation, "screening", cfg.RootVersion, w.win.from, time.Time{},
-		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 14}}, true)
+		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 14,
+			Programmes: syntheticProgrammes}}, true)
 	envs := w.relayed(ev, polapi.Source)
 	var publication eventing.Envelope
 	for _, env := range envs {
@@ -485,8 +486,12 @@ func TestProgrammeImportReopensTheConclusionsThatUsedAnotherVersion(t *testing.T
 	_, both := w.prepared("quote.1")
 	withCN := w.cleared(both.ObjectID)
 	_, un := w.prepared("quote.2")
+	// S5R-D38: an evaluation uses the lists its regulation enables; a UN-only regulation.
+	unReg := w.configure(w.author, w.reviewer, polapi.KindScreeningRegulation, "screening.un", 0, w.win.from, time.Time{},
+		polapi.ConfigData{ScreeningRegulation: &polapi.ScreeningRegulation{Lists: []polapi.ScreeningList{cnList}, RescreenIntervalDays: 30,
+			Programmes: []polapi.ScreeningList{{ListCode: unProgrammeList, Jurisdiction: polapi.JurisdictionUN}}}}, true)
 	cmd := w.evaluateCmd(un.ObjectID, 1, 0, syntheticClear)
-	cmd.ProgrammeLists = []string{unProgrammeList}
+	cmd.RegulationID, cmd.RegulationRevision, cmd.ProgrammeLists = unReg.ConfigID, unReg.Revision, nil
 	e, err := w.cnx.Evaluate(w.compliance, cmd)
 	w.must(err)
 	unOnly, err := w.cnx.Decide(w.compliance, w.decideCmd(e, cnxapi.ConclusionClear, false))

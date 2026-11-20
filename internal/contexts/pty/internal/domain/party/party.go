@@ -32,6 +32,8 @@ const (
 	AddressConsignee AddressRole = "consignee"
 	AddressShipper   AddressRole = "shipper"
 	AddressBilling   AddressRole = "billing"
+	// AddressNotify is the notify party's address (S5R-D40).
+	AddressNotify AddressRole = "notify"
 )
 
 // Address is an address of the party with the one trade role it serves (PTY-AGG-Party entity
@@ -82,22 +84,34 @@ func (p *Party) ReadyToConfirm() error {
 	return nil
 }
 
-// ServiceKind is the service a party provides as a service party (T02 spec 13.1).
+// ServiceKind is the service a party provides as a service party (T02 spec 13.1; S5R-D36).
 type ServiceKind string
 
 const (
-	ServiceForwarder  ServiceKind = "forwarder"
-	ServiceCarrier    ServiceKind = "carrier"
+	ServiceForwarder        ServiceKind = "forwarder"
+	ServiceCarrier          ServiceKind = "carrier"
+	ServiceInsurer          ServiceKind = "insurer"
+	ServiceInspectionAgency ServiceKind = "inspection_agency"
+	ServiceCustomsBroker    ServiceKind = "customs_broker"
+	// The S1 names of the customs broker and the inspection agency, which serve a route (S5R-D36
+	// keeps them until QLT and CNX resolve the new ones).
 	ServiceBroker     ServiceKind = "broker"
 	ServiceInspection ServiceKind = "inspection"
-	ServiceInsurer    ServiceKind = "insurer"
 )
+
+// NeedsRoute reports whether a role of kind k serves a route, an exact origin and destination: a
+// forwarder or a carrier, and the S1 kinds (S5R-D36). An insurer, an inspection agency and a customs
+// broker are verified without one.
+func (k ServiceKind) NeedsRoute() bool {
+	return k == ServiceForwarder || k == ServiceCarrier || k == ServiceBroker || k == ServiceInspection
+}
 
 // ServiceRole is one verified revision of a service-provider role of the party (PTY-AGG-Party
 // entity PartyRole, UL PTY-ServicePartyRole): the service it applies to, between an exact origin
-// and an exact destination (UN/LOCODE), within a validity, verified by a human on evidence against
-// the party's confirmed revision. Revisions of one role ID count from 1; the latest is current. It
-// does not change what customer or supplier mean.
+// and an exact destination (UN/LOCODE) when its kind serves a route (both empty otherwise, unless
+// the verifier states them), within a validity, verified by a human on evidence against the party's
+// confirmed revision. Revisions of one role ID count from 1; the latest is current. It does not
+// change what customer or supplier mean.
 type ServiceRole struct {
 	ID            string
 	Revision      int64
@@ -127,6 +141,8 @@ func (p *Party) VerifyServiceRole(r ServiceRole, latest int64, at time.Time) (Se
 		return ServiceRole{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/valid_until", "")
 	case !r.Validity.Until.After(at):
 		return ServiceRole{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/valid_until", "The validity has already ended")
+	case r.Kind.NeedsRoute() && (r.Origin == "" || r.Destination == ""):
+		return ServiceRole{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args/origin", "A "+string(r.Kind)+" serves a route")
 	}
 	r.Revision, r.PartyRevision, r.EvidenceIDs = latest+1, p.Revision, slices.Clone(r.EvidenceIDs)
 	return r, nil

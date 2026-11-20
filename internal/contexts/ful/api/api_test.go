@@ -144,7 +144,7 @@ func TestCodes(t *testing.T) {
 		CodeCommercialReleaseBlocked: kernel.CategoryConflict, CodeTradeComplianceNotClear: kernel.CategoryConflict,
 		CodeExportLicenseRequired: kernel.CategoryConflict, CodeShipmentDocumentsUnreconciled: kernel.CategoryConflict,
 		CodeDocumentIntegrityFailure: kernel.CategoryInvalid, CodeInsuranceCoverageInsufficient: kernel.CategoryInvalid,
-		CodeCertificateNotApplicable: kernel.CategoryConflict}
+		CodeCertificateNotApplicable: kernel.CategoryConflict, CodeIndependentReviewRequired: kernel.CategoryInvalid}
 	got := Codes()
 	if len(got) != len(want) {
 		t.Fatal(got)
@@ -187,5 +187,26 @@ func TestShipmentFactsScan(t *testing.T) {
 	if ValidateOrderIDs([]string{"order.1"}) != nil || outcome(ValidateOrderIDs([]string{"ok", ""})) != "SCHEMA_INVALID /order_ids/1" ||
 		ValidateOrderIDs(make([]string, MaxShippedLookups+1)) == nil {
 		t.Fatal("lookup ids")
+	}
+}
+
+// ReleaseConsumption v1 as QLT's quality_release.revoke reads it (R79, S5R-D18, QLT-INV-002).
+func TestReleaseConsumptionScan(t *testing.T) {
+	if !strings.Contains(ReleaseConsumptionSQL, ReleaseConsumptionFunction+"($1)") || ReleaseConsumptionFunction != "brant_ful.release_consumption_v1" {
+		t.Fatal("the SQL calls another function")
+	}
+	if args := ReleaseConsumptionArgs("rel.1"); len(args) != 1 || args[0] != "rel.1" {
+		t.Fatal(args)
+	}
+	c, err := ScanReleaseConsumption(func(dest ...any) error {
+		*dest[0].(*string), *dest[1].(*int64), *dest[2].(*string), *dest[3].(*int64) = "pcs", 1, "24", 1
+		return nil
+	})
+	if err != nil || c != (ReleaseShipped{UnitID: "pcs", UnitRevision: 1, Quantity: "24", Shipments: 1}) {
+		t.Fatalf("%+v %v", c, err)
+	}
+	boom := errors.New("scan")
+	if _, err = ScanReleaseConsumption(func(...any) error { return boom }); !errors.Is(err, boom) {
+		t.Fatal(err)
 	}
 }

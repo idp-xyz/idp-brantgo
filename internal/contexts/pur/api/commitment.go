@@ -463,7 +463,9 @@ type CommitmentView struct {
 	CancelEpoch    int64
 	CancelReason   string
 	CancelEvidence []Evidence
-	CheckedAt      time.Time
+	// S5R-D05: the dispositions of its delivered goods, by disposition ID.
+	Dispositions []DispositionView
+	CheckedAt    time.Time
 }
 
 // CommitmentCommands is PUR's command entry point for purchase commitments. Errors are
@@ -518,9 +520,21 @@ type CommitmentQueries interface {
 //	                          state allocated.
 //
 // order_revision is the order revision the object binds (a commitment's: that of its revision in
-// force, which a change prepared on an amended order moves); disposition is the approved disposition of
-// the object, empty until an order-change review records one (S5-09). The function applies no data
-// scope. A caller:
+// force, which a change prepared on an amended order moves). S5R-D05 (migration 000006) adds the
+// approved dispositions of delivered goods:
+//
+//	kind demand_allocation       quantity is the line's effective allocation net of the approved
+//	                             dispositions of the line — what is still held for the order and not
+//	                             disposed of (R71 "订单的未处置……需求分配") —; listed while above zero;
+//	kind commitment_disposition  object_id the disposition, draft_id its commitment's draft, order_line_id
+//	                             and quantity what it disposes of (the line's unit), order_revision that
+//	                             of the commitment's revision in force, state approved, disposition its
+//	                             kind (return_to_supplier, write_off or hold_for_reuse).
+//
+// disposition is empty on every other row. TRD's order end counts a row with a disposition as settled
+// and compares an allocation with what the line shipped, so goods disposed of no longer hold the order
+// open: a reader does not subtract the dispositions again. The function applies no data scope. A
+// caller:
 //
 //	rows, err := exec.Query(ctx, purapi.DownstreamCommitmentsSQL, purapi.DownstreamCommitmentsArgs(orderID)...)
 //	for rows.Next() {
@@ -536,6 +550,7 @@ const (
 	DownstreamKindDraft      = "purchase_draft"
 	DownstreamKindAllocation = "demand_allocation"
 	DownstreamStateAllocated = "allocated"
+	DownstreamStateApproved  = "approved" // a commitment_disposition row's
 )
 
 // DownstreamCommitmentsArgs returns the arguments of DownstreamCommitmentsSQL for order orderID.

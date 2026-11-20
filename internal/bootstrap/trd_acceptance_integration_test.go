@@ -666,7 +666,7 @@ func TestAcceptanceArrivingBeforeExpiryFormsTheContractAfterExpiry(t *testing.T)
 	if err != nil || !replay.Replayed || replay.ActionID != v.ActionID {
 		t.Fatalf("a replay after expiry %+v %v", replay, err)
 	}
-	_, err = q.c.TRD.BindControl(tsk, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	_, err = q.bindTask(tsk, "quote.1", "task.1", 0)
 	q.must(err)
 	_, err = q.c.TRD.VerifyResponse(q.reviewer, verify)
 	q.want(err, trdapi.CodeObjectControlConflict)
@@ -783,7 +783,7 @@ func TestResponseAndAcceptanceWritesPassTheObjectControl(t *testing.T) {
 	a, v := q.accepted("quote.1")
 	_, err := q.c.TRD.RecordResponse(q.author, q.full("response.b", "quote.1", 1, a.BusinessHash))
 	q.must(err)
-	_, err = q.c.TRD.BindControl(tsk, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	_, err = q.bindTask(tsk, "quote.1", "task.1", 0)
 	q.must(err)
 	claim := func(ctx context.Context, epoch int64) context.Context {
 		c, err := trdapi.WithControl(ctx, trdapi.ControlClaim{TaskID: "task.1", ControlEpoch: epoch})
@@ -804,7 +804,8 @@ func TestResponseAndAcceptanceWritesPassTheObjectControl(t *testing.T) {
 	q.must(err)
 	_, err = q.c.TRD.VerifyResponse(claim(q.reviewer, 1), verifyB)
 	q.must(err)
-	_, err = q.c.TRD.StopControl(q.author, trdapi.StopControl{IdempotencyKey: q.key(), QuoteID: "quote.1", ExpectedControlEpoch: 1, Reason: "人工接管"})
+	_, err = q.c.TRD.StopControl(claim(q.author, 1), trdapi.StopControl{IdempotencyKey: q.key(), QuoteID: "quote.1", ExpectedControlEpoch: 1,
+		Reason: "人工接管"})
 	q.must(err)
 	_, err = q.c.TRD.DisputeAcceptance(claim(q.author, 1), q.dispute("acceptance.b", 1))
 	q.want(err, trdapi.CodeControlEpochStale)

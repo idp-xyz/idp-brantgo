@@ -23,14 +23,16 @@ DB=brant
 cd "$(dirname "$0")/.."
 
 if ! docker inspect "$NAME" >/dev/null 2>&1; then
-  volumes=() server=()
+  # Sharded local gates (make integration|race SHARDS=N) run N shards plus the other packages against one
+  # container; the image's default of 100 connections is exhausted at SHARDS=4 on a busy host.
+  volumes=() server=(-c "max_connections=${BRANT_PG_MAX_CONNECTIONS:-300}")
   if [ "$WAL_ARCHIVE" = 1 ]; then
     if ! [ "$ARCHIVE_TIMEOUT" -ge 1 ] 2>/dev/null || [ "$ARCHIVE_TIMEOUT" -gt 900 ]; then
       echo "BRANT_PG_ARCHIVE_TIMEOUT must be 1..900 seconds, got ${ARCHIVE_TIMEOUT}" >&2
       exit 2
     fi
     volumes=(-v "${NAME}-wal:/wal-archive")
-    server=(-c wal_level=replica -c archive_mode=on -c "archive_timeout=${ARCHIVE_TIMEOUT}"
+    server+=(-c wal_level=replica -c archive_mode=on -c "archive_timeout=${ARCHIVE_TIMEOUT}"
       -c 'archive_command=test ! -f /wal-archive/%f && cp %p /wal-archive/%f')
   fi
   docker run -d --name "$NAME" -p "127.0.0.1:${PORT}:5432" \

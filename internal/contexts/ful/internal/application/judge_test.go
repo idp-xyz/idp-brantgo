@@ -43,6 +43,9 @@ type guards struct {
 func (g *guards) ResolveActiveOrders(context.Context, []string) (map[string]trdapi.ActiveOrderFact, error) {
 	return nil, nil
 }
+func (g *guards) ResolveOrderRevisions(context.Context, []trdapi.OrderRevisionKey) (map[trdapi.OrderRevisionKey]trdapi.OrderRevisionFact, error) {
+	return nil, nil
+}
 func (g *guards) GuardOrder(_ context.Context, _ bentopg.Executor, b trdapi.OrderBinding) (trdapi.OrderVerdict, error) {
 	g.calls, g.guarded = append(g.calls, "trd"), append(g.guarded, b)
 	v := g.order
@@ -106,7 +109,8 @@ func clearGuards() *guards {
 			RegulationID: "screening", RegulationRevision: 1},
 		screening: ptyapi.ScreeningGuardResult{Clear: true, Status: "clear", Reason: "no_match", ScreeningID: "scr.1", PartyRevision: 3},
 		delivery: DeliveryLine{Known: true, Status: "verified", VerifiedVersion: 1, CommitmentID: "commitment.1", SupplierID: "supplier.1", OrderID: "order.1",
-			OrderLineID: "L1", SkuID: "sku.1", SpecRevision: 2, UnitID: "pcs", UnitRevision: 1, VerifiedQuantity: "800"},
+			OrderLineID: "L1", SkuID: "sku.1", SpecRevision: 2, UnitID: "pcs", UnitRevision: 1, VerifiedQuantity: "800", LineVerifiedQuantity: "800",
+			LineDisposedQuantity: "0"},
 		quality: qltapi.QualityReleaseVerdict{Known: true, Status: "granted", Scope: scope, Quantity: "600", ValidUntil: time.Now().Add(time.Hour)},
 		payment: stlapi.PaymentVerdict{Status: stlapi.PaymentSatisfied, OrderRevision: 1, OrderHash: hash, Currency: "USD", RequiredMinor: "96000",
 			AppliedMinor: "96000"},
@@ -154,7 +158,8 @@ func TestJudgeRunsEveryGuardInCodeOrder(t *testing.T) {
 		names = append(names, e.Name)
 	}
 	if !slices.Equal(names, []string{"guards_checked_at", shipment.GuardTradeCompliance, "screening:customer.1",
-		"supplier_delivery:delivery.1/L1/v1", "quality_release:rel.1", shipment.GuardPaymentCondition, shipment.GuardOrder}) {
+		"supplier_delivery:delivery.1/L1/v1", "supplier_commitment_line:commitment.1/L1", "quality_release:rel.1", shipment.GuardPaymentCondition,
+		shipment.GuardOrder}) {
 		t.Fatal(names)
 	}
 	b := j.bindings
@@ -240,11 +245,45 @@ func TestJudgeOfAConfirmedShipment(t *testing.T) {
 	s := Service{Upstream: Upstream{Orders: g, Releases: g, Deliveries: g, Screening: g, Compliance: g, Payments: g}}
 	two := kernel.MustDecimal("200")
 	consumed := shipment.Consumed{OrderLines: map[string]kernel.Decimal{"L1": two},
-		Deliveries: map[shipment.DeliveryRef]kernel.Decimal{sh.Lines[0].Delivery: two}, Releases: map[string]kernel.Decimal{"rel.1": two}}
-	g.quality.Quantity, g.delivery.VerifiedQuantity = "200", "200"
+		Deliveries:      map[shipment.DeliveryRef]kernel.Decimal{sh.Lines[0].Delivery: two},
+		CommitmentLines: map[shipment.CommitmentLine]kernel.Decimal{{CommitmentID: "commitment.1", OrderLineID: "L1"}: two},
+		Releases:        map[string]kernel.Decimal{"rel.1": two}}
+	g.quality.Quantity, g.delivery.VerifiedQuantity, g.delivery.LineVerifiedQuantity = "200", "200", "200"
 	j, err := s.judge(context.Background(), nil, sh, consumed, release.ScopeDocuments, nil, time.Now())
 	if err != nil || j.failure != nil {
 		t.Fatalf("%v %v", err, j.failure)
+	}
+}
+
+// FUL-INV-003 with S5R-D05: SupplierDeliveryGuard v2 states the commitment line's verified and disposed
+// totals; what an approved disposition took out of the order never ships, though the delivery line
+// alone has room. The refusal is the supplier delivery guard's and no exception covers it.
+func TestS5RD05TheJudgementCountsTheDispositions(t *testing.T) {
+	g := clearGuards()
+	g.delivery.LineDisposedQuantity = "600.5"
+	j := judged(t, g, shipmentOf(shipment.StatusPrepared), release.ScopeShipment, nil)
+	if codeOf(j.failure) != api.CodeSupplierDeliveryInsufficient || j.guard != shipment.GuardSupplierDelivery ||
+		codeOf(j.other) != api.CodeSupplierDeliveryInsufficient || j.failure.Fields[0].Path != "/shipment/lines/0/quantity" {
+		t.Fatalf("%v %s", j.failure, j.guard)
+	}
+	if !slices.ContainsFunc(j.entries, func(e shipment.Entry) bool {
+		return e.Name == "supplier_commitment_line:commitment.1/L1" && e.Value == "verified=800/disposed=600.5"
+	}) {
+		t.Fatalf("entries %+v", j.entries)
+	}
+	g = clearGuards()
+	g.delivery.LineDisposedQuantity = "600"
+	if j = judged(t, g, shipmentOf(shipment.StatusPrepared), release.ScopeShipment, nil); j.failure != nil {
+		t.Fatalf("200 of 800 − 600: %v", j.failure)
+	}
+	// A guard that refused the delivery line states no totals: no second refusal, no entry.
+	g = clearGuards()
+	g.delivery.Code = api.CodeSupplierDeliveryUnverified
+	j = judged(t, g, shipmentOf(shipment.StatusPrepared), release.ScopeShipment, nil)
+	if codeOf(j.failure) != api.CodeSupplierDeliveryUnverified || slices.ContainsFunc(j.entries, func(e shipment.Entry) bool {
+		return strings.HasPrefix(e.Name, "supplier_commitment_line:")
+	}) {
+		t.Fatalf("%v %+v", j.failure, j.entries)
 	}
 }
 

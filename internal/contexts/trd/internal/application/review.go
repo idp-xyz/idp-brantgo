@@ -26,7 +26,7 @@ import (
 func (s Service) SubmitReview(ctx context.Context, cmd api.SubmitReview) (api.ReviewReceipt, error) {
 	h := &quoteCommand{s: s, id: cmd.QuoteID}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
@@ -81,7 +81,7 @@ func (s Service) DecideReview(ctx context.Context, cmd api.DecideReview) (api.Re
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
@@ -151,7 +151,7 @@ func (s Service) RevokeApproval(ctx context.Context, cmd api.RevokeApproval) (ap
 	}
 	var reviewID string
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-		if err := h.admit(ctx, d, false); err != nil {
+		if err := h.admit(ctx, exec, d, false); err != nil {
 			return action.Outcome{}, err
 		}
 		a, hold, err := h.q.Revoke(quote.Revocation{ApprovalID: cmd.ApprovalID, ExpectedEffectivity: cmd.ExpectedEffectivityVersion,

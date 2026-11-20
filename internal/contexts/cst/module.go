@@ -28,19 +28,21 @@ type Module struct {
 }
 
 var (
-	_ api.Commands   = (*Module)(nil)
-	_ api.Queries    = (*Module)(nil)
-	_ api.Lookups    = (*Module)(nil)
-	_ api.Auditor    = (*Module)(nil)
-	_ api.Reconciler = (*Module)(nil)
+	_ api.Commands         = (*Module)(nil)
+	_ api.Queries          = (*Module)(nil)
+	_ api.Lookups          = (*Module)(nil)
+	_ api.Auditor          = (*Module)(nil)
+	_ api.Reconciler       = (*Module)(nil)
+	_ api.ActionReconciler = (*Module)(nil)
 
 	_ api.ScenarioCommands  = (*Module)(nil)
 	_ api.ScenarioQueries   = (*Module)(nil)
 	_ api.EvaluationLookups = (*Module)(nil)
 
-	_ api.SnapshotCommands = (*Module)(nil)
-	_ api.SnapshotQueries  = (*Module)(nil)
-	_ api.SnapshotLookups  = (*Module)(nil)
+	_ api.SnapshotCommands   = (*Module)(nil)
+	_ api.SnapshotQueries    = (*Module)(nil)
+	_ api.SnapshotLookups    = (*Module)(nil)
+	_ api.RfqSnapshotQueries = (*Module)(nil)
 
 	// S5-16: the snapshot's components by cost category for FUL (R78).
 	_ api.ComponentLookups = (*Module)(nil)

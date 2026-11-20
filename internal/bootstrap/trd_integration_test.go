@@ -436,7 +436,8 @@ func TestQuoteRootScopeIsEnforced(t *testing.T) {
 
 // The tactical model's humanOnlyCommands (quote.freeze, object_control.stop, object_control.release)
 // refuse AI agents and the system with PERMISSION_DENIED, whatever they hold; object_control.bind
-// admits the system and refuses an AI agent; drafts admit AI agents and refuse the system (Python
+// admits the system and refuses an AI agent, as object_control.enter_manual and
+// object_control.handoff refuse an AI agent (S4 decision D-4); drafts admit AI agents and refuse the system (Python
 // test_t03_quote_review.py test_ai_cannot_decide_review_and_rollback_leaves_no_event, the freeze
 // half; test_t03_write_contract.py test_schema_ai_authority_and_server_control_are_enforced;
 // test_t03_a6_authority.py test_ai_can_save_a_draft_but_cannot_freeze, PYT-0401: the revision stays
@@ -453,11 +454,17 @@ func TestHumanOnlyQuoteCommandsRefuseAIAndSystem(t *testing.T) {
 		_, err = q.c.TRD.ReleaseControl(ctx, trdapi.ReleaseControl{IdempotencyKey: q.key(), QuoteID: "quote.1", ExpectedControlEpoch: 1, Reason: "释放"})
 		q.want(err, kernel.CodePermissionDenied)
 	}
-	_, err := q.c.TRD.BindControl(agent, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	_, err := q.c.TRD.EnterManualControl(agent, trdapi.EnterManualControl{IdempotencyKey: q.key(), QuoteID: "quote.1", ExpectedControlEpoch: 1,
+		Reason: "转人工"})
+	q.want(err, kernel.CodePermissionDenied)
+	_, err = q.c.TRD.HandoffControl(agent, trdapi.HandoffControl{IdempotencyKey: q.key(), QuoteID: "quote.1", ExpectedControlEpoch: 1,
+		InitiatorID: actorID(t, q.author), AgentID: "agent.1", Reason: "交回"})
+	q.want(err, kernel.CodePermissionDenied)
+	_, err = q.bindTask(agent, "quote.1", "task.1", 0)
 	q.want(err, kernel.CodePermissionDenied)
 	_, err = q.saveQuote(system, "quote.2", 0, q.data())
 	q.want(err, kernel.CodePermissionDenied)
-	b, err := q.c.TRD.BindControl(system, trdapi.BindControl{IdempotencyKey: q.key(), QuoteID: "quote.1", TaskID: "task.1"})
+	b, err := q.bindTask(system, "quote.1", "task.1", 0)
 	if err != nil || b.RowVersion != 1 || b.Status != trdapi.ControlBound {
 		t.Fatalf("bind by the system %+v, %v", b, err)
 	}

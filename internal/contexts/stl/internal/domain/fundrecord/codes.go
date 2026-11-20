@@ -16,6 +16,9 @@ const (
 	CodeFXScopeMismatch             = "FX_SCOPE_MISMATCH"
 	CodeOrderNotActive              = "ORDER_NOT_ACTIVE"
 	CodeReferenceStale              = "REFERENCE_STALE"
+	// CodeFundRecordHasApplications: something stands applied from the fund record (S5R-D22, STL-INV-014; error catalog
+	// FUND_RECORD_HAS_APPLICATIONS, 409): unapply first.
+	CodeFundRecordHasApplications = "FUND_RECORD_HAS_APPLICATIONS"
 )
 
 // Codes maps each code to its category.
@@ -30,6 +33,7 @@ var Codes = map[string]kernel.Category{
 	CodeFXScopeMismatch:             kernel.CategoryInvalid,
 	CodeOrderNotActive:              kernel.CategoryInvalid,
 	CodeReferenceStale:              kernel.CategoryConflict,
+	CodeFundRecordHasApplications:   kernel.CategoryConflict,
 }
 
 // Reject returns a rejection with one of Codes at path.

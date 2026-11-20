@@ -179,12 +179,54 @@ jobs:
           BRANT_SPIKE_REPORT="$RUNNER_TEMP/spike-consistency.json" go test -tags integration -count=1 ./tools/spikes/consistency
           cat "$RUNNER_TEMP/spike-consistency.json"
 
+  # The scripted Q01 evaluation suite (tests/ai-evaluation, WBS S4-07a; make ai-eval runs the same): the
+  # built processes against the job's own database, the scripted model only (decision E-4); it fails when
+  # a trial misses its family's expected outcome. The live suite never runs in CI.
+  ai-evaluation:
+    name: AI evaluation (scripted Q01 suite)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.12-alpine@sha256:97ff59a4e30e08d1c11bdcd9455e7832368c0572b576c9092cde2df4ae5552a3
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-superuser-only
+          POSTGRES_DB: brant
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d brant"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      IDP_BRANT_MIGRATOR_DSN: postgres://brant_migrator:ci-migrator-only@127.0.0.1:5432/brant?sslmode=disable
+      IDP_BRANT_POSTGRES_DSN: postgres://brant_app:ci-app-only@127.0.0.1:5432/brant?sslmode=disable
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.26.5"
+          cache: true
+      - name: Roles, migrations on an empty database (twice, the second applies nothing), grants
+        env:
+          BRANT_PG_CONTAINER: ${{ job.services.postgres.id }}
+          BRANT_PG_PORT: "5432"
+          BRANT_PG_SUPERUSER_PASSWORD: ci-superuser-only
+          BRANT_PG_MIGRATOR_PASSWORD: ci-migrator-only
+          BRANT_PG_APP_PASSWORD: ci-app-only
+        run: scripts/pg-prepare.sh
+      - name: Build the processes
+        run: go build -o bin/ ./cmd/...
+      - name: Scripted suite, every family and trial kept in the EvalRun registry
+        run: go run ./tests/ai-evaluation -suite scripted -bin bin -out "$RUNNER_TEMP/ai-eval"
+
   # The required check. It runs whatever happened to the jobs it needs, and fails unless every one of
   # them succeeded (a matrix succeeds only when all its shards did). Every other job of this workflow
   # belongs in needs.
   brant-ci:
     if: always()
-    needs: [static, bootstrap, bootstrap-race, others]
+    needs: [static, bootstrap, bootstrap-race, others, ai-evaluation]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

@@ -118,8 +118,19 @@ func (v OrderVerdict) Check(path string) error {
 }
 
 // OrderLine is an order line as ActiveOrderRef v1 shows it: the quoted line (its RFQ line, SKU
-// specification, quantity and unit, unit price), its quantity in the costing's unit (the
-// calculation's cost scope binding) and its amounts in the quote currency's minor units.
+// specification, quantity and unit, unit price with its price basis quantity and discount ratio —
+// net = quantity × unit price ÷ price basis quantity × (1 − discount ratio) — S5R-D35), its quantity
+// in the costing's unit (the calculation's cost scope binding) and its amounts in the quote
+// currency's minor units.
+//
+// CostMinor (S5R-D33; OrderCommercialSnapshot v1 and OrderRevisionRef v1, "" in ActiveOrderRef v1)
+// is the line's sealed costing cost, the expected cost of a line no purchase commitment covers
+// yet: what the cost snapshot the source quote revision adopted (CostSnapshotRef v1 at its result
+// hash, frozen) costs the line's RFQ line, in minor units of the calculation's comparison currency
+// (OrderSnapshotFact.AnalysisFX.ComparisonCurrencyRef), at the costed quantity; for a quantity an
+// amendment changed, that cost × the line's normalized quantity ÷ the costed quantity, rounded
+// HALF_UP to the minor unit once. It is "" for a line no costing priced — added by an amendment, or
+// of another SKU specification — and when CST does not show the caller the snapshot.
 type OrderLine struct {
 	LineID             string
 	RfqLineID          string
@@ -129,9 +140,12 @@ type OrderLine struct {
 	NormalizedQuantity string
 	CostUnit           string
 	UnitPrice          string
+	PriceBasisQuantity string
+	DiscountRatio      string
 	NetMinor           string
 	TaxMinor           string
 	PayableMinor       string
+	CostMinor          string
 }
 
 // ActiveOrderFact is what TRD says of an order now (ActiveOrderRef v1): its binding (OrderBinding),

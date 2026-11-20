@@ -75,7 +75,11 @@ func TestS5Contracts(t *testing.T) {
 		{KindExportTaxPolicy, func(*ConfigData) {}, "OK"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundExemptCreditRefund }, "OK"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundNotApplicable }, "OK"},
-		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = "exempt" }, "SCHEMA_INVALID /args/data/refund_method"},
+		// S5R-D14: exempt and taxable are refund methods; not_applicable passes the contract and POL's
+		// rules refuse it on a new revision (POL-INV-006, config.Validate).
+		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundExempt }, "OK"},
+		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = RefundTaxable }, "OK"},
+		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.RefundMethod = "exempt-refund" }, "SCHEMA_INVALID /args/data/refund_method"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.PolicyBasis = "" }, "SCHEMA_INVALID /args/data/policy_basis"},
 		{KindExportTaxPolicy, func(d *ConfigData) { d.ExportTaxPolicy.ProfessionalReviewEvidenceID = "" },
 			"SCHEMA_INVALID /args/data/professional_review_evidence_id"},
@@ -89,7 +93,8 @@ func TestS5Contracts(t *testing.T) {
 			t.Errorf("%s: %s, want %s", c.kind, got, c.want)
 		}
 	}
-	if len(kinds) != 22 || kinds[20] != KindShipmentDocumentTemplate || kinds[21] != KindExportTaxPolicy ||
+	// Later kinds follow them (sales_price, the twenty-third: owner decision 2026-11-18, sales_price_test.go).
+	if len(kinds) < 22 || kinds[20] != KindShipmentDocumentTemplate || kinds[21] != KindExportTaxPolicy ||
 		!KindImplemented(KindShipmentDocumentTemplate) || !KindImplemented(KindExportTaxPolicy) {
 		t.Fatal("shipment_document_template and export_tax_policy are the twenty-first and twenty-second kinds")
 	}

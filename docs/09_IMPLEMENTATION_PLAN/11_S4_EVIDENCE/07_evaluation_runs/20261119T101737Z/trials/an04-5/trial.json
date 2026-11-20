@@ -1,0 +1,441 @@
+{
+  "family": "an04",
+  "trial": 5,
+  "trial_id": "an04-5",
+  "design": [
+    "AN04",
+    "AI-INV-002",
+    "D-5"
+  ],
+  "goal": "the owner revokes the agent's delegation while the task waits for an approval grant",
+  "input": {
+    "kind": "xlsx",
+    "file": "inquiry.xlsx",
+    "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "bytes": 2010,
+    "sha256": "ea129ecdc09874bf21f03ee12ff968c3a992bff6886ebed89c7aad62160bfcee"
+  },
+  "expected": "the runner pauses the task (conflict, PERMISSION_DENIED) for the owner; no order exists; no approval grant is used",
+  "outcome": "paused/conflict",
+  "pass": true,
+  "task_id": "task.q01",
+  "lifecycle": "paused",
+  "goal_completed": false,
+  "automation": "extra_human_work",
+  "assertions": [
+    {
+      "name": "BC-AT27: the agent's locators stand in the extract",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "quote root bound to the task",
+      "want": "bound quote.q01",
+      "got": "bound quote.q01",
+      "pass": true
+    },
+    {
+      "name": "TSK lifecycle",
+      "want": "paused",
+      "got": "paused",
+      "pass": true
+    },
+    {
+      "name": "TSK pause cause",
+      "want": "conflict",
+      "got": "conflict",
+      "pass": true
+    },
+    {
+      "name": "pause reason names PERMISSION_DENIED",
+      "want": "true",
+      "got": "true",
+      "pass": true
+    },
+    {
+      "name": "pause responsible is the owner",
+      "want": "clerk.1",
+      "got": "clerk.1",
+      "pass": true
+    },
+    {
+      "name": "TRD order",
+      "want": "NOT_FOUND",
+      "got": "NOT_FOUND",
+      "pass": true
+    },
+    {
+      "name": "committed order.prepare actions",
+      "want": "0",
+      "got": "0",
+      "pass": true
+    }
+  ],
+  "authority": {
+    "actions": [
+      "evd/source.register committed src.inquiry.xlsx.5 attempts=1 by agent.q01",
+      "inq/rfq.save_draft committed rfq.q01 attempts=1 by agent.q01",
+      "inq/rfq.confirm_scope committed rfq.q01 attempts=1 by clerk.1",
+      "trd/quote.save_draft committed quote.q01 attempts=1 by agent.q01",
+      "trd/quote.freeze committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.submit_review committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.review.decide committed quote.q01 attempts=1 by quote.reviewer",
+      "trd/quote.activate committed quote.q01 attempts=1 by clerk.1",
+      "trd/quote.response.record committed response.q01 attempts=1 by agent.q01",
+      "trd/quote.response.verify committed acceptance.q01 attempts=1 by clerk.1"
+    ],
+    "approval_grants": null,
+    "binding": {
+      "bound_at": "2026-11-19T10:18:12.220661Z",
+      "control_epoch": 1,
+      "quote_id": "quote.q01",
+      "state": "bound"
+    },
+    "control_epoch": 1,
+    "control_mode": "ai",
+    "delegation_status": "revoked",
+    "extract": {
+      "characters": 334,
+      "extract_sha256": "6853a90b25af149064a32caa84e4c721b3b84eb33962f3b902b5a3a6f6c411f5",
+      "extractor": "brant.ingest.xlsx/1",
+      "file_sha256": "ea129ecdc09874bf21f03ee12ff968c3a992bff6886ebed89c7aad62160bfcee",
+      "kind": "xlsx"
+    },
+    "history": [
+      "task.create →created human:clerk.1",
+      "task.scope created→scoping system:eval.platform",
+      "task.scope scoping→running human:clerk.1",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.bind_object running→running system:system:ai.runner",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.verify running→verifying system:system:ai.runner",
+      "goal.verify verifying→waiting_input system:system:ai.runner",
+      "task.resume waiting_input→running system:eval.platform",
+      "task.wait running→waiting_approval system:system:ai.runner",
+      "task.pause waiting_approval→paused system:system:ai.runner"
+    ],
+    "open_actions": 0,
+    "order_status": "absent (NOT_FOUND)",
+    "pause_cause": "conflict",
+    "pause_reason": "paused by the agent runner: PERMISSION_DENIED: the agent holds no active delegation for the task; spent 8 model calls, 6 tool calls, 0 retries, 14420 tokens, cost 0.00 USD settled and 0.00 USD open of 3.00 USD (limits 40 model calls, 3 retries, task budget)",
+    "quote_control": {
+      "agent_id": "agent.q01",
+      "changed_at": "2026-11-19T10:18:12.208325Z",
+      "changed_by": {
+        "id": "system:ai.runner",
+        "kind": "system"
+      },
+      "control_epoch": 1,
+      "initiator_id": "clerk.1",
+      "state": "bound",
+      "task_id": "task.q01"
+    },
+    "quote_revision_1_payable_minor": "96000",
+    "recorded_response": "response.q01",
+    "registered_source": {
+      "file_id": "file.inquiry",
+      "learned_from": "the task's committed source.register action (TSK) and EVD's read of its source",
+      "registered_by": {
+        "id": "agent.q01",
+        "kind": "ai"
+      },
+      "source_id": "src.inquiry.xlsx.5",
+      "source_kind": "file_extract"
+    },
+    "rfq_lines": [
+      "L1:ai:agent.q01",
+      "L2:ai:agent.q01",
+      "L3:ai:agent.q01",
+      "L4:ai:agent.q01"
+    ],
+    "rfq_status": "ready",
+    "task_source": {
+      "id": "file.inquiry",
+      "kind": "evd_file"
+    },
+    "task_version": 15,
+    "wait": {
+      "awaiting": {
+        "id": "agp.808ca2e9257326794e7c247165088f7f161086fe",
+        "kind": "ai_approval_grant",
+        "version": 1
+      },
+      "items": [
+        "command order.prepare",
+        "request_hash 2d007ce9230a679a6694b112d642c844aa1dd41e601d1482d2cdd4fc25678d7b",
+        "object trd.quote quote.q01 version 1",
+        "proposal agp.808ca2e9257326794e7c247165088f7f161086fe"
+      ],
+      "reason": "The agent proposes order.prepare on quote.q01; it needs a person's approval grant (ai.approval_grant.issue) for exactly this request, which ai.proposal.get shows, before the platform sends it.",
+      "responsible_id": "clerk.1",
+      "since": "2026-11-19T10:18:14.035356Z",
+      "wait": "approval"
+    }
+  },
+  "corrections": null,
+  "owner_resolutions": null,
+  "human_steps": [
+    {
+      "actor": "clerk.1",
+      "command": "file.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.create",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "task.scope",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.grant",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "rfq.confirm_scope",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "buyer",
+      "command": "costing (supplier RFQ, offers, costing context, scenario)",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "cost.checker",
+      "command": "cost_snapshot.freeze",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.freeze",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.submit_review",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "quote.reviewer",
+      "command": "quote.review.decide",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.activate",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "source.register",
+      "route": "plain",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "quote.response.verify",
+      "route": "step",
+      "required": true,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.delegation.revoke",
+      "route": "plain",
+      "required": false,
+      "synthetic": true,
+      "outcome": "ok"
+    },
+    {
+      "actor": "clerk.1",
+      "command": "ai.approval_grant.issue",
+      "route": "ai",
+      "required": false,
+      "synthetic": true,
+      "outcome": "INVALID_STATE"
+    }
+  ],
+  "cost": {
+    "model_calls": 8,
+    "tool_calls": 6,
+    "retries": 0,
+    "failed_calls": 0,
+    "unavailable_calls": 0,
+    "input_tokens": 13500,
+    "output_tokens": 920,
+    "cost": "0.00",
+    "currency": "USD",
+    "profiles": [
+      "scripted.v1"
+    ],
+    "model_returned": [
+      "scripted-q01-v1"
+    ]
+  },
+  "phases": [
+    {
+      "name": "rfq",
+      "script": "script-01-rfq.json",
+      "script_steps": 2,
+      "model_calls": 2,
+      "tool_calls": 2,
+      "writes": 2,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.56,
+      "started_at": "2026-11-19T10:18:10.306491304Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "quote",
+      "script": "script-02-quote.json",
+      "script_steps": 3,
+      "model_calls": 3,
+      "tool_calls": 2,
+      "writes": 1,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.55,
+      "started_at": "2026-11-19T10:18:11.76597784Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "response",
+      "script": "script-03-response.json",
+      "script_steps": 2,
+      "model_calls": 2,
+      "tool_calls": 1,
+      "writes": 1,
+      "lifecycle_after": "waiting_input",
+      "seconds": 0.45,
+      "started_at": "2026-11-19T10:18:13.115975377Z",
+      "timeout": "2m0s"
+    },
+    {
+      "name": "order",
+      "script": "script-04-order.json",
+      "script_steps": 3,
+      "model_calls": 1,
+      "tool_calls": 1,
+      "writes": 0,
+      "lifecycle_after": "paused",
+      "seconds": 0.48,
+      "started_at": "2026-11-19T10:18:13.794281046Z",
+      "timeout": "2m0s",
+      "diagnosis": "no write: the phase ended with the task paused after 1 model calls and 1 tool calls, and committed no action",
+      "last_calls": [
+        "#13 model succeeded finish=tool_calls in=1800 out=160 0ms",
+        "#14 tool order.prepare waiting WAITING_APPROVAL"
+      ]
+    }
+  ],
+  "verifications": [
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NOT_FOUND"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.scope",
+        "Q01.quote",
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.document",
+        "Q01.industry",
+        "Q01.acceptance",
+        "Q01.order"
+      ],
+      "unmet_codes": [
+        "Q01.scope unsatisfied NO_ACTIVE_REVISION",
+        "Q01.quote unsatisfied NO_ACTIVE_REVISION",
+        "Q01.lines unsatisfied ORDER_MISSING",
+        "Q01.approval unsatisfied ORDER_MISSING",
+        "Q01.document unsatisfied NO_ACTIVE_REVISION",
+        "Q01.industry unsatisfied NO_ACTIVE_REVISION",
+        "Q01.acceptance unsatisfied ORDER_MISSING",
+        "Q01.order unsatisfied ORDER_MISSING"
+      ]
+    },
+    {
+      "code": "REQUIRED_CHECK_UNSATISFIED",
+      "lifecycle": "waiting_input",
+      "outcome": "unsatisfied",
+      "unmet": [
+        "Q01.lines",
+        "Q01.approval",
+        "Q01.acceptance",
+        "Q01.order"
+      ],
+      "unmet_codes": [
+        "Q01.lines unsatisfied ORDER_MISSING",
+        "Q01.approval unsatisfied ORDER_MISSING",
+        "Q01.acceptance unsatisfied ORDER_MISSING",
+        "Q01.order unsatisfied ORDER_MISSING"
+      ]
+    }
+  ],
+  "budget": {
+    "max_model_calls": 40,
+    "max_retries": 3,
+    "max_cost": "3.00",
+    "currency": "USD"
+  },
+  "seconds": 6.37,
+  "notes": [
+    "approval grant issued on the revoked delegation: refused INVALID_STATE"
+  ]
+}

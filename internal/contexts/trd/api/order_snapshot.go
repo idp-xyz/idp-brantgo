@@ -152,20 +152,23 @@ func (t OrderTerms) Address(role string) []OrderAddress {
 
 // OrderTerms are the terms of an order revision downstream contexts act on (the Terms block of
 // ActiveOrderRef v1, R27, and of OrderCommercialSnapshot v1, R32): the trade terms, the customer's
-// addresses with their roles, the POL payment_terms revision and the payment plan it produced, and
-// the credit portion of that plan (TRD-INV-022) in minor units of the order currency.
+// addresses with their roles, the POL payment_terms revision and the payment plan it produced, the
+// credit portion of that plan (TRD-INV-022) in minor units of the order currency, and the notify
+// party the revision binds (S5R-D40; nil when none): its address of the role notify, as sealed.
 type OrderTerms struct {
 	TradeTerms         TradeTerms
 	Addresses          []OrderAddress
 	PaymentTerms       ConfigRef
 	Stages             []PaymentStage
 	CreditPortionMinor string
+	NotifyParty        *OrderAddress
 }
 
 // TradeTerms are the order's trade terms: the POL trade_terms revision it binds (Ref) with the
 // Incoterm (EXW, FCA, CPT, CIP, DAP, DPU, DDP, FAS, FOB, CFR or CIF) and edition that revision
-// states, and the named place the order binds (a BusinessRef of kind location, such as the port of
-// loading under FOB or FCA).
+// states — sealed with the order revision since S5R-D35, read from POL's revision for one written
+// before — and the named place the order binds (a BusinessRef of kind location, such as the port
+// of loading under FOB or FCA).
 type TradeTerms struct {
 	Ref        ConfigRef
 	Incoterm   string
@@ -173,15 +176,20 @@ type TradeTerms struct {
 	NamedPlace BusinessRef
 }
 
-// OrderAddress is an address of the customer the order binds: its PTY address role (buyer, seller,
-// payer, payee, consignee, shipper or billing), the party at the confirmed revision the quote
-// bound (AddressRoleRef v1: PartyID, PartyRevision, AddressID) and the address text as sealed.
+// OrderAddress is an address the order binds: a customer address with its PTY address role (buyer,
+// seller, payer, payee, consignee, shipper or billing) at the confirmed revision the quote bound,
+// or the notify party (role notify, any party; S5R-D40) — AddressRoleRef v1: PartyID,
+// PartyRevision, AddressID — with the address text as sealed and its country (ISO 3166-1 alpha-2;
+// S5R-D35): what the revision sealed, "" when PTY's revision states none or, in ActiveOrderRef v1
+// and OrderCommercialSnapshot v1, when the revision was written before S5R (OrderRevisionRef v1
+// derives it then from the bound party revision, which never changes).
 type OrderAddress struct {
 	Role          string
 	PartyID       string
 	PartyRevision int64
 	AddressID     string
 	Address       string
+	Country       string
 }
 
 // PaymentStage is one stage of the order revision's payment plan: its ID, trigger (order_confirmed,

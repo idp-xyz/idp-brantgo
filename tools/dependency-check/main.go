@@ -6,13 +6,18 @@
 //   - CODEOWNERS covering every bounded context and the kernel (AC7);
 //   - no Go code inside the master archive under docs/ (AC10);
 //   - test-support packages (pgtest) imported from test files only;
+//   - restricted packages (the AI layer's approval-grant proof, foundation/aigrant) imported outside
+//     test files only by the packages named for them;
 //   - tools that run before or around the test suite (tools/testshard) importing the standard
 //     library only.
 //
 // D7 (the <bc>api import alias) is a "should" rule and only produces warnings.
 //
 // The cross-context allowlist is generated from the Context Map's relationships with -generate and
-// lists only contexts that exist under internal/contexts.
+// lists only contexts that exist under internal/contexts. A relationship whose upstream is one of
+// the Context Map's platform providers (S5R-D34: REF, reference data under internal/reference) gives
+// its downstream context the line "<bc> ref", which lets it import internal/reference/api; a context
+// without such a line may not (rule D1).
 package main
 
 import (
@@ -29,6 +34,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -173,6 +179,13 @@ const (
 // testSupport lists packages that exist for tests and may be imported from test files only.
 var testSupport = []string{"internal/foundation/database/pgtest"}
 
+// restricted lists packages that, outside test files, only the named packages may import. The
+// proof that an approval grant was used for an AI actor's call (S4 decision D-7, unit F1) is minted
+// by the AI layer's gateway and checked by the command ledger; no transport or context may set it.
+var restricted = map[string][]string{
+	"internal/foundation/aigrant": {"internal/ai/gateway", "internal/foundation/action"},
+}
+
 // stdlibTools lists tools that import the standard library only, test files included.
 var stdlibTools = []string{"tools/testshard"}
 
@@ -280,6 +293,11 @@ func checkImports(module string, pkgs []listedPackage, allow map[[2]string]bool)
 					}
 					continue
 				}
+				if allowed, ok := restricted[strings.TrimPrefix(imp, module+"/")]; ok && !test && !slices.Contains(allowed, name) {
+					out = append(out, finding{"restricted", name, "imports " + strings.TrimPrefix(imp, module+"/") +
+						", which outside test files only " + strings.Join(allowed, ", ") + " may import"})
+					continue
+				}
 				if f, bad := judge(module, from, imp, allow); bad {
 					f.pkg = name
 					out = append(out, f)
@@ -367,10 +385,14 @@ func judgeContext(from, to class, target string, allow map[[2]string]bool) (find
 	case layerKernel, layerFoundation:
 		return finding{}, false
 	case layerReference:
-		if to.part == partAPI {
-			return finding{}, false
+		if to.part != partAPI {
+			return bad("D1", "imports "+target+"; contexts use reference data through internal/reference/api")
 		}
-		return bad("D1", "imports "+target+"; contexts use reference data through internal/reference/api")
+		if !allow[[2]string{from.context, referenceProvider}] {
+			return bad("D1", fmt.Sprintf("imports %s; reference data (%s) is not an upstream of %s in the allowlist generated from the Context Map (S5R-D34)",
+				target, referenceProvider, from.context))
+		}
+		return finding{}, false
 	case layerBootstrap, layerInbound:
 		return bad("D4", "imports "+target+"; contexts do not import transport, ai, processes or bootstrap")
 	case layerContext:
@@ -504,19 +526,36 @@ type contextMapDoc struct {
 		From string `json:"frm"`
 		To   string `json:"to"`
 	} `json:"relationships"`
+	PlatformProviders []struct {
+		ID string `json:"id"`
+	} `json:"platformProviders"`
 }
 
-// generate returns the allowlist lines for the contexts present: the downstream context may import
-// the upstream context's api.
-func generate(doc contextMapDoc, present []string) []string {
-	have := map[string]bool{}
+// referenceProvider is the allowlist name of reference data, the Context Map's platform provider
+// REF (S5R-D34): an "<bc> ref" line lets context <bc> import internal/reference/api.
+const referenceProvider = "ref"
+
+// providerDirs are the directories of the platform providers the repository holds, by allowlist name.
+var providerDirs = map[string]string{referenceProvider: "internal/reference"}
+
+// generate returns the allowlist lines for the contexts and platform providers present: the
+// downstream context may import the upstream context's api, or the platform provider's
+// (internal/reference/api for ref). An upstream that is a platform provider counts only when the
+// Context Map registers it under platformProviders.
+func generate(doc contextMapDoc, present, providers []string) []string {
+	have, provider := map[string]bool{}, map[string]bool{}
 	for _, c := range present {
 		have[c] = true
+	}
+	for _, p := range doc.PlatformProviders {
+		if id := strings.ToLower(p.ID); slices.Contains(providers, id) {
+			provider[id] = true
+		}
 	}
 	lines := map[string]bool{}
 	for _, r := range doc.Relationships {
 		up, down := strings.ToLower(r.From), strings.ToLower(r.To)
-		if have[up] && have[down] && up != down {
+		if (have[up] || provider[up]) && have[down] && up != down {
 			lines[down+" "+up] = true
 		}
 	}
@@ -554,14 +593,26 @@ func runGenerate(contextMapPath, allowPath string) error {
 	if presentText == "" {
 		presentText = "none yet"
 	}
+	var providers []string
+	for name, dir := range providerDirs {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			providers = append(providers, name)
+		}
+	}
+	sort.Strings(providers)
+	providersText := strings.Join(providers, ", ")
+	if providersText == "" {
+		providersText = "none"
+	}
 	sum := sha256.Sum256(raw)
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Generated by `go run ./tools/dependency-check -generate <Context Map JSON>`; do not edit.\n")
-	fmt.Fprintf(&b, "# Context Map %s, version %s, sha256 %s, %d relationships; contexts present: %s.\n",
-		filepath.ToSlash(contextMapPath), doc.Version, hex.EncodeToString(sum[:]), len(doc.Relationships), presentText)
-	fmt.Fprintf(&b, "# Each line lets the downstream context import the upstream context's api package.\n")
+	fmt.Fprintf(&b, "# Context Map %s, version %s, sha256 %s, %d relationships; contexts present: %s; platform providers present: %s.\n",
+		filepath.ToSlash(contextMapPath), doc.Version, hex.EncodeToString(sum[:]), len(doc.Relationships), presentText, providersText)
+	fmt.Fprintf(&b, "# Each line lets the downstream context import the upstream context's api package; upstream ref is the platform\n")
+	fmt.Fprintf(&b, "# provider reference data (internal/reference/api, S5R-D34).\n")
 	fmt.Fprintf(&b, "# downstream upstream\n")
-	for _, l := range generate(doc, present) {
+	for _, l := range generate(doc, present, providers) {
 		fmt.Fprintln(&b, l)
 	}
 	return os.WriteFile(allowPath, []byte(b.String()), 0o644)

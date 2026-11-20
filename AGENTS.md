@@ -7,6 +7,7 @@ This repository is the IDP Brant Go module (`go.idp.xyz/idp-brant`) plus its mas
 - `make check` passes (module verification, gofmt, vet, golangci-lint, unit tests, package rules).
 - Code that touches PostgreSQL also passes `make db && make integration`; `CI=true` makes a missing database a failure, never a skip.
 - New behaviour has a test at the level it belongs to: kernel and domain rules as unit tests, persistence and concurrency as PostgreSQL 16 integration tests.
+- The live suites (`make ai-eval-live`, `make eer-live`) never run under `CI=true`; a missing model key makes the live suite report NOT EXECUTED, never a pass. The model service key is only the environment variable `IDP_BRANT_MODEL_API_KEY`; if it is kept in a file, that file is the git-ignored `.env`, and the key never goes into a report, a log, a trace or the archive.
 
 ## Rules the checks enforce
 
@@ -25,11 +26,11 @@ This repository is the IDP Brant Go module (`go.idp.xyz/idp-brant`) plus its mas
 - Lock order inside a transaction: own aggregate root `FOR UPDATE` first, then upstream guard rows `FOR SHARE`.
 - A reverse read in a bidirectional relationship (TRD reading FUL's shipments or PUR's commitments) is a lock-free read inside the reader's own transaction, after it locked its own root; it is correct only while every writer of those facts calls the reader's guard (OrderGuard v1) in its transaction. A new FUL or PUR command that writes order facts calls it too.
 - An event consumer subscribes only to the events of its upstreams in the Context Map (`Subscriptions()`, checked against the allowlist), runs as its own system actor `system:inbox.<bc>.<purpose>` with the permissions `brant-admin inbox` grants, keys its command by the event ID, reads upstream state in `Prepare` before its transaction and never calls an upstream's transaction owner in the handler.
-- Migrations: a new file `migrations/<dir>/NNNNNN_<dir>_<topic>.sql`, numbered without gaps, listed in `migrations/manifest/contexts.txt`; applied files are never edited. A new directory goes into the manifest after the directories whose guards its transactions call (S5: `qlt`, `stl`, `cnx`, `ful` after `pur`); when two branches take the same number, the later merge renumbers its file. Grants for the application role go into `deploy/postgres/10_app_grants.sql`; every table gets FORCE RLS on `app.tenant_id` and `app.company_id`.
+- Migrations: a new file `migrations/<dir>/NNNNNN_<dir>_<topic>.sql`, numbered without gaps, listed in `migrations/manifest/contexts.txt`; applied files are never edited. A new directory goes into the manifest after the directories whose guards its transactions call (S5: `qlt`, `stl`, `cnx`, `ful` after `pur`; S4: `tsk` after its upstreams `trd`, `evd`, `inq`, `sup`, `cst`, and `ai` last); when two branches take the same number, the later merge renumbers its file. Grants for the application role go into `deploy/postgres/10_app_grants.sql`; every table gets FORCE RLS on `app.tenant_id` and `app.company_id`.
 - Python V0.50 is behaviour reference, not evidence: port its vectors into Go tests and cite the Python test they come from.
 
 ## The archive
 
 - Pages in `docs/` are generated. Edit the sources under `docs/00_START_HERE/tools/` (`pages/*.md`, `data/*.json`) and rebuild with `python3 docs/00_START_HERE/tools/build_archive.py`; the build validates links, counts, manifest and SHA-256 sums.
-- Evidence from real runs goes into the archive with the date, the environment and what was not executed.
+- Evidence from real runs goes into the archive with the date, the environment and what was not executed. From a live model run it takes the run's `summary.md` and `report.json` and says which families ran on the live model and which did not; never a `trace/` directory (local diagnostics, not evidence) or a process log.
 - `brand/` is the brand kit (visual locked, production master not yet authorized). Never edit, recolor, crop or redraw its files, and never present its SVG traces as source vectors. The archive builder embeds the PNGs it uses byte for byte and checks them against `brand/05_QA/sha256_manifest.json`.

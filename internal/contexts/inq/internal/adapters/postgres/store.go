@@ -47,14 +47,26 @@ func Load(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id str
 			By: kernel.ActorRef{Kind: kernel.ActorKind(confirmedKind), ID: confirmedID}, Epoch: *epoch}
 	}
 	rows, err := exec.Query(ctx, `SELECT line_id, coalesce(sku_id, ''), coalesce(quantity, ''), coalesce(uom, ''),
-		coalesce(requested_item, ''), coalesce(source_id, ''), coalesce(locator, ''), coalesce(sku_spec_revision, 0)
+		coalesce(requested_item, ''), coalesce(source_id, ''), coalesce(locator, ''), coalesce(sku_spec_revision, 0),
+		locators, pending, coalesce(proposed_by_kind, ''), coalesce(proposed_by_id, '')
 		FROM brant_inq.rfq_line WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3 ORDER BY position`, t, c, id)
 	if err != nil {
 		return nil, err
 	}
 	r.Lines, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (rfq.Line, error) {
 		var l rfq.Line
-		err := row.Scan(&l.ID, &l.SkuID, &l.Quantity, &l.UOM, &l.RequestedItem, &l.SourceID, &l.Locator, &l.SkuSpecRevision)
+		var locators []locatorJSON
+		var pending []pendingJSON
+		var kind string
+		err := row.Scan(&l.ID, &l.SkuID, &l.Quantity, &l.UOM, &l.RequestedItem, &l.SourceID, &l.Locator, &l.SkuSpecRevision,
+			&locators, &pending, &kind, &l.ProposedBy.ID)
+		l.ProposedBy.Kind = kernel.ActorKind(kind)
+		for _, x := range locators {
+			l.Locators = append(l.Locators, rfq.FieldLocator(x))
+		}
+		for _, x := range pending {
+			l.Pending = append(l.Pending, rfq.PendingField(x))
+		}
 		return l, err
 	})
 	if err != nil {
@@ -125,10 +137,19 @@ func writeContent(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 		if l.SkuSpecRevision > 0 {
 			revision = l.SkuSpecRevision
 		}
+		locators, pending := []locatorJSON{}, []pendingJSON{}
+		for _, x := range l.Locators {
+			locators = append(locators, locatorJSON(x))
+		}
+		for _, x := range l.Pending {
+			pending = append(pending, pendingJSON(x))
+		}
 		_, err := exec.Exec(ctx, `INSERT INTO brant_inq.rfq_line (tenant_id, company_id, rfq_id, line_id, position, sku_id, quantity, uom,
-			requested_item, source_id, locator, sku_spec_revision) VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), nullif($8, ''),
-			nullif($9, ''), nullif($10, ''), nullif($11, ''), $12)`,
-			t, c, r.ID, l.ID, i, l.SkuID, l.Quantity, l.UOM, l.RequestedItem, l.SourceID, l.Locator, revision)
+			requested_item, source_id, locator, sku_spec_revision, locators, pending, proposed_by_kind, proposed_by_id)
+			VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), nullif($8, ''), nullif($9, ''), nullif($10, ''), nullif($11, ''), $12,
+			$13, $14, nullif($15, ''), nullif($16, ''))`,
+			t, c, r.ID, l.ID, i, l.SkuID, l.Quantity, l.UOM, l.RequestedItem, l.SourceID, l.Locator, revision, locators, pending,
+			string(l.ProposedBy.Kind), l.ProposedBy.ID)
 		if err != nil {
 			return err
 		}
@@ -140,6 +161,71 @@ func writeContent(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 		}
 	}
 	return nil
+}
+
+// locatorJSON and pendingJSON are the stored forms of a line's field locators and pending fields.
+type locatorJSON struct {
+	Field   string `json:"field"`
+	Locator string `json:"locator"`
+	Quote   string `json:"quote"`
+}
+
+type pendingJSON struct {
+	Field      string   `json:"field"`
+	Reason     string   `json:"reason"`
+	Candidates []string `json:"candidates,omitempty"`
+}
+
+// Correction is a stored correction.
+type Correction struct {
+	rfq.Correction
+	Seq        int64
+	RecordedAt time.Time
+}
+
+// InsertCorrections appends corrections to the RFQ's, numbered after the last one. The caller
+// holds the RFQ root FOR UPDATE.
+func InsertCorrections(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, rfqID string, cs []rfq.Correction, at time.Time) error {
+	if len(cs) == 0 {
+		return nil
+	}
+	t, c := string(scope.Tenant), string(scope.Company)
+	var last int64
+	if err := exec.QueryRow(ctx, `SELECT coalesce(max(seq), 0) FROM brant_inq.rfq_correction WHERE tenant_id = $1 AND company_id = $2
+		AND rfq_id = $3`, t, c, rfqID).Scan(&last); err != nil {
+		return err
+	}
+	for i, x := range cs {
+		_, err := exec.Exec(ctx, `INSERT INTO brant_inq.rfq_correction (tenant_id, company_id, rfq_id, seq, row_version, command, line_id,
+			field, kind, from_value, to_value, locator, reason, candidates, proposed_by_kind, proposed_by_id, corrected_by_kind,
+			corrected_by_id, recorded_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, nullif($15, ''), nullif($16, ''), $17, $18, $19)`,
+			t, c, rfqID, last+int64(i)+1, x.RowVersion, x.Command, x.LineID, x.Field, x.Kind, x.From, x.To, x.Locator, x.Reason,
+			nonNil(x.Candidates), string(x.ProposedBy.Kind), x.ProposedBy.ID, string(x.CorrectedBy.Kind), x.CorrectedBy.ID, at)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Corrections returns the RFQ's corrections in order.
+func Corrections(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, rfqID string) ([]Correction, error) {
+	rows, err := exec.Query(ctx, `SELECT seq, row_version, command, line_id, field, kind, from_value, to_value, locator, reason, candidates,
+		coalesce(proposed_by_kind, ''), coalesce(proposed_by_id, ''), corrected_by_kind, corrected_by_id, recorded_at
+		FROM brant_inq.rfq_correction WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3 ORDER BY seq`,
+		string(scope.Tenant), string(scope.Company), rfqID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Correction, error) {
+		var x Correction
+		var proposed, corrected string
+		err := row.Scan(&x.Seq, &x.RowVersion, &x.Command, &x.LineID, &x.Field, &x.Kind, &x.From, &x.To, &x.Locator, &x.Reason,
+			&x.Candidates, &proposed, &x.ProposedBy.ID, &corrected, &x.CorrectedBy.ID, &x.RecordedAt)
+		x.ProposedBy.Kind, x.CorrectedBy.Kind = kernel.ActorKind(proposed), kernel.ActorKind(corrected)
+		return x, err
+	})
 }
 
 func nonNil(s []string) []string {

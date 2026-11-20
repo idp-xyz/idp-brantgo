@@ -9,8 +9,8 @@ import (
 )
 
 // humanOnlyCommands name fund.record, fund.resolve_difference, application.apply and
-// application.unapply (D-16, D-17); order_account.open is a person's or the system's, with the
-// permission payment_plan_review.open (SM-STL-PAYMENT-PLAN-REVIEW); the reads need stl.read.
+// application.unapply (D-16, D-17); order_account.open is a person's or the system's under its own
+// permission order_account.open (S5R-D02); the reads need stl.read.
 func TestActorKindsOfTheFundCommands(t *testing.T) {
 	policy, err := authorization.NewPolicy(Rules()...)
 	if err != nil {
@@ -22,9 +22,10 @@ func TestActorKindsOfTheFundCommands(t *testing.T) {
 	}{
 		api.CommandRecordFund:        {api.CommandRecordFund, []kernel.ActorKind{kernel.ActorHuman}},
 		api.CommandResolveDifference: {api.CommandResolveDifference, []kernel.ActorKind{kernel.ActorHuman}},
+		api.CommandVerifyPayer:       {api.CommandVerifyPayer, []kernel.ActorKind{kernel.ActorHuman}}, // S5R-D21
 		api.CommandApply:             {api.CommandApply, []kernel.ActorKind{kernel.ActorHuman}},
 		api.CommandUnapply:           {api.CommandUnapply, []kernel.ActorKind{kernel.ActorHuman}},
-		api.CommandOpenOrderAccount:  {api.PermissionOpenOrderAccount, []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
+		api.CommandOpenOrderAccount:  {"order_account.open", []kernel.ActorKind{kernel.ActorHuman, kernel.ActorSystem}},
 		api.CommandGetFundRecord:     {api.PermissionRead, []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}},
 		api.CommandGetOrderAccount:   {api.PermissionRead, []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}},
 		api.CommandGetApplication:    {api.PermissionRead, []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI, kernel.ActorSystem}},

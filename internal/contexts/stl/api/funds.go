@@ -28,11 +28,15 @@ import (
 //	fund.resolve_difference  human only (credit manager), independent of the recorder: resolves part
 //	                         or all of a receipt's unexplained difference as a bank charge or a
 //	                         discount borne by us, with its basis.
-//	order_account.open       human or system (payment_plan_review.open): opens the order account of an
-//	                         active order at TRD's current revision with its payment stages.
+//	order_account.open       human or system, never AI (its own permission order_account.open, S5R-D02:
+//	                         template treasury and the consumer system:inbox.stl.order_account): opens
+//	                         the order account of an active order at TRD's current revision with its
+//	                         payment stages. The consumer opens it on OrderActivated; treasury only
+//	                         opens one the consumer could not (an order activated before it ran).
 //	application.apply        human only (treasury): allocates part of a receipt's available balance to
 //	                         a payment stage of an order account in the same currency, the payer being
-//	                         the order's customer (APPLICATION_EXCEEDS_AVAILABLE,
+//	                         the order's customer, one of its permitted payers or a verified third-party
+//	                         payer (S5R-D21, payers.go) (APPLICATION_EXCEEDS_AVAILABLE,
 //	                         FUND_DIFFERENCE_UNEXPLAINED, APPLICATION_EXCEEDS_OPEN,
 //	                         PARTY_ENTITY_MISMATCH, FX_SCOPE_MISMATCH). Commercial allocation, never
 //	                         the administrative 出口收汇核销 (CN-R11).
@@ -53,8 +57,10 @@ const (
 	CommandApply             = "application.apply"
 	CommandUnapply           = "application.unapply"
 
-	// order_account.open needs the permission that adopts an order revision's payment stages.
-	PermissionOpenOrderAccount = "payment_plan_review.open"
+	// order_account.open is STL's own permission (S5R-D02; S5 borrowed payment_plan_review.open), held by
+	// the role template treasury and by the consumer system:inbox.stl.order_account, never by sales roles
+	// or AI agents.
+	PermissionOpenOrderAccount = "order_account.open"
 
 	// Reads.
 	CommandGetFundRecord   = "fund_record.get"
@@ -85,6 +91,8 @@ const (
 	ResolutionBankCharge = "bank_charge"
 	ResolutionDiscount   = "discount"
 	TargetOrderStage     = "order_stage"
+	// TargetCharge is a confirmed charge an outgoing payment pays (S5R-D19): {kind: "charge", charge_id}.
+	TargetCharge = "charge"
 
 	KindBankAccount = "bank_account"
 )
@@ -151,26 +159,33 @@ type OpenOrderAccount struct {
 
 // ApplicationTarget is what an application allocates to: Kind order_stage, the order's account and
 // its payment stage StageID; Kind receivable, sales statement StatementID's installment of StageID
-// ("" the first one still open); Kind payable, purchase statement StatementID (settlement.go).
+// ("" the first one still open); Kind payable, purchase statement StatementID (settlement.go); Kind
+// charge, confirmed charge ChargeID, paid by a payment to its source party (S5R-D19).
 type ApplicationTarget struct {
 	Kind        string
 	OrderID     string
 	StageID     string
 	StatementID string
+	ChargeID    string `json:",omitempty"`
 }
 
 // Apply allocates Amount (in the fund's currency) of fund record FundRecordID — or of confirmed credit
 // note CreditNoteID (creditnotes.go) — to Target as application ApplicationID. A fund in another currency
-// than the target's names FXRate, a POL fx_rate of purpose settlement (STL-INV-007). Human only. The
-// members C8 added are left out of the request hash while empty, so earlier requests replay unchanged.
+// than the target's names FXRate, a POL fx_rate of purpose settlement (STL-INV-007). A receipt in the
+// order's currency applied to an order's stage or receivable, the order analysed in another currency, may
+// name SettlementFXRate ("settlement_fx_rate"): the POL fx_rate of purpose settlement in force now from the
+// order's currency into its analysis currency, which values what of the receipt is not converted yet in the
+// order result (S5R-D19, unrealised). Human only. The members C8 and R8 added are left out of the request
+// hash while empty, so earlier requests replay unchanged.
 type Apply struct {
-	IdempotencyKey string
-	ApplicationID  string
-	FundRecordID   string
-	CreditNoteID   string `json:",omitempty"`
-	Target         ApplicationTarget
-	Amount         string
-	FXRate         *ConfigRef `json:",omitempty"`
+	IdempotencyKey   string
+	ApplicationID    string
+	FundRecordID     string
+	CreditNoteID     string `json:",omitempty"`
+	Target           ApplicationTarget
+	Amount           string
+	FXRate           *ConfigRef `json:",omitempty"`
+	SettlementFXRate *ConfigRef `json:",omitempty"`
 }
 
 // Unapply undoes application ApplicationID at ExpectedVersion for Reason. Human only.
@@ -301,13 +316,20 @@ func (c Apply) Validate() error {
 		return schema("/idempotency_key")
 	case !kernel.ValidIdentifier(c.ApplicationID):
 		return schema("/args/application_id")
-	case c.Target.Kind != TargetOrderStage && c.Target.Kind != TargetReceivable && c.Target.Kind != TargetPayable:
+	case c.Target.Kind != TargetOrderStage && c.Target.Kind != TargetReceivable && c.Target.Kind != TargetPayable &&
+		c.Target.Kind != TargetCharge:
 		return schema("/args/target/kind")
+	case c.Target.Kind == TargetCharge && (!kernel.ValidIdentifier(c.Target.ChargeID) || c.Target.OrderID != "" || c.Target.StatementID != "" ||
+		c.Target.StageID != ""):
+		return schema("/args/target/charge_id")
+	case c.Target.Kind != TargetCharge && c.Target.ChargeID != "":
+		return schema("/args/target/charge_id")
 	case c.Target.Kind == TargetOrderStage && (!kernel.ValidIdentifier(c.Target.OrderID) || c.Target.StatementID != ""):
 		return schema("/args/target/order_id")
 	case c.Target.Kind == TargetOrderStage && !kernel.ValidIdentifier(c.Target.StageID):
 		return schema("/args/target/stage_id")
-	case c.Target.Kind != TargetOrderStage && (!kernel.ValidIdentifier(c.Target.StatementID) || c.Target.OrderID != ""):
+	case c.Target.Kind != TargetOrderStage && c.Target.Kind != TargetCharge && (!kernel.ValidIdentifier(c.Target.StatementID) ||
+		c.Target.OrderID != ""):
 		return schema("/args/target/statement_id")
 	case c.Target.Kind == TargetReceivable && c.Target.StageID != "" && !kernel.ValidIdentifier(c.Target.StageID),
 		c.Target.Kind == TargetPayable && c.Target.StageID != "":
@@ -377,6 +399,16 @@ type ApplicationReceipt struct {
 	StageOpenMinor     string
 	StatementOpenMinor string
 	Conversion         *ConversionView
+	// S5R-D19: the charge a payment pays and what is open on it now; the settlement rate a receipt in the order's
+	// currency recorded.
+	ChargeID        string
+	ChargeOpenMinor string
+	SettlementRate  *SettlementRateView
+	// PayerBasis says why the fund's payer may pay the target's customer (S5R-D21): customer,
+	// permitted_payer (PayerProfileRevision: the customer's PTY trading profile revision that lists
+	// it) or verified_payer.
+	PayerBasis           string
+	PayerProfileRevision int64
 }
 
 // ResolutionView is one resolved part of a receipt's difference.
@@ -415,6 +447,12 @@ type AllocationView struct {
 	AmountMinor    string
 	Status         string
 	Conversion     *ConversionView
+	// S5R-D21: the payer basis, as on ApplicationReceipt.
+	PayerBasis           string
+	PayerProfileRevision int64
+	// S5R-D19: the charge a payment pays; the settlement rate a receipt in the order's currency recorded.
+	ChargeID       string
+	SettlementRate *SettlementRateView
 }
 
 // DrawView is a refund, returned remittance or conversion drawn on a fund record, in its currency
@@ -463,7 +501,15 @@ type FundRecordRef struct {
 	Allocations        []AllocationView
 	RecordedBy         kernel.ActorRef
 	RecordedAt         time.Time
+	// PayerVerifications are the verifications of a receipt's third-party payer (S5R-D21), in order.
+	PayerVerifications []PayerVerificationView
+	// Reversal is the reversal of a reversed fund record (S5R-D22; Status reversed).
+	Reversal *FundReversalView
 }
+
+// Reversed reports whether fund.reverse reversed the record (S5R-D22): it is no evidence of money
+// received or paid any more, and CNX links it to nothing new.
+func (f FundRecordRef) Reversed() bool { return f.Status == FundReversed }
 
 // FundRecordView is a fund record as fund_record.get shows it, as of CheckedAt.
 type FundRecordView struct {
@@ -530,6 +576,8 @@ type ApplicationView struct {
 	Currency       string
 	AmountMinor    string
 	Conversion     *ConversionView
+	ChargeID       string              // S5R-D19
+	SettlementRate *SettlementRateView // S5R-D19
 	Status         string
 	Version        int64
 	AppliedBy      kernel.ActorRef
@@ -537,7 +585,10 @@ type ApplicationView struct {
 	UnappliedBy    kernel.ActorRef
 	UnappliedAt    time.Time
 	UnapplyReason  string
-	CheckedAt      time.Time
+	// S5R-D21: the payer basis, as on ApplicationReceipt.
+	PayerBasis           string
+	PayerProfileRevision int64
+	CheckedAt            time.Time
 }
 
 // FundCommands is STL's command entry point for funds, applications and order accounts; errors as

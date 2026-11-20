@@ -34,6 +34,8 @@ type Content struct {
 	ConsigneeSource string           `json:"consignee_source"`          // stated, order or buyer
 	OrderConsignee  *PartyContent    `json:"order_consignee,omitempty"` // the order's consignee address when it binds one
 	Notify          *PartyContent    `json:"notify,omitempty"`
+	NotifySource    string           `json:"notify_source,omitempty"` // stated or order (S5R-D40); "" for none or a version before S5R
+	OrderNotify     *PartyContent    `json:"order_notify,omitempty"`  // the order's notify party when it binds one (S5R-D40)
 	Marks           string           `json:"marks"`
 	PortOfLoading   string           `json:"port_of_loading"`
 	PortOfDischarge string           `json:"port_of_discharge"`
@@ -80,8 +82,10 @@ type BookingContent struct {
 	ETD     string `json:"etd"`
 }
 
-// TermsContent are the order's trade and payment terms as TRD showed the order's current revision
-// (OrderRevision, OrderHash) when the version was prepared.
+// TermsContent are the order's trade and payment terms of the order revision (OrderRevision,
+// OrderHash) the shipment binds, as TRD's OrderRevisionRef v1 reads it (S5R-D35: the documents print
+// the revision the goods are shipped under, which a later amendment never rewrites; a version
+// prepared before S5R printed the order's current revision then).
 type TermsContent struct {
 	OrderRevision int64          `json:"order_revision"`
 	OrderHash     string         `json:"order_hash"`
@@ -108,19 +112,23 @@ type CurrencyContent struct {
 }
 
 // LineContent is a shipment line as a version prints it: the goods' names by language, the
-// quantity and unit, and for a CI the unit price and amounts.
+// quantity and unit, and for a CI the unit price and amounts — with the order line's price basis
+// quantity and discount ratio when they are not 1 and 0 (S5R-D35: net = quantity × unit price ÷
+// price basis quantity × (1 − discount ratio), as the bound order revision states them).
 type LineContent struct {
-	LineID       string            `json:"line_id"`
-	OrderLineID  string            `json:"order_line_id"`
-	SkuID        string            `json:"sku_id"`
-	SpecRevision int64             `json:"spec_revision"`
-	Names        map[string]string `json:"names"`
-	Quantity     string            `json:"quantity"`
-	UnitID       string            `json:"unit_id"`
-	UnitPrice    string            `json:"unit_price,omitempty"`
-	NetMinor     string            `json:"net_minor,omitempty"`
-	TaxMinor     string            `json:"tax_minor,omitempty"`
-	PayableMinor string            `json:"payable_minor,omitempty"`
+	LineID             string            `json:"line_id"`
+	OrderLineID        string            `json:"order_line_id"`
+	SkuID              string            `json:"sku_id"`
+	SpecRevision       int64             `json:"spec_revision"`
+	Names              map[string]string `json:"names"`
+	Quantity           string            `json:"quantity"`
+	UnitID             string            `json:"unit_id"`
+	UnitPrice          string            `json:"unit_price,omitempty"`
+	PriceBasisQuantity string            `json:"price_basis_quantity,omitempty"`
+	DiscountRatio      string            `json:"discount_ratio,omitempty"`
+	NetMinor           string            `json:"net_minor,omitempty"`
+	TaxMinor           string            `json:"tax_minor,omitempty"`
+	PayableMinor       string            `json:"payable_minor,omitempty"`
 }
 
 // PackageContent is a group of equal cartons numbered CartonFrom on, with what each holds and
@@ -271,8 +279,9 @@ type Stage struct {
 	DayBasis string
 }
 
-// OrderFacts is what TRD shows of the shipment's order now (OrderCommercialSnapshot v1): its
-// current revision, trade terms, payment plan and the customer's address roles.
+// OrderFacts is what TRD shows of the order revision the shipment binds (OrderRevisionRef v1,
+// S5R-D35): its binding, trade terms, payment plan, the customer's address roles, the notify party
+// (nil: none; S5R-D40) and the lines' prices by order line.
 type OrderFacts struct {
 	Binding    OrderBinding
 	Incoterm   string
@@ -280,6 +289,21 @@ type OrderFacts struct {
 	NamedPlace string
 	Stages     []Stage
 	Addresses  []Address
+	Notify     *Address
+	Lines      map[string]LinePrice
+	NetMinor   string // the revision's net total, minor units of the order currency
+}
+
+// LinePrice is an order line's price as the bound revision states it: the unit price, its price
+// basis quantity and discount ratio, and the order line's net, tax and payable amounts in minor
+// units (TRD's OrderLine).
+type LinePrice struct {
+	UnitPrice          string
+	PriceBasisQuantity string
+	DiscountRatio      string
+	NetMinor           string
+	TaxMinor           string
+	PayableMinor       string
 }
 
 // Address returns the order's first address of role, or nil.
@@ -339,11 +363,14 @@ type Request struct {
 }
 
 // Facts are what FUL holds of the shipment in the transaction, its share lock held: the shipment
-// with its lines and current actual packing, the prices it keeps and its current booking.
+// with its lines and current actual packing, the prices it keeps and its current booking; and, for an
+// issue and the set's read, what CNX answered when asked again about the current certificate of
+// origin draft (Rechecked, S5R-D12; nil: not asked — prepare and record judge without it).
 type Facts struct {
-	Shipment *shipment.Shipment
-	Prices   map[string]shipment.Price
-	Booking  *shipment.Booking
+	Shipment  *shipment.Shipment
+	Prices    map[string]shipment.Price
+	Booking   *shipment.Booking
+	Rechecked map[RecheckKey]*CertificateResult
 }
 
 // Upstream are what TRD, PTY, POL, EVD and CNX said before the transaction: the order (nil: TRD shows
@@ -514,8 +541,9 @@ func CheckLayout(req Request) error {
 // compose reads the facts into the language-neutral content of rendered version d.
 func compose(s *Set, d *Document, req Request, f Facts, up Upstream) (*Content, error) {
 	sh, o := f.Shipment, up.Order
-	if o == nil || o.Binding.OrderID != sh.Order.OrderID {
-		return nil, Reject(kernel.CodeReferenceInvalid, "/args/shipment_id", "TRD shows no order of the shipment to the actor")
+	if o == nil || o.Binding.OrderID != sh.Order.OrderID || o.Binding.OrderRevision != sh.Order.OrderRevision ||
+		o.Binding.OrderHash != sh.Order.OrderHash {
+		return nil, Reject(kernel.CodeReferenceInvalid, "/args/shipment_id", "TRD shows the actor no order revision the shipment binds")
 	}
 	c := &Content{DocumentKind: req.Kind, Number: up.Number, Version: d.Version, DocumentSetID: s.ID, ShipmentID: sh.ID,
 		Order: OrderContent{OrderID: sh.Order.OrderID, OrderRevision: sh.Order.OrderRevision, OrderHash: sh.Order.OrderHash},
@@ -552,7 +580,8 @@ func compose(s *Set, d *Document, req Request, f Facts, up Upstream) (*Content, 
 
 // parties fills the buyer (the customer at the revision the shipment binds, at the order's buyer
 // address, else its billing address), the consignee (stated, else the order's consignee address,
-// else the buyer) and the notify party (stated, else none).
+// else the buyer) and the notify party (stated, else the order's notify party — S5R-D40 —, else
+// none).
 func parties(c *Content, sh *shipment.Shipment, o *OrderFacts, p Particulars, names map[PartyKey]string) error {
 	var customer shipment.Party
 	for _, x := range sh.Parties {
@@ -584,8 +613,19 @@ func parties(c *Content, sh *shipment.Shipment, o *OrderFacts, p Particulars, na
 	default:
 		c.Consignee, c.ConsigneeSource = c.Buyer, "buyer"
 	}
-	if p.Notify != nil {
-		c.Notify = &PartyContent{Name: p.Notify.Name, Address: p.Notify.Address}
+	if a := o.Notify; a != nil {
+		n := names[PartyKey{PartyID: a.PartyID, Revision: a.PartyRevision}]
+		if strings.TrimSpace(n) == "" {
+			return Reject(kernel.CodeReferenceInvalid, "/args/shipment_id", "The order's notify party has no name the actor reads")
+		}
+		c.OrderNotify = &PartyContent{PartyID: a.PartyID, PartyRevision: a.PartyRevision, Name: n, Address: a.Text}
+	}
+	switch {
+	case p.Notify != nil:
+		c.Notify, c.NotifySource = &PartyContent{Name: p.Notify.Name, Address: p.Notify.Address}, "stated"
+	case c.OrderNotify != nil:
+		n := *c.OrderNotify
+		c.Notify, c.NotifySource = &n, "order"
 	}
 	return nil
 }
@@ -626,9 +666,10 @@ func goodsNames(sh *shipment.Shipment, req Request) (map[string]map[string]strin
 	return out, nil
 }
 
-// invoice fills a CI's terms, currency, lines at the prices the shipment keeps (the order line's
-// price at the bound revision; the amounts of the shipped quantity as shipment.Price.Of values them)
-// and totals.
+// invoice fills a CI's terms, currency, lines and totals: the order line's price as the bound
+// revision states it (OrderRevisionRef v1, S5R-D35; the amounts of the shipped quantity as
+// shipment.Price.Of values them), in the currency of the prices the shipment keeps — which stay the
+// reconciliation value (Reconcile compares the CI with them).
 func invoice(c *Content, sh *shipment.Shipment, o *OrderFacts, prices map[string]shipment.Price, cur *Currency,
 	names map[string]map[string]string) error {
 	c.Terms = &TermsContent{OrderRevision: o.Binding.OrderRevision, OrderHash: o.Binding.OrderHash, Incoterm: o.Incoterm, Edition: o.Edition,
@@ -642,12 +683,16 @@ func invoice(c *Content, sh *shipment.Shipment, o *OrderFacts, prices map[string
 	total := shipment.Amounts{}
 	quantities := map[string]kernel.Decimal{}
 	for i, l := range sh.Lines {
-		p, ok := prices[l.ID]
+		kept, ok := prices[l.ID]
 		if !ok {
 			return Reject(kernel.CodeReferenceInvalid, "/args/shipment_id", "Shipment line "+l.ID+" keeps no price")
 		}
-		if cur == nil || p.CurrencyID != cur.Code || p.CurrencyRevision != cur.Revision || cur.MinorUnits < 0 || cur.MinorUnits > 4 {
+		if cur == nil || kept.CurrencyID != cur.Code || kept.CurrencyRevision != cur.Revision || cur.MinorUnits < 0 || cur.MinorUnits > 4 {
 			return Reject(kernel.CodeReferenceInvalid, "/args/shipment_id", "The order currency's revision and minor units are needed")
+		}
+		p, basis, discount, err := revisionPrice(o, l.OrderLineID, kept)
+		if err != nil {
+			return err
 		}
 		if i == 0 {
 			c.Currency = &CurrencyContent{Code: cur.Code, Revision: cur.Revision, MinorUnits: cur.MinorUnits}
@@ -656,12 +701,40 @@ func invoice(c *Content, sh *shipment.Shipment, o *OrderFacts, prices map[string
 		total = total.Add(a)
 		quantities[l.UnitID] = quantities[l.UnitID].Add(l.Quantity)
 		c.Lines = append(c.Lines, LineContent{LineID: l.ID, OrderLineID: l.OrderLineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision,
-			Names: names[l.SkuID], Quantity: text(l.Quantity), UnitID: l.UnitID, UnitPrice: text(p.UnitPrice), NetMinor: minorText(a.Net),
-			TaxMinor: minorText(a.Tax), PayableMinor: minorText(a.Payable)})
+			Names: names[l.SkuID], Quantity: text(l.Quantity), UnitID: l.UnitID, UnitPrice: text(p.UnitPrice), PriceBasisQuantity: basis,
+			DiscountRatio: discount, NetMinor: minorText(a.Net), TaxMinor: minorText(a.Tax), PayableMinor: minorText(a.Payable)})
 	}
 	c.Totals = TotalsContent{Quantities: unitTotals(quantities), NetMinor: minorText(total.Net), TaxMinor: minorText(total.Tax),
 		PayableMinor: minorText(total.Payable)}
 	return nil
+}
+
+// revisionPrice is the price of order line id as the bound revision o states it (S5R-D35), in the
+// currency of the price the shipment keeps (kept), with its price basis quantity and discount ratio
+// as the CI prints them ("" for 1 and 0). A line the revision does not price, or prices in a form
+// FUL cannot read, is REFERENCE_INVALID: the revision the shipment binds always has its lines.
+func revisionPrice(o *OrderFacts, id string, kept shipment.Price) (shipment.Price, string, string, error) {
+	invalid := Reject(kernel.CodeReferenceInvalid, "/args/shipment_id", "The order revision the shipment binds has no price FUL can read for line "+id)
+	l, ok := o.Lines[id]
+	if !ok {
+		return shipment.Price{}, "", "", invalid
+	}
+	unit, err := kernel.ParseDecimal(l.UnitPrice, kernel.PriceFormat)
+	net, okNet := shipment.Minor(l.NetMinor)
+	tax, okTax := shipment.Minor(l.TaxMinor)
+	payable, okPayable := shipment.Minor(l.PayableMinor)
+	if err != nil || !okNet || !okTax || !okPayable || net.Sign() < 0 || tax.Sign() < 0 || payable.Sign() < 0 {
+		return shipment.Price{}, "", "", invalid
+	}
+	basis, discount := "", ""
+	if b, err := kernel.ParseDecimal(l.PriceBasisQuantity, kernel.PriceFormat); err == nil && !b.Equal(kernel.DecimalFromInt(1)) {
+		basis = text(b)
+	}
+	if d, err := kernel.ParseDecimal(l.DiscountRatio, kernel.PriceFormat); err == nil && d.Sign() != 0 {
+		discount = text(d)
+	}
+	return shipment.Price{CurrencyID: kept.CurrencyID, CurrencyRevision: kept.CurrencyRevision, UnitPrice: unit, Net: net, Tax: tax,
+		Payable: payable}, basis, discount, nil
 }
 
 // packingList fills a PL's packages — the stated ones, else the shipment's current actual packing

@@ -7,7 +7,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// Opening balances (S5 unit C10, WBS S5-20; STL-INV-012; MD-50; baseline 11.2 期初、防重、切换; BT17, CN-AT16 STL
+// Opening balances (S5 unit C10, WBS S5-20; STL-INV-012; MD-50; baseline 11.2 期初、防重、切换; STL-OB-01, CN-AT16 STL
 // half). Python V0.50 has no STL.
 
 var cutoff = time.Date(2026, 10, 31, 16, 0, 0, 0, time.UTC) // 2026-11-01 00:00 China time
@@ -70,7 +70,7 @@ func TestAnOpeningPrepaymentIsAFundRecord(t *testing.T) {
 	want(t, err, kernel.CodeInvalidKnownValue, "/args/value_date")
 }
 
-// STL-INV-012 negative (重复导入返回 OPENING_BALANCE_DUPLICATE) and BT17 (上线后不重建同一账款): a source document that
+// STL-INV-012 negative (重复导入返回 OPENING_BALANCE_DUPLICATE) and STL-OB-01 (上线后不重建同一账款): a source document that
 // stands as an opening item of the kind — recorded at this cutoff or another — is refused before anything else
 // is judged, so importing the same batch twice creates nothing.
 func TestASourceDocumentStandsOnce(t *testing.T) {

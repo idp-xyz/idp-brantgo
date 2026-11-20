@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx/api"
@@ -39,7 +40,7 @@ func versionView(v *dcl.Version) api.DeclarationVersionView {
 		OrderHash: d.Order.OrderHash, OrderStatus: d.Order.Status, SalesDocuments: []api.SalesDocumentView{}, LotCurrency: d.ExportLot.Currency,
 		LotValueMinor: d.ExportLot.ValueMinor, Mapping: d.Mapping, Items: []api.DeclarationItemView{}, Amendments: []api.AmendmentView{},
 		ReceiptID: d.ReceiptID, PreparedBy: kernel.ActorRef{Kind: kernel.ActorKind(d.PreparedBy.Kind), ID: d.PreparedBy.ID},
-		AuthorityEpoch: d.AuthorityEpoch, PreparedAt: timestampOf(d.PreparedAt)}
+		AuthorityEpoch: d.AuthorityEpoch, PreparedAt: timestampOf(d.PreparedAt), CustomsOffice: d.CustomsOffice}
 	for _, s := range d.Order.Documents {
 		out.SalesDocuments = append(out.SalesDocuments, api.SalesDocumentView(s))
 	}
@@ -106,9 +107,14 @@ func (s Service) GetDeclaration(ctx context.Context, id string) (api.Declaration
 			return err
 		}
 		for _, x := range submissions {
-			v.Submissions = append(v.Submissions, api.SubmissionView{SubmissionNo: x.No, Version: x.Version, OperationReference: x.OperationReference,
-				Submitter: api.Submitter{Kind: x.SubmitterKind, PartyID: x.SubmitterPartyID, Name: x.SubmitterName}, SubmittedAt: x.SubmittedAt,
-				Evidence: declarationEvidenceViews(x.Evidence), Note: x.Note, RecordedBy: x.By, AuthorityEpoch: x.Epoch, RecordedAt: x.At})
+			sv := api.SubmissionView{SubmissionNo: x.No, Version: x.Version, OperationReference: x.OperationReference,
+				Submitter: api.Submitter{Kind: x.SubmitterKind, PartyID: x.SubmitterPartyID, Name: x.SubmitterName}, ServiceRoleKind: x.ServiceRoleKind,
+				SubmittedAt: x.SubmittedAt, Evidence: declarationEvidenceViews(x.Evidence), Note: x.Note, RecordedBy: x.By, AuthorityEpoch: x.Epoch,
+				RecordedAt: x.At}
+			if x.ServiceRoleID != "" {
+				sv.Submitter.ServiceRole = &api.ServiceRoleRef{ID: x.ServiceRoleID, Revision: x.ServiceRoleRevision}
+			}
+			v.Submissions = append(v.Submissions, sv)
 		}
 		receipts, err := postgres.Receipts(ctx, exec, sc, c.ID)
 		if err != nil {
@@ -155,7 +161,8 @@ func requirementViews(rs []db.Requirement) []api.RequirementView {
 				ExportedAt: d.ExportedAt, CustomsReleased: d.Exported}
 		}
 		for _, f := range r.FundRecords {
-			v.FundRecords = append(v.FundRecords, api.FundLink(f))
+			v.FundRecords = append(v.FundRecords, api.FundLink{FundRecordID: f.FundRecordID, Kind: f.Kind, Direction: f.Direction, Currency: f.Currency,
+				ReceivedMinor: f.ReceivedMinor, Label: f.Label})
 		}
 		v.Certificates = certificateLinks(r.Certificates)
 		out = append(out, v)
@@ -221,7 +228,37 @@ func (s Service) GetBundle(ctx context.Context, id string) (api.BundleView, erro
 		}
 		return nil
 	})
-	return v, err
+	if err != nil {
+		return v, err
+	}
+	return v, s.markReversedFunds(ctx, &v)
+}
+
+// markReversedFunds shows, on every fund record the bundle's checks link, whether STL's FundRecordRef
+// v1 shows it reversed now (S5R-D22), asked after the read's transaction.
+func (s Service) markReversedFunds(ctx context.Context, v *api.BundleView) error {
+	var ids []string
+	for _, c := range v.Checks {
+		for _, r := range c.Requirements {
+			for _, f := range r.FundRecords {
+				if !slices.Contains(ids, f.FundRecordID) {
+					ids = append(ids, f.FundRecordID)
+				}
+			}
+		}
+	}
+	reversed, err := s.reversedFunds(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for _, c := range v.Checks {
+		for _, r := range c.Requirements {
+			for i := range r.FundRecords {
+				r.FundRecords[i].Reversed = reversed[r.FundRecords[i].FundRecordID]
+			}
+		}
+	}
+	return nil
 }
 
 // Bundles returns the company's document bundles, newest first (document_bundle.list, cnx.read).

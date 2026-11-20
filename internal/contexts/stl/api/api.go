@@ -33,22 +33,25 @@
 //	                         cover amount (STL-INV-005).
 //	credit.release           human, AI or system: releases a reserved reservation before its order
 //	                         is activated (or once it expired); a consumed one only by the system when
-//	                         its order ends (PL-13). A person's or agent's release reads TRD's order
+//	                         its order ends (PL-13) or a later order revision supersedes it (S5R-D08;
+//	                         every release records its cause). A person's or agent's release reads TRD's order
 //	                         state inside the transaction, after the reservation row is locked
 //	                         (brant_trd.order_state_v1): an order active at the reservation's revision
 //	                         or a later one keeps it (INVALID_STATE), also when its activation
 //	                         committed while the release waited for the row.
 //	credit.consume           system only: marks a reserved reservation consumed when its order was
-//	                         activated (PL-12), for the order binding it was reserved for.
+//	                         activated (PL-12), for the order binding it was reserved for; with
+//	                         carried_from it carries an earlier revision's reservation over to an
+//	                         amended revision (S5R-D08, the consumer of OrderAmended).
 //
 // Request members in snake_case: credit_limit.request {request_id, party_id, currency {kind, id,
 // revision}, sources [{source, amount, evidence_ids}], valid_from, valid_until, credit_policy {kind,
 // id, revision}, reason}; credit_limit.publish {request_id, expected_version, decision ("publish" |
 // "reject"), credit_policy, reason}; credit.reserve {reservation_id, order_id, order_revision,
-// order_hash, credit_policy, fx_rate}; credit_exception.decide {decision_id, expected_version,
-// decision ("release" | "reject"), credit_policy, reason}; credit.release {reservation_id,
-// expected_version, reason}; credit.consume {reservation_id, order_id, order_revision, order_hash,
-// activated_at}.
+// order_hash, credit_policy, fx_rate, exposure_fx_rates [fx_rate refs]}; credit_exception.decide
+// {decision_id, expected_version, decision ("release" | "reject"), credit_policy, reason};
+// credit.release {reservation_id, expected_version, reason, cause}; credit.consume {reservation_id,
+// order_id, order_revision, order_hash, activated_at, carried_from}.
 package api
 
 import (
@@ -126,10 +129,20 @@ const (
 	// instead of reserving.
 	StatusDecisionOpened = "decision_opened"
 
-	// Bases of a reservation.
+	// Bases of a reservation. BasisCarriedOver: the system carried an earlier order revision's
+	// reservation over to an amended revision at its credit portion, no larger (S5R-D08).
 	BasisWithinLimit      = "within_limit"
 	BasisCreditDecision   = "credit_decision"
 	BasisDocumentsSecured = "documents_secured"
+	BasisCarriedOver      = "carried_over"
+
+	// Why a reservation was released (S5R-D08): a person or agent abandoned it before its order was
+	// activated, or it had expired; the system released it at its order's end (PL-13) or because a
+	// later order revision superseded it. Releases before S5R-D08 show none.
+	CauseAbandoned  = "abandoned"
+	CauseExpired    = "expired"
+	CauseOrderEnded = "order_ended"
+	CauseSuperseded = "superseded"
 
 	// POL configuration kinds STL names.
 	KindCreditPolicy = "credit_policy"
@@ -139,6 +152,9 @@ const (
 	MaxEvidence = 20
 	MaxReason   = 1000
 	maxVersion  = 2147483647
+
+	// MaxExposureRates bounds credit.reserve's exposure_fx_rates (S5R-D22): one per currency.
+	MaxExposureRates = 10
 )
 
 // ConfigRef is a POL configuration revision (ConfigRef v1): {kind, id, revision}.
@@ -186,15 +202,21 @@ type PublishCreditLimit struct {
 // ReserveCredit reserves credit for order OrderID at OrderRevision and OrderHash (TRD's current
 // revision, draft or active) as reservation ReservationID under CreditPolicy. FXRate names the POL
 // fx_rate revision of purpose credit that converts the order currency into the policy's currency;
-// it is required when the two differ (FX_SCOPE_MISMATCH otherwise).
+// it is required when the two differ (FX_SCOPE_MISMATCH otherwise). ExposureFXRates name, one per
+// currency, the fx_rate revisions of purpose credit that convert the customer's receivables in other
+// currencies than the policy's — an opening receivable's, another order's — into it for the exposure
+// (S5R-D22; FXRate converts those in the order currency); a receivable in a currency none converts
+// is FX_SCOPE_MISMATCH at /args/exposure_fx_rates. Left out of the request hash while empty, so
+// earlier requests replay unchanged.
 type ReserveCredit struct {
-	IdempotencyKey string
-	ReservationID  string
-	OrderID        string
-	OrderRevision  int64
-	OrderHash      string
-	CreditPolicy   ConfigRef
-	FXRate         *ConfigRef
+	IdempotencyKey  string
+	ReservationID   string
+	OrderID         string
+	OrderRevision   int64
+	OrderHash       string
+	CreditPolicy    ConfigRef
+	FXRate          *ConfigRef
+	ExposureFXRates []ConfigRef `json:",omitempty"`
 }
 
 // DecideCreditException releases (Decision "release") or rejects ("reject") credit decision
@@ -208,16 +230,25 @@ type DecideCreditException struct {
 	Reason          string
 }
 
-// ReleaseCredit releases reservation ReservationID at ExpectedVersion for Reason.
+// ReleaseCredit releases reservation ReservationID at ExpectedVersion for Reason. Cause says why
+// (S5R-D08): STL's consumers state order_ended or superseded; empty, a person's or agent's release is
+// abandoned, or expired when the reservation had expired, and the system's order_ended. Left out of
+// the request hash while empty, so earlier requests replay unchanged.
 type ReleaseCredit struct {
 	IdempotencyKey  string
 	ReservationID   string
 	ExpectedVersion int64
 	Reason          string
+	Cause           string `json:",omitempty"`
 }
 
 // ConsumeCredit marks reservation ReservationID consumed by the activation of order OrderID at
 // OrderRevision and OrderHash at ActivatedAt (the OrderActivated event's instant). System only.
+//
+// With CarriedFrom (S5R-D08) it carries that reservation — of an earlier revision of the order — over
+// to the amended revision OrderRevision at the revision's credit portion, which is no larger: it
+// writes reservation ReservationID consumed at ActivatedAt (the instant the amendment took effect),
+// basis carried_over, without a limit check. Left out of the request hash while empty.
 type ConsumeCredit struct {
 	IdempotencyKey string
 	ReservationID  string
@@ -225,6 +256,7 @@ type ConsumeCredit struct {
 	OrderRevision  int64
 	OrderHash      string
 	ActivatedAt    string
+	CarriedFrom    string `json:",omitempty"`
 }
 
 // Command is one of STL's commands.
@@ -380,7 +412,26 @@ func (c ReserveCredit) Validate() error {
 		return err
 	}
 	if c.FXRate != nil {
-		return c.FXRate.Validate(KindFXRate, "/args/fx_rate")
+		if err := c.FXRate.Validate(KindFXRate, "/args/fx_rate"); err != nil {
+			return err
+		}
+	}
+	if len(c.ExposureFXRates) > MaxExposureRates {
+		return schema("/args/exposure_fx_rates")
+	}
+	for i, r := range c.ExposureFXRates {
+		path := "/args/exposure_fx_rates/" + strconv.Itoa(i)
+		if err := r.Validate(KindFXRate, path); err != nil {
+			return err
+		}
+		if c.FXRate != nil && c.FXRate.ConfigID == r.ConfigID {
+			return schema(path + "/id")
+		}
+		for _, x := range c.ExposureFXRates[:i] {
+			if x.ConfigID == r.ConfigID {
+				return schema(path + "/id")
+			}
+		}
 	}
 	return nil
 }
@@ -417,6 +468,8 @@ func (c ReleaseCredit) Validate() error {
 		return schema("/args/expected_version")
 	case !Reason(c.Reason):
 		return schema("/args/reason")
+	case c.Cause != "" && c.Cause != CauseAbandoned && c.Cause != CauseExpired && c.Cause != CauseOrderEnded && c.Cause != CauseSuperseded:
+		return schema("/args/cause")
 	}
 	return nil
 }
@@ -428,6 +481,8 @@ func (c ConsumeCredit) Validate() error {
 		return schema("/idempotency_key")
 	case !kernel.ValidIdentifier(c.ReservationID):
 		return schema("/args/reservation_id")
+	case c.CarriedFrom != "" && (!kernel.ValidIdentifier(c.CarriedFrom) || c.CarriedFrom == c.ReservationID):
+		return schema("/args/carried_from")
 	case !kernel.ValidIdentifier(c.OrderID):
 		return schema("/args/order_id")
 	case !versionOK(c.OrderRevision):
@@ -583,6 +638,8 @@ type ReservationView struct {
 	ReleasedBy    kernel.ActorRef
 	ReleasedAt    time.Time
 	ReleaseReason string
+	ReleaseCause  string // S5R-D08; empty for releases before it
+	CarriedFrom   string // basis carried_over: the earlier revision's reservation it carries over (S5R-D08)
 	CheckedAt     time.Time
 }
 
@@ -625,18 +682,21 @@ type DecisionView struct {
 // CustomerCreditView is a customer's credit: the limit version in force now (none: the credit
 // policy's default limit applies), every version, the limit requests, reservations and decisions
 // the caller sees, and the exposure of the live reservations now in the limit currency (D-4; open
-// receivables count from B2b).
+// receivables count from B2b). Receivables in another currency convert only at a credit rate
+// (S5R-D22), which a read does not name: when there are some, ExposureMinor is empty and
+// UnconvertedCurrencies says which currencies credit.reserve needs exposure_fx_rates for.
 type CustomerCreditView struct {
-	PartyID          string
-	RowVersion       int64
-	LimitInForce     *LimitVersionView
-	Versions         []LimitVersionView
-	Requests         []LimitRequestView
-	Reservations     []ReservationView
-	Decisions        []DecisionView
-	ExposureCurrency string
-	ExposureMinor    string
-	CheckedAt        time.Time
+	PartyID               string
+	RowVersion            int64
+	LimitInForce          *LimitVersionView
+	Versions              []LimitVersionView
+	Requests              []LimitRequestView
+	Reservations          []ReservationView
+	Decisions             []DecisionView
+	ExposureCurrency      string
+	ExposureMinor         string
+	UnconvertedCurrencies []string
+	CheckedAt             time.Time
 }
 
 // Commands is STL's command entry point. Errors are *kernel.Rejection for refusals. An error that

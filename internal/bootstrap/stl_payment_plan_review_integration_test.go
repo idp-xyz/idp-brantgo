@@ -139,7 +139,11 @@ func stageApplied(v stlapi.OrderAccountView, stage string) string {
 // revision 3's review supersedes revision 2's. A person of treasury settles revision 3's review:
 // not a sales clerk, not with an item marked corrected that is not, and every item once; after the
 // excess is unapplied and the deposit re-applied, it settles. A redelivered OrderAmended of
-// revision 2 changes nothing; the credit stays on revision 1's consumed reservation throughout.
+// revision 2 changes nothing. S5R-D08 (this test asserted the S5 rule until R7: the credit stayed on
+// revision 1's 672.00 until the order ended): each amendment carries the order's credit over to the
+// new revision at its credit portion — revision 2's 504.00, then revision 3's 448.00, each a new
+// consumed reservation, basis carried_over — and releases the earlier one as superseded, so the
+// exposure falls with the order.
 func TestAmendedOrderMovesItsAccountThroughTheRelay(t *testing.T) {
 	q := newCreditOrderWorld(t, "")
 	ctx := context.Background()
@@ -199,8 +203,11 @@ func TestAmendedOrderMovesItsAccountThroughTheRelay(t *testing.T) {
 	}
 	wantItem(t, rv.Items[0], 1, stlapi.ItemStageOverApplied, "P1", "28800", "21600", "28800")
 	wantItem(t, rv.Items[1], 2, stlapi.ItemCreditPortion, "", "67200", "50400", "0")
-	if r := q.reservationOf(first.ReservationID); r.Status != stlapi.ReservationConsumed || r.Version != 2 || exposure() != "67200" {
-		t.Fatalf("revision 2 stands on revision 1's reservation: %+v, exposure %s", r, exposure())
+	carried2 := q.carriedFor(id, 2)
+	if r := q.reservationOf(first.ReservationID); r.Status != stlapi.ReservationReleased || r.Version != 3 || r.ReleaseCause != stlapi.CauseSuperseded ||
+		carried2.Status != stlapi.ReservationConsumed || carried2.Version != 1 || carried2.Basis != stlapi.BasisCarriedOver ||
+		carried2.CarriedFrom != first.ReservationID || carried2.PortionMinor != "50400" || carried2.OrderHash != r2.OrderHash || exposure() != "50400" {
+		t.Fatalf("S5R-D08: revision 2 carries revision 1's credit over at 504.00: %+v / %+v, exposure %s", r, carried2, exposure())
 	}
 
 	r3 := q.reviewAmend(id, "amendment.fewer", "80", false)
@@ -217,13 +224,18 @@ func TestAmendedOrderMovesItsAccountThroughTheRelay(t *testing.T) {
 	}
 	wantItem(t, rv3.Items[0], 1, stlapi.ItemStageOverApplied, "P1", "21600", "19200", "28800")
 	wantItem(t, rv3.Items[1], 2, stlapi.ItemCreditPortion, "", "50400", "44800", "0")
+	carried3 := q.carriedFor(id, 3)
+	if r := q.reservationOf(carried2.ReservationID); r.Status != stlapi.ReservationReleased || r.ReleaseCause != stlapi.CauseSuperseded ||
+		carried3.CarriedFrom != carried2.ReservationID || carried3.PortionMinor != "44800" || exposure() != "44800" {
+		t.Fatalf("S5R-D08: revision 3 carries revision 2's credit over at 448.00: %+v / %+v, exposure %s", r, carried3, exposure())
+	}
 
 	settle := func(who context.Context, rev, version int64, items ...stlapi.ReviewDisposition) (stlapi.PaymentPlanReviewReceipt, error) {
 		return q.c.STL.SettlePaymentPlanReview(who, stlapi.SettlePaymentPlanReview{IdempotencyKey: q.key(), OrderID: id, OrderRevision: rev,
 			ExpectedVersion: version, Reason: "客户确认减量，定金差额退回", Items: items})
 	}
 	corrected := stlapi.ReviewDisposition{Seq: 1, Disposition: stlapi.DispositionCorrected, Note: "多收定金 96.00 撤销核销后重新核销 192.00"}
-	accepted := stlapi.ReviewDisposition{Seq: 2, Disposition: stlapi.DispositionAccepted, Note: "信用占用仍按第 1 版 672.00 保留至订单结束"}
+	accepted := stlapi.ReviewDisposition{Seq: 2, Disposition: stlapi.DispositionAccepted, Note: "信用占用随第 3 版降为 448.00（S5R-D08）"}
 	_, err = settle(treasurer, 2, 3, stlapi.ReviewDisposition{Seq: 1, Disposition: stlapi.DispositionAccepted, Note: "n"},
 		stlapi.ReviewDisposition{Seq: 2, Disposition: stlapi.DispositionAccepted, Note: "n"})
 	wantRefused(t, "settling the superseded review", err, kernel.CodeInvalidState, "/args/order_revision")
@@ -273,8 +285,8 @@ func TestAmendedOrderMovesItsAccountThroughTheRelay(t *testing.T) {
 	if acc.OrderRevision != 3 || acc.Version != 4 || q.count("company.A", "brant_stl.payment_plan_review WHERE order_id = '"+id+"'") != 2 {
 		t.Fatalf("after the redelivery: %+v", acc)
 	}
-	if r := q.reservationOf(first.ReservationID); r.Status != stlapi.ReservationConsumed || r.Version != 2 || exposure() != "67200" {
-		t.Fatalf("the credit after three revisions: %+v, exposure %s", r, exposure())
+	if r := q.carriedFor(id, 3); r.ReservationID != carried3.ReservationID || r.Version != 1 || exposure() != "44800" {
+		t.Fatalf("the credit after three revisions and a redelivery: %+v, exposure %s", r, exposure())
 	}
 }
 
@@ -283,6 +295,24 @@ func (q *trdWorld) reservationOf(id string) stlapi.ReservationView {
 	v, err := q.c.STL.GetReservation(q.credit.officer, id)
 	q.must(err)
 	return v
+}
+
+// carriedFor returns the one held (reserved or consumed) reservation of order revision revision of customer.1's
+// order, as customer_credit.get lists it (S5R-D08: "当前修订恰有一个已消耗占用").
+func (q *trdWorld) carriedFor(order string, revision int64) stlapi.ReservationView {
+	q.t.Helper()
+	v, err := q.c.STL.GetCustomerCredit(q.credit.officer, "customer.1")
+	q.must(err)
+	var held []stlapi.ReservationView
+	for _, r := range v.Reservations {
+		if r.OrderID == order && r.OrderRevision == revision && r.Status != stlapi.ReservationReleased {
+			held = append(held, r)
+		}
+	}
+	if len(held) != 1 {
+		q.t.Fatalf("order %s revision %d holds %d reservations: %+v", order, revision, len(held), held)
+	}
+	return held[0]
 }
 
 // D-9, WF-06 ("信用部分增加时须新的占用"), D-4, PL-12, SM-STL-CREDIT-RESERVATION on TRD's real
@@ -338,7 +368,7 @@ func TestAmendmentThatGrowsTheCreditMovesTheReservation(t *testing.T) {
 		t.Fatalf("revision 2's reservation: %+v (applied at %v)", v2, appliedAt)
 	}
 	v1 := q.reservationOf(first.ReservationID)
-	if v1.Status != stlapi.ReservationReleased || v1.Version != 3 || v1.ReleasedBy != consumerActor ||
+	if v1.Status != stlapi.ReservationReleased || v1.Version != 3 || v1.ReleasedBy != consumerActor || v1.ReleaseCause != stlapi.CauseSuperseded ||
 		!strings.Contains(v1.ReleaseReason, "superseded by reservation "+next.ReservationID) || exposure() != "72800" {
 		t.Fatalf("revision 1's reservation: %+v, exposure %s", v1, exposure())
 	}
@@ -374,7 +404,7 @@ func TestAmendmentThatGrowsTheCreditMovesTheReservation(t *testing.T) {
 	q.must(err)
 	relayTRD(ev, scope)
 	if a, b := q.reservationOf(next.ReservationID), q.reservationOf(first.ReservationID); a.Status != stlapi.ReservationReleased || a.Version != 3 ||
-		b.Version != 3 || q.stlEvents(stlapi.EventCreditReservationReleased, first.ReservationID) != 1 {
+		a.ReleaseCause != stlapi.CauseOrderEnded || b.Version != 3 || q.stlEvents(stlapi.EventCreditReservationReleased, first.ReservationID) != 1 {
 		t.Fatalf("after the cancellation: %+v %+v", a, b)
 	}
 }

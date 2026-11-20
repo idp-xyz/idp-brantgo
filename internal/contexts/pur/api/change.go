@@ -52,9 +52,20 @@ import (
 //	                                    a reason and the supplier's EVD evidence; each line keeps what
 //	                                    was verified delivered of it (they stay settlement and
 //	                                    shipment sources) and the allocation of the rest is released.
+//	                                    While a claim of one of its deliveries awaits its verification
+//	                                    it is INVALID_STATE, reason unverified_delivery_pending: the
+//	                                    claim is verified or rejected first (S5R-D41).
 //
 // A short receipt is a change to exactly the verified quantities: the commitment then counts as
 // fulfilled (CommitmentView.Fulfilled; state fulfilled in DownstreamCommitments v1).
+//
+// S5R-D41 (PUR-INV-009, PUR-INV-011, PUR-INV-012): a change that only buys less — no line buys more,
+// allocated or overbuy, every line still bought keeps its condition line and supplier date — is
+// prepared, decided and applied without checking the supply condition's validity (SUP's
+// SUPPLY_CONDITION_EXPIRED and SUPPLY_CONDITION_NOT_CURRENT do not refuse it) and at the unit prices of
+// the revision in force (the revision document's revision.decrease_only and price_groups[].price_kept);
+// an increase or another price still needs a verified supply condition in force. A commitment line's
+// unit is its order line's: a revision line in another unit is UNIT_SCOPE_MISMATCH.
 //
 // Request members in snake_case: purchase.commitment.change.prepare {change_id, commitment_id,
 // revision, lines [{order_line_id, quantity, overbuy {quantity, reason}, source {kind, id, revision,
@@ -389,8 +400,8 @@ type RevisionView struct {
 	AuthorityEpoch int64
 }
 
-// CommitmentLineView is what a commitment buys of a line at its revision in force and what the
-// supplier's verified deliveries add up to for it.
+// CommitmentLineView is what a commitment buys of a line at its revision in force, what the supplier's
+// verified deliveries add up to for it and what of them its approved dispositions dispose of (S5R-D05).
 type CommitmentLineView struct {
 	OrderLineID       string
 	AllocatedQuantity string
@@ -398,6 +409,7 @@ type CommitmentLineView struct {
 	PurchaseQuantity  string
 	VerifiedQuantity  string
 	SupplierDate      string
+	DisposedQuantity  string
 }
 
 // ChangeCommands is PUR's command entry point for commitment changes and cancellation.

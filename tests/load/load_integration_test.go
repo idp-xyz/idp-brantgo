@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -64,6 +65,20 @@ func TestLoadGeneratorSmoke(t *testing.T) {
 	// the observer works, so it needs successful samples, not a run without a single late probe.
 	if s.DB.Samples == 0 || s.DB.ObservationErrors > s.DB.Samples || s.Commands.Latency.P95 <= 0 || s.Reads.Latency.P99 <= 0 {
 		t.Fatalf("observation %+v latency %+v %+v", s.DB, s.Commands.Latency, s.Reads.Latency)
+	}
+	// The thresholds are evaluated without being asserted (CI hosts are not the reference
+	// deployment; S5R-D07 asserts on the owner's machine): the read and command targets of S5-11
+	// are judged, the relay targets of S5R-D07 are not measured without a relay.
+	th := rep.Thresholds
+	if th == nil || th.Asserted || rep.Workers != 0 || th.Workers != 0 || len(th.Checks) != 5 {
+		t.Fatalf("thresholds %+v (workers %d)", th, rep.Workers)
+	}
+	for _, c := range th.Checks {
+		relay := strings.HasPrefix(c.Target, "relay_") || strings.HasPrefix(c.Target, "oldest_")
+		if relay && (c.Status != statusNotMeasured || c.Note != "no relay (-workers 0)") ||
+			!relay && c.Status != statusPass && c.Status != statusFail {
+			t.Fatalf("check %+v", c)
+		}
 	}
 	for _, f := range []string{"report.json", "summary.md", "brant-api.log"} {
 		if _, err = os.Stat(filepath.Join(out, f)); err != nil {

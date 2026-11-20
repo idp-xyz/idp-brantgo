@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -47,6 +48,7 @@ const (
 	MaxProgrammeScope          = 2000
 	MaxProgrammeLists          = 100 // lists one ResolveCountryProgrammes call may name
 	MaxProgrammeQueryCountries = 50  // countries one ResolveCountryProgrammes call may name
+	MaxProgrammeRegions        = 1000
 )
 
 // CountryProgrammeListGuardFunction is the SQL function reference data publishes for the guard
@@ -90,12 +92,37 @@ type ImportCountryProgrammes struct {
 // source's identifier of the programme; Countries are the officially assigned ISO 3166-1 alpha-2
 // codes (kernel.ValidCountryCode) of the countries it names, each once, in any order; Scope is
 // optional: what the programme restricts (goods, sectors, end uses) in the source's words.
+//
+// Regions (S5R-D15, UL PLATFORM-CountryProgrammeVersion) are optional ISO 3166-2 subdivision codes
+// (ValidRegionCode, "UA-43"), each once, in any order, each of one of Countries: the programme
+// affects only those regions of the countries they belong to, and a country of the programme with
+// no region listed is affected whole (Programme.RegionsOf). A programme stays country-level data:
+// an address carries no subdivision, so CNX does not decide a regional hit itself but raises a
+// region_review finding for a human (CNX-INV-001). A programme without regions leaves them out of
+// the request hash and of its content hash, which stay as they were before regions existed.
 type CountryProgramme struct {
 	ProgrammeID string
 	Name        string
 	Measure     string
 	Countries   []string
 	Scope       string
+	Regions     []string `json:",omitempty"`
+}
+
+// ValidRegionCode reports whether code is an ISO 3166-2 subdivision code of an officially assigned
+// country: the alpha-2 code, a hyphen and one to three letters or digits ("UA-43", "GB-ENG"). The
+// subdivision part is checked for its form only.
+func ValidRegionCode(code string) bool {
+	country, sub, ok := strings.Cut(code, "-")
+	if !ok || !kernel.ValidCountryCode(country) || len(sub) < 1 || len(sub) > 3 {
+		return false
+	}
+	for i := 0; i < len(sub); i++ {
+		if (sub[i] < 'A' || sub[i] > 'Z') && (sub[i] < '0' || sub[i] > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // Validate checks the closed contract.
@@ -146,6 +173,17 @@ func (c ImportCountryProgrammes) Validate() error {
 			}
 			countries[country] = true
 		}
+		if len(p.Regions) > MaxProgrammeRegions {
+			return schema(at + "/regions")
+		}
+		for j, region := range p.Regions {
+			if !ValidRegionCode(region) || slices.Index(p.Regions, region) != j {
+				return schema(at + "/regions/" + strconv.Itoa(j))
+			}
+			if !slices.Contains(p.Countries, region[:2]) {
+				return kernel.Reject(kernel.CodeInvalidKnownValue, at+"/regions/"+strconv.Itoa(j), "A region belongs to one of the programme's countries")
+			}
+		}
 	}
 	if len(countries) != c.CountryCount {
 		return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/country_count", "The programmes do not name the declared number of countries")
@@ -183,8 +221,9 @@ type ProgrammeListVersion struct {
 	Current        bool
 }
 
-// Programme is an imported programme. Countries are sorted. ContentHash is the SHA-256 of its
-// canonical content (identifier, name, measure, sorted countries, scope); it changes when the
+// Programme is an imported programme. Countries are sorted, and so are its Regions, none when it
+// lists none (S5R-D15). ContentHash is the SHA-256 of its canonical content (identifier, name,
+// measure, sorted countries, scope and, when it lists any, sorted regions); it changes when the
 // source changes the programme.
 type Programme struct {
 	ProgrammeID string
@@ -192,7 +231,21 @@ type Programme struct {
 	Measure     string
 	Countries   []string
 	Scope       string
+	Regions     []string
 	ContentHash string
+}
+
+// RegionsOf returns the regions of country the programme lists, in order: none means the programme
+// affects the whole country (or does not name it); some mean only those regions of it are affected,
+// which CNX's trade compliance check leaves to a human as a region_review finding (S5R-D15).
+func (p Programme) RegionsOf(country string) []string {
+	var out []string
+	for _, r := range p.Regions {
+		if strings.HasPrefix(r, country+"-") {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // ProgrammeListView is a country programme list and every version the company imported, oldest

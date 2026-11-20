@@ -44,6 +44,46 @@ const (
 	CommandIssueNumber     = "number.issue"
 )
 
+// Capabilities of publication by kind (S5R-D30, POL-INV-001; role templates capabilities
+// config.publish.<kind> and principle 5). config.publish admits the command; inside it POL requires
+// the publisher to hold the capability the kind names as well, so config.publish never lets a
+// holder publish a kind that is not its own (the lead's decision of 2026-11-13 on S5R-D30):
+//
+//   - credit_policy: config.publish.credit_policy (credit_manager, exclusively);
+//   - export_tax_policy: config.publish.export_tax_policy (tax_specialist);
+//   - screening_regulation: config.publish.screening_regulation (compliance, exclusively);
+//   - every other kind: config.retire, the capability of the configuration administrator, who
+//     publishes and retires the general configurations (role template administrator, "配置发布与退役",
+//     the only template that holds it).
+//
+// A tenant role that merges administrator with a specialist template publishes both. A publisher
+// without the capability gets PERMISSION_DENIED at /args/kind. Editing is unchanged: the last editor
+// may still be an administrator or costing, and the publisher is independent of it.
+const (
+	PermissionPublishCreditPolicy        = "config.publish.credit_policy"
+	PermissionPublishExportTaxPolicy     = "config.publish.export_tax_policy"
+	PermissionPublishScreeningRegulation = "config.publish.screening_regulation"
+	// PermissionAdministerConfigs is the capability of the general kinds: config.retire.
+	PermissionAdministerConfigs = CommandRetire
+)
+
+// PublishCapability returns the capability a publisher of kind holds besides config.publish
+// (S5R-D30); "" for a kind POL does not know.
+func PublishCapability(kind string) string {
+	switch kind {
+	case KindCreditPolicy:
+		return PermissionPublishCreditPolicy
+	case KindExportTaxPolicy:
+		return PermissionPublishExportTaxPolicy
+	case KindScreeningRegulation:
+		return PermissionPublishScreeningRegulation
+	}
+	if KindKnown(kind) {
+		return PermissionAdministerConfigs
+	}
+	return ""
+}
+
 // Statuses of a configuration revision (SM-POL-REVISION), of an issued number and of a snapshot.
 const (
 	StatusWorking    = "working"
@@ -88,6 +128,9 @@ const (
 	// KindExportTaxPolicy is the export tax refund method that applies to the company's exports, as
 	// its professional review verified it (CN-F01, CN-D02, CN-R08; CN-AT12; Context Map R50).
 	KindExportTaxPolicy = "export_tax_policy"
+	// KindSalesPrice is one price of the sales price list: the price of one SKU in one currency,
+	// for every customer or for one (owner decision 2026-11-18; sales_price.go).
+	KindSalesPrice = "sales_price"
 )
 
 // Closed values of configuration data.
@@ -163,7 +206,7 @@ var (
 	kinds = []string{KindCompanyProfile, KindCurrency, KindUnit, KindUnitConversion, KindFXRate, KindCalendar, KindTradeTerms,
 		KindPaymentTerms, KindTaxProfile, KindTaxApplication, KindFeeCategory, KindPricingPolicy, KindBankAccount,
 		KindNumberSequence, KindDocumentTemplate, KindQuoteDocumentTemplate, KindScreeningRegulation, KindCreditPolicy, KindLegalTerms,
-		KindOrderDocumentTemplate, KindShipmentDocumentTemplate, KindExportTaxPolicy}
+		KindOrderDocumentTemplate, KindShipmentDocumentTemplate, KindExportTaxPolicy, KindSalesPrice}
 	implemented      = slices.Clone(kinds)
 	purposes         = []string{PurposeCostEstimate, PurposeQuotation, PurposeCredit, PurposeSettlement}
 	snapshotPurposes = []string{PurposeCostEstimate, PurposeQuotation}
@@ -178,8 +221,11 @@ var (
 // PercentFormat is the lexical form of a payment stage's percentage.
 var PercentFormat = kernel.DecimalFormat{IntDigits: 3, Scale: 6}
 
-// KindKnown reports whether kind is one of the twenty-two configuration kinds.
+// KindKnown reports whether kind is one of the twenty-three configuration kinds.
 func KindKnown(kind string) bool { return slices.Contains(kinds, kind) }
+
+// Kinds returns the configuration kinds, in the order KindKnown uses. sales_price is the twenty-third.
+func Kinds() []string { return slices.Clone(kinds) }
 
 // KindImplemented reports whether POL accepts configurations of kind yet.
 func KindImplemented(kind string) bool { return slices.Contains(implemented, kind) }
@@ -538,6 +584,31 @@ type SnapshotView struct {
 	Entries     []SnapshotEntry
 }
 
+// MaxConfigsInForce bounds one lookup of the configurations of a kind that are in force.
+const MaxConfigsInForce = 40
+
+// ConfigInForce is one published revision in force now. The configuration body is not in it: a
+// lookup by kind never returns pol.read_sensitive content, and it does not return any other kind's
+// body either.
+type ConfigInForce struct {
+	ID       string
+	Revision int64
+}
+
+// ConfigsInForce is the answer of a lookup by kind.
+type ConfigsInForce struct {
+	Kind      string
+	Configs   []ConfigInForce
+	Truncated bool
+}
+
+// InForceQueries is the audited lookup of configurations in force (pol.read).
+type InForceQueries interface {
+	// ConfigsInForce returns the active revisions of kind whose validity contains now, audited as
+	// config.lookup. Kind bank_account is PERMISSION_DENIED. An unknown kind is SCHEMA_INVALID.
+	ConfigsInForce(ctx context.Context, kind string) (ConfigsInForce, error)
+}
+
 // Queries is POL's read side.
 type Queries interface {
 	// GetConfig returns a configuration and its revisions, audited as config.get. Bank accounts
@@ -558,6 +629,11 @@ type Queries interface {
 	// LookupUnitConversion returns the unit_conversion revision a calculation adopts for one SKU at
 	// one specification revision, in force with both its units (Python foundation.unit.convert).
 	LookupUnitConversion(ctx context.Context, q UnitQuery) (QuantityConversion, error)
+	// ConfigAt answers ConfigAt v1 (S5R-D23, POL-INV-007, Context Map R50): the revision of a
+	// configuration in force by its validity at an instant, whenever it was published (configat.go).
+	// It needs no permission beyond an active grant and takes no lock: published revisions never
+	// change. Inside your own transaction, ConfigAtSQL decides the same.
+	ConfigAt(ctx context.Context, q ConfigAtQuery) (RevisionAt, error)
 	// GetSnapshot returns a FoundationSnapshot, audited as snapshot.get.
 	GetSnapshot(ctx context.Context, snapshotID string) (SnapshotView, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)

@@ -39,7 +39,8 @@ func content(cmd api.SaveDraft) config.Content {
 	case d.TradeTerms != nil:
 		t, l := d.TradeTerms, d.TradeTerms.Delivery
 		c.TradeTerms = &config.TradeTerms{Incoterm: t.Incoterm, Edition: t.Edition, NamedPlace: t.NamedPlace, ResponsibilityNote: t.ResponsibilityNote,
-			Delivery: config.Delivery{Kind: l.Kind, Date: l.Date, AnchorEvent: l.AnchorEvent, Days: l.Days, DayBasis: l.DayBasis, Calendar: toRef(l.Calendar)}}
+			Delivery:         config.Delivery{Kind: l.Kind, Date: l.Date, AnchorEvent: l.AnchorEvent, Days: l.Days, DayBasis: l.DayBasis, Calendar: toRef(l.Calendar)},
+			InsurancePercent: t.InsurancePercent}
 	case d.PaymentTerms != nil:
 		p := d.PaymentTerms
 		v := config.PaymentTerms{Name: p.Name, Stages: make([]config.PaymentStage, len(p.Stages)), DayBasis: p.DayBasis, Calendar: toRef(p.Calendar)}
@@ -58,7 +59,10 @@ func content(cmd api.SaveDraft) config.Content {
 	case d.PricingPolicy != nil:
 		p := d.PricingPolicy
 		c.PricingPolicy = &config.PricingPolicy{Name: p.Name, CalculationCurrency: p.CalculationCurrency, MinimumMargin: p.MinimumMargin,
-			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: config.Ref(p.TaxProfile)}
+			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: config.Ref(p.TaxProfile),
+			TargetMargin: p.TargetMargin}
+	case d.SalesPrice != nil:
+		c.SalesPrice = ptr(config.SalesPrice(*d.SalesPrice))
 	case d.BankAccount != nil:
 		c.BankAccount = ptr(config.BankAccount(*d.BankAccount))
 	case d.NumberSequence != nil:
@@ -102,6 +106,10 @@ func content(cmd api.SaveDraft) config.Content {
 			RescreenIntervalDays: d.ScreeningRegulation.RescreenIntervalDays}
 		for i, l := range d.ScreeningRegulation.Lists {
 			v.Lists[i] = config.ScreeningList(l)
+		}
+		// No programme lists are none (nil), which the stored data omits (S5R-D38).
+		for _, l := range d.ScreeningRegulation.Programmes {
+			v.Programmes = append(v.Programmes, config.ScreeningList(l))
 		}
 		c.ScreeningRegulation = &v
 	case d.LegalTerms != nil:
@@ -157,7 +165,8 @@ func data(c config.Content) api.ConfigData {
 	case c.TradeTerms != nil:
 		t, l := c.TradeTerms, c.TradeTerms.Delivery
 		d.TradeTerms = &api.TradeTerms{Incoterm: t.Incoterm, Edition: t.Edition, NamedPlace: t.NamedPlace, ResponsibilityNote: t.ResponsibilityNote,
-			Delivery: api.Delivery{Kind: l.Kind, Date: l.Date, AnchorEvent: l.AnchorEvent, Days: l.Days, DayBasis: l.DayBasis, Calendar: fromRef(l.Calendar)}}
+			Delivery:         api.Delivery{Kind: l.Kind, Date: l.Date, AnchorEvent: l.AnchorEvent, Days: l.Days, DayBasis: l.DayBasis, Calendar: fromRef(l.Calendar)},
+			InsurancePercent: t.InsurancePercent}
 	case c.PaymentTerms != nil:
 		p := c.PaymentTerms
 		v := api.PaymentTerms{Name: p.Name, Stages: make([]api.PaymentStage, len(p.Stages)), DayBasis: p.DayBasis, Calendar: fromRef(p.Calendar)}
@@ -176,7 +185,10 @@ func data(c config.Content) api.ConfigData {
 	case c.PricingPolicy != nil:
 		p := c.PricingPolicy
 		d.PricingPolicy = &api.PricingPolicy{Name: p.Name, CalculationCurrency: p.CalculationCurrency, MinimumMargin: p.MinimumMargin,
-			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: api.ConfigRef(p.TaxProfile)}
+			QuoteValidDays: p.QuoteValidDays, MaxFXAgeSeconds: p.MaxFXAgeSeconds, TaxProfile: api.ConfigRef(p.TaxProfile),
+			TargetMargin: p.TargetMargin}
+	case c.SalesPrice != nil:
+		d.SalesPrice = ptr(api.SalesPrice(*c.SalesPrice))
 	case c.BankAccount != nil:
 		d.BankAccount = ptr(api.BankAccount(*c.BankAccount))
 	case c.NumberSequence != nil:
@@ -214,6 +226,9 @@ func data(c config.Content) api.ConfigData {
 			RescreenIntervalDays: c.ScreeningRegulation.RescreenIntervalDays}
 		for i, l := range c.ScreeningRegulation.Lists {
 			v.Lists[i] = api.ScreeningList(l)
+		}
+		for _, l := range c.ScreeningRegulation.Programmes {
+			v.Programmes = append(v.Programmes, api.ScreeningList(l))
 		}
 		d.ScreeningRegulation = &v
 	case c.LegalTerms != nil:

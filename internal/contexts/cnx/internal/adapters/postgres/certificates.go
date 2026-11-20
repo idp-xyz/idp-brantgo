@@ -89,9 +89,18 @@ func SaveCertificate(ctx context.Context, exec bentopg.Executor, scope kernel.Sc
 
 // InsertCertificateRevision appends revision r of its certificate.
 func InsertCertificateRevision(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *cert.Revision) error {
-	var objectID, license, reason *string
+	var objectID, license, reason, agreement, form, body *string
 	if r.Object.ID != "" {
 		objectID = &r.Object.ID
+	}
+	for _, x := range []struct {
+		s  string
+		to **string
+	}{{r.AgreementCode, &agreement}, {r.OriginForm, &form}, {r.IssuingBody, &body}} {
+		if x.s != "" {
+			s := x.s
+			*x.to = &s
+		}
 	}
 	if r.LicenseID != "" {
 		license = &r.LicenseID
@@ -105,11 +114,11 @@ func InsertCertificateRevision(ctx context.Context, exec bentopg.Executor, scope
 	}
 	_, err = exec.Exec(ctx, `INSERT INTO brant_cnx.certificate_revision (tenant_id, company_id, certificate_id, revision, kind, issuer, number,
 		issued_on, object_kind, object_id, market, valid_from, valid_until, file_id, file_sha256, license_id, document, document_sha256, reason,
-		verified_by_kind, verified_by_id, authority_epoch, registered_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+		verified_by_kind, verified_by_id, authority_epoch, registered_at, agreement_code, origin_form, issuing_body)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
 		scoped(scope, r.CertificateID, r.Revision, r.Kind, r.Issuer, r.Number, r.IssuedOn, r.Object.Kind, objectID, r.Market,
 			r.Validity.From, r.Validity.Until, r.File.SourceID, r.File.ContentSHA256, license, string(r.Bytes), r.SHA256, reason,
-			r.VerifiedBy.Kind, r.VerifiedBy.ID, r.AuthorityEpoch, kernel.Instant(at))...)
+			r.VerifiedBy.Kind, r.VerifiedBy.ID, r.AuthorityEpoch, kernel.Instant(at), agreement, form, body)...)
 	return err
 }
 

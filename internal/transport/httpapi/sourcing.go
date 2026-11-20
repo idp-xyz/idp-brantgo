@@ -12,6 +12,8 @@ type (
 	SUP interface {
 		supapi.Commands
 		supapi.Queries
+		supapi.Reconciler
+		supapi.ActionReconciler
 		supapi.Auditor
 	}
 	CST interface {
@@ -22,6 +24,7 @@ type (
 		cstapi.SnapshotCommands
 		cstapi.SnapshotQueries
 		cstapi.Reconciler
+		cstapi.ActionReconciler
 		cstapi.Auditor
 	}
 )
@@ -49,7 +52,8 @@ func supCommands(c SUP) *commandSet {
 		cmds[supapi.Command(k.kind, k.seal)] = reflected("ID", k.kind, c.Seal)
 		cmds[supapi.Command(k.kind, k.end)] = reflected("ID", k.kind, c.End)
 	}
-	return &commandSet{bc: "sup", contract: supapi.Contract, auditor: c, audit: c.Audit, commands: cmds}
+	return &commandSet{bc: "sup", contract: supapi.Contract, auditor: c, audit: c.Audit, reconcile: hashReconciler(c.Reconcile, c.ReconcileHash),
+		commands: cmds}
 }
 
 func cstCommands(c CST) *commandSet {
@@ -64,7 +68,7 @@ func cstCommands(c CST) *commandSet {
 		r, err := c.FreezeSnapshot(ctx, cmd)
 		return r.Receipt, err
 	}
-	return &commandSet{bc: "cst", contract: cstapi.Contract, auditor: c, audit: c.Audit, reconcile: reconciler(c.Reconcile), commands: map[string]commandFunc{
+	return &commandSet{bc: "cst", contract: cstapi.Contract, auditor: c, audit: c.Audit, reconcile: hashReconciler(c.Reconcile, c.ReconcileHash), commands: map[string]commandFunc{
 		cstapi.CommandSaveContext:          reflected("ContextID", "", c.SaveContext),
 		cstapi.CommandReviseContext:        reflected("ContextID", "", c.ReviseContext),
 		cstapi.CommandDiscardContextDraft:  reflected("ContextID", "", c.DiscardContextDraft),

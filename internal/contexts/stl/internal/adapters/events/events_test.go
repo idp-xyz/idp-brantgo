@@ -26,14 +26,21 @@ type credit struct {
 	prepared, opened   []application.OrderEvent
 	bases              []application.AccountBasis
 	amended            []application.OrderEvent // ConsumeOnAmendment
+	creditBases        []application.CreditBasis
+	creditPrepared     []application.OrderEvent // PrepareCredit
 	reviewPrepared     []application.OrderEvent // PrepareReview
 	reviewed           []application.OrderEvent // OpenReviewOnAmendment
 	err, prepareErr    error
 }
 
-func (c *credit) ConsumeOnAmendment(_ context.Context, _ bentopg.Executor, e application.OrderEvent) (application.CreditEffect, error) {
-	c.amended = append(c.amended, e)
+func (c *credit) ConsumeOnAmendment(_ context.Context, _ bentopg.Executor, e application.OrderEvent, b application.CreditBasis) (application.CreditEffect, error) {
+	c.amended, c.creditBases = append(c.amended, e), append(c.creditBases, b)
 	return application.CreditEffect{Outcome: application.EffectConsumed}, c.err
+}
+
+func (c *credit) PrepareCredit(_ context.Context, e application.OrderEvent) (application.CreditBasis, error) {
+	c.creditPrepared = append(c.creditPrepared, e)
+	return application.CreditBasis{Order: &application.Order{Binding: application.OrderBinding{OrderID: e.OrderID, OrderRevision: 7}}}, c.prepareErr
 }
 
 func (c *credit) PrepareReview(_ context.Context, e application.OrderEvent) (application.AccountBasis, error) {
@@ -111,8 +118,8 @@ func activated(fields map[string]any) messaging.Event {
 // system:inbox.stl.order_credit with credit.consume, credit.release and stl.read. The second
 // consumer, stl.order_account (D-4, D-18, units B6b and C4b), takes OrderActivated and OrderAmended
 // (PL-09, the payment plan review), reads TRD and POL in its Prepare step, and its actor
-// system:inbox.stl.order_account holds payment_plan_review.open (also order_account.open's
-// permission) and stl.read.
+// system:inbox.stl.order_account holds order_account.open (its own permission since S5R-D02),
+// payment_plan_review.open and stl.read (Context Map consumers).
 func TestOrderCreditSubscription(t *testing.T) {
 	subs := Subscriptions(nil, &credit{})
 	if len(subs) != 2 {
@@ -121,7 +128,7 @@ func TestOrderCreditSubscription(t *testing.T) {
 	s := subs[0]
 	want := []eventing.EventType{trdapi.EventOrderActivated, trdapi.EventOrderCancelled, trdapi.EventOrderClosedUnfulfilled,
 		trdapi.EventOrderRemainderClosed, trdapi.EventOrderClosed, trdapi.EventOrderAmended}
-	if s.Consumer != "stl.order_credit" || s.Source != trdapi.Source || !slices.Equal(s.EventTypes, want) || s.Prepare != nil || s.Handler == nil {
+	if s.Consumer != "stl.order_credit" || s.Source != trdapi.Source || !slices.Equal(s.EventTypes, want) || s.Prepare == nil || s.Handler == nil {
 		t.Fatalf("subscription %+v", s)
 	}
 	a := subs[1]
@@ -133,7 +140,7 @@ func TestOrderCreditSubscription(t *testing.T) {
 	if err != nil || len(grants) != 2 || grants[0].Actor != (kernel.ActorRef{Kind: kernel.ActorSystem, ID: "inbox.stl.order_credit"}) ||
 		!slices.Equal(grants[0].Permissions, []string{"credit.consume", "credit.release", "stl.read"}) ||
 		grants[1].Actor != (kernel.ActorRef{Kind: kernel.ActorSystem, ID: "inbox.stl.order_account"}) ||
-		!slices.Equal(grants[1].Permissions, []string{"payment_plan_review.open", "stl.read"}) {
+		!slices.Equal(grants[1].Permissions, []string{"order_account.open", "payment_plan_review.open", "stl.read"}) {
 		t.Fatalf("grants %+v %v", grants, err)
 	}
 	// The declared types are not the handler's own slices: a caller cannot change what it routes.
