@@ -8,7 +8,7 @@ import (
 )
 
 // cnxCertificateRoutes registers CNX's certificate reads (S5 C5).
-func (s *server) cnxCertificateRoutes(mux *http.ServeMux) {
+func (s *server) cnxCertificateRoutes(mux routeMux) {
 	mux.Handle("GET /api/brant/v1/cnx/certificates", s.authenticated(s.certificates))
 	mux.Handle("GET /api/brant/v1/cnx/certificates/{id}", s.authenticated(read(s, s.cfg.CNX.GetCertificate, okView[cnxapi.CertificateView])))
 	mux.Handle("GET /api/brant/v1/cnx/certificates/{id}/applicability", s.authenticated(s.certificateApplicability))

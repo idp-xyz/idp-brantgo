@@ -769,10 +769,10 @@ func cnatApplyArgs(id, fund, statement, stage, amount string) map[string]any {
 	return map[string]any{"application_id": id, "fund_record_id": fund, "target": target, "amount": amount}
 }
 
-// cnatInvoice is a synthetic VAT special invoice of supplier.A to the company (the company
-// profile's legal name and registration number, as D1's): one line of qty PCS at 5.00 USD net, the
-// 13 % tax as printed (HALF_UP to the cent), colour blue or red (red: red_of names the blue one).
-func cnatInvoice(number, colour, qty string, redOf string) map[string]any {
+// cnatFacts is a synthetic VAT special invoice of supplier.A to the company (the company profile's
+// legal name and registration number, as D1's): one line of qty PCS at 5.00 USD net, the 13 % tax
+// as printed (HALF_UP to the cent), colour blue or red (red: RedOf names the blue one).
+func cnatFacts(number, colour, qty, redOf string) cnxapi.InvoiceFacts {
 	usd := kernel.MustCurrency("USD", 2)
 	net, err := kernel.RoundMoney(usd, kernel.MustDecimal(qty).Mul(kernel.MustDecimal("5")))
 	if err != nil {
@@ -786,15 +786,33 @@ func cnatInvoice(number, colour, qty string, redOf string) map[string]any {
 	if err != nil {
 		panic(err)
 	}
-	f := map[string]any{"kind": "special_vat", "colour": colour, "number": number, "issued_on": today(),
-		"supplier": map[string]any{"party_id": "supplier.A", "name": "supplier.A", "tax_id": "91330200SYNTHA0001"},
-		"buyer":    map[string]any{"name": "合成企业", "tax_id": "SYNTHETIC-NOT-REAL"}, "currency": map[string]any{"id": "USD", "revision": 1},
-		"lines": []any{map[string]any{"line_no": 1, "description": "棉制针织T恤衫 ST01", "quantity": qty, "unit": "PCS", "net_amount": net.Amount(),
-			"tax_rate": "0.13", "tax_amount": tax.Amount()}}, "net_total": net.Amount(), "tax_total": tax.Amount(), "gross_total": gross.Amount()}
+	f := cnxapi.InvoiceFacts{Kind: cnxapi.InvoiceSpecialVAT, Colour: colour, Number: number, IssuedOn: today(),
+		Supplier: cnxapi.InvoiceParty{PartyID: "supplier.A", Name: "supplier.A", TaxID: "91330200SYNTHA0001"},
+		Buyer:    cnxapi.InvoiceParty{Name: "合成企业", TaxID: "SYNTHETIC-NOT-REAL"},
+		Currency: cnxapi.CurrencyRef{ID: "USD", Revision: 1},
+		Lines: []cnxapi.InvoiceLine{{LineNo: 1, Description: "棉制针织T恤衫 ST01", Quantity: qty, Unit: "PCS",
+			NetAmount: net.Amount(), TaxRate: "0.13", TaxAmount: tax.Amount()}},
+		NetTotal: net.Amount(), TaxTotal: tax.Amount(), GrossTotal: gross.Amount()}
 	if redOf != "" {
-		f["red_of"] = map[string]any{"kind": "special_vat", "number": redOf}
+		f.RedOf = &cnxapi.InvoiceRef{Kind: cnxapi.InvoiceSpecialVAT, Number: redOf}
 	}
 	return f
+}
+
+// cnatInvoice is cnatFacts as the HTTP command's candidate map.
+func cnatInvoice(number, colour, qty, redOf string) map[string]any {
+	f := cnatFacts(number, colour, qty, redOf)
+	line := f.Lines[0]
+	out := map[string]any{"kind": f.Kind, "colour": f.Colour, "number": f.Number, "issued_on": f.IssuedOn,
+		"supplier": map[string]any{"party_id": f.Supplier.PartyID, "name": f.Supplier.Name, "tax_id": f.Supplier.TaxID},
+		"buyer":    map[string]any{"name": f.Buyer.Name, "tax_id": f.Buyer.TaxID}, "currency": map[string]any{"id": f.Currency.ID, "revision": f.Currency.Revision},
+		"lines": []any{map[string]any{"line_no": line.LineNo, "description": line.Description, "quantity": line.Quantity, "unit": line.Unit,
+			"net_amount": line.NetAmount, "tax_rate": line.TaxRate, "tax_amount": line.TaxAmount}},
+		"net_total": f.NetTotal, "tax_total": f.TaxTotal, "gross_total": f.GrossTotal}
+	if f.RedOf != nil {
+		out["red_of"] = map[string]any{"kind": f.RedOf.Kind, "number": f.RedOf.Number}
+	}
+	return out
 }
 
 // cnatMatch matches qty of invoice line 1 to commitment.1's line.

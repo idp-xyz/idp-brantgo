@@ -3,6 +3,7 @@
 package bootstrap_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -20,6 +21,9 @@ import (
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	"go.idp.xyz/idp-brant/internal/foundation/action"
+	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
+	"go.idp.xyz/idp-brant/internal/foundation/identity"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -1585,32 +1589,59 @@ func TestCNATSuite17BilingualDocumentsAndSignedCopies(t *testing.T) {
 }
 
 // CN-AT18 AI读取票据／报关资料后误匹配 — "显示来源与差异；候选须核实后进入相同业务命令，模型不能直接过账" (C3b, C3a;
-// TestCNAT18CandidatesAreVerifiedByAHuman, TestDeclarationHumanOnlyCommandsRefuseAnAIActor): an AI agent
-// holding every invoice, declaration and allocation permission reads supplier.A's invoice scan and imports
-// a candidate with misread figures (12 PCS, 60.00 net). It cannot verify it (PERMISSION_DENIED: human only)
-// nor allocate the unverified candidate (INVALID_STATE). tax.officer verifies the true facts through the
-// same command: the invoice view shows each difference with its source (the AI's import, the human's
-// verification). The agent prepares lot.1's declaration (a candidate draft); confirming it and recording a
-// customs receipt are PERMISSION_DENIED; doc.1 confirms the same version. Nothing the model produced
-// is posted without a human's verification.
+// TestCNAT18CandidatesAreVerifiedByAHuman, TestDeclarationHumanOnlyCommandsRefuseAnAIActor). S4
+// registers only Q01's capabilities: no invoice or declaration capability is registered, so the
+// candidate cannot enter through the gateway. It enters in process, as the AI principal, through
+// CNX's api, the way a registered capability would call it. Every writing HTTP route refuses the
+// agent's token (PERMISSION_DENIED) before the body is read, including the allocation that used to
+// answer INVALID_STATE. In process the ledger's human-only rule still refuses verification,
+// confirmation and a customs receipt, and the unverified candidate's allocation is still
+// INVALID_STATE. tax.officer verifies the true facts through the same command; doc.1 confirms and
+// submits. Nothing the model produced is posted without a person's verification.
 func TestCNATSuite18AIReadsInvoicesAndDeclarations(t *testing.T) {
 	c := newCNAT(t, "CN-AT18")
 	c.provisionAI(cnatAgent, cnxapi.CommandImportInvoice, cnxapi.CommandVerifyInvoice, cnxapi.CommandAllocateTaxEvidence, cnxapi.CommandPrepareDeclaration,
 		cnxapi.CommandConfirmDeclaration, cnxapi.CommandRecordReceipt, "cnx.read", "evd.read", "ful.read", "trd.read", "cat.read", "pur.read", "pol.read", "stl.read")
 	c.toLot()
+	ctx, err := identity.WithPrincipal(context.Background(), identity.Principal{Actor: actorRef("ai", cnatAgent), Scope: c.w.scope("company.A")})
+	c.w.must(err)
+	agent := action.WithCorrelation(ctx, pgtest.UniqueID(t, "cnat."))
+
 	c.phaseOf("the AI's invoice candidate")
 	c.scanInvoice("invoice.scan", "33002611001", "120")
-	misread := cnatInvoice("33002611001", "blue", "12", "")
-	id, rv := c.importInvoice("ai", cnatAgent, "invoice.scan", misread)
-	truth := cnatInvoice("33002611001", "blue", "120", "")
+	misreadMap := cnatInvoice("33002611001", "blue", "12", "")
+	misread := cnatFacts("33002611001", "blue", "12", "")
+	c.no("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandImportInvoice, map[string]any{"file_id": "invoice.scan", "candidate": misreadMap},
+		http.StatusForbidden, kernel.CodePermissionDenied, "")
+	imp, err := c.w.c.CNX.ImportInvoice(agent, cnxapi.ImportInvoice{IdempotencyKey: c.w.key(), FileID: "invoice.scan", Candidate: misread})
+	c.w.must(err)
+	if imp.Status != cnxapi.InvoiceImported || imp.RowVersion != 1 || imp.ObjectID == "" {
+		t.Fatalf("in-process import %+v", imp)
+	}
+	id, rv := imp.ObjectID, imp.RowVersion
+	truthMap := cnatInvoice("33002611001", "blue", "120", "")
+	truth := cnatFacts("33002611001", "blue", "120", "")
 	var ms []any
+	var matches []cnxapi.InvoiceMatch
 	for _, l := range brcLines {
 		ms = append(ms, cnatMatch(l.id, l.qty))
+		matches = append(matches, cnxapi.InvoiceMatch{LineNo: 1, CommitmentID: "commitment.1", OrderLineID: l.id, Quantity: l.qty})
 	}
-	verify := map[string]any{"purchase_invoice_id": id, "expected_version": rv, "decision": "verify", "facts": truth, "matches": ms}
+	verify := map[string]any{"purchase_invoice_id": id, "expected_version": rv, "decision": "verify", "facts": truthMap, "matches": ms}
 	c.no("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandVerifyInvoice, verify, http.StatusForbidden, kernel.CodePermissionDenied, "")
+	_, err = c.w.c.CNX.VerifyInvoice(agent, cnxapi.VerifyInvoice{IdempotencyKey: c.w.key(), PurchaseInvoiceID: id, ExpectedVersion: rv,
+		Decision: cnxapi.DecisionVerify, Facts: &truth, Matches: matches})
+	if code(err) != kernel.CodePermissionDenied {
+		t.Fatalf("in-process verify %s %v", code(err), err)
+	}
 	c.no("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandAllocateTaxEvidence, cnatAllocArgs("lot.1", cnatAlloc("alloc.ai", "E1", id, "12")),
-		http.StatusUnprocessableEntity, kernel.CodeInvalidState, "")
+		http.StatusForbidden, kernel.CodePermissionDenied, "")
+	_, err = c.w.c.CNX.AllocateTaxEvidence(agent, cnxapi.AllocateTaxEvidence{IdempotencyKey: c.w.key(), ExportLotID: "lot.1", PolicyID: "export.tax",
+		Allocations: []cnxapi.EvidenceAllocation{{AllocationID: "alloc.ai", ExportLineID: "E1", PurchaseInvoiceID: id, LineNo: 1,
+			Purpose: cnxapi.PurposeExportRefund, Quantity: "12"}}})
+	if code(err) != kernel.CodeInvalidState {
+		t.Fatalf("in-process allocation %s %v", code(err), err)
+	}
 	c.ok(brcTaxOfficer, "cnx", cnxapi.Contract, cnxapi.CommandVerifyInvoice, verify)
 	v := c.get(brcTaxOfficer, "/api/brant/v1/cnx/purchase_invoices/"+id)
 	var fields []string
@@ -1625,26 +1656,40 @@ func TestCNATSuite18AIReadsInvoicesAndDeclarations(t *testing.T) {
 		c.t.Fatalf("invoice %v", v)
 	}
 	c.fact("differences", fields)
-	c.observe("AI 误读: the agent imports a candidate of 12 PCS / 60.00; its verification → %s, its allocation of the candidate → %s; tax.officer verifies the true 120 PCS / 600.00 and the matches through the same command; the view shows %d differences, each with the AI's import and the human's verification as sources: %v",
-		kernel.CodePermissionDenied, kernel.CodeInvalidState, len(fields), fields)
+	c.observe("AI 误读: S4 registers only Q01's capabilities, so no invoice capability is registered; the candidate enters in process, as the AI principal, through CNX's api the way a capability would (12 PCS / 60.00). Every writing route refuses the agent's token before the body is read: the import, the verification and the allocation are %s over HTTP (the allocation was INVALID_STATE before that refusal). In process the verification is %s (human only) and the allocation of the unverified candidate is %s. tax.officer verifies the true 120 PCS / 600.00 and the matches through the same command; the view shows %d differences, each with the AI's import and the human's verification as sources: %v",
+		kernel.CodePermissionDenied, kernel.CodePermissionDenied, kernel.CodeInvalidState, len(fields), fields)
 
 	c.phaseOf("the AI's declaration candidate")
-	status, p := c.as("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandPrepareDeclaration, map[string]any{"expected_version": 0, "export_lot_id": "lot.1",
-		"code_table_version": codeTable, "items": []any{cnatItem(1, "E1", "E2", "E3", "E4")}})
-	if status != http.StatusOK || p["status"] != "draft" {
-		c.t.Fatalf("the AI prepares %d %v", status, p)
+	prep := map[string]any{"expected_version": 0, "export_lot_id": "lot.1", "code_table_version": codeTable, "items": []any{cnatItem(1, "E1", "E2", "E3", "E4")}}
+	c.no("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandPrepareDeclaration, prep, http.StatusForbidden, kernel.CodePermissionDenied, "")
+	p, err := c.w.c.CNX.PrepareDeclaration(agent, cnxapi.PrepareDeclaration{IdempotencyKey: c.w.key(), ExpectedVersion: 0, ExportLotID: "lot.1",
+		CodeTableVersion: codeTable, Items: []cnxapi.DeclarationItem{{ItemNo: 1, Lines: []cnxapi.DeclarationLine{
+			{LineID: "E1"}, {LineID: "E2"}, {LineID: "E3"}, {LineID: "E4"}}}}})
+	c.w.must(err)
+	if p.Status != cnxapi.DeclarationDraft || p.ObjectID == "" {
+		t.Fatalf("in-process prepare %+v", p)
 	}
-	decl := brcStr(p["object_id"])
-	c.no("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandConfirmDeclaration, map[string]any{"declaration_id": decl, "expected_version": p["row_version"],
+	decl := p.ObjectID
+	c.no("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandConfirmDeclaration, map[string]any{"declaration_id": decl, "expected_version": p.RowVersion,
 		"version": 1}, http.StatusForbidden, kernel.CodePermissionDenied, "")
-	rv = c.declConfirm(decl, brcNum(p["row_version"]), 1)
+	_, err = c.w.c.CNX.ConfirmDeclaration(agent, cnxapi.ConfirmDeclaration{IdempotencyKey: c.w.key(), DeclarationID: decl, ExpectedVersion: p.RowVersion,
+		Version: 1, Reason: "申报要素与已核实的申报档案一致（合成）"})
+	if code(err) != kernel.CodePermissionDenied {
+		t.Fatalf("in-process confirm %s %v", code(err), err)
+	}
+	rv = c.declConfirm(decl, p.RowVersion, 1)
 	rv = c.declSubmit(decl, rv, "SW-CNAT18-0001")
 	c.no("ai", cnatAgent, "cnx", cnxapi.Contract, cnxapi.CommandRecordReceipt, c.receiptArgs(decl, rv, "rcpt.ai", "released", 1, "SYN-2026-000181"),
 		http.StatusForbidden, kernel.CodePermissionDenied, "")
+	_, err = c.w.c.CNX.RecordReceipt(agent, cnxapi.RecordReceipt{IdempotencyKey: c.w.key(), DeclarationID: decl, ExpectedVersion: rv,
+		ReceiptID: "rcpt.ai.process", Outcome: cnxapi.DeclarationUnknown, Reason: "合成：模型不能直接过账"})
+	if code(err) != kernel.CodePermissionDenied {
+		t.Fatalf("in-process receipt %s %v", code(err), err)
+	}
 	dv := c.get(brcDocumentation, "/api/brant/v1/cnx/declaration_cases/"+decl)
 	if dv["status"] != "submitted" || brcDig(dv, "opened_by", "kind") != "ai" || brcDig(dv, "confirmations", 0, "confirmed_by", "id") != brcDocumentation {
 		c.t.Fatalf("declaration %v", dv)
 	}
-	c.observe("AI 报关候选: the agent prepares lot.1's declaration (opened by ai); its confirmation and a customs receipt → %s; doc.1 confirms the same version and submits it",
-		kernel.CodePermissionDenied)
+	c.observe("AI 报关候选: S4 registers no declaration capability; the candidate enters in process as the AI principal (opened by ai). Over HTTP the prepare, the confirmation and a customs receipt are %s before the body is read. In process the confirmation and a customs receipt are %s (human only); doc.1 confirms the same version and submits it",
+		kernel.CodePermissionDenied, kernel.CodePermissionDenied)
 }

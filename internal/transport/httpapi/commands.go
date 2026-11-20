@@ -75,22 +75,31 @@ type envelope struct {
 	Args           json.RawMessage `json:"args"`
 }
 
-// command answers POST /api/brant/v1/<bc>/commands/<command>. The checks run in the contracts'
-// order: size and closed JSON, contract and command, structure of the arguments; then the context
-// takes over with permission, idempotency, CAS, state and references. A request refused here is
-// audited in the context as the Python service audits it.
+// command answers POST /api/brant/v1/<bc>/commands/<command>. The checks run in this order: the
+// bearer (UNAUTHENTICATED, before this handler); an AI actor (PERMISSION_DENIED, before the body
+// is read — a plain route cannot name a delegation); an unknown context (UNSUPPORTED_CONTRACT,
+// unchanged, and not audited); then size and closed JSON, contract and command, the structure of
+// the arguments. The context then takes over with permission, idempotency, CAS, state and
+// references. A request refused here is audited in the context as the route names the command (the
+// command, or "invalid" when the route has none) with an empty object id. An unknown context has
+// no auditor, so an AI token's refusal there is not audited.
 func (s *server) command(w http.ResponseWriter, r *http.Request) {
 	set, ok := s.contexts[r.PathValue("bc")]
+	name := r.PathValue("command")
+	if s.refuseAI(w, r, func(code string) error {
+		if !ok {
+			return nil
+		}
+		return set.auditor.AuditRejected(r.Context(), rejectedCommand(set, name), "", code)
+	}) {
+		return
+	}
 	if !ok {
 		s.reject(w, r, kernel.Reject(kernel.CodeUnsupportedContract, "/contract", ""))
 		return
 	}
-	name := r.PathValue("command")
-	run, known := set.commands[name]
-	audited := name
-	if !known {
-		audited = "invalid"
-	}
+	run := set.commands[name]
+	audited := rejectedCommand(set, name)
 	res, err := s.decodeAndRun(r, set, name, run)
 	if err != nil {
 		if rej, ok := kernel.AsRejection(err); ok && rej.Code != kernel.CodeUnauthenticated && !executed(err) {

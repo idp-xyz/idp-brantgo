@@ -431,9 +431,13 @@ func TestConcurrentDeclarationProfileCommandsHaveOneWinner(t *testing.T) {
 	}
 }
 
-// S5-10 over HTTP with OIDC access tokens and the role templates: an AI agent saves a candidate
-// (declaration_profile.save_draft), cannot verify it (403); the documentation clerk who last edited
-// it is refused (422 INDEPENDENT_REVIEW_REQUIRED); another clerk verifies; both read routes answer.
+// S5-10 over HTTP with OIDC access tokens and the role templates. An AI token's
+// declaration_profile.save_draft and declaration_profile.verify are refused at the transport
+// (PERMISSION_DENIED) before the body is read, and the profile does not exist until a person
+// creates it. An AI principal may still draft a profile in process, and a person must verify it:
+// TestDeclarationProfileCandidateIsVerifiedIndependently. Here a documentation clerk saves the
+// candidate and cannot verify it (422 INDEPENDENT_REVIEW_REQUIRED); another clerk verifies; both
+// read routes answer.
 func TestDeclarationProfileOverHTTP(t *testing.T) {
 	w, _, _, _, _ := declarationWorld(t)
 	is := newIssuer(t)
@@ -447,27 +451,29 @@ func TestDeclarationProfileOverHTTP(t *testing.T) {
 	agent, doc1, doc2 := as("agent.doc", "ai", 0), as("doc.1", "human", 100), as("doc.2", "human", 200)
 	args := map[string]any{"id": "decl.http", "expected_version": 0, "sku_id": "ST01.red.S", "spec_revision": 1, "code_table_version": codeTable,
 		"commodity":        map[string]any{"code": "6109100021", "basis": "合成：AI 归类候选", "source_ids": []string{"spec.1"}},
-		"declaration_name": "棉制针织T恤衫",
+		"declaration_name": "棉制针织T恤",
 		"elements":         []any{map[string]any{"name": "品名", "value": "T恤衫"}, map[string]any{"name": "成分含量", "value": "100%棉"}},
 		"legal_units":      []any{map[string]any{"unit": "件", "per_base_unit": "1", "basis": "一件即一 PCS"}},
 		"origin":           map[string]any{"country": "CN", "criterion": "wholly_obtained", "basis": "合成：境内生产"},
 		"export_control":   map[string]any{"status": "not_controlled", "basis": "合成：不在合成管制清单内"}}
-	if r := agent.command("cat", catapi.Contract, catapi.CommandSaveDeclarationProfile, args); r["status"] != "draft" || r["row_version"] != float64(1) {
-		t.Fatalf("candidate %v", r)
+	if status, out := agent.try("cat", catapi.Contract, catapi.CommandSaveDeclarationProfile, args); status != http.StatusForbidden ||
+		out["code"] != kernel.CodePermissionDenied {
+		t.Fatalf("an AI token saved a profile: %d %v", status, out)
+	}
+	if status, out := doc1.do("GET", "/api/brant/v1/cat/declaration_profiles/decl.http", nil); status != http.StatusNotFound {
+		t.Fatalf("the refused save left a profile: %d %v", status, out)
 	}
 	verify := map[string]any{"id": "decl.http", "expected_version": 1, "revision": 1, "evidence_ids": []string{"ruling.1"}, "reason": "单证专业核实（合成）"}
 	if status, out := agent.try("cat", catapi.Contract, catapi.CommandVerifyDeclarationProfile, verify); status != http.StatusForbidden ||
 		out["code"] != kernel.CodePermissionDenied {
 		t.Fatalf("an AI agent verified: %d %v", status, out)
 	}
-	args["expected_version"], args["declaration_name"] = 1, "棉制针织T恤"
 	doc1.command("cat", catapi.Contract, catapi.CommandSaveDeclarationProfile, args)
-	verify["expected_version"] = 2
 	if status, out := doc1.try("cat", catapi.Contract, catapi.CommandVerifyDeclarationProfile, verify); status != http.StatusUnprocessableEntity ||
 		out["code"] != catapi.CodeIndependentReviewRequired {
 		t.Fatalf("the last editor verified: %d %v", status, out)
 	}
-	if r := doc2.command("cat", catapi.Contract, catapi.CommandVerifyDeclarationProfile, verify); r["status"] != "verified" || r["row_version"] != float64(3) {
+	if r := doc2.command("cat", catapi.Contract, catapi.CommandVerifyDeclarationProfile, verify); r["status"] != "verified" || r["row_version"] != float64(2) {
 		t.Fatalf("verify %v", r)
 	}
 	status, v := doc1.do("GET", "/api/brant/v1/cat/declaration_profiles/decl.http", nil)

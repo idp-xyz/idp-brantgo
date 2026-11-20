@@ -7,7 +7,7 @@ import (
 )
 
 // cnxDeclarationRoutes registers CNX's declaration and document bundle reads (S5 C3a).
-func (s *server) cnxDeclarationRoutes(mux *http.ServeMux) {
+func (s *server) cnxDeclarationRoutes(mux routeMux) {
 	mux.Handle("GET /api/brant/v1/cnx/declaration_cases", s.authenticated(s.declarationCases))
 	mux.Handle("GET /api/brant/v1/cnx/declaration_cases/{id}", s.authenticated(read(s, s.cfg.CNX.GetDeclaration, okView[cnxapi.DeclarationView])))
 	mux.Handle("GET /api/brant/v1/cnx/document_bundles", s.authenticated(s.documentBundles))
