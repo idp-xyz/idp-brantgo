@@ -46,6 +46,12 @@ const (
 	Approved  = "approved"
 	Received  = "received"
 	Rejected  = "rejected"
+	// Unknown (S6-D05): the channel filed the case and the answer was lost. Evidence still counts. A lookup
+	// then records approved, rejected or not_received.
+	Unknown = "unknown"
+	// NotReceived (S6-D05): the lookup found the tax authority has nothing under the operation. Final, like a
+	// rejection: the evidence returns and the lot's next case may be allocated. The attempt row stays.
+	NotReceived = "not_received"
 	// ConvertedToExemption (S5R-D14): the export was not declared for a refund in time and is exempt; final. Its
 	// allocations keep counting: the invoice lines evidenced this export whatever its treatment (CN-R09).
 	ConvertedToExemption = "converted_to_exemption"
@@ -182,12 +188,13 @@ type Allocation struct {
 	At           time.Time
 }
 
-// Status is the allocation's state: released once its case was rejected, replaced once a later
-// allocation took its place, under review once its invoice was reversed or its invoice line's evidence is
-// over-used after a partial reversal (S5R-D20), standing otherwise.
+// Status is the allocation's state: released once its case was rejected or the channel verified the
+// filing was not received (S6-D05), replaced once a later allocation took its place, under review once
+// its invoice was reversed or its invoice line's evidence is over-used after a partial reversal
+// (S5R-D20), standing otherwise.
 func (a *Allocation) Status() string {
 	switch {
-	case a.CaseStatus == Rejected:
+	case a.CaseStatus == Rejected || a.CaseStatus == NotReceived:
 		return Released
 	case a.ReplacedBy != "":
 		return Replaced
@@ -388,11 +395,13 @@ type Result struct {
 }
 
 // next is SM-CNX-TAXCASE: the stage each state may record. S5R adds converted_to_exemption from expected and planned
-// (S5R-D14) and evidence_rolled_back on a filed case, which keeps its state (S5R-D20).
+// (S5R-D14) and evidence_rolled_back on a filed case, which keeps its state (S5R-D20). S6-D05 adds the channel:
+// submitted → unknown, then unknown → approved, rejected or not_received. The manual pairs are unchanged.
 var next = map[string][]string{
 	Expected:  {Expected, Planned, ConvertedToExemption},
 	Planned:   {Submitted, ConvertedToExemption},
-	Submitted: {Approved, Rejected, EvidenceRolledBack},
+	Submitted: {Approved, Rejected, EvidenceRolledBack, Unknown},
+	Unknown:   {Approved, Rejected, NotReceived},
 	Approved:  {Received, EvidenceRolledBack},
 	Received:  {EvidenceRolledBack},
 }

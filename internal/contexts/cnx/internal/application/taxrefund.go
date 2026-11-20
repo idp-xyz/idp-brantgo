@@ -188,7 +188,7 @@ func (h *allocateTaxEvidence) Apply(ctx context.Context, exec bentopg.Executor, 
 		}
 	}
 	c := h.taxCase
-	opened := c == nil || c.Status == tr.Rejected
+	opened := c == nil || c.Status == tr.Rejected || c.Status == tr.NotReceived
 	if !opened && c.Policy.PolicyID != cmd.PolicyID {
 		return action.Outcome{}, api.Reject(api.CodeReferenceStale, "/args/policy_id", "The case binds export tax policy "+c.Policy.PolicyID)
 	}

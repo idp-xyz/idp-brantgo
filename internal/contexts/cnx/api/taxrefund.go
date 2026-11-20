@@ -80,6 +80,10 @@ const (
 	TaxApproved  = "approved"
 	TaxReceived  = "received"
 	TaxRejected  = "rejected"
+	// TaxUnknown (S6-D05): the channel filed the case and the answer was lost. Evidence still counts.
+	TaxUnknown = "unknown"
+	// TaxNotReceived (S6-D05): the lookup found no filing. Final, and the evidence is released.
+	TaxNotReceived = "not_received"
 	// TaxConvertedToExemption (S5R-D14): not declared for a refund in time, the export is exempt; final.
 	TaxConvertedToExemption = "converted_to_exemption"
 	// TaxEvidenceRolledBack (S5R-D20) is a stage a filed case records without moving: the external rollback of a
@@ -194,6 +198,8 @@ type ProfessionalReview struct {
 //	approved   currency, amount (the refund approved), offset_amount (optional), result_text, evidence_ids
 //	received   currency, amount, fund_record_id; reason optional
 //	rejected   result_text, evidence_ids; reason optional
+//	unknown    reason; from submitted (S6-D05). No amount and no external reference
+//	not_received  reason and evidence_ids; from unknown (S6-D05). Final
 //	converted_to_exemption  evidence_ids (the missed deadline), reason (S5R-D14)
 //	evidence_rolled_back    purchase_invoice_id, result_text, evidence_ids; reason optional (S5R-D20)
 //
@@ -241,6 +247,10 @@ func (c RecordTaxResult) Validate() error {
 		money, fund, evidenceAllowed = true, true, false
 	case TaxRejected:
 		text, evidenceMin = true, true
+	case TaxUnknown:
+		reasonRequired = true
+	case TaxNotReceived:
+		evidenceMin, reasonRequired = true, true
 	case TaxConvertedToExemption:
 		evidenceMin, reasonRequired = true, true
 	case TaxEvidenceRolledBack:

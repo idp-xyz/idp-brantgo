@@ -32,6 +32,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/interop"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -69,6 +70,9 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandVerifyInvoice, api.CommandVerifyInvoice),
 		{Command: api.CommandAllocateTaxEvidence, Permission: api.CommandAllocateTaxEvidence, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 		authorization.HumanOnly(api.CommandRecordTaxResult, api.CommandRecordTaxResult),
+		authorization.HumanOnly(api.CommandSubmitTaxChannel, api.CommandRecordTaxResult),
+		authorization.HumanOnly(api.CommandSettleTaxChannel, api.CommandRecordTaxResult),
+		authorization.HumanOnly(api.CommandReconcileTaxChannel, api.CommandRecordTaxResult),
 		{Command: api.CommandGetInvoice, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandInvoices, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandGetTaxCase, Permission: api.PermissionRead, ActorKinds: anyActor},
@@ -104,6 +108,9 @@ type Service struct {
 	Ledger   *action.Ledger
 	Clock    application.Clock
 	Upstream Upstream
+	// Interop is the professional-system connector (S6-D05). Nil means none is configured:
+	// a channel command then refuses with EXTERNAL_CHANNEL_NOT_CONFIGURED and records no success.
+	Interop interop.Port
 }
 
 func scope(ctx context.Context) kernel.Scope {
@@ -233,6 +240,9 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.RecordTaxResult:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandRecordTaxResult, key, c
+	}
+	if name, key, args = channelRequest(cmd); name != "" {
+		return name, key, args
 	}
 	return declarationRequest(cmd)
 }

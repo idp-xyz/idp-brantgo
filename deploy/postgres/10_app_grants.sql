@@ -480,6 +480,12 @@ GRANT UPDATE (policy_revision, policy_hash, refund_method, policy_valid_from, po
 GRANT EXECUTE ON FUNCTION brant_cnx.purchase_invoice_line_reversed(text, text, text, integer) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.tax_evidence_overused(text, text, text, integer, text) TO brant_app;
 
+-- CNX channel attempts and the non-authoritative receipt chain (S6-05). An attempt moves along the
+-- connector states (the column grant is also what the command's update needs); receipts are only
+-- inserted. The case and declaration column grants above cover the roots these commands lock.
+GRANT SELECT, INSERT ON brant_cnx.channel_attempt, brant_cnx.channel_receipt TO brant_app;
+GRANT UPDATE (state, outcome, reason, row_version, updated_at) ON brant_cnx.channel_attempt TO brant_app;
+
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
 -- every update. A shipment is inserted prepared with its lines and parties and then changes only by
