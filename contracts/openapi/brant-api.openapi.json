@@ -42111,6 +42111,2122 @@
         ]
       }
     },
+    "/api/brant/v1/stk/commands/reservation.place": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.reservation.place",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "order_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "order_line_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reservation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "reservation.place"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "reservation.place",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/reservation.place/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.reservation.place.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "order_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "order_line_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reservation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "reservation.place"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of reservation.place sent with this idempotency key (动作对账)",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/reservation.release": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.reservation.release",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "reservation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "reservation.release"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "reservation.release",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/reservation.release/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.reservation.release.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "reservation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "reservation.release"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of reservation.release sent with this idempotency key (动作对账)",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stk.module.configure": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stk.module.configure",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stk.module.configure"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "stk.module.configure",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stk.module.configure/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stk.module.configure.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stk.module.configure"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of stk.module.configure sent with this idempotency key (动作对账)",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stock.adjust": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stock.adjust",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "adjusted_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "direction": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minor_units": {
+                        "type": "integer"
+                      },
+                      "movement_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "price_basis_qty": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_cost_minor": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stock.adjust"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "stock.adjust",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stock.adjust/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stock.adjust.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "adjusted_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "direction": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minor_units": {
+                        "type": "integer"
+                      },
+                      "movement_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "price_basis_qty": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_cost_minor": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stock.adjust"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of stock.adjust sent with this idempotency key (动作对账)",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stock.issue": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stock.issue",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "issued_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "movement_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reservation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_line_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stock.issue"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "stock.issue",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stock.issue/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stock.issue.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "issued_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "movement_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reservation_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_line_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stock.issue"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of stock.issue sent with this idempotency key (动作对账)",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stock.receive": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stock.receive",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "lineage": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "input_batch_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "output_batch_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "shipment_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "shipment_line_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minor_units": {
+                        "type": "integer"
+                      },
+                      "movement_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "price_basis_qty": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "received_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_line_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_cost_minor": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stock.receive"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "stock.receive",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
+    "/api/brant/v1/stk/commands/stock.receive/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "stk.stock.receive.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "batch_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "custody_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "lineage": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "input_batch_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "output_batch_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "shipment_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "shipment_line_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "location_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minor_units": {
+                        "type": "integer"
+                      },
+                      "movement_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "price_basis_qty": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "received_at": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sku_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_kind": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source_line_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_cost_minor": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "unit_revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "stock.receive"
+                  },
+                  "contract": {
+                    "const": "brant.stock/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of stock.receive sent with this idempotency key (动作对账)",
+        "tags": [
+          "stk"
+        ]
+      }
+    },
     "/api/brant/v1/stl/applications/{id}": {
       "get": {
         "operationId": "stl.application.get",

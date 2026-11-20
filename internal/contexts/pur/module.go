@@ -35,6 +35,7 @@ var (
 
 	_ api.InspectionSubjects = (*Module)(nil)
 	_ api.DeliveryLookups    = (*Module)(nil)
+	_ api.ReceiptRequests    = (*Module)(nil)
 )
 
 // Upstream are the lookups of PUR's upstream contexts: TRD's orders through PUR's port Orders (R19),

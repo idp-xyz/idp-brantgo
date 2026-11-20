@@ -582,3 +582,14 @@ GRANT UPDATE (status, row_version, attempts, sends, claimed_at, grant_id, settle
 -- A reservation locks its task's budget row FOR UPDATE, which needs UPDATE on one column; the trigger
 -- refuses every change of a budget.
 GRANT UPDATE (source) ON brant_ai.task_budget TO brant_app;
+
+-- STK (S6-01): balances, reservations and the company switch change; movements, cost allocations
+-- and batch lineage only grow. StockAvailability v1 is executed by FUL in FUL's own transaction.
+GRANT USAGE ON SCHEMA brant_stk TO brant_app;
+GRANT SELECT, INSERT ON brant_stk.company_setting, brant_stk.stock_balance, brant_stk.stock_movement, brant_stk.cost_layer,
+    brant_stk.cost_allocation, brant_stk.stock_reservation, brant_stk.batch_lineage, brant_stk.action_result, brant_stk.audit_event TO brant_app;
+GRANT UPDATE (enabled, row_version, updated_by_kind, updated_by_id, update_epoch, updated_at) ON brant_stk.company_setting TO brant_app;
+GRANT UPDATE (on_hand, reserved, row_version) ON brant_stk.stock_balance TO brant_app;
+GRANT UPDATE (remaining_qty) ON brant_stk.cost_layer TO brant_app;
+GRANT UPDATE (remaining_qty, status, row_version) ON brant_stk.stock_reservation TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_stk.stock_availability_issue_v1(text, text, text, text, text, text, text, text, text, bigint, text, text, bigint, timestamptz) TO brant_app;
