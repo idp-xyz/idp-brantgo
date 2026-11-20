@@ -70,7 +70,11 @@ type Quote struct {
 	Reviews      []*Review   // in the order they were requested
 	Approvals    []*Approval // in the order they were given
 	Holds        []*Hold     // risk holds, in the order they were registered
-	Slot         *Slot       // the conversion slot, once taken
+	Slot         *Slot       // the full_v1 conversion slot, once taken
+	// Consumed is true once any quote_order_consumption row exists (TRD-INV-024). It is derived
+	// when the root is loaded and set when a partial order is prepared. Cancelling an order does
+	// not clear it. It is not the full_v1 slot: GoalReadiness v1 still reads Slot only.
+	Consumed bool
 	// Contracts are the live (valid or disputed) acceptances of the root's revisions, by revision:
 	// the formed contracts that keep a revision from being superseded, withdrawn or cancelled (the
 	// owner's decision of 2026-11-11). They are loaded with the root and change only in commands that
@@ -233,6 +237,14 @@ func (q *Quote) Freeze(working int64, s *Seal, by kernel.ActorRef, epoch int64, 
 	s.By, s.Epoch, s.At, s.RootVersion = by, epoch, kernel.Instant(now), q.RootVersion
 	w.Status, w.Seal, w.Changed = Frozen, s, true
 	return w, nil
+}
+
+// NoteConsumption records that a partial order consumed quantity (TRD-INV-024). The root version
+// moves, as taking the full_v1 slot does, and the consumption is kept: cancelling the order does
+// not clear it. The ledger rows themselves are written with the order.
+func (q *Quote) NoteConsumption() {
+	q.Consumed = true
+	q.RootVersion++
 }
 
 // UpdateMetadata replaces the internal labels and note (BC-AT09): the root version moves, no

@@ -256,6 +256,12 @@ type Line struct {
 	DiscountRatio      string     `contract:"required,ratio" doc:"0 = no discount"`
 	TaxApplicationRef  ConfigRef  `contract:"required,kind=tax_application"`
 	Evidence           []Evidence `contract:"required"`
+	// MaxOrderQuantity and Uncapped are the multi_order line cap (TRD-INV-024). The json tag keeps
+	// them out of the Q01 tool schema, so the q01.agent bundle hash does not change. The HTTP
+	// transport still accepts max_order_quantity and uncapped, and MarshalJSON includes them in the
+	// request hash when they are set.
+	MaxOrderQuantity string `json:"-" contract:"decimal=quantity,positive"`
+	Uncapped         *bool  `json:"-"`
 }
 
 // Charge is a sales charge {charge_id, fee_category_ref (fee_category, sales_charge side),
@@ -308,6 +314,10 @@ type QuoteData struct {
 	CustomerNotes       *string      `doc:"shown to the customer"`
 	Evidence            []Evidence   `contract:"min=1"`
 	LegalTermsRef       *ConfigRef   `contract:"kind=legal_terms"`
+	// ConversionMode is empty or single_full (today's one full_v1 order) or multi_order
+	// (TRD-INV-024). Same json tag as the line cap: absent from the Q01 schema, accepted on HTTP,
+	// and part of the request hash only when it opts in.
+	ConversionMode string `json:"-" contract:"enum=single_full|multi_order"`
 }
 
 // SaveDraft creates a quote root with working revision 1 at ExpectedVersion 0, or replaces the
@@ -504,6 +514,21 @@ func (d QuoteData) Validate(path string) error {
 	for _, check := range checks {
 		if err := check(); err != nil {
 			return err
+		}
+	}
+	return d.conversionRules(path)
+}
+
+// conversionRules checks the form of the opt-in (TRD-INV-024). Which caps a mode may carry is the
+// domain's rule (quote.CheckDraft): a format that is valid on its own is not refused here, so a
+// caller that learns the command from its field rules can state each member alone.
+func (d QuoteData) conversionRules(path string) error {
+	if d.ConversionMode != "" && d.ConversionMode != "single_full" && d.ConversionMode != "multi_order" {
+		return schema(path + "/conversion_mode")
+	}
+	for i, l := range d.Lines {
+		if l.MaxOrderQuantity != "" && !decimal(l.MaxOrderQuantity, kernel.QuantityFormat, true) {
+			return schema(index(path+"/lines", i) + "/max_order_quantity")
 		}
 	}
 	return nil

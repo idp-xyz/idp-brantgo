@@ -103,6 +103,7 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetResponse, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetAcceptance, Permission: PermissionRead, ActorKinds: anyActor},
 		authorization.HumanOrGrantedAI(api.CommandPrepareOrder, api.CommandPrepareOrder),
+		authorization.HumanOnly(api.CommandPreparePartialOrder, api.CommandPreparePartialOrder),
 		authorization.HumanOrGrantedAI(api.CommandRequestOrderReview, api.CommandRequestOrderReview),
 		authorization.HumanOnly(api.CommandDecideOrderReview, api.CommandDecideOrderReview),
 		authorization.HumanOnly(api.CommandActivateOrder, api.CommandActivateOrder),
@@ -269,6 +270,9 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.PrepareOrder:
 		key, c.IdempotencyKey = c.IdempotencyKey, ""
 		return api.CommandPrepareOrder, key, c
+	case api.PreparePartialOrder:
+		key, c.IdempotencyKey = c.IdempotencyKey, ""
+		return api.CommandPreparePartialOrder, key, c
 	case api.RequestOrderReview:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandRequestOrderReview, key, c
@@ -611,7 +615,15 @@ func (s Service) GetQuote(ctx context.Context, id string) (api.QuoteView, error)
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		v, err = quoteView(q)
-		return err
+		if err != nil {
+			return err
+		}
+		sums, err := postgres.ConsumedQuantities(ctx, exec, scope(ctx), id)
+		if err != nil {
+			return err
+		}
+		v.MultiOrderLedger = multiOrderLedger(q, sums)
+		return nil
 	})
 	return v, err
 }

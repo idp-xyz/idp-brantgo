@@ -154,7 +154,7 @@ func (s Service) lookupQuotes(ctx context.Context, fn func(load func(id string) 
 // refusal, else quote.Usable's (QUOTE_NOT_CURRENT, the hold's code), else empty.
 func (s Service) formalRevision(ctx context.Context, exec bentopg.Executor, q *quote.Quote, r *quote.Revision) (api.FormalRevision, error) {
 	v := api.FormalRevision{Ref: api.QuoteRevisionRef{QuoteID: q.ID, BusinessRevision: r.Number}, Status: string(r.Status),
-		Active: r.Status == quote.Active, ConversionTaken: q.Slot != nil}
+		Active: r.Status == quote.Active, ConversionTaken: q.Slot != nil || q.Consumed}
 	if r.Seal != nil {
 		v.BusinessHash, v.IssuedAt, v.ExpiresAt = r.Seal.BusinessHash, r.Seal.IssuedAt, r.Seal.ExpiresAt
 	}

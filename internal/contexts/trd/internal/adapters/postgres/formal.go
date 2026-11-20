@@ -100,6 +100,10 @@ func loadFormal(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, 
 	if err != nil {
 		return err
 	}
+	if err = exec.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM brant_trd.quote_order_consumption
+		WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3)`, t, c, q.ID).Scan(&q.Consumed); err != nil {
+		return err
+	}
 	s := &quote.Slot{}
 	var kind string
 	err = exec.QueryRow(ctx, `SELECT slot, revision, business_hash, order_id, taken_by_kind, taken_by_id, take_epoch, taken_at, root_version

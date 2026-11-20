@@ -52,7 +52,7 @@ var allPermissions = []string{
 	"quote.submit_review", "quote.review.decide", "quote.approval.revoke", "quote.margin_exception.approve",
 	"quote.activate", "quote.replace", "quote.withdraw", "quote.cancel",
 	"quote.response.record", "quote.response.verify", "acceptance.invalidate", "acceptance.mark_disputed",
-	"order.prepare", "order.review.request", "order.review.decide", "order.activate", "order.approval.revoke", "order.cancel",
+	"order.prepare", "order.prepare_partial", "order.review.request", "order.review.decide", "order.activate", "order.approval.revoke", "order.cancel",
 	"order.close_unfulfilled", "order.amendment.prepare", "order.amendment.submit", "order.amendment.decide", "order.amendment.apply",
 	"order.amendment.withdraw", "order.close_remainder", "order.close", "order.document.generate", "order.document.record_signed",
 	"purchase.draft.prepare", "purchase.draft.void", "pur.read", "pur.audit",

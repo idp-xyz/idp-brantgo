@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -30,7 +31,51 @@ func LoadOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, i
 
 // LoadOrderOfQuote returns the order quote id converted into, or nil, unlocked.
 func LoadOrderOfQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, quoteID string) (*order.Order, error) {
-	return loadOrder(ctx, exec, scope, `quote_id = $3`, quoteID, NoLock)
+	return loadOrder(ctx, exec, scope, `quote_id = $3 AND slot = 'full_v1'`, quoteID, NoLock)
+}
+
+// ConsumedQuantities is the sum of quote_order_consumption for each line of quoteID. The caller
+// holds the quote root FOR UPDATE, so the sum is the quantity already placed (TRD-INV-024).
+func ConsumedQuantities(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, quoteID string) (map[string]string, error) {
+	rows, err := exec.Query(ctx, `SELECT line_id, sum(quantity)::text FROM brant_trd.quote_order_consumption
+		WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3 GROUP BY line_id`,
+		string(scope.Tenant), string(scope.Company), quoteID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	var id, qty string
+	_, err = pgx.ForEachRow(rows, []any{&id, &qty}, func() error {
+		out[id] = trimQuantity(qty)
+		return nil
+	})
+	return out, err
+}
+
+// trimQuantity is a numeric(18,6) sum as a QuantityFormat string: trailing fractional zeros drop.
+func trimQuantity(raw string) string {
+	if strings.Contains(raw, ".") {
+		raw = strings.TrimRight(strings.TrimRight(raw, "0"), ".")
+	}
+	if raw == "" {
+		return "0"
+	}
+	return raw
+}
+
+// writeConsumption inserts the partial order's ledger rows before the order itself, so the order
+// trigger can see them. A full_v1 order has none.
+func writeConsumption(ctx context.Context, exec bentopg.Executor, t, c string, o *order.Order) error {
+	for _, line := range o.Consumption {
+		if _, err := exec.Exec(ctx, `INSERT INTO brant_trd.quote_order_consumption (tenant_id, company_id, quote_id, order_id,
+			business_revision, line_id, quantity, recorded_by_kind, recorded_by_id, record_epoch, recorded_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+			t, c, o.Source.QuoteID, o.ID, o.Source.Revision, line.LineID, line.Quantity,
+			string(o.Prepared.By.Kind), o.Prepared.By.ID, o.Prepared.Epoch, o.Prepared.At); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // OrderQuote returns the quote order id converts, "" for none: what an order command locks first.
@@ -170,6 +215,9 @@ func loadOrderClosure(ctx context.Context, exec bentopg.Executor, t, c, id strin
 func SaveOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, o *order.Order, from int64, at time.Time) error {
 	t, c := string(scope.Tenant), string(scope.Company)
 	if o.Fresh {
+		if err := writeConsumption(ctx, exec, t, c, o); err != nil {
+			return err
+		}
 		s := o.Source
 		_, err := exec.Exec(ctx, `INSERT INTO brant_trd.sales_order (tenant_id, company_id, order_id, quote_id, slot, revision, business_hash,
 			number, document_sha256, acceptance_id, acceptance_version, arrival_at, arrival_basis, expires_at, order_revision, snapshot,

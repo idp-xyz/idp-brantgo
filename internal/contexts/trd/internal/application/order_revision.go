@@ -349,6 +349,47 @@ func (s Service) prepareSeal(ctx context.Context, quoteID string, revision int64
 	return f, nil
 }
 
+// prepareCurrency reads the sealed quote's currency, before the transaction, as POL states its
+// code and minor units. A revision this read does not find yields the zero currency: the
+// transaction refuses the revision first.
+func (s Service) prepareCurrency(ctx context.Context, quoteID string, revision int64, hash string) (kernel.Currency, error) {
+	var ref quote.Ref
+	var found bool
+	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		q, err := postgres.LoadQuote(ctx, exec, scope(ctx), quoteID, postgres.NoLock)
+		if err != nil || q == nil {
+			return err
+		}
+		rev := q.Revision(revision)
+		if rev == nil || rev.Seal == nil || rev.Seal.BusinessHash != hash {
+			return nil
+		}
+		doc, err := quote.ParseCommercial(rev.Seal.Commercial, rev.Seal.BusinessHash)
+		if err != nil {
+			return err
+		}
+		ref, found = doc.Data.Currency, true
+		return nil
+	})
+	if err != nil || !found {
+		return kernel.Currency{}, err
+	}
+	asked := polapi.ConfigRef{Kind: ref.Kind, ConfigID: ref.ID, Revision: ref.Revision}
+	answered, err := s.Upstream.Configs.ResolveConfigs(ctx, []polapi.ConfigRef{asked}, s.Clock.Now())
+	if err != nil {
+		return kernel.Currency{}, err
+	}
+	rc, ok := answered[asked]
+	if !ok || rc.Data.Currency == nil {
+		return kernel.Currency{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/quote_id", "The quote currency is not known")
+	}
+	c, err := kernel.NewCurrency(rc.Data.Currency.Code, rc.Data.Currency.MinorUnits)
+	if err != nil {
+		return kernel.Currency{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/quote_id", "The quote currency is not known")
+	}
+	return c, nil
+}
+
 // amendmentSeal resolves, before an amendment command's transaction, what the revision proposal p
 // yields on the order's current revision r seals (S5R-D35, D40): the Incoterm and edition of p's
 // trade terms — r's seal while they stay, POL's revision (got, as amendmentInputs read it)

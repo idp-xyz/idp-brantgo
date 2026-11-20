@@ -68,9 +68,11 @@ const (
 	CodeMarginExceptionNotAuthorized = "MARGIN_EXCEPTION_NOT_AUTHORIZED"
 	CodeMarginPolicyRequiresApproval = "MARGIN_POLICY_REQUIRES_APPROVAL"
 
-	CodeRootConversionLocked   = "ROOT_CONVERSION_LOCKED"
-	CodeConversionSlotConflict = "CONVERSION_SLOT_CONFLICT"
-	CodeFXStale                = "FX_STALE"
+	CodeRootConversionLocked       = "ROOT_CONVERSION_LOCKED"
+	CodeConversionSlotConflict     = "CONVERSION_SLOT_CONFLICT"
+	CodeConversionSlotUnsupported  = "CONVERSION_SLOT_UNSUPPORTED"  // 422: order.prepare_partial on a single_full quote
+	CodeQuoteRemainingInsufficient = "QUOTE_REMAINING_INSUFFICIENT" // 409: the line's remaining quantity does not cover the order
+	CodeFXStale                    = "FX_STALE"
 
 	// CodeAcceptanceAlreadyExists refuses ending a revision a live acceptance accepts (the owner's
 	// decision of 2026-11-11; formal.go).
@@ -106,9 +108,11 @@ var Categories = map[string]kernel.Category{
 	CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 	CodeMarginPolicyRequiresApproval: kernel.CategoryInvalid,
 
-	CodeRootConversionLocked:   kernel.CategoryConflict,
-	CodeConversionSlotConflict: kernel.CategoryConflict,
-	CodeFXStale:                kernel.CategoryInvalid,
+	CodeRootConversionLocked:       kernel.CategoryConflict,
+	CodeConversionSlotConflict:     kernel.CategoryConflict,
+	CodeConversionSlotUnsupported:  kernel.CategoryInvalid,
+	CodeQuoteRemainingInsufficient: kernel.CategoryConflict,
+	CodeFXStale:                    kernel.CategoryInvalid,
 
 	CodeAcceptanceAlreadyExists: kernel.CategoryConflict,
 }

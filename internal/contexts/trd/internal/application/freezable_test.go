@@ -53,6 +53,8 @@ var freezeOptional = []struct {
 	{"SalesFXRef", func(d *api.QuoteData) { d.SalesFXRef = nil }},
 	{"CustomerNotes", func(d *api.QuoteData) { d.CustomerNotes = nil }},
 	{"LegalTermsRef", func(d *api.QuoteData) { d.LegalTermsRef = nil }},
+	// conversion_mode is optional: omitted, the freeze seals today's single full order (TRD-INV-024).
+	{"ConversionMode", func(d *api.QuoteData) { d.ConversionMode = "" }},
 }
 
 // completeQuote has every member of QuoteData. Only presence matters to either rule: the values are

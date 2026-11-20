@@ -149,6 +149,13 @@ type Line struct {
 	DiscountRatio      string     `json:"discount_ratio"`
 	TaxApplication     Ref        `json:"tax_application_ref"`
 	Evidence           []Evidence `json:"evidence"`
+	// MaxOrderQuantity is the most a multi_order quote will place of this line, in the line's unit
+	// (TRD-INV-024). Empty means the quoted quantity. Omitted from the document unless conversion
+	// mode is multi_order, so a default quote hashes as it did.
+	MaxOrderQuantity string `json:"max_order_quantity,omitempty"`
+	// Uncapped is an explicit decision that this line has no quantity cap (SIM-03's repeat PO).
+	// Omitted when false.
+	Uncapped bool `json:"uncapped,omitempty"`
 }
 
 // Charge is a sales charge: a fee category, the obligation it settles (counted once), its amount in
@@ -195,6 +202,10 @@ type Data struct {
 	CustomerNotes    *string      `json:"customer_notes,omitempty"`
 	Evidence         []Evidence   `json:"evidence,omitempty"`
 	LegalTerms       *Ref         `json:"legal_terms_ref,omitempty"`
+	// ConversionMode is how the sealed quote converts into orders (TRD-INV-024): empty or
+	// single_full is today's one full_v1 order and is omitted; multi_order opts into
+	// order.prepare_partial. Omitted from the draft hash when it is the default.
+	ConversionMode string `json:"conversion_mode,omitempty"`
 }
 
 // Hash returns the content hash of the draft as saved: the SHA-256 of its canonical JSON (the
@@ -334,7 +345,39 @@ func CheckDraft(d Data, sources map[string]bool) error {
 			return kernel.Reject(kernel.CodeReferenceInvalid, fmt.Sprintf("%s/charges/%d/included_line_id", p, i), "")
 		}
 	}
+	if err := d.checkConversion(); err != nil {
+		return err
+	}
 	return readable(d, sources)
+}
+
+// checkConversion is TRD-INV-024 on a draft: empty and single_full are the default and carry no
+// per-line cap; multi_order may name a positive max_order_quantity or uncapped, not both. A max
+// may be below or above the quoted quantity: the quoted quantity is the cap only when neither is set.
+func (d Data) checkConversion() error {
+	const p = "/args/data"
+	mode := d.ConversionMode
+	if mode == ModeSingleFull {
+		mode = ""
+	}
+	if mode != "" && mode != ModeMultiOrder {
+		return kernel.Reject(kernel.CodeSchemaInvalid, p+"/conversion_mode", "")
+	}
+	for i, l := range d.Lines {
+		lp := fmt.Sprintf("%s/lines/%d", p, i)
+		switch {
+		case l.Uncapped && l.MaxOrderQuantity != "":
+			return kernel.Reject(kernel.CodeInvalidKnownValue, lp+"/uncapped", "A line is uncapped or names max_order_quantity")
+		case mode != ModeMultiOrder && (l.Uncapped || l.MaxOrderQuantity != ""):
+			return kernel.Reject(kernel.CodeInvalidKnownValue, lp+"/max_order_quantity", "A line cap belongs to conversion_mode multi_order")
+		case l.MaxOrderQuantity != "":
+			q, err := kernel.ParseDecimal(l.MaxOrderQuantity, kernel.QuantityFormat)
+			if err != nil || q.Sign() <= 0 {
+				return kernel.Reject(kernel.CodeSchemaInvalid, lp+"/max_order_quantity", "")
+			}
+		}
+	}
+	return nil
 }
 
 // readable refuses the first evidence entry of d whose source the caller does not read; a missing

@@ -42,6 +42,7 @@ const NormalizationVersion = "brant.quote-normalization/0.1.0"
 // protocol.DECIMAL_PATHS).
 var DecimalPaths = []string{
 	"/data/lines/*/quantity",
+	"/data/lines/*/max_order_quantity",
 	"/data/lines/*/unit_price",
 	"/data/lines/*/price_basis_quantity",
 	"/data/lines/*/discount_ratio",

@@ -18,8 +18,11 @@ const (
 	SnapshotContract = "brant.order-commercial-snapshot/0.1.0"
 	// RevisionContract is every later revision (order.amendment.apply).
 	RevisionContract = "brant.order-revision/0.1.0"
-	// SlotFullV1 is the conversion slot every order holds (TRD-INV-010).
+	// SlotFullV1 is the conversion slot of order.prepare (TRD-INV-010).
 	SlotFullV1 = "full_v1"
+	// SlotMultiOrder is the conversion slot of order.prepare_partial (TRD-INV-024). It is not a
+	// quote_conversion_slot row.
+	SlotMultiOrder = "multi_order"
 )
 
 // Scope is the tenant and company an order belongs to.
@@ -240,7 +243,7 @@ func FromSnapshot(doc []byte, orderHash string) (*Revision, error) {
 	if err := json.Unmarshal(doc, &s); err != nil {
 		return bad("", "is not readable")
 	}
-	if s.Contract != SnapshotContract || s.Slot != SlotFullV1 || !kernel.ValidIdentifier(s.OrderID) {
+	if s.Contract != SnapshotContract || (s.Slot != SlotFullV1 && s.Slot != SlotMultiOrder) || !kernel.ValidIdentifier(s.OrderID) {
 		return bad("/snapshot_contract", "is not an order commercial snapshot of slot full_v1")
 	}
 	c := s.Calculation
