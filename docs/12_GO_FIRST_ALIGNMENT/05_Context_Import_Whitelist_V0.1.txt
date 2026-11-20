@@ -1,5 +1,5 @@
 # tools/dependency-check 规则由 Context Map V0.1 的 relationships 生成，不手工编辑
-# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（81 条关系，其中以平台提供方为上游的 2 条）
+# 来源：03_STRATEGIC_DDD/01_IDP_Brant_Strategic_Context_Map_V0.1_Draft.json（82 条关系，其中以平台提供方为上游的 2 条）
 allow internal/contexts/pty/... -> internal/contexts/{evd,pol}/api
 allow internal/contexts/pty/... -> internal/reference/api            # 平台提供方 REF（S5R-D34）
 allow internal/contexts/cat/... -> internal/contexts/evd/api
@@ -9,7 +9,7 @@ allow internal/contexts/inq/... -> internal/contexts/{cat,crm,evd,pol,pty}/api
 allow internal/contexts/sup/... -> internal/contexts/{cat,evd,inq,pol,pty}/api
 allow internal/contexts/cst/... -> internal/contexts/{cat,evd,inq,pol,sup}/api
 allow internal/contexts/trd/... -> internal/contexts/{cat,cnx,cst,evd,ful,inq,pol,pty,pur,stl,tsk}/api
-allow internal/contexts/pur/... -> internal/contexts/{cat,cst,evd,pol,pty,sup,trd}/api
+allow internal/contexts/pur/... -> internal/contexts/{cat,cst,evd,ful,pol,pty,sup,trd}/api
 allow internal/contexts/mfg/... -> internal/contexts/pur/api
 allow internal/contexts/qlt/... -> internal/contexts/{evd,ful,mfg,pty,pur}/api
 allow internal/contexts/stk/... -> internal/contexts/{mfg,pur}/api

@@ -13,9 +13,11 @@ POL,pol.snapshot.get,GET /api/brant/v1/pol/snapshots/{id},pol.read,是
 POL,pol.fx.convert,—（进程内查询，POL api）,—,否
 POL,pol.unit.convert,—（进程内查询，POL api）,—,否
 POL,pol.tax.preview,—（进程内查询，POL api）,—,否
+POL,pol.config.at,—（进程内查询，POL api，ConfigAt v1）,—,否
 EVD,evd.file.get,GET /api/brant/v1/evd/files/{id},evd.read,是
 EVD,evd.source.get,GET /api/brant/v1/evd/sources/{id},evd.read,是
 EVD,evd.source.extract.get,GET /api/brant/v1/evd/sources/{id}/extract,evd.read,是
+EVD,file.formal.get,—（进程内查询，EVD api）,evd.read,是
 INQ,inq.rfq.get,GET /api/brant/v1/inq/rfqs/{id},inq.read,是
 SUP,sup.logistics_offer.get,GET /api/brant/v1/sup/logistics_offers/{id},sup.read,是
 SUP,sup.purchase_terms.get,GET /api/brant/v1/sup/purchase_terms/{id},sup.read,是
@@ -48,6 +50,8 @@ TRD,trd.quote.dispatch.target,GET /api/brant/v1/trd/quotes/{id}/revisions/{revis
 TRD,trd.quote.document.get,GET /api/brant/v1/trd/quotes/{id}/revisions/{revision}/document,trd.read,是
 TRD,trd.goal.readiness,GET /api/brant/v1/trd/quotes/{id}/goal_readiness,trd.read,是
 TRD,trd.quote.price_proposal,GET /api/brant/v1/trd/rfqs/{id}/price_proposal,trd.read,是
+TRD,trd.order.revision.get,—（进程内查询，TRD api，OrderRevisionRef v1）,—,否
+TRD,trd.order.request_checks,—（进程内查询，TRD api，OrderRequestChecks；审计名 order.prepare.check 与 order.review.request.check）,—,是
 PUR,pur.allocation_review.get,GET /api/brant/v1/pur/allocation_reviews/{id},pur.read,是
 PUR,pur.allocation_review.list,GET /api/brant/v1/pur/orders/{id}/allocation_reviews,pur.read,是
 PUR,pur.demand_allocation.get,GET /api/brant/v1/pur/orders/{id}/allocations,pur.read,是

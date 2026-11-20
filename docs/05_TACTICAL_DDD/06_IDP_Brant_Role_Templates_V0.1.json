@@ -10,8 +10,9 @@
   "人工专属命令仍只接受人工身份：岗位不会让 AI 或 system 身份获得人工专属命令。",
   "同一对象的编制与审核分开由命令自身检查（independence），岗位层面的禁止组合是第二道防线。",
   "系统操作者 system:inbox.<bc>.<purpose> 不用岗位模板：其权限即 Context Map consumers 登记的 permissions，由 brant-admin inbox 授予；只由系统执行的命令（shipment_review.open、allocation_review.open）不进人工模板（S5R-D29）。",
-  "按种类的配置发布：credit_policy、export_tax_policy、screening_regulation 的发布须同时持有 config.publish 与对应的 config.publish.<kind>；其余种类只需 config.publish（S5R-D30）。",
-  "AI 模板的读取权限按委托的任务目标最小化，随该模板的能力一起授予；不为某个测试扩大现有 AI 模板（ai_q01_agent 不加 ful.read，S5R-D32）。"
+  "按种类的配置发布：credit_policy、export_tax_policy、screening_regulation 的发布须同时持有 config.publish 与对应的 config.publish.<kind>；其余已知种类的发布须同时持有 config.publish 与 config.retire（POL 的 PublishCapability 对它们返回 config.retire；S5R-D30 的实现）。",
+  "AI 模板的读取权限按委托的任务目标最小化，随该模板的能力一起授予；不为某个测试扩大现有 AI 模板（ai_q01_agent 不加 ful.read，S5R-D32）。",
+  "一个 Q01 任务可以有多份委托：每个人只在自己的岗位模板范围内委托，不设把全部 Q01 能力合并进一个岗位模板的做法，因为委托不超过其发起人（S4-D33）。"
  ],
  "templates": [
   {

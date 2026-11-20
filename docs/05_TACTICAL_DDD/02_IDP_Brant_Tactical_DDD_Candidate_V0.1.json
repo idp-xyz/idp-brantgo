@@ -1092,7 +1092,32 @@
           ],
           "goPackage": "internal/contexts/trd/internal/domain/order",
           "pythonSource": "t03_storage.py prepare_order／activate_order；t04_order_review.py；t03_order_qualification.py；t03_order_snapshot.py",
-          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。 S5（负责人决定 2026-11-12）：order.activate 在 CNX 与 STL 扩展点调用 TradeComplianceGuard v1 与 CreditGuard v1；取消、关闭与变更应用在锁定订单后事务内无锁读取 FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1（R70、R71）；STK 未启用记为 not_enabled。 S5R：发布 OrderRevisionRef v1（按（订单、修订）读取任何已提交修订：行的单价、价格基数、折扣、净额与税额，条款，Incoterm 与版本，绑定地址及国别）；新修订以 omitempty 字段封存 Incoterm 与地址国别，旧修订哈希不变，旧修订从绑定的 POL、PTY 修订推导并标 derived（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor（D33）；取消检查把 PUR 的获批处置计为已处置（D05）。"
+          "notes": "订单生效后的变更、取消、短交关闭与关闭见 SM-TRD-ORDER 与 SM-TRD-ORDER-AMENDMENT；转换名额永久保留。外销合同／形式发票（S/C、PI）绑定订单修订，签署版本作为证据。 S5（负责人决定 2026-11-12）：order.activate 在 CNX 与 STL 扩展点调用 TradeComplianceGuard v1 与 CreditGuard v1；取消、关闭与变更应用在锁定订单后事务内无锁读取 FUL ShipmentFacts v1 与 PUR DownstreamCommitments v1（R70、R71）；STK 未启用记为 not_enabled。 S5R：发布 OrderRevisionRef v1（按（订单、修订）读取任何已提交修订：行的单价、价格基数、折扣、净额与税额，条款，Incoterm 与版本，绑定地址及国别）；新修订以 omitempty 字段封存 Incoterm 与地址国别，旧修订哈希不变，旧修订从绑定的 POL、PTY 修订推导并标 derived（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor（D33）；取消检查把 PUR 的获批处置计为已处置（D05）。",
+          "eventPayloads": {
+            "OrderDocumentGenerated": [
+              "order_id",
+              "quote_id",
+              "business_revision",
+              "business_hash",
+              "order_revision",
+              "order_hash",
+              "order_status",
+              "document_kind",
+              "document_order_revision",
+              "document_order_hash",
+              "number",
+              "sequence_ref",
+              "template_ref",
+              "template_content_hash",
+              "renderer_version",
+              "generated_at",
+              "file_name",
+              "mime_type",
+              "file_sha256",
+              "file_size",
+              "generated_by"
+            ]
+          }
         }
       ],
       "policies": [
@@ -1467,7 +1492,45 @@
           ],
           "goPackage": "internal/contexts/tsk/internal/domain/task",
           "pythonSource": "Q01 旧包 store.py take_control／verify_and_complete（未移植进 V0.50）",
-          "notes": "未列出的转换拒绝；不提供设置任意状态接口；每个转换都是登记命令（S4 D-1）。接管先由 TRD object_control.stop 递增 epoch，再记录任务控制变化；屏障完成（task.finish_stop）先对账全部 submitted／unknown 动作，再由 TRD 转人工、交回或保持停止。任务步骤只经 internal/ai/execution 携带 TSK 签发的控制声明执行（D-2）；绑定在委托人与 AI 执行身份的授权未变时有效（D-5）。"
+          "notes": "未列出的转换拒绝；不提供设置任意状态接口；每个转换都是登记命令（S4 D-1）。接管先由 TRD object_control.stop 递增 epoch，再记录任务控制变化；屏障完成（task.finish_stop）先对账全部 submitted／unknown 动作，再由 TRD 转人工、交回或保持停止。任务步骤只经 internal/ai/execution 携带 TSK 签发的控制声明执行（D-2）；绑定在委托人与 AI 执行身份的授权未变时有效（D-5）。来源种类是代码常量而不是设计清单：evd_source（EVD 来源）、evd_file（EVD 业务文件，其抽取由任务的代理登记为第一步）、rfq（INQ 客户询价）；来源防重按目标、种类与标识拒绝同一目标上的第二个开放任务（S4 G2）。",
+          "eventPayloads": {
+            "TaskCreated": [
+              "task_id",
+              "task_version",
+              "goal_code",
+              "goal_version",
+              "lifecycle",
+              "control_mode",
+              "owner_id",
+              "rfq_id",
+              "quote_id"
+            ],
+            "TaskControlChanged": [
+              "task_id",
+              "task_version",
+              "control_change",
+              "lifecycle",
+              "control_mode",
+              "control_epoch",
+              "quote_id"
+            ],
+            "TaskCompleted": [
+              "task_id",
+              "task_version",
+              "goal_code",
+              "goal_version",
+              "completion_actor",
+              "quote_id"
+            ],
+            "TaskClosedUnfulfilled": [
+              "task_id",
+              "task_version",
+              "goal_code",
+              "goal_version",
+              "close_cause",
+              "quote_id"
+            ]
+          }
         },
         {
           "id": "TSK-AGG-ActionExecution",
@@ -1701,7 +1764,9 @@
               "released_quantity",
               "valid_from",
               "valid_until",
-              "inspection_ids"
+              "inspection_ids",
+              "concession",
+              "concession_quantity"
             ],
             "QualityReleaseRevoked": [
               "release_id",
@@ -1712,7 +1777,9 @@
               "order_line_id",
               "released_quantity",
               "unit_id",
-              "revoked_at"
+              "revoked_at",
+              "shipped_quantity",
+              "frozen_quantity"
             ]
           }
         }
@@ -2737,7 +2804,8 @@
               "from",
               "policy_id",
               "policy_revision",
-              "fund_record_id"
+              "fund_record_id",
+              "purchase_invoice_id"
             ],
             "TaxOpeningRecorded": [
               "opening_id",
@@ -2798,7 +2866,8 @@
               "commitment_ids",
               "reversed_invoice_id",
               "reversed_invoice_version",
-              "review_commitment_ids"
+              "review_commitment_ids",
+              "reversal"
             ]
           }
         },
@@ -9347,6 +9416,10 @@
     "tax_refund_case.rebind_policy"
   ],
   "commandActors": {
-    "order_account.open": "human|system"
+    "order_account.open": "human|system",
+    "task.create": "human|system",
+    "quote.risk_hold.register": "system",
+    "order.risk.record": "system",
+    "formal_file.register": "system"
   }
 }

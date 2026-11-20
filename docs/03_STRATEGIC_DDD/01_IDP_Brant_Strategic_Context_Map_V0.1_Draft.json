@@ -226,6 +226,12 @@
           "route": "—（进程内查询，POL api）",
           "permission": "—",
           "audited": false
+        },
+        {
+          "name": "pol.config.at",
+          "route": "—（进程内查询，POL api，ConfigAt v1）",
+          "permission": "—",
+          "audited": false
         }
       ],
       "invariants": [
@@ -255,7 +261,8 @@
       "commands": [
         "source.register",
         "source.use",
-        "file.register"
+        "file.register",
+        "formal_file.register"
       ],
       "facts": [
         "SourceRegistered",
@@ -278,6 +285,12 @@
         {
           "name": "evd.source.extract.get",
           "route": "GET /api/brant/v1/evd/sources/{id}/extract",
+          "permission": "evd.read",
+          "audited": true
+        },
+        {
+          "name": "file.formal.get",
+          "route": "—（进程内查询，EVD api）",
           "permission": "evd.read",
           "audited": true
         }
@@ -557,7 +570,9 @@
         "order.document.generate",
         "order.document.record_signed",
         "object_control.enter_manual",
-        "object_control.handoff"
+        "object_control.handoff",
+        "quote.risk_hold.register",
+        "order.risk.record"
       ],
       "facts": [
         "QuoteFrozen",
@@ -707,6 +722,18 @@
           "name": "trd.quote.price_proposal",
           "route": "GET /api/brant/v1/trd/rfqs/{id}/price_proposal",
           "permission": "trd.read",
+          "audited": true
+        },
+        {
+          "name": "trd.order.revision.get",
+          "route": "—（进程内查询，TRD api，OrderRevisionRef v1）",
+          "permission": "—",
+          "audited": false
+        },
+        {
+          "name": "trd.order.request_checks",
+          "route": "—（进程内查询，TRD api，OrderRequestChecks；审计名 order.prepare.check 与 order.review.request.check）",
+          "permission": "—",
           "audited": true
         }
       ],
@@ -3771,6 +3798,69 @@
         "见 S5 C4b-CNX 报告"
       ],
       "policies": "PL-14、PL-15、PL-16；idp-brant.ref 经 R81 登记（S5R-D34）"
+    },
+    {
+      "id": "trd.cost_source_holds",
+      "context": "TRD",
+      "systemActor": "system:inbox.trd.cost_source_holds",
+      "subscribes": [
+        "idp-brant.cst.cost_source_denied.v1"
+      ],
+      "permissions": [
+        "quote.risk_hold.register",
+        "order.risk.record",
+        "trd.read"
+      ],
+      "failureCodes": [
+        "trd.cost_source_denial_invalid"
+      ],
+      "policies": "PL-07；WF-03 第 4 步；S4 D-9：未形成合同的修订登记风险暂停，已生效订单只登记不阻断的风险记录"
+    },
+    {
+      "id": "tsk.task_progress",
+      "context": "TSK",
+      "systemActor": "system:inbox.tsk.task_progress",
+      "subscribes": [
+        "idp-brant.trd.quote_review_decided.v1",
+        "idp-brant.trd.quote_activated.v1",
+        "idp-brant.trd.quote_replaced.v1",
+        "idp-brant.trd.quote_approval_revoked.v1",
+        "idp-brant.trd.customer_response_recorded.v1",
+        "idp-brant.trd.acceptance_verified.v1",
+        "idp-brant.trd.order_review_decided.v1",
+        "idp-brant.trd.order_activated.v1",
+        "idp-brant.trd.order_approval_revoked.v1"
+      ],
+      "permissions": [
+        "task.resume",
+        "task.verify",
+        "tsk.read"
+      ],
+      "failureCodes": [
+        "tsk.trd_fact_invalid"
+      ],
+      "policies": "PL-04、PL-06；R18：等待中的任务在所等事实到达、目标可核验或报价批准被撤销时恢复，运行中的任务在目标可核验时开始核验"
+    },
+    {
+      "id": "evd.formal_files",
+      "context": "EVD",
+      "systemActor": "system:inbox.evd.formal_files",
+      "subscribes": [
+        "idp-brant.trd.quote_activated.v1",
+        "idp-brant.trd.quote_replaced.v1",
+        "idp-brant.trd.order_document_generated.v1"
+      ],
+      "permissions": [
+        "formal_file.register",
+        "evd.read",
+        "trd.read"
+      ],
+      "failureCodes": [
+        "evd.formal_document_event_invalid",
+        "evd.formal_document_mismatch",
+        "evd.formal_document_not_fileable"
+      ],
+      "policies": "R65；S4 D-8；IG-08：事务前重读 TRD 封存的正式文档，核对 SHA-256 后登记为业务文件"
     }
   ]
 }

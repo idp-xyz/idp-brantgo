@@ -64,7 +64,7 @@ TRD,OrderClosedUnfulfilled,idp-brant.trd.order_closed_unfulfilled.v1,idp-brant.t
 TRD,OrderAmended,idp-brant.trd.order_amended.v1,idp-brant.trd,SalesOrder,S3,—
 TRD,OrderRemainderClosed,idp-brant.trd.order_remainder_closed.v1,idp-brant.trd,SalesOrder,S3,—
 TRD,OrderClosed,idp-brant.trd.order_closed.v1,idp-brant.trd,SalesOrder,S3,—
-TRD,OrderDocumentGenerated,idp-brant.trd.order_document_generated.v1,idp-brant.trd,SalesOrder,S3,—
+TRD,OrderDocumentGenerated,idp-brant.trd.order_document_generated.v1,idp-brant.trd,SalesOrder,S3,order_id、quote_id、business_revision、business_hash、order_revision、order_hash、order_status、document_kind、document_order_revision、document_order_hash、number、sequence_ref、template_ref、template_content_hash、renderer_version、generated_at、file_name、mime_type、file_sha256、file_size、generated_by
 TRD,OrderDocumentSigned,idp-brant.trd.order_document_signed.v1,idp-brant.trd,SalesOrder,S3,—
 PUR,PurchaseDraftPrepared,idp-brant.pur.purchase_draft_prepared.v1,idp-brant.pur,PurchaseDraft,S3,draft_id、order_id、order_revision、order_hash、supplier_id、draft_hash、currency、commitment_state、order_line_ids、supply_valid_until
 PUR,PurchaseCommitmentApproved,idp-brant.pur.purchase_commitment_approved.v1,idp-brant.pur,PurchaseCommitment,S3,commitment_id、draft_id、draft_hash、order_id、order_revision、supplier_id、order_hash、valid_until、decided_by
@@ -81,8 +81,8 @@ MFG,SubcontractOrderIssued,idp-brant.mfg.subcontract_order_issued.v1,idp-brant.m
 MFG,OperationProgressRecorded,idp-brant.mfg.operation_progress_recorded.v1,idp-brant.mfg,SubcontractOrder,S6,—
 QLT,InspectionRecorded,idp-brant.qlt.inspection_recorded.v1,idp-brant.qlt,Inspection,S5,inspection_id、subject_kind、subject_id、subject_line_id、subject_revision、subject_hash、order_id、order_line_id、sku_id、spec_revision、unit_id、inspected_quantity、conforming_quantity、nonconforming_quantity、inspector_kind、standard_source_id、standard_sha256、report_file_id、report_sha256、inspected_at、agency_party_id、agency_service_role_id、agency_role_revision、supersedes_inspection_id
 QLT,DispositionDecided,idp-brant.qlt.disposition_decided.v1,idp-brant.qlt,Inspection,S5,inspection_id、subject_kind、subject_id、subject_line_id、unit_id、nonconforming_quantity、items
-QLT,QualityReleased,idp-brant.qlt.quality_released.v1,idp-brant.qlt,QualityRelease,S5,release_id、subject_kind、subject_id、subject_line_id、subject_revision、supplier_id、order_id、order_line_id、sku_id、spec_revision、unit_id、unit_revision、released_quantity、valid_from、valid_until、inspection_ids
-QLT,QualityReleaseRevoked,idp-brant.qlt.quality_release_revoked.v1,idp-brant.qlt,QualityRelease,S5,release_id、subject_kind、subject_id、subject_line_id、order_id、order_line_id、released_quantity、unit_id、revoked_at
+QLT,QualityReleased,idp-brant.qlt.quality_released.v1,idp-brant.qlt,QualityRelease,S5,release_id、subject_kind、subject_id、subject_line_id、subject_revision、supplier_id、order_id、order_line_id、sku_id、spec_revision、unit_id、unit_revision、released_quantity、valid_from、valid_until、inspection_ids、concession、concession_quantity
+QLT,QualityReleaseRevoked,idp-brant.qlt.quality_release_revoked.v1,idp-brant.qlt,QualityRelease,S5,release_id、subject_kind、subject_id、subject_line_id、order_id、order_line_id、released_quantity、unit_id、revoked_at、shipped_quantity、frozen_quantity
 STK,StockReceived,idp-brant.stk.stock_received.v1,idp-brant.stk,StockLedger,S6,—
 STK,StockIssued,idp-brant.stk.stock_issued.v1,idp-brant.stk,StockLedger,S6,—
 STK,ReservationPlaced,idp-brant.stk.reservation_placed.v1,idp-brant.stk,Reservation,S6,—
@@ -118,7 +118,7 @@ CLM,ClaimOpened,idp-brant.clm.claim_opened.v1,idp-brant.clm,ClaimCase,S6,—
 CLM,ReturnRegistered,idp-brant.clm.return_registered.v1,idp-brant.clm,ReturnRecord,S6,—
 CLM,RemedyDecided,idp-brant.clm.remedy_decided.v1,idp-brant.clm,ClaimCase,S6,—
 CLM,ClaimClosed,idp-brant.clm.claim_closed.v1,idp-brant.clm,ClaimCase,S6,—
-CNX,PurchaseInvoiceVerified,idp-brant.cnx.purchase_invoice_verified.v1,idp-brant.cnx,PurchaseInvoice,S5,purchase_invoice_id、kind、colour、number、supplier_party_id、currency、lines、matches、commitment_ids、reversed_invoice_id、reversed_invoice_version、review_commitment_ids
+CNX,PurchaseInvoiceVerified,idp-brant.cnx.purchase_invoice_verified.v1,idp-brant.cnx,PurchaseInvoice,S5,purchase_invoice_id、kind、colour、number、supplier_party_id、currency、lines、matches、commitment_ids、reversed_invoice_id、reversed_invoice_version、review_commitment_ids、reversal
 CNX,DeclarationReceiptRecorded,idp-brant.cnx.declaration_receipt_recorded.v1,idp-brant.cnx,DeclarationCase,S5,declaration_id、export_lot_id、attempt、shipment_id、order_id、order_revision、receipt_id、receipt_no、outcome、from、version、external_sequence、mapping_version、declaration_number、exported_at
 CNX,TaxEvidenceAllocated,idp-brant.cnx.tax_evidence_allocated.v1,idp-brant.cnx,TaxRefundCase,S5,case_id、export_lot_id、attempt、order_id、policy_id、policy_revision、refund_method、allocation_ids、purchase_invoice_ids
 CNX,DocumentBundleChecked,idp-brant.cnx.document_bundle_checked.v1,idp-brant.cnx,DocumentBundle,S5,bundle_id、export_lot_id、order_id、check_no、status、missing、unverified、verified、document_sha256
@@ -126,12 +126,12 @@ CNX,TradeComplianceDecided,idp-brant.cnx.trade_compliance_decided.v1,idp-brant.c
 CNX,ExportLicenseAllocated,idp-brant.cnx.export_license_allocated.v1,idp-brant.cnx,ExportLicense,S5,license_id、allocation_id、target_kind、target_id、target_version、attempt、order_id、order_revision、quantity、unit、value_minor、currency、lines_hash
 CNX,TradeComplianceReopened,idp-brant.cnx.trade_compliance_reopened.v1,idp-brant.cnx,TradeComplianceCheck,S5,decision_id、regulation_id、regulation_revision、updated_lists、check_id、order_id、order_revision、order_hash、cause
 CNX,CertificateRegistered,idp-brant.cnx.certificate_registered.v1,idp-brant.cnx,CertificateResult,S5,certificate_id、revision、kind、object_kind、market、valid_from、valid_until、document_sha256、object_id、supersedes
-CNX,TaxRefundResultRecorded,idp-brant.cnx.tax_refund_result_recorded.v1,idp-brant.cnx,TaxRefundCase,S5,case_id、result_id、export_lot_id、stage、from、policy_id、policy_revision、fund_record_id
+CNX,TaxRefundResultRecorded,idp-brant.cnx.tax_refund_result_recorded.v1,idp-brant.cnx,TaxRefundCase,S5,case_id、result_id、export_lot_id、stage、from、policy_id、policy_revision、fund_record_id、purchase_invoice_id
 CNX,TaxOpeningRecorded,idp-brant.cnx.tax_opening_recorded.v1,idp-brant.cnx,TaxRefundCase,S5,opening_id、kind、cutoff_at、source_document、purchase_invoice_id、case_id、export_lot_id、position、policy_id、policy_revision、allocation_ids、purchase_invoice_ids
 CNX,ExportLicenseRegistered,idp-brant.cnx.export_license_registered.v1,idp-brant.cnx,ExportLicense,S5,license_id、license_number、issuer、destination、end_user_party_id、unit、licensed_quantity、currency、licensed_value_minor、valid_from、valid_until、file_id、file_sha256
 CRM,OpportunityAdvanced,idp-brant.crm.opportunity_advanced.v1,idp-brant.crm,Opportunity,S6,—
-TSK,TaskCreated,idp-brant.tsk.task_created.v1,idp-brant.tsk,BusinessTask,S4,—
-TSK,TaskControlChanged,idp-brant.tsk.task_control_changed.v1,idp-brant.tsk,BusinessTask,S4,—
-TSK,TaskCompleted,idp-brant.tsk.task_completed.v1,idp-brant.tsk,BusinessTask,S4,—
-TSK,TaskClosedUnfulfilled,idp-brant.tsk.task_closed_unfulfilled.v1,idp-brant.tsk,BusinessTask,S4,—
+TSK,TaskCreated,idp-brant.tsk.task_created.v1,idp-brant.tsk,BusinessTask,S4,task_id、task_version、goal_code、goal_version、lifecycle、control_mode、owner_id、rfq_id、quote_id
+TSK,TaskControlChanged,idp-brant.tsk.task_control_changed.v1,idp-brant.tsk,BusinessTask,S4,task_id、task_version、control_change、lifecycle、control_mode、control_epoch、quote_id
+TSK,TaskCompleted,idp-brant.tsk.task_completed.v1,idp-brant.tsk,BusinessTask,S4,task_id、task_version、goal_code、goal_version、completion_actor、quote_id
+TSK,TaskClosedUnfulfilled,idp-brant.tsk.task_closed_unfulfilled.v1,idp-brant.tsk,BusinessTask,S4,task_id、task_version、goal_code、goal_version、close_cause、quote_id
 TSK,ActionReconciled,idp-brant.tsk.action_reconciled.v1,idp-brant.tsk,ActionExecution,S4,—
