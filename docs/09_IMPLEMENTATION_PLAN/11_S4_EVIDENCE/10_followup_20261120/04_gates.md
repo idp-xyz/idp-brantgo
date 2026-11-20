@@ -41,4 +41,15 @@
 - 冒烟运行退出 0，对着假的模型服务，不是证据，不在本目录。
 - 主导者合并时的 `f-l1-check.log` 是一次 `make check`：golangci-lint 0 issues，日志跑到依赖检查，没有 FAIL 行。文件没有退出状态行。
 
-没有跑 `make race`、`make ai-eval-live`、`make eer-live`。没有 9d2d045 或 ad704e3 上的真实运行。没执行的族的重跑还没有做。
+没有跑 `make race`、`make ai-eval-live`、`make eer-live`。上面三句是 L1 合并当时的记录。其后在 224ffcf 上有门禁 f2，以及本目录 README 里的两次真实运行。
+
+## 主导者在 224ffcf 上的门禁 f2
+
+日志 `scratchpad/lead/logs/f2-gate.out`。开始时树是干净的 224ffcf（2026-11-20T10:27:26Z）。门禁从 2026-11-20T10:27:27Z 记到脚本化套件之后的 2026-11-20T10:54:19Z，`gate_rc=0`。分步在 2026-11-20T10:50:11Z 结束，`overall=0`，`gate_steps_rc=0`。结束后树仍是干净的 224ffcf（10:54:19Z）。
+
+- 迁移：0 个新应用、96 个已记录。`db=0`。
+- 集成：bootstrap 773 个测试，SHARDS=6，各一次（127＋140＋124＋116＋124＋142），墙钟 10 分 20 秒。`integration=0`。
+- 竞态：同样 773 个测试，SHARDS=6，0 个数据竞争，墙钟 12 分 20 秒。`race=0`。
+- 脚本化套件：容器 brant-pg16-ci100（`max_connections` 100），70 次里 70 次通过，248 秒，客户端连接峰值 12，运行 `bin/ai-eval/20261120T105017Z`。`ai_eval_rc=0`。
+
+224ffcf 已推到 `origin/s4/followups`。远程运行 44729594979 于 2026-11-20T11:41:04Z 开始，工作流 Brant M0 / PG16 / Bento RC2，事件 push，`completed success`，16 个作业全部成功。拉取请求 #9：`https://github.com/idp-xyz/idp-brantgo/pull/9`（`s4/followups` → `main`）。这次远程运行是 224ffcf 的，不是本追加提交自己的。E3 没有为这个运行再去列作业；16／16 取自主导者写给拉取请求的正文（`scratchpad/lead/pr-s4f-body.final.md`），成功与开始时间取自同一份正文和 `s4-lead-notes.md`。
