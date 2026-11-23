@@ -3,14 +3,19 @@
 //
 // PUR's SubcontractDemand v1 (Context Map R23, guardLock false) is read in Prepare, before the
 // subcontract transaction, and only when the issue cites a commitment. The processing quantity is
-// not written back as a sales demand. Material handover (R42) is performed by the composition
-// root's Handovers port, which calls STK in STK's own transaction before MFG records the
-// association. MFG does not import STK: the Context Map edge lets STK import MFG, not the reverse.
-// operation.record_progress locks the subcontract only and calls neither QLT nor STK (MFG-INV-001).
+// not written back as a sales demand, and the issue does not lock a PUR row. Material handover
+// (R42) is performed by the composition root's Handovers port, which calls STK in STK's own
+// transaction before MFG records the association. MFG does not import STK: the Context Map edge
+// lets STK import MFG, not the reverse. operation.record_progress locks the subcontract only and
+// calls neither QLT nor STK (MFG-INV-001).
 //
-// Lock order: the command's own root FOR UPDATE (the plan, or the subcontract), then the authority
-// guard FOR SHARE. A handover locks the subcontract and no stock row. Children of a plan are not
-// locked on their own.
+// Lock order: the command's own root FOR UPDATE, then the authority guard FOR SHARE.
+// subcontract_order.issue locks the collaboration plan FOR UPDATE first, then the subcontract
+// FOR UPDATE, and under that plan lock refuses a quantity that would take the non-cancelled
+// issues of the operation above the operation quantity or, when a commitment is cited, above the
+// demand quantity read in Prepare. A handover locks the subcontract and no stock row, and refuses
+// a sku that is not a material responsibility of the plan. Children of a plan are not locked on
+// their own.
 package application
 
 import (

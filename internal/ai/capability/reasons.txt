@@ -1006,6 +1006,7 @@
 "The shipment's document set has no issued bill of lading record: documents are released on it"
 "The shipped quantity is not within the order line's"
 "The single_use licence was declared (一批一证)"
+"The sku is not a material on the plan"
 "The snapshot costs lines the RFQ does not have"
 "The snapshot does not cost the RFQ's complete line set"
 "The snapshot is not on nominal direct cost"

@@ -185,3 +185,8 @@ func (p *Plan) OperationByID(id string) (Operation, bool) {
 	}
 	return p.Operations[i], true
 }
+
+// HasMaterialSKU reports whether sku is one of the plan's material responsibilities.
+func (p *Plan) HasMaterialSKU(sku string) bool {
+	return slices.ContainsFunc(p.Materials, func(m Material) bool { return m.SkuID == sku })
+}
