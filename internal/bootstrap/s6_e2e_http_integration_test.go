@@ -24,9 +24,10 @@ import (
 )
 
 // S6-06 on the merged tip (SIM-03, S6-D01..S6-D05). Each story is the place the wave-2
-// contracts meet. Commands that already have a route are HTTP on the composed process.
-// CNX channel methods and material handover stay in process. Fixture setup is the existing
-// worlds; these tests do not repeat a unit suite under another name.
+// contracts meet. Commands that have a route are HTTP on the composed process. The five CNX
+// channel commands are on that route too (S6-05); this story still drives them in process.
+// Material handover stays in process. Fixture setup is the existing worlds; these tests do
+// not repeat a unit suite under another name.
 
 // SIM-03: a multi_order quote takes two orders inside the cap and refuses a third.
 // An AI actor cannot call order.prepare_partial.
