@@ -36,7 +36,7 @@ func shipmentLineRefs(sh *shipment.Shipment, prices map[string]shipment.Price, t
 			CustomerID: sh.CustomerID, OrderLineID: l.OrderLineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision, UnitID: l.UnitID,
 			UnitRevision: l.UnitRevision, OrderLineQuantity: postgres.Text(l.OrderQuantity), Quantity: postgres.Text(l.Quantity),
 			SupplierDelivery: api.DeliveryLineRef{DeliveryID: l.Delivery.DeliveryID, LineID: l.Delivery.LineID, Version: l.DeliveryVersion},
-			CommitmentID:     l.CommitmentID, SupplierID: l.SupplierID, QualityReleaseID: l.ReleaseID, ExportLotID: taken[l.ID]}
+			CommitmentID:     l.CommitmentID, SupplierID: l.SupplierID, QualityReleaseID: l.ReleaseID, ExportLotID: taken[l.ID], Route: sh.Route}
 		if c := sh.Confirmation; c != nil {
 			r.ConfirmedAt = c.Confirmed.At
 		}

@@ -52,6 +52,13 @@ func nullable(s string) *string {
 	return &s
 }
 
+func str(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func strs(s []string) []string {
 	if s == nil {
 		return []string{}
@@ -147,7 +154,8 @@ func LoadShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 func loadLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s *shipment.Shipment) error {
 	t, c := scope2(scope)
 	rows, err := exec.Query(ctx, `SELECT line_id, order_line_id, sku_id, spec_revision, unit_id, unit_revision, order_line_quantity::text,
-		quantity::text, delivery_id, delivery_line_id, delivery_version, commitment_id, supplier_id, quality_release_id, quality_concession
+		quantity::text, delivery_id, delivery_line_id, delivery_version, commitment_id, supplier_id, quality_release_id, quality_concession,
+		location_id, batch_id, custody_kind, reservation_id
 		FROM brant_ful.shipment_line WHERE tenant_id = $1 AND company_id = $2 AND shipment_id = $3 ORDER BY line_no`, t, c, s.ID)
 	if err != nil {
 		return err
@@ -155,10 +163,23 @@ func loadLines(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s
 	s.Lines, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (shipment.Line, error) {
 		var l shipment.Line
 		var ordered, qty string
-		if err := row.Scan(&l.ID, &l.OrderLineID, &l.SkuID, &l.SpecRevision, &l.UnitID, &l.UnitRevision, &ordered, &qty, &l.Delivery.DeliveryID,
-			&l.Delivery.LineID, &l.DeliveryVersion, &l.CommitmentID, &l.SupplierID, &l.ReleaseID, &l.QualityConcession); err != nil {
+		var deliveryID, deliveryLine, commitment, supplier, release, location, batch, custody, reservation *string
+		var deliveryVersion *int64
+		if err := row.Scan(&l.ID, &l.OrderLineID, &l.SkuID, &l.SpecRevision, &l.UnitID, &l.UnitRevision, &ordered, &qty, &deliveryID,
+			&deliveryLine, &deliveryVersion, &commitment, &supplier, &release, &l.QualityConcession, &location, &batch, &custody, &reservation); err != nil {
 			return l, err
 		}
+		if deliveryID != nil {
+			l.Delivery.DeliveryID = *deliveryID
+		}
+		if deliveryLine != nil {
+			l.Delivery.LineID = *deliveryLine
+		}
+		if deliveryVersion != nil {
+			l.DeliveryVersion = *deliveryVersion
+		}
+		l.CommitmentID, l.SupplierID, l.ReleaseID = str(commitment), str(supplier), str(release)
+		l.LocationID, l.BatchID, l.CustodyKind, l.ReservationID = str(location), str(batch), str(custody), str(reservation)
 		var err error
 		if l.OrderQuantity, err = quantity(ordered); err != nil {
 			return l, err
@@ -267,12 +288,18 @@ func InsertShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 		return err
 	}
 	for i, l := range s.Lines {
+		var deliveryVersion any
+		if s.Route != shipment.RouteStock {
+			deliveryVersion = l.DeliveryVersion
+		}
 		if _, err := exec.Exec(ctx, `INSERT INTO brant_ful.shipment_line (tenant_id, company_id, shipment_id, line_id, line_no, order_line_id,
 			sku_id, spec_revision, unit_id, unit_revision, order_line_quantity, quantity, delivery_id, delivery_line_id, delivery_version,
-			commitment_id, supplier_id, quality_release_id, quality_concession)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17, $18, $19)`,
+			commitment_id, supplier_id, quality_release_id, quality_concession, location_id, batch_id, custody_kind, reservation_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::numeric, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
 			t, c, s.ID, l.ID, i+1, l.OrderLineID, l.SkuID, l.SpecRevision, l.UnitID, l.UnitRevision, Text(l.OrderQuantity), Text(l.Quantity),
-			l.Delivery.DeliveryID, l.Delivery.LineID, l.DeliveryVersion, l.CommitmentID, l.SupplierID, l.ReleaseID, l.QualityConcession); err != nil {
+			nullable(l.Delivery.DeliveryID), nullable(l.Delivery.LineID), deliveryVersion, nullable(l.CommitmentID), nullable(l.SupplierID),
+			nullable(l.ReleaseID), l.QualityConcession, nullable(l.LocationID), nullable(l.BatchID), nullable(l.CustodyKind),
+			nullable(l.ReservationID)); err != nil {
 			return err
 		}
 	}
@@ -396,7 +423,7 @@ func LoadConsumed(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 		return out, err
 	}
 	if err := collect(`SELECT l.commitment_id, l.order_line_id, trim_scale(sum(l.quantity))::text`+confirmed+
-		`s.order_id = $3 GROUP BY l.commitment_id, l.order_line_id`, []any{t, c, orderID}, func(k []string, d kernel.Decimal) {
+		`s.order_id = $3 AND l.commitment_id IS NOT NULL GROUP BY l.commitment_id, l.order_line_id`, []any{t, c, orderID}, func(k []string, d kernel.Decimal) {
 		out.CommitmentLines[shipment.CommitmentLine{CommitmentID: k[0], OrderLineID: k[1]}] = d
 	}); err != nil {
 		return out, err

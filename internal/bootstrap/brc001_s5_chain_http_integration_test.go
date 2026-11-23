@@ -104,7 +104,7 @@ import (
 //   - 26 (STL-INV-010): credit.officer records provider.1's pre_carriage of 60.00 USD as estimated (S5R-D24),
 //     treasury confirms it on the forwarder's bill, credit.officer allocates it to the order.
 //   - 27 (STL-INV-011, BT18): treasury reviews and closes the order result: confirmed 960.00 − 600.00 −
-//     60.00 = 300.00 (31.25 %), equal to the quote's calculation; CLM recorded not_enabled.
+//     60.00 = 300.00 (31.25 %), equal to the quote's calculation; claims are met (no open claim).
 //
 // Final assertions (§5): order 960.00; reservation 672.00 reserved → consumed → released; shipped
 // 120; CI 960.00; export lot 960.00; receivable 960.00 → 0 (288.00 + 670.00 + 2.00 approved charge);
@@ -210,7 +210,7 @@ func newBRC001S5With(t *testing.T, opt bootstrap.PlatformConfig) *brcS5 {
 		"the bank: fund records are entered by treasury from synthetic bank advices",
 		"the tax authority: the VAT special invoice is a synthetic scan imported and verified by tax.officer; no refund is " +
 			"submitted, approved or received, the case stays expected",
-		"CLM: the order result records claims not_enabled (S5 has no claims context)",
+		"CLM: the order has no open claim, so the order result records claims met (an open claim blocks close)",
 		"the Outbox relay to an external sink: the relay publishes to the in-process dispatcher (brant-worker -dispatch)",
 		"a real identity provider",
 	}
@@ -1218,7 +1218,7 @@ func (c *brcS5) result() {
 		}
 	}
 	if v["status"] != "settled" || confirmed["result_minor"] != "30000" || confirmed["margin"] != "31.25" || snapshot["result_minor"] != "30000" ||
-		confirmed["net_sales_minor"] != "96000" || claims != "not_enabled" {
+		confirmed["net_sales_minor"] != "96000" || claims != "met" {
 		c.t.Fatalf("order result %v", v)
 	}
 	c.fact("status", v["status"], "net_sales_minor", confirmed["net_sales_minor"], "cost_of_sales_minor", brcDig(confirmed, "batches", 0, "cost_of_sales_minor"),
@@ -1313,7 +1313,7 @@ func (c *brcS5) finalAssertions() {
 		if e.Type == stlapi.EventOrderResultClosed {
 			var payload map[string]any
 			c.w.must(json.Unmarshal(e.Payload, &payload))
-			if payload["claims"] != "not_enabled" || payload["order_id"] != "order.1" {
+			if payload["claims"] != "met" || payload["order_id"] != "order.1" {
 				c.t.Fatalf("OrderResultClosed %s", e.Payload)
 			}
 		}

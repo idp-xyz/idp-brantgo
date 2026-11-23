@@ -175,7 +175,7 @@ func TestBaseline46SAOrderResult(t *testing.T) {
 	is(t, "receipts", f.Cash.Receipts, "6900.00 CNY")
 	is(t, "payments", f.Cash.Payments, "4000.00 CNY")
 	is(t, "net cash", f.Cash.Net, "2900.00 CNY")
-	want := []string{"fulfilment met", "receivables met", "payables met", "purchase_costs met", "direct_charges met", "claims not_enabled"}
+	want := []string{"fulfilment met", "receivables met", "payables met", "purchase_costs met", "direct_charges met", "claims met"}
 	for i, d := range dims {
 		if d.Name+" "+d.Status != want[i] {
 			t.Fatalf("condition %d %+v, want %s", i, d, want[i])
@@ -188,7 +188,7 @@ func TestBaseline46SAOrderResult(t *testing.T) {
 
 // BT18 (基线 9.3 "发货完成但有未结费用或未决事项"): everything shipped, but a charge pending, a receivable open and the
 // order still active — close is ORDER_RESULT_NOT_SETTLED with every unmet dimension listed, not a pass because the
-// goods left; CLM stays not_enabled.
+// goods left. With no claim the claims dimension is met.
 func TestBT18ShippedButNotSettled(t *testing.T) {
 	in := saInput(t)
 	in.Order.Status, in.Order.Ended = "active", ""
@@ -210,14 +210,36 @@ func TestBT18ShippedButNotSettled(t *testing.T) {
 		!strings.Contains(rej.Fields[2].Reason, "charge inspection is pending") {
 		t.Fatalf("BT18 refusal %v", err)
 	}
-	if dims[5].Status != NotEnabled {
-		t.Fatalf("CLM %+v", dims[5])
+	if dims[5].Name != DimClaims || dims[5].Status != Met {
+		t.Fatalf("claims %+v", dims[5])
 	}
 	is(t, "executing counts the pending charge", f.Executing.ChargesEstimated, "120.00 CNY")
 	is(t, "the confirmed result does not", f.Confirmed.DirectCharges, "650.00 CNY")
 	r := &Result{OrderID: "order.sa", Status: StatusReviewed, Version: 1}
 	if err := r.Close(dims, Snapshot{}); err == nil || r.Status != StatusReviewed || len(r.Snapshots) != 0 {
 		t.Fatalf("closed with BT18's conditions: %v %+v", err, r)
+	}
+}
+
+// An open claim is its own unmet dimension and blocks close (STL-INV-011, R35). A closed claim stays met.
+func TestOpenClaimBlocksClose(t *testing.T) {
+	in := saInput(t)
+	in.Claims = []ClaimFact{{ClaimID: "claim.1", Open: true}}
+	_, dims := Compute(in)
+	err := NotSettled(dims)
+	rej, ok := kernel.AsRejection(err)
+	if !ok || rej.Code != CodeOrderResultNotSettled || len(rej.Fields) != 1 || rej.Fields[0].Path != "/conditions/claims" ||
+		dims[5].Status != Unmet {
+		t.Fatalf("open claim %v %+v", err, dims[5])
+	}
+	r := &Result{OrderID: "order.sa", Status: StatusReviewed, Version: 1}
+	if err := r.Close(dims, Snapshot{}); err == nil || r.Status != StatusReviewed {
+		t.Fatalf("closed with an open claim: %v %+v", err, r)
+	}
+	in.Claims[0].Open = false
+	_, dims = Compute(in)
+	if dims[5].Status != Met || NotSettled(dims) != nil {
+		t.Fatalf("closed claim %+v %v", dims[5], NotSettled(dims))
 	}
 }
 
