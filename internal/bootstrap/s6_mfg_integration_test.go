@@ -4,6 +4,8 @@ package bootstrap_test
 
 import (
 	"net/http/httptest"
+	"slices"
+	"sync"
 	"testing"
 
 	"go.idp.xyz/idp-brant/internal/bootstrap"
@@ -188,6 +190,16 @@ func TestS6ManufacturingSubcontractAndHandover(t *testing.T) {
 	if stopped.Status != mfgapi.StatusCancelled {
 		t.Fatalf("subcontract cancel %+v", stopped)
 	}
+	// sc.1's 10 still counts (it completed). sc.cancel does not. 90 fills the operation of 100.
+	fit, err := mfg.IssueSubcontract(admin, mfgIssue("sc.fit", "plan.pub", "op.1", "90", ""))
+	w.must(err)
+	if fit.Status != mfgapi.StatusIssued || fit.RowVersion != 1 {
+		t.Fatalf("remainder %+v", fit)
+	}
+	_, err = mfg.IssueSubcontract(admin, mfgIssue("sc.over2", "plan.pub", "op.1", "1", ""))
+	if code(err) != kernel.CodeInvalidKnownValue || path(err) != "/args/quantity" || reasonOf(err) != "The quantity is above the operation" {
+		t.Fatalf("cumulative cap %s %s %q", code(err), path(err), reasonOf(err))
+	}
 
 	_, err = mfg.RecordMaterialHandover(admin, mfgHandover("sc.1", "mv.early", "mv.early.in", mfgapi.HandoverTransfer, "loc.1", "loc.factory", "1"))
 	w.want(err, mfgapi.CodeDependencyNotSupported)
@@ -199,8 +211,18 @@ func TestS6ManufacturingSubcontractAndHandover(t *testing.T) {
 	}
 
 	w.must(enable(w, admin))
-	_, err = w.c.STK.ReceiveStock(admin, receive("mv.recv", "sku.1", "100", "100", "1", "2026-01-01T00:00:00.000000Z"))
+	_, err = w.c.STK.ReceiveStock(admin, receive("mv.recv", "sku.cloth", "100", "100", "1", "2026-01-01T00:00:00.000000Z"))
 	w.must(err)
+	moves := w.count("company.A", "brant_stk.stock_movement")
+	foreign := mfgHandover("sc.1", "mv.foreign", "mv.foreign.in", mfgapi.HandoverTransfer, "loc.1", "loc.factory", "1")
+	foreign.SkuID = "sku.1"
+	_, err = mfg.RecordMaterialHandover(admin, foreign)
+	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/sku_id" || reasonOf(err) != "The sku is not a material on the plan" {
+		t.Fatalf("foreign sku %s %s %q", code(err), path(err), reasonOf(err))
+	}
+	if w.count("company.A", "brant_mfg.material_handover") != 0 || w.count("company.A", "brant_stk.stock_movement") != moves {
+		t.Fatal("a sku that is not a material was handed over")
+	}
 	for _, h := range []mfgapi.RecordMaterialHandover{
 		mfgHandover("sc.1", "mv.xfer", "mv.xfer.in", mfgapi.HandoverTransfer, "loc.1", "loc.factory", "20"),
 		mfgHandover("sc.1", "mv.consume", "", mfgapi.HandoverConsume, "loc.1", "", "5"),
@@ -218,8 +240,8 @@ func TestS6ManufacturingSubcontractAndHandover(t *testing.T) {
 	}
 	kinds := map[string]bool{}
 	for _, key := range []stkapi.BalanceKey{
-		{SkuID: "sku.1", LocationID: "loc.1", BatchID: "batch.1", CustodyKind: stkapi.CustodyOwnWarehouse},
-		{SkuID: "sku.1", LocationID: "loc.factory", BatchID: "batch.1", CustodyKind: stkapi.CustodyExternalFactoryMaterial},
+		{SkuID: "sku.cloth", LocationID: "loc.1", BatchID: "batch.1", CustodyKind: stkapi.CustodyOwnWarehouse},
+		{SkuID: "sku.cloth", LocationID: "loc.factory", BatchID: "batch.1", CustodyKind: stkapi.CustodyExternalFactoryMaterial},
 	} {
 		moves, err := w.c.STK.ListMovements(admin, key)
 		w.must(err)
@@ -281,6 +303,36 @@ func TestS6ManufacturingSubcontractAndHandover(t *testing.T) {
 	if !published || !issuedEvent || !progressed {
 		t.Fatalf("events published %v issued %v progressed %v", published, issuedEvent, progressed)
 	}
+
+	// Two issues of 60 against an operation of 100 share the plan lock. One is stored.
+	_, err = mfg.PublishPlan(admin, mfgapi.PublishPlan{IdempotencyKey: w.key(), PlanID: "plan.race", ExpectedVersion: 0, Target: mfgapi.StatusPublished,
+		FactoryPartyID: "factory.1", Operations: ops, Materials: mats})
+	w.must(err)
+	before := w.count("company.A", "brant_mfg.subcontract_order")
+	got := make([]string, 2)
+	var wg sync.WaitGroup
+	for i, id := range []string{"sc.race.a", "sc.race.b"} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := mfg.IssueSubcontract(admin, mfgIssue(id, "plan.race", "op.1", "60", ""))
+			got[i] = code(err)
+		}()
+	}
+	wg.Wait()
+	if s := slices.Sorted(slices.Values(got)); !slices.Equal(s, []string{kernel.CodeInvalidKnownValue, "OK"}) {
+		t.Fatalf("concurrent issues %v", got)
+	}
+	if w.count("company.A", "brant_mfg.subcontract_order") != before+1 {
+		t.Fatal("both concurrent issues were stored")
+	}
+	rest, err := mfg.IssueSubcontract(admin, mfgIssue("sc.race.rest", "plan.race", "op.1", "40", ""))
+	w.must(err)
+	if rest.Status != mfgapi.StatusIssued {
+		t.Fatalf("remainder after the race %+v", rest)
+	}
+	_, err = mfg.IssueSubcontract(admin, mfgIssue("sc.race.over", "plan.race", "op.1", "1", ""))
+	w.want(err, kernel.CodeInvalidKnownValue)
 }
 
 func mfgIssue(id, planID, operationID, qty, commitment string) mfgapi.IssueSubcontract {
@@ -304,7 +356,7 @@ func mfgHandover(subcontractID, movementID, counter, kind, from, to, qty string)
 		custody = stkapi.CustodyExternalFactoryMaterial
 	}
 	cmd := mfgapi.RecordMaterialHandover{IdempotencyKey: "handover." + movementID, SubcontractID: subcontractID, MovementID: movementID,
-		CounterMovementID: counter, Kind: kind, SkuID: "sku.1", LocationID: from, BatchID: "batch.1", CustodyKind: custody,
+		CounterMovementID: counter, Kind: kind, SkuID: "sku.cloth", LocationID: from, BatchID: "batch.1", CustodyKind: custody,
 		Quantity: qty, UnitID: "PCS", UnitRevision: 1, Reason: "material " + kind}
 	if kind == mfgapi.HandoverTransfer || kind == mfgapi.HandoverReturn {
 		cmd.ToLocationID, cmd.ToBatchID, cmd.ToCustodyKind = to, "batch.1", stkapi.CustodyExternalFactoryMaterial

@@ -66,6 +66,18 @@ func TestSubcontractStateMachine(t *testing.T) {
 	}
 }
 
+func TestCumulativeQuantityStaysWithinTheLimit(t *testing.T) {
+	if !subcontract.WithinQuantity(qty(t, "0"), qty(t, "10"), qty(t, "10")) {
+		t.Fatal("a quantity equal to the limit fits")
+	}
+	if !subcontract.WithinQuantity(qty(t, "60"), qty(t, "40"), qty(t, "100")) {
+		t.Fatal("60 and 40 fit in 100")
+	}
+	if subcontract.WithinQuantity(qty(t, "60"), qty(t, "41"), qty(t, "100")) {
+		t.Fatal("60 and 41 are above 100")
+	}
+}
+
 func TestHandoverKindsStayDistinct(t *testing.T) {
 	for _, kind := range []string{subcontract.HandoverTransfer, subcontract.HandoverConsume, subcontract.HandoverReturn, subcontract.HandoverScrap} {
 		if subcontract.HandoverKind(kind) != nil {

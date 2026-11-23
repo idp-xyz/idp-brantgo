@@ -177,7 +177,7 @@ func TestS6E2EManufacturingSubcontract(t *testing.T) {
 
 	admin.command("mfg", mfgapi.Contract, mfgapi.CommandConfigure, map[string]any{"enabled": true, "expected_version": 0})
 	admin.command("stk", stkapi.Contract, stkapi.CommandConfigure, map[string]any{"enabled": true, "expected_version": 0})
-	buyer.command("stk", stkapi.Contract, stkapi.CommandReceive, e2eReceive("mv.mfg.recv", sku, unit, unitRev, "100", "1000", "2026-01-01T00:00:00.000000Z"))
+	buyer.command("stk", stkapi.Contract, stkapi.CommandReceive, e2eReceive("mv.mfg.recv", "sku.cloth", unit, unitRev, "100", "1000", "2026-01-01T00:00:00.000000Z"))
 
 	published := merch.command("mfg", mfgapi.Contract, mfgapi.CommandPublish, map[string]any{
 		"plan_id": "plan.e2e", "expected_version": 0, "target": mfgapi.StatusPublished, "factory_party_id": "factory.1",
@@ -238,8 +238,17 @@ func TestS6E2EManufacturingSubcontract(t *testing.T) {
 		t.Fatal("the subcontract inspection granted a release or shipped to the customer")
 	}
 
+	bad := mfgHandover("sc.e2e", "mv.e2e.bad", "mv.e2e.bad.in", mfgapi.HandoverTransfer, "loc.1", "loc.factory", "20")
+	bad.SkuID, bad.UnitID, bad.UnitRevision = sku, unit, unitRev
+	_, err = w.c.MFG.RecordMaterialHandover(buyerCtx, bad)
+	if code(err) != kernel.CodeReferenceInvalid || path(err) != "/args/sku_id" {
+		t.Fatalf("operation sku handed over: %s %s", code(err), path(err))
+	}
+	if w.count("company.A", "brant_mfg.material_handover") != 0 || w.count("company.A", "brant_stk.stock_movement") != moves {
+		t.Fatal("a sku that is not a material was handed over")
+	}
 	h := mfgHandover("sc.e2e", "mv.e2e", "mv.e2e.in", mfgapi.HandoverTransfer, "loc.1", "loc.factory", "20")
-	h.SkuID, h.UnitID, h.UnitRevision = sku, unit, unitRev
+	h.UnitID, h.UnitRevision = unit, unitRev
 	handed, err := w.c.MFG.RecordMaterialHandover(buyerCtx, h)
 	w.must(err)
 	if handed.ObjectID != "mv.e2e" || handed.Status != mfgapi.HandoverTransfer {
@@ -249,6 +258,57 @@ func TestS6E2EManufacturingSubcontract(t *testing.T) {
 		w.count("company.A", "brant_qlt.quality_release") != releases || w.count("company.A", "brant_ful.shipment") != shipments {
 		t.Fatal("handover did not stay a stock movement")
 	}
+
+	// commitment.1's purchase quantity is 120. op.1 is 200, so the demand cap and the operation cap
+	// are different numbers. The sum is the operation's non-cancelled issues, cited or not.
+	capped := merch.command("mfg", mfgapi.Contract, mfgapi.CommandPublish, map[string]any{
+		"plan_id": "plan.cap", "expected_version": 0, "target": mfgapi.StatusPublished, "factory_party_id": "factory.1",
+		"operations": []any{
+			map[string]any{"operation_id": "op.1", "name": "sew", "sequence": 1, "sku_id": sku,
+				"spec_revision": spec, "quantity": "200", "unit_id": unit, "unit_revision": unitRev},
+			map[string]any{"operation_id": "op.2", "name": "pack", "sequence": 2, "sku_id": sku,
+				"spec_revision": spec, "quantity": "200", "unit_id": unit, "unit_revision": unitRev},
+		},
+		"materials": []any{map[string]any{"material_id": "mat.1", "kind": mfgapi.MaterialOurSupply, "sku_id": "sku.cloth",
+			"quantity": "200", "unit_id": unit, "unit_revision": unitRev}}})
+	if capped["status"] != mfgapi.StatusPublished {
+		t.Fatalf("cap plan %v", capped)
+	}
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.u", "plan.cap", "op.1", "80", ""))
+	w.must(err)
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.mix", "plan.cap", "op.1", "50", "commitment.1"))
+	if code(err) != kernel.CodeInvalidKnownValue || reasonOf(err) != "The quantity is above the subcontract demand" {
+		t.Fatalf("80 uncited plus 50 cited against a demand of 120: %s %q", code(err), reasonOf(err))
+	}
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.c1", "plan.cap", "op.1", "40", "commitment.1"))
+	w.must(err)
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.full", "plan.cap", "op.1", "1", "commitment.1"))
+	if code(err) != kernel.CodeInvalidKnownValue || reasonOf(err) != "The quantity is above the subcontract demand" {
+		t.Fatalf("demand full: %s %q", code(err), reasonOf(err))
+	}
+	merch.command("mfg", mfgapi.Contract, mfgapi.CommandProgress, map[string]any{
+		"subcontract_id": "sc.cap.c1", "progress_id": "pg.cap.c1", "expected_version": 1, "operation_id": "op.1",
+		"progress_kind": mfgapi.StatusCancelled, "quantity": "1", "unit_id": unit, "reported_at": "2026-01-03T00:00:00.000000Z"})
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.c3", "plan.cap", "op.1", "40", "commitment.1"))
+	w.must(err)
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.rest", "plan.cap", "op.1", "80", ""))
+	w.must(err)
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.over", "plan.cap", "op.1", "1", ""))
+	if code(err) != kernel.CodeInvalidKnownValue || reasonOf(err) != "The quantity is above the operation" {
+		t.Fatalf("operation full: %s %q", code(err), reasonOf(err))
+	}
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.op2.over", "plan.cap", "op.2", "121", "commitment.1"))
+	if code(err) != kernel.CodeInvalidKnownValue || reasonOf(err) != "The quantity is above the subcontract demand" {
+		t.Fatalf("other operation shares the sum: %s %q", code(err), reasonOf(err))
+	}
+	_, err = w.c.MFG.IssueSubcontract(buyerCtx, e2eIssue(w, "sc.cap.op2", "plan.cap", "op.2", "120", "commitment.1"))
+	w.must(err)
+}
+
+func e2eIssue(w *fulPurWorld, id, planID, operationID, qty, commitment string) mfgapi.IssueSubcontract {
+	return mfgapi.IssueSubcontract{IdempotencyKey: "cap." + id, SubcontractID: id, PlanID: planID, OperationID: operationID,
+		Quantity: qty, UnitID: w.line.UnitRef.ID, UnitRevision: w.line.UnitRef.Revision, Currency: "USD", MinorUnits: 2,
+		ProcessingFeeMinor: "0", CommitmentID: commitment, OrderID: w.order.ObjectID, OrderLineID: "L1"}
 }
 
 // A claim on a confirmed shipment line settles one credit. A second settlement of that

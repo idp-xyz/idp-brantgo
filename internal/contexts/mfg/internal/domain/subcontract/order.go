@@ -62,6 +62,12 @@ func HandoverKind(kind string) error {
 	}
 }
 
+// WithinQuantity reports whether already plus add stays within limit. already is the sum of
+// non-cancelled subcontract quantities of one operation. Equal to the limit is within it.
+func WithinQuantity(already, add, limit kernel.Decimal) bool {
+	return already.Add(add).Cmp(limit) <= 0
+}
+
 // MovesStock reports whether a progress claim posts stock. It never does (MFG-INV-001).
 func MovesStock() bool { return false }
 

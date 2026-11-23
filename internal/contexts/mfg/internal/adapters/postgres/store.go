@@ -330,6 +330,22 @@ func loadProgress(ctx context.Context, exec bentopg.Executor, scope kernel.Scope
 	return rows.Err()
 }
 
+// SubcontractedQuantity is the sum of quantities on non-cancelled subcontracts of one operation.
+// Issued, in progress and completed count. Cancelled does not. No such row sums to 0. The caller
+// holds the collaboration plan FOR UPDATE, so a concurrent issue of that plan cannot commit a row
+// this sum missed.
+func SubcontractedQuantity(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, planID, operationID string) (kernel.Decimal, error) {
+	t, c := scope2(scope)
+	var q string
+	err := exec.QueryRow(ctx, `SELECT coalesce(sum(quantity), 0)::text FROM brant_mfg.subcontract_order
+		WHERE tenant_id = $1 AND company_id = $2 AND plan_id = $3 AND operation_id = $4 AND status <> 'cancelled'`,
+		t, c, planID, operationID).Scan(&q)
+	if err != nil {
+		return kernel.Decimal{}, err
+	}
+	return quantity(q)
+}
+
 // InsertSubcontract inserts an issued subcontract.
 func InsertSubcontract(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s *Subcontract, actor string, epoch int64, at time.Time) error {
 	t, c := scope2(scope)

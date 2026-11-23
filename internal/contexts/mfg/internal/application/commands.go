@@ -245,6 +245,7 @@ type issueCmd struct {
 	s      Service
 	cmd    api.IssueSubcontract
 	demand *purapi.SubcontractDemand
+	plan   *plan.Plan
 	cur    *postgres.Subcontract
 	replay bool
 }
@@ -272,7 +273,14 @@ func (h *issueCmd) Prepare(ctx context.Context) error {
 }
 
 func (h *issueCmd) Lock(ctx context.Context, exec bentopg.Executor) error {
-	h.cur, h.replay = nil, false
+	h.cur, h.replay, h.plan = nil, false, nil
+	// The collaboration plan is MFG's own root for this command. Lock it before the subcontract
+	// so two issues of the operation cannot both pass the quantity cap. PUR is not locked.
+	p, err := postgres.LoadPlan(ctx, exec, scopeOf(ctx), h.cmd.PlanID, postgres.ForUpdate)
+	if err != nil {
+		return err
+	}
+	h.plan = p
 	s, err := postgres.LoadSubcontract(ctx, exec, scopeOf(ctx), h.cmd.SubcontractID, postgres.ForUpdate)
 	h.cur = s
 	return err
@@ -294,10 +302,7 @@ func (h *issueCmd) Apply(ctx context.Context, exec bentopg.Executor, d authoriza
 		return done(h.cur.Order.ID, h.cur.Order.Version, h.cur.Order.Status), nil
 	}
 	sc := scopeOf(ctx)
-	p, err := postgres.LoadPlan(ctx, exec, sc, h.cmd.PlanID, postgres.NoLock)
-	if err != nil {
-		return action.Outcome{}, err
-	}
+	p := h.plan
 	if p == nil || !d.Sees(p.OwnerActor, p.OwnerTeam) {
 		return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/plan_id", "The collaboration plan is not known")
 	}
@@ -314,11 +319,17 @@ func (h *issueCmd) Apply(ctx context.Context, exec bentopg.Executor, d authoriza
 	if err != nil {
 		return action.Outcome{}, kernel.Reject(kernel.CodeSchemaInvalid, "/args/quantity", "")
 	}
-	if qty.Cmp(op.Quantity) > 0 {
-		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/quantity", "The quantity is above the operation")
-	}
 	if h.cmd.UnitID != op.UnitID || h.cmd.UnitRevision != op.UnitRevision {
 		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/unit_id", "The unit is the operation's unit")
+	}
+	// The plan lock is held. open is the non-cancelled quantity already issued for this operation.
+	// This issue is added to that sum. A cited demand caps the same sum, not a second ledger.
+	open, err := postgres.SubcontractedQuantity(ctx, exec, sc, p.ID, op.ID)
+	if err != nil {
+		return action.Outcome{}, err
+	}
+	if !subcontract.WithinQuantity(open, qty, op.Quantity) {
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/quantity", "The quantity is above the operation")
 	}
 	orderRevision := int64(1)
 	orderHash := digest("mfg-order", h.cmd.OrderID, h.cmd.OrderLineID)
@@ -330,7 +341,7 @@ func (h *issueCmd) Apply(ctx context.Context, exec bentopg.Executor, d authoriza
 			return action.Outcome{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_id", "The demand belongs to order "+h.demand.OrderID)
 		}
 		dq, err := kernel.ParseDecimal(h.demand.OperationQuantity, kernel.QuantityFormat)
-		if err != nil || qty.Cmp(dq) > 0 {
+		if err != nil || !subcontract.WithinQuantity(open, qty, dq) {
 			return action.Outcome{}, kernel.Reject(kernel.CodeInvalidKnownValue, "/args/quantity", "The quantity is above the subcontract demand")
 		}
 		if h.cmd.UnitID != h.demand.UnitID || h.cmd.UnitRevision != h.demand.UnitRevision {
@@ -475,6 +486,7 @@ type handoverCmd struct {
 	s      Service
 	cmd    api.RecordMaterialHandover
 	cur    *postgres.Subcontract
+	plan   *plan.Plan
 	replay bool
 }
 
@@ -494,6 +506,10 @@ func (h *handoverCmd) Prepare(ctx context.Context) error {
 			return err
 		}
 		h.cur = s
+		h.plan, err = postgres.LoadPlan(ctx, exec, scopeOf(ctx), s.Order.PlanID, postgres.NoLock)
+		if err != nil {
+			return err
+		}
 		existing, err = postgres.LoadHandover(ctx, exec, scopeOf(ctx), h.cmd.MovementID)
 		return err
 	})
@@ -515,6 +531,9 @@ func (h *handoverCmd) Prepare(ctx context.Context) error {
 			return nil
 		}
 		return api.Reject(api.CodeBusinessKeyConflict, "/args/movement_id", "The movement ID holds another handover")
+	}
+	if err = h.materialSKU(); err != nil {
+		return err
 	}
 	if h.s.Handovers == nil {
 		return api.Reject(api.CodeDependencyNotSupported, "/args/kind", "MaterialHandover v1 is not wired")
@@ -560,6 +579,9 @@ func (h *handoverCmd) Apply(ctx context.Context, exec bentopg.Executor, d author
 		}
 		return action.Outcome{}, api.Reject(api.CodeBusinessKeyConflict, "/args/movement_id", "The movement ID holds another handover")
 	}
+	if err = h.materialSKU(); err != nil {
+		return action.Outcome{}, err
+	}
 	row := postgres.Handover{MovementID: h.cmd.MovementID, Kind: h.cmd.Kind, Hash: hash, OwnerActor: d.Actor.ID, OwnerTeam: d.Team}
 	if err = postgres.InsertHandover(ctx, exec, scopeOf(ctx), h.cur.Order.ID, row, h.cmd.Kind, h.cmd.CounterMovementID, h.cmd.SkuID,
 		h.cmd.LocationID, h.cmd.BatchID, h.cmd.CustodyKind, h.cmd.ToLocationID, h.cmd.ToBatchID, h.cmd.ToCustodyKind, h.cmd.Quantity,
@@ -570,4 +592,11 @@ func (h *handoverCmd) Apply(ctx context.Context, exec bentopg.Executor, d author
 		return action.Outcome{}, err
 	}
 	return done(h.cmd.MovementID, h.cur.Order.Version, h.cmd.Kind), nil
+}
+
+func (h *handoverCmd) materialSKU() error {
+	if h.plan == nil || !h.plan.HasMaterialSKU(h.cmd.SkuID) {
+		return kernel.Reject(kernel.CodeReferenceInvalid, "/args/sku_id", "The sku is not a material on the plan")
+	}
+	return nil
 }

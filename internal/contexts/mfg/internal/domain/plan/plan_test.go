@@ -72,6 +72,13 @@ func TestPlanStateMachine(t *testing.T) {
 	}
 }
 
+func TestMaterialSKUIsAResponsibility(t *testing.T) {
+	p := sample()
+	if !p.HasMaterialSKU("sku.1") || p.HasMaterialSKU("sku.cloth") {
+		t.Fatalf("materials %+v", p.Materials)
+	}
+}
+
 func TestPublishNeedsMaterialAndAnOperation(t *testing.T) {
 	p := &plan.Plan{ID: "plan.1", FactoryID: "factory.1"}
 	if err := p.Transition(plan.StatusPublished); code(err) != kernel.CodeDraftNotReady {
