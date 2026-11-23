@@ -38,6 +38,10 @@ func declarationRules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandConfirmDeclaration, api.CommandConfirmDeclaration),
 		authorization.HumanOnly(api.CommandRecordSubmission, api.CommandRecordSubmission),
 		authorization.HumanOnly(api.CommandRecordReceipt, api.CommandRecordReceipt),
+		authorization.HumanOnly(api.CommandSubmitDeclarationChannel, api.CommandRecordSubmission),
+		authorization.HumanOnly(api.CommandSettleDeclarationChannel, api.CommandRecordReceipt),
+		authorization.HumanOnly(api.CommandIngestDeclarationReceipts, api.CommandRecordReceipt),
+		authorization.HumanOnly(api.CommandReconcileDeclarationChannel, api.CommandRecordReceipt),
 		{Command: api.CommandGetDeclaration, Permission: api.PermissionRead, ActorKinds: anyActor},
 		{Command: api.CommandDeclarations, Permission: api.PermissionRead, ActorKinds: anyActor},
 	}
