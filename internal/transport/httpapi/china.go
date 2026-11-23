@@ -20,6 +20,7 @@ type CNX interface {
 	cnxapi.TaxCaseQueries
 	cnxapi.DeclarationCommands
 	cnxapi.DeclarationQueries
+	cnxapi.ChannelCommands
 	cnxapi.BundleCommands
 	cnxapi.BundleQueries
 	cnxapi.CertificateCommands
@@ -48,12 +49,19 @@ func cnxCommands(c CNX) *commandSet {
 			cnxapi.CommandRecordTaxResult:     reflected("", "", receiptOf[cnxapi.Receipt](c.RecordTaxResult)),
 			cnxapi.CommandRebindPolicy:        reflected("", "", receiptOf[cnxapi.Receipt](c.RebindPolicy)), // S5R-D23
 			// Declarations and document bundles name declaration_id, export_lot_id, bundle_id.
-			cnxapi.CommandPrepareDeclaration:    reflected("", "", receiptOf[cnxapi.Receipt](c.PrepareDeclaration)),
-			cnxapi.CommandConfirmDeclaration:    reflected("", "", receiptOf[cnxapi.Receipt](c.ConfirmDeclaration)),
-			cnxapi.CommandRecordSubmission:      reflected("", "", receiptOf[cnxapi.Receipt](c.RecordSubmission)),
-			cnxapi.CommandRecordReceipt:         reflected("", "", receiptOf[cnxapi.Receipt](c.RecordReceipt)),
-			cnxapi.CommandCheckBundle:           reflected("", "", receiptOf[cnxapi.Receipt](c.CheckBundle)),
-			cnxapi.CommandResolveReconciliation: reflected("", "", receiptOf[cnxapi.Receipt](c.ResolveReconciliation)),
+			cnxapi.CommandPrepareDeclaration: reflected("", "", receiptOf[cnxapi.Receipt](c.PrepareDeclaration)),
+			cnxapi.CommandConfirmDeclaration: reflected("", "", receiptOf[cnxapi.Receipt](c.ConfirmDeclaration)),
+			cnxapi.CommandRecordSubmission:   reflected("", "", receiptOf[cnxapi.Receipt](c.RecordSubmission)),
+			cnxapi.CommandRecordReceipt:      reflected("", "", receiptOf[cnxapi.Receipt](c.RecordReceipt)),
+			// Channel filing (S6-05). Permissions stay record_submission, record_receipt and
+			// record_result. Settle is not a route: it is not a second filing.
+			cnxapi.CommandSubmitDeclarationChannel:    reflected("", "", receiptOf[cnxapi.Receipt](c.SubmitDeclarationChannel)),
+			cnxapi.CommandReconcileDeclarationChannel: reflected("", "", receiptOf[cnxapi.Receipt](c.ReconcileDeclarationChannel)),
+			cnxapi.CommandIngestDeclarationReceipts:   reflected("", "", receiptOf[cnxapi.Receipt](c.IngestDeclarationReceipts)),
+			cnxapi.CommandSubmitTaxChannel:            reflected("", "", receiptOf[cnxapi.Receipt](c.SubmitTaxChannel)),
+			cnxapi.CommandReconcileTaxChannel:         reflected("", "", receiptOf[cnxapi.Receipt](c.ReconcileTaxChannel)),
+			cnxapi.CommandCheckBundle:                 reflected("", "", receiptOf[cnxapi.Receipt](c.CheckBundle)),
+			cnxapi.CommandResolveReconciliation:       reflected("", "", receiptOf[cnxapi.Receipt](c.ResolveReconciliation)),
 			// Certificate results name certificate_id (S5 C5).
 			cnxapi.CommandRegisterCertificate: reflected("", "", receiptOf[cnxapi.Receipt](c.RegisterCertificate)),
 			// Opening refund material names opening_id (S5 C10).

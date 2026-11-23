@@ -37,9 +37,19 @@ func LoadOrderOfQuote(ctx context.Context, exec bentopg.Executor, scope kernel.S
 // ConsumedQuantities is the sum of quote_order_consumption for each line of quoteID. The caller
 // holds the quote root FOR UPDATE, so the sum is the quantity already placed (TRD-INV-024).
 func ConsumedQuantities(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, quoteID string) (map[string]string, error) {
+	return consumedSums(ctx, exec, scope, `quote_id = $3`, quoteID)
+}
+
+// ConsumedByOrder is the sum of quote_order_consumption for each line of orderID. An amendment
+// subtracts it from the quote sum so the quantity this order already holds is not counted twice.
+func ConsumedByOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, orderID string) (map[string]string, error) {
+	return consumedSums(ctx, exec, scope, `order_id = $3`, orderID)
+}
+
+func consumedSums(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, where, arg string) (map[string]string, error) {
 	rows, err := exec.Query(ctx, `SELECT line_id, sum(quantity)::text FROM brant_trd.quote_order_consumption
-		WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3 GROUP BY line_id`,
-		string(scope.Tenant), string(scope.Company), quoteID)
+		WHERE tenant_id = $1 AND company_id = $2 AND `+where+` GROUP BY line_id`,
+		string(scope.Tenant), string(scope.Company), arg)
 	if err != nil {
 		return nil, err
 	}
@@ -63,15 +73,20 @@ func trimQuantity(raw string) string {
 	return raw
 }
 
-// writeConsumption inserts the partial order's ledger rows before the order itself, so the order
-// trigger can see them. A full_v1 order has none.
+// writeConsumption inserts the command's ledger rows. A partial prepare writes them before the
+// order, so the order trigger can see them. An amendment appends one row per line it grows, at
+// the order revision it produces. A full_v1 order has none. A row with no recorder is the preparer's.
 func writeConsumption(ctx context.Context, exec bentopg.Executor, t, c string, o *order.Order) error {
 	for _, line := range o.Consumption {
+		act := line.Recorded
+		if act.By.ID == "" {
+			act = o.Prepared
+		}
 		if _, err := exec.Exec(ctx, `INSERT INTO brant_trd.quote_order_consumption (tenant_id, company_id, quote_id, order_id,
-			business_revision, line_id, quantity, recorded_by_kind, recorded_by_id, record_epoch, recorded_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			t, c, o.Source.QuoteID, o.ID, o.Source.Revision, line.LineID, line.Quantity,
-			string(o.Prepared.By.Kind), o.Prepared.By.ID, o.Prepared.Epoch, o.Prepared.At); err != nil {
+			business_revision, order_revision, line_id, quantity, recorded_by_kind, recorded_by_id, record_epoch, recorded_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			t, c, o.Source.QuoteID, o.ID, o.Source.Revision, line.OrderRevision, line.LineID, line.Quantity,
+			string(act.By.Kind), act.By.ID, act.Epoch, act.At); err != nil {
 			return err
 		}
 	}
@@ -214,10 +229,15 @@ func loadOrderClosure(ctx context.Context, exec bentopg.Executor, t, c, id strin
 // trigger checks them), reviews after the order they belong to.
 func SaveOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, o *order.Order, from int64, at time.Time) error {
 	t, c := string(scope.Tenant), string(scope.Company)
-	if o.Fresh {
+	// The ledger is appended before the order row moves: a partial prepare inserts the order
+	// after its rows, and an amendment inserts the increase while the order already exists.
+	// Both sit in this transaction, under the quote root locked FOR UPDATE.
+	if len(o.Consumption) > 0 {
 		if err := writeConsumption(ctx, exec, t, c, o); err != nil {
 			return err
 		}
+	}
+	if o.Fresh {
 		s := o.Source
 		_, err := exec.Exec(ctx, `INSERT INTO brant_trd.sales_order (tenant_id, company_id, order_id, quote_id, slot, revision, business_hash,
 			number, document_sha256, acceptance_id, acceptance_version, arrival_at, arrival_basis, expires_at, order_revision, snapshot,
