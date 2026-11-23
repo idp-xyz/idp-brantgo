@@ -38,6 +38,9 @@ const (
 	// Charges and order results (C9).
 	CodeAllocationInvalid     = "ALLOCATION_INVALID"       // 422: a weight negative, or the weights sum to zero (STL-INV-010)
 	CodeOrderResultNotSettled = "ORDER_RESULT_NOT_SETTLED" // 409: a close condition does not hold (STL-INV-011)
+
+	// An approved CLM remedy already has a credit note or a refund (R35, S6-D03).
+	CodeClaimRemedyAlreadySettled = "CLAIM_REMEDY_ALREADY_SETTLED" // 409
 )
 
 var codes = map[string]kernel.Category{
@@ -60,6 +63,7 @@ var codes = map[string]kernel.Category{
 	CodeSettlementHasApplications:   kernel.CategoryConflict,
 	CodeAllocationInvalid:           kernel.CategoryInvalid,
 	CodeOrderResultNotSettled:       kernel.CategoryConflict,
+	CodeClaimRemedyAlreadySettled:   kernel.CategoryConflict,
 	CodeOpeningBalanceDuplicate:     kernel.CategoryConflict, // C10 (opening.go)
 	CodeFundRecordHasApplications:   kernel.CategoryConflict, // S5R-D22 (payables.go)
 }

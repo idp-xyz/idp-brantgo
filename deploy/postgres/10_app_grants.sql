@@ -390,6 +390,8 @@ GRANT UPDATE (status, version, source_kind, source_party_id, source_reference, e
     basis, evidence_ids, billed_by_kind, billed_by_id, bill_epoch, billed_at, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at,
     confirm_evidence_ids, confirm_reason, allocation_seq, updated_at) ON brant_stl.charge TO brant_app;
 GRANT UPDATE (status, version, updated_at) ON brant_stl.order_result TO brant_app;
+-- S6-D03: one append-only row per approved remedy a credit note or a refund settles (R35).
+GRANT SELECT, INSERT ON brant_stl.claim_remedy_settlement TO brant_app;
 
 -- STL opening balances (S5-20): an opening item is only inserted with the opening statement or fund record its command
 -- writes, and moves recorded → reversed with its reversed statement (trigger); nothing is deleted.
@@ -501,6 +503,8 @@ GRANT EXECUTE ON FUNCTION brant_ful.release_consumption_v1(text) TO brant_app;
 -- PUR's purchase.commitment.dispose and purchase.commitment.disposition.decide execute CommitmentShipped v1
 -- (R82, PUR-INV-013) inside their own transactions, after the commitment root is locked.
 GRANT EXECUTE ON FUNCTION brant_ful.commitment_shipped_v1(text) TO brant_app;
+-- shipment.prepare inserts a stock line; the trigger checks the parent route.
+GRANT EXECUTE ON FUNCTION brant_ful.guard_stock_line() TO brant_app;
 
 -- FUL milestones and export lots (S5-03b): a shipment line's price is only inserted with its
 -- shipment; a milestone plan moves only its version, revision, counts and last revision (trigger),

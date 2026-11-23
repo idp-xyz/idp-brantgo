@@ -42,17 +42,38 @@ type Analysis struct {
 	Rate     kernel.Decimal
 }
 
-// ShipmentLine is a line of a FUL shipment of the order (ShipmentLineRef v1), in any state.
+// ShipmentLine is a line of a FUL shipment of the order (ShipmentLineRef v1), in any state. Route stock is valued
+// from CostLayerRef; an empty route is valued with the purchase statements, as every line was before S6.
 type ShipmentLine struct {
 	ShipmentID  string
 	LineID      string
 	Status      string // prepared, confirmed or cancelled
 	OrderLineID string
 	Quantity    kernel.Decimal
+	Route       string
 }
 
-// ShipmentConfirmed is FUL's state of a confirmed shipment.
-const ShipmentConfirmed = "confirmed"
+// StockCost is the FIFO cost of one confirmed stock-route line (CostLayerRef v1, R41). Gap is set when the
+// cost's currency is neither the order currency nor the analysis currency.
+type StockCost struct {
+	ShipmentID string
+	LineID     string
+	MovementID string
+	Amount     kernel.Money
+	Gap        string
+}
+
+// ClaimFact is one claim of the order (CreditRequest's order list, R35). Open blocks close.
+type ClaimFact struct {
+	ClaimID string
+	Open    bool
+}
+
+// ShipmentConfirmed is FUL's state of a confirmed shipment. routeStock is FUL's stock route (R29).
+const (
+	ShipmentConfirmed = "confirmed"
+	routeStock        = "stock"
+)
 
 // CommitmentLine is a line of a PUR purchase commitment of the order (PurchaseLineRef v1): its state, what it
 // buys for (the sealed net amount: the expected purchase cost) and its verified deliveries.
@@ -102,6 +123,9 @@ type Input struct {
 	ChargePayments map[string][]fa.Application
 	// S5R-D20: the payable adjustments of each purchase statement.
 	PayableAdjustments map[string][]settlement.PayableAdjustment
+	// S6-D02: FIFO cost of confirmed stock-route lines. S6-D03: claims of the order; none open is met.
+	StockCosts []StockCost
+	Claims     []ClaimFact
 }
 
 // Source is a record a figure counts: its kind, ID, version and what of it counts.
@@ -578,10 +602,12 @@ func (in Input) confirmed(b basis, p purchases, shares []share, chargeGaps []str
 				bt.statements = append(bt.statements, st.ID)
 			}
 			bt.net = add(bt.net, l.Net)
-			q := bt.sold[l.OrderLineID]
-			bt.sold[l.OrderLineID] = q.Add(l.Quantity)
-			s := soldBy[l.OrderLineID]
-			soldBy[l.OrderLineID] = s.Add(l.Quantity)
+			if !in.onStock(l.Source.ID, l.Source.LineID) {
+				q := bt.sold[l.OrderLineID]
+				bt.sold[l.OrderLineID] = q.Add(l.Quantity)
+				s := soldBy[l.OrderLineID]
+				soldBy[l.OrderLineID] = s.Add(l.Quantity)
+			}
 			totalNet = add(totalNet, l.Net)
 			if !slices.Contains(ids, l.Source.ID) {
 				ids, weights = append(ids, l.Source.ID), append(weights, l.Net.Decimal())
@@ -680,6 +706,7 @@ func (in Input) confirmed(b basis, p purchases, shares []share, chargeGaps []str
 		out.OrderLevelCharges = add(out.OrderLevelCharges, s.amount)
 	}
 	out.Gaps = append(out.Gaps, chargeGaps...)
+	in.addStockCost(b, &out, result)
 	for i := range result {
 		bt := &result[i]
 		bt.Result = sub(sub(sub(bt.NetSales, bt.Credits), bt.CostOfSales), bt.DirectCharges)
@@ -831,8 +858,63 @@ func (in Input) cash(b basis, values map[string]kernel.Money) Cash {
 // conditions are the close conditions as they stand (STL-INV-011), in their order.
 func (in Input) conditions(b basis, p purchases, f Figures) []Dimension {
 	dims := []Dimension{in.fulfilment(f), in.receivables(), in.payables(), in.purchaseCosts(p), in.directCharges(b)}
-	return append(dims, Dimension{Name: DimClaims, Status: NotEnabled,
-		Items: []string{"clm: not_enabled — CLM is not enabled in S5; no open return or claim can be checked"}})
+	return append(dims, in.claims())
+}
+
+// claims is STL-INV-011's claims dimension. No open claim — including an order CLM has none for — is met.
+// An open claim, a reject that has not been closed included, is unmet.
+func (in Input) claims() Dimension {
+	var open []string
+	for _, c := range in.Claims {
+		if c.Open {
+			open = append(open, c.ClaimID)
+		}
+	}
+	sort.Strings(open)
+	items := make([]string, len(open))
+	for i, id := range open {
+		items[i] = "claim " + id + " is open"
+	}
+	return dim(DimClaims, items, "no open claim")
+}
+
+func (in Input) onStock(shipmentID, lineID string) bool {
+	for _, l := range in.Shipments {
+		if l.ShipmentID == shipmentID && l.LineID == lineID && l.Route == routeStock {
+			return true
+		}
+	}
+	return false
+}
+
+// addStockCost adds FIFO cost to the sales batch of the shipment, or to unsold cost when that shipment is not on a
+// standing sales statement. It runs before each batch's result is subtracted, so the cost is in cost of sales.
+func (in Input) addStockCost(b basis, out *Confirmed, batches []Batch) {
+	known := map[string]bool{}
+	for _, c := range in.StockCosts {
+		known[c.ShipmentID+"\x00"+c.LineID] = true
+		if c.Gap != "" {
+			out.Gaps = append(out.Gaps, c.Gap)
+			continue
+		}
+		amount, ok := b.of(c.Amount)
+		if !ok {
+			out.Gaps = append(out.Gaps, "stock cost of shipment "+c.ShipmentID+" line "+c.LineID+" in "+c.Amount.Currency().Code()+" does not convert into "+b.result.Code())
+			continue
+		}
+		if j := slices.IndexFunc(batches, func(bt Batch) bool { return bt.ShipmentID == c.ShipmentID }); j >= 0 {
+			batches[j].CostOfSales = add(batches[j].CostOfSales, amount)
+		} else {
+			out.UnsoldPurchaseCost = add(out.UnsoldPurchaseCost, amount)
+		}
+		out.Sources = append(out.Sources, Source{Kind: "stock_cost", ID: c.MovementID, Detail: c.ShipmentID + " line " + c.LineID + " " + amount.String()})
+	}
+	for _, l := range in.Shipments {
+		if l.Route != routeStock || l.Status != ShipmentConfirmed || known[l.ShipmentID+"\x00"+l.LineID] {
+			continue
+		}
+		out.Gaps = append(out.Gaps, "shipment "+l.ShipmentID+" line "+l.LineID+" has no stock cost")
+	}
 }
 
 func dim(name string, items []string, met string) Dimension {

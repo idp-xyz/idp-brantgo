@@ -123,7 +123,7 @@ func (f FUL) ResolveOrderShipments(ctx context.Context, orderIDs []string) (map[
 			list := []application.OrderShipmentLine{}
 			for _, r := range lines {
 				list = append(list, application.OrderShipmentLine{ShipmentID: r.Key.ShipmentID, LineID: r.Key.LineID, Status: r.ShipmentStatus,
-					OrderLineID: r.OrderLineID, UnitID: r.UnitID, Quantity: r.Quantity})
+					OrderLineID: r.OrderLineID, UnitID: r.UnitID, Quantity: r.Quantity, Route: r.Route})
 			}
 			out[id] = list
 		}

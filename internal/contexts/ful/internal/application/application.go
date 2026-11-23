@@ -105,6 +105,9 @@ type Upstream struct {
 	Documents DocumentUpstream
 	// Costs is CST's cost snapshot by category (R78): the insurance component (S5-16, insurance.go).
 	Costs Costs
+	// Stock is STK's availability read (R29). Nil refuses the stock route at prepare. Confirm posts
+	// stock with the SQL function, not through this port.
+	Stock Stock
 }
 
 // Complete reports whether every upstream is wired.

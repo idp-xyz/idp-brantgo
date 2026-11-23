@@ -64,7 +64,7 @@ func figure(v map[string]any, path ...string) any {
 //     treasurer closes the result (and reconciles the command).
 //   - GET /stl/orders/{id}/result: settled; confirmed result 960.00 − 600.00 − 60.00 = 300.00 USD, margin 31.25
 //     (equal to the quote's calculation); the forecast too (PUR's commitment of 600.00, the 60.00 estimate); claims
-//     not_enabled; one snapshot. GET /stl/charges/{id} shows the charge and its allocation.
+//     met (no open claim); one snapshot. GET /stl/charges/{id} shows the charge and its allocation.
 func TestOrderResultOnRealRecordsBRC001OverHTTP(t *testing.T) {
 	w := newStatementWorld(t)
 	order := w.order.ObjectID
@@ -179,7 +179,7 @@ func TestOrderResultOnRealRecordsBRC001OverHTTP(t *testing.T) {
 	}
 	conditions, _ := v["conditions"].([]any)
 	if len(conditions) != 6 || figure(conditions[5].(map[string]any), "dimension") != "claims" ||
-		figure(conditions[5].(map[string]any), "status") != "not_enabled" {
+		figure(conditions[5].(map[string]any), "status") != "met" {
 		t.Fatalf("conditions %v", conditions)
 	}
 	status, ch := officer.do("GET", "/api/brant/v1/stl/charges/freight.brc", nil)

@@ -23,6 +23,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai/ingest"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
 	"go.idp.xyz/idp-brant/internal/contexts/clm"
+	clmapi "go.idp.xyz/idp-brant/internal/contexts/clm/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	"go.idp.xyz/idp-brant/internal/contexts/crm"
@@ -349,7 +350,16 @@ func (p *Platform) ContextsWithOptions(opt PlatformConfig) (*Contexts, error) {
 					return nil
 				}
 				return c.CNX
-			})})
+			}),
+			// CLM is composed after STL (R35). STK is already composed (R41).
+			Claims: stl.CLMCredits(func() clmapi.CreditLookups {
+				if c.CLM == nil {
+					return nil
+				}
+				return c.CLM
+			}),
+			Stock: c.STK,
+		})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -376,6 +386,7 @@ func (p *Platform) ContextsWithOptions(opt PlatformConfig) (*Contexts, error) {
 			// S5-08: bookings and shipment documents; S5 C5: CNX's certificate results (R56)
 			Documents: ful.DocumentPorts(c.POL, c.PTY, c.TRD).WithCertificates(c.CNX),
 			Costs:     c.CST, // S5-16: the costing's insurance component (R78)
+			Stock:     c.STK, // S6-D02: availability before prepare; confirm calls the SQL function
 		})
 	}
 	if err == nil {

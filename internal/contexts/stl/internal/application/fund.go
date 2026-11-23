@@ -6,6 +6,7 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	clmapi "go.idp.xyz/idp-brant/internal/contexts/clm/api"
 	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
@@ -89,6 +90,7 @@ type recordFund struct {
 	account  polapi.ResolvedConfig
 	source   *fr.FundRecord
 	existing *fr.FundRecord
+	remedy   remedyCite
 }
 
 func (h *recordFund) Prepare(ctx context.Context) error {
@@ -111,6 +113,10 @@ func (h *recordFund) Prepare(ctx context.Context) error {
 	if err == nil {
 		h.currency, h.account = configs["/args/currency"], configs["/args/bank_account"]
 	}
+	if err != nil {
+		return err
+	}
+	h.remedy, err = h.s.readRemedy(ctx, c.ClaimID, c.RemedyID, clmapi.KindRefund)
 	return err
 }
 
@@ -211,6 +217,20 @@ func (h *recordFund) Apply(ctx context.Context, exec bentopg.Executor, d authori
 	}
 	if err = postgres.InsertFund(ctx, exec, sc, f); err != nil {
 		return action.Outcome{}, err
+	}
+	if h.remedy.set {
+		customer := ""
+		if h.source != nil {
+			customer = h.source.CounterpartyID
+		}
+		if err = matchRemedy(h.remedy, c.OrderID, customer, f.Received, "/args/received_amount"); err != nil {
+			return action.Outcome{}, err
+		}
+		minor := f.Received.Minor().Int64()
+		if err = postgres.InsertRemedySettlement(ctx, exec, sc, postgres.RemedySettlement{ClaimID: h.remedy.req.ClaimID, RemedyID: h.remedy.req.RemedyID,
+			Kind: "refund", SettlementID: f.ID, OrderID: c.OrderID, AmountMinor: minor, Currency: f.Received.Currency().Code(), RecordedAt: now}); err != nil {
+			return action.Outcome{}, settledRemedy(err)
+		}
 	}
 	fields := map[string]any{"kind": f.Kind, "direction": f.Direction}
 	if f.SourceID != "" {

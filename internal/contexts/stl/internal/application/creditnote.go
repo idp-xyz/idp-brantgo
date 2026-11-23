@@ -4,6 +4,7 @@ import (
 	"context"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	clmapi "go.idp.xyz/idp-brant/internal/contexts/clm/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	"go.idp.xyz/idp-brant/internal/contexts/stl/internal/adapters/postgres"
 	fa "go.idp.xyz/idp-brant/internal/contexts/stl/internal/domain/application"
@@ -67,11 +68,15 @@ type requestCredit struct {
 	evidence  map[string]bool
 	statement *settlement.Statement
 	taken     bool
+	remedy    remedyCite
 }
 
 func (h *requestCredit) Prepare(ctx context.Context) error {
 	var err error
-	h.evidence, err = h.s.resolveEvidence(ctx, h.cmd.EvidenceIDs)
+	if h.evidence, err = h.s.resolveEvidence(ctx, h.cmd.EvidenceIDs); err != nil {
+		return err
+	}
+	h.remedy, err = h.s.readRemedy(ctx, h.cmd.ClaimID, h.cmd.RemedyID, clmapi.KindCreditNote)
 	return err
 }
 
@@ -109,6 +114,16 @@ func (h *requestCredit) Apply(ctx context.Context, exec bentopg.Executor, d auth
 		By: fundAct(d, now, ""), Team: d.Team})
 	if err != nil {
 		return action.Outcome{}, err
+	}
+	if err = matchRemedy(h.remedy, st.OrderID, st.CounterpartyID, amount, "/args/amount"); err != nil {
+		return action.Outcome{}, err
+	}
+	if h.remedy.set {
+		minor := amount.Minor().Int64()
+		if err = postgres.InsertRemedySettlement(ctx, exec, sc, postgres.RemedySettlement{ClaimID: h.remedy.req.ClaimID, RemedyID: h.remedy.req.RemedyID,
+			Kind: "credit_note", SettlementID: n.ID, OrderID: st.OrderID, AmountMinor: minor, Currency: amount.Currency().Code(), RecordedAt: now}); err != nil {
+			return action.Outcome{}, settledRemedy(err)
+		}
 	}
 	if err = postgres.InsertCreditNote(ctx, exec, sc, n); err != nil {
 		return action.Outcome{}, err

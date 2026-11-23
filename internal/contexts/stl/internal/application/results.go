@@ -39,6 +39,8 @@ type resultFacts struct {
 	shipmentsShown bool
 	purchases      []OrderPurchaseLine
 	purchasesShown bool
+	stock          []orderresult.StockCost
+	claims         []orderresult.ClaimFact
 }
 
 // resultFacts asks TRD, FUL, PUR and POL about order id (nothing locked).
@@ -94,6 +96,12 @@ func (s Service) resultFacts(ctx context.Context, id string) (resultFacts, error
 			return f, err
 		}
 	}
+	if f.stock, err = s.stockCosts(ctx, f.shipments, f.orderCurrency, f.resultCurrency); err != nil {
+		return f, err
+	}
+	if f.claims, err = s.orderClaims(ctx, id); err != nil {
+		return f, err
+	}
 	return f, nil
 }
 
@@ -104,7 +112,8 @@ func (s Service) input(ctx context.Context, exec bentopg.Executor, f resultFacts
 	in := orderresult.Input{At: kernel.Instant(s.Clock.Now()), Order: orderresult.Order{ID: id, Revision: o.Binding.OrderRevision,
 		Hash: o.Binding.OrderHash, Status: o.Status, Ended: o.Ended, Currency: f.orderCurrency, Net: zeroIn(f.orderCurrency)},
 		CreditNotes: map[string][]settlement.CreditNote{}, Applied: map[string]map[int]kernel.Money{},
-		PayableApplications: map[string][]fa.Application{}, ShipmentsShown: f.shipmentsShown, CommitmentsShown: f.purchasesShown}
+		PayableApplications: map[string][]fa.Application{}, ShipmentsShown: f.shipmentsShown, CommitmentsShown: f.purchasesShown,
+		StockCosts: f.stock, Claims: f.claims}
 	if o.NetMinor != "" {
 		net, err := kernel.ParseMinor(f.orderCurrency, o.NetMinor)
 		if err != nil {
@@ -154,7 +163,7 @@ func (s Service) input(ctx context.Context, exec bentopg.Executor, f resultFacts
 			continue
 		}
 		in.Shipments = append(in.Shipments, orderresult.ShipmentLine{ShipmentID: l.ShipmentID, LineID: l.LineID, Status: l.Status,
-			OrderLineID: l.OrderLineID, Quantity: q})
+			OrderLineID: l.OrderLineID, Quantity: q, Route: l.Route})
 	}
 	for _, l := range f.purchases {
 		c, err := kernel.NewCurrency(l.Currency, l.MinorUnits)
@@ -467,8 +476,14 @@ func (h *closeResult) Apply(ctx context.Context, exec bentopg.Executor, d author
 	if err = postgres.SaveResult(ctx, exec, sc, r, from, now); err != nil {
 		return action.Outcome{}, err
 	}
+	claims := orderresult.Met
+	for _, d := range x.dims {
+		if d.Name == orderresult.DimClaims {
+			claims = d.Status
+		}
+	}
 	ev := resultEvent(api.EventOrderResultClosed, r, map[string]any{"snapshot_seq": s.Seq, "order_revision": s.OrderRevision,
-		"content_sha256": s.ContentSHA256, "claims": orderresult.NotEnabled})
+		"content_sha256": s.ContentSHA256, "claims": claims})
 	return action.Outcome{ObjectID: r.OrderID, RowVersion: r.Version, Status: r.Status, Events: []action.Event{ev}}, nil
 }
 

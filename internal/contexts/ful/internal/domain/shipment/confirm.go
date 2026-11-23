@@ -24,6 +24,7 @@ const (
 	GuardSupplierDelivery  = "pur.supplier_delivery_guard.v2"
 	GuardQualityRelease    = "qlt.quality_release_guard.v1"
 	GuardPaymentCondition  = "stl.payment_condition_guard.v1"
+	GuardStock             = "stk.stock_availability.v1"
 	GuardOrder             = "trd.order_guard.v1"
 	GuardCommercialRelease = "ful.commercial_release.v1"
 	NotWired               = "not_wired"
@@ -83,6 +84,9 @@ type CommitmentLineUse struct {
 func (s *Shipment) CommitmentLines() []CommitmentLineUse {
 	var out []CommitmentLineUse
 	for i, l := range s.Lines {
+		if l.CommitmentID == "" {
+			continue
+		}
 		ref := CommitmentLine{CommitmentID: l.CommitmentID, OrderLineID: l.OrderLineID}
 		at := slices.IndexFunc(out, func(u CommitmentLineUse) bool { return u.Ref == ref })
 		if at < 0 {
@@ -120,6 +124,9 @@ type OrderLineUse struct {
 func (s *Shipment) Deliveries() []DeliveryUse {
 	var out []DeliveryUse
 	for i, l := range s.Lines {
+		if l.Delivery.DeliveryID == "" && l.Delivery.LineID == "" {
+			continue
+		}
 		at := slices.IndexFunc(out, func(u DeliveryUse) bool { return u.Ref == l.Delivery })
 		if at < 0 {
 			out = append(out, DeliveryUse{Ref: l.Delivery, Version: l.DeliveryVersion, Line: i})
@@ -135,6 +142,9 @@ func (s *Shipment) Deliveries() []DeliveryUse {
 func (s *Shipment) Releases() []ReleaseUse {
 	var out []ReleaseUse
 	for i, l := range s.Lines {
+		if l.ReleaseID == "" {
+			continue
+		}
 		at := slices.IndexFunc(out, func(u ReleaseUse) bool { return u.ID == l.ReleaseID })
 		if at < 0 {
 			out = append(out, ReleaseUse{ID: l.ReleaseID, Line: i})

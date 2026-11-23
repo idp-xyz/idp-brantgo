@@ -335,7 +335,7 @@ func saFigures(t *testing.T, what string, f stlapi.ResultFiguresView, confirmedC
 //     commitment of CNY 4,000.00 less the freight estimate of CNY 500.00 — kept when the bill replaces it.
 //   - BT18: everything shipped, settled, paid and bought, the freight only estimated and the order still active:
 //     review, then close is ORDER_RESULT_NOT_SETTLED listing fulfilment and direct_charges — never a pass because
-//     the goods left; receivables, payables and purchase costs are met, claims stay not_enabled.
+//     the goods left; receivables, payables and purchase costs are met, and claims are met when none are open.
 //   - The freight billed at CNY 650.00, confirmed and allocated 390.00 + 260.00 by quantity; TRD closes the order;
 //     close settles the result: confirmed CNY 2,350.00 = 1,410.00 (4,200 − 2,400 − 390) + 940.00 (2,800 − 1,600 −
 //     260); the business settlement FX difference −100.00 (CNY 6,900 received against 7,000 analysed), apart; net
@@ -372,7 +372,7 @@ func TestBaseline46SAOrderResult(t *testing.T) {
 	}
 	v = w.result("order.sa")
 	for dim, status := range map[string]string{stlapi.DimensionReceivables: stlapi.ConditionMet, stlapi.DimensionPayables: stlapi.ConditionMet,
-		stlapi.DimensionPurchaseCosts: stlapi.ConditionMet, stlapi.DimensionClaims: stlapi.ConditionNotEnabled} {
+		stlapi.DimensionPurchaseCosts: stlapi.ConditionMet, stlapi.DimensionClaims: stlapi.ConditionMet} {
 		if c := conditionOf(v.Conditions, dim); c.Status != status {
 			t.Fatalf("BT18 %s %+v", dim, c)
 		}
@@ -397,7 +397,7 @@ func TestBaseline46SAOrderResult(t *testing.T) {
 	s := v.Snapshots[0]
 	saFigures(t, "snapshot 1", s.Figures, "65000", "0", "235000")
 	if s.OrderID != "order.sa" || s.OrderRevision != 1 || conditionOf(s.Conditions, stlapi.DimensionClaims).Items[0] !=
-		"clm: not_enabled — CLM is not enabled in S5; no open return or claim can be checked" {
+		"no open claim" {
 		t.Fatalf("snapshot %+v", s)
 	}
 	for _, d := range []string{stlapi.DimensionFulfilment, stlapi.DimensionReceivables, stlapi.DimensionPayables, stlapi.DimensionPurchaseCosts,
@@ -417,7 +417,7 @@ func TestBaseline46SAOrderResult(t *testing.T) {
 	}
 	if len(allocated) != 1 || allocated[0]["charge_id"] != "freight.sa" || allocated[0]["allocation_seq"] != float64(1) ||
 		len(allocated[0]["shipment_ids"].([]any)) != 2 || len(closed) != 1 || closed[0]["order_id"] != "order.sa" ||
-		closed[0]["snapshot_seq"] != float64(1) || closed[0]["claims"] != "not_enabled" || closed[0]["content_sha256"] != s.ContentSHA256 {
+		closed[0]["snapshot_seq"] != float64(1) || closed[0]["claims"] != "met" || closed[0]["content_sha256"] != s.ContentSHA256 {
 		t.Fatalf("events %v %v", allocated, closed)
 	}
 	ch, err := w.stl.GetCharge(w.treasury, "freight.sa")

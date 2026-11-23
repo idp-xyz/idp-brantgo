@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
+	stkapi "go.idp.xyz/idp-brant/internal/contexts/stk/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
@@ -34,6 +35,8 @@ type prepareCommand struct {
 	releases   map[string]shipment.ReleaseFact
 	deliveries map[shipment.DeliveryRef]shipment.DeliveryFact
 	endUser    *shipment.PartyFact
+	stock      []shipment.StockLineFact
+	stockOn    bool
 	existing   *shipment.Shipment
 	consumed   shipment.Consumed
 	replay     bool
@@ -46,8 +49,17 @@ func (h *prepareCommand) Prepare(ctx context.Context) error {
 		taken = s != nil
 		return err
 	})
-	if err != nil || taken || h.req.Route != shipment.RouteSupplierDirect {
+	if err != nil || taken {
 		return err
+	}
+	if h.req.Route == shipment.RouteStock {
+		if h.s.Upstream.Stock == nil {
+			return nil
+		}
+		return h.prepareStock(ctx)
+	}
+	if h.req.Route != shipment.RouteSupplierDirect {
+		return nil
 	}
 	orders, err := h.s.Upstream.Orders.ResolveActiveOrders(ctx, []string{h.req.OrderID})
 	if err != nil {
@@ -107,6 +119,85 @@ func (h *prepareCommand) Prepare(ctx context.Context) error {
 	return nil
 }
 
+// prepareStock reads the order and, for each line, STK's availability. It does not read a delivery
+// or a quality release. The read is before FUL's transaction and writes nothing.
+func (h *prepareCommand) prepareStock(ctx context.Context) error {
+	orders, err := h.s.Upstream.Orders.ResolveActiveOrders(ctx, []string{h.req.OrderID})
+	if err != nil {
+		return err
+	}
+	if f, ok := orders[h.req.OrderID]; ok {
+		var rev *trdapi.OrderRevisionFact
+		if f.Code == "" {
+			if rev, err = h.s.boundRevision(ctx, f.Binding); err != nil {
+				return err
+			}
+		}
+		h.order, h.prices = orderFact(f, rev), priceFact(rev)
+	}
+	if u := h.req.EndUser; u != nil {
+		got, err := h.s.Upstream.Documents.Parties.ResolveParties(ctx, ptyapi.Resolve{PartyIDs: []string{u.PartyID}})
+		if err != nil {
+			return err
+		}
+		if p, ok := got.Parties[u.PartyID]; ok {
+			h.endUser = &shipment.PartyFact{PartyID: p.PartyID, Status: p.Status, Revision: p.Revision}
+		}
+	}
+	h.stock = make([]shipment.StockLineFact, len(h.req.Lines))
+	h.stockOn = true
+	if h.order == nil {
+		return nil
+	}
+	for i, l := range h.req.Lines {
+		if l.Stock == nil {
+			continue
+		}
+		sku := skuOf(h.order, l.OrderLineID)
+		if sku == "" {
+			continue
+		}
+		av, err := h.s.Upstream.Stock.ResolveAvailability(ctx, stkapi.AvailabilityQuery{SkuID: sku,
+			LocationID: l.Stock.LocationID, BatchID: l.Stock.BatchID, CustodyKind: l.Stock.CustodyKind, Quantity: postgres.Text(l.Quantity)})
+		if err != nil {
+			return err
+		}
+		fact := shipment.StockLineFact{Enabled: av.Enabled, UnitID: av.UnitID, UnitRevision: av.UnitRevision}
+		if av.Enabled {
+			if fact.OnHand, err = qtyText(av.OnHand); err != nil {
+				return err
+			}
+			if fact.Reserved, err = qtyText(av.Reserved); err != nil {
+				return err
+			}
+			if fact.Available, err = qtyText(av.Available); err != nil {
+				return err
+			}
+		}
+		h.stock[i] = fact
+	}
+	return nil
+}
+
+func skuOf(order *shipment.OrderFact, lineID string) string {
+	if order == nil {
+		return ""
+	}
+	for _, l := range order.Lines {
+		if l.LineID == lineID {
+			return l.SkuID
+		}
+	}
+	return ""
+}
+
+func qtyText(s string) (kernel.Decimal, error) {
+	if s == "" {
+		return kernel.Decimal{}, nil
+	}
+	return kernel.ParseDecimal(s, kernel.QuantityFormat)
+}
+
 func (h *prepareCommand) Lock(ctx context.Context, exec bentopg.Executor) error {
 	h.existing, h.consumed, h.replay = nil, shipment.Consumed{}, false
 	sc := scope(ctx)
@@ -125,7 +216,12 @@ func (h *prepareCommand) Lock(ctx context.Context, exec bentopg.Executor) error 
 	var refs []shipment.DeliveryRef
 	var ids []string
 	for _, l := range h.req.Lines {
-		refs, ids = append(refs, l.Delivery), append(ids, l.ReleaseID)
+		if l.Delivery.DeliveryID != "" {
+			refs = append(refs, l.Delivery)
+		}
+		if l.ReleaseID != "" {
+			ids = append(ids, l.ReleaseID)
+		}
 	}
 	h.consumed, err = postgres.LoadConsumed(ctx, exec, sc, h.req.OrderID, refs, ids)
 	return err
@@ -143,7 +239,7 @@ func (h *prepareCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 		return action.Outcome{ObjectID: s.ID, RowVersion: s.RowVersion, Status: s.Status}, nil
 	}
 	s, err := shipment.Prepare(h.req, shipment.Inputs{Order: h.order, Releases: h.releases, Deliveries: h.deliveries, EndUser: h.endUser,
-		Consumed: h.consumed, Preparer: d.Actor, Epoch: d.Epoch, Team: d.Team, Now: h.s.Clock.Now()})
+		Consumed: h.consumed, Preparer: d.Actor, Epoch: d.Epoch, Team: d.Team, Now: h.s.Clock.Now(), StockEnabled: h.stockOn, Stock: h.stock})
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -180,9 +276,14 @@ func (s Service) PrepareShipment(ctx context.Context, cmd api.PrepareShipment) (
 		}
 		for _, l := range cmd.Lines {
 			q, _ := api.Quantity(l.Quantity)
-			h.req.Lines = append(h.req.Lines, shipment.RequestLine{ID: l.LineID, OrderLineID: l.OrderLineID, Quantity: q,
+			line := shipment.RequestLine{ID: l.LineID, OrderLineID: l.OrderLineID, Quantity: q,
 				Delivery: shipment.DeliveryRef{DeliveryID: l.SupplierDelivery.DeliveryID, LineID: l.SupplierDelivery.LineID},
-				Version:  l.SupplierDelivery.Version, ReleaseID: l.QualityReleaseID})
+				Version:  l.SupplierDelivery.Version, ReleaseID: l.QualityReleaseID}
+			if l.Stock != nil {
+				line.Stock = &shipment.StockPlace{LocationID: l.Stock.LocationID, BatchID: l.Stock.BatchID, CustodyKind: l.Stock.CustodyKind,
+					ReservationID: l.Stock.ReservationID}
+			}
+			h.req.Lines = append(h.req.Lines, line)
 		}
 	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandPrepareShipment, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.ShipmentID}, cmd, err, h)

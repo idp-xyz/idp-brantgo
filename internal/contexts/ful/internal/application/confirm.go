@@ -60,7 +60,7 @@ func (h *confirmCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 		return action.Outcome{}, err
 	}
 	now := kernel.Instant(h.s.Clock.Now())
-	j, err := h.s.judge(ctx, exec, s, h.consumed, release.ScopeShipment, h.release, now)
+	j, err := h.s.judgeAt(ctx, exec, s, h.consumed, release.ScopeShipment, h.release, now, true, d)
 	if err != nil {
 		return action.Outcome{}, err
 	}
@@ -88,9 +88,16 @@ func (h *confirmCommand) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	}
 	lines := make([]map[string]any, 0, len(s.Lines))
 	for _, l := range s.Lines {
-		lines = append(lines, map[string]any{"line_id": l.ID, "order_line_id": l.OrderLineID, "quantity": postgres.Text(l.Quantity), "unit_id": l.UnitID,
+		line := map[string]any{"line_id": l.ID, "order_line_id": l.OrderLineID, "quantity": postgres.Text(l.Quantity), "unit_id": l.UnitID,
 			"unit_revision": l.UnitRevision, "delivery_id": l.Delivery.DeliveryID, "delivery_line_id": l.Delivery.LineID,
-			"delivery_version": l.DeliveryVersion, "quality_release_id": l.ReleaseID})
+			"delivery_version": l.DeliveryVersion, "quality_release_id": l.ReleaseID}
+		if l.LocationID != "" {
+			line["location_id"], line["batch_id"], line["custody_kind"] = l.LocationID, l.BatchID, l.CustodyKind
+			if l.ReservationID != "" {
+				line["reservation_id"] = l.ReservationID
+			}
+		}
+		lines = append(lines, line)
 	}
 	c := s.Confirmation
 	event := action.Event{Type: api.EventShipmentConfirmed, AggregateType: "Shipment", AggregateID: s.ID, AggregateVersion: s.RowVersion,

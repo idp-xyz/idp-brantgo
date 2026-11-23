@@ -26998,6 +26998,28 @@
                               "minLength": 1,
                               "type": "string"
                             },
+                            "stock": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "batch_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "custody_kind": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "location_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "reservation_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
                             "supplier_delivery": {
                               "additionalProperties": false,
                               "properties": {
@@ -27201,6 +27223,28 @@
                             "quantity": {
                               "minLength": 1,
                               "type": "string"
+                            },
+                            "stock": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "batch_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "custody_kind": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "location_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "reservation_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
                             },
                             "supplier_delivery": {
                               "additionalProperties": false,
@@ -52450,6 +52494,10 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "claim_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "credit_note_id": {
                         "minLength": 1,
                         "type": "string"
@@ -52466,6 +52514,10 @@
                         "type": "string"
                       },
                       "order_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "remedy_id": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -52618,6 +52670,10 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "claim_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "credit_note_id": {
                         "minLength": 1,
                         "type": "string"
@@ -52634,6 +52690,10 @@
                         "type": "string"
                       },
                       "order_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "remedy_id": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -52796,6 +52856,10 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "claim_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "counterparty_id": {
                         "minLength": 1,
                         "type": "string"
@@ -52853,7 +52917,15 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "order_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "received_amount": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "remedy_id": {
                         "minLength": 1,
                         "type": "string"
                       },
@@ -53034,6 +53106,10 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "claim_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "counterparty_id": {
                         "minLength": 1,
                         "type": "string"
@@ -53091,7 +53167,15 @@
                         "minLength": 1,
                         "type": "string"
                       },
+                      "order_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "received_amount": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "remedy_id": {
                         "minLength": 1,
                         "type": "string"
                       },

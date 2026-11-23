@@ -48,9 +48,15 @@ const (
 	CodeReferenceStale = "REFERENCE_STALE"
 	// CodeBusinessKeyConflict (409): the shipment ID holds another request.
 	CodeBusinessKeyConflict = "BUSINESS_KEY_CONFLICT"
-	// CodeDependencyNotSupported: the stock route (STK, S6-01) or a unit conversion between an order
-	// line and its release or delivery.
+	// CodeDependencyNotSupported: STK is not enabled for a stock-route shipment, or a unit conversion
+	// between an order line and its release or delivery.
 	CodeDependencyNotSupported = "DEPENDENCY_NOT_SUPPORTED"
+	// CodeStockInsufficient (409): the stock balance does not cover a stock-route line
+	// (StockAvailability v1, STK-INV-001). cost_short uses the same code.
+	CodeStockInsufficient = "STOCK_INSUFFICIENT"
+	// CodeStockReservationConflict (409): the named reservation does not cover the line
+	// (StockAvailability v1).
+	CodeStockReservationConflict = "STOCK_RESERVATION_CONFLICT"
 	// CodeShipmentDocumentsUnreconciled (409): a difference of the document set is neither resolved
 	// nor acknowledged, or the set lacks a required document (FUL-INV-004, BT12; S5-08).
 	CodeShipmentDocumentsUnreconciled = "SHIPMENT_DOCUMENTS_UNRECONCILED"
@@ -87,6 +93,8 @@ var codes = map[string]kernel.Category{
 	CodeReferenceStale:               kernel.CategoryConflict,
 	CodeBusinessKeyConflict:          kernel.CategoryConflict,
 	CodeDependencyNotSupported:       kernel.CategoryInvalid,
+	CodeStockInsufficient:            kernel.CategoryConflict,
+	CodeStockReservationConflict:     kernel.CategoryConflict,
 	// S5-08
 	CodeShipmentDocumentsUnreconciled: kernel.CategoryConflict,
 	CodeDocumentIntegrityFailure:      kernel.CategoryInvalid,

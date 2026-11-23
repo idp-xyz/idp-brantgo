@@ -96,6 +96,11 @@ type Line struct {
 	SupplierID        string
 	ReleaseID         string
 	QualityConcession bool
+	// Stock balance of a stock-route line (R29). Empty on a supplier_direct line.
+	LocationID    string
+	BatchID       string
+	CustodyKind   string
+	ReservationID string
 }
 
 // Party is a party the confirmation screens (R44): the order's customer (Role RoleCustomer, no
@@ -232,7 +237,27 @@ type CommitmentLineTotals struct {
 	Disposed kernel.Decimal
 }
 
-// RequestLine is a line of a preparation: Delivery at Version.
+// StockPlace is the balance a stock-route line ships from.
+type StockPlace struct {
+	LocationID    string
+	BatchID       string
+	CustodyKind   string
+	ReservationID string
+}
+
+// StockLineFact is what ResolveAvailability said of that balance before the transaction. Enabled is
+// false when the company has not turned STK on. OnHand, Reserved and Available are the balance;
+// a named reservation is covered by OnHand even when Available (on hand less reserved) is short.
+type StockLineFact struct {
+	Enabled      bool
+	OnHand       kernel.Decimal
+	Reserved     kernel.Decimal
+	Available    kernel.Decimal
+	UnitID       string
+	UnitRevision int64
+}
+
+// RequestLine is a line of a preparation: a supplier delivery at Version, or a stock balance.
 type RequestLine struct {
 	ID          string
 	OrderLineID string
@@ -240,6 +265,7 @@ type RequestLine struct {
 	Delivery    DeliveryRef
 	Version     int64
 	ReleaseID   string
+	Stock       *StockPlace
 }
 
 // Consumed is what FUL's confirmed shipments shipped before, as a transaction holding the order's
@@ -278,6 +304,10 @@ type Inputs struct {
 	Epoch      int64
 	Team       string
 	Now        time.Time
+	// StockEnabled is true when STK answered the stock route. False keeps the stock route refused
+	// (DEPENDENCY_NOT_SUPPORTED), which is every preparation that does not wire STK.
+	StockEnabled bool
+	Stock        []StockLineFact
 }
 
 func linePath(i int, member string) string {
@@ -302,23 +332,19 @@ func linePath(i int, member string) string {
 // confirmation decides again under its locks and guards. The shipment binds the customer, the order's
 // address roles, its notify party and the stated end user as its parties (R44: each is screened).
 func Prepare(req Request, in Inputs) (*Shipment, error) {
+	if req.Route == RouteStock {
+		if !in.StockEnabled {
+			return nil, Reject(CodeDependencyNotSupported, "/args/route", "Only the supplier direct delivery route is delivered; the stock route waits for STK")
+		}
+		return prepareStock(req, in)
+	}
 	if req.Route != RouteSupplierDirect {
 		return nil, Reject(CodeDependencyNotSupported, "/args/route", "Only the supplier direct delivery route is delivered; the stock route waits for STK")
 	}
-	o := in.Order
-	if o == nil {
-		return nil, Reject(kernel.CodeReferenceInvalid, "/args/order_id", "No order the actor reads")
+	s, o, err := openShipment(req, in)
+	if err != nil {
+		return nil, err
 	}
-	if o.Code != "" {
-		return nil, Upstream(o.Code, "/args/order_id", "The order does not serve a shipment: "+o.Code)
-	}
-	if o.Binding.OrderID != req.OrderID || o.Binding.OrderRevision < 1 || o.CustomerID == "" || o.Customer < 1 {
-		return nil, Reject(kernel.CodeReferenceInvalid, "/args/order_id", "The order is not intact")
-	}
-	now := kernel.Instant(in.Now)
-	s := &Shipment{ID: req.ID, Status: StatusPrepared, RowVersion: 1, Route: req.Route, Order: o.Binding, CustomerID: o.CustomerID,
-		RequestHash: req.RequestHash, OwnerActor: in.Preparer.ID, OwnerTeam: in.Team,
-		Prepared: Act{By: in.Preparer, Epoch: in.Epoch, At: now}}
 	shipping, fromDelivery, underRelease := map[string]kernel.Decimal{}, map[DeliveryRef]kernel.Decimal{}, map[string]kernel.Decimal{}
 	fromCommitment := map[CommitmentLine]kernel.Decimal{}
 	versions := map[DeliveryRef]int64{}
@@ -383,6 +409,85 @@ func Prepare(req Request, in Inputs) (*Shipment, error) {
 	if len(s.Lines) == 0 {
 		return nil, Reject(kernel.CodeSchemaInvalid, "/args/lines", "")
 	}
+	if err := bindParties(s, req, in, o); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// openShipment checks the order and returns the prepared root. The caller fills lines and parties.
+func openShipment(req Request, in Inputs) (*Shipment, *OrderFact, error) {
+	o := in.Order
+	if o == nil {
+		return nil, nil, Reject(kernel.CodeReferenceInvalid, "/args/order_id", "No order the actor reads")
+	}
+	if o.Code != "" {
+		return nil, nil, Upstream(o.Code, "/args/order_id", "The order does not serve a shipment: "+o.Code)
+	}
+	if o.Binding.OrderID != req.OrderID || o.Binding.OrderRevision < 1 || o.CustomerID == "" || o.Customer < 1 {
+		return nil, nil, Reject(kernel.CodeReferenceInvalid, "/args/order_id", "The order is not intact")
+	}
+	now := kernel.Instant(in.Now)
+	s := &Shipment{ID: req.ID, Status: StatusPrepared, RowVersion: 1, Route: req.Route, Order: o.Binding, CustomerID: o.CustomerID,
+		RequestHash: req.RequestHash, OwnerActor: in.Preparer.ID, OwnerTeam: in.Team,
+		Prepared: Act{By: in.Preparer, Epoch: in.Epoch, At: now}}
+	return s, o, nil
+}
+
+// prepareStock binds a stock-route shipment (R29). It does not read a supplier delivery or a quality
+// release. A named reservation is allowed when on-hand covers the quantity; available quantity can
+// be short because the hold is inside reserved. Confirm's SQL is the reservation authority.
+func prepareStock(req Request, in Inputs) (*Shipment, error) {
+	s, o, err := openShipment(req, in)
+	if err != nil {
+		return nil, err
+	}
+	if len(in.Stock) != len(req.Lines) {
+		return nil, Reject(kernel.CodeReferenceInvalid, "/args/lines", "STK did not answer every line")
+	}
+	shipping := map[string]kernel.Decimal{}
+	for i, l := range req.Lines {
+		if l.Stock == nil {
+			return nil, Reject(kernel.CodeSchemaInvalid, linePath(i, "stock"), "")
+		}
+		at := slices.IndexFunc(o.Lines, func(ol OrderLine) bool { return ol.LineID == l.OrderLineID })
+		if at < 0 {
+			return nil, Reject(kernel.CodeReferenceInvalid, linePath(i, "order_line_id"), "The order's current revision has no such line")
+		}
+		ol := o.Lines[at]
+		fact := in.Stock[i]
+		if !fact.Enabled {
+			return nil, Reject(CodeDependencyNotSupported, "/args/route", "STK is not enabled for the company")
+		}
+		if fact.UnitID != "" && (fact.UnitID != ol.UnitID || fact.UnitRevision != ol.UnitRevision) {
+			return nil, Reject(kernel.CodeInvalidKnownValue, linePath(i, "stock"), "The stock balance is in another unit than the order line")
+		}
+		cover := fact.Available
+		if l.Stock.ReservationID != "" {
+			cover = fact.OnHand
+		}
+		if cover.Cmp(l.Quantity) < 0 {
+			return nil, Reject(CodeStockInsufficient, linePath(i, "quantity"), "The stock on hand does not cover the shipment line")
+		}
+		shipping[ol.LineID] = shipping[ol.LineID].Add(l.Quantity)
+		if err := WithinOrderLine(ol.LineID, in.Consumed.OrderLines[ol.LineID], shipping[ol.LineID], ol.Quantity, linePath(i, "quantity")); err != nil {
+			return nil, err
+		}
+		s.Lines = append(s.Lines, Line{ID: l.ID, OrderLineID: ol.LineID, SkuID: ol.SkuID, SpecRevision: ol.SpecRevision, UnitID: ol.UnitID,
+			UnitRevision: ol.UnitRevision, OrderQuantity: ol.Quantity, Quantity: l.Quantity, LocationID: l.Stock.LocationID,
+			BatchID: l.Stock.BatchID, CustodyKind: l.Stock.CustodyKind, ReservationID: l.Stock.ReservationID})
+	}
+	if len(s.Lines) == 0 {
+		return nil, Reject(kernel.CodeSchemaInvalid, "/args/lines", "")
+	}
+	if err := bindParties(s, req, in, o); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// bindParties adds the customer, the order's address roles, its notify party and the stated end user.
+func bindParties(s *Shipment, req Request, in Inputs, o *OrderFact) error {
 	s.Parties = append([]Party{{Role: RoleCustomer, PartyID: o.CustomerID, PartyRevision: o.Customer}}, o.Addresses...)
 	if o.Notify != nil {
 		n := *o.Notify
@@ -393,16 +498,16 @@ func Prepare(req Request, in Inputs) (*Shipment, error) {
 		f := in.EndUser
 		switch {
 		case f == nil || f.PartyID != u.PartyID:
-			return nil, Reject(kernel.CodeReferenceInvalid, "/args/end_user_party", "No party the actor reads")
+			return Reject(kernel.CodeReferenceInvalid, "/args/end_user_party", "No party the actor reads")
 		case f.Status != PartyConfirmed:
-			return nil, Reject(kernel.CodeReferenceInvalid, "/args/end_user_party", "The party is "+f.Status+", not confirmed")
+			return Reject(kernel.CodeReferenceInvalid, "/args/end_user_party", "The party is "+f.Status+", not confirmed")
 		case f.Revision != u.Revision:
-			return nil, Reject(CodeReferenceStale, "/args/end_user_party/revision", "The party's confirmed revision is "+
+			return Reject(CodeReferenceStale, "/args/end_user_party/revision", "The party's confirmed revision is "+
 				strconv.FormatInt(f.Revision, 10))
 		}
 		s.Parties = append(s.Parties, Party{Role: RoleEndUser, PartyID: u.PartyID, PartyRevision: u.Revision})
 	}
-	return s, nil
+	return nil
 }
 
 // EndUser returns the end user the shipment states (S5R-D40), or nil.
