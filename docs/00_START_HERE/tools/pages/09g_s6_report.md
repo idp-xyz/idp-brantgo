@@ -5,36 +5,36 @@ short: S6 执行报告 V0.1
 kicker: IDP BRANT / 09 IMPLEMENTATION PLAN / S6 EXECUTION REPORT
 doc_title: S6 R1 完整首发执行报告 V0.1
 doc_desc: 部分与多次下单 · 库存台账与库存路线 · 生产协同与委外 · 索赔与退货 · 可选 CRM · 进程内渠道 · 本机回归 · 模拟 G5 NO-GO
-meta: 版本=V0.1; 日期=2026-11-23; 证据=E2 本机执行; 结论=S6 六项 DONE_LOCAL · S6-06 PARTIAL · G5 NO-GO（模拟）
+meta: 版本=V0.1; 日期=2026-11-23; 证据=E2 本机执行与 GitHub Actions; 结论=S6 六项 DONE_CI · S6-06 PARTIAL · G5 NO-GO（模拟）
 stage: 09 · 工程实施总体计划
 eyebrow: S6 EXECUTION REPORT
 search: 搜索工作项、合并、缺口或门禁
 foot: S6 Execution Report V0.1 · 2026-11-23
 ---
-<span class="scope-badge">S6 DONE_LOCAL · S6-06 PARTIAL · G5 NO-GO</span>
+<span class="scope-badge">S6 DONE_CI · S6-06 PARTIAL · G5 NO-GO</span>
 
-<h2>六项工作有本机证据，发布门禁记为模拟 NO-GO；尖端的远程运行还不是证据</h2>
+<h2>六项工作在本机与 07601c8 的远程运行上通过；发布门禁仍是模拟 NO-GO</h2>
 
-<p class="lede">2026-11-23，S6 记在集成分支 s6/business 的尖端提交 9e2502a（已推送）。e2e 合并的父提交是 b662ea5，那是第二波的最后一次合并。本版不改产品行为：没有新的命令、收据、迁移或既有测试期望。S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_LOCAL。S6-06 为 PARTIAL。DONE_CI 表示本机 PostgreSQL 16 与该尖端上一次已结束的 GitHub Actions 运行都通过。9e2502a 的远程运行在本档案里没有结论，所以这七项都不写 DONE_CI。G5 记为模拟 NO-GO。</p>
+<p class="lede">2026-11-23，S6 记在集成分支 s6/business。本机回归的尖端是 9e2502a，e2e 合并的父提交是 b662ea5。档案提交 07601c8 已推送。同一提交上，推送运行 45129948206 与拉取请求运行 45131658394 都成功。拉取请求 #10 已合并，main 上的合并提交是 1264d61；1264d61 自己的运行不作为本页的证据。本版不改产品行为。S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_CI。S6-06 为 PARTIAL。G5 仍是模拟 NO-GO。</p>
 
 ::: cover
-- 结论 | 六项 DONE_LOCAL，S6-06 PARTIAL。本机尖端门禁：迁移 0（106 个迁移已记录），集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。
-- 证据 | 15_S6_EVIDENCE：日期、环境、源文件 SHA-256 快照、本机尖端门禁的记录。不复制 trace/、进程日志或密钥。
-- 未执行 | make race、make ai-eval-live、make eer-live、真实海关单一窗口、真实金税、真实客户、真人签核。9e2502a 的 GitHub Actions 结论不在本目录。
+- 结论 | 六项 DONE_CI，S6-06 PARTIAL。本机尖端门禁：迁移 0（106 个迁移已记录），集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。远程：07601c8 的两次运行成功。
+- 证据 | 15_S6_EVIDENCE：日期、环境、源文件 SHA-256 快照、本机尖端门禁、两次 GitHub Actions 运行的编号与地址。不复制 trace/、进程日志或密钥。
+- 未执行 | 本机的 make race、make ai-eval-live、make eer-live、真实海关单一窗口、真实金税、真实客户、真人签核。远程工作流里的竞态分片已成功，那不是本机的 make race。
 :::
 
 ## 01 七项工作与合并 {#s1}
 
-状态说明：DONE_LOCAL 表示验收项在本机通过，该尖端的远程运行还不是证据。PARTIAL 表示发布条件没有齐。下表的合并提交都在 s6/business 上。设计源修订 R0（单元提交 4a0eb07，合并 ebafb48）在这七项之前，基线是档案 V1.10 的 776431b；R0 本身不是这七项里的一项。
+状态说明：DONE_CI 表示本机 PostgreSQL 16 与 07601c8 上一次已结束的 GitHub Actions 运行都通过。PARTIAL 表示发布条件没有齐。下表的合并提交都在 s6/business 上。设计源修订 R0（单元提交 4a0eb07，合并 ebafb48）在这七项之前，基线是档案 V1.10 的 776431b；R0 本身不是这七项里的一项。
 
 | 项 | 状态 | 单元提交 | 合并 | 这一项交付了什么 |
 |---|---|---|---|---|
-| S6-07 | DONE_LOCAL | 3dbb052 | 9821c96 | 参照报价的部分与多次下单。报价可在冻结时显式选择 multi_order；人工专属命令 order.prepare_partial 按行占用剩余数量；并发只有一笔能占用超出剩余的数量 |
-| S6-01 | DONE_LOCAL | c626f0f；0065726 | f934a71；b828290 | 库存台账（FIFO、预留、公司开关、StockAvailability v1）以及 FUL 的库存路线。直发不写库存移动。STL 按库存成本层给库存路线计价 |
-| S6-02 | DONE_LOCAL | aeaeced | e1c2600 | 协作计划、委外单与材料交接。制造默认关闭。进度是来源声称，不写出库存、不给出质量放行、不做出运 |
-| S6-03 | DONE_LOCAL | 8a402c4 | 6c3a633 | 索赔、退货、补救与结案。退货不改原出运。一笔已批准的补救只记一次贷项。未结索赔使经营结果的索赔维不满足，关闭被拒。接线在 b828290 |
-| S6-04 | DONE_LOCAL | 54f2451 | 175c3c9 | 可选 CRM 与 BC-AT24。关闭时省略商机的询价仍能走完；带上商机则拒绝。零值 APIConfig 把 CRM 组装为开启；brant-api 传入关闭标志 |
-| S6-05 | DONE_LOCAL | 7a28f27 | b662ea5 | 进程内渠道端口与假适配器。超时记为 unknown，不是成功。过期回执记下来，不推进案件。没有真实海关单一窗口，也没有真实金税 |
+| S6-07 | DONE_CI | 3dbb052 | 9821c96 | 参照报价的部分与多次下单。报价可在冻结时显式选择 multi_order；人工专属命令 order.prepare_partial 按行占用剩余数量；并发只有一笔能占用超出剩余的数量 |
+| S6-01 | DONE_CI | c626f0f；0065726 | f934a71；b828290 | 库存台账（FIFO、预留、公司开关、StockAvailability v1）以及 FUL 的库存路线。直发不写库存移动。STL 按库存成本层给库存路线计价 |
+| S6-02 | DONE_CI | aeaeced | e1c2600 | 协作计划、委外单与材料交接。制造默认关闭。进度是来源声称，不写出库存、不给出质量放行、不做出运 |
+| S6-03 | DONE_CI | 8a402c4 | 6c3a633 | 索赔、退货、补救与结案。退货不改原出运。一笔已批准的补救只记一次贷项。未结索赔使经营结果的索赔维不满足，关闭被拒。接线在 b828290 |
+| S6-04 | DONE_CI | 54f2451 | 175c3c9 | 可选 CRM 与 BC-AT24。关闭时省略商机的询价仍能走完；带上商机则拒绝。零值 APIConfig 把 CRM 组装为开启；brant-api 传入关闭标志 |
+| S6-05 | DONE_CI | 7a28f27 | b662ea5 | 进程内渠道端口与假适配器。超时记为 unknown，不是成功。过期回执记下来，不推进案件。没有真实海关单一窗口，也没有真实金税 |
 | S6-06 | PARTIAL | 95e011a | 9e2502a | 经 HTTP 的回归锁住上面六段行为。795 个 bootstrap 测试，SHARDS=4，墙钟 8 分 04 秒（2026-11-23）。发布条件没有齐，见第 02 章 |
 
 {{wbs_tasks phase=S6}}
@@ -53,7 +53,7 @@ G5 的通过条件是公开支持矩阵、授权、部署组合、服务边界�
 | 真人签核 | 没有 |
 | 实际发布指标与支持机制 | 没有 |
 | 真实海关单一窗口或金税 | 没有。S6-05 只有进程内假适配器 |
-| 该尖端的远程运行 | 9e2502a 已推送。本档案不记录它的 GitHub Actions 结论，也不把它写成通过 |
+| 该尖端的远程运行 | 07601c8 的推送运行 45129948206 与拉取请求运行 45131658394 都成功。这不构成发布指标，G5 仍是模拟 NO-GO |
 
 S6-06 因此是 PARTIAL：回归在本机通过，发布门禁没有通过。G0、G1、G2、G3、G4 的结论不因这一章改变。G2、G3、G4 仍是此前的模拟 NO-GO。
 
@@ -87,20 +87,19 @@ S6 没有 Python V0.50 的对等测试。Q01 的 order.prepare、提示词与工
 
 回归覆盖六段：部分下单（1,200 中先 700 再 500，再 1 被拒；AI 令牌在读请求体之前是 PERMISSION_DENIED）、库存路线的 FIFO 成本与直发不虚构收发、制造委外与交接、索赔贷项与关闭门、CRM 开与关、渠道的 unknown 与过期回执。
 
-没有执行，也不记为通过：
+远程工作流在 07601c8 上跑了竞态分片并且成功。本机没有另跑 `make race`。下面这些仍然没有执行，也不记为通过：
 
-- make race
+- 本机的 make race
 - make ai-eval-live
 - make eer-live
 - 真实海关单一窗口
 - 真实金税
 - 真实客户任务
 - 真人签核
-- 9e2502a 的 GitHub Actions 结论（本档案不编造）
 
 档案单元自己的门禁是两次档案构建与一次 CI=true make check。那次 check 的退出状态记在单元报告里，日志不进本目录。
 
 {{s6_evidence}}
 
 > [!decision] 本版不改行为
-> 之前：WBS 里 S6-01 至 S6-07 都是 NOT_STARTED，G5 是 NOT_STARTED，档案版本是 V1.10。之后：六项为 DONE_LOCAL，S6-06 为 PARTIAL，G5 为模拟 NO-GO，档案版本是 V1.11。命令、收据、迁移、岗位权限与既有测试的期望都不变。S1 至 S5R 的状态不变。
+> 之前：六项为 DONE_LOCAL，因为 9e2502a 的远程运行还没有结论。之后：同一天 07601c8 的两次 GitHub Actions 运行成功，六项改为 DONE_CI。S6-06 仍为 PARTIAL，G5 仍为模拟 NO-GO。命令、收据、迁移、岗位权限与既有测试的期望都不变。S1 至 S5R 的状态不变。BIP 不在这次记录里。

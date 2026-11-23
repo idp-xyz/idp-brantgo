@@ -11,8 +11,9 @@
 | 01_environment.json | 生成本目录时的主机、Go、模块与 git 提交，以及尖端门禁的环境说明 | 档案单元，不打开数据库 |
 | 02_go_source_manifest.txt | 尖端树上源文件的 SHA-256（`.go`、`.sql`、`.sh`、`Makefile`、`go.mod`、`go.sum`；不含 `docs/`、`brand/`、`bin/` 与点开头的目录） | 档案单元 |
 | 04_local_gate.md | 本机尖端门禁的结果，以及没有执行的项目 | 2026-11-23 的尖端门禁；日志本身不在本目录 |
+| 05_github_actions.md | `07601c8` 上两次已结束的远程运行 | 运行编号与地址；不复制作业日志 |
 
-`9e2502a` 已于 2026-11-23 推送。本目录没有 GitHub Actions 运行记录，也不给那次远程运行写结论。S6 的状态因此是 DONE_LOCAL 与 PARTIAL，不是 DONE_CI。
+`9e2502a` 的本机门禁仍是 `04_local_gate.md`。`07601c8` 的推送运行与拉取请求运行都成功，所以 S6-01、S6-02、S6-03、S6-04、S6-05 与 S6-07 改为 DONE_CI。S6-06 仍是 PARTIAL。G5 仍是模拟 NO-GO。`main` 的合并提交 `1264d61` 自己的运行不在本目录。
 
 没有执行，也没有放进本目录：
 

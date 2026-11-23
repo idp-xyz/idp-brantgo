@@ -28,6 +28,12 @@ S6 在集成分支 s6/business 上，尖端 9e2502a（2026-11-23 已推送）。
 ### 限制
 - G0、G1、G2、G3、G4 的结论不变。G5 为模拟 NO-GO。本档案提交自己的 make check 记在单元报告里，不把进程日志复制进证据目录。
 
+### 同日追加（07601c8 的远程运行）
+- 推送运行 [45129948206](https://github.com/idp-xyz/idp-brantgo/actions/runs/45129948206) 与拉取请求运行 [45131658394](https://github.com/idp-xyz/idp-brantgo/actions/runs/45131658394) 都在 `07601c8` 上成功。工作流是 Brant M0 / PG16 / Bento RC2，含静态检查、bootstrap 六片、竞态六片、其余包与脚本化 Q01。
+- 拉取请求 #10 已合并，`main` 上的合并提交是 `1264d61`。`1264d61` 自己的运行不作为这次记录的证据。
+- WBS：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 改为 DONE_CI。S6-06 仍为 PARTIAL。G5 仍为模拟 NO-GO。BIP 不在这次记录里。
+- 本机仍没有另跑 `make race`、`make ai-eval-live`、`make eer-live`。远程竞态分片的成功不改写这句话。
+
 ## V1.10 · 2026-11-20 · S4 后续轮：F2、R14、ADR-BR-IMP-003、目录补录与全量真实运行
 
 后续轮在集成分支 s4/followups 上，基线是 9d2d045（R14 合并 0cfdf59，F2 合并 9d2d045）。本版不改行为。登记合并代码里已经做了的类 (i)，类 (ii) 与类 (iii) 仍是缺口。全量真实运行的数字只按那次运行的 report.json 与 summary.md。

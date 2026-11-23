@@ -86,10 +86,11 @@ S4_EVIDENCE_FILES = [
     "10_followup_20261120/07_live-20261120T122849Z/report.json",
     "10_followup_20261120/07_live-20261120T122849Z/summary.md",
 ]
-# S6: the archive unit runs no database. The tip gate below is the lead's local run on 2026-11-23
-# (db 0, integration 0). There is no GitHub Actions conclusion for 9e2502a in this folder.
+# S6: the archive unit runs no database. The tip gate is the lead's local run on 2026-11-23
+# (db 0, integration 0). 05 records the two finished GitHub Actions runs on 07601c8.
 S6_EVIDENCE_FILES = [
     "README.md", "01_environment.json", "02_go_source_manifest.txt", "04_local_gate.md",
+    "05_github_actions.md",
 ]
 # Spike outcomes the M0 report states; the build fails if the evidence says otherwise.
 SPIKE_EXPECTED = {
