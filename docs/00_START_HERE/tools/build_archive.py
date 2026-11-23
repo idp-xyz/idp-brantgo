@@ -28,8 +28,8 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.10"
-ARCHIVE_DATE = "2026-11-20"
+ARCHIVE_VERSION = "1.11"
+ARCHIVE_DATE = "2026-11-23"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
 S1_EVIDENCE = "09_IMPLEMENTATION_PLAN/05_S1_EVIDENCE"
@@ -41,6 +41,9 @@ S5_EVIDENCE = "09_IMPLEMENTATION_PLAN/13_S5_EVIDENCE"
 S4_EVIDENCE = "09_IMPLEMENTATION_PLAN/11_S4_EVIDENCE"
 # V1.10 (2026-11-20 follow-up): a newer source snapshot beside the V1.9 file, which stays the record of that date.
 S4_FOLLOWUP_EVIDENCE = S4_EVIDENCE + "/10_followup_20261120"
+# V1.11 (2026-11-23): S6 local evidence. This snapshot is the one current Go sources must match.
+# The V1.10 follow-up file stays the record of 2026-11-20.
+S6_EVIDENCE = "09_IMPLEMENTATION_PLAN/15_S6_EVIDENCE"
 M0_EVIDENCE_FILES = [
     "README.md", "01_environment.json", "02_go_source_manifest.txt", "03_make_ci_go1.26.5.txt", "04_make_ci_go1.26.8.txt",
     "05_integration_verbose_go1.26.5.txt", "06_kernel_fuzz.txt", "07_migrate_first_run.txt", "08_migrate_second_run.txt",
@@ -82,6 +85,11 @@ S4_EVIDENCE_FILES = [
     "10_followup_20261120/06_scenarios/README.md",
     "10_followup_20261120/07_live-20261120T122849Z/report.json",
     "10_followup_20261120/07_live-20261120T122849Z/summary.md",
+]
+# S6: the archive unit runs no database. The tip gate below is the lead's local run on 2026-11-23
+# (db 0, integration 0). There is no GitHub Actions conclusion for 9e2502a in this folder.
+S6_EVIDENCE_FILES = [
+    "README.md", "01_environment.json", "02_go_source_manifest.txt", "04_local_gate.md",
 ]
 # Spike outcomes the M0 report states; the build fails if the evidence says otherwise.
 SPIKE_EXPECTED = {
@@ -1074,6 +1082,10 @@ def inc_s4_evidence(a):
     return inc_m0_evidence(a, S4_EVIDENCE, S4_EVIDENCE_FILES)
 
 
+def inc_s6_evidence(a):
+    return inc_m0_evidence(a, S6_EVIDENCE, S6_EVIDENCE_FILES)
+
+
 def inc_m0_evidence(a, folder=M0_EVIDENCE, files=M0_EVIDENCE_FILES):
     base = DOCS / folder
     rows = []
@@ -1441,7 +1453,7 @@ def write_registry(pages: list[str]) -> None:
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "product": "IDP Brant · AI-Native Trade Operations Platform（中国 B2B 出口业务版）",
         "standard": "IDP-Cargo 主档案 V2.9（01–12 阶段、证据分级、门禁与 Go-first 工程基线）",
         "implementation_language": "Go (Golang)",
-        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；公开远程仓库 idp-xyz/idp-brantgo（2026-11-11 由个人账号 idpxyz 转入），GitHub Actions 通过；M0 完成，S1、S2、S3、S4（含 S5R 修订轮）与 S5 完成；main 为受保护分支，只要求 brant-ci 通过）",
+        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；公开远程仓库 idp-xyz/idp-brantgo（2026-11-11 由个人账号 idpxyz 转入），GitHub Actions 通过；M0 完成，S1、S2、S3、S4（含 S5R 修订轮）与 S5 完成；S6 于 2026-11-23 有本机证据（S6-01—S6-05 与 S6-07 为 DONE_LOCAL，S6-06 为 PARTIAL；9e2502a 的远程运行不是本档案的证据）；G5 为模拟 NO-GO；main 为受保护分支，只要求 brant-ci 通过）",
         "status": "DESIGN_CANDIDATE_ARCHIVE_WITH_M0_BASELINE_AND_S1_PARTIAL", "production_ready": False,
         "gates": G1["productGates"], "gate_mapping": G1["gateMapping"],
         "versioning_policy": "Latest means the most recent design candidate, not approved or implemented",
@@ -1480,8 +1492,9 @@ def write_registry(pages: list[str]) -> None:
             "V1.8 S5 完成（先于 S4，负责人决定 2026-11-12）：新建 QLT、STL、CNX、FUL 四个上下文，扩展 PUR、TRD、CAT、POL、PTY 与参考数据；STL 信用守卫与 CNX 贸易合规守卫接入订单生效；S4-06a Inbox 分发；BRC-001 经 HTTP 从订单走到结算、核销与中国资料（结果 300.00 USD，31.25 %）；容量与恢复演练在 WSL2 上实测；G3、G4 按负责人决定记为模拟 NO-GO。",
             "V1.9 S4 与 S5R 完成（2026-11-20）：新建 TSK 上下文与 internal/ai（schema brant_ai）：任务生命周期与控制模式、动作执行与对账、能力网关、委托与批准授权、执行器与代理运行器、预算、模型适配、受限文件抽取与来源定位、EER 与 BIP 适配、Inbox 消费方；S5R 的 47 项模拟签核决定由单元 R1—R13 落实；Q01 评测套件脚本化 70／70，本地模型上的真实试次只有正常家族一个家族 4／4，其余 13 个家族未做真实试次；G2 按负责人决定记为模拟 NO-GO。",
             "V1.10 S4 后续轮（2026-11-20）：登记 ADR-BR-IMP-003 与模拟评审 SR-86；三个 S4 消费方与它们的系统命令、类 (i) 的目录行、关系 82；F2 与 R14 写回。全量真实运行 live-20261120T054323Z 在 74743b8 上 70 次试次 15 次通过，40 次实质上没有执行；没有把其余家族记成真实通过。L1 已合并（ad704e3）。224ffcf 上的重跑 live-20261120T122849Z 跑完：45 次里 35 次通过，0 次未执行；an01 与 an03 为 0／5。被停止的 live-20261120T120042Z 不作为完成的运行。G2 仍是模拟 NO-GO。",
+            "V1.11 S6（2026-11-23，分支 s6/business，尖端 9e2502a）：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_LOCAL，S6-06 为 PARTIAL。本机尖端门禁迁移 0（106 个迁移已记录）、集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。9e2502a 的 GitHub Actions 结论不在本档案里，S6 不写 DONE_CI。G5 为模拟 NO-GO：没有真实客户、没有真人签核、没有发布指标、没有真实的海关单一窗口或金税。本版不改产品行为。",
             "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
-            "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4 仍为 NO-GO；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考。",
+            "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4、G5 仍为 NO-GO（G5 为 2026-11-23 的模拟结论）；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考，S6 没有 Python 对等测试。",
         ],
     }
     (DOCS / "00_START_HERE/02_VERSION_REGISTRY.json").write_text(json.dumps(reg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1681,14 +1694,15 @@ def validate(pages: list[str]) -> list[dict]:
     check("S3 证据文件齐全", [f for f in S3_EVIDENCE_FILES if not (DOCS / S3_EVIDENCE / f).exists()], f"{len(S3_EVIDENCE_FILES)} 个文件")
     check("S5 证据文件齐全", [f for f in S5_EVIDENCE_FILES if not (DOCS / S5_EVIDENCE / f).exists()], f"{len(S5_EVIDENCE_FILES)} 个文件")
     check("S4 证据文件齐全", [f for f in S4_EVIDENCE_FILES if not (DOCS / S4_EVIDENCE / f).exists()], f"{len(S4_EVIDENCE_FILES)} 个文件")
+    check("S6 证据文件齐全", [f for f in S6_EVIDENCE_FILES if not (DOCS / S6_EVIDENCE / f).exists()], f"{len(S6_EVIDENCE_FILES)} 个文件")
     got = {r["id"]: r["verdict"] for r in SPIKE["results"]}
     check("M0 一致性实测结论与报告一致", [f"{k}: {got.get(k)}≠{v}" for k, v in SPIKE_EXPECTED.items() if got.get(k) != v] + sorted(set(got) - set(SPIKE_EXPECTED)),
           f"{len(got)} 个场景")
     check("M0 实测场景均有中文说明", sorted(set(got) - set(SPIKE_CN)) + [f"{r['id']}: {k}" for r in SPIKE["results"] for k in list(r["outcomes"]) + list(r["outcomes"].values()) if k not in SPIKE_WORDS and not k.isdigit()])
     # Evidence was produced from the sources listed in the manifest; code that changed since then needs new evidence.
-    # The latest evidence snapshot is the one the current code must match: S4 (with S5R), else S5, else S3, else S2, else S1, else M0.
+    # The latest evidence snapshot is the one the current code must match: S6, else the V1.10 follow-up, else S4, else S5, else S3, else S2, else S1, else M0.
     drift = []
-    manifest = next((DOCS / e / "02_go_source_manifest.txt" for e in (S4_FOLLOWUP_EVIDENCE, S4_EVIDENCE, S5_EVIDENCE, S3_EVIDENCE, S2_EVIDENCE, S1_EVIDENCE, M0_EVIDENCE)
+    manifest = next((DOCS / e / "02_go_source_manifest.txt" for e in (S6_EVIDENCE, S4_FOLLOWUP_EVIDENCE, S4_EVIDENCE, S5_EVIDENCE, S3_EVIDENCE, S2_EVIDENCE, S1_EVIDENCE, M0_EVIDENCE)
                      if (DOCS / e / "02_go_source_manifest.txt").exists()), DOCS / M0_EVIDENCE / "02_go_source_manifest.txt")
     if manifest.exists():
         for ln in manifest.read_text(encoding="utf-8").splitlines():
@@ -1751,8 +1765,8 @@ def main() -> int:
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "builder": "00_START_HERE/tools/build_archive.py",
         "scope": "结构与交叉引用校验：JSON 可解析、术语／上下文／关系／聚合／不变量／状态机／WBS／测试映射的引用完整性、生成页面的本地链接与锚点；"
                  "读取目录与 OpenAPI 候选的读取路由一致、系统消费方只订阅上游事件、S5R 模拟签核的签核角色与来源已登记；"
-                 "M0、S1、S2、S3、S4、S5 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
-        "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE、07_S2_EVIDENCE、09_S3_EVIDENCE、11_S4_EVIDENCE、13_S5_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
+                 "M0、S1、S2、S3、S4、S5、S6 证据文件齐全、一致性实测结论与报告一致、最新证据快照对应当前 Go 源码；页面内联的品牌标志与品牌包 QA 清单逐字节一致。",
+        "not_in_scope": "构建器不执行 Go 测试或 PostgreSQL 16（证据见 10 阶段 06_M0_EVIDENCE 与 09 阶段 05_S1_EVIDENCE、07_S2_EVIDENCE、09_S3_EVIDENCE、11_S4_EVIDENCE、13_S5_EVIDENCE、15_S6_EVIDENCE）；不验证业务正确性、真实身份提供方或任何外部集成，这些仍为 G1 待办。",
         "result": "PASS" if not failed else "FAIL", "checks": results, "counts": counts(),
     }
     (DOCS / "00_START_HERE/05_VALIDATION_REPORT.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

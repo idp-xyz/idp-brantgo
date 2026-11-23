@@ -9,12 +9,13 @@
 //
 //	shipment.prepare       human or AI (merchandiser): prepares a shipment of one active sales order
 //	                       at the order revision and hash TRD shows now (ActiveOrderRef v1, R27). Each
-//	                       line ships a quantity of an order line, in the order line's unit, from one
-//	                       line of a PUR supplier delivery (R59) under one QLT quality release (R26);
-//	                       the delivery line and the release must be of that order line, its SKU
-//	                       specification and its supplier. Route supplier_direct only: the stock route
-//	                       waits for STK (D-10, DEPENDENCY_NOT_SUPPORTED). A shipment line never
-//	                       exceeds its order line; nothing is reserved by preparing. S5R: the lines'
+//	                       line ships a quantity of an order line, in the order line's unit. Route
+//	                       supplier_direct takes one line of a PUR supplier delivery (R59) under one
+//	                       QLT quality release (R26); the delivery line and the release must be of
+//	                       that order line, its SKU specification and its supplier. Route stock names
+//	                       a balance (location, batch, custody) and an optional reservation (R29,
+//	                       S6-D02); STK disabled is DEPENDENCY_NOT_SUPPORTED. A shipment line never
+//	                       exceeds its order line; preparing does not post stock. S5R: the lines'
 //	                       prices, the address roles and the notify party are read from that revision
 //	                       (OrderRevisionRef v1, D35); the shipment's parties — screened at every
 //	                       release (R44) — are the customer, the address roles, the order's notify
@@ -32,7 +33,8 @@
 //	                       transaction, with the shipment and the order's fulfilment root locked, every
 //	                       guard is re-checked in context code order — PTY PartyScreeningGuard on the
 //	                       order's parties (R44), PUR SupplierDeliveryGuard (R59), QLT
-//	                       QualityReleaseGuard (R26), TRD OrderGuard (R27) — and the quantities are
+//	                       QualityReleaseGuard (R26), STL's payment condition, then on route stock
+//	                       only STK StockAvailability v1 (R29), then TRD OrderGuard (R27) — and the quantities are
 //	                       judged on what FUL's confirmed shipments consumed before: of each supplier
 //	                       delivery line (FUL-INV-003, SUPPLIER_DELIVERY_INSUFFICIENT), of each
 //	                       quality release (QUALITY_RELEASE_INSUFFICIENT) and of each order line
@@ -45,7 +47,8 @@
 // TRD reads what an order shipped through ShipmentFacts v1 (facts.go, R70).
 //
 // Request members in snake_case: shipment.prepare {shipment_id, order_id, route, lines [{line_id,
-// order_line_id, quantity, supplier_delivery {delivery_id, line_id, version}, quality_release_id}],
+// order_line_id, quantity, supplier_delivery {delivery_id, line_id, version}, quality_release_id,
+// stock {location_id, batch_id, custody_kind, reservation_id}}]},
 // end_user_party {party_id, revision} (optional, S5R-D40)};
 // packing.plan and packing.record_actual {shipment_id, expected_version, packages [{cartons,
 // carton_from, contents [{line_id, quantity_per_carton}], gross_weight_kg, net_weight_kg,
@@ -144,14 +147,25 @@ type DeliveryLineRef struct {
 	Version    int64
 }
 
+// StockLine is the balance a stock-route line ships from (R29). ReservationID empty issues
+// unreserved quantity. custody_kind is one of STK's four kinds.
+type StockLine struct {
+	LocationID    string
+	BatchID       string
+	CustodyKind   string
+	ReservationID string `json:",omitempty"`
+}
+
 // ShipmentLine ships Quantity (kernel.QuantityFormat, positive, in the order line's unit) of order
-// line OrderLineID from SupplierDelivery under quality release QualityReleaseID.
+// line OrderLineID. A supplier_direct line names SupplierDelivery and QualityReleaseID. A stock
+// line names Stock and neither of those. Stock is omitted from the request hash when absent.
 type ShipmentLine struct {
 	LineID           string
 	OrderLineID      string
 	Quantity         string
 	SupplierDelivery DeliveryLineRef
 	QualityReleaseID string
+	Stock            *StockLine `json:",omitempty"`
 }
 
 // Roles of a shipment's parties (ShipmentParty.Role) besides the address roles the order binds: the
@@ -301,6 +315,35 @@ func head(key, shipmentID string) error {
 	return nil
 }
 
+func stockCustody(kind string) bool {
+	switch kind {
+	case "own_warehouse", "external_factory_material", "external_factory_wip", "in_transit":
+		return true
+	}
+	return false
+}
+
+// stockLine checks a stock-route line: a balance, no supplier delivery and no quality release.
+func stockLine(l ShipmentLine, p string) error {
+	if l.Stock == nil {
+		return schema(p + "/stock")
+	}
+	if l.SupplierDelivery.DeliveryID != "" || l.SupplierDelivery.LineID != "" || l.SupplierDelivery.Version != 0 || l.QualityReleaseID != "" {
+		return schema(p + "/supplier_delivery")
+	}
+	switch {
+	case !kernel.ValidIdentifier(l.Stock.LocationID):
+		return schema(p + "/stock/location_id")
+	case !kernel.ValidIdentifier(l.Stock.BatchID):
+		return schema(p + "/stock/batch_id")
+	case !stockCustody(l.Stock.CustodyKind):
+		return schema(p + "/stock/custody_kind")
+	case l.Stock.ReservationID != "" && !kernel.ValidIdentifier(l.Stock.ReservationID):
+		return schema(p + "/stock/reservation_id")
+	}
+	return nil
+}
+
 func version(v int64) error {
 	if v < 1 || v > maxVersion {
 		return schema("/args/expected_version")
@@ -332,11 +375,23 @@ func (c PrepareShipment) Validate() error {
 			return kernel.Reject(kernel.CodeDuplicateLineID, p+"/line_id", "")
 		}
 		seen[l.LineID] = true
-		switch q, ok := Quantity(l.Quantity); {
+		q, ok := Quantity(l.Quantity)
+		switch {
 		case !kernel.ValidIdentifier(l.OrderLineID):
 			return schema(p + "/order_line_id")
 		case !ok || q.Sign() <= 0:
 			return schema(p + "/quantity")
+		}
+		if c.Route == RouteStock {
+			if err := stockLine(l, p); err != nil {
+				return err
+			}
+			continue
+		}
+		if l.Stock != nil {
+			return schema(p + "/stock")
+		}
+		switch {
 		case !kernel.ValidIdentifier(l.SupplierDelivery.DeliveryID):
 			return schema(p + "/supplier_delivery/delivery_id")
 		case !kernel.ValidIdentifier(l.SupplierDelivery.LineID):
@@ -533,6 +588,8 @@ type ShipmentLineView struct {
 	// QualityConcession: QLT granted the line's quality release on an approved concession (S5R-D18,
 	// recorded when the shipment was prepared; false for a shipment prepared before S5R).
 	QualityConcession bool
+	// Stock is set on a stock-route line (R29). A supplier_direct line leaves it empty.
+	Stock *StockLine `json:",omitempty"`
 }
 
 // ShipmentParty is a party the confirmation screens (R44): the order's customer (Role customer, no

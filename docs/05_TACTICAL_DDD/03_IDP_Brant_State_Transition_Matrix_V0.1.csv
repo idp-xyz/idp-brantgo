@@ -246,3 +246,38 @@ SM-CNX-TAXCASE,CNX,TaxRefundCase,TaxRefundCase,received,tax_refund_case.record_r
 SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,draft,declaration_profile.verify,verified,授权专业人工，独立于最后编辑人（CAT-INV-002）,human
 SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,verified,declaration_profile.verify,superseded,核实更新修订时取代，历史申报快照不变,human
 SM-CAT-DECLARATION,CAT,DeclarationProfile,DeclarationProfileRevision,draft,declaration_profile.discard_draft,discarded,编辑人或授权专业人工丢弃草稿；已核实修订不撤回，只由更正修订取代（S5R-D47）,human
+SM-STK-RESERVATION,STK,Reservation,Reservation,active,reservation.place,active,幂等占位；可用量扣减后仍不小于零，否则 STOCK_INSUFFICIENT；占用与可用量不重复计入（STK-INV-001）,human|ai
+SM-STK-RESERVATION,STK,Reservation,Reservation,active,reservation.release,released,释放不是出库；已消耗的占用不能释放（STOCK_RESERVATION_CONFLICT）,human|ai
+SM-STK-RESERVATION,STK,Reservation,Reservation,active,（FUL StockAvailability v1 消耗）,consumed,仅 shipment.confirm 的 stock 路线消耗匹配的有效占用；supplier_direct 不消耗（S6-D02）,system
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,draft,collaboration_plan.publish,published,材料责任与作业粒度已明确；公司未启用返回 DEPENDENCY_NOT_SUPPORTED,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,draft,collaboration_plan.publish,cancelled,未发布前放弃，不形成委外需求,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,published,collaboration_plan.publish,in_progress,标为执行中；不形成合格库存或客户交付（MFG-INV-001）。不在本命令里写工序进度,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,in_progress,collaboration_plan.publish,paused,暂停不改写已记录的计划事实,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,paused,collaboration_plan.publish,in_progress,恢复执行仍不是合格库存或客户交付,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,in_progress,collaboration_plan.publish,completed,完成仍不是合格库存或客户交付,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,published,collaboration_plan.publish,cancelled,取消不形成库存,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,in_progress,collaboration_plan.publish,cancelled,取消不形成库存,human|ai
+SM-MFG-PLAN,MFG,CollaborationPlan,CollaborationPlan,paused,collaboration_plan.publish,cancelled,取消不形成库存,human|ai
+SM-MFG-SUBCONTRACT,MFG,SubcontractOrder,SubcontractOrder,issued,subcontract_order.issue,issued,幂等签发；加工量不计入销售需求；公司未启用返回 DEPENDENCY_NOT_SUPPORTED。仅人工,human
+SM-MFG-SUBCONTRACT,MFG,SubcontractOrder,SubcontractOrder,issued,operation.record_progress,in_progress,外厂进度只是来源声明，不形成合格库存或客户交付（MFG-INV-001）,human|ai
+SM-MFG-SUBCONTRACT,MFG,SubcontractOrder,SubcontractOrder,in_progress,operation.record_progress,completed,完成声明不形成合格库存或客户交付,human|ai
+SM-MFG-SUBCONTRACT,MFG,SubcontractOrder,SubcontractOrder,issued,operation.record_progress,cancelled,取消不形成库存,human|ai
+SM-MFG-SUBCONTRACT,MFG,SubcontractOrder,SubcontractOrder,in_progress,operation.record_progress,cancelled,取消不形成库存,human|ai
+SM-CLM-CLAIM,CLM,ClaimCase,ClaimCase,open,claim.open,open,锚定已确认出运行；未确认或已取消答 INVALID_STATE；不改写出运（CLM-INV-001）,human|ai
+SM-CLM-CLAIM,CLM,ClaimCase,ClaimCase,open,return.register,open,累计退货不超过已确认出运量，超出答 CLAIM_RETURN_EXCEEDS_SHIPPED；不写库存（CLM-INV-002）,human|ai
+SM-CLM-CLAIM,CLM,ClaimCase,ClaimCase,open,remedy.decide,open,仅人工，且独立于开案人，否则 INDEPENDENT_REVIEW_REQUIRED；不自动贷项或退款（CLM-INV-003）,human
+SM-CLM-CLAIM,CLM,ClaimCase,ClaimCase,open,claim.close,closed,仅人工，且独立于开案人；结案保留退货与补救历史,human
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,qualified,opportunity.advance,proposal,只沿登记阶段推进；R1 不设指派与公海,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,qualified,opportunity.advance,abandoned,放弃不产生交易单据,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,proposal,opportunity.advance,negotiation,只沿登记阶段推进,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,proposal,opportunity.advance,lost,失利不产生交易单据,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,proposal,opportunity.advance,abandoned,放弃不产生交易单据,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,negotiation,opportunity.advance,won,赢单只推进阶段，不创建报价或订单,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,negotiation,opportunity.advance,lost,失利不产生交易单据,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,negotiation,opportunity.advance,abandoned,放弃不产生交易单据,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,qualified,follow_up.record,qualified,跟进不是 BusinessTask，不改变阶段,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,proposal,follow_up.record,proposal,跟进不是 BusinessTask，不改变阶段,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,negotiation,follow_up.record,negotiation,跟进不是 BusinessTask，不改变阶段,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,won,follow_up.record,won,赢单后的跟进仍不是 BusinessTask,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,lost,follow_up.record,lost,跟进不改变终态,human|ai
+SM-CRM-OPPORTUNITY,CRM,Opportunity,Opportunity,abandoned,follow_up.record,abandoned,跟进不改变终态,human|ai

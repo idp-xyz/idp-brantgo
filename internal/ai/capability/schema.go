@@ -130,7 +130,10 @@ func schemaOf(t reflect.Type, r Rule, top bool, open map[reflect.Type]bool) (map
 func structProperties(t reflect.Type, top bool, open map[reflect.Type]bool, props map[string]any, required *[]string) error {
 	for i := range t.NumField() {
 		f := t.Field(i)
-		if f.Tag.Get("json") == "-" || (top && f.Name == KeyField) {
+		// ai:"-" keeps a member on the api type, and in request hashes, without offering it to the
+		// model. rfq.save_draft's OpportunityID is one (S6-D04): the tool schema, and therefore
+		// q01.agent's bundle hash, stays the schema of the members the model already had.
+		if f.Tag.Get("json") == "-" || f.Tag.Get("ai") == "-" || (top && f.Name == KeyField) {
 			continue
 		}
 		ft := f.Type

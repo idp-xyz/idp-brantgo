@@ -120,7 +120,14 @@ func (s Service) orderSource(ctx context.Context, exec bentopg.Executor, h *orde
 	if err = q.Usable(src.Revision, src.BusinessHash, path); err != nil {
 		return source{}, err
 	}
-	if q.Slot == nil || q.Slot.OrderID != o.ID || q.Slot.Revision != src.Revision {
+	// full_v1 is held by this order. A multi_order order holds no quote_conversion_slot
+	// (TRD-INV-024); a full_v1 slot on its quote is a conflict.
+	switch {
+	case o.Slot == quote.SlotMultiOrder:
+		if q.Slot != nil {
+			return source{}, api.Reject(api.CodeConversionSlotConflict, path)
+		}
+	case q.Slot == nil || q.Slot.OrderID != o.ID || q.Slot.Revision != src.Revision:
 		return source{}, api.Reject(api.CodeConversionSlotConflict, path)
 	}
 	rev := q.Revision(src.Revision)

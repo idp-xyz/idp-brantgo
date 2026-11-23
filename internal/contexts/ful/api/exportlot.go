@@ -167,7 +167,9 @@ type ShipmentLineRef struct {
 	SupplierID        string
 	QualityReleaseID  string
 	ExportLotID       string
-	Code              string
+	// Route is supplier_direct or stock (R29). Empty on a line read before the stock route existed.
+	Route string
+	Code  string
 }
 
 // Settleable reports whether the line is a source of sales settlement.

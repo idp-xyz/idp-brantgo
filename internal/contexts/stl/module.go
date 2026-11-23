@@ -5,10 +5,12 @@
 package stl
 
 import (
+	"context"
 	"errors"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	bentooutbox "go.idp.xyz/idp-bento-go/postgres/outbox"
+	clmapi "go.idp.xyz/idp-brant/internal/contexts/clm/api"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	purapi "go.idp.xyz/idp-brant/internal/contexts/pur/api"
@@ -25,6 +27,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // Module is STL wired to PostgreSQL through its own IDP-Bento-Go transaction owner.
@@ -140,6 +143,30 @@ func FULShipmentLines(lookups func() fulapi.ShipmentLineLookups) Shipments {
 // (PurchaseSettlementSource v1, R31) before STL's transaction.
 func PURSettlementSources(lookups purapi.DeliveryLookups) Deliveries {
 	return sources.PUR{Lookups: lookups}
+}
+
+// Claims is CLM's CreditRequest v1 (R35).
+type Claims = application.Claims
+
+type clmCredits struct{ lookups func() clmapi.CreditLookups }
+
+// CLMCredits binds CreditRequest v1. CLM is composed after STL, so the lookup is a function (D-2).
+func CLMCredits(lookups func() clmapi.CreditLookups) Claims { return clmCredits{lookups} }
+
+func (c clmCredits) ResolveCreditRequest(ctx context.Context, claimID, remedyID string) (clmapi.CreditRequest, error) {
+	l := c.lookups()
+	if l == nil {
+		return clmapi.CreditRequest{}, kernel.Reject(kernel.CodeNotFound, "/args/claim_id", "")
+	}
+	return l.ResolveCreditRequest(ctx, claimID, remedyID)
+}
+
+func (c clmCredits) ResolveOrderClaims(ctx context.Context, orderID string) ([]clmapi.OrderClaim, error) {
+	l := c.lookups()
+	if l == nil {
+		return nil, nil
+	}
+	return l.ResolveOrderClaims(ctx, orderID)
 }
 
 // New wires STL to db, a transaction owner that belongs to STL alone, and to its upstreams.

@@ -39,10 +39,11 @@ type CostDenial struct {
 // CostHoldID is the identifier of the hold attestation registers.
 func CostHoldID(attestation string) string { return HoldCostSourceDenied + ":" + attestation }
 
-// Contracted reports whether a contract formed on revision n: a live acceptance accepts it, or the
-// root's conversion slot is taken (an order converts it).
+// Contracted reports whether a contract formed on revision n: a live acceptance accepts it, the
+// root's full_v1 conversion slot is taken, or any partial order has consumed quantity
+// (TRD-INV-024: a consumption row locks replace, cancel and a cost-source hold the way the slot does).
 func (q *Quote) Contracted(n int64) bool {
-	return len(q.Contracts[n]) > 0 || q.Slot != nil
+	return len(q.Contracts[n]) > 0 || q.Slot != nil || q.Consumed
 }
 
 // CostSnapshotOf returns the cost snapshot the commit evidence of the root's active revision names

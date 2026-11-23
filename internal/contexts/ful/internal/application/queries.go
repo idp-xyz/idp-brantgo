@@ -50,7 +50,8 @@ func shipmentView(s *shipment.Shipment) api.ShipmentView {
 		v.Lines = append(v.Lines, api.ShipmentLineView{LineID: l.ID, OrderLineID: l.OrderLineID, SkuID: l.SkuID, SpecRevision: l.SpecRevision,
 			UnitID: l.UnitID, UnitRevision: l.UnitRevision, OrderLineQuantity: postgres.Text(l.OrderQuantity), Quantity: postgres.Text(l.Quantity),
 			SupplierDelivery: api.DeliveryLineRef{DeliveryID: l.Delivery.DeliveryID, LineID: l.Delivery.LineID, Version: l.DeliveryVersion},
-			CommitmentID:     l.CommitmentID, SupplierID: l.SupplierID, QualityReleaseID: l.ReleaseID, QualityConcession: l.QualityConcession})
+			CommitmentID:     l.CommitmentID, SupplierID: l.SupplierID, QualityReleaseID: l.ReleaseID, QualityConcession: l.QualityConcession,
+			Stock: stockView(l)})
 	}
 	for _, p := range s.Parties {
 		v.Parties = append(v.Parties, api.ShipmentParty(p))
@@ -68,6 +69,13 @@ func shipmentView(s *shipment.Shipment) api.ShipmentView {
 		v.Cancellation = &api.CancellationView{Reason: x.Reason, CancelledBy: x.Cancelled.By, CancelledAt: x.Cancelled.At, AuthorityEpoch: x.Cancelled.Epoch}
 	}
 	return v
+}
+
+func stockView(l shipment.Line) *api.StockLine {
+	if l.LocationID == "" {
+		return nil
+	}
+	return &api.StockLine{LocationID: l.LocationID, BatchID: l.BatchID, CustodyKind: l.CustodyKind, ReservationID: l.ReservationID}
 }
 
 func packingView(p *shipment.Packing) *api.PackingView {

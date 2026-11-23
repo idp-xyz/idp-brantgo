@@ -118,6 +118,19 @@ func quoteData(a api.QuoteData) quote.Data {
 		n := *a.CustomerNotes
 		d.CustomerNotes = &n
 	}
+	// single_full is the default and is stored as empty, so the draft hash matches a quote that
+	// omitted the member (TRD-INV-024).
+	if a.ConversionMode == quote.ModeMultiOrder {
+		d.ConversionMode = quote.ModeMultiOrder
+	}
+	for i := range d.Lines {
+		l := a.Lines[i]
+		if d.ConversionMode != quote.ModeMultiOrder {
+			continue
+		}
+		d.Lines[i].MaxOrderQuantity = l.MaxOrderQuantity
+		d.Lines[i].Uncapped = l.Uncapped != nil && *l.Uncapped
+	}
 	return d
 }
 
@@ -168,7 +181,56 @@ func apiData(d quote.Data) api.QuoteData {
 		n := *d.CustomerNotes
 		a.CustomerNotes = &n
 	}
+	a.ConversionMode = d.ConversionMode
+	for i := range a.Lines {
+		l := d.Lines[i]
+		a.Lines[i].MaxOrderQuantity = l.MaxOrderQuantity
+		if l.Uncapped {
+			uncapped := true
+			a.Lines[i].Uncapped = &uncapped
+		}
+	}
 	return a
+}
+
+// multiOrderLedger is the active revision's remaining quantity when the quote opted into
+// multi_order (TRD-INV-024). Nil for a default quote, so the quote read omits the member.
+func multiOrderLedger(q *quote.Quote, sums map[string]string) *api.MultiOrderLedger {
+	rev := q.Active()
+	if rev == nil || rev.Seal == nil {
+		return nil
+	}
+	doc, err := quote.ParseCommercial(rev.Seal.Commercial, rev.Seal.BusinessHash)
+	if err != nil || doc.Data.ConversionMode != quote.ModeMultiOrder {
+		return nil
+	}
+	lines := make([]api.MultiOrderLedgerLine, len(doc.Data.Lines))
+	for i, l := range doc.Data.Lines {
+		consumed := sums[l.LineID]
+		if consumed == "" {
+			consumed = "0"
+		}
+		item := api.MultiOrderLedgerLine{LineID: l.LineID, QuotedQuantity: l.Quantity, MaxOrderQuantity: l.MaxOrderQuantity,
+			Uncapped: l.Uncapped, Consumed: consumed}
+		if !l.Uncapped {
+			raw := l.MaxOrderQuantity
+			if raw == "" {
+				raw = l.Quantity
+			}
+			capQty, err1 := kernel.ParseDecimal(raw, kernel.QuantityFormat)
+			got, err2 := kernel.ParseDecimal(consumed, kernel.QuantityFormat)
+			if err1 == nil && err2 == nil {
+				left := capQty.Sub(got)
+				if s, ok := left.Exact(); ok {
+					item.Remaining = s
+				} else {
+					item.Remaining = left.String()
+				}
+			}
+		}
+		lines[i] = item
+	}
+	return &api.MultiOrderLedger{Lines: lines}
 }
 
 // quoteView is a quote as GetQuote shows it. A frozen revision whose commercial document does not

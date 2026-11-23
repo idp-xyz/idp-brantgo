@@ -20,6 +20,8 @@ const (
 	CodeReferenceStale               = "REFERENCE_STALE"
 	CodeBusinessKeyConflict          = "BUSINESS_KEY_CONFLICT"
 	CodeDependencyNotSupported       = "DEPENDENCY_NOT_SUPPORTED"
+	CodeStockInsufficient            = "STOCK_INSUFFICIENT"
+	CodeStockReservationConflict     = "STOCK_RESERVATION_CONFLICT"
 	// CodeIndependentReviewRequired (422): the credit manager evaluated the release an exception
 	// would grant (S5R-D28; role templates' independence of commercial_release.grant_exception).
 	CodeIndependentReviewRequired = "INDEPENDENT_REVIEW_REQUIRED"
@@ -42,6 +44,8 @@ var Codes = map[string]kernel.Category{
 	CodeReferenceStale:               kernel.CategoryConflict,
 	CodeBusinessKeyConflict:          kernel.CategoryConflict,
 	CodeDependencyNotSupported:       kernel.CategoryInvalid,
+	CodeStockInsufficient:            kernel.CategoryConflict,
+	CodeStockReservationConflict:     kernel.CategoryConflict,
 	CodeIndependentReviewRequired:    kernel.CategoryInvalid,
 }
 

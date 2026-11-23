@@ -93,6 +93,9 @@ const (
 	// SubjectCommitmentLine is a line of a PUR purchase commitment (InspectionSubject v1). A
 	// verified supplier delivery line (S5-15) is not a subject yet.
 	SubjectCommitmentLine = "purchase_commitment_line"
+	// SubjectSubcontractOperation is an operation of an MFG subcontract (InspectionSubject v1,
+	// Context Map R25). A progress claim is not this subject and is not a quality release.
+	SubjectSubcontractOperation = "mfg_subcontract_operation"
 
 	// Inspectors (InspectorRef).
 	InspectorInternal = "internal"        // our own human, who records the result
@@ -127,8 +130,8 @@ const (
 	maxVersion      = 2147483647
 )
 
-// SubjectRef names an inspection subject: line LineID of purchase commitment ID (Kind
-// SubjectCommitmentLine).
+// SubjectRef names an inspection subject. Kind SubjectCommitmentLine is line LineID of purchase
+// commitment ID. Kind SubjectSubcontractOperation is operation LineID of subcontract ID (R25).
 type SubjectRef struct {
 	Kind   string
 	ID     string
@@ -137,9 +140,12 @@ type SubjectRef struct {
 
 // Validate checks the reference's form at path.
 func (r SubjectRef) Validate(path string) error {
-	switch {
-	case r.Kind != SubjectCommitmentLine:
+	switch r.Kind {
+	case SubjectCommitmentLine, SubjectSubcontractOperation:
+	default:
 		return schema(path + "/kind")
+	}
+	switch {
 	case !kernel.ValidIdentifier(r.ID):
 		return schema(path + "/id")
 	case !kernel.ValidIdentifier(r.LineID):

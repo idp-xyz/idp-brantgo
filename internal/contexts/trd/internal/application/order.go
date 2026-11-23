@@ -40,7 +40,7 @@ const (
 
 // orderWrites are the commands of this file; a replay of one passes the quote root's object control
 // as the write would (Visible).
-var orderWrites = []string{api.CommandPrepareOrder, api.CommandRequestOrderReview, api.CommandDecideOrderReview, api.CommandActivateOrder,
+var orderWrites = []string{api.CommandPrepareOrder, api.CommandPreparePartialOrder, api.CommandRequestOrderReview, api.CommandDecideOrderReview, api.CommandActivateOrder,
 	api.CommandRevokeOrderApproval, api.CommandCancelOrder, api.CommandCloseOrderUnfulfilled, api.CommandPrepareAmendment,
 	api.CommandSubmitAmendment, api.CommandDecideAmendment, api.CommandApplyAmendment, api.CommandWithdrawAmendment,
 	api.CommandCloseOrderRemainder, api.CommandCloseOrder, api.CommandGenerateOrderDocument, api.CommandRecordSignedOrderDocument}
@@ -194,6 +194,80 @@ func (s Service) PrepareOrder(ctx context.Context, cmd api.PrepareOrder) (api.Or
 			"customer_party_id": a.Customer.PartyID, "customer_revision": a.Customer.Revision}))
 	}
 	res, err := s.run(ctx, action.Command{Name: api.CommandPrepareOrder, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID,
+		GrantObject: action.GrantObject{Type: api.ObjectQuote, ID: cmd.QuoteID, Version: cmd.BusinessRevision}}, cmd, cmd.Validate(), h)
+	if err != nil {
+		return api.OrderReceipt{}, err
+	}
+	return s.orderReceipt(ctx, res, "")
+}
+
+// PreparePartialOrder places part of a multi_order quote into a draft sales order (TRD-INV-024).
+// The quote root is locked FOR UPDATE before the ledger is read, so two concurrent prepares see
+// one consumption total. Human only.
+func (s Service) PreparePartialOrder(ctx context.Context, cmd api.PreparePartialOrder) (api.OrderReceipt, error) {
+	h := &orderCommand{s: s, orderID: cmd.OrderID, quoteID: cmd.QuoteID, preparing: true}
+	var notify *quote.AddressRef
+	if n := cmd.NotifyPartyRef; n != nil {
+		notify = &quote.AddressRef{PartyID: n.PartyID, PartyRevision: n.PartyRevision, AddressID: n.AddressID}
+	}
+	var seal *orderrev.SealFacts
+	var currency kernel.Currency
+	h.prepare = func(ctx context.Context) error {
+		var err error
+		if seal, err = s.prepareSeal(ctx, cmd.QuoteID, cmd.BusinessRevision, cmd.BusinessHash, notify); err != nil {
+			return err
+		}
+		currency, err = s.prepareCurrency(ctx, cmd.QuoteID, cmd.BusinessRevision, cmd.BusinessHash)
+		return err
+	}
+	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+		if err := h.admit(ctx, exec, d, "/args/quote_id"); err != nil {
+			return action.Outcome{}, err
+		}
+		if h.o != nil {
+			return action.Outcome{}, api.Reject(api.CodeBusinessKeyConflict, "/args/order_id")
+		}
+		a, err := postgres.LoadAcceptance(ctx, exec, scope(ctx), cmd.AcceptanceID, postgres.NoLock)
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		consumed, err := postgres.ConsumedQuantities(ctx, exec, scope(ctx), cmd.QuoteID)
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		lines := make([]order.PartialLine, len(cmd.Lines))
+		for i, l := range cmd.Lines {
+			lines[i] = order.PartialLine{LineID: l.LineID, Quantity: l.Quantity}
+		}
+		charges := make([]order.PartialCharge, len(cmd.Charges))
+		for i, c := range cmd.Charges {
+			charges[i] = order.PartialCharge{ChargeID: c.ChargeID, AmountMinor: c.AmountMinor}
+		}
+		var payments []order.PartialStage
+		for _, p := range cmd.PaymentPlan {
+			payments = append(payments, order.PartialStage{StageID: p.StageID, AmountMinor: p.AmountMinor})
+		}
+		o, err := order.PreparePartial(order.PartialPreparation{Preparation: order.Preparation{OrderID: cmd.OrderID, QuoteID: cmd.QuoteID,
+			Revision: cmd.BusinessRevision, BusinessHash: cmd.BusinessHash, AcceptanceID: cmd.AcceptanceID, NotifyParty: notify, Seal: seal},
+			Lines: lines, Charges: charges, Payments: payments, Currency: currency, Consumed: consumed}, h.q, a, scope(ctx), d.Actor, d.Epoch, s.Clock.Now())
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		if notify != nil {
+			if err = guardAddress(ctx, exec, ptyRef(*notify), "/args/notify_party_ref"); err != nil {
+				return action.Outcome{}, err
+			}
+		}
+		h.o = o
+		src := o.Source
+		return h.save(ctx, exec, string(o.Status), h.event(api.EventOrderPrepared, map[string]any{"number": src.Number,
+			"acceptance_id": src.AcceptanceID, "acceptance_effectivity_version": src.AcceptanceVersion,
+			"arrival_at": kernel.FormatTimestamp(src.ArrivalAt), "arrival_basis": src.ArrivalBasis,
+			"quote_expires_at": kernel.FormatTimestamp(src.ExpiresAt), "conversion_slot": o.Slot,
+			"conversion_mode":   quote.ModeMultiOrder,
+			"customer_party_id": a.Customer.PartyID, "customer_revision": a.Customer.Revision}))
+	}
+	res, err := s.run(ctx, action.Command{Name: api.CommandPreparePartialOrder, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.OrderID,
 		GrantObject: action.GrantObject{Type: api.ObjectQuote, ID: cmd.QuoteID, Version: cmd.BusinessRevision}}, cmd, cmd.Validate(), h)
 	if err != nil {
 		return api.OrderReceipt{}, err

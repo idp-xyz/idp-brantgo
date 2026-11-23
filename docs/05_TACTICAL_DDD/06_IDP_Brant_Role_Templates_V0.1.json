@@ -2,7 +2,7 @@
  "artifact": "IDP Brant Role Templates and Separation of Duties",
  "version": "0.1",
  "date": "2026-11-10",
- "status": "岗位模板与职责分离规则按模拟评审 SR-32（BC-D02）接受；岗位到命令权限的映射为候选（E0），真实客户开通时由租户确认或合并岗位；2026-11-13 按 S5R 模拟签核（E0，不是真人签核）修订：S5R-D01、D02、D05、D20—D23、D25、D26、D28—D30、D32、D47",
+ "status": "岗位模板与职责分离规则按模拟评审 SR-32（BC-D02）接受；岗位到命令权限的映射为候选（E0），真实客户开通时由租户确认或合并岗位；2026-11-13 按 S5R 模拟签核（E0，不是真人签核）修订：S5R-D01、D02、D05、D20—D23、D25、D26、D28—D30、D32、D47；2026-11-20 按 S6 负责人决定修订：S6-D01 的 order.prepare_partial 归销售经办且不授予 AI；S6-D02 的模块开关归管理员；S6-D03 将 remedy.decide 移出管理员",
  "source": "10_M0_ENGINEERING_BASELINE/07_IDP_Brant_Simulated_Review_V0.1.json SR-32",
  "principles": [
   "权限即命令名；读取与审计为 <bc>.read、<bc>.audit；能力权限（如毛利例外）由命令内部检查。",
@@ -18,7 +18,7 @@
   {
    "code": "sales_clerk",
    "name": "销售经办",
-   "duties": "客户询价、报价编制与提交、客户回复登记、订单准备与生效、订单变更编制、客户主体与联系人草稿；为订单在额度内申请信用占用，超额生成信用决定由信用人员裁决（S5 D-7，负责人决定 2026-11-12）；可释放自己申请的、尚未被订单消耗的信用占用（负责人决定 2026-11-12）",
+   "duties": "客户询价、报价编制与提交、客户回复登记、订单准备与生效、订单变更编制、客户主体与联系人草稿；为订单在额度内申请信用占用，超额生成信用决定由信用人员裁决（S5 D-7，负责人决定 2026-11-12）；可释放自己申请的、尚未被订单消耗的信用占用（负责人决定 2026-11-12）；部分与多次下单的 order.prepare_partial（S6-D01，不授予 AI）",
    "permissions": [
     "acceptance.mark_disputed",
     "action.reconcile",
@@ -64,6 +64,7 @@
     "order.document.generate",
     "order.document.record_signed",
     "order.prepare",
+    "order.prepare_partial",
     "order.review.request",
     "party.revise",
     "party.save_draft",
@@ -376,7 +377,7 @@
   {
    "code": "order_reviewer",
    "name": "订单审核人",
-   "duties": "订单与订单变更审核、撤销批准、合同成立的否认处理；采购承诺审批与承诺变更裁决（A47）；承诺行获批处置的批准（S5R-D05）",
+   "duties": "订单与订单变更审核、撤销批准、合同成立的否认处理；采购承诺审批与承诺变更裁决（A47）；承诺行获批处置的批准（S5R-D05）；客诉补救决定（独立于开案人，S6-D03）",
    "permissions": [
     "acceptance.invalidate",
     "cat.read",
@@ -401,6 +402,7 @@
     "purchase.commitment.revoke",
     "qlt.read",
     "ref.read",
+    "remedy.decide",
     "stk.read",
     "stl.read",
     "sup.read",
@@ -473,7 +475,7 @@
   {
    "code": "credit_manager",
    "name": "信用经理",
-   "duties": "信用额度发布、信用例外（最高层级）、贷项确认、结算冲销与资金差额批准、商业放行例外；应付调整确认、临时第三方付款人核实、资金记录冲销（S5R-D20—D22）；信用政策发布（S5R-D30）；登记本岗位决定所依据的证据（S5R-D26）",
+   "duties": "信用额度发布、信用例外（最高层级）、贷项确认、结算冲销与资金差额批准、商业放行例外；应付调整确认、临时第三方付款人核实、资金记录冲销（S5R-D20—D22）；信用政策发布（S5R-D30）；登记本岗位决定所依据的证据（S5R-D26）；客诉补救决定（独立于开案人，S6-D03）",
    "permissions": [
     "cat.read",
     "clm.read",
@@ -500,6 +502,7 @@
     "pur.read",
     "qlt.read",
     "ref.read",
+    "remedy.decide",
     "settlement.reverse",
     "source.register",
     "stk.read",
@@ -735,7 +738,7 @@
   {
    "code": "administrator",
    "name": "管理员",
-   "duties": "主数据核实与停用、服务方核实、交易档案发布、配置发布与退役、编号、Outbox 死信重放、审计查阅；不作业务审批与合规结论",
+   "duties": "主数据核实与停用、服务方核实、交易档案发布、配置发布与退役、编号、Outbox 死信重放、审计查阅；不作业务审批与合规结论；STK 与 MFG 的公司启用开关（S6-D02）",
    "permissions": [
     "ai.audit",
     "ai.read",
@@ -764,6 +767,7 @@
     "inq.read",
     "item_code_mapping.publish",
     "mfg.audit",
+    "mfg.module.configure",
     "mfg.read",
     "number.issue",
     "party.confirm",
@@ -779,11 +783,11 @@
     "qlt.read",
     "ref.audit",
     "ref.read",
-    "remedy.decide",
     "service_role.verify",
     "sku.confirm",
     "sku.deactivate",
     "stk.audit",
+    "stk.module.configure",
     "stk.read",
     "stl.audit",
     "stl.read",
@@ -1264,6 +1268,18 @@
    "command": "fund.reverse",
    "independentOf": "资金登记人（S5R-D22）",
    "context": "STL",
+   "state": "SPEC"
+  },
+  {
+   "command": "remedy.decide",
+   "independentOf": "客诉开案人（claim.open，S6-D03）",
+   "context": "CLM",
+   "state": "SPEC"
+  },
+  {
+   "command": "claim.close",
+   "independentOf": "客诉开案人（claim.open，S6-D03）",
+   "context": "CLM",
    "state": "SPEC"
   }
  ]

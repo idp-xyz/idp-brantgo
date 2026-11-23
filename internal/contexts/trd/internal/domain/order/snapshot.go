@@ -174,8 +174,16 @@ func (o *Order) Verify(scope kernel.Scope, path string) (Snapshot, error) {
 		lines[i] = l.LineID
 	}
 	slices.Sort(lines)
-	rebuilt, err := BuildSnapshot(scope, o.ID, src, commercial, &acceptance.Acceptance{Customer: d.Customer, Contact: d.Contact, LineIDs: lines},
-		s.Sealing())
+	acc := &acceptance.Acceptance{Customer: d.Customer, Contact: d.Contact, LineIDs: lines}
+	var rebuilt []byte
+	if o.Slot == quote.SlotMultiOrder {
+		// A partial order is not a copy of the quote: it is repriced from the sealed unit prices
+		// and the quantities the snapshot itself chose (TRD-INV-024). Rebuilding checks that those
+		// quantities still produce these amounts.
+		rebuilt, err = rebuildPartial(scope, o.ID, src, commercial, acc, s.Sealing(), o.Snapshot)
+	} else {
+		rebuilt, err = BuildSnapshot(scope, o.ID, src, commercial, acc, s.Sealing())
+	}
 	if err != nil || !bytes.Equal(rebuilt, o.Snapshot) {
 		return bad("is not the copy of its source")
 	}

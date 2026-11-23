@@ -198,6 +198,8 @@ GRANT UPDATE (effectivity, effectivity_version, revoked_by_kind, revoked_by_id, 
     ON brant_trd.quote_approval TO brant_app;
 GRANT SELECT, INSERT ON brant_trd.quote_document, brant_trd.quote_commit_evidence, brant_trd.quote_revision_closure,
     brant_trd.quote_risk_hold, brant_trd.quote_conversion_slot TO brant_app;
+-- TRD 000011 (S6-07, TRD-INV-024): the quote-line consumption ledger is append-only.
+GRANT SELECT, INSERT ON brant_trd.quote_order_consumption TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_trd.guard_quote_revision_active_v1(text, bigint, text) TO brant_app;
 -- Customer responses and the effectivity ledger are only inserted (triggers); an acceptance changes
 -- its effectivity once (trigger), and acceptance.invalidate and acceptance.mark_disputed lock it FOR
@@ -388,6 +390,8 @@ GRANT UPDATE (status, version, source_kind, source_party_id, source_reference, e
     basis, evidence_ids, billed_by_kind, billed_by_id, bill_epoch, billed_at, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at,
     confirm_evidence_ids, confirm_reason, allocation_seq, updated_at) ON brant_stl.charge TO brant_app;
 GRANT UPDATE (status, version, updated_at) ON brant_stl.order_result TO brant_app;
+-- S6-D03: one append-only row per approved remedy a credit note or a refund settles (R35).
+GRANT SELECT, INSERT ON brant_stl.claim_remedy_settlement TO brant_app;
 
 -- STL opening balances (S5-20): an opening item is only inserted with the opening statement or fund record its command
 -- writes, and moves recorded → reversed with its reversed statement (trigger); nothing is deleted.
@@ -478,6 +482,12 @@ GRANT UPDATE (policy_revision, policy_hash, refund_method, policy_valid_from, po
 GRANT EXECUTE ON FUNCTION brant_cnx.purchase_invoice_line_reversed(text, text, text, integer) TO brant_app;
 GRANT EXECUTE ON FUNCTION brant_cnx.tax_evidence_overused(text, text, text, integer, text) TO brant_app;
 
+-- CNX channel attempts and the non-authoritative receipt chain (S6-05). An attempt moves along the
+-- connector states (the column grant is also what the command's update needs); receipts are only
+-- inserted. The case and declaration column grants above cover the roots these commands lock.
+GRANT SELECT, INSERT ON brant_cnx.channel_attempt, brant_cnx.channel_receipt TO brant_app;
+GRANT UPDATE (state, outcome, reason, row_version, updated_at) ON brant_cnx.channel_attempt TO brant_app;
+
 -- FUL shipments (S5-03a): an order's fulfilment root is only inserted; the single column grant
 -- exists so shipment.prepare and shipment.confirm can lock it FOR UPDATE, and the trigger refuses
 -- every update. A shipment is inserted prepared with its lines and parties and then changes only by
@@ -499,6 +509,8 @@ GRANT EXECUTE ON FUNCTION brant_ful.release_consumption_v1(text) TO brant_app;
 -- PUR's purchase.commitment.dispose and purchase.commitment.disposition.decide execute CommitmentShipped v1
 -- (R82, PUR-INV-013) inside their own transactions, after the commitment root is locked.
 GRANT EXECUTE ON FUNCTION brant_ful.commitment_shipped_v1(text) TO brant_app;
+-- shipment.prepare inserts a stock line; the trigger checks the parent route.
+GRANT EXECUTE ON FUNCTION brant_ful.guard_stock_line() TO brant_app;
 
 -- FUL milestones and export lots (S5-03b): a shipment line's price is only inserted with its
 -- shipment; a milestone plan moves only its version, revision, counts and last revision (trigger),
@@ -539,6 +551,26 @@ GRANT UPDATE (status, row_version, settled_by_kind, settled_by_id, settle_epoch,
 GRANT UPDATE (disposition, disposition_shipment_id, disposition_revision, disposition_ref, disposition_status, disposition_at,
               disposition_reason)
     ON brant_ful.shipment_review_item TO brant_app;
+
+-- CLM claims (S6-03): a claim is inserted open and moves only its version, and once to closed
+-- (trigger); returns and remedies are only inserted; the shipment-line lock row is only inserted
+-- and locked FOR UPDATE (the column grant); nothing is deleted. The claim commands call no guard
+-- function of another context.
+GRANT USAGE ON SCHEMA brant_clm TO brant_app;
+GRANT SELECT, INSERT ON brant_clm.claim_case, brant_clm.claim_return, brant_clm.claim_remedy,
+    brant_clm.shipment_line_claim_lock, brant_clm.action_result, brant_clm.audit_event TO brant_app;
+GRANT UPDATE (status, row_version, closed_summary, closed_by_kind, closed_by_id, close_epoch, closed_at)
+    ON brant_clm.claim_case TO brant_app;
+GRANT UPDATE (lock_token) ON brant_clm.shipment_line_claim_lock TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_clm.guard_mutation() TO brant_app;
+
+-- CRM (S6-04, optional): a lead is inserted once (SELECT FOR UPDATE still needs UPDATE; a trigger
+-- refuses a real change). An opportunity moves only its stage and row version. Follow-ups only
+-- grow. The ledger only grows. INQ reads an opportunity before its own transaction and takes no lock.
+GRANT USAGE ON SCHEMA brant_crm TO brant_app;
+GRANT SELECT, INSERT, UPDATE ON brant_crm.lead, brant_crm.opportunity TO brant_app;
+GRANT SELECT, INSERT ON brant_crm.follow_up, brant_crm.action_result, brant_crm.audit_event TO brant_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA brant_crm TO brant_app;
 
 -- TSK business tasks (S4-01): a task is inserted created and moves only along SM-TSK-TASK, one version at
 -- a time, never changing what it was created with (trigger); its history only grows (trigger); nothing
@@ -582,3 +614,26 @@ GRANT UPDATE (status, row_version, attempts, sends, claimed_at, grant_id, settle
 -- A reservation locks its task's budget row FOR UPDATE, which needs UPDATE on one column; the trigger
 -- refuses every change of a budget.
 GRANT UPDATE (source) ON brant_ai.task_budget TO brant_app;
+
+-- STK (S6-01): balances, reservations and the company switch change; movements, cost allocations
+-- and batch lineage only grow. StockAvailability v1 is executed by FUL in FUL's own transaction.
+GRANT USAGE ON SCHEMA brant_stk TO brant_app;
+GRANT SELECT, INSERT ON brant_stk.company_setting, brant_stk.stock_balance, brant_stk.stock_movement, brant_stk.cost_layer,
+    brant_stk.cost_allocation, brant_stk.stock_reservation, brant_stk.batch_lineage, brant_stk.action_result, brant_stk.audit_event TO brant_app;
+GRANT UPDATE (enabled, row_version, updated_by_kind, updated_by_id, update_epoch, updated_at) ON brant_stk.company_setting TO brant_app;
+GRANT UPDATE (on_hand, reserved, row_version) ON brant_stk.stock_balance TO brant_app;
+GRANT UPDATE (remaining_qty) ON brant_stk.cost_layer TO brant_app;
+GRANT UPDATE (remaining_qty, status, row_version) ON brant_stk.stock_reservation TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_stk.stock_availability_issue_v1(text, text, text, text, text, text, text, text, text, bigint, text, text, bigint, timestamptz) TO brant_app;
+
+-- MFG (S6-02): the company switch, a plan and a subcontract change. A draft's children are replaced.
+-- Progress claims and material handovers only grow. MFG locks no row of PUR, QLT or STK.
+GRANT USAGE ON SCHEMA brant_mfg TO brant_app;
+GRANT SELECT, INSERT ON brant_mfg.company_setting, brant_mfg.collaboration_plan, brant_mfg.operation_task,
+    brant_mfg.material_responsibility, brant_mfg.subcontract_order, brant_mfg.operation_progress,
+    brant_mfg.material_handover, brant_mfg.action_result, brant_mfg.audit_event TO brant_app;
+GRANT UPDATE (enabled, row_version, updated_by_kind, updated_by_id, update_epoch, updated_at) ON brant_mfg.company_setting TO brant_app;
+GRANT UPDATE (status, row_version, note, request_hash) ON brant_mfg.collaboration_plan TO brant_app;
+GRANT UPDATE (status, row_version, request_hash) ON brant_mfg.subcontract_order TO brant_app;
+GRANT DELETE ON brant_mfg.operation_task, brant_mfg.material_responsibility TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_mfg.guard_mutation() TO brant_app;

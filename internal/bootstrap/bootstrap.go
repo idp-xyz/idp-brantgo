@@ -22,17 +22,22 @@ import (
 	"go.idp.xyz/idp-brant/internal/ai"
 	"go.idp.xyz/idp-brant/internal/ai/ingest"
 	"go.idp.xyz/idp-brant/internal/contexts/cat"
+	"go.idp.xyz/idp-brant/internal/contexts/clm"
+	clmapi "go.idp.xyz/idp-brant/internal/contexts/clm/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cnx"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	"go.idp.xyz/idp-brant/internal/contexts/crm"
 	"go.idp.xyz/idp-brant/internal/contexts/cst"
 	"go.idp.xyz/idp-brant/internal/contexts/evd"
 	"go.idp.xyz/idp-brant/internal/contexts/ful"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq"
+	"go.idp.xyz/idp-brant/internal/contexts/mfg"
 	"go.idp.xyz/idp-brant/internal/contexts/pol"
 	"go.idp.xyz/idp-brant/internal/contexts/pty"
 	"go.idp.xyz/idp-brant/internal/contexts/pur"
 	"go.idp.xyz/idp-brant/internal/contexts/qlt"
+	"go.idp.xyz/idp-brant/internal/contexts/stk"
 	"go.idp.xyz/idp-brant/internal/contexts/stl"
 	"go.idp.xyz/idp-brant/internal/contexts/sup"
 	"go.idp.xyz/idp-brant/internal/contexts/trd"
@@ -51,6 +56,13 @@ import (
 type Config struct {
 	PostgresDSN string
 	BentoSchema string // empty means bentopg.DefaultSchema
+}
+
+// PlatformConfig is how a process composes optional contexts. The zero value composes every
+// context, including CRM. DisableCRM leaves CRM unconstructed (S6-D04, BC-AT24): INQ's
+// opportunity lookup stays nil and the HTTP transport does not register CRM.
+type PlatformConfig struct {
+	DisableCRM bool
 }
 
 // Platform holds the connection pool that all transaction owners share.
@@ -180,21 +192,31 @@ type Contexts struct {
 	CAT *cat.Module
 	POL *pol.Module
 	INQ *inq.Module
+	CRM *crm.Module // nil when PlatformConfig.DisableCRM
 	SUP *sup.Module
 	CST *cst.Module
 	TRD *trd.Module
 	PUR *pur.Module
+	STK *stk.Module
+	MFG *mfg.Module
 	QLT *qlt.Module
 	STL *stl.Module
 	CNX *cnx.Module
 	FUL *ful.Module
+	CLM *clm.Module
 	TSK *tsk.Module
 	AI  *ai.Layer // internal/ai: not a bounded context (ADR-BR-003)
 }
 
-// Contexts wires reference data and every bounded context, upstream first. Call it once per
-// process.
+// Contexts wires reference data and every bounded context, upstream first, with CRM enabled.
+// Call it once per process.
 func (p *Platform) Contexts() (*Contexts, error) {
+	return p.ContextsWithOptions(PlatformConfig{})
+}
+
+// ContextsWithOptions is Contexts with the optional packages PlatformConfig names. DisableCRM
+// skips CRM and leaves INQ without an opportunity lookup.
+func (p *Platform) ContextsWithOptions(opt PlatformConfig) (*Contexts, error) {
 	var c Contexts
 	db, err := p.newDB()
 	if err == nil {
@@ -233,11 +255,20 @@ func (p *Platform) Contexts() (*Contexts, error) {
 	if err == nil {
 		c.CAT, err = cat.New(db, c.EVD)
 	}
+	if err == nil && !opt.DisableCRM {
+		db, err = p.newDB()
+		if err == nil {
+			c.CRM, err = crm.New(db)
+		}
+	}
 	if err == nil {
 		db, err = p.newDB()
 	}
 	if err == nil {
 		c.INQ, err = inq.New(db, c.EVD, c.PTY, c.CAT)
+		if err == nil && c.CRM != nil {
+			c.INQ.SetOpportunityLookup(c.CRM)
+		}
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -272,11 +303,32 @@ func (p *Platform) Contexts() (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
-		// PUR publishes no InspectionSubject v1 yet (S5 unit A4): QLT's port to it answers
-		// DEPENDENCY_NOT_SUPPORTED until it is bound to PUR's lookup. FUL's ReleaseConsumption v1
-		// (R79) is a SQL function QLT's revocation reads; FUL is composed later (S5R-D18).
-		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.PURSubjects(c.PUR), Sources: c.EVD, Agencies: qlt.PTYAgencies(c.PTY),
-			Consumption: qlt.FULReleaseConsumption()})
+		// STK (S6-01) after PUR: stock.receive reads ReceiptRequest v1 (R28) before its transaction.
+		// The company switch defaults to off, so existing flows do not post stock.
+		c.STK, err = stk.New(db, c.PUR)
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// PUR's InspectionSubject v1 (R24) answers commitment lines. MFG is composed next, so the
+		// subcontract-operation kind (R25) is bound after mfg.New. FUL's ReleaseConsumption v1 (R79)
+		// is a SQL function QLT's revocation reads; FUL is composed later (S5R-D18).
+		factory := qlt.NewFactorySlot()
+		c.QLT, err = qlt.New(db, qlt.Upstream{Subjects: qlt.JoinedSubjects(qlt.PURSubjects(c.PUR), factory), Sources: c.EVD,
+			Agencies: qlt.PTYAgencies(c.PTY), Consumption: qlt.FULReleaseConsumption()})
+		if err == nil {
+			db, err = p.newDB()
+		}
+		if err == nil {
+			// MFG (S6-02) after STK: SubcontractDemand v1 is read from PUR before the subcontract
+			// transaction (R23). MaterialHandover v1 is STK's command, called before MFG records the
+			// association (R42). The company switch defaults to off.
+			c.MFG, err = mfg.New(db, c.PUR, stkHandover{stock: c.STK})
+		}
+		if err == nil {
+			factory.Bind(qlt.MFGSubjects(c.MFG))
+		}
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -298,7 +350,16 @@ func (p *Platform) Contexts() (*Contexts, error) {
 					return nil
 				}
 				return c.CNX
-			})})
+			}),
+			// CLM is composed after STL (R35). STK is already composed (R41).
+			Claims: stl.CLMCredits(func() clmapi.CreditLookups {
+				if c.CLM == nil {
+					return nil
+				}
+				return c.CLM
+			}),
+			Stock: c.STK,
+		})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -325,7 +386,17 @@ func (p *Platform) Contexts() (*Contexts, error) {
 			// S5-08: bookings and shipment documents; S5 C5: CNX's certificate results (R56)
 			Documents: ful.DocumentPorts(c.POL, c.PTY, c.TRD).WithCertificates(c.CNX),
 			Costs:     c.CST, // S5-16: the costing's insurance component (R78)
+			Stock:     c.STK, // S6-D02: availability before prepare; confirm calls the SQL function
 		})
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
+		// CLM (S6-03) after FUL: it reads ShipmentLineRef v1 before its transaction (R34) and
+		// publishes CreditRequest v1 for STL (R35). It calls no guard.
+		c.CLM, err = clm.New(db, clm.Upstream{Lines: clm.FULLines(c.FUL), Evidence: clmEvidence{Sources: c.EVD},
+			Currency: clmCurrency{Configs: c.POL}})
 	}
 	if err == nil {
 		db, err = p.newDB()
@@ -424,6 +495,8 @@ type APIConfig struct {
 	ReplayDispatch       bool
 	ReplayPublishTimeout time.Duration
 	Logger               *slog.Logger
+	// DisableCRM composes the API without CRM (BC-AT24). The zero value leaves CRM on.
+	DisableCRM bool
 }
 
 // API wires every context behind the HTTP transport with an OIDC verifier. It makes no network
@@ -435,15 +508,20 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 		return nil, err
 	}
 	p.verifier = verifier
-	c, err := p.Contexts()
+	c, err := p.ContextsWithOptions(PlatformConfig{DisableCRM: cfg.DisableCRM})
 	if err != nil {
 		return nil, err
 	}
-	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, Verifier: oidc.HeaderVerifier{Tokens: verifier},
+	tc := httpapi.Config{EVD: c.EVD, PTY: c.PTY, CAT: c.CAT, INQ: c.INQ, POL: c.POL, REF: c.REF, SUP: c.SUP, CST: c.CST, TRD: c.TRD, PUR: c.PUR, QLT: c.QLT, STK: c.STK, MFG: c.MFG, Verifier: oidc.HeaderVerifier{Tokens: verifier},
 		Clock: bento.SystemClock{}, Logger: cfg.Logger}
+	if c.CRM != nil {
+		// A nil *Module stored in the interface would still be non-nil and panic on the route.
+		tc.CRM = c.CRM
+	}
 	tc.STL = c.STL
 	tc.CNX = c.CNX
 	tc.FUL = c.FUL
+	tc.CLM = c.CLM
 	tc.TSK = c.TSK
 	tc.AI = c.AI
 	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {

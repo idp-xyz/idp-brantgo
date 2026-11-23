@@ -437,9 +437,10 @@ func TestShipmentPreparePackConfirmBT11(t *testing.T) {
 	}
 }
 
-// D-10: the stock route waits for STK. The composed process asks PUR itself (ful.PURDeliveries): a
-// delivery line PUR does not have, such as this world's in-memory one, is REFERENCE_INVALID. Nothing
-// is stored either way.
+// D-10: a stock line that still names a delivery is not a stock line (SCHEMA_INVALID). A stock
+// line on a FUL with no STK port still waits for STK (DEPENDENCY_NOT_SUPPORTED at /args/route).
+// The composed process asks PUR itself (ful.PURDeliveries): a delivery line PUR does not have,
+// such as this world's in-memory one, is REFERENCE_INVALID. Nothing is stored either way.
 func TestStockRouteAndUnknownDeliveries(t *testing.T) {
 	w := newFulWorld(t)
 	rel := w.released("commitment.1", "50")
@@ -447,8 +448,12 @@ func TestStockRouteAndUnknownDeliveries(t *testing.T) {
 	stock := w.prepareCmd("shipment.stock", "10", d, rel)
 	stock.Route = fulapi.RouteStock
 	_, err := w.ful.PrepareShipment(w.merch, stock)
+	if code(err) != kernel.CodeSchemaInvalid || path(err) != "/args/lines/0/stock" {
+		t.Fatalf("stock route with a delivery line %s at %s", code(err), path(err))
+	}
+	_, err = w.prepareStockLine("shipment.waits", "10", "")
 	if code(err) != fulapi.CodeDependencyNotSupported || path(err) != "/args/route" {
-		t.Fatalf("stock route %s at %s", code(err), path(err))
+		t.Fatalf("stock route without STK %s at %s", code(err), path(err))
 	}
 	composed := w.c.FUL.PrepareShipment
 	_, err = composed(w.merch, w.prepareCmd("shipment.composed", "10", d, rel))
@@ -460,8 +465,8 @@ func TestStockRouteAndUnknownDeliveries(t *testing.T) {
 	}
 	audit, err := w.c.FUL.Audit(w.assign("admin.1", "administrator"))
 	w.must(err)
-	if len(audit) != 2 || audit[0].Outcome != "rejected" || audit[0].Code != fulapi.CodeDependencyNotSupported ||
-		audit[1].Code != kernel.CodeReferenceInvalid {
+	if len(audit) != 3 || audit[0].Outcome != "rejected" || audit[0].Code != kernel.CodeSchemaInvalid ||
+		audit[1].Code != fulapi.CodeDependencyNotSupported || audit[2].Code != kernel.CodeReferenceInvalid {
 		t.Fatalf("audit %+v", audit)
 	}
 }

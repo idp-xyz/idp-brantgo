@@ -67,7 +67,7 @@ type (
 )
 
 // OrderShipmentLine is a line of a FUL shipment of an order: its state (prepared, confirmed, cancelled), the order
-// line, unit and quantity.
+// line, unit and quantity. Route is supplier_direct or stock; empty means the line was not marked.
 type OrderShipmentLine struct {
 	ShipmentID  string
 	LineID      string
@@ -75,6 +75,7 @@ type OrderShipmentLine struct {
 	OrderLineID string
 	UnitID      string
 	Quantity    string
+	Route       string
 }
 
 // OrderPurchaseLine is a line of a PUR purchase commitment of an order: the commitment's status, supplier, the

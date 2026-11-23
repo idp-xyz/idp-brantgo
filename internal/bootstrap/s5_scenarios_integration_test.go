@@ -899,7 +899,7 @@ func TestS5SCBT18BT24OrderResultNotSettledAndReopenedOverHTTP(t *testing.T) {
 		conditions = append(conditions, fmt.Sprint(brcDig(c, "dimension"), "=", brcDig(c, "status")))
 	}
 	s.want("conditions_after_shipment", fmt.Sprint(v["status"], " ", strings.Join(conditions, " ")), "reviewed "+
-		"fulfilment=unmet receivables=unmet payables=met purchase_costs=unmet direct_charges=unmet claims=not_enabled")
+		"fulfilment=unmet receivables=unmet payables=met purchase_costs=unmet direct_charges=unmet claims=met")
 
 	s.documents()
 	s.documentsRelease()

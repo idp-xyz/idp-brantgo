@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	qltapi "go.idp.xyz/idp-brant/internal/contexts/qlt/api"
+	stkapi "go.idp.xyz/idp-brant/internal/contexts/stk/api"
 	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -187,4 +188,11 @@ func orderVerdict(v trdapi.OrderVerdict) shipment.OrderVerdict {
 
 func binding(b shipment.OrderBinding) trdapi.OrderBinding {
 	return trdapi.OrderBinding{OrderID: b.OrderID, OrderRevision: b.OrderRevision, OrderHash: b.OrderHash}
+}
+
+// Stock is STK's read-only availability (R29). Nil means the stock route is not wired, and prepare
+// refuses it. Confirm of a stock shipment calls the SQL function with FUL's executor; it does not
+// use this port.
+type Stock interface {
+	ResolveAvailability(ctx context.Context, q stkapi.AvailabilityQuery) (stkapi.Availability, error)
 }

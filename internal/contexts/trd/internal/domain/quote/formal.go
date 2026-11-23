@@ -36,8 +36,15 @@ import (
 // (TakeSlot) and kept for good; while it is taken, the active revision is neither replaced nor
 // cancelled (ROOT_CONVERSION_LOCKED).
 
-// The conversion slot a root has (Python t03_order conversion_slot).
-const SlotFullV1 = "full_v1"
+// The conversion slot a root has (Python t03_order conversion_slot). SlotMultiOrder is not a row of
+// quote_conversion_slot: a multi_order quote spends quantity on the consumption ledger instead
+// (TRD-INV-024). ModeSingleFull is the default conversion and is omitted from the sealed document.
+const (
+	SlotFullV1     = "full_v1"
+	SlotMultiOrder = "multi_order"
+	ModeSingleFull = "single_full"
+	ModeMultiOrder = "multi_order"
+)
 
 // Causes of a risk hold and the code a use of the held revision is refused with.
 const (
@@ -186,7 +193,7 @@ func (q *Quote) CheckConversion(target string) error {
 	if target != TargetReplace {
 		return nil
 	}
-	if q.Slot != nil {
+	if q.Slot != nil || q.Consumed {
 		return fail(CodeRootConversionLocked, "/args/quote_id", "The quote was converted into an order; its active revision stays")
 	}
 	if active := q.Active(); active != nil {
@@ -317,7 +324,7 @@ func (q *Quote) Cancel(n int64, by kernel.ActorRef, epoch int64, now time.Time, 
 	if active == nil || active.Number != n {
 		return nil, fail(CodeQuoteNotCurrent, "/args/business_revision", "Only the active revision is cancelled")
 	}
-	if q.Slot != nil {
+	if q.Slot != nil || q.Consumed {
 		return nil, fail(CodeRootConversionLocked, "/args/quote_id", "The quote was converted into an order")
 	}
 	if err := q.CheckContract(n, "/args/business_revision"); err != nil {
@@ -423,7 +430,7 @@ func (q *Quote) TakeSlot(n int64, businessHash, orderID string, by kernel.ActorR
 	if err := q.Usable(n, businessHash, "/args/business_revision"); err != nil {
 		return nil, err
 	}
-	if q.Slot != nil {
+	if q.Slot != nil || q.Consumed {
 		return nil, fail(CodeConversionSlotConflict, "/args/quote_id", "The quote's full_v1 conversion slot is taken")
 	}
 	q.RootVersion++

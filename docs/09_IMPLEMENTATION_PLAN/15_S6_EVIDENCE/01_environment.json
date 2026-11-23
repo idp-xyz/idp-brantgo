@@ -1,0 +1,50 @@
+{
+  "recorded_at": "2026-11-23T06:23:42Z",
+  "recorded_by": "S6 archive unit s6e4. No database was opened. No process log was copied.",
+  "archive_version": "1.11",
+  "archive_date": "2026-11-23",
+  "host": {
+    "os": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "kernel": "6.18.58.1-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "nproc": 20
+  },
+  "git": {
+    "branch": "s6/archive-v111",
+    "head_when_recorded": "9e2502ac8c816840e2fd9fe49070b548a2a8c2e1",
+    "tip_described": "9e2502ac8c816840e2fd9fe49070b548a2a8c2e1",
+    "e2e_merge_parent": "b662ea518df5fe8bdee633d061d20e3e56688df7",
+    "repository": "idp-xyz/idp-brantgo"
+  },
+  "go": {
+    "toolchain": "go version go1.26.8 linux/amd64"
+  },
+  "tip_gate": {
+    "date": "2026-11-23",
+    "environment": "WSL Ubuntu 24.04, PostgreSQL 16 container brant-pg16, port 55471",
+    "rerun_by_this_unit": false,
+    "db_exit": 0,
+    "migrations_already_recorded": 106,
+    "integration_exit": 0,
+    "bootstrap_tests": 795,
+    "shards": "208+193+184+210",
+    "SHARDS": 4,
+    "wall": "8m04s",
+    "regression_commit": "95e011a",
+    "merge_commit": "9e2502a"
+  },
+  "not_executed": [
+    "make race",
+    "make ai-eval-live",
+    "make eer-live",
+    "live Single Window",
+    "live Golden Tax",
+    "real customer",
+    "human sign-off",
+    "GitHub Actions conclusion for 9e2502a"
+  ],
+  "source_manifest": {
+    "file": "02_go_source_manifest.txt",
+    "files": 1480
+  }
+}

@@ -38,8 +38,10 @@ const (
 	CodeMarginExceptionNotAuthorized = "MARGIN_EXCEPTION_NOT_AUTHORIZED" // 403: no capability, or not independent of the revision's authors
 
 	// Formalization and conversion (WBS S3-04, S3-05; formal.go).
-	CodeRootConversionLocked   = "ROOT_CONVERSION_LOCKED"   // 409: the conversion slot is taken; the active revision is neither replaced nor cancelled
-	CodeConversionSlotConflict = "CONVERSION_SLOT_CONFLICT" // 409: the root's full_v1 conversion slot is taken
+	CodeRootConversionLocked       = "ROOT_CONVERSION_LOCKED"       // 409: the conversion slot is taken; the active revision is neither replaced nor cancelled
+	CodeConversionSlotConflict     = "CONVERSION_SLOT_CONFLICT"     // 409: the root's full_v1 conversion slot is taken
+	CodeConversionSlotUnsupported  = "CONVERSION_SLOT_UNSUPPORTED"  // 422: order.prepare_partial on a single_full quote
+	CodeQuoteRemainingInsufficient = "QUOTE_REMAINING_INSUFFICIENT" // 409: the line's remaining quantity does not cover the order
 
 	// Customer responses and acceptance (WBS S3-06, S3-13; acceptance.go).
 	CodeAcceptanceNotUnconditional    = "ACCEPTANCE_NOT_UNCONDITIONAL"    // the response is not a complete, unconditional acceptance
@@ -79,8 +81,10 @@ var codes = map[string]kernel.Category{
 	CodeIndependentReviewRequired:    kernel.CategoryInvalid,
 	CodeMarginExceptionNotAuthorized: kernel.CategoryForbidden,
 
-	CodeRootConversionLocked:   kernel.CategoryConflict,
-	CodeConversionSlotConflict: kernel.CategoryConflict,
+	CodeRootConversionLocked:       kernel.CategoryConflict,
+	CodeConversionSlotConflict:     kernel.CategoryConflict,
+	CodeConversionSlotUnsupported:  kernel.CategoryInvalid,
+	CodeQuoteRemainingInsufficient: kernel.CategoryConflict,
 
 	CodeAcceptanceNotUnconditional:    kernel.CategoryInvalid,
 	CodeAcceptanceScopeMismatch:       kernel.CategoryInvalid,

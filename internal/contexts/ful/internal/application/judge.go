@@ -1,7 +1,10 @@
 package application
 
 import (
+	"cmp"
 	"context"
+	"slices"
+	"strconv"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -10,7 +13,9 @@ import (
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/adapters/postgres"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/release"
 	"go.idp.xyz/idp-brant/internal/contexts/ful/internal/domain/shipment"
+	stkapi "go.idp.xyz/idp-brant/internal/contexts/stk/api"
 	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -108,6 +113,14 @@ func paymentVerdict(v stlapi.PaymentVerdict) release.PaymentVerdict {
 // (judgeRelease).
 func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.Shipment, consumed shipment.Consumed, scope string,
 	rel *release.Release, now time.Time) (*judgement, error) {
+	return s.judgeAt(ctx, exec, sh, consumed, scope, rel, now, false, authorization.Decision{})
+}
+
+// judgeAt is judge. issue is true only for shipment.confirm of a stock route: it calls
+// StockAvailability v1 with this executor after the payment condition and before TRD's order guard.
+// commercial_release.evaluate and judgeDocuments pass issue false.
+func (s Service) judgeAt(ctx context.Context, exec bentopg.Executor, sh *shipment.Shipment, consumed shipment.Consumed, scope string,
+	rel *release.Release, now time.Time, issue bool, d authorization.Decision) (*judgement, error) {
 	const at = "/args/shipment_id"
 	j := &judgement{entries: []shipment.Entry{{Name: "guards_checked_at", Value: kernel.FormatTimestamp(now)}},
 		bindings: release.Bindings{Screenings: []release.ScreeningBinding{}, Deliveries: []release.DeliveryBinding{},
@@ -192,6 +205,11 @@ func (s Service) judge(ctx context.Context, exec bentopg.Executor, sh *shipment.
 	if err = s.judgePayment(ctx, exec, j, scope, rel, now); err != nil {
 		return nil, err
 	}
+	if issue && sh.Route == shipment.RouteStock {
+		if err = s.issueStock(ctx, exec, j, sh, d, now); err != nil {
+			return nil, err
+		}
+	}
 	ov, err := s.Upstream.Orders.GuardOrder(ctx, exec, binding(sh.Order))
 	if err != nil {
 		return nil, err
@@ -250,6 +268,56 @@ func (s Service) judgePayment(ctx context.Context, exec bentopg.Executor, j *jud
 		OrderHash: p.OrderHash, Currency: p.Currency, RequiredMinor: p.RequiredMinor, AppliedMinor: p.AppliedMinor, StageID: p.StageID,
 		ShortfallMinor: p.ShortfallMinor, ExceptionSeq: exception}
 	return j.note(shipment.GuardPaymentCondition, refused)
+}
+
+// issueStock calls StockAvailability v1 once per stock line, in balance-key order so two shipments
+// lock the same balances in the same order. The arguments other than actor, epoch and the instant
+// are the stored line, so a retry of the same line passes the same business arguments. A status
+// other than ok writes nothing. An ok write lives in this transaction and rolls back with it.
+func (s Service) issueStock(ctx context.Context, exec bentopg.Executor, j *judgement, sh *shipment.Shipment, d authorization.Decision, now time.Time) error {
+	order := make([]int, len(sh.Lines))
+	for i := range sh.Lines {
+		order[i] = i
+	}
+	slices.SortFunc(order, func(a, b int) int {
+		la, lb := sh.Lines[a], sh.Lines[b]
+		return cmp.Or(cmp.Compare(la.SkuID, lb.SkuID), cmp.Compare(la.LocationID, lb.LocationID), cmp.Compare(la.BatchID, lb.BatchID),
+			cmp.Compare(la.CustodyKind, lb.CustodyKind), cmp.Compare(la.ID, lb.ID))
+	})
+	for _, i := range order {
+		l := sh.Lines[i]
+		in := stkapi.StockIssue{ShipmentID: sh.ID, ShipmentLineID: l.ID, SkuID: l.SkuID, LocationID: l.LocationID, BatchID: l.BatchID,
+			CustodyKind: l.CustodyKind, ReservationID: l.ReservationID, Quantity: postgres.Text(l.Quantity), UnitID: l.UnitID,
+			UnitRevision: l.UnitRevision, ActorKind: string(d.Actor.Kind), ActorID: d.Actor.ID, Epoch: d.Epoch, At: now}
+		v, err := stkapi.ScanStockAvailability(exec.QueryRow(ctx, stkapi.StockAvailabilitySQL, stkapi.StockAvailabilityArgs(in)...).Scan)
+		if err != nil {
+			return err
+		}
+		if !v.OK() {
+			if err = j.note(shipment.GuardStock, stockRefusal(v, shipment.StoredLinePath(i, "quantity"))); err != nil {
+				return err
+			}
+			continue
+		}
+		j.entries = append(j.entries, shipment.Entry{Name: shipment.GuardStock + ":" + l.ID, Value: "ok/" + v.MovementID + "/" +
+			strconv.FormatInt(v.TotalCostMinor, 10) + "/" + v.Currency + "/replayed=" + strconv.FormatBool(v.Replayed)})
+	}
+	return nil
+}
+
+func stockRefusal(v stkapi.StockAvailabilityVerdict, path string) error {
+	switch v.Status {
+	case stkapi.AvailabilityInsufficient, stkapi.AvailabilityCostShort:
+		return shipment.Reject(shipment.CodeStockInsufficient, path, "The stock on hand does not cover the shipment line")
+	case stkapi.AvailabilityConflict:
+		return shipment.Reject(shipment.CodeStockReservationConflict, path, "The reservation does not cover the shipment line")
+	case stkapi.AvailabilityDisabled:
+		return shipment.Reject(shipment.CodeDependencyNotSupported, path, "STK is not enabled for the company")
+	case stkapi.AvailabilityUnitMismatch:
+		return shipment.Reject(kernel.CodeInvalidKnownValue, path, "The stock balance is in another unit than the order line")
+	default:
+		return shipment.Reject(kernel.CodeReferenceInvalid, path, "Stock availability returned "+v.Status)
+	}
 }
 
 // judgeDocuments judges, with FUL's executor in the caller's transaction (which holds the shipment,

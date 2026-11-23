@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-brant/internal/bootstrap"
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
@@ -103,7 +104,7 @@ import (
 //   - 26 (STL-INV-010): credit.officer records provider.1's pre_carriage of 60.00 USD as estimated (S5R-D24),
 //     treasury confirms it on the forwarder's bill, credit.officer allocates it to the order.
 //   - 27 (STL-INV-011, BT18): treasury reviews and closes the order result: confirmed 960.00 − 600.00 −
-//     60.00 = 300.00 (31.25 %), equal to the quote's calculation; CLM recorded not_enabled.
+//     60.00 = 300.00 (31.25 %), equal to the quote's calculation; claims are met (no open claim).
 //
 // Final assertions (§5): order 960.00; reservation 672.00 reserved → consumed → released; shipped
 // 120; CI 960.00; export lot 960.00; receivable 960.00 → 0 (288.00 + 670.00 + 2.00 approved charge);
@@ -118,7 +119,10 @@ import (
 // in-process relay and dispatcher. With BRANT_BRC001_S5_REPORT set to a file path the test writes the
 // chain record as JSON (the S3 record's shape plus the dispatches).
 func TestBRC001OrderToSettlementOverHTTP(t *testing.T) {
-	c := newBRC001S5(t)
+	newBRC001S5(t).run()
+}
+
+func (c *brcS5) run() {
 	c.toPurchaseDraft()
 	c.configurations()
 	c.dispatch("after the activation (S3 chain, §5 step 6)")
@@ -189,8 +193,10 @@ type brcS5 struct {
 	invoiceID, taxCaseID, bundleID, salesContract     string
 }
 
-func newBRC001S5(t *testing.T) *brcS5 {
-	b := newBRC001(t)
+func newBRC001S5(t *testing.T) *brcS5 { return newBRC001S5With(t, bootstrap.PlatformConfig{}) }
+
+func newBRC001S5With(t *testing.T, opt bootstrap.PlatformConfig) *brcS5 {
+	b := newBRC001With(t, opt)
 	b.report = "BRANT_BRC001_S5_REPORT"
 	b.record.WBS = "S5 D1 (S5 plan §5; S5-01..S5-05, S5-07, S5-08, S5-12, S5-13, S5-15, S5-17)"
 	b.record.Parity = "BC-AT01 continued: BRC-001 order → settlement, write-off and China materials"
@@ -204,7 +210,7 @@ func newBRC001S5(t *testing.T) *brcS5 {
 		"the bank: fund records are entered by treasury from synthetic bank advices",
 		"the tax authority: the VAT special invoice is a synthetic scan imported and verified by tax.officer; no refund is " +
 			"submitted, approved or received, the case stays expected",
-		"CLM: the order result records claims not_enabled (S5 has no claims context)",
+		"CLM: the order has no open claim, so the order result records claims met (an open claim blocks close)",
 		"the Outbox relay to an external sink: the relay publishes to the in-process dispatcher (brant-worker -dispatch)",
 		"a real identity provider",
 	}
@@ -1212,7 +1218,7 @@ func (c *brcS5) result() {
 		}
 	}
 	if v["status"] != "settled" || confirmed["result_minor"] != "30000" || confirmed["margin"] != "31.25" || snapshot["result_minor"] != "30000" ||
-		confirmed["net_sales_minor"] != "96000" || claims != "not_enabled" {
+		confirmed["net_sales_minor"] != "96000" || claims != "met" {
 		c.t.Fatalf("order result %v", v)
 	}
 	c.fact("status", v["status"], "net_sales_minor", confirmed["net_sales_minor"], "cost_of_sales_minor", brcDig(confirmed, "batches", 0, "cost_of_sales_minor"),
@@ -1307,7 +1313,7 @@ func (c *brcS5) finalAssertions() {
 		if e.Type == stlapi.EventOrderResultClosed {
 			var payload map[string]any
 			c.w.must(json.Unmarshal(e.Payload, &payload))
-			if payload["claims"] != "not_enabled" || payload["order_id"] != "order.1" {
+			if payload["claims"] != "met" || payload["order_id"] != "order.1" {
 				c.t.Fatalf("OrderResultClosed %s", e.Payload)
 			}
 		}

@@ -178,7 +178,7 @@ func (h *recordTaxOpening) Apply(ctx context.Context, exec bentopg.Executor, d a
 		}
 		return action.Outcome{}, tr.Duplicate("/args/purchase_invoice_id", "The invoice's opening balance is opening item "+r.ID)
 	}
-	if lc := h.lotCase; lc != nil && lc.Status != tr.Rejected {
+	if lc := h.lotCase; lc != nil && lc.Status != tr.Rejected && lc.Status != tr.NotReceived {
 		return action.Outcome{}, tr.Duplicate("/args/export/reference", "The export has case "+lc.ID+", "+lc.Status)
 	}
 	if h.taken {

@@ -14,9 +14,8 @@
 //
 // The result is reviewed (open → reviewed, human or AI) and closed (reviewed → settled, human only) when every
 // close condition holds (STL-INV-011): fulfilment complete or short-closed, receivables and payables settled,
-// purchase costs and direct charges confirmed, no open return or claim — CLM is not enabled in S5, so that
-// dimension is recorded not_enabled and never as met; otherwise ORDER_RESULT_NOT_SETTLED names every unmet
-// dimension. Closing appends an immutable snapshot (MD-49); a late charge or adjustment reopens the result with a
+// purchase costs and direct charges confirmed, and no open claim. An order with no claim is met on that
+// dimension. Otherwise ORDER_RESULT_NOT_SETTLED names every unmet dimension. Closing appends an immutable snapshot (MD-49); a late charge or adjustment reopens the result with a
 // reason (settled → open), and the next close appends the next snapshot while the earlier ones stay (BT24).
 package orderresult
 

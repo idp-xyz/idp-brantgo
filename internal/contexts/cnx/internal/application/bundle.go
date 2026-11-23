@@ -55,7 +55,9 @@ func bundleRequest(cmd api.Command) (name, key string, args any) {
 // licences: ok reports whether command is one of them.
 func visibleDeclaration(ctx context.Context, exec bentopg.Executor, command, id string) (ok, visible bool, err error) {
 	switch command {
-	case api.CommandPrepareDeclaration, api.CommandConfirmDeclaration, api.CommandRecordSubmission, api.CommandRecordReceipt:
+	case api.CommandPrepareDeclaration, api.CommandConfirmDeclaration, api.CommandRecordSubmission, api.CommandRecordReceipt,
+		api.CommandSubmitDeclarationChannel, api.CommandSettleDeclarationChannel, api.CommandIngestDeclarationReceipts,
+		api.CommandReconcileDeclarationChannel:
 		c, err := postgres.LoadDeclaration(ctx, exec, scope(ctx), id, postgres.NoLock)
 		return true, c != nil, err
 	case api.CommandCheckBundle, api.CommandResolveReconciliation:

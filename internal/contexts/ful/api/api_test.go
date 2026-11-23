@@ -31,7 +31,13 @@ func TestPrepareShipmentContract(t *testing.T) {
 		want string
 	}{
 		{func(*PrepareShipment) {}, "OK"},
-		{func(c *PrepareShipment) { c.Route = RouteStock }, "OK"}, // refused by the domain: DEPENDENCY_NOT_SUPPORTED
+		{func(c *PrepareShipment) { c.Route = RouteStock }, "SCHEMA_INVALID /args/lines/0/stock"},
+		{func(c *PrepareShipment) {
+			c.Route = RouteStock
+			c.Lines[0].SupplierDelivery = DeliveryLineRef{}
+			c.Lines[0].QualityReleaseID = ""
+			c.Lines[0].Stock = &StockLine{LocationID: "loc.1", BatchID: "batch.1", CustodyKind: "own_warehouse"}
+		}, "OK"},
 		{func(c *PrepareShipment) { c.IdempotencyKey = "" }, "SCHEMA_INVALID /idempotency_key"},
 		{func(c *PrepareShipment) { c.ShipmentID = "a b" }, "SCHEMA_INVALID /args/shipment_id"},
 		{func(c *PrepareShipment) { c.OrderID = "" }, "SCHEMA_INVALID /args/order_id"},
@@ -144,7 +150,8 @@ func TestCodes(t *testing.T) {
 		CodeCommercialReleaseBlocked: kernel.CategoryConflict, CodeTradeComplianceNotClear: kernel.CategoryConflict,
 		CodeExportLicenseRequired: kernel.CategoryConflict, CodeShipmentDocumentsUnreconciled: kernel.CategoryConflict,
 		CodeDocumentIntegrityFailure: kernel.CategoryInvalid, CodeInsuranceCoverageInsufficient: kernel.CategoryInvalid,
-		CodeCertificateNotApplicable: kernel.CategoryConflict, CodeIndependentReviewRequired: kernel.CategoryInvalid}
+		CodeCertificateNotApplicable: kernel.CategoryConflict, CodeIndependentReviewRequired: kernel.CategoryInvalid,
+		CodeStockInsufficient: kernel.CategoryConflict, CodeStockReservationConflict: kernel.CategoryConflict}
 	got := Codes()
 	if len(got) != len(want) {
 		t.Fatal(got)

@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
+	crmapi "go.idp.xyz/idp-brant/internal/contexts/crm/api"
 	evdapi "go.idp.xyz/idp-brant/internal/contexts/evd/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	"go.idp.xyz/idp-brant/internal/contexts/inq/internal/adapters/postgres"
@@ -61,11 +62,13 @@ type Upstream struct {
 	Skus    catapi.Queries
 }
 
-// Service runs INQ's use cases.
+// Service runs INQ's use cases. Opportunities is optional (R40): nil means CRM is not composed,
+// and a save that cites an opportunity is DEPENDENCY_NOT_SUPPORTED (BC-AT24).
 type Service struct {
-	Ledger   *action.Ledger
-	Clock    application.Clock
-	Upstream Upstream
+	Ledger        *action.Ledger
+	Clock         application.Clock
+	Upstream      Upstream
+	Opportunities crmapi.OpportunityLookups
 }
 
 func (s Service) run(ctx context.Context, cmd action.Command, req api.Command, validation error, h action.Handler) (api.Receipt, error) {
@@ -122,9 +125,15 @@ func (s Service) facts(ctx context.Context, customer, contact string, skus, sour
 	return f, err
 }
 
-// SaveRfq saves a whole draft RFQ (Python rfq.save_draft).
+// SaveRfq saves a whole draft RFQ (Python rfq.save_draft). An opportunity id is checked against
+// OpportunityRef v1 before this transaction, and only when one was supplied.
 func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, error) {
-	content := rfq.Content{CustomerID: cmd.CustomerID, ContactID: cmd.ContactID, SourceIDs: cmd.SourceIDs, Unresolved: cmd.UnresolvedFields}
+	validation := cmd.Validate()
+	if validation == nil && cmd.OpportunityID != "" && s.Opportunities == nil {
+		validation = api.DependencyNotSupported("/args/opportunity_id")
+	}
+	content := rfq.Content{CustomerID: cmd.CustomerID, ContactID: cmd.ContactID, OpportunityID: cmd.OpportunityID,
+		SourceIDs: cmd.SourceIDs, Unresolved: cmd.UnresolvedFields}
 	var skus, sources []string
 	sources = append(sources, cmd.SourceIDs...)
 	for _, l := range cmd.Lines {
@@ -137,8 +146,18 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 		}
 	}
 	h := &rfqCommand{s: s, id: cmd.RfqID}
-	h.prepare = func(ctx context.Context) (err error) {
-		h.facts, err = s.facts(ctx, cmd.CustomerID, cmd.ContactID, skus, sources)
+	h.prepare = func(ctx context.Context) error {
+		if cmd.OpportunityID != "" {
+			ref, err := s.Opportunities.ResolveOpportunity(ctx, cmd.OpportunityID)
+			if err != nil {
+				return err
+			}
+			if ref.OpportunityID == "" || !ref.Active || (ref.CustomerID != "" && cmd.CustomerID != "" && ref.CustomerID != cmd.CustomerID) {
+				return kernel.Reject(kernel.CodeReferenceInvalid, "/args/opportunity_id", "")
+			}
+		}
+		facts, err := s.facts(ctx, cmd.CustomerID, cmd.ContactID, skus, sources)
+		h.facts = facts
 		return err
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
@@ -160,7 +179,7 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 		}
 		return out, postgres.InsertCorrections(ctx, exec, h.scope(ctx), h.rfq.ID, corrections, s.Clock.Now())
 	}
-	return s.run(ctx, action.Command{Name: api.CommandSaveRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, cmd, cmd.Validate(), &prepared{h})
+	return s.run(ctx, action.Command{Name: api.CommandSaveRfq, IdempotencyKey: cmd.IdempotencyKey, ObjectID: cmd.RfqID}, cmd, validation, &prepared{h})
 }
 
 // ConfirmRfqScope makes a complete draft ready (Python rfq.confirm_scope).
@@ -412,7 +431,8 @@ func (s Service) GetRfq(ctx context.Context, id string) (api.RfqView, error) {
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		v = api.RfqView{RfqID: r.ID, Status: string(r.Status), RowVersion: r.RowVersion, CustomerID: r.CustomerID, ContactID: r.ContactID,
-			SourceIDs: nonNil(r.Sources), UnresolvedFields: nonNil(r.Unresolved), Lines: []api.RfqLineView{}, Corrections: []api.Correction{}}
+			OpportunityID: r.OpportunityID, SourceIDs: nonNil(r.Sources), UnresolvedFields: nonNil(r.Unresolved),
+			Lines: []api.RfqLineView{}, Corrections: []api.Correction{}}
 		for _, l := range r.Lines {
 			line := api.RfqLineView{SkuSpecRevision: l.SkuSpecRevision, ProposedBy: l.ProposedBy, RfqLine: api.RfqLine{LineID: l.ID,
 				SkuID: l.SkuID, Quantity: l.Quantity, UOM: l.UOM, RequestedItem: l.RequestedItem, SourceID: l.SourceID, Locator: l.Locator}}

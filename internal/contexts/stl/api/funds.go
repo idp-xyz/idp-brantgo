@@ -133,6 +133,11 @@ type RecordFund struct {
 	EvidenceIDs        []string
 	SourceFundRecordID string
 	FX                 *FXSale
+	// ClaimID, RemedyID and OrderID cite an approved refund remedy (R35). All three or none.
+	// Empty values are omitted from the request hash.
+	ClaimID  string `json:",omitempty"`
+	RemedyID string `json:",omitempty"`
+	OrderID  string `json:",omitempty"`
 }
 
 // ResolveFundDifference resolves Amount of fund record FundRecordID's unexplained difference at
@@ -272,7 +277,29 @@ func (c RecordFund) Validate() error {
 	if !bankReference.MatchString(c.BankReference) {
 		return schema("/args/bank_reference")
 	}
+	if err := citePair(c.ClaimID, c.RemedyID, c.OrderID); err != nil {
+		return err
+	}
+	if (c.ClaimID != "" || c.RemedyID != "") && c.FundKind != FundRefund {
+		return schema("/args/claim_id")
+	}
 	return evidence(c.EvidenceIDs, "/args/evidence_ids", 1)
+}
+
+// citePair requires claim_id, remedy_id and order_id together, or none of the first two.
+func citePair(claim, remedy, order string) error {
+	if claim == "" && remedy == "" {
+		return nil
+	}
+	switch {
+	case !kernel.ValidIdentifier(claim):
+		return schema("/args/claim_id")
+	case !kernel.ValidIdentifier(remedy):
+		return schema("/args/remedy_id")
+	case !kernel.ValidIdentifier(order):
+		return schema("/args/order_id")
+	}
+	return nil
 }
 
 // Validate checks the closed contract.

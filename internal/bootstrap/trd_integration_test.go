@@ -41,6 +41,12 @@ type trdWorld struct {
 	// What order.activate's guards need, set up once on first use (trd_guards_integration_test.go).
 	cnx    *cnxWorld
 	credit *orderCredit
+	// The comparison basis partial orders adopt (TRD-INV-006). Empty until ensureMultiBasis:
+	// the fixture RFQ and snapshot stay at 120 PCS, and a quote quantity other than that is
+	// COMPARISON_BASIS_MISMATCH at /args/data/lines/0/quantity.
+	multiQty        string
+	multiRfqVersion int64
+	multiSnap       cstapi.SnapshotReceipt
 }
 
 func newTrdWorld(t *testing.T) *trdWorld {

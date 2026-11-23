@@ -42,6 +42,7 @@ func TestRecordInspectionContract(t *testing.T) {
 		{func(c *RecordInspection) { c.IdempotencyKey = "" }, "SCHEMA_INVALID /idempotency_key"},
 		{func(c *RecordInspection) { c.InspectionID = "a b" }, "SCHEMA_INVALID /args/inspection_id"},
 		{func(c *RecordInspection) { c.Subject.Kind = "supplier_delivery_line" }, "SCHEMA_INVALID /args/subject/kind"},
+		{func(c *RecordInspection) { c.Subject.Kind = SubjectSubcontractOperation }, "OK"},
 		{func(c *RecordInspection) { c.Subject.ID = "" }, "SCHEMA_INVALID /args/subject/id"},
 		{func(c *RecordInspection) { c.Subject.LineID = "" }, "SCHEMA_INVALID /args/subject/line_id"},
 		{func(c *RecordInspection) { c.InspectedQuantity = "0" }, "SCHEMA_INVALID /args/inspected_quantity"},

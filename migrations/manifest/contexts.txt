@@ -30,11 +30,23 @@ stl
 # release call CNX's trade compliance guard at run time only, and CNX's own transactions call POL's
 # guard function.
 cnx
+# stk (S6-01) before ful: FUL calls StockAvailability v1 (R29, guardLock) inside shipment.confirm.
+stk
+# mfg (S6-02) after stk: calls no guard. PUR SubcontractDemand v1 is read before the MFG transaction
+# (R23). QLT reads InspectionSubject v1 before its transaction (R25). MaterialHandover v1 is STK's
+# command, called before the MFG transaction (R42).
+mfg
 # ful is last of the S5 order after pur (qlt, stl, cnx, ful): its transactions call the guard
 # functions of PTY, PUR, QLT and TRD, and from its commercial release on those of CNX and STL
 # (R26, R27, R44, R45, R56, R59); TRD reads its ShipmentFacts v1 at run time only (R70), and QLT its
 # ReleaseConsumption v1 (R79, S5R-D18).
 ful
+# clm (S6-03): after ful. It reads FUL ShipmentLineRef v1 before its transaction (R34, guardLock
+# false) and publishes CreditRequest v1 for STL (R35). It calls no guard function.
+clm
+# crm (S6-04) after clm and before tsk: optional package, no guard lock. INQ reads OpportunityRef v1
+# before its own transaction (R40). The column on the RFQ is migrations/inq/000004 and calls no CRM function.
+crm
 # tsk (S4) after its upstreams trd (R18 GoalReadiness v1 and TRD's object control, R17) and evd, inq,
 # sup, cst (R66-R69 ActionReconciliation v1): it reads them before its transactions and calls no guard
 # function of theirs.

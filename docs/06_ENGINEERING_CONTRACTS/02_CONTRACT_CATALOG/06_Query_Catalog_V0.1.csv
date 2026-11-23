@@ -65,6 +65,8 @@ PUR,pur.supplier_delivery.get,GET /api/brant/v1/pur/supplier_deliveries/{id},pur
 QLT,qlt.inspection.get,GET /api/brant/v1/qlt/inspections/{id},qlt.read,是
 QLT,qlt.quality_release.get,GET /api/brant/v1/qlt/quality_releases/{id},qlt.read,是
 QLT,qlt.inspection_subject.get,GET /api/brant/v1/qlt/subjects/{kind}/{id}/lines/{line_id},qlt.read,是
+STK,stk.stock_availability.v1,—（进程内查询，STK api，StockAvailability v1）,—,否
+STK,stk.cost_layer.ref,—（进程内查询，STK api，CostLayerRef v1）,—,否
 FUL,ful.commercial_release.get,GET /api/brant/v1/ful/commercial_releases/{id},ful.read,是
 FUL,ful.shipment_document_set.get,GET /api/brant/v1/ful/document_sets/{id},ful.read,是
 FUL,ful.shipment_document.get,GET /api/brant/v1/ful/document_sets/{id}/documents/{kind}/versions/{version}/{language},ful.read,是

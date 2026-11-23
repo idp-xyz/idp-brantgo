@@ -551,6 +551,7 @@
         "acceptance.invalidate",
         "acceptance.mark_disputed",
         "order.prepare",
+        "order.prepare_partial",
         "order.review.request",
         "order.review.decide",
         "order.activate",
@@ -751,7 +752,7 @@
         "UL-INV-27"
       ],
       "boundary": "不拥有成本计算（CST）、配置（POL）、主体身份（PTY）；报价 active 不等于已发送或客户已接受；订单 active 不等于采购承诺或已出运。",
-      "decision": "报价、确认与订单共享报价根冲突键、统一锁序与同事务资格重查，合并为一个上下文的多个聚合。见 ADR-BR-002。 S5R（2026-11-13，模拟签核 E0）：TRD 发布 OrderRevisionRef v1，新修订封存 Incoterm 与地址国别（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor，供 STL 预计未承诺行的成本（D33）；取消检查把 PUR 记录的获批处置计为已处置（D05）；order.activate 留在销售经办（D27）。",
+      "decision": "报价、确认与订单共享报价根冲突键、统一锁序与同事务资格重查，合并为一个上下文的多个聚合。见 ADR-BR-002。 S5R（2026-11-13，模拟签核 E0）：TRD 发布 OrderRevisionRef v1，新修订封存 Incoterm 与地址国别（D35）；订单可选绑定通知方（D40）；订单事实给出行的封存核价成本 CostMinor，供 STL 预计未承诺行的成本（D33）；取消检查把 PUR 记录的获批处置计为已处置（D05）；order.activate 留在销售经办（D27）。 S6（2026-11-20，S6-D01）：默认仍是整单一次 full_v1（conversion_mode 省略即为 single_full，order.prepare 与 q01.agent 不变）。报价在冻结时显式选择 conversion_mode=multi_order，并封入商业文档与 business_hash；可选行上限 max_order_quantity，省略时以报价行数量为上限，超过未声明上限须显式 uncapped。同一有效修订共享一份已核实的 full_unconditional Acceptance，每张订单独立 order.review.* 与 order.activate。新命令 order.prepare_partial 仅人工，只授予 sales_clerk，不进入 ai_q01_agent。数量台账只追加，在报价根行锁下由分录派生剩余；并发且不重叠的两笔都提交，合计超出剩余的第二笔返回 QUOTE_REMAINING_INSUFFICIENT。取消订单不自动归还已消耗数量。multi_order 报价一旦已有部分订单，无行的 order.prepare 返回 CONVERSION_SLOT_CONFLICT；任一转换（整单或部分）之后 quote.replace 与 quote.cancel 返回 ROOT_CONVERSION_LOCKED。部分订单仍发布既有 OrderPrepared（conversion_mode=multi_order，conversion_slot=multi_order，不另插第二条 full_v1 名额行），stl.order_credit 与 stl.order_account 不新增事件类型。GoalReadiness v1（quote_ready@1、order_active@1）在 full_v1 路径上不变。",
       "legacy": "t03_write.py、t03_storage.py、t03_query.py、t03_order_qualification.py、t03_order_snapshot.py、t03_reconciliation.py、t03_sales_terms.py、t03_trade_parties.py、t03_cost_scope.py、t04_response.py、t04_order_review.py；brant.quotation/0.1.0",
       "stage": "S3",
       "status": "CANDIDATE"
@@ -890,7 +891,8 @@
       "commands": [
         "collaboration_plan.publish",
         "subcontract_order.issue",
-        "operation.record_progress"
+        "operation.record_progress",
+        "mfg.module.configure"
       ],
       "facts": [
         "CollaborationPlanPublished",
@@ -900,7 +902,7 @@
       "queries": [],
       "invariants": [],
       "boundary": "不拥有自有车间完整制造（MRP／MES）；外厂上报完成只是来源声明，不形成合格库存或客户交付。",
-      "decision": "仅在客户选择供料或工序委外组合时启用；Python 无实现。",
+      "decision": "仅在客户选择供料或工序委外组合时启用；Python 无实现。 S6（2026-11-20，S6-D02）：公司级启用开关 mfg.module.configure（管理员、仅人工，默认关闭；关闭时返回 DEPENDENCY_NOT_SUPPORTED）。协作计划状态为草稿、已发布、执行中、暂停、完成、取消；委外单状态为已签发、执行中、完成、取消。operation.record_progress 只记录外厂来源声明，不形成合格库存或客户交付。R23 读取 PUR 的委外需求（加工量不算销售需求），R25 向 QLT 提供受检种类 mfg_subcontract_operation，R42 向 STK 交接并区分转移、耗用、退回与损耗。",
       "legacy": "无（产品基线第 3.4–3.7、4.8 节）",
       "stage": "S6",
       "status": "CANDIDATE"
@@ -976,18 +978,33 @@
         "stock.issue",
         "stock.adjust",
         "reservation.place",
-        "reservation.release"
+        "reservation.release",
+        "stk.module.configure"
       ],
       "facts": [
         "StockReceived",
         "StockIssued",
+        "StockAdjusted",
         "ReservationPlaced",
         "ReservationReleased"
       ],
-      "queries": [],
+      "queries": [
+        {
+          "name": "stk.stock_availability.v1",
+          "route": "—（进程内查询，STK api，StockAvailability v1）",
+          "permission": "—",
+          "audited": false
+        },
+        {
+          "name": "stk.cost_layer.ref",
+          "route": "—（进程内查询，STK api，CostLayerRef v1）",
+          "permission": "—",
+          "audited": false
+        }
+      ],
       "invariants": [],
       "boundary": "纯成品直发不虚构本仓收发；其他模块请求业务动作，不直写库存。",
-      "decision": "代码用 STK 而非 INV，避免与外贸常用的 INV（Invoice）混淆。",
+      "decision": "代码用 STK 而非 INV，避免与外贸常用的 INV（Invoice）混淆。 S6（2026-11-20，S6-D02）：公司级启用开关 stk.module.configure（管理员、仅人工，默认关闭；关闭时库存命令与本仓路线返回 DEPENDENCY_NOT_SUPPORTED）。成本层为 FIFO：收货追加不可变流水与成本层，出库按收到时间与层标识从最旧层分配，金额为最小币值整数，乘积在唯一舍入点半数向上。FUL 仅在 shipment.confirm 且路线为 stock 时，于自身根与授权之后、按上下文代码序（STL 之后、TRD 之前）调用 StockAvailability v1，原子检查可用量或消耗匹配的有效占用并扣减，幂等键为出运与出运行；commercial_release.evaluate、judgeDocuments 与 supplier_direct 不写库存，直发不虚构本仓收发。stock.issue 不接受出运拥有的占用。",
       "legacy": "无（产品基线 F06、F24、第 4.3–4.4 节）",
       "stage": "S6",
       "status": "CANDIDATE"
@@ -1311,8 +1328,7 @@
       "scope": "ClaimCase、ReturnRecord、Remedy。",
       "truth": "案件事实、退货核实与补救决定。",
       "aggregates": [
-        "ClaimCase",
-        "ReturnRecord"
+        "ClaimCase"
       ],
       "commands": [
         "claim.open",
@@ -1329,7 +1345,7 @@
       "queries": [],
       "invariants": [],
       "boundary": "退货不抹去原发货，也不隐式创建补发；财务与库存仍由原模块受控维护。",
-      "decision": "首发最小：客诉、退货／贷项／退款及来源关联。",
+      "decision": "首发最小：客诉、退货／贷项／退款及来源关联。 S6（2026-11-20，S6-D03）：ClaimCase 是唯一聚合根，ReturnRecord 与 Remedy 是其子实体，同一客诉案件行锁串行全部迁移。同一已确认出运行可有多笔客诉，未拒绝案件的累计退货不超过 ShipmentLineRef 数量，超出返回 CLAIM_RETURN_EXCEEDS_SHIPPED；R1 退货只是 CLM 事实，不写 STK，不改原出运。remedy.decide 与 claim.close 仅人工，且独立于开案人（INDEPENDENT_REVIEW_REQUIRED）；remedy.decide 在订单审核人与信用经理，不在管理员。R35 CreditRequest v1 由 STL 在 credit_note.request 与 fund.record（kind=refund）的事务前读取，核对获批补救及订单、相对方、币种与金额上限，并在 brant_stl 禁止同一获批补救再次贷项或退款（CLAIM_REMEDY_ALREADY_SETTLED）；不设自动过账的收件箱消费方。未决案件使经营结果的 claims 维 unmet，阻断 order_result.close。",
       "legacy": "无（产品基线 F28、第 4.7 节）",
       "stage": "S6",
       "status": "CANDIDATE"
@@ -1512,7 +1528,7 @@
         "UL-INV-31"
       ],
       "boundary": "不替代报关、开票、退税申报、银行与外汇办理的法定权威；导出文件或任务完成不冒充专业系统成功。",
-      "decision": "单上下文起步，B0 前按专业责任（发票、报关、退税）评估拆分。见 ADR-BR-009。 S5 只交付人工路径：外部结果由授权人员按原文、映射版本与外部顺序登记，专业接口在 S6-05（负责人决定 2026-11-12）。 S5R（2026-11-13，模拟签核 E0）：许可证一批一证、一证一关，多证经出口批次，未报关即取消的目标可凭人工以 local_cancellation 释放分配（D03、D04）；重新评估中的 blocked 结论在新决定前仍答 blocked（D10）；全面禁运或制裁命中判 clear 须附授权文件证据（D17）；国别项目来自 screening_regulation 的 programmes，带区域的项目生成 region_review（D15、D38）；报关 unknown 可查证为 not_received（D13）；退（免）税方式按法定四类，征税批次不开案件（D14）；退税案件按出口日期所在有效期绑定政策修订（ConfigAt v1，D23）；部分红冲按红票金额冲减蓝票，已申报蓝票先登记进货凭证信息回退，受票主体不一致直接拒绝（D20、D21）；优惠原产地证作为登记种类，证书不加撤回、以更正修订截止有效期（D12、D47）。",
+      "decision": "单上下文起步，B0 前按专业责任（发票、报关、退税）评估拆分。见 ADR-BR-009。 S5 只交付人工路径：外部结果由授权人员按原文、映射版本与外部顺序登记，专业接口在 S6-05（负责人决定 2026-11-12）。 S5R（2026-11-13，模拟签核 E0）：许可证一批一证、一证一关，多证经出口批次，未报关即取消的目标可凭人工以 local_cancellation 释放分配（D03、D04）；重新评估中的 blocked 结论在新决定前仍答 blocked（D10）；全面禁运或制裁命中判 clear 须附授权文件证据（D17）；国别项目来自 screening_regulation 的 programmes，带区域的项目生成 region_review（D15、D38）；报关 unknown 可查证为 not_received（D13）；退（免）税方式按法定四类，征税批次不开案件（D14）；退税案件按出口日期所在有效期绑定政策修订（ConfigAt v1，D23）；部分红冲按红票金额冲减蓝票，已申报蓝票先登记进货凭证信息回退，受票主体不一致直接拒绝（D20、D21）；优惠原产地证作为登记种类，证书不加撤回、以更正修订截止有效期（D12、D47）。 S6（2026-11-20，S6-D05）：internal/foundation/interop 提供提交与对账端口（planned、submitted、succeeded、failed、unknown、not_received，稳定 OperationID）；超时记 unknown，不得伪装成功；Lookup 返回权威结果或 NotFound／Unavailable。CNX 报关与退税适配器建在该端口上，测试只用合成替身，不编造单一窗口或税务机关端点。乱序回执仍以 DECLARATION_RECEIPT_STALE 拒绝推进状态，同时把非权威的迟到回执存入审计表以保留外部版本链。unknown 经 Lookup 对成 accepted、released、rejected 或 not_received；not_received 之后允许新的提交尝试，不覆盖未送达的尝试记录。退税案件同样记录 unknown 与 not_received，既有人工 tax_refund_case.record_result 迁移保留。",
       "legacy": "无（产品基线第 21–24 章，CN-F01–CN-F08、CN-R01–CN-R15）",
       "stage": "S5",
       "status": "CANDIDATE"
@@ -1541,7 +1557,7 @@
       "queries": [],
       "invariants": [],
       "boundary": "交易只保留来源关联；CRM 跟进任务不是 BusinessTask。",
-      "decision": "crm.trade.bridge 只保存来源引用，不反向成为交易依赖。",
+      "decision": "crm.trade.bridge 只保存来源引用，不反向成为交易依赖。 S6（2026-11-20，S6-D04）：Lead（lead.capture）、Opportunity（阶段 qualified、proposal、negotiation、won、lost、abandoned）与 FollowUp（follow_up.record，挂在 Opportunity，不是 TSK 的 BusinessTask）。R40 OpportunityRef v1 可选挂在询价草稿：opportunity_id 省略时不进入请求哈希，Q01 与既有询价不变；CRM 开启且给出标识时，INQ 在事务前校验。关闭开关是 bootstrap 的 DisableCRM／WithoutCRM，以及 httpapi 与 inq 的可空 CRM；关闭后核心交易链不依赖 CRM（BC-AT24），给出商机标识返回 DEPENDENCY_NOT_SUPPORTED，人工 POST CRM 命令返回 UNSUPPORTED_CONTRACT，未注册的 GET 返回 NOT_FOUND，AI POST 返回 PERMISSION_DENIED。R1 不含客户指派与公海。",
       "legacy": "无（产品基线 F12）",
       "stage": "S6",
       "status": "CANDIDATE"
@@ -1968,10 +1984,10 @@
       "to": "MFG",
       "pattern": "Customer / Supplier（条件）",
       "fact": "委外或工序需求与材料责任",
-      "contract": "SubcontractDemand v1",
+      "contract": "SubcontractDemand v1（PUR 在事务前提供的委外或工序需求与材料责任；加工量不计入销售需求；S6-D02）",
       "authority": "PUR",
       "risk": "工序加工量被累加为销售需求",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -1992,10 +2008,10 @@
       "to": "QLT",
       "pattern": "Customer / Supplier（条件）",
       "fact": "工序与半成品受检对象",
-      "contract": "InspectionSubject v1",
+      "contract": "InspectionSubject v1（受检种类增加 mfg_subcontract_operation；外厂完成声明不是放行，也不形成合格库存；S6-D02）",
       "authority": "MFG",
       "risk": "外厂完成声明直接形成合格库存",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -2028,10 +2044,10 @@
       "to": "STK",
       "pattern": "Customer / Supplier（条件）",
       "fact": "收货与外厂我方物料",
-      "contract": "ReceiptRequest v1",
+      "contract": "ReceiptRequest v1（本仓或外厂我方物料的收货依据，不是 supplier_delivery；hold_for_reuse 只可作为启用后的来源引用，本身不形成库存；直发不虚构收发；S6-D02）",
       "authority": "PUR",
       "risk": "直发路线虚构本仓收发",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -2040,10 +2056,10 @@
       "to": "FUL",
       "pattern": "OHS（条件）",
       "fact": "可用库存与出库",
-      "contract": "StockAvailability v1",
+      "contract": "StockAvailability v1（仅 FUL shipment.confirm 且路线 stock：锁定自身根与授权后，按上下文代码序在 STL 之后、TRD 之前原子扣减可用量或消耗匹配占用，幂等键为出运与出运行；evaluate、judgeDocuments 与 supplier_direct 不写库存；S6-D02）",
       "authority": "STK",
       "risk": "占用与可用量重复计入",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": true
     },
     {
@@ -2100,10 +2116,10 @@
       "to": "CLM",
       "pattern": "OHS",
       "fact": "原出运事实",
-      "contract": "ShipmentLineRef v1",
+      "contract": "ShipmentLineRef v1（CLM 在事务前读取已确认出运行；未确认或已取消答 INVALID_STATE；原出运不改写；同一行可有多笔客诉；S6-D03）",
       "authority": "FUL",
       "risk": "退货抹去原发货",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -2112,10 +2128,10 @@
       "to": "STL",
       "pattern": "Customer / Supplier",
       "fact": "经批准的贷项与退款请求",
-      "contract": "CreditRequest v1",
+      "contract": "CreditRequest v1（获批贷项或退款补救；STL 在 credit_note.request 与 fund.record kind=refund 的事务前读取并防重复，同一补救再次结算答 CLAIM_REMEDY_ALREADY_SETTLED；无收件箱消费方；S6-D03）",
       "authority": "CLM",
       "risk": "同一退货重复贷项",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -2172,10 +2188,10 @@
       "to": "INQ",
       "pattern": "Conformist（可选）",
       "fact": "商机来源关联",
-      "contract": "OpportunityRef v1",
+      "contract": "OpportunityRef v1（询价草稿可选 opportunity_id，省略不进请求哈希；CRM 关闭时省略即 BC-AT24，给出标识答 DEPENDENCY_NOT_SUPPORTED；S6-D04）",
       "authority": "CRM",
       "risk": "交易链反向依赖 CRM",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -2184,10 +2200,10 @@
       "to": "STL",
       "pattern": "OHS（条件）",
       "fact": "成本层与库存流水",
-      "contract": "CostLayerRef v1",
+      "contract": "CostLayerRef v1（本仓出运按 FIFO 成本层分配计价；直发仍按采购结算；STL 不另建成本余额；S6-D02）",
       "authority": "STK",
       "risk": "成本层被报表另建余额",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -2196,10 +2212,10 @@
       "to": "STK",
       "pattern": "Customer / Supplier（条件）",
       "fact": "材料交接、耗用与在制",
-      "contract": "MaterialHandover v1",
+      "contract": "MaterialHandover v1（转移、耗用、退回、损耗分列，不混同；S6-D02）",
       "authority": "STK（事实）／MFG（关联）",
       "risk": "转移、耗用、退回与损耗混同",
-      "contractStatus": "NOT_STARTED",
+      "contractStatus": "DESIGN",
       "guardLock": false
     },
     {
@@ -2738,8 +2754,8 @@
       "src": "海关、税务、银行与外汇等专业系统或授权人员",
       "target": "CNX／STL",
       "pattern": "ACL",
-      "rule": "外部回执保存原文及映射版本；unknown 先查证，不盲目重申报。S5 只交付人工路径：授权人员登记提交声明、外部结果原文、映射版本与外部版本或业务顺序，旧回执不覆盖新结果；专业接口在 S6-05（负责人决定 2026-11-12）。",
-      "boundary": "专业办理结果是外部权威事实。"
+      "rule": "外部回执保存原文及映射版本；unknown 先查证，不盲目重申报。S5 只交付人工路径：授权人员登记提交声明、外部结果原文、映射版本与外部版本或业务顺序，旧回执不覆盖新结果；专业接口在 S6-05（负责人决定 2026-11-12）。 S6-D05（2026-11-20）：通道端口在 internal/foundation/interop，状态为 planned、submitted、succeeded、failed、unknown、not_received，稳定操作标识；超时记 unknown，不得伪装成功。CNX 报关与退税适配器只接合成替身。乱序回执仍拒绝推进（DECLARATION_RECEIPT_STALE），并另存非权威迟到回执。unknown 经查找对成受理、放行、退回或 not_received；not_received 之后允许新的提交尝试，不覆盖未送达记录。",
+      "boundary": "专业办理结果是外部权威事实。不编造单一窗口、税务机关或银行的真实端点与凭证。"
     },
     {
       "src": "外部 ERP／总账",
@@ -3045,7 +3061,7 @@
       "name": "R1 商业发布",
       "passCriteria": "公开支持矩阵、授权、部署组合及服务边界；完整回归、实际发布指标与支持机制。",
       "approverRole": "产品＋研发／交付＋经营负责人",
-      "status": "NOT_STARTED"
+      "status": "NO-GO（2026-11-23，模拟，评审没有召开）：S6-01—S6-05 与 S6-07 为 DONE_LOCAL，S6-06 为 PARTIAL；没有真实客户、没有真人签核、没有发布指标、没有真实的海关单一窗口或金税。尖端 9e2502a 已推送，其 GitHub Actions 运行在本档案中没有结论"
     }
   ],
   "factAuthority": [
@@ -3609,6 +3625,28 @@
       "invariant": "截止时点、凭证、用途余额与已办状态可核对；不重复生成用途占用",
       "forbidden": "按本地估算恢复已申报用途",
       "priority": "P1"
+    },
+    {
+      "id": "MD-52",
+      "fact": "客诉案件、退货与补救决定",
+      "classification": "交易",
+      "fact_authority": "CLM",
+      "write_owner": "CLM",
+      "consumers": "STL",
+      "invariant": "累计退货不超过已确认出运量；获批补救不重复贷项或退款；未决案件阻断经营结果关闭",
+      "forbidden": "退货抹去原发货或隐式改库存",
+      "priority": "P1"
+    },
+    {
+      "id": "MD-53",
+      "fact": "委外与工序协作记录",
+      "classification": "交易（条件）",
+      "fact_authority": "MFG",
+      "write_owner": "MFG",
+      "consumers": "QLT、STK",
+      "invariant": "外厂进度只是来源声明，不形成合格库存或客户交付；交接区分转移、耗用、退回与损耗",
+      "forbidden": "工序加工量累加为销售需求",
+      "priority": "P2"
     }
   ],
   "counts": {},

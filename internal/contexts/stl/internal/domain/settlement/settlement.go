@@ -42,9 +42,13 @@ const (
 // CodeSettlementSourceDuplicate: the source line is settled by a standing statement (STL-INV-001).
 const CodeSettlementSourceDuplicate = "SETTLEMENT_SOURCE_DUPLICATE"
 
+// CodeClaimRemedyAlreadySettled: an approved remedy already has a credit note or a refund (R35).
+const CodeClaimRemedyAlreadySettled = "CLAIM_REMEDY_ALREADY_SETTLED"
+
 // Codes are the codes the statement rules give besides the kernel's, with their categories.
 var Codes = map[string]kernel.Category{CodeSettlementSourceDuplicate: kernel.CategoryConflict,
-	CodeSettlementHasApplications: kernel.CategoryConflict, CodeOpeningBalanceDuplicate: kernel.CategoryConflict}
+	CodeSettlementHasApplications: kernel.CategoryConflict, CodeOpeningBalanceDuplicate: kernel.CategoryConflict,
+	CodeClaimRemedyAlreadySettled: kernel.CategoryConflict}
 
 // SourceKey names a source line across its versions: (shipment, line) or (delivery, order line).
 type SourceKey struct {

@@ -1,5 +1,5 @@
 {
-  "note": "错误码从 Python V0.50 源码中的字符串常量提取并按类别整理；HTTP 状态只是传输分类，业务处理以错误码为准。未出现在 Python 中、已由代码返回的码：CONTROL_EPOCH_STALE（业务核心设计第 11 章；TRD 的 control.go 与 TSK 的 task.go 对旧控制代次返回它），以及 05 阶段战术模型新增规则引用的错误码（如 ACCEPTANCE_LATE、ORDER_RISK_UNACKNOWLEDGED、PURCHASE_ALLOCATION_EXCEEDED、COMMERCIAL_RELEASE_BLOCKED），以及 S5 负责人决定（2026-11-12）引入的采购承诺、质量、履约、结算与中国出口协同码（如 PURCHASE_DRAFT_STALE、SHIPMENT_QUANTITY_EXCEEDED、APPLICATION_EXCEEDS_AVAILABLE、DECLARATION_RECEIPT_STALE），以及 S4 负责人决定（2026-11-12）引入的任务与 AI 码（产品基线第 18.2 节与 Q01 V0.1 验证包，如 CONTROL_MODE_MISMATCH、REQUIRED_CHECK_UNSATISFIED、BUDGET_EXHAUSTED），以及 S5R 模拟签核（2026-11-13，E0）统一登记的 5 个码（S5 单元提出的名称与 FUND_RECORD_HAS_APPLICATIONS；实现尚未使用，由 R5、R8、R9、R10 改用）。未单列的情形继续用 INVALID_KNOWN_VALUE 或 INVALID_STATE 并带路径；币种不符继续答 FX_SCOPE_MISMATCH（STL-INV-007）。",
+  "note": "错误码从 Python V0.50 源码中的字符串常量提取并按类别整理；HTTP 状态只是传输分类，业务处理以错误码为准。未出现在 Python 中、已由代码返回的码：CONTROL_EPOCH_STALE（业务核心设计第 11 章；TRD 的 control.go 与 TSK 的 task.go 对旧控制代次返回它），以及 05 阶段战术模型新增规则引用的错误码（如 ACCEPTANCE_LATE、ORDER_RISK_UNACKNOWLEDGED、PURCHASE_ALLOCATION_EXCEEDED、COMMERCIAL_RELEASE_BLOCKED），以及 S5 负责人决定（2026-11-12）引入的采购承诺、质量、履约、结算与中国出口协同码（如 PURCHASE_DRAFT_STALE、SHIPMENT_QUANTITY_EXCEEDED、APPLICATION_EXCEEDS_AVAILABLE、DECLARATION_RECEIPT_STALE），以及 S4 负责人决定（2026-11-12）引入的任务与 AI 码（产品基线第 18.2 节与 Q01 V0.1 验证包，如 CONTROL_MODE_MISMATCH、REQUIRED_CHECK_UNSATISFIED、BUDGET_EXHAUSTED），以及 S5R 模拟签核（2026-11-13，E0）统一登记的 5 个码（S5 单元提出的名称与 FUND_RECORD_HAS_APPLICATIONS；实现尚未使用，由 R5、R8、R9、R10 改用）。未单列的情形继续用 INVALID_KNOWN_VALUE 或 INVALID_STATE 并带路径；币种不符继续答 FX_SCOPE_MISMATCH（STL-INV-007）。 S6 负责人决定（2026-11-20）登记部分下单、库存与客诉码（QUOTE_REMAINING_INSUFFICIENT、STOCK_INSUFFICIENT、STOCK_RESERVATION_CONFLICT、CLAIM_RETURN_EXCEEDS_SHIPPED、CLAIM_REMEDY_ALREADY_SETTLED；实现尚未使用）。",
   "columns": ["code", "category", "http", "retryable", "contexts", "note"],
   "codes": [
     ["UNSUPPORTED_CONTRACT", "契约与传输", 400, "否", "ALL", "契约版本或命令未登记"],
@@ -38,7 +38,7 @@
     ["REFERENCE_STALE", "引用", 409, "刷新引用后重提", "ALL", "引用版本或状态已不适用"],
     ["CUSTOMER_REFERENCE_MISSING", "引用", 422, "否", "TRD", "缺少客户引用"],
     ["CONTACT_REFERENCE_MISSING", "引用", 422, "否", "TRD", "缺少联系人引用"],
-    ["DEPENDENCY_NOT_SUPPORTED", "引用", 422, "否", "CST／TRD／PUR／QLT／FUL", "未交付的依赖路径"],
+    ["DEPENDENCY_NOT_SUPPORTED", "引用", 422, "否", "CST／TRD／PUR／QLT／FUL／STK／MFG／INQ", "未交付的依赖路径；STK 或 MFG 公司开关关闭，或 CRM 关闭时询价携带商机（S6-D02、S6-D04）"],
     ["UNSUPPORTED_PRICING_MODE", "引用", 422, "否", "SUP／CST／PUR", "未实现的计价模式"],
     ["ORDER_LINE_NOT_FOUND", "引用", 404, "否", "PUR", "订单行不存在"],
     ["CONFIG_EXPIRED", "配置与政策", 422, "否", "POL／TRD", "配置已过有效期"],
@@ -52,7 +52,7 @@
     ["TEMPLATE_INVALID", "配置与政策", 422, "否", "POL", "模板字段非法"],
     ["SEQUENCE_EXHAUSTED", "配置与政策", 422, "否", "POL", "编号序列耗尽"],
     ["FILE_INVALID", "配置与政策", 422, "否", "EVD／POL", "文件类型、大小或哈希不合法"],
-    ["INDEPENDENT_REVIEW_REQUIRED", "配置与政策", 422, "否", "POL／PTY／SUP／TRD／PUR／STL／CAT", "需要独立复核"],
+    ["INDEPENDENT_REVIEW_REQUIRED", "配置与政策", 422, "否", "POL／PTY／SUP／TRD／PUR／STL／CAT／CLM", "需要独立复核；客诉补救与结案独立于开案人（S6-D03）"],
     ["PAYMENT_TOTAL_MISMATCH", "配置与政策", 422, "否", "POL／TRD", "付款比例或金额不守恒"],
     ["COST_INPUT_NOT_READY", "核价", 422, "补齐后重提", "SUP／CST", "必需输入或证据缺失"],
     ["COMPARISON_BASIS_MISMATCH", "核价", 422, "否", "CST／TRD", "无法统一规格、责任、交期或税价"],
@@ -186,6 +186,11 @@
     ["TAX_EVIDENCE_EXCEEDED", "中国出口协同", 409, "否", "CNX", "按用途的凭证分配超过剩余额度（CN-R04）"],
     ["DECLARATION_RECEIPT_STALE", "中国出口协同", 409, "否", "CNX", "回执的外部版本或业务顺序早于已登记结果，不覆盖（CN-R05、CN-AT06）"],
     ["DECLARATION_MAPPING_UNVERIFIED", "中国出口协同", 422, "否", "CNX", "票据品名、单位与申报资料的映射或换算缺少专业依据（CN-AT03）"],
-    ["DOCUMENT_REQUIREMENT_UNVERIFIED", "中国出口协同", 409, "否", "CNX", "资料要求只有附件、未经核实，不能计为满足"]
+    ["DOCUMENT_REQUIREMENT_UNVERIFIED", "中国出口协同", 409, "否", "CNX", "资料要求只有附件、未经核实，不能计为满足"],
+    ["QUOTE_REMAINING_INSUFFICIENT", "并发与幂等", 409, "否", "TRD", "报价行剩余可下单数量不足"],
+    ["STOCK_INSUFFICIENT", "履约与合规", 409, "否", "STK／FUL", "可用库存不足，无法预占或出库"],
+    ["STOCK_RESERVATION_CONFLICT", "并发与幂等", 409, "否", "STK／FUL", "库存占用状态或数量冲突"],
+    ["CLAIM_RETURN_EXCEEDS_SHIPPED", "履约与合规", 422, "否", "CLM", "累计退货数量超过已确认出运量"],
+    ["CLAIM_REMEDY_ALREADY_SETTLED", "并发与幂等", 409, "否", "CLM／STL", "同一获批索赔补救已生成贷项或退款"]
   ]
 }

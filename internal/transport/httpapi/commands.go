@@ -647,6 +647,7 @@ func inqCommands(c INQ) *commandSet {
 		ExpectedVersion  *int64   `json:"expected_version"`
 		CustomerID       string   `json:"customer_id"`
 		ContactID        string   `json:"contact_id"`
+		OpportunityID    string   `json:"opportunity_id"`
 		Lines            []line   `json:"lines"`
 		SourceIDs        []string `json:"source_ids"`
 		UnresolvedFields []string `json:"unresolved_fields"`
@@ -655,7 +656,7 @@ func inqCommands(c INQ) *commandSet {
 		inqapi.CommandSaveRfq: handle(func(key string, a saveRfq) (inqapi.SaveRfq, error) {
 			v, err := version(a.ExpectedVersion)
 			cmd := inqapi.SaveRfq{IdempotencyKey: key, RfqID: a.ID, ExpectedVersion: v, CustomerID: a.CustomerID, ContactID: a.ContactID,
-				SourceIDs: a.SourceIDs, UnresolvedFields: a.UnresolvedFields}
+				OpportunityID: a.OpportunityID, SourceIDs: a.SourceIDs, UnresolvedFields: a.UnresolvedFields}
 			if a.Lines != nil {
 				cmd.Lines = make([]inqapi.RfqLine, len(a.Lines))
 				for i, l := range a.Lines {

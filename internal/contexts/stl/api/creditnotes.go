@@ -79,6 +79,10 @@ type RequestCreditNote struct {
 	Amount         string
 	Basis          string
 	EvidenceIDs    []string
+	// ClaimID and RemedyID cite an approved credit_note remedy (R35). Both or neither. Omitted from
+	// the request hash when empty, so a credit note that cites nothing keeps its hash.
+	ClaimID  string `json:",omitempty"`
+	RemedyID string `json:",omitempty"`
 }
 
 // ConfirmCredit decides credit note CreditNoteID at ExpectedVersion: Decision confirm or reject, for Reason.
@@ -122,6 +126,9 @@ func (c RequestCreditNote) Validate() error {
 		return schema("/args/amount")
 	case !Reason(c.Basis):
 		return schema("/args/basis")
+	}
+	if err := citePair(c.ClaimID, c.RemedyID, c.OrderID); err != nil {
+		return err
 	}
 	return evidence(c.EvidenceIDs, "/args/evidence_ids", 1)
 }

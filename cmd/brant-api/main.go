@@ -35,8 +35,12 @@ func run() error {
 	replaySink := flag.String("replay-sink", "", "HTTP sink for dead-letter replay by an authorized human; empty disables the route")
 	replayDispatch := flag.Bool("replay-dispatch", false, "dead-letter replay delivers in process to the contexts' consumers, as brant-worker -dispatch, instead of -replay-sink")
 	replayTimeout := flag.Duration("replay-timeout", 5*time.Second, "timeout for one replayed publish")
+	disableCRM := flag.Bool("disable-crm", false, "do not construct CRM; the trade chain runs without it (BC-AT24)")
 	types := flag.String("oidc-token-types", "", "comma-separated accepted JWT typ values; empty accepts at+jwt (RFC 9068) only")
 	flag.Parse()
+	if os.Getenv("BRANT_DISABLE_CRM") == "true" {
+		*disableCRM = true
+	}
 	dsn := os.Getenv("IDP_BRANT_POSTGRES_DSN")
 	if dsn == "" || *issuer == "" || *audience == "" {
 		return errors.New("IDP_BRANT_POSTGRES_DSN, -oidc-issuer and -oidc-audience are required")
@@ -53,6 +57,7 @@ func run() error {
 	handler, err := platform.API(bootstrap.APIConfig{
 		Issuer: *issuer, Audience: *audience, JWKSURL: *jwks, TokenTypes: split(*types), AllowInsecureHTTP: *insecure,
 		ReplaySinkURL: *replaySink, ReplayDispatch: *replayDispatch, ReplayPublishTimeout: *replayTimeout, Logger: logger,
+		DisableCRM: *disableCRM,
 	})
 	if err != nil {
 		return err

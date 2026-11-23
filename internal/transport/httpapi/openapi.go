@@ -28,6 +28,10 @@ func OpenAPI() ([]byte, error) {
 	sets = append(sets, stlCommands(struct{ STL }{}))
 	sets = append(sets, cnxCommands(struct{ CNX }{}))
 	sets = append(sets, fulCommands(struct{ FUL }{}))
+	sets = append(sets, stkCommands(struct{ STK }{}))
+	sets = append(sets, mfgCommands(struct{ MFG }{}))
+	sets = append(sets, clmCommands(struct{ CLM }{}))
+	sets = append(sets, crmCommands(struct{ CRM }{}))
 	sets = append(sets, tskCommands(struct{ TSK }{}), aiCommands(struct{ AI }{}))
 	paths := map[string]any{}
 	for _, set := range sets {

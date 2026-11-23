@@ -492,6 +492,9 @@ func TestSchemaStatesWhatADraftNeeds(t *testing.T) {
 		t.Errorf("ExpectedVersion: %v", schemaAt(t, quote, "ExpectedVersion"))
 	}
 	_, rfq := q01Schema(t, inqapi.CommandSaveRfq)
+	if strings.Contains(string(rfq), "opportunity") || strings.Contains(string(rfq), "Opportunity") {
+		t.Fatalf("rfq.save_draft schema names an opportunity, which would change the q01.agent bundle: %s", rfq)
+	}
 	if got := strs(schemaAt(t, rfq)["required"]); !slices.Equal(got, []string{"RfqID"}) {
 		t.Errorf("rfq.save_draft requires %v", got)
 	}

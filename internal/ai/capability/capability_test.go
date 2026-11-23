@@ -380,7 +380,15 @@ func TestQ01Schemas(t *testing.T) {
 		}
 		for i := range c.Input().NumField() {
 			f := c.Input().Field(i)
-			if _, ok := s.Properties[f.Name]; f.Name != KeyField && !ok {
+			if f.Name == KeyField || f.Tag.Get("ai") == "-" {
+				if name := jsonName(f); name != f.Name {
+					if _, ok := s.Properties[name]; ok {
+						t.Errorf("%s: the schema offers %s", c.Command, name)
+					}
+				}
+				continue
+			}
+			if _, ok := s.Properties[f.Name]; !ok {
 				t.Errorf("%s: the schema lacks %s", c.Command, f.Name)
 			}
 		}

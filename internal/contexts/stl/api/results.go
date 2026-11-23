@@ -32,9 +32,9 @@ import (
 //	                     stand (expected_version 0 for an order without a result yet).
 //	order_result.close   human only (treasury): reviewed → settled when every close condition holds (STL-INV-011):
 //	                     fulfilment complete or short-closed (TRD), receivables and payables settled, purchase costs
-//	                     and direct charges confirmed; claims are recorded "clm: not_enabled" (CLM is not in S5),
-//	                     never a pass. Otherwise ORDER_RESULT_NOT_SETTLED with one field per unmet dimension
-//	                     (/conditions/<dimension>). It appends an immutable snapshot.
+//	                     and direct charges confirmed, and no open claim (met when the order has none). Otherwise
+//	                     ORDER_RESULT_NOT_SETTLED with one field per unmet dimension (/conditions/<dimension>). It
+//	                     appends an immutable snapshot.
 //	order_result.reopen  human only (treasury): settled → open for a late charge or adjustment, with a reason; the
 //	                     snapshot stays, the next close appends the next one (BT24).
 //

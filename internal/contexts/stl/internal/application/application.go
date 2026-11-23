@@ -120,6 +120,11 @@ type Upstream struct {
 	// Invoices is CNX's PurchaseInvoiceRef v1 (R55, S5R-D20), STL's port (invoices.go); optional: nil is a CNX that
 	// shows STL no purchase invoice (the invoice_reversed flag reads not shown; an adjustment's invoice is not found).
 	Invoices PurchaseInvoices
+	// Claims is CLM's CreditRequest v1 and the order's claims (R35, S6-D03). Nil treats the order as having no
+	// claim. Stock is STK's CostLayerRef (R41, S6-D02). Nil leaves stock shipments without a cost, which the
+	// result records as a gap. Neither is required to construct STL.
+	Claims Claims
+	Stock  StockCosts
 }
 
 // Complete reports whether every upstream is wired.
