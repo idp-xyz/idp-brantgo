@@ -34,6 +34,13 @@ S6 在集成分支 s6/business 上，尖端 9e2502a（2026-11-23 已推送）。
 - WBS：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 改为 DONE_CI。S6-06 仍为 PARTIAL。G5 仍为模拟 NO-GO。BIP 不在这次记录里。
 - 本机仍没有另跑 `make race`、`make ai-eval-live`、`make eer-live`。远程竞态分片的成功不改写这句话。
 
+### 同日再追加（8066e1c）
+- `main` 的合并提交 `8066e1c`（拉取请求 #12，父提交 `23ed630` 与 `5eee844`）合入三项后续：报价变更上限 `51b9d41`、委外累计上限与交接货号 `750d1de`、申报与退税的五条渠道命令 HTTP `7dd2604`。推送运行 [45161081163](https://github.com/idp-xyz/idp-brantgo/actions/runs/45161081163) 在该提交上成功。本机没有把这三项再跑一遍合并后的集成。
+- 源码快照改为 `8066e1c`。`9e2502a` 的快照改名为 `02_go_source_manifest_9e2502a.txt`。
+- 现场评测跑在 `1264d61`，模型 `qwen3.8-flash-next-iq3_xxs`。证据是第三次运行 `live-20261123T110243Z` 的 `summary.md` 与 `report.json`。前两次没有这两份文件。合计：`an04`、`an06`、`an07`、`an09`、`an10`、`an11`、`ct14` 为 5/5 通过；`normal` 为 4/5；`an01`、`an03`、`an05` 为 0/5。`an08`、`reads`、`feedback` 为 NOT APPLICABLE。AN12、AN02 与负责人在 HTTP 上操作的那一次没有执行。
+- 参照负载也跑在 `1264d61`。16 个命令用户加 16 个读用户。2 个 worker 的中继 P95 是 13.011 秒，3 个 worker 是 6.403 秒。5 秒的目标没有改。
+- 七项状态不变。S6-06 仍为 PARTIAL。G5 仍为模拟 NO-GO。BIP 不在这次记录里。不复制 `trace/`、进程日志或密钥。
+
 ## V1.10 · 2026-11-20 · S4 后续轮：F2、R14、ADR-BR-IMP-003、目录补录与全量真实运行
 
 后续轮在集成分支 s4/followups 上，基线是 9d2d045（R14 合并 0cfdf59，F2 合并 9d2d045）。本版不改行为。登记合并代码里已经做了的类 (i)，类 (ii) 与类 (iii) 仍是缺口。全量真实运行的数字只按那次运行的 report.json 与 summary.md。

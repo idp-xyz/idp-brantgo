@@ -228,9 +228,9 @@
     "sapReferenceGaps": 0,
     "sapReferencePartial": 4,
     "goPackages": 215,
-    "goSourceLines": 357786,
-    "goTestFunctions": 2326,
-    "goIntegrationTests": 898,
+    "goSourceLines": 358721,
+    "goTestFunctions": 2333,
+    "goIntegrationTests": 900,
     "goFuzzTargets": 9,
     "m0DoneLocal": 9,
     "m0Tasks": 11
