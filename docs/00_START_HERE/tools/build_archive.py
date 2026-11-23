@@ -88,9 +88,16 @@ S4_EVIDENCE_FILES = [
 ]
 # S6: the archive unit runs no database. The tip gate is the lead's local run on 2026-11-23
 # (db 0, integration 0). 05 records the two finished GitHub Actions runs on 07601c8.
+# 06 records the push run on 8066e1c. 02 is that commit's source snapshot; the 9e2502a
+# snapshot is kept beside it. 07 and 08 are the live evaluation and the relay load,
+# both measured on 1264d61.
 S6_EVIDENCE_FILES = [
-    "README.md", "01_environment.json", "02_go_source_manifest.txt", "04_local_gate.md",
-    "05_github_actions.md",
+    "README.md", "01_environment.json", "02_go_source_manifest.txt",
+    "02_go_source_manifest_9e2502a.txt", "04_local_gate.md",
+    "05_github_actions.md", "06_github_actions.md",
+    "07_live-20261123T110243Z/summary.md", "07_live-20261123T110243Z/report.json",
+    "08_load-20261123T075618Z/summary.md", "08_load-20261123T075618Z/report.json",
+    "08_load-20261123T075819Z/summary.md", "08_load-20261123T075819Z/report.json",
 ]
 # Spike outcomes the M0 report states; the build fails if the evidence says otherwise.
 SPIKE_EXPECTED = {

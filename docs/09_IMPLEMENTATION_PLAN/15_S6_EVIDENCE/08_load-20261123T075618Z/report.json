@@ -1,0 +1,957 @@
+{
+  "tool": "tests/load",
+  "mode": "stages",
+  "started_at": "2026-11-23T07:56:18Z",
+  "finished_at": "2026-11-23T07:57:51Z",
+  "tenant": "load.20261123T075618.c768",
+  "company": "company.A",
+  "environment": {
+    "go": "go1.26.8",
+    "os_arch": "linux/amd64",
+    "kernel": "6.18.58.1-microsoft-standard-WSL2",
+    "wsl": true,
+    "nproc": 20,
+    "host_at_start": {
+      "at": "2026-11-23T07:56:18Z",
+      "uptime": "15:56:18 up 4 days,  2:36,  1 user,  load average: 13.68, 10.35, 8.62",
+      "load1": 13.68,
+      "load5": 10.35,
+      "load15": 8.62,
+      "nproc": 20,
+      "mem_free_mib": 1885,
+      "mem_available_mib": 51029,
+      "mem_total_mib": 64301,
+      "swap_used_mib": 527
+    },
+    "postgresql": "PostgreSQL 16.12 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "postgresql_settings": {
+      "archive_mode": "off",
+      "archive_timeout": "0s",
+      "checkpoint_timeout": "300s",
+      "default_transaction_isolation": "read committed",
+      "effective_cache_size": "5242888kB",
+      "fsync": "on",
+      "max_connections": "300",
+      "max_wal_size": "1024MB",
+      "shared_buffers": "163848kB",
+      "synchronous_commit": "on",
+      "wal_level": "replica",
+      "work_mem": "4096kB"
+    },
+    "api_pool": "pgxpool pool_max_conns=20",
+    "database_bytes_start": 25123863,
+    "database_bytes_end": 91593751,
+    "transport": "brant-api process on 127.0.0.1, HTTP/1.1 keep-alive, JSON",
+    "identity": "local OIDC issuer of the load generator (RS256, typ at+jwt, JWKS by discovery)"
+  },
+  "workload": "BRC-001 on one tenant and company (company.A), one customer (customer.1), one RFQ (rfq.1, 4 lines, 120 PCS) and one cost snapshot (660.00 USD). A command user repeats the order cycle: evd file.register (the customer's PO, ~3.7 KiB text), trd quote.save_draft, quote.freeze, GET quote, quote.submit_review, quote.review.decide, quote.activate (formal document and QT number), evd source.register (the customer's mail), quote.response.record, quote.response.verify, order.prepare, GET order, order.review.request, order.review.decide, cnx trade_compliance.evaluate, GET check, trade_compliance.decide, stl credit.reserve (672.00 of the shared customer credit), GET order check, trd order.activate, pur purchase.draft.prepare (600.00): 17 commands and 4 reads, as six humans (sales, quote.reviewer, acceptance.verifier, order.reviewer, compliance, purchaser). A read user issues one of 14 GET routes uniformly on the cycles completed so far. Closed loop, no think time; brant-worker -dispatch processes (2 by default, S5R-D07's reference deployment) relay the Outbox to the contexts' consumers (STL consumes the reservation on OrderActivated).",
+  "setup": {
+    "seconds": 1.62,
+    "requests": 94
+  },
+  "prime": {
+    "cycles": 3,
+    "seconds": 2.4,
+    "commands": {
+      "requests": 51,
+      "ok": 51,
+      "errors": 0,
+      "timeouts": 0,
+      "transport_errors": 0,
+      "error_rate": 0,
+      "timeout_rate": 0,
+      "rps": 14.99,
+      "latency_ok": {
+        "count": 51,
+        "mean_ms": 42.88,
+        "p50_ms": 37.04,
+        "p95_ms": 93,
+        "p99_ms": 113.2,
+        "max_ms": 113.2
+      },
+      "by_name": {
+        "cnx trade_compliance.decide": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 22.67,
+            "p50_ms": 23.75,
+            "p95_ms": 24.07,
+            "p99_ms": 24.07,
+            "max_ms": 24.07
+          }
+        },
+        "cnx trade_compliance.evaluate": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 53.43,
+            "p50_ms": 51.83,
+            "p95_ms": 58.01,
+            "p99_ms": 58.01,
+            "max_ms": 58.01
+          }
+        },
+        "evd file.register": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 8.03,
+            "p50_ms": 8.07,
+            "p95_ms": 8.2,
+            "p99_ms": 8.2,
+            "max_ms": 8.2
+          }
+        },
+        "evd source.register": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 9.56,
+            "p50_ms": 9.56,
+            "p95_ms": 10.04,
+            "p99_ms": 10.04,
+            "max_ms": 10.04
+          }
+        },
+        "pur purchase.draft.prepare": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 74.97,
+            "p50_ms": 75.73,
+            "p95_ms": 82.59,
+            "p99_ms": 82.59,
+            "max_ms": 82.59
+          }
+        },
+        "stl credit.reserve": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 42.56,
+            "p50_ms": 41.52,
+            "p95_ms": 49.13,
+            "p99_ms": 49.13,
+            "max_ms": 49.13
+          }
+        },
+        "trd order.activate": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 57.06,
+            "p50_ms": 58.14,
+            "p95_ms": 58.59,
+            "p99_ms": 58.59,
+            "max_ms": 58.59
+          }
+        },
+        "trd order.prepare": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 45.38,
+            "p50_ms": 41.55,
+            "p95_ms": 53.53,
+            "p99_ms": 53.53,
+            "max_ms": 53.53
+          }
+        },
+        "trd order.review.decide": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 55.48,
+            "p50_ms": 56.57,
+            "p95_ms": 57.73,
+            "p99_ms": 57.73,
+            "max_ms": 57.73
+          }
+        },
+        "trd order.review.request": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 28.52,
+            "p50_ms": 29.38,
+            "p95_ms": 29.43,
+            "p99_ms": 29.43,
+            "max_ms": 29.43
+          }
+        },
+        "trd quote.activate": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 98.47,
+            "p50_ms": 93,
+            "p95_ms": 113.2,
+            "p99_ms": 113.2,
+            "max_ms": 113.2
+          }
+        },
+        "trd quote.freeze": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 90.79,
+            "p50_ms": 81.09,
+            "p95_ms": 111.06,
+            "p99_ms": 111.06,
+            "max_ms": 111.06
+          }
+        },
+        "trd quote.response.record": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 26.34,
+            "p50_ms": 25.91,
+            "p95_ms": 28.78,
+            "p99_ms": 28.78,
+            "max_ms": 28.78
+          }
+        },
+        "trd quote.response.verify": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 35.43,
+            "p50_ms": 34.21,
+            "p95_ms": 39.95,
+            "p99_ms": 39.95,
+            "max_ms": 39.95
+          }
+        },
+        "trd quote.review.decide": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 34.71,
+            "p50_ms": 32.58,
+            "p95_ms": 42.94,
+            "p99_ms": 42.94,
+            "max_ms": 42.94
+          }
+        },
+        "trd quote.save_draft": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 20.43,
+            "p50_ms": 18.27,
+            "p95_ms": 25.16,
+            "p99_ms": 25.16,
+            "max_ms": 25.16
+          }
+        },
+        "trd quote.submit_review": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 25.1,
+            "p50_ms": 25.91,
+            "p95_ms": 29.44,
+            "p99_ms": 29.44,
+            "max_ms": 29.44
+          }
+        }
+      }
+    },
+    "reads": {
+      "requests": 12,
+      "ok": 12,
+      "errors": 0,
+      "timeouts": 0,
+      "transport_errors": 0,
+      "error_rate": 0,
+      "timeout_rate": 0,
+      "rps": 3.53,
+      "latency_ok": {
+        "count": 12,
+        "mean_ms": 17.56,
+        "p50_ms": 9.23,
+        "p95_ms": 44.8,
+        "p99_ms": 44.8,
+        "max_ms": 44.8
+      },
+      "by_name": {
+        "GET cnx.trade_compliance_check": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 7.43,
+            "p50_ms": 7.44,
+            "p95_ms": 9.21,
+            "p99_ms": 9.21,
+            "max_ms": 9.21
+          }
+        },
+        "GET trd.order": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 9.98,
+            "p50_ms": 10.17,
+            "p95_ms": 10.54,
+            "p99_ms": 10.54,
+            "max_ms": 10.54
+          }
+        },
+        "GET trd.order.check": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 43.05,
+            "p50_ms": 42.8,
+            "p95_ms": 44.8,
+            "p99_ms": 44.8,
+            "max_ms": 44.8
+          }
+        },
+        "GET trd.quote": {
+          "requests": 3,
+          "errors": 0,
+          "latency_ok": {
+            "count": 3,
+            "mean_ms": 9.78,
+            "p50_ms": 9.02,
+            "p95_ms": 12.22,
+            "p99_ms": 12.22,
+            "max_ms": 12.22
+          }
+        }
+      }
+    }
+  },
+  "dispatch_workers": 2,
+  "stages": [
+    {
+      "stage": 1,
+      "command_users": 16,
+      "read_users": 16,
+      "cycles_readable_at_start": 3,
+      "window": {
+        "from": "2026-11-23T07:56:33.720546304Z",
+        "to": "2026-11-23T07:57:23.723580114Z",
+        "seconds": 50,
+        "wall_clock_step_s": 0
+      },
+      "host_before": {
+        "at": "2026-11-23T07:56:23Z",
+        "uptime": "15:56:23 up 4 days,  2:36,  1 user,  load average: 12.98, 10.26, 8.60",
+        "load1": 12.98,
+        "load5": 10.26,
+        "load15": 8.6,
+        "nproc": 20,
+        "mem_free_mib": 1812,
+        "mem_available_mib": 50961,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 527
+      },
+      "host_after": {
+        "at": "2026-11-23T07:57:23Z",
+        "uptime": "15:57:23 up 4 days,  2:37,  1 user,  load average: 21.60, 12.99, 9.64",
+        "load1": 21.6,
+        "load5": 12.99,
+        "load15": 9.64,
+        "nproc": 20,
+        "mem_free_mib": 1252,
+        "mem_available_mib": 51259,
+        "mem_total_mib": 64301,
+        "swap_used_mib": 527
+      },
+      "commands": {
+        "requests": 5150,
+        "ok": 5150,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 103,
+        "latency_ok": {
+          "count": 5150,
+          "mean_ms": 142.65,
+          "p50_ms": 118.87,
+          "p95_ms": 328.32,
+          "p99_ms": 528.3,
+          "max_ms": 890.36
+        },
+        "by_name": {
+          "cnx trade_compliance.decide": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 85.45,
+              "p50_ms": 72.67,
+              "p95_ms": 136.77,
+              "p99_ms": 326.93,
+              "max_ms": 399.93
+            }
+          },
+          "cnx trade_compliance.evaluate": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 200.85,
+              "p50_ms": 178.65,
+              "p95_ms": 294.47,
+              "p99_ms": 697.06,
+              "max_ms": 890.36
+            }
+          },
+          "evd file.register": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 26.86,
+              "p50_ms": 23.64,
+              "p95_ms": 47.32,
+              "p99_ms": 81.46,
+              "max_ms": 93.95
+            }
+          },
+          "evd source.register": {
+            "requests": 298,
+            "errors": 0,
+            "latency_ok": {
+              "count": 298,
+              "mean_ms": 29.55,
+              "p50_ms": 25.1,
+              "p95_ms": 53.81,
+              "p99_ms": 83.91,
+              "max_ms": 128.66
+            }
+          },
+          "pur purchase.draft.prepare": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 245.53,
+              "p50_ms": 217.3,
+              "p95_ms": 429.18,
+              "p99_ms": 736.41,
+              "max_ms": 792.81
+            }
+          },
+          "stl credit.reserve": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 163.01,
+              "p50_ms": 143,
+              "p95_ms": 278.42,
+              "p99_ms": 514.19,
+              "max_ms": 677.48
+            }
+          },
+          "trd order.activate": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 177.31,
+              "p50_ms": 151.74,
+              "p95_ms": 368.46,
+              "p99_ms": 607.15,
+              "max_ms": 673.3
+            }
+          },
+          "trd order.prepare": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 142.86,
+              "p50_ms": 130.07,
+              "p95_ms": 226.42,
+              "p99_ms": 288.43,
+              "max_ms": 389.11
+            }
+          },
+          "trd order.review.decide": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 171.1,
+              "p50_ms": 154.04,
+              "p95_ms": 269.66,
+              "p99_ms": 342.57,
+              "max_ms": 692.36
+            }
+          },
+          "trd order.review.request": {
+            "requests": 306,
+            "errors": 0,
+            "latency_ok": {
+              "count": 306,
+              "mean_ms": 90.97,
+              "p50_ms": 82.74,
+              "p95_ms": 150.08,
+              "p99_ms": 219.91,
+              "max_ms": 279.9
+            }
+          },
+          "trd quote.activate": {
+            "requests": 298,
+            "errors": 0,
+            "latency_ok": {
+              "count": 298,
+              "mean_ms": 313.25,
+              "p50_ms": 280.85,
+              "p95_ms": 497.43,
+              "p99_ms": 688.72,
+              "max_ms": 824.23
+            }
+          },
+          "trd quote.freeze": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 297.48,
+              "p50_ms": 266.41,
+              "p95_ms": 472.04,
+              "p99_ms": 673.77,
+              "max_ms": 767.47
+            }
+          },
+          "trd quote.response.record": {
+            "requests": 300,
+            "errors": 0,
+            "latency_ok": {
+              "count": 300,
+              "mean_ms": 105.03,
+              "p50_ms": 92.34,
+              "p95_ms": 179.52,
+              "p99_ms": 352.96,
+              "max_ms": 363.36
+            }
+          },
+          "trd quote.response.verify": {
+            "requests": 300,
+            "errors": 0,
+            "latency_ok": {
+              "count": 300,
+              "mean_ms": 126.71,
+              "p50_ms": 113.18,
+              "p95_ms": 208.42,
+              "p99_ms": 263.23,
+              "max_ms": 424.59
+            }
+          },
+          "trd quote.review.decide": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 111.6,
+              "p50_ms": 98.27,
+              "p95_ms": 174.79,
+              "p99_ms": 321.2,
+              "max_ms": 363.36
+            }
+          },
+          "trd quote.save_draft": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 75.66,
+              "p50_ms": 67.58,
+              "p95_ms": 130.67,
+              "p99_ms": 168.42,
+              "max_ms": 252.15
+            }
+          },
+          "trd quote.submit_review": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 62.54,
+              "p50_ms": 55.28,
+              "p95_ms": 103.53,
+              "p99_ms": 176.39,
+              "max_ms": 194.93
+            }
+          }
+        }
+      },
+      "reads": {
+        "requests": 21824,
+        "ok": 21824,
+        "errors": 0,
+        "timeouts": 0,
+        "transport_errors": 0,
+        "error_rate": 0,
+        "timeout_rate": 0,
+        "rps": 436.48,
+        "latency_ok": {
+          "count": 21824,
+          "mean_ms": 39.34,
+          "p50_ms": 24.66,
+          "p95_ms": 115.09,
+          "p99_ms": 175.11,
+          "max_ms": 604.11
+        },
+        "by_name": {
+          "GET cnx.trade_compliance_check": {
+            "requests": 1781,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1781,
+              "mean_ms": 23.05,
+              "p50_ms": 20.12,
+              "p95_ms": 41.01,
+              "p99_ms": 83.01,
+              "max_ms": 130.62
+            }
+          },
+          "GET cst.cost_snapshot": {
+            "requests": 1518,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1518,
+              "mean_ms": 128.98,
+              "p50_ms": 114.7,
+              "p95_ms": 209.95,
+              "p99_ms": 385.3,
+              "max_ms": 568.26
+            }
+          },
+          "GET evd.file": {
+            "requests": 1492,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1492,
+              "mean_ms": 19.81,
+              "p50_ms": 17.14,
+              "p95_ms": 36.05,
+              "p99_ms": 77.33,
+              "max_ms": 129.08
+            }
+          },
+          "GET inq.rfq": {
+            "requests": 1480,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1480,
+              "mean_ms": 20.92,
+              "p50_ms": 18.51,
+              "p95_ms": 34.54,
+              "p99_ms": 67.38,
+              "max_ms": 127.05
+            }
+          },
+          "GET pol.config": {
+            "requests": 1397,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1397,
+              "mean_ms": 21.06,
+              "p50_ms": 18.25,
+              "p95_ms": 37.28,
+              "p99_ms": 74.64,
+              "max_ms": 117.77
+            }
+          },
+          "GET pty.party": {
+            "requests": 1476,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1476,
+              "mean_ms": 22.1,
+              "p50_ms": 19.34,
+              "p95_ms": 36.86,
+              "p99_ms": 74.07,
+              "max_ms": 136.33
+            }
+          },
+          "GET pur.demand_allocation": {
+            "requests": 1547,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1547,
+              "mean_ms": 49.44,
+              "p50_ms": 43.34,
+              "p95_ms": 82.79,
+              "p99_ms": 158.94,
+              "max_ms": 247.31
+            }
+          },
+          "GET pur.purchase_draft": {
+            "requests": 1450,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1450,
+              "mean_ms": 87.56,
+              "p50_ms": 76.04,
+              "p95_ms": 141.66,
+              "p99_ms": 309.42,
+              "max_ms": 423.74
+            }
+          },
+          "GET stl.credit_reservation": {
+            "requests": 1426,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1426,
+              "mean_ms": 18.89,
+              "p50_ms": 16.57,
+              "p95_ms": 33.32,
+              "p99_ms": 67.41,
+              "max_ms": 119.43
+            }
+          },
+          "GET trd.order": {
+            "requests": 1711,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1711,
+              "mean_ms": 30.56,
+              "p50_ms": 26.71,
+              "p95_ms": 52.31,
+              "p99_ms": 92.8,
+              "max_ms": 203.04
+            }
+          },
+          "GET trd.order.check": {
+            "requests": 304,
+            "errors": 0,
+            "latency_ok": {
+              "count": 304,
+              "mean_ms": 117.67,
+              "p50_ms": 98.2,
+              "p95_ms": 209.87,
+              "p99_ms": 454.41,
+              "max_ms": 604.11
+            }
+          },
+          "GET trd.quote": {
+            "requests": 1769,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1769,
+              "mean_ms": 29.37,
+              "p50_ms": 25.62,
+              "p95_ms": 49.07,
+              "p99_ms": 94.66,
+              "max_ms": 142.41
+            }
+          },
+          "GET trd.quote.active": {
+            "requests": 1427,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1427,
+              "mean_ms": 29.44,
+              "p50_ms": 25.22,
+              "p95_ms": 51.27,
+              "p99_ms": 102.9,
+              "max_ms": 165.25
+            }
+          },
+          "GET trd.quote.document": {
+            "requests": 1541,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1541,
+              "mean_ms": 28.9,
+              "p50_ms": 25.01,
+              "p95_ms": 49.5,
+              "p99_ms": 91.28,
+              "max_ms": 154.52
+            }
+          },
+          "GET trd.quote.history": {
+            "requests": 1505,
+            "errors": 0,
+            "latency_ok": {
+              "count": 1505,
+              "mean_ms": 28.1,
+              "p50_ms": 24.14,
+              "p95_ms": 50.23,
+              "p99_ms": 101.7,
+              "max_ms": 180.03
+            }
+          }
+        }
+      },
+      "cycles": {
+        "completed": 304,
+        "failed": 0,
+        "completed_per_second": 6.08,
+        "latency_completed": {
+          "count": 304,
+          "mean_ms": 2582.41,
+          "p50_ms": 2351.71,
+          "p95_ms": 3969.78,
+          "p99_ms": 4620.45,
+          "max_ms": 4709.02
+        }
+      },
+      "api_cpu_cores": 1.81,
+      "worker_cpu_cores": 0.27,
+      "database": {
+        "samples": 50,
+        "api_connections_max": 20,
+        "api_active_mean": 6.92,
+        "api_active_max": 14,
+        "api_idle_in_transaction_max": 18,
+        "worker_connections_max": 4,
+        "samples_with_lock_waiters": 9,
+        "lock_waiters_max": 4,
+        "lock_waiters_mean": 0.32,
+        "longest_lock_wait_s": 0.051,
+        "ungranted_locks_max": 4,
+        "outbox_backlog_max": 1299,
+        "outbox_backlog_end": 1299,
+        "oldest_undelivered_max_s": 29.014,
+        "wait_events_of_active_api_sessions": {
+          "Client:ClientRead": 47,
+          "IO:WALInitWrite": 1,
+          "IO:WALSync": 40,
+          "LWLock:WALWrite": 144,
+          "Lock:transactionid": 10,
+          "Lock:tuple": 3,
+          "Timeout:SpinDelay": 1
+        },
+        "commits": 76522,
+        "rollbacks": 0,
+        "deadlocks": 0,
+        "conflicts": 0,
+        "temp_files": 0,
+        "blocks_read": 7,
+        "cache_hit_ratio": 1,
+        "tuples_inserted": 67458,
+        "outbox_relay_lag": {
+          "published": 4260,
+          "p50_s": 7.593,
+          "p95_s": 13.011,
+          "p99_s": 24.744,
+          "max_s": 29.343
+        }
+      },
+      "top_wait_events": [
+        "LWLock:WALWrite×144",
+        "Client:ClientRead×47",
+        "IO:WALSync×40",
+        "Lock:transactionid×10",
+        "Lock:tuple×3",
+        "IO:WALInitWrite×1"
+      ],
+      "worker_relay_metrics": {
+        "workers": 2,
+        "seconds": 50.011,
+        "published": 4261,
+        "share_within_p95_target": 0.3502,
+        "share_within_p99_target": 1,
+        "p95_target_met": false,
+        "p99_target_met": true,
+        "publish_failures": 0,
+        "dead_letters": 0,
+        "settle_mean_s": 0.0087
+      }
+    }
+  ],
+  "outbox_drain": {
+    "seconds": 28.1,
+    "published": 1460,
+    "published_per_second": 52,
+    "pending_or_leased_left": 0,
+    "complete": true
+  },
+  "thresholds": {
+    "asserted": true,
+    "dispatch_workers": 2,
+    "reference_command_users": 16,
+    "api_capacity_command_users": 32,
+    "checks": [
+      {
+        "stage": 1,
+        "command_users": 16,
+        "target": "read_latency_p95",
+        "basis": "S5-11 (C7)",
+        "limit_s": 0.5,
+        "observed_s": 0.11509,
+        "status": "pass"
+      },
+      {
+        "stage": 1,
+        "command_users": 16,
+        "target": "command_latency_p95",
+        "basis": "S5-11 (C7)",
+        "limit_s": 0.8,
+        "observed_s": 0.32832,
+        "status": "pass"
+      },
+      {
+        "stage": 1,
+        "command_users": 16,
+        "target": "relay_latency_p95",
+        "basis": "S5R-D07",
+        "limit_s": 5,
+        "observed_s": 13.011,
+        "status": "fail"
+      },
+      {
+        "stage": 1,
+        "command_users": 16,
+        "target": "relay_latency_p99",
+        "basis": "S5R-D07",
+        "limit_s": 30,
+        "observed_s": 24.744,
+        "status": "pass"
+      },
+      {
+        "stage": 1,
+        "command_users": 16,
+        "target": "oldest_undelivered_below_alert",
+        "basis": "S5R-D07",
+        "limit_s": 60,
+        "observed_s": 29.014,
+        "status": "pass"
+      }
+    ],
+    "failed": 1,
+    "verdict": "fail"
+  },
+  "not_executed": [
+    "a front end: latencies are client-side over loopback HTTP (server plus transport), not browser end to end",
+    "a real identity provider: tokens come from the load generator's local issuer (RS256, at+jwt); each actor's token is reused for 7.5 minutes",
+    "several tenants or customers: every user works in one tenant on one customer, so the shared rows (POL quote number sequence, STL customer credit, authority guard) are contended as hard as possible",
+    "AI tasks, large reports, files above 4 KiB and external services: baseline 11.1 sets their limits apart",
+    "failures (process restart, database interruption, redelivery) during the stages: the recovery drill covers the database",
+    "a production-like host: the API, the worker, PostgreSQL (Docker) and the load generator share one WSL2 host with other work",
+    "a host whose wall clock is slewed, not stepped: WSL2 steps it forward by seconds now and then; each window reports the step it saw, and a step between an event's recorded_at and published_at adds to that event's relay lag (both stamps are wall-clock readings)"
+  ]
+}
