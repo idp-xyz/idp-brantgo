@@ -254,7 +254,7 @@
     {
       "check": "S6 证据文件齐全",
       "result": "PASS",
-      "detail": "4 个文件"
+      "detail": "5 个文件"
     },
     {
       "check": "M0 一致性实测结论与报告一致",

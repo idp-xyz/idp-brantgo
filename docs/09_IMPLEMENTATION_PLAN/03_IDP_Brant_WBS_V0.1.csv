@@ -86,10 +86,10 @@ S5R-09,S5R,CNX,CNX 合规与许可证（R9）,P1,S5R-02,local_cancellation 释�
 S5R-10,S5R,CNX,CNX 报关、证书、发票与退税（R10）,P1,S5R-02,优惠原产地证种类与一单一证核对；unknown → not_received；征税批次不开案件、converted_to_exemption（R1 前）；PurchaseInvoiceRef v1、部分红冲与进货凭证信息回退；按有效期绑定政策与 rebind_policy；报关行 ServiceRoleRef,S5R-D12、D13、D14、D20、D23、D36；CNX-INV-003、004、005、007、008；CN-AT05、CN-AT12,CNX Owner＋专业角色,—（Python 未实现）,DONE_CI
 S5R-11,S5R,messaging,Outbox 中继延迟指标与告警（R11）,P1,S5-11,最老未分发事件年龄与分发延迟指标；tests/load 阈值断言；运行手册,S5R-D07：参考负载下 2 个分发进程 P95 ≤ 5 s（本机）；数值 B0 前须运维与财务真实负责人确认,技术负责人＋运维,—（Python 未实现）,PARTIAL
 S5R-12,S5R,端到端,S5R 端到端回归（R12）,P1,S5R-04;S5R-05;S5R-06;S5R-07;S5R-08;S5R-09;S5R-10,D1、D2a、D2b 链上补 S5R 场景并更新证据；BT17 编号引用改为 STL-OB-01,"SIM-02 敞口随修订下降；BT21 冻结量复检后再放行；S-A 结汇汇差与净现金 2,250；CN-AT12 迟发布的政策；CN-AT05 部分红冲与应付复核；CIF 缺保单；未报关取消释放许可证（S5R-D45）",TRD／PUR／FUL／STL Owner,—（Python 未实现）,DONE_CI
-S6-01,S6,STK,库存与外厂台账（条件）,P2,S5-03,internal/contexts/stk,并发安全出库；直发不虚构收发,STK Owner,,DONE_LOCAL
-S6-02,S6,MFG,生产协同与委外（条件）,P2,S6-01,internal/contexts/mfg,材料责任与交接留证,MFG Owner,,DONE_LOCAL
-S6-03,S6,CLM,售后与索赔,P2,S5-04,internal/contexts/clm,退货不抹去原发货,CLM Owner,,DONE_LOCAL
-S6-04,S6,CRM,CRM 可选包与来源桥接,P2,S1-05,internal/contexts/crm,BC-AT24：CRM 关闭时整链可运行,CRM Owner,,DONE_LOCAL
-S6-05,S6,CNX,中国专业接口与全量协同,P2,S5-05,foundation/interop＋cnx adapters,外部回执乱序与 unknown 对账,集成负责人＋专业角色,,DONE_LOCAL
+S6-01,S6,STK,库存与外厂台账（条件）,P2,S5-03,internal/contexts/stk,并发安全出库；直发不虚构收发,STK Owner,,DONE_CI
+S6-02,S6,MFG,生产协同与委外（条件）,P2,S6-01,internal/contexts/mfg,材料责任与交接留证,MFG Owner,,DONE_CI
+S6-03,S6,CLM,售后与索赔,P2,S5-04,internal/contexts/clm,退货不抹去原发货,CLM Owner,,DONE_CI
+S6-04,S6,CRM,CRM 可选包与来源桥接,P2,S1-05,internal/contexts/crm,BC-AT24：CRM 关闭时整链可运行,CRM Owner,,DONE_CI
+S6-05,S6,CNX,中国专业接口与全量协同,P2,S5-05,foundation/interop＋cnx adapters,外部回执乱序与 unknown 对账,集成负责人＋专业角色,,DONE_CI
 S6-06,S6,门禁,R1 发布（G5）,P2,S6-01;S6-02;S6-03;S6-04;S6-05,支持矩阵与发布证据,完整回归与实际发布指标,产品＋研发＋经营负责人,,PARTIAL
-S6-07,S6,TRD,参照报价下单：部分与多次（F-01，BC-D06）,P1,S3-15,报价行剩余数量台账、每张订单独立确认与审批,SIM-03：有效期内第二张 PO 可下单，累计不超报价数量（如报价设定）；并发只有一张占用成功,TRD Owner＋产品,—（Python 未实现）,DONE_LOCAL
+S6-07,S6,TRD,参照报价下单：部分与多次（F-01，BC-D06）,P1,S3-15,报价行剩余数量台账、每张订单独立确认与审批,SIM-03：有效期内第二张 PO 可下单，累计不超报价数量（如报价设定）；并发只有一张占用成功,TRD Owner＋产品,—（Python 未实现）,DONE_CI

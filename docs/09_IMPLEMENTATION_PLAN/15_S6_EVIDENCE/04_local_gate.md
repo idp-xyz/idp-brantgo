@@ -11,6 +11,6 @@
 
 没有执行：`make race`、`make ai-eval-live`、`make eer-live`、真实海关单一窗口、真实金税、真实客户、真人签核。
 
-`9e2502a` 的 GitHub Actions 运行不在本目录。本文件不写它的结论。
+本机门禁仍是 `9e2502a`。同一天更后的提交 `07601c8` 有两次已结束的 GitHub Actions 运行，写在 `05_github_actions.md`。本文件不把那两次运行算进上面的本机表。
 
 进程日志没有复制进来。
