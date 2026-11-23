@@ -45,12 +45,14 @@ var (
 	_ api.TaxCaseQueries  = (*Module)(nil)
 	// Declarations, document bundles and external reconciliation (S5 C3a).
 	_ api.DeclarationCommands = (*Module)(nil)
-	_ api.DeclarationQueries  = (*Module)(nil)
-	_ api.BundleCommands      = (*Module)(nil)
-	_ api.BundleQueries       = (*Module)(nil)
-	_ api.Auditor             = (*Module)(nil)
-	_ api.Reconciler          = (*Module)(nil)
-	_ api.FollowQueries       = (*Module)(nil)
+	// Channel filing and lookup (S6-05). Settle stays off this interface.
+	_ api.ChannelCommands    = (*Module)(nil)
+	_ api.DeclarationQueries = (*Module)(nil)
+	_ api.BundleCommands     = (*Module)(nil)
+	_ api.BundleQueries      = (*Module)(nil)
+	_ api.Auditor            = (*Module)(nil)
+	_ api.Reconciler         = (*Module)(nil)
+	_ api.FollowQueries      = (*Module)(nil)
 	// Official certificate results and CertificateResultRef v1 (S5 C5).
 	_ api.CertificateCommands = (*Module)(nil)
 	_ api.CertificateQueries  = (*Module)(nil)

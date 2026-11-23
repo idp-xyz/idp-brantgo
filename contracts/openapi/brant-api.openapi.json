@@ -5814,6 +5814,982 @@
         ]
       }
     },
+    "/api/brant/v1/cnx/commands/declaration_case.channel_ingest": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.declaration_case.channel_ingest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "declaration_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "receipts": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "declaration_number": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "exported_at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "mapping_version": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "original_text": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "received_at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "integer"
+                            },
+                            "status_code": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "declaration_case.channel_ingest"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "declaration_case.channel_ingest",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/declaration_case.channel_ingest/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.declaration_case.channel_ingest.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "declaration_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "receipts": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "declaration_number": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "exported_at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "mapping_version": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "original_text": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "received_at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "integer"
+                            },
+                            "status_code": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "declaration_case.channel_ingest"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of declaration_case.channel_ingest sent with this idempotency key (动作对账)",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/declaration_case.channel_reconcile": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.declaration_case.channel_reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "declaration_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "declaration_case.channel_reconcile"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "declaration_case.channel_reconcile",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/declaration_case.channel_reconcile/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.declaration_case.channel_reconcile.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "declaration_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "declaration_case.channel_reconcile"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of declaration_case.channel_reconcile sent with this idempotency key (动作对账)",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/declaration_case.channel_submit": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.declaration_case.channel_submit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "declaration_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "submitter_name": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "declaration_case.channel_submit"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "declaration_case.channel_submit",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/declaration_case.channel_submit/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.declaration_case.channel_submit.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "declaration_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "submitter_name": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "declaration_case.channel_submit"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of declaration_case.channel_submit sent with this idempotency key (动作对账)",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
     "/api/brant/v1/cnx/commands/declaration_case.confirm": {
       "post": {
         "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
@@ -11039,6 +12015,674 @@
           }
         },
         "summary": "What became of tax_refund_case.allocate sent with this idempotency key (动作对账)",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/tax_refund_case.channel_reconcile": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.tax_refund_case.channel_reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "case_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "tax_refund_case.channel_reconcile"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "tax_refund_case.channel_reconcile",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/tax_refund_case.channel_reconcile/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.tax_refund_case.channel_reconcile.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "case_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "tax_refund_case.channel_reconcile"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of tax_refund_case.channel_reconcile sent with this idempotency key (动作对账)",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/tax_refund_case.channel_submit": {
+      "post": {
+        "description": "Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.tax_refund_case.channel_submit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "case_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "tax_refund_case.channel_submit"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Committed, or the stored result of the same idempotency key (replayed: true)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "VERSION_CONFLICT, IDEMPOTENCY_PAYLOAD_CONFLICT or a context's conflict code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "tax_refund_case.channel_submit",
+        "tags": [
+          "cnx"
+        ]
+      }
+    },
+    "/api/brant/v1/cnx/commands/tax_refund_case.channel_submit/reconcile": {
+      "post": {
+        "description": "The body is the request exactly as it was sent. Nothing is executed; the context's read permission and the caller's data scope are checked now. Request bodies are at most 1 MiB and 100000 JSON values; duplicate keys, null, numbers that are not integers, unknown or case-variant members and empty strings are refused (SCHEMA_INVALID). Actor, tenant and company come from the bearer token. An actor of kind ai is refused on every writing route (PERMISSION_DENIED) before the body is read.",
+        "operationId": "cnx.tax_refund_case.channel_submit.reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "case_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currency": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "evidence_ids": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "expected_version": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "expected_version"
+                    ],
+                    "type": "object"
+                  },
+                  "command": {
+                    "const": "tax_refund_case.channel_submit"
+                  },
+                  "contract": {
+                    "const": "brant.china-export/0.1.0"
+                  },
+                  "idempotency_key": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contract",
+                  "command",
+                  "idempotency_key",
+                  "args"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            },
+            "description": "committed (with the stored receipt), payload_conflict (the key committed another request) or not_committed (the caller may send the command again with the same key)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNSUPPORTED_CONTRACT"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "NOT_FOUND: missing or outside the caller's data scope"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "REQUEST_TOO_LARGE"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "What became of tax_refund_case.channel_submit sent with this idempotency key (动作对账)",
         "tags": [
           "cnx"
         ]

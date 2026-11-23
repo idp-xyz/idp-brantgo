@@ -1,10 +1,15 @@
 package api
 
-import "go.idp.xyz/idp-brant/internal/kernel"
+import (
+	"context"
 
-// Channel commands (S6-05, S6-D05). They run in process on the CNX module. No HTTP route registers
-// them: a person still records a submission and a receipt by hand, and these commands are what the
-// connector does with the same permissions. A timeout is recorded as unknown, never as a success.
+	"go.idp.xyz/idp-brant/internal/kernel"
+)
+
+// Channel commands (S6-05, S6-D05). The five filing and lookup commands are on the CNX command
+// route, POST /api/brant/v1/cnx/commands/<command>, with the permissions the manual submission,
+// receipt and tax result already use. Settle stays in process: it moves the attempt after the
+// case has moved and is not a second filing. A timeout is recorded as unknown, never as a success.
 const (
 	CommandSubmitDeclarationChannel    = "declaration_case.channel_submit"
 	CommandSettleDeclarationChannel    = "declaration_case.channel_settle"
@@ -211,8 +216,17 @@ func (c ReconcileTaxChannel) Validate() error {
 	return evidence(c.EvidenceIDs, "/args/evidence_ids", 1)
 }
 
+// ChannelCommands is the connector entry point on the CNX command route. Settle is not on it.
+type ChannelCommands interface {
+	SubmitDeclarationChannel(ctx context.Context, cmd SubmitDeclarationChannel) (ChannelAnswer, error)
+	ReconcileDeclarationChannel(ctx context.Context, cmd ReconcileDeclarationChannel) (ChannelAnswer, error)
+	IngestDeclarationReceipts(ctx context.Context, cmd IngestDeclarationReceipts) (ChannelIngest, error)
+	SubmitTaxChannel(ctx context.Context, cmd SubmitTaxChannel) (ChannelAnswer, error)
+	ReconcileTaxChannel(ctx context.Context, cmd ReconcileTaxChannel) (ChannelAnswer, error)
+}
+
 // SettleDeclarationChannel and SettleTaxChannel move the connector attempt after the case has
-// moved. The channel commands run them; they are not a second filing.
+// moved. The channel commands run them; they are not a second filing and they are not HTTP.
 type SettleDeclarationChannel struct {
 	IdempotencyKey string
 	Channel        string
