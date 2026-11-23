@@ -26,7 +26,12 @@ import (
 //
 // Each runs as an order command (order.go): the quote root FOR UPDATE, then the order FOR UPDATE
 // (which loads its amendments: every amendment write happens under that lock), then the ledger's
-// authority guard row FOR SHARE. Prepare and apply read, before the transaction, what POL says of
+// authority guard row FOR SHARE. An amendment that grows a line of a multi_order quote must fit
+// that line's remaining cap (QUOTE_REMAINING_INSUFFICIENT at the line quantity). The increase is
+// the new quantity minus what this order already holds on quote_order_consumption, so that
+// quantity is not counted twice; apply appends only the increase, under the quote lock already
+// taken. A decrease appends nothing. Cancelling still does not. A quote that is not multi_order
+// is unchanged. Prepare and apply read, before the transaction, what POL says of
 // the references the proposal adopts that the current revision does not bind (units, conversions,
 // tax applications and profiles, payment terms, trade terms) and what the next revision seals
 // (S5R-D35, D40: the Incoterm, the customer addresses' countries, the notify party's address; POL
@@ -452,6 +457,11 @@ func (s Service) PrepareAmendment(ctx context.Context, cmd api.PrepareAmendment)
 		if err != nil {
 			return action.Outcome{}, err
 		}
+		// The proposal is valid. Refuse a growth the remaining cap does not cover, before the
+		// draft is saved. Apply checks again and is what appends the ledger.
+		if _, err = s.amendmentCap(ctx, exec, h.q, h.o, partialLines(p.Lines), "/args"); err != nil {
+			return action.Outcome{}, err
+		}
 		fields := diffFields(diff)
 		fields["preview_order_revision"], fields["preview_order_hash"] = preview.Number, preview.Hash
 		fields["source_kind"], fields["response_id"] = src.Kind, src.ResponseID
@@ -556,6 +566,7 @@ func (s Service) ApplyAmendment(ctx context.Context, cmd api.ApplyAmendment) (ap
 			quote.Entry{Name: api.GuardSTKReservations, Value: api.NotEnabled})
 		var unchecked []string
 		var credit []quote.Entry
+		var grown []order.Consumption
 		f, err := s.activeFulfilment(ctx, exec, h.o)
 		if err != nil {
 			return action.Outcome{}, err
@@ -566,6 +577,15 @@ func (s Service) ApplyAmendment(ctx context.Context, cmd api.ApplyAmendment) (ap
 		a, _, diff, err := h.o.ApplyAmendment(cmd.AmendmentID, amendment.Applying{ExpectedVersion: cmd.ExpectedVersion,
 			IdempotencyKey: cmd.IdempotencyKey, Fulfilment: f, Facts: in.facts, Upstream: upstream, ControlEpoch: h.q.Control.Epoch,
 			Guard: func(next *orderrev.Revision) ([]quote.Entry, error) {
+				// Next has accepted the proposal. The quote root is locked FOR UPDATE, so the
+				// ledger sum is the quantity already placed. Credit follows the cap.
+				if am := h.o.Amendment(cmd.AmendmentID); am != nil {
+					var capErr error
+					grown, capErr = s.amendmentCap(ctx, exec, h.q, h.o, partialLines(am.Content.Proposal.Lines), "/proposal")
+					if capErr != nil {
+						return nil, capErr
+					}
+				}
 				out, err := s.amendedCredit(ctx, exec, h.o, next, now)
 				if err != nil {
 					return nil, err
@@ -579,6 +599,13 @@ func (s Service) ApplyAmendment(ctx context.Context, cmd api.ApplyAmendment) (ap
 		if err != nil {
 			return action.Outcome{}, err
 		}
+		if len(grown) > 0 {
+			for i := range grown {
+				grown[i].OrderRevision = h.o.OrderRevision
+				grown[i].Recorded = quote.Act{By: d.Actor, Epoch: d.Epoch, At: kernel.Instant(now)}
+			}
+			h.o.Consumption = grown
+		}
 		fields := diffFields(diff)
 		fields["from_order_revision"], fields["from_order_hash"] = a.Applied.From.Revision, a.Applied.From.Hash
 		fields["fulfilment_source"] = f.Source
@@ -589,6 +616,44 @@ func (s Service) ApplyAmendment(ctx context.Context, cmd api.ApplyAmendment) (ap
 		return h.saveAmendment(ctx, exec, a, h.amendmentEvent(api.EventOrderAmended, a, fields))
 	}
 	return s.runAmendment(ctx, api.CommandApplyAmendment, cmd.IdempotencyKey, cmd.OrderID, "", cmd, cmd.Validate(), h, cmd.AmendmentID)
+}
+
+// partialLines is a proposal's lines as the cap reads them, in proposal order.
+func partialLines(lines []orderrev.ProposedLine) []order.PartialLine {
+	out := make([]order.PartialLine, len(lines))
+	for i, l := range lines {
+		out[i] = order.PartialLine{LineID: l.LineID, Quantity: l.Quantity}
+	}
+	return out
+}
+
+// amendmentCap is the ledger rows an amendment of a multi_order order would append, or the
+// refusal when the increase does not fit. The quote root is locked FOR UPDATE by the caller.
+// A quote that is not multi_order, and an order that is not, change nothing.
+func (s Service) amendmentCap(ctx context.Context, exec bentopg.Executor, q *quote.Quote, o *order.Order, lines []order.PartialLine, path string) ([]order.Consumption, error) {
+	if o == nil || q == nil || o.Slot != quote.SlotMultiOrder {
+		return nil, nil
+	}
+	rev := q.Revision(o.Source.Revision)
+	if rev == nil || rev.Seal == nil {
+		return nil, kernel.Reject(kernel.CodeReferenceInvalid, path, "")
+	}
+	doc, err := quote.ParseCommercial(rev.Seal.Commercial, rev.Seal.BusinessHash)
+	if err != nil {
+		return nil, err
+	}
+	if doc.Data.ConversionMode != quote.ModeMultiOrder {
+		return nil, nil
+	}
+	consumed, err := postgres.ConsumedQuantities(ctx, exec, scope(ctx), o.Source.QuoteID)
+	if err != nil {
+		return nil, err
+	}
+	own, err := postgres.ConsumedByOrder(ctx, exec, scope(ctx), o.ID)
+	if err != nil {
+		return nil, err
+	}
+	return order.AmendmentConsumption(doc, lines, consumed, own, path)
 }
 
 // current is the order's current revision for a staleness check, nil when it cannot be read (the

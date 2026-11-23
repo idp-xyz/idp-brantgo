@@ -13,11 +13,16 @@ import (
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
-// Consumption is one append-only quote_order_consumption row a partial order writes (TRD-INV-024).
-// Quantity is a QuantityFormat decimal, greater than zero. Cancelling the order does not remove it.
+// Consumption is one append-only quote_order_consumption row (TRD-INV-024). Quantity is a
+// QuantityFormat decimal, greater than zero. OrderRevision is the sales-order revision the row
+// records: 1 for the prepare, and the revision an amendment produces when that amendment grows the
+// line. Recorded is who appended it; empty means the order's preparer. Cancelling the order does
+// not remove a row, and a decrease does not append one.
 type Consumption struct {
-	LineID   string
-	Quantity string
+	LineID        string
+	Quantity      string
+	OrderRevision int64
+	Recorded      quote.Act
 }
 
 // PartialLine is one line of order.prepare_partial: a line of the sealed quote and the quantity
@@ -105,7 +110,7 @@ func PreparePartial(p PartialPreparation, q *quote.Quote, a *acceptance.Acceptan
 	consumed := make([]Consumption, len(p.Lines))
 	for i, l := range p.Lines {
 		qty, _ := kernel.ParseDecimal(l.Quantity, kernel.QuantityFormat)
-		consumed[i] = Consumption{LineID: l.LineID, Quantity: exactDec(qty)}
+		consumed[i] = Consumption{LineID: l.LineID, Quantity: exactDec(qty), OrderRevision: 1}
 	}
 	return &Order{ID: p.OrderID, Source: src, Slot: quote.SlotMultiOrder, OrderRevision: 1, Snapshot: snapshot, SnapshotHash: hash,
 		OrderHash: hash, Status: Draft, RowVersion: 1, Prepared: quote.Act{By: by, Epoch: epoch, At: at}, Fresh: true,
@@ -169,6 +174,77 @@ func lineCap(l quote.Line) (kernel.Decimal, error) {
 	q, err := kernel.ParseDecimal(raw, kernel.QuantityFormat)
 	if err != nil || q.Sign() <= 0 {
 		return kernel.Decimal{}, kernel.Reject(kernel.CodeReferenceInvalid, "/args/quote_id", "The line cap is not a quantity")
+	}
+	return q, nil
+}
+
+// AmendmentConsumption is what an amendment appends to the ledger when it grows a line of a
+// multi_order quote (S6-07). lines are the proposal, in the order path indexes
+// (path+"/lines/i/quantity"). consumed is the ledger sum of each line; own is the sum this order
+// already holds, so that quantity is not added again. The increase is the proposed quantity minus
+// own. It must fit the remaining cap, which is the cap minus the ledger. A decrease, a quantity
+// still inside own, a line the quote does not name, and a quote that is not multi_order append
+// nothing. An uncapped line stays uncapped and still records its increase. A refusal is
+// QUOTE_REMAINING_INSUFFICIENT and names cap, consumed, requested and remaining, where requested
+// is the increase.
+func AmendmentConsumption(doc quote.Commercial, lines []PartialLine, consumed, own map[string]string, path string) ([]Consumption, error) {
+	if doc.Data.ConversionMode != quote.ModeMultiOrder {
+		return nil, nil
+	}
+	byID := map[string]quote.Line{}
+	for _, l := range doc.Data.Lines {
+		byID[l.LineID] = l
+	}
+	var out []Consumption
+	for i, line := range lines {
+		quoted, ok := byID[line.LineID]
+		if !ok {
+			continue
+		}
+		at := fmt.Sprintf("%s/lines/%d/quantity", path, i)
+		qty, err := kernel.ParseDecimal(line.Quantity, kernel.QuantityFormat)
+		if err != nil || qty.Sign() <= 0 {
+			return nil, kernel.Reject(kernel.CodeSchemaInvalid, at, "")
+		}
+		held, err := ledgerQty(own[line.LineID], at)
+		if err != nil {
+			return nil, err
+		}
+		if qty.Cmp(held) <= 0 {
+			continue
+		}
+		if !quoted.Uncapped {
+			capQty, err := lineCap(quoted)
+			if err != nil {
+				return nil, err
+			}
+			ledger, err := ledgerQty(consumed[line.LineID], at)
+			if err != nil {
+				return nil, err
+			}
+			others := ledger.Sub(held)
+			if others.Sign() < 0 {
+				return nil, kernel.Reject(kernel.CodeReferenceInvalid, at, "The consumption ledger is not a quantity")
+			}
+			increase := qty.Sub(held)
+			remaining := capQty.Sub(ledger)
+			if increase.Cmp(remaining) > 0 {
+				return nil, fail(quote.CodeQuoteRemainingInsufficient, at, fmt.Sprintf("cap %s, consumed %s, requested %s, remaining %s",
+					exactDec(capQty), exactDec(ledger), exactDec(increase), exactDec(remaining)))
+			}
+		}
+		out = append(out, Consumption{LineID: line.LineID, Quantity: exactDec(qty.Sub(held))})
+	}
+	return out, nil
+}
+
+func ledgerQty(raw, path string) (kernel.Decimal, error) {
+	if raw == "" {
+		return kernel.Decimal{}, nil
+	}
+	q, err := kernel.ParseDecimal(raw, kernel.QuantityFormat)
+	if err != nil {
+		return kernel.Decimal{}, kernel.Reject(kernel.CodeReferenceInvalid, path, "The consumption ledger is not a quantity")
 	}
 	return q, nil
 }

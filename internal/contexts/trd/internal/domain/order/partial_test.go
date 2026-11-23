@@ -114,6 +114,51 @@ func TestPartialOrdersSpendTheQuoteLine(t *testing.T) {
 	}
 }
 
+// S6-07: an amendment's increase is the new quantity minus what this order already holds, and that
+// increase must fit cap minus the ledger. A decrease appends nothing. A quote that is not
+// multi_order appends nothing. An uncapped line records the increase and is not refused.
+func TestAmendmentConsumptionFitsTheRemainingCap(t *testing.T) {
+	capped := quote.Line{LineID: "L1", Quantity: "1200"}
+	doc := quote.Commercial{Data: quote.Terms{ConversionMode: quote.ModeMultiOrder, Lines: []quote.Line{capped, {LineID: "L2", Quantity: "10"}}}}
+	plain := quote.Commercial{Data: quote.Terms{Lines: []quote.Line{capped}}}
+	rows, err := AmendmentConsumption(plain, []PartialLine{{LineID: "L1", Quantity: "9999"}}, nil, nil, "/args")
+	if err != nil || rows != nil {
+		t.Fatalf("single_full: %v %+v", err, rows)
+	}
+	rows, err = AmendmentConsumption(doc, []PartialLine{{LineID: "L1", Quantity: "800"}},
+		map[string]string{"L1": "1100"}, map[string]string{"L1": "700"}, "/proposal")
+	if err != nil || len(rows) != 1 || rows[0].LineID != "L1" || rows[0].Quantity != "100" {
+		t.Fatalf("the held 700 is not counted twice: %v %+v", err, rows)
+	}
+	_, err = AmendmentConsumption(doc, []PartialLine{{LineID: "L9", Quantity: "1"}, {LineID: "L1", Quantity: "801"}},
+		map[string]string{"L1": "1100"}, map[string]string{"L1": "700"}, "/args")
+	if code(err) != "QUOTE_REMAINING_INSUFFICIENT /args/lines/1/quantity" {
+		t.Fatalf("over the cap: %s", code(err))
+	}
+	if rej, ok := kernel.AsRejection(err); !ok || rej.Fields[0].Reason != "cap 1200, consumed 1100, requested 101, remaining 100" {
+		t.Fatalf("reason %v", err)
+	}
+	for _, qty := range []string{"500", "700"} {
+		rows, err = AmendmentConsumption(doc, []PartialLine{{LineID: "L1", Quantity: qty}},
+			map[string]string{"L1": "1100"}, map[string]string{"L1": "700"}, "/args")
+		if err != nil || rows != nil {
+			t.Fatalf("quantity %s does not give quantity back: %v %+v", qty, err, rows)
+		}
+	}
+	rows, err = AmendmentConsumption(doc, []PartialLine{{LineID: "L2", Quantity: "10"}},
+		map[string]string{"L2": "0"}, nil, "/args")
+	if err != nil || len(rows) != 1 || rows[0].Quantity != "10" {
+		t.Fatalf("a line this order has not drawn: %v %+v", err, rows)
+	}
+	open := doc
+	open.Data.Lines = []quote.Line{{LineID: "L1", Quantity: "1200", Uncapped: true}}
+	rows, err = AmendmentConsumption(open, []PartialLine{{LineID: "L1", Quantity: "5000"}},
+		map[string]string{"L1": "1200"}, map[string]string{"L1": "1200"}, "/proposal")
+	if err != nil || len(rows) != 1 || rows[0].Quantity != "3800" {
+		t.Fatalf("uncapped: %v %+v", err, rows)
+	}
+}
+
 // A unit price of 0.005 rounds HALF_UP to one cent, and a stated payment plan must sum to the
 // payable. The quote's own percentages are the plan when the caller states none.
 func TestPartialRepricesHalfUpAndThePaymentPlan(t *testing.T) {
