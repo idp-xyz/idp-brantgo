@@ -83,6 +83,7 @@ TRD,quote.response.verify,仅人工,quote.response.verify,POST /api/brant/v1/trd
 TRD,acceptance.invalidate,仅人工,—（Python 未实现）,POST /api/brant/v1/trd/commands/acceptance.invalidate,S3
 TRD,acceptance.mark_disputed,仅人工,—（Python 未实现）,POST /api/brant/v1/trd/commands/acceptance.mark_disputed,S3
 TRD,order.prepare,人工或 AI（按动作权限）,order.prepare,POST /api/brant/v1/trd/commands/order.prepare,S3
+TRD,order.prepare_partial,仅人工,—（Python 未实现）,POST /api/brant/v1/trd/commands/order.prepare_partial,S3
 TRD,order.review.request,人工或 AI（按动作权限）,order.review.request,POST /api/brant/v1/trd/commands/order.review.request,S3
 TRD,order.review.decide,仅人工,order.review.decide,POST /api/brant/v1/trd/commands/order.review.decide,S3
 TRD,order.activate,仅人工,order.activate,POST /api/brant/v1/trd/commands/order.activate,S3
@@ -122,18 +123,20 @@ PUR,allocation_review.open,系统,—（Python 未实现）,POST /api/brant/v1/p
 PUR,allocation_review.settle,仅人工,—（Python 未实现）,POST /api/brant/v1/pur/commands/allocation_review.settle,S3
 PUR,purchase.commitment.dispose,仅人工,—（Python 未实现）,POST /api/brant/v1/pur/commands/purchase.commitment.dispose,S3
 PUR,purchase.commitment.disposition.decide,仅人工,—（Python 未实现）,POST /api/brant/v1/pur/commands/purchase.commitment.disposition.decide,S3
-MFG,collaboration_plan.publish,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/mfg/commands/collaboration_plan.publish,S6
-MFG,subcontract_order.issue,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/mfg/commands/subcontract_order.issue,S6
-MFG,operation.record_progress,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/mfg/commands/operation.record_progress,S6
+MFG,collaboration_plan.publish,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/mfg/commands/collaboration_plan.publish,S6
+MFG,subcontract_order.issue,仅人工,—（Python 未实现）,POST /api/brant/v1/mfg/commands/subcontract_order.issue,S6
+MFG,operation.record_progress,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/mfg/commands/operation.record_progress,S6
+MFG,mfg.module.configure,仅人工,—（Python 未实现）,POST /api/brant/v1/mfg/commands/mfg.module.configure,S6
 QLT,inspection.record,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/qlt/commands/inspection.record,S5
 QLT,disposition.decide,仅人工,—（Python 未实现）,POST /api/brant/v1/qlt/commands/disposition.decide,S5
 QLT,quality_release.grant,仅人工,—（Python 未实现）,POST /api/brant/v1/qlt/commands/quality_release.grant,S5
 QLT,quality_release.revoke,仅人工,—（Python 未实现）,POST /api/brant/v1/qlt/commands/quality_release.revoke,S5
-STK,stock.receive,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/stk/commands/stock.receive,S6
-STK,stock.issue,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/stk/commands/stock.issue,S6
-STK,stock.adjust,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/stk/commands/stock.adjust,S6
-STK,reservation.place,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/stk/commands/reservation.place,S6
-STK,reservation.release,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/stk/commands/reservation.release,S6
+STK,stock.receive,仅人工,—（Python 未实现）,POST /api/brant/v1/stk/commands/stock.receive,S6
+STK,stock.issue,仅人工,—（Python 未实现）,POST /api/brant/v1/stk/commands/stock.issue,S6
+STK,stock.adjust,仅人工,—（Python 未实现）,POST /api/brant/v1/stk/commands/stock.adjust,S6
+STK,reservation.place,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/stk/commands/reservation.place,S6
+STK,reservation.release,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/stk/commands/reservation.release,S6
+STK,stk.module.configure,仅人工,—（Python 未实现）,POST /api/brant/v1/stk/commands/stk.module.configure,S6
 FUL,milestone.plan,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/ful/commands/milestone.plan,S5
 FUL,milestone.record_actual,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/ful/commands/milestone.record_actual,S5
 FUL,packing.plan,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/ful/commands/packing.plan,S5
@@ -180,10 +183,10 @@ STL,fund.reverse,仅人工,—（Python 未实现）,POST /api/brant/v1/stl/comm
 STL,fund.verify_payer,仅人工,—（Python 未实现）,POST /api/brant/v1/stl/commands/fund.verify_payer,S5
 STL,payable_adjustment.request,仅人工,—（Python 未实现）,POST /api/brant/v1/stl/commands/payable_adjustment.request,S5
 STL,payable_adjustment.confirm,仅人工,—（Python 未实现）,POST /api/brant/v1/stl/commands/payable_adjustment.confirm,S5
-CLM,claim.open,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/clm/commands/claim.open,S6
-CLM,return.register,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/clm/commands/return.register,S6
-CLM,remedy.decide,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/clm/commands/remedy.decide,S6
-CLM,claim.close,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/clm/commands/claim.close,S6
+CLM,claim.open,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/clm/commands/claim.open,S6
+CLM,return.register,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/clm/commands/return.register,S6
+CLM,remedy.decide,仅人工,—（Python 未实现）,POST /api/brant/v1/clm/commands/remedy.decide,S6
+CLM,claim.close,仅人工,—（Python 未实现）,POST /api/brant/v1/clm/commands/claim.close,S6
 CNX,purchase_invoice.import,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/cnx/commands/purchase_invoice.import,S5
 CNX,declaration_case.prepare,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/cnx/commands/declaration_case.prepare,S5
 CNX,declaration_case.record_receipt,仅人工,—（Python 未实现）,POST /api/brant/v1/cnx/commands/declaration_case.record_receipt,S5
@@ -204,8 +207,8 @@ CNX,certificate.register,仅人工,—（Python 未实现）,POST /api/brant/v1/
 CNX,trade_compliance.reopen,系统,—（Python 未实现）,POST /api/brant/v1/cnx/commands/trade_compliance.reopen,S5
 CNX,tax_refund_case.rebind_policy,仅人工,—（Python 未实现）,POST /api/brant/v1/cnx/commands/tax_refund_case.rebind_policy,S5
 CRM,lead.capture,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/crm/commands/lead.capture,S6
-CRM,opportunity.advance,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/crm/commands/opportunity.advance,S6
-CRM,follow_up.record,人工或 AI（按动作权限）,—（Python 未实现）,POST /api/brant/v1/crm/commands/follow_up.record,S6
+CRM,opportunity.advance,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/crm/commands/opportunity.advance,S6
+CRM,follow_up.record,人工或 AI（同一守卫）,—（Python 未实现）,POST /api/brant/v1/crm/commands/follow_up.record,S6
 TSK,task.create,人工或系统（不接受 AI）,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.create,S4
 TSK,task.scope,人工或系统（不接受 AI）,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.scope,S4
 TSK,task.take_control,仅人工,—（Python 未实现）,POST /api/brant/v1/tsk/commands/task.take_control,S4
