@@ -215,8 +215,9 @@ type Order struct {
 	RowVersion      int64
 	Prepared        quote.Act
 	ActivatedReview string
-	// Consumption is the append-only ledger rows a partial preparation writes with the order
-	// (TRD-INV-024). Empty for order.prepare. Not reloaded: the ledger is the record.
+	// Consumption is the append-only ledger rows this command writes (TRD-INV-024): a partial
+	// preparation's lines, or the increases an applied amendment appends. Empty for order.prepare
+	// and for an amendment that does not grow a multi_order line. Not reloaded: the ledger is the record.
 	Consumption []Consumption
 	Reviews     []*Review // in the order they were requested
 	Commits     []*Commit // one per activated order revision

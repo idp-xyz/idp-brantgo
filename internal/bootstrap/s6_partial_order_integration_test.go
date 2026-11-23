@@ -187,6 +187,84 @@ func TestPartialOrderOverHTTPRefusesAI(t *testing.T) {
 	}
 }
 
+// An amendment that grows a line of a multi_order quote must fit the remaining cap. The quantity
+// this order already consumed is not counted twice. A decrease and a cancel do not return
+// quantity. A quote that is not multi_order does not gain a ledger row.
+func TestAmendmentStaysInsideTheQuoteCap(t *testing.T) {
+	q := newOrderWorld(t)
+	capQ := q.multiAccepted("sim.amend", "1200", false)
+	first := q.activePartial(capQ, "order.amend.1", "700")
+	q.partial(capQ, "order.amend.2", "400")
+	v := q.getOrder(first.ObjectID)
+	_, err := q.c.TRD.PrepareAmendment(q.author, q.amendCmd(first.ObjectID, "amendment.over", 0, v.OrderRevision, v.OrderHash, "900"))
+	if code(err) != trdapi.CodeQuoteRemainingInsufficient || path(err) != "/args/lines/0/quantity" {
+		t.Fatalf("prepare past the remaining cap: %s at %s", code(err), path(err))
+	}
+	q.applyAmend(first.ObjectID, "amendment.fit", "800")
+	q.wantLedger(capQ.QuoteID, "1200", "0")
+	if _, err = q.c.TRD.PreparePartialOrder(q.author, q.partialCmd(capQ, "order.amend.3", "1")); code(err) != trdapi.CodeQuoteRemainingInsufficient {
+		t.Fatalf("the applied increase did not take the remainder: %s", code(err))
+	}
+
+	// Prepared while 500 remained, then another order takes 400, so apply must refuse.
+	room := q.multiAccepted("sim.late", "1200", false)
+	held := q.activePartial(room, "order.late.a", "700")
+	hv := q.getOrder(held.ObjectID)
+	approved := q.approvedAmendment(held.ObjectID, "amendment.late", hv.OrderRevision, hv.OrderHash, "1000")
+	q.partial(room, "order.late.b", "400")
+	_, err = q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(held.ObjectID, "amendment.late", approved.RowVersion))
+	if code(err) != trdapi.CodeQuoteRemainingInsufficient || path(err) != "/proposal/lines/0/quantity" {
+		t.Fatalf("apply after the remainder moved: %s at %s", code(err), path(err))
+	}
+	q.wantLedger(room.QuoteID, "1100", "100")
+
+	// A decrease does not put quantity back. Rising back through what this order already
+	// consumed appends nothing. Growing past that high water appends only the extra.
+	down := q.multiAccepted("sim.down", "1200", false)
+	one := q.activePartial(down, "order.down.1", "700")
+	q.applyAmend(one.ObjectID, "amendment.down", "500")
+	q.wantLedger(down.QuoteID, "700", "500")
+	if _, err = q.c.TRD.PreparePartialOrder(q.author, q.partialCmd(down, "order.down.2", "501")); code(err) != trdapi.CodeQuoteRemainingInsufficient {
+		t.Fatalf("a decrease returned quantity: %s", code(err))
+	}
+	q.applyAmend(one.ObjectID, "amendment.back", "650")
+	q.wantLedger(down.QuoteID, "700", "500")
+	up := q.applyAmend(one.ObjectID, "amendment.up", "900")
+	q.wantLedger(down.QuoteID, "900", "300")
+	qty, _ := revisionLine(t, q.getOrder(one.ObjectID).CurrentRevision)
+	if qty != "900" {
+		t.Fatalf("order quantity %s", qty)
+	}
+	ended, err := q.c.TRD.CancelOrder(q.author, trdapi.CancelOrder{IdempotencyKey: q.key(), OrderID: one.ObjectID,
+		ExpectedVersion: up.OrderRowVersion, Reason: "客户撤单", Evidence: q.proof})
+	q.must(err)
+	if ended.Status != trdapi.OrderCancelled {
+		t.Fatalf("cancel %+v", ended)
+	}
+	q.wantLedger(down.QuoteID, "900", "300")
+	if _, err = q.c.TRD.PreparePartialOrder(q.author, q.partialCmd(down, "order.down.3", "301")); code(err) != trdapi.CodeQuoteRemainingInsufficient {
+		t.Fatalf("cancel returned quantity: %s", code(err))
+	}
+
+	open := q.multiAccepted("sim.uncap", "1200", true)
+	big := q.activePartial(open, "order.uncap.1", "1200")
+	q.applyAmend(big.ObjectID, "amendment.uncap", "2500")
+	led := q.getQuote(open.QuoteID).MultiOrderLedger
+	if led == nil || len(led.Lines) != 1 || !led.Lines[0].Uncapped || led.Lines[0].Consumed != "2500" || led.Lines[0].Remaining != "" {
+		t.Fatalf("uncapped ledger %+v", led)
+	}
+
+	before := q.count("company.A", "brant_trd.quote_order_consumption")
+	plain := q.activeOrder("quote.plaincap")
+	q.applyAmend(plain.ObjectID, "amendment.plain", "140")
+	if n := q.count("company.A", "brant_trd.quote_order_consumption"); n != before {
+		t.Fatalf("a full_v1 amendment wrote the ledger: %d rows, was %d", n, before)
+	}
+	if view := q.getQuote("quote.plaincap"); view.MultiOrderLedger != nil || view.Conversion == nil || view.Conversion.Slot != "full_v1" {
+		t.Fatalf("a default quote after an increase: ledger %+v conversion %+v", view.MultiOrderLedger, view.Conversion)
+	}
+}
+
 func (q *trdWorld) multiData(quantity string, uncapped bool) trdapi.QuoteData {
 	q.ensureMultiBasis(quantity)
 	d := q.data()
@@ -284,6 +362,32 @@ func (q *trdWorld) partial(a trdapi.AcceptanceReceipt, order, quantity string) t
 	o, err := q.c.TRD.PreparePartialOrder(q.author, q.partialCmd(a, order, quantity))
 	q.must(err)
 	return o
+}
+
+func (q *trdWorld) activePartial(a trdapi.AcceptanceReceipt, order, quantity string) trdapi.OrderReceipt {
+	q.t.Helper()
+	o := q.partial(a, order, quantity)
+	d := q.reviewed(o, "review."+order)
+	act, err := q.c.TRD.ActivateOrder(q.author, q.activateOrderCmd(o.ObjectID, d.RowVersion, "review."+order))
+	q.must(err)
+	return act
+}
+
+func (q *trdWorld) applyAmend(order, id, quantity string) trdapi.AmendmentReceipt {
+	q.t.Helper()
+	v := q.getOrder(order)
+	d := q.approvedAmendment(order, id, v.OrderRevision, v.OrderHash, quantity)
+	got, err := q.c.TRD.ApplyAmendment(q.reviewer, q.applyCmd(order, id, d.RowVersion))
+	q.must(err)
+	return got
+}
+
+func (q *trdWorld) wantLedger(id, consumed, remaining string) {
+	q.t.Helper()
+	ledger := q.getQuote(id).MultiOrderLedger
+	if ledger == nil || len(ledger.Lines) != 1 || ledger.Lines[0].Consumed != consumed || ledger.Lines[0].Remaining != remaining {
+		q.t.Fatalf("ledger of %s: %+v", id, ledger)
+	}
 }
 
 func (q *trdWorld) wantPayable(o trdapi.OrderReceipt, want string) {
