@@ -4,18 +4,18 @@ title: IDP Brant 服装行业插件（industry.apparel）详细设计说明书 V
 short: 服装行业插件详细设计 V0.1
 kicker: IDP BRANT / 05 TACTICAL DDD / APPAREL INDUSTRY PLUGIN DETAILED DESIGN V0.1
 doc_title: 服装行业插件（industry.apparel）详细设计 V0.1
-doc_desc: trade-extension.v1 扩展点底座 · CAT 款色码与样衣批准 · CST 成本 BOM 与替代审批 · 七步固定计价与混单拦截 · QLT/FUL 服装参数 · AI 行业契约 · PG16 迁移与四切片计划
+doc_desc: trade-extension.v1 扩展点底座 · CAT 款色码与样衣批准 · CST 分码单耗 BOM、MCQ 起染费与替代审批 · 大货短溢装容差 · QLT/FUL 质检配比与装柜测算 · AI 行业契约
 meta: 版本=V0.1 Design Candidate; 日期=2026-11-24; 代码基线=main 80e94b5 / 8066e1c; 依据=ADR-BR-008 · 基线第 2.3/5/8.8/15.5/18 章; 证据层级=E0 编码前设计文档
 stage: 05 · 战术 DDD
 eyebrow: APPAREL PLUGIN DESIGN
-search: 搜索 ADR-BR-EXT、SampleApproval、CostBOM、document_profile、错误码、迁移、守卫锁或用例
+search: 搜索 ADR-BR-EXT、SampleApproval、CostBOM、分码单耗、MCQ、短溢装、装柜、错误码或用例
 foot: Apparel Industry Plugin Detailed Design V0.1 · 2026-11-24 · E0 Pre-Implementation
 ---
 <span class="scope-badge">DETAILED DESIGN V0.1 (E0 PRE-IMPLEMENTATION) · ADR-BR-008 · BASELINE 8066e1c · NO GO CODE CHANGED</span>
 
 <h2>以扩展点而非第 19 个上下文的方式，在确定性核价、守卫锁序与 AI 契约下交付服装行业包</h2>
 
-<p class="lede">本文件是 <b>IDP Brant 服装行业插件（<code>industry.apparel</code>，版本 <code>0.1.0</code>，契约 <code>trade-extension.v1</code>）</b>及其前置能力的编码前详细设计说明书。设计严格依据《产品与研发范围基线 V1.0》第 2.3、5.1—5.8、8.8、15.5、18.1—18.4 章、附录 B Schema 与 <code>ADR-BR-008</code>，并逐项对齐 <code>main</code> 分支当前代码（<code>8066e1c</code> / <code>80e94b5</code>）：保留 18 个限界上下文的单写者权威与无环守卫锁拓扑，通过平台扩展底座（<code>brant_ext</code>）与四个上下文的显式扩展点，完整补齐产品能力目录 <code>F13</code>（款色码、样衣批准、成本 BOM、替代物料审批、服装质检参数与尺码装箱配比）及对应 AI 行业契约。</p>
+<p class="lede">本文件是 <b>IDP Brant 服装行业插件（<code>industry.apparel</code>，版本 <code>0.1.0</code>，契约 <code>trade-extension.v1</code>）</b>及其前置能力的编码前详细设计说明书。设计严格依据《产品与研发范围基线 V1.0》第 2.3、5.1—5.8、8.8、15.5、18.1—18.4 章、附录 B Schema 与 <code>ADR-BR-008</code>，并对照 SAP Fashion 与中国服装外贸实战要求逐项对齐 <code>main</code> 分支当前代码（<code>8066e1c</code> / <code>80e94b5</code>）：保留 18 个限界上下文的单写者权威与无环守卫锁拓扑，通过平台扩展底座（<code>brant_ext</code>）与四个上下文的显式扩展点，完整补齐产品能力目录 <code>F13</code>（款色码矩阵、样衣批准、分码单耗 CostBOM、面料起染费 MCQ 与打样版费、替代物料审批、大货短溢装容差与增量信用守卫、服装质检参数、尺码装箱配比及箱规装柜测算）及对应 AI 行业契约。</p>
 
 ::: cover
 - 设计依据 | `ADR-BR-008`（行业插件是扩展点而非限界上下文）、`ADR-BR-004` 方案 B（事务内守卫 `FOR SHARE`）、`ADR-BR-011`（确定性锁序）及产品基线第 5/8.8/15.5/18 章。
@@ -26,7 +26,7 @@ foot: Apparel Industry Plugin Detailed Design V0.1 · 2026-11-24 · E0 Pre-Imple
 {{app_kpis}}
 
 > [!warn] 编码前纪律声明（Design-First Discipline）
-> 1. **本文件尚未对应已实现代码**：文中的 `brant_ext`、`Item`、`SampleApproval`、`CostBOM`、10 个 SQL 迁移、13 条新命令、10 个错误码与 `internal/plugins/apparel` 均为**待实施设计规格**，不代表当前 `8066e1c` 已支持这些路由或行为。
+> 1. **本文件尚未对应已实现代码**：文中的 `brant_ext`、`Item`、`SampleApproval`、`CostBOM`、10 个 SQL 迁移、13 条新命令、13 个错误码与 `internal/plugins/apparel` 均为**待实施设计规格**，不代表当前 `8066e1c` 已支持这些路由或行为。
 > 2. **既有规范 JSON 在编码前保持不变**：为保持当前主干 `make check`、`build_archive.py` 与 `02_go_source_manifest.txt`（1,369 个 Go 文件）完全一致，设计源 JSON 变更清单统一汇总在第 08 章与第 10 章的「切片 A · P1-R0」中，随首波代码一并落地。
 > 3. **业务默认值待服装角色签核**：色批是否强制同缸发货、缩水与配比容差默认值、哪类样衣阶段阻断正式化或出运等属于客户／行业政策参数，本设计全部做成公司级可配置策略，商业上线前须经真实服装业务角色在 G0/G3 签核。
 
@@ -42,7 +42,7 @@ foot: Apparel Industry Plugin Detailed Design V0.1 · 2026-11-24 · E0 Pre-Imple
   2. 战术模型中 `CAT-AGG-Item`（商品款式）与 `CAT-AGG-SampleApproval`（`sample.approve`）仍为「轮廓聚合，待详细设计」，`brant_cat` 尚无对应表与 `SampleGuard v1`；
   3. `CST` 目前仅有通用 `CostScenario` 与 `CostSnapshot`，尚无版本化 `CostBOM`（面辅料单耗、幅宽、克重、缩水、损耗）与替代物料审批模型。
 
-### 1.2 六项核心设计裁决（ADR-BR-EXT-001—006）
+### 1.2 七项核心设计裁决（ADR-BR-EXT-001—007）
 
 {{app_adrs}}
 
@@ -52,9 +52,9 @@ foot: Apparel Industry Plugin Detailed Design V0.1 · 2026-11-24 · E0 Pre-Imple
 |---|---|---|
 | 商品与规格（`CAT`） | 款式 `Item` → 颜色 × 尺码矩阵 → 绑定已确认交易 `SKU`；面料幅宽（cm）、克重（GSM）、缩水率（%）、色批／缸号策略；严格区分 `measured=true` 实测值与预估值 | 不替换现有 `SkuRef` 主键语义；不做完整 PLM 版单管理或自动生成未知 SKU |
 | 样衣批准（`CAT`） | 样衣送审草稿、`sample.approve`（人工专属）、`sample.revoke`（人工专属）；强绑定 `(sku_id, spec_revision)` 与样衣阶段（`proto`/`fit`/`pp_sample`/`shipment`）；`SampleGuard v1` | 不做外部打样工厂协同门户或自动免除技术版本升版后的重新确认 |
-| 成本与用料（`CST`） | 版本化 `CostBOM`（面料／辅料／包装明细）、基于幅宽／克重／缩水／损耗的确定性用料与成本估算（`cost.estimate.v1`）；替代面辅料变更申请与独立人工审批 | **不做自动排料、裁床算料优化或自有车间工单在制核算**；替代绝不倒写已发料／已加工／已交付事实 |
-| 报价与目标（`TRD`/`INQ`） | `document_profile`（`generic` \| `apparel`）防混单；`quote.validate.v1` 合并校验；`Q01.industry` 接入 `SampleGuard v1` 与 `CostBOMGuard v1`；全面覆盖 `S-D` 反例 | 不支持单据内跨行业模板逐行混单，不支持不同模板订单合并出运（基线 2.3 后置） |
-| 质检与装箱（`QLT`/`FUL`） | 服装检验扩展参数（色差等级、水洗缩水实测、关键部位尺寸公差、色批／缸号核对）；装箱尺码配比（Assortment / Ratio Pack）与同色批约束校验 | 不以插件检验参数替代核心 `QualityReleaseGuard v1` 或商业条件放行五重闸门 |
+| 成本与用料（`CST`） | 版本化 `CostBOM`（支持**统一基准码**与**按尺码分档单耗 `size_graded`**）、基于幅宽／克重／缩水／损耗的确定性估算（`cost.estimate.v1`）、**按色汇总面料起染量附加费（MCQ / Dye Lot Surcharge）与打样／版费摊销**、替代面辅料独立审批 | **不做自动排料、裁床算料优化或自有车间工单在制核算**；替代绝不倒写已发料／已加工／已交付事实 |
+| 报价、订单与容差（`TRD`/`INQ`） | `document_profile`（`generic` \| `apparel`）防混单；`quote.validate.v1` 合并校验；**大货短溢装容差（总容差 ±3% ＋ 单色单码 ±5%，溢装增量须过 `STL` 信用守卫）**；`Q01.industry` 接入 `SampleGuard v1` 与 `CostBOMGuard v1` | 不支持单据内跨行业模板逐行混单，不支持不同模板订单合并出运（基线 2.3 后置） |
+| 质检、装箱与装柜（`QLT`/`FUL`） | 服装检验扩展参数（色差、水洗缩水、尺寸公差、色批／缸号）；装箱尺码配比（Assortment / Ratio Pack）、同色批约束、**箱规长宽高 CBM／毛净重推算与 20GP/40GP/40HQ 装柜容积载重校核** | 不做 3D 拼柜排箱算法，也不以插件检验参数替代核心 `QualityReleaseGuard v1` 或五重商业放行闸门 |
 | 轻 CRM 桥接与 AI | `CRM` 开启时条件加载 `apparel.crm.bridge`，`CRM` 关闭时不加载且不反向强制安装 CRM；对接附录 B 五项 AI 行业契约与 `ExecutionBundle` 指纹 | 不允许第三方公网任意上传动态加载代码；不宣称同进程硬沙箱；**不涉及 BIP** |
 
 ## 02 运行时架构、分层依赖与 trade-extension.v1 契约 {#s2}
@@ -254,23 +254,35 @@ $$;
   - `brant_cst.cost_bom_revision`（不可变修订）：固化 `content_sha256`、`verified_by_id`（必须独立于编制人的 `costing` 人工角色）、`authority_epoch`、`evidence_ids[]`。
   - `brant_cst.cost_bom_line`（面辅料明细行，全数值列为高精度十进制字符串／numeric，**禁用 float**）：
     - `line_id`、`material_kind`（`shell_fabric` 主面料 | `lining` 里料 | `interlining` 衬布 | `trim` 辅料 | `packaging` 包装 | `labor_cm` 加工费）
-    - `material_code`、`unit`（如 `M`、`KG`、`PCS`）、`consumption_per_unit`（单件净耗，6 位小数）
+    - `material_code`、`unit`（如 `M`、`KG`、`PCS`）、`grading_mode`（`uniform` 统一基准码 | `size_graded` 按尺码分档）、`consumption_per_unit`（基准码单件净耗，6 位小数）
     - `wastage_ratio`（工艺损耗率，8 位小数，如 `0.03` 表示 3%）、`shrinkage_factor`（缩水补偿系数，如经纬缩水折算后的 `1.04`）
     - `fabric_width_cm`、`fabric_gsm`、`measured`（实测标记）与 `formula_basis`（计算依据标识：`direct_qty` | `width_length_m` | `gsm_weight_kg`）
     - `supply_ref`（可选引用 `SUP` 已核实供应报价版本，保证单价有据可查）。
+  - `brant_cst.cost_bom_size_grade`（**按尺码分档单耗子表**，同属 `cst/000004`，`FORCE RLS`）：
+    - 主键 `(tenant_id, company_id, bom_id, revision, line_id, size_code)`；登记各尺码或尺码档（如 `S`/`M` `1.45 M`、`L`/`XL` `1.60 M`、`2XL`/`3XL` `1.78 M`）的精确净耗 `consumption_per_unit`（6 位小数）与可选尺码加工加价 `size_cm_delta_minor`（解决欧美大码订单按单码均值算亏的行业痛点）。
+  - `brant_cst.cost_bom_surcharge`（**面料起染费 MCQ 与打样／版费子表**，同属 `cst/000004`，`FORCE RLS`）：
+    - 登记按色汇总触发的染厂起染量阈值（`mcq_threshold` ＋ `mcq_unit`）与起染附加费（`surcharge_kind`: `dye_lot_mcq` | `trim_moq_surcharge` | `sample_dev_fee` | `pattern_fee`）、归属范围（`per_color` | `per_style` | `per_order`）、固定金额或分级单价（`kernel.Money`）、摊销口径（`order_lump_sum` 整单列支 | `allocate_by_qty` 按件最大余数法分摊到对应色行）以及关联 `POL fee_category` 费目。
 
-### 4.2 确定性服装用料与成本估算公式（`cost.estimate.v1`）
+### 4.2 确定性服装用料、分码单耗与 MCQ／版费核算公式（`cost.estimate.v1`）
 
 `internal/plugins/apparel/cost_provider.go` 全部使用 `internal/kernel` 的精确有理数（`big.Rat`，中间精度 ≥ 34 位有效数字）计算每条 BOM 行的有效单耗与标准成本组件，只在行金额出口按币种最小单位做一次 `HALF_UP` 舍入：
 
-1. **按米计价主面料（`width_length_m`）**：
-   `有效单耗 (M/件) = 基础排料米数 × (基准幅宽 / 实际有效幅宽) × 缩水补偿系数 × (1 + 损耗率)`
-2. **按公斤计价针织面料（`gsm_weight_kg`）**：
-   `有效单耗 (KG/件) = (有效用布面积 m²/件 × 克重 g/m² / 1000) × 缩水补偿系数 × (1 + 损耗率)`
-3. **辅料／包装／加工费（`direct_qty`）**：
-   `有效单耗 = 单件净耗 × (1 + 损耗率)`
-4. **行标准成本**：
-   `行总用量 = 订单行数量（已换算至基础单位 PCS）× 有效单耗`；`行标准成本（最小单位）= RoundHalfUp(行总用量 × 供应单价)`
+1. **尺码单耗查找（严禁静默回退）**：
+   - 当 `grading_mode = "uniform"` 时取 `cost_bom_line.consumption_per_unit`；
+   - 当 `grading_mode = "size_graded"` 时，按订单行 SKU 对应的 `size_code` 精确查找 `cost_bom_size_grade`；**若某尺码未命中分档，立即拒绝 `422 BOM_SIZE_GRADE_MISSING`，绝不静默回退基准码**。
+2. **按米计价主面料（`width_length_m`）**：
+   `有效单耗 (M/件) = 对应尺码净耗 × (基准幅宽 / 实际有效幅宽) × 缩水补偿系数 × (1 + 损耗率)`
+3. **按公斤计价针织面料（`gsm_weight_kg`）**：
+   `有效单耗 (KG/件) = (对应尺码用布面积 m²/件 × 克重 g/m² / 1000) × 缩水补偿系数 × (1 + 损耗率)`
+4. **辅料／包装／加工费（`direct_qty`）**：
+   `有效单耗 = 对应尺码净耗 × (1 + 损耗率)`（若含 `size_cm_delta_minor`，单独累加至加工费组件）。
+5. **行标准材料成本**：
+   `行总用量 = 订单行数量（已换算至基础单位 PCS）× 有效单耗`；`行标准成本（最小单位）= RoundHalfUp(行总用量 × 供应单价)`。
+6. **分色汇总起染量（MCQ）与打样／版费核算**：
+   - 按 `(material_code, color_code)` 聚合同一颜色下全部尺码的真实总用布量 `color_total_usage = Σ 行总用量`；
+   - 若 `color_total_usage < mcq_threshold`，自动生成显式成本组件 `Kind = "surcharge"`（保留触发颜色、实际用量与阈值证据），并按最大余数法分摊到该颜色的订单行（保证分摊之和与附加费逐分守恒）；同一 `obligation_id` 绝不重复计费（遵守 T02 §6）；
+   - 若供应商／BOM 声明了 `mcq_threshold` 但未明确起染费金额，拒绝 **`CHARGE_SCOPE_UNRESOLVED`**，绝不按 `0` 静默放行；
+   - 按款／按单登记的 `sample_dev_fee` 与 `pattern_fee` 作为显式一次性成本组件进入 `CostScenario`，并在冻结快照中固定分摊方式。
    - **重要约束**：若任意必需工艺参数（幅宽／克重／缩水）为 `measured=false` 且公司政策开启「正式报价必须实测」，或引用了 `draft`/`withdrawn` 的 BOM，`cost.estimate.v1` 必须返回 `adoptable = false` 与 `BOM_UNVERIFIED`，**绝不静默产出可报价成本**；且 `cost.estimate.v1` 永不直接写出最终售价。
 
 ### 4.3 替代面辅料变更审批与不可倒写原则（基线 5.8）
@@ -306,14 +318,32 @@ $$;
   - `APP-VAL-04`（`reject`）：`CostBOM` 含未审批替代物料（`BOM_SUBSTITUTION_UNAPPROVED`）或强制实测参数为 `measured=false`（`BOM_UNVERIFIED`）。
   - `APP-VAL-05`（`requires_approval`，`Waivable=true`）：色批容差放宽或特殊尺码加价豁免（须显式内容绑定审批，注明规则 ID、快照哈希与插件版本）。
 
-### 5.3 `QLT` 服装质检参数与 `FUL` 尺码装箱配比扩展
+### 5.3 大货短溢装容差与溢装增量信用守卫（Delivery Tolerance · `ADR-BR-EXT-007`）
+
+纺织服装大货裁片与整烫天然存在小幅短装或溢装（行业合同通常约定“整单 ±3%，单色单码 ±5%”）。对标 SAP SD/MM 的 Delivery Tolerance，设计在不破坏既有不变量的前提下引入显式合同容差：
+
+- **合同级声明（`migrations/trd/000013`）**：`quote_revision` 与 `sales_order` 增加可选结构 `delivery_tolerance { short_pct, over_pct, per_line_short_pct, per_line_over_pct }`（`kernel.Decimal` 8 位精度比例，上限硬限 ≤ `0.20`）。`generic` 单据默认全 `0`（保持既有严格不超量行为 100% 不变）；`apparel` 单据按客户合同约定写入并在商业哈希（`business_hash`）与审批中绑定。
+- **出运上下限守卫（`FUL` 调用 `OrderGuard v1`）**：
+  - 单行累计已确认出运上限：`max_line_ship = floor(ordered_line_qty × (1 + per_line_over_pct))`；
+  - 整单累计已确认出运上限：`max_order_ship = floor(total_ordered_qty × (1 + over_pct))`；
+  - 任意一笔 `shipment.prepare` 或 `shipment.confirm` 若使累计量超过上述任一上限，立即拒绝 **`409 DELIVERY_TOLERANCE_EXCEEDED`**。
+- **溢装增量信用守卫（严防借溢装绕过信用控制）**：对于含出运后收款条款的赊销订单，若本次出运触发了超出原订购量的溢装金额增量 `over_amount_minor > 0`，`FUL shipment.confirm` 在调用 `STL PaymentConditionGuard` 时必须校验客户信用额度覆盖该溢装增量（否则拒绝放行或要求非销售的信用经理显式批准，绝不允许借 +5% 溢装悄悄突破信用额）。
+- **短装容差结案与 `TRD-INV-018` 兼容**：当每行与整单累计出运均达到短装下限 `ceil(ordered_qty × (1 - short_pct))` 时，允许按「容差内完成」正常结案并按实出数量在 `STL` 结算；低于短装下限仍走既有短交关闭流程；生效订单变更仍严格遵守 `TRD-INV-018`（变更后数量 ≥ 已确认出运量）。
+
+### 5.4 `QLT` 服装质检参数、`FUL` 尺码装箱配比与箱规装柜测算
 
 - **`QLT` 扩展（`migrations/qlt/000004_qlt_apparel_inspection_params.sql`）**：
   - 在 `inspection.record` 请求中增加可选的 `apparel_checks` 结构化数组（仅当所检采购承诺／委外单归属 `apparel` 订单时接受，否则拒 `DOCUMENT_PROFILE_MISMATCH`）：记录**色差灰卡等级（`color_fastness_grade`）**、**水洗经／纬缩水实测（`measured_warp_shrinkage_pct` / `measured_weft_shrinkage_pct`）**、**关键部位尺寸公差判定（`measurement_tolerance_pass`）**与**色批／缸号（`dye_lot_no`）**，每项绑定检验报告证据文件。
   - `InspectionValidator` 校验实测值是否在规格公差内；若 `dye_lot_policy = same_lot_per_color` 且同色出现混缸且无让步处置（`disposition.decide` `concession`），拒绝放行。
-- **`FUL` 扩展（`migrations/ful/000012_ful_document_profile_and_size_ratio.sql`）**：
-  - 在 `packing.plan` 与 `packing.record_actual` 中支持服装**尺码装箱配比规则（Assortment / Ratio Pack）**：例如每箱按 `S:M:L = 1:2:1` 混码装 `24` 件或单色单码独箱，以及可选的 `dye_lot_no` 同箱校验。
-  - `PackingValidator` 使用精确整数比对验证每箱内各尺码件数严格符合配比比例、箱数 × 单箱件数与出运总件数严格守恒；任一偏差立即拒绝 **`422 PACKING_RATIO_MISMATCH`**，确保双语装箱单（`ShipmentDocumentSet`）数据逐件可溯。
+- **`FUL` 尺码配比与箱规装柜测算（`migrations/ful/000012_ful_document_profile_and_size_ratio.sql`）**：
+  - 在 `packing.plan` 与 `packing.record_actual` 中支持服装**尺码装箱配比规则（Assortment / Ratio Pack）**与**单箱物理规格（Carton Spec）**：
+    - 配比定义：单箱混码比例（如 `S:M:L = 1:2:1`，单箱 `24` 件）或单色单码独箱、尾箱规则（`allow_remainder_carton`）、以及可选同箱同缸（`dye_lot_no`）校验。
+    - 箱规与装柜参数：单箱外径 `length_cm` × `width_cm` × `height_cm`、`net_weight_kg`、`gross_weight_kg`（强制 `gross >= net`），以及可选目标集装箱型 `container_type`（`20GP` | `40GP` | `40HQ` | `LCL`，柜型有效净容积与限重基准取自公司 `POL` 配置，不写死魔法数）。
+  - `PackingValidator` 使用 `kernel.Decimal` 精确执行四项校验：
+    1. **件数与配比守恒**：每箱内各尺码件数严格符合配比比例，箱数 × 单箱件数（含显式声明尾箱）与出运总件数严格相等，否则拒 **`422 PACKING_RATIO_MISMATCH`**；
+    2. **箱规 CBM 与毛净重推算核对**：`单箱体积 (CBM) = (L × W × H) / 1,000,000`，`总 CBM = Σ(箱数 × 单箱体积)`，`总毛重 = Σ(箱数 × 单箱毛重)`；若请求手填的 `Package.VolumeCbm` / `GrossWeightKg` / `NetWeightKg` 与箱规推算值超出允许舍入差，拒绝 `422 PACKING_RATIO_MISMATCH`（防手填错小数点导致订舱爆仓）；
+    3. **集装箱容积与载重校核**：指定整柜类型时，计算精确体积利用率（%）与载重利用率（%）；若总 CBM 超出目标柜型配置净容积（如 `40HQ` 常用净容积 `68.000 CBM`）或总毛重超限重上限，拒绝 **`422 CONTAINER_CAPACITY_EXCEEDED`** 并返回需拆柜／升级柜型提示；
+    4. **核价前置复用**：经核实的箱规规格可同步供 `CST MeasurementSnapshot` 引用，使海运按方／按柜费用分摊与实际出运单证保持同一口径。
 
 ## 06 数据库 Schema、PostgreSQL 16 迁移与无环锁序设计 {#s6}
 
@@ -333,7 +363,7 @@ $$;
   4. `brant_cat` **`FOR SHARE`**：先按 `(sku_id, spec_revision)` 字典序调 `SkuGuard v1`，再按 `(sku_id, stage)` 字典序调 `SampleGuard v1`；
   5. `brant_cst` **`FOR SHARE`**：先调 `AdoptabilityGuard v1`，再调 `CostBOMGuard v1`；
   6. 依次调 `brant_inq`（`RfqGuard v1`）→ `brant_pol`（`ConfigGuard v1`）→ `brant_pty`（`TradingProfileGuard v1` / `AddressRoleGuard v1`）**`FOR SHARE`**。
-- **死锁免疫性**：所有上游守卫严格沿 Context Map DAG 拓扑单向向下调用，且同类对象按主键字典序排序加锁；既有 `build_archive.py` 守卫锁环检测（后续更新至 29 条守卫锁边）继续保持**严格无环**。
+- **死锁免疫性**：所有上游守卫严格沿 Context Map DAG 拓扑单向向下调用，且同类对象按主键字典序排序加锁；`FUL shipment.confirm` 在检查 `apparel` 溢装容差增量信用时，仍严格遵守既有 `FUL` 锁序（`OrderGuard v1` 读取容差 → `PaymentConditionGuard` 校验增量信用），不引入任何反向锁边；既有 `build_archive.py` 守卫锁环检测（后续更新至 29 条守卫锁边）继续保持**严格无环**。
 
 ## 07 插件生命周期、停用在途保护与 AI 行业契约 {#s7}
 
@@ -406,6 +436,8 @@ $$;
 | `APP-D02` | 同色服装是否强制同色批／同缸发货（`same_lot_per_color`）？ | 默认允许配置 `none` / `same_lot_per_color` / `same_lot_per_order`，混缸须 `QLT` 让步处置 | 客户代表 ＋ 质检负责人 |
 | `APP-D03` | 正式报价是否禁止含 `measured=false`（估算幅宽／克重／缩水）的 BOM？ | 默认开启硬阻断 `BOM_UNVERIFIED`，可按公司政策配置为 `requires_approval` 例外放行 | 核价负责人 ＋ 财务 |
 | `APP-D04` | 服装尺码配比装箱（Ratio Pack）是否允许尾箱非整数倍散箱？ | 默认支持显式声明尾箱规则（`allow_remainder_carton`），未声明则按严格整比校验 | 单证 ＋ 跟单负责人 |
+| `APP-D05` | 服装大货默认短溢装容差比例（总容差／单色单码容差）及溢装增量信用放行规则？ | 默认 `generic = 0%`；`apparel` 支持合同逐单配置（典型 `±3% / ±5%`，系统硬上限 `20%`），溢装增量强制过 `STL` 信用校验 | 销售 ＋ 信用经理 ＋ 财务 |
+| `APP-D06` | `20GP`/`40GP`/`40HQ` 净容积与载重上限基准、以及起染费 MCQ 对应的 `POL fee_category`？ | 全部纳入公司级 `POL` 配置版本化管理（示例默认 `40HQ = 68 CBM / 26,000 KG`，可按船公司或客户调整） | 物流／单证 ＋ 核价负责人 |
 
 ### 10.3 关联主档案索引
 

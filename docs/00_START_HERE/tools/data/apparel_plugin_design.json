@@ -49,18 +49,25 @@
       "decision": "扩展 internal/ai/executionevidence.Bundle 增加 Plugins []PluginRef（id、version、contract_version、manifest_sha256），由规范化 JSON 参与 bundle SHA-256 计算；插件升级后在途 AI 任务在下次运行前因哈希不匹配暂停（EXECUTION_BUNDLE_INCOMPATIBLE）。",
       "rationale": "复用已经通过脚本与现场评测 5/5 的 CT14 机制，保证插件规则或 AI 语义升级不会静默改变正在等待审批的旧任务。",
       "status": "PROPOSED"
+    },
+    {
+      "id": "ADR-BR-EXT-007",
+      "title": "服装大货短溢装容差显式绑定合同修订，溢装增量必须通过 STL 信用守卫复核",
+      "decision": "generic 订单维持零溢装（over_pct=0）；apparel 报价／订单可显式声明合同级总容差与单色单码容差（如 ±3%／±5%，kernel.Decimal 8 位精度）。FUL 确认出运在容差上限内放行，超限拒 409 DELIVERY_TOLERANCE_EXCEEDED；任何超出原订购量的溢装金额增量在出运放行时同步经 STL CreditGuard 校验额度，防止借溢装绕过信用控制。",
+      "rationale": "兼顾纺织服装大货天然存在的短溢装行业惯例（对标 SAP Delivery Tolerance）与 Brant 信用零绕过铁律（STL-INV-004）。",
+      "status": "PROPOSED"
     }
   ],
   "migrations": [
     {"seq": "ext/000001", "file": "migrations/ext/000001_ext_plugin_activations.sql", "schema": "brant_ext", "manifestPos": "ref 之后、evd 之前", "tables": "plugin_activation, plugin_activation_history, action_result, audit_event", "guard": "brant_ext.guard_plugin_active_v1(p_plugin_id, p_document_profile)", "rls": "FORCE RLS (tenant_id, company_id)"},
     {"seq": "cat/000005", "file": "migrations/cat/000005_cat_items_apparel_matrix.sql", "schema": "brant_cat", "manifestPos": "既有 cat 目录末尾", "tables": "item, item_revision, item_sku_variant（款-色-码-SKU 映射与服装技术参数）", "guard": "复用 SkuGuard v1 + item_sku_variant FK 约束", "rls": "FORCE RLS (tenant_id, company_id)"},
     {"seq": "cat/000006", "file": "migrations/cat/000006_cat_sample_approvals.sql", "schema": "brant_cat", "manifestPos": "紧随 cat/000005", "tables": "sample_approval, sample_approval_revision", "guard": "brant_cat.guard_sample_approved_v1(p_sku_id, p_spec_revision, p_stage)", "rls": "FORCE RLS (tenant_id, company_id)"},
-    {"seq": "cst/000004", "file": "migrations/cst/000004_cst_cost_boms.sql", "schema": "brant_cst", "manifestPos": "既有 cst 目录末尾", "tables": "cost_bom, cost_bom_revision, cost_bom_line（面辅料单耗、幅宽、克重、缩水、损耗）", "guard": "brant_cst.guard_cost_bom_current_v1(p_bom_id, p_revision, p_content_sha256)", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "cst/000004", "file": "migrations/cst/000004_cst_cost_boms.sql", "schema": "brant_cst", "manifestPos": "既有 cst 目录末尾", "tables": "cost_bom, cost_bom_revision, cost_bom_line, cost_bom_size_grade（分码单耗）, cost_bom_surcharge（起染费 MCQ ／ 打样版费）", "guard": "brant_cst.guard_cost_bom_current_v1(p_bom_id, p_revision, p_content_sha256)", "rls": "FORCE RLS (tenant_id, company_id)"},
     {"seq": "cst/000005", "file": "migrations/cst/000005_cst_bom_substitutions.sql", "schema": "brant_cst", "manifestPos": "紧随 cst/000004", "tables": "cost_bom_substitution（原/替物料、数量、技术版本、独立审批记录）", "guard": "不可变记录触发器，禁止修改已发料/已加工/已交付事实", "rls": "FORCE RLS (tenant_id, company_id)"},
     {"seq": "inq/000005", "file": "migrations/inq/000005_inq_document_profile.sql", "schema": "brant_inq", "manifestPos": "既有 inq 目录末尾", "tables": "ALTER brant_inq.rfq ADD document_profile（默认 generic，不可变）", "guard": "确认后禁止更改 profile 触发器", "rls": "继承既表 FORCE RLS"},
-    {"seq": "trd/000013", "file": "migrations/trd/000013_trd_document_profile_and_plugin_snapshot.sql", "schema": "brant_trd", "manifestPos": "紧随 trd/000012", "tables": "ALTER quote_root / quote_revision / sales_order ADD document_profile & plugin_snapshot（版本、规则校验结果、样衣绑定引用）", "guard": "freeze/activate 时校验与 INQ/CST profile 一致", "rls": "继承既表 FORCE RLS"},
+    {"seq": "trd/000013", "file": "migrations/trd/000013_trd_document_profile_and_plugin_snapshot.sql", "schema": "brant_trd", "manifestPos": "紧随 trd/000012", "tables": "ALTER quote_root / quote_revision / sales_order ADD document_profile, plugin_snapshot, delivery_tolerance（总／单行短溢装比例，默认 0）", "guard": "freeze/activate 时校验 profile 一致并向 FUL 暴露容差上限", "rls": "继承既表 FORCE RLS"},
     {"seq": "qlt/000004", "file": "migrations/qlt/000004_qlt_apparel_inspection_params.sql", "schema": "brant_qlt", "manifestPos": "既有 qlt 目录末尾", "tables": "inspection_apparel_check（色差、缩水、尺寸公差、色批/缸号实测与证据）", "guard": "仅绑定 confirmed inspection；未测标记 measured=false 不冒充实测", "rls": "FORCE RLS (tenant_id, company_id)"},
-    {"seq": "ful/000012", "file": "migrations/ful/000012_ful_document_profile_and_size_ratio.sql", "schema": "brant_ful", "manifestPos": "紧随 ful/000011", "tables": "ALTER shipment ADD document_profile；新建 packing_assortment_rule（尺码配比与色批配套校验）", "guard": "prepare 时拒绝跨模板订单合并出运", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "ful/000012", "file": "migrations/ful/000012_ful_document_profile_and_size_ratio.sql", "schema": "brant_ful", "manifestPos": "紧随 ful/000011", "tables": "ALTER shipment ADD document_profile；新建 packing_assortment_rule（尺码配比、色批、箱规 L/W/H、毛净重、目标柜型装柜测算）", "guard": "prepare/confirm 拒混单、校验短溢装容差与柜型容积载重上限", "rls": "FORCE RLS (tenant_id, company_id)"},
     {"seq": "ai/000006", "file": "migrations/ai/000006_ai_bundle_plugins.sql", "schema": "brant_ai", "manifestPos": "既有 ai 目录末尾", "tables": "ALTER execution_bundle ADD plugins_json（规范化插件指纹数组）", "guard": "不可变触发器保护已登记 bundle", "rls": "继承既表 FORCE RLS"}
   ],
   "commands": [
@@ -88,7 +95,10 @@
     {"code": "SAMPLE_SPEC_MISMATCH", "http": "409", "category": "Conflict", "contexts": "CAT, TRD, TSK", "trigger": "既有样衣批准绑定旧技术版本（如 TECH-01-r1），而当前单据／SKU 已升至 r2（基线 15.5 / BC-AT23）"},
     {"code": "BOM_UNVERIFIED", "http": "422", "category": "Invalid", "contexts": "CST, TRD", "trigger": "服装成本估算引用了草稿、已撤回或含未实测强制工艺参数的 CostBOM"},
     {"code": "BOM_SUBSTITUTION_UNAPPROVED", "http": "422", "category": "Invalid", "contexts": "CST, TRD, MFG", "trigger": "使用替代面辅料但缺少独立审批决定或审批范围未覆盖当前数量／版本（基线 5.8）"},
-    {"code": "PACKING_RATIO_MISMATCH", "http": "422", "category": "Invalid", "contexts": "FUL", "trigger": "服装装箱明细违反声明的尺码配比（assortment ratio）、色批同缸约束或总件数不守恒"}
+    {"code": "BOM_SIZE_GRADE_MISSING", "http": "422", "category": "Invalid", "contexts": "CST, TRD", "trigger": "CostBOM 声明按尺码分档单耗（size_graded），但订单中存在未命中分档的尺码（严禁静默回退基准码）"},
+    {"code": "DELIVERY_TOLERANCE_EXCEEDED", "http": "409", "category": "Conflict", "contexts": "FUL, TRD", "trigger": "累计确认出运量超出订单合同约定的总溢装上限或单色单码溢装上限（generic 默认 0%）"},
+    {"code": "PACKING_RATIO_MISMATCH", "http": "422", "category": "Invalid", "contexts": "FUL", "trigger": "服装装箱明细违反声明的尺码配比（assortment ratio）、色批同缸约束、箱规体积／毛净重推导或总件数不守恒"},
+    {"code": "CONTAINER_CAPACITY_EXCEEDED", "http": "422", "category": "Invalid", "contexts": "FUL", "trigger": "按箱规测算的总 CBM 或总毛重超出所选集装箱型（20GP/40GP/40HQ）配置的净容积或载重上限"}
   ],
   "tests": [
     {"id": "APP-T01", "basis": "基线 18.3 #1 / 15.5 S-D", "level": "PG16 集成 + HTTP", "scenario": "核心 ＋ 服装组合完整链路（ST01 红/蓝 × S/M，120 PCS，CostBOM ＋ 样衣批准 ＋ 报价 ＋ 订单 ＋ 服装质检 ＋ 尺码配比装箱）", "expected": "全链通过，金额 960.00 / 660.00 / 300.00 USD 逐分守恒，插件版本与快照哈希完整落库"},
@@ -100,26 +110,29 @@
     {"id": "APP-T07", "basis": "基线 5.8", "level": "PG16 集成", "scenario": "面辅料替代未审批尝试发布 BOM；以及审批通过后对已发料／已加工事实的影响检查", "expected": "未批返回 BOM_SUBSTITUTION_UNAPPROVED；批准生成新版本，历史发料与加工记录逐字节不变"},
     {"id": "APP-T08", "basis": "基线 18.3 #4–#7 / 18.1", "level": "单元 + PG16 集成", "scenario": "必需行业检查返回 unknown/timeout；过期上下文（stale）；插件回传 required=false 企图取消平台必检；同键异内容", "expected": "unknown/timeout 使任务入 waiting_external；required=false 被平台注册表忽略；同键异内容拒 IDEMPOTENCY_PAYLOAD_CONFLICT"},
     {"id": "APP-T09", "basis": "基线 18.3 #8–#9 / 5.5", "level": "PG16 集成 + AI", "scenario": "插件版本从 0.1.0 升级至 0.2.0 时恢复旧 AI 任务；存在在途订单时尝试停用插件 → 转 draining_readonly → 完结后停用并读取历史单据", "expected": "旧任务暂停 EXECUTION_BUNDLE_INCOMPATIBLE（CT14）；在途拒 PLUGIN_IN_USE；停用后历史快照仍可读"},
-    {"id": "APP-T10", "basis": "基线 5.8 / F2", "level": "单元 + httpapi", "scenario": "未测缩水率冒充实测值；装箱违背尺码配比；AI 令牌直接 POST 任何新增写路由（sample.approve / cost_bom.verify / plugin.enable）", "expected": "未测数据拦截；配比不符拒 PACKING_RATIO_MISMATCH；所有新增写路由读体前拒 403 PERMISSION_DENIED"}
+    {"id": "APP-T10", "basis": "基线 5.8 / F2", "level": "单元 + httpapi", "scenario": "未测缩水率冒充实测值；装箱违背尺码配比；AI 令牌直接 POST 任何新增写路由（sample.approve / cost_bom.verify / plugin.enable）", "expected": "未测数据拦截；配比不符拒 PACKING_RATIO_MISMATCH；所有新增写路由读体前拒 403 PERMISSION_DENIED"},
+    {"id": "APP-T11", "basis": "服装核算 · 分码单耗", "level": "单元 + PG16 集成", "scenario": "大码偏重订单（S 10 件 @ 1.45 M ＋ 2XL 90 件 @ 1.78 M）对比单码均值差异；以及订单含未登记的 3XL 尺码", "expected": "分码单耗精确算得 174.70 M（高出均值口径）；缺失 3XL 分档直接拒 422 BOM_SIZE_GRADE_MISSING，绝不静默回退 M 码"},
+    {"id": "APP-T12", "basis": "服装核算 · MCQ 与版费", "level": "单元 + PG16 集成", "scenario": "红/蓝两色中蓝色总用布 180 M 低于染厂起染量 MCQ 300 M，触发固定起染费 200.00 USD ＋ 按款打样版费 120.00 USD；以及仅标 MCQ 未给费率", "expected": "蓝色行按最大余数法分摊 200.00 USD 且不重复计费，红色行不触发；缺费率拒 CHARGE_SCOPE_UNRESOLVED"},
+    {"id": "APP-T13", "basis": "服装履约 · 短溢装与装柜", "level": "PG16 集成 + 并发", "scenario": "apparel 订单约定总 ±3%／单行 ±5% 容差：+3% 溢装校验增量信用额度后放行、+6% 单行拒 DELIVERY_TOLERANCE_EXCEEDED、-2.5% 容差内正常结案；以及 40HQ 装柜超 68 CBM 拒 CONTAINER_CAPACITY_EXCEEDED", "expected": "容差上限与增量信用并发守卫准确生效；generic 订单仍严格 0% 溢装；箱规 CBM/毛净重与装柜利用率逐项守恒"}
   ],
   "slices": [
     {
       "slice": "切片 A · R0 设计源定型与插件底座",
       "units": "P1-R0（设计源与错误码）＋ P1-Ext（foundation/plugin ＋ brant_ext ＋ dependency-check）",
-      "deliverables": "更新战术模型/Context Map/错误码/角色 JSON；tools/dependency-check 新增 layerPlugin；migrations/ext/000001；plugin.enable/enter_readonly/disable；INQ/TRD/FUL 的 document_profile 不可变校验与混单拒绝",
+      "deliverables": "更新战术模型/Context Map/错误码（含 13 新码）/角色 JSON；tools/dependency-check 新增 layerPlugin；migrations/ext/000001；plugin.enable/enter_readonly/disable；INQ/TRD/FUL 的 document_profile 不可变校验与混单拒绝",
       "gate": "CI=true make check 0 违规；PG16 并发双提供者冲突与在途停用阻断测试全绿"
     },
     {
       "slice": "切片 B · 通用前置：samples 与 cost_bom",
-      "units": "P2-CAT（Item ＋ SampleApproval ＋ SampleGuard v1）＋ P2-CST（CostBOM ＋ 替代审批 ＋ CostBOMGuard v1）",
-      "deliverables": "migrations/cat/000005–000006；migrations/cst/000004–000005；item.*/sample.*/cost_bom.* 全部命令、HTTP 路由、OpenAPI 重新生成；TRD freeze/activate 与 Q01.industry 接入 SampleGuard v1 与 CostBOMGuard v1",
-      "gate": "CI=true make check ＋ make db ＋ make integration SHARDS=4 全绿；验证旧样衣 r1 阻断 r2 并发窗口"
+      "units": "P2-CAT（Item ＋ SampleApproval ＋ SampleGuard v1）＋ P2-CST（CostBOM ＋ 分码单耗 ＋ MCQ／版费 ＋ 替代审批 ＋ CostBOMGuard v1）",
+      "deliverables": "migrations/cat/000005–000006；migrations/cst/000004–000005（含 cost_bom_size_grade 与 cost_bom_surcharge）；item.*/sample.*/cost_bom.* 全部命令、HTTP 路由、OpenAPI 重新生成；TRD freeze/activate 与 Q01.industry 接入 SampleGuard v1 与 CostBOMGuard v1",
+      "gate": "CI=true make check ＋ make db ＋ make integration SHARDS=4 全绿；验证旧样衣 r1 阻断 r2 并发窗口与分码/MCQ 核算"
     },
     {
       "slice": "切片 C · industry.apparel 插件本体与四扩展点",
-      "units": "P3-Apparel（internal/plugins/apparel）＋ P3-QLTFUL（服装质检参数与尺码装箱配比）＋ P3-E2E",
-      "deliverables": "实现 cost.estimate.v1（幅宽/克重/缩水/损耗精确算术）、quote.validate.v1（校验合并与 S-D 反例）、QLT/FUL 服装扩展迁移（qlt/000004、ful/000012）、optional apparel.crm.bridge，完成 APP-T01—T10 全套端到端回归",
-      "gate": "CI=true make check ＋ 全量 bootstrap 集成与竞态分片通过；CRM 开/关双模式验证"
+      "units": "P3-Apparel（internal/plugins/apparel）＋ P3-QLTFUL（质检参数、尺码配比、箱规装柜与短溢装容差）＋ P3-E2E",
+      "deliverables": "实现 cost.estimate.v1（分码单耗/幅宽/克重/缩水/损耗/MCQ 与版费分摊）、quote.validate.v1（校验合并与 S-D 反例）、TRD/FUL/STL 大货短溢装容差与溢装增量信用守卫（trd/000013、ful/000012）、QLT 服装质检（qlt/000004）、optional apparel.crm.bridge，完成 APP-T01—T13 全套端到端回归",
+      "gate": "CI=true make check ＋ 全量 bootstrap 集成与竞态分片通过；CRM 开/关双模式与溢装信用并发验证"
     },
     {
       "slice": "切片 D · AI 契约接入与主档案升级",

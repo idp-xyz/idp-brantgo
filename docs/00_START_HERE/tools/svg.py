@@ -1045,9 +1045,9 @@ def apparel_plugin_architecture() -> str:
     body.append(_text(46, 146, "允许导入：stdlib · kernel · foundation/plugin · 上游 api/（禁上下文 internal、禁 bentopg.DB、禁网络 I/O）", 9.8, "#5d4c86", "400", "start"))
 
     p_cards = [
-        (46, 160, 244, 64, "cost.estimate.v1", "幅宽／克重／缩水／损耗公式核算", "输出标准 CostComponent（math/big）"),
-        (306, 160, 244, 64, "quote.validate.v1", "款色码矩阵 · 样衣版本 · 混单拦截", "合并裁决 reject > requires_approval > pass"),
-        (46, 236, 244, 64, "packing & inspection", "尺码配比（Assortment）· 色批同缸", "色差／缩水／尺寸公差（禁未测冒充实测）"),
+        (46, 160, 244, 64, "cost.estimate.v1", "分码单耗 · 幅宽／克重／缩水／损耗", "按色汇总 MCQ 起染费 ＋ 版费分摊"),
+        (306, 160, 244, 64, "quote.validate.v1", "款色码 · 样衣版本 · 短溢装 · 防混单", "合并裁决 reject > requires_approval > pass"),
+        (46, 236, 244, 64, "packing & inspection", "尺码配比 · 箱规 CBM 与装柜测算", "色差／缩水／公差（禁未测冒充实测）"),
         (306, 236, 244, 64, "AI 行业契约（4 项）", "semantics · context · task_profile", "outcome.check.v1（不可取消平台必检）"),
     ]
     for cx, cy, cw, ch, ct, l1, l2 in p_cards:
@@ -1162,12 +1162,12 @@ def apparel_domain_er() -> str:
     body.append(_text(598, 139, "brant_cst · 成本 BOM 与替代审批（CST-AGG-CostBOM ＋ Substitution）", 11.5, "#ffffff", "700", "start"))
 
     cst_tables = [
-        (596, 162, 246, 154, "cost_bom & cost_bom_line", [
+        (596, 162, 246, 154, "cost_bom ＋ size_grade ＋ surcharge", [
             "PK (tenant, company, bom_id)",
             "引用 item_id / (sku_id, spec_rev)",
             "status: draft→verified→withdrawn",
-            "material_kind: fabric/trim/pack",
-            "单耗 · 损耗率 · 缩水补偿系数",
+            "分码单耗表（缺码拒 422 禁回退）",
+            "分色起染费 MCQ ＋ 打样／版费",
             "SUP 供应报价引用 ＋ content_sha",
             "守卫: guard_cost_bom_current_v1",
         ]),
@@ -1190,9 +1190,9 @@ def apparel_domain_er() -> str:
     # Row 3: Downstream Consumers (INQ, TRD, QLT, FUL, AI)
     d_boxes = [
         ("brant_inq", "inq/000005", "rfq.document_profile", "确认后不可变 · 防混单"),
-        ("brant_trd", "trd/000013", "quote/order profile", "plugin_snapshot ＋ 样衣引用"),
+        ("brant_trd", "trd/000013", "profile ＋ tolerance", "快照 ＋ 短溢装容差策略"),
         ("brant_qlt", "qlt/000004", "apparel_check", "色差／缩水／尺寸／缸号"),
-        ("brant_ful", "ful/000012", "shipment profile", "packing_assortment_rule"),
+        ("brant_ful", "ful/000012", "assortment ＋ carton", "配比 · 箱规 CBM · 装柜校验"),
         ("brant_ai", "ai/000006", "bundle.plugins_json", "插件版本指纹 → CT14"),
     ]
     dw, dgap = 202, 18
@@ -1228,7 +1228,7 @@ def apparel_pricing_and_validation_chain() -> str:
     # Top Row: Steps 1 -> 4
     top_steps = [
         ("步骤 1 · 绑定成本提供者", "#123248", "按 document_profile 唯一查找", "双提供者 → 409 COST_PROVIDER_CONFLICT", "apparel 故障禁静默回退 generic"),
-        ("步骤 2 · cost.estimate.v1", TEAL, "纯函数计算 CostBOM 面辅料", "幅宽／克重／缩水／损耗（34位精度）", "未测参数或草稿 BOM → 拒采纳"),
+        ("步骤 2 · cost.estimate.v1", TEAL, "分码单耗 ＋ 幅宽／克重／缩水", "按色汇总 MCQ 起染费 ＋ 打样版费", "缺码拒 422 · 未测参数禁冒充实测"),
         ("步骤 3 · 单位与币种归一", "#1f4a63", "核心 CST/TRD 统一换算", "例：2 DOZEN × 12 = 24 PCS", "误录 2 PCS 或缺汇率直接拒绝"),
         ("步骤 4 · 售价、折扣与舍入", "#2d6178", "定价策略或授权业务员报价", "应用客户折扣 · 逐行先舍后加", "显式 HALF_UP · 禁用 float"),
     ]
