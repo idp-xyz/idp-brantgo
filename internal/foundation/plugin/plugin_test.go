@@ -1,9 +1,12 @@
 package plugin
 
 import (
+	"context"
 	"errors"
 	"testing"
 
+	"go.idp.xyz/idp-brant/internal/foundation/authorization"
+	"go.idp.xyz/idp-brant/internal/foundation/plugin/postgres"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -110,6 +113,33 @@ func TestUniformProfileRejectsAMix(t *testing.T) {
 	}
 	if _, err := Uniform([]string{"generic", "apparel"}, "/args/order_id"); err == nil || CodeOf(err) != CodeDocumentProfileMismatch {
 		t.Fatalf("mix: %v", err)
+	}
+}
+
+func TestDisableApplyOnlyFromDraining(t *testing.T) {
+	h := disableHandler{&act{id: ApparelPluginID}}
+	_, err := h.Apply(context.Background(), nil, authorization.Decision{})
+	wantDisable(t, err, kernel.CodeInvalidState, "The plugin is not draining")
+
+	h.row = &postgres.Activation{PluginID: ApparelPluginID, Status: StatusDisabled}
+	_, err = h.Apply(context.Background(), nil, authorization.Decision{})
+	wantDisable(t, err, kernel.CodeInvalidState, "The plugin is not draining")
+
+	h.row.Status = StatusActive
+	_, err = h.Apply(context.Background(), nil, authorization.Decision{})
+	wantDisable(t, err, kernel.CodeInvalidState, "Run plugin.enter_readonly before plugin.disable")
+
+	h.row.Status = StatusDraining
+	h.busy = true
+	_, err = h.Apply(context.Background(), nil, authorization.Decision{})
+	wantDisable(t, err, CodePluginInUse, "The industry plugin still has work in flight")
+}
+
+func wantDisable(t *testing.T, err error, code, reason string) {
+	t.Helper()
+	rej, ok := kernel.AsRejection(err)
+	if !ok || rej.Code != code || len(rej.Fields) != 1 || rej.Fields[0].Path != "/args/plugin_id" || rej.Fields[0].Reason != reason {
+		t.Fatalf("got %v, want %s at /args/plugin_id (%s)", err, code, reason)
 	}
 }
 

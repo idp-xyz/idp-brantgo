@@ -190,14 +190,9 @@ func (h readonlyHandler) Apply(ctx context.Context, exec bentopg.Executor, d aut
 	return action.Outcome{ObjectID: h.id, RowVersion: next.RowVersion, Status: StatusDraining}, nil
 }
 
-// Disable moves active or draining_readonly to disabled when the profile has nothing open.
+// Disable moves draining_readonly to disabled when the profile has nothing open.
 func (s Service) Disable(ctx context.Context, cmd DisablePlugin) (Receipt, error) {
 	h := &act{s: s, id: cmd.PluginID}
-	if err := cmd.Validate(); err == nil {
-		if reg, ok := s.Registry.Get(cmd.PluginID); ok {
-			h.reg = reg
-		}
-	}
 	return s.run(ctx, action.Command{ObjectID: cmd.PluginID}, cmd, cmd.Validate(), disableHandler{h})
 }
 
@@ -209,7 +204,8 @@ func (h disableHandler) Prepare(ctx context.Context) error {
 		return err
 	}
 	// InFlight opens the downstream contexts' own transactions. It must not run on the context
-	// that still carries this platform's executor.
+	// that still carries this platform's executor. In draining_readonly the guard refuses every
+	// new apparel document, so this set can only shrink before Apply locks the activation.
 	h.busy, err = h.s.InFlight.InFlight(ctx, profile)
 	if err != nil {
 		return err
@@ -225,8 +221,12 @@ func (h disableHandler) Lock(ctx context.Context, exec bentopg.Executor) error {
 }
 
 func (h disableHandler) Apply(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
-	if h.row == nil || (h.row.Status != StatusActive && h.row.Status != StatusDraining) {
-		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, "/args/plugin_id", "The plugin is not active")
+	switch {
+	case h.row != nil && h.row.Status == StatusActive:
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, "/args/plugin_id",
+			"Run plugin.enter_readonly before plugin.disable")
+	case h.row == nil || h.row.Status != StatusDraining:
+		return action.Outcome{}, kernel.Reject(kernel.CodeInvalidState, "/args/plugin_id", "The plugin is not draining")
 	}
 	if h.busy {
 		return action.Outcome{}, InUse()
@@ -252,7 +252,7 @@ func (h disableHandler) prepareRow(ctx context.Context) (profile DocumentProfile
 		if err != nil || row == nil {
 			return err
 		}
-		if row.Status == StatusActive || row.Status == StatusDraining {
+		if row.Status == StatusDraining {
 			profile = DocumentProfile(row.DocumentProfile)
 			check = true
 		}

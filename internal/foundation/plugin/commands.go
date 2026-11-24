@@ -38,7 +38,7 @@ type EnterReadOnlyPlugin struct {
 
 func (EnterReadOnlyPlugin) extCommand() {}
 
-// DisablePlugin moves an active or draining plugin to disabled when nothing of its profile is open.
+// DisablePlugin moves a draining_readonly plugin to disabled when nothing of its profile is open.
 type DisablePlugin struct {
 	IdempotencyKey string
 	PluginID       string

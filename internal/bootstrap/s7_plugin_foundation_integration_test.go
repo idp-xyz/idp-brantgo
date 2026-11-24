@@ -4,17 +4,13 @@ package bootstrap_test
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"os"
 	"sync"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	fulapi "go.idp.xyz/idp-brant/internal/contexts/ful/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/database/pgtest"
 	"go.idp.xyz/idp-brant/internal/foundation/plugin"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -22,8 +18,8 @@ import (
 
 // S7-01: the plugin platform on PostgreSQL 16. A company enables industry.apparel, and apparel
 // documents are refused until that activation is active. Two cost providers cannot both be active
-// for one document profile. Open apparel documents keep plugin.disable at PLUGIN_IN_USE until they
-// close; the rows stay readable afterwards.
+// for one document profile. plugin.disable runs only from draining_readonly, and open apparel
+// documents keep it at PLUGIN_IN_USE until they close; the rows stay readable afterwards.
 
 func TestPluginEnableListsActiveAndIsolatesCompanies(t *testing.T) {
 	w := newWorld(t)
@@ -103,6 +99,11 @@ func TestApparelRFQFollowsPluginLifecycle(t *testing.T) {
 
 	_, err = w.c.EXT.Enable(ctx, plugin.EnablePlugin{IdempotencyKey: w.key(), PluginID: plugin.ApparelPluginID})
 	w.must(err)
+	_, err = w.c.EXT.Disable(ctx, plugin.DisablePlugin{IdempotencyKey: w.key(), PluginID: plugin.ApparelPluginID})
+	w.want(err, kernel.CodeInvalidState)
+	if path(err) != "/args/plugin_id" || rejectionReason(err) != "Run plugin.enter_readonly before plugin.disable" {
+		t.Fatalf("disable from active: %s %s", path(err), rejectionReason(err))
+	}
 	saved, err := w.save(ctx, draft)
 	w.must(err)
 	if saved.Status != inqapi.StatusDraft {
@@ -142,32 +143,80 @@ func TestApparelQuoteOrderAndShipmentProfiles(t *testing.T) {
 	_, err := q.saveQuote(q.author, "quote.mixed", 0, mixed)
 	q.want(err, plugin.CodeDocumentProfileMismatch)
 
-	order := q.activeOrder("gen")
-	if order.QuoteID == "" || order.ObjectID != "order.gen" {
-		t.Fatalf("order %+v", order)
-	}
-	cloneApparelOrder(t, q.tenant, "company.A", order.QuoteID, order.ObjectID)
-
-	pluginAdmin := q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "plugin.admin"},
-		Permissions: extPerms(), DataScope: "company", Team: "trade"})
-	_, err = q.c.EXT.Enable(pluginAdmin, plugin.EnablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
+	_, err = q.c.EXT.Enable(q.author, plugin.EnablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
 	q.must(err)
-	_, err = q.c.EXT.Disable(pluginAdmin, plugin.DisablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
-	q.want(err, plugin.CodePluginInUse)
+	apparel := q.activeOrderFrom("apparel", q.apparelData())
+	if apparel.QuoteID != "apparel" || apparel.ObjectID != "order.apparel" {
+		t.Fatalf("apparel order %+v", apparel)
+	}
+	if quote := q.getQuote(apparel.QuoteID); quote.DocumentProfile != "apparel" {
+		t.Fatalf("quote profile %q", quote.DocumentProfile)
+	}
+	guard := q.orderGuard(trdapi.OrderBinding{OrderID: apparel.ObjectID, OrderRevision: apparel.OrderRevision, OrderHash: apparel.OrderHash})
+	if !guard.Usable() || guard.DocumentProfile != "apparel" {
+		t.Fatalf("order guard %+v", guard)
+	}
+	facts, err := q.c.TRD.ResolveActiveOrders(q.author, []string{apparel.ObjectID})
+	q.must(err)
+	if facts[apparel.ObjectID].DocumentProfile != "apparel" {
+		t.Fatalf("order fact %+v", facts[apparel.ObjectID])
+	}
 
+	generic := q.activeOrder("gen")
 	shipper := q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "shipper.1"},
 		Permissions: append(append([]string{}, allPermissions...), "shipment.prepare", "ful.read"), DataScope: "company", Team: "trade"})
 	_, err = q.c.FUL.PrepareShipment(shipper, fulapi.PrepareShipment{IdempotencyKey: q.key(), ShipmentID: "shipment.mix",
-		OrderID: order.ObjectID, OrderIDs: []string{order.ObjectID, "order.apparel"}, Route: fulapi.RouteSupplierDirect,
+		OrderID: generic.ObjectID, OrderIDs: []string{generic.ObjectID, apparel.ObjectID}, Route: fulapi.RouteSupplierDirect,
 		Lines: []fulapi.ShipmentLine{{LineID: "S1", OrderLineID: "L1", Quantity: "1", QualityReleaseID: "rel.1",
 			SupplierDelivery: fulapi.DeliveryLineRef{DeliveryID: "delivery.1", LineID: "L1", Version: 1}}}})
 	q.want(err, plugin.CodeDocumentProfileMismatch)
 
-	closeApparelClone(t, q.tenant, "company.A")
-	_, err = q.c.EXT.Disable(pluginAdmin, plugin.DisablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
+	_, err = q.c.EXT.Disable(q.author, plugin.DisablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
+	q.want(err, kernel.CodeInvalidState)
+	if rejectionReason(err) != "Run plugin.enter_readonly before plugin.disable" {
+		t.Fatalf("disable with open apparel work: %s", rejectionReason(err))
+	}
+	_, err = q.c.EXT.EnterReadOnly(q.author, plugin.EnterReadOnlyPlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
 	q.must(err)
-	if view := q.getOrder(order.ObjectID); view.QuoteID != order.QuoteID {
+	_, err = q.c.EXT.Disable(q.author, plugin.DisablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
+	q.want(err, plugin.CodePluginInUse)
+
+	_, err = q.c.TRD.CancelOrder(q.author, trdapi.CancelOrder{IdempotencyKey: q.key(), OrderID: apparel.ObjectID,
+		ExpectedVersion: apparel.RowVersion, Reason: "客户撤单", Evidence: q.proof})
+	q.must(err)
+	_, err = q.c.EXT.Disable(q.author, plugin.DisablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
+	q.want(err, plugin.CodePluginInUse)
+	_, err = q.c.INQ.CloseRfq(q.author, inqapi.CloseRfq{IdempotencyKey: q.key(), RfqID: "rfq.apparel",
+		ExpectedVersion: q.apparelRfqVersion, Reason: "询价已转订单"})
+	q.must(err)
+	quote := q.getQuote(apparel.QuoteID)
+	_, err = q.c.TRD.Cancel(q.author, trdapi.Cancel{IdempotencyKey: q.key(), QuoteID: apparel.QuoteID,
+		ExpectedVersion: quote.RootVersion, BusinessRevision: quote.ActiveRevision, Reason: "客户取消", Evidence: q.proof})
+	q.want(err, trdapi.CodeRootConversionLocked)
+	_, err = q.c.EXT.Disable(q.author, plugin.DisablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
+	q.must(err)
+
+	if pluginStatus(t, q.world, q.author, plugin.ApparelPluginID) != plugin.StatusDisabled {
+		t.Fatal("disable did not stick")
+	}
+	if view := q.getOrder(generic.ObjectID); view.QuoteID != generic.QuoteID || view.Status != trdapi.OrderActive {
 		t.Fatalf("generic order unreadable: %+v", view)
+	}
+	ended := q.getOrder(apparel.ObjectID)
+	if ended.Status != trdapi.OrderCancelled || ended.QuoteID != apparel.QuoteID {
+		t.Fatalf("apparel order unreadable: %+v", ended)
+	}
+	after := q.orderGuard(trdapi.OrderBinding{OrderID: apparel.ObjectID, OrderRevision: apparel.OrderRevision, OrderHash: apparel.OrderHash})
+	if after.DocumentProfile != "apparel" || after.Status != trdapi.OrderCancelled {
+		t.Fatalf("order guard after cancel %+v", after)
+	}
+	if kept := q.getQuote(apparel.QuoteID); kept.DocumentProfile != "apparel" || kept.ActiveRevision == 0 {
+		t.Fatalf("apparel quote unreadable: %+v", kept)
+	}
+	rfq, err := q.c.INQ.GetRfq(q.author, "rfq.apparel")
+	q.must(err)
+	if rfq.Status != inqapi.StatusClosed || rfq.DocumentProfile != "apparel" {
+		t.Fatalf("apparel rfq %+v", rfq)
 	}
 }
 
@@ -189,95 +238,10 @@ func pluginStatus(t *testing.T, w *world, ctx context.Context, id string) string
 	return ""
 }
 
-// cloneApparelOrder copies one active order onto a new quote and order id with document_profile
-// apparel, so a shipment can be asked to consolidate the two profiles. The copy is not a second
-// business command: the slot unique index allows one full_v1 order per quote, and the profile
-// column cannot change after insert. session_replication_role skips the immutability triggers;
-// foreign keys still hold because the parent rows are copied first.
-func cloneApparelOrder(t *testing.T, tenant, company, quoteID, orderID string) {
-	t.Helper()
-	pool := devSuperPool(t)
-	defer pool.Close()
-	ctx := context.Background()
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
+func rejectionReason(err error) string {
+	rej, ok := kernel.AsRejection(err)
+	if !ok || len(rej.Fields) == 0 {
+		return ""
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica"); err != nil {
-		t.Fatal(err)
-	}
-	const newQuote, newOrder = "quote.apparel", "order.apparel"
-	mustCopy(t, ctx, tx, "brant_trd.quote_root", tenant, company, "quote_id", quoteID, newQuote, "document_profile = 'apparel'")
-	mustCopy(t, ctx, tx, "brant_trd.quote_revision", tenant, company, "quote_id", quoteID, newQuote, "")
-	mustCopy(t, ctx, tx, "brant_trd.quote_document", tenant, company, "quote_id", quoteID, newQuote,
-		"number = number || '.apparel', file_name = number || '.apparel.txt'")
-	mustCopy(t, ctx, tx, "brant_trd.quote_conversion_slot", tenant, company, "quote_id", quoteID, newQuote, "order_id = 'order.apparel'")
-	mustCopy(t, ctx, tx, "brant_trd.sales_order", tenant, company, "order_id", orderID, newOrder,
-		"quote_id = 'quote.apparel', document_profile = 'apparel', number = number || '.apparel'")
-	if err = tx.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func closeApparelClone(t *testing.T, tenant, company string) {
-	t.Helper()
-	pool := devSuperPool(t)
-	defer pool.Close()
-	ctx := context.Background()
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = tx.Exec(ctx, `UPDATE brant_trd.quote_revision SET status = 'cancelled'
-		WHERE tenant_id = $1 AND company_id = $2 AND quote_id = 'quote.apparel'`, tenant, company); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = tx.Exec(ctx, `UPDATE brant_trd.sales_order SET status = 'cancelled', activated_review_id = NULL
-		WHERE tenant_id = $1 AND company_id = $2 AND order_id = 'order.apparel'`, tenant, company); err != nil {
-		t.Fatal(err)
-	}
-	if err = tx.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// devSuperPool is the container superuser. brant_migrator cannot set session_replication_role,
-// and the copy has to skip the profile immutability triggers.
-func devSuperPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	raw := os.Getenv("IDP_BRANT_POSTGRES_DSN")
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		t.Fatalf("IDP_BRANT_POSTGRES_DSN: %v", err)
-	}
-	u.User = url.UserPassword("postgres", "dev-superuser-only")
-	pool, err := pgxpool.New(context.Background(), u.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return pool
-}
-
-func mustCopy(t *testing.T, ctx context.Context, tx pgx.Tx, table, tenant, company, column, from, to, extra string) {
-	t.Helper()
-	tmp := "tmp_copy_" + table[len("brant_trd."):]
-	if _, err := tx.Exec(ctx, fmt.Sprintf(`CREATE TEMP TABLE %s ON COMMIT DROP AS SELECT * FROM %s
-		WHERE tenant_id = $1 AND company_id = $2 AND %s = $3`, tmp, table, column), tenant, company, from); err != nil {
-		t.Fatalf("%s: %v", table, err)
-	}
-	set := column + " = $1"
-	if extra != "" {
-		set += ", " + extra
-	}
-	if _, err := tx.Exec(ctx, fmt.Sprintf("UPDATE %s SET %s", tmp, set), to); err != nil {
-		t.Fatalf("update %s: %v", table, err)
-	}
-	if _, err := tx.Exec(ctx, fmt.Sprintf("INSERT INTO %s SELECT * FROM %s", table, tmp)); err != nil {
-		t.Fatalf("insert %s: %v", table, err)
-	}
+	return rej.Fields[0].Reason
 }

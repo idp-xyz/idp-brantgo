@@ -372,10 +372,10 @@ $$;
 ### 7.1 插件版本兼容矩阵、升级与停用在途保护（基线 5.5 / 18.3）
 
 1. **精确发布组合验证**：首期插件随经过测试的 Go 二进制一同构建发布，平台内置已验证的精确兼容三元组登记表 `(core_version, contract_version, plugin_version)`。`plugin.enable` 与进程启动校验精确匹配，**绝不凭语义版本号（如 `^0.1`）猜测兼容性**；不匹配即拒 `409 PLUGIN_VERSION_INCOMPATIBLE`。
-2. **三态生命周期（`disabled` ↔ `active` → `draining_readonly` → `disabled`）**：
-   - `plugin.enable`（`administrator`，人工专属）：校验 `requires` 依赖上下文全部就绪，校验该公司在 `document_profile=apparel` 上无第二个成本提供者（否则 `409 COST_PROVIDER_CONFLICT`），写入 `brant_ext.plugin_activation(status='active')`。
-   - `plugin.enter_readonly`（`administrator`，人工专属）：切入 `draining_readonly`——阻止新建任何 `apparel` 询价、草稿与 AI 任务，但允许已在途的报价审批、订单履约、出运与结算继续完结。
-   - `plugin.disable`（`administrator`，人工专属）：在 `Prepare` 阶段检查 `INQ`/`TRD`/`FUL`/`TSK` 是否存在未终态的 `apparel` 单据或运行中任务；**若存在任何在途对象，硬拒绝 `409 PLUGIN_IN_USE`**（指引管理员先走 `plugin.enter_readonly`）。确认无在途后方可置为 `disabled`。
+2. **三态生命周期（`disabled` → `active` → `draining_readonly` → `disabled`）**：
+   - `plugin.enable`（`administrator`，人工专属）：仅从 `disabled` 启用。校验 `requires` 依赖上下文全部就绪，校验该公司在 `document_profile=apparel` 上无第二个成本提供者（否则 `409 COST_PROVIDER_CONFLICT`），写入 `brant_ext.plugin_activation(status='active')`。
+   - `plugin.enter_readonly`（`administrator`，人工专属）：仅从 `active` 切入 `draining_readonly`——阻止新建任何 `apparel` 询价、草稿与 AI 任务，但允许已在途的报价审批、订单履约、出运与结算继续完结。
+   - `plugin.disable`（`administrator`，人工专属）：**仅从 `draining_readonly` 执行**。该状态下守卫拒绝一切新建 apparel 单据，因此 `Prepare` 读到的在途集合只会缩小，不会在加锁前被新单据扩大。从 `active` 直接调用拒绝 `INVALID_STATE`，并要求管理员先执行 `plugin.enter_readonly`；缺失或已是 `disabled` 同样拒绝 `INVALID_STATE`（插件不在排空）。在 `draining_readonly` 下若 `INQ`/`TRD`/`FUL`/`TSK` 仍有未终态 apparel 单据或运行中任务，硬拒绝 `409 PLUGIN_IN_USE`。确认无在途后方可置为 `disabled`。
 3. **停用后历史可读**：即使 `industry.apparel` 处于 `disabled`，历史已完成报价与订单仍完整保存其 `CostSnapshot` 与 `plugin_snapshot`（含规则版本与 findings），通过受支持的只读视图原样展示，不丢失任何财务或审计记录。
 
 ### 7.2 对齐附录 B 的五项 AI 行业契约与 `ExecutionBundle` 指纹

@@ -44,9 +44,11 @@ type trdWorld struct {
 	// The comparison basis partial orders adopt (TRD-INV-006). Empty until ensureMultiBasis:
 	// the fixture RFQ and snapshot stay at 120 PCS, and a quote quantity other than that is
 	// COMPARISON_BASIS_MISMATCH at /args/data/lines/0/quantity.
-	multiQty        string
-	multiRfqVersion int64
-	multiSnap       cstapi.SnapshotReceipt
+	multiQty          string
+	multiRfqVersion   int64
+	multiSnap         cstapi.SnapshotReceipt
+	apparelRfqVersion int64
+	apparelSnap       cstapi.SnapshotReceipt
 }
 
 func newTrdWorld(t *testing.T) *trdWorld {

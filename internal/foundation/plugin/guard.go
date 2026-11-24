@@ -69,7 +69,7 @@ func RequireActive(ctx context.Context, exec bentopg.Executor, pluginID, profile
 // Active reports whether profile is the apparel profile the apparel plugin guards.
 func Active(profile DocumentProfile) bool { return profile == ProfileApparel }
 
-// Rejection is a small alias so callers can test codes without importing kernel twice.
+// CodeOf returns the rejection code of err, or "" when err is not a rejection.
 func CodeOf(err error) string {
 	rej, ok := kernel.AsRejection(err)
 	if !ok {

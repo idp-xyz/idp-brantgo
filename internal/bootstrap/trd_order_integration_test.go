@@ -108,11 +108,20 @@ func (q *trdWorld) approvedReview(o trdapi.OrderReceipt, review string, risks ..
 // "review.<id>" (which readies it for STL's and CNX's guards) and activated.
 func (q *trdWorld) activeOrder(id string) trdapi.OrderReceipt {
 	q.t.Helper()
-	_, o := q.prepared(id)
-	d := q.reviewed(o, "review."+id)
-	a, err := q.c.TRD.ActivateOrder(q.author, q.activateOrderCmd(o.ObjectID, d.RowVersion, "review."+id))
+	return q.activeOrderFrom(id, q.data())
+}
+
+// activeOrderFrom is activeOrder for quote data d, so a document profile other than the fixture's
+// follows the same save, freeze, approval, activation and order commands.
+func (q *trdWorld) activeOrderFrom(id string, d trdapi.QuoteData) trdapi.OrderReceipt {
+	q.t.Helper()
+	a := q.acceptedOn(id, d)
+	o, err := q.c.TRD.PrepareOrder(q.author, q.prepareCmd("order."+id, a))
 	q.must(err)
-	return a
+	decided := q.reviewed(o, "review."+id)
+	act, err := q.c.TRD.ActivateOrder(q.author, q.activateOrderCmd(o.ObjectID, decided.RowVersion, "review."+id))
+	q.must(err)
+	return act
 }
 
 func (q *trdWorld) getOrder(id string) trdapi.OrderView {

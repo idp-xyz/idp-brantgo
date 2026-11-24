@@ -195,7 +195,7 @@
     ["COST_PROVIDER_CONFLICT", "并发与幂等", 409, "否", "EXT／CST", "同一 (tenant, company, document_profile) 绑定超过一个成本提供者，或重复注册同名检查"],
     ["DOCUMENT_PROFILE_MISMATCH", "配置与政策", 422, "否", "INQ／CST／TRD／FUL", "单据内跨行业模板混单、报价与询价／成本快照 profile 不一致，或不同模板订单合并出运"],
     ["PLUGIN_NOT_ENABLED", "配置与政策", 422, "否", "EXT／INQ／CST／TRD／QLT／FUL", "使用 document_profile=apparel 或调用服装扩展能力时，该公司未激活 industry.apparel"],
-    ["PLUGIN_IN_USE", "状态", 409, "否", "EXT", "存在未关闭的 apparel 单据或运行中 AI 任务时尝试直接 plugin.disable（须先转入 draining_readonly）"],
+    ["PLUGIN_IN_USE", "状态", 409, "否", "EXT", "`draining_readonly` 下仍有未终态的 apparel 单据或运行中 AI 任务时执行 plugin.disable"],
     ["PLUGIN_VERSION_INCOMPATIBLE", "配置与政策", 409, "否", "EXT／AI", "插件 manifest.requires 声明的核心／契约版本与当前构建受支持组合不匹配"],
     ["SAMPLE_APPROVAL_REQUIRED", "报价", 422, "否", "CAT／TRD", "服装模板策略要求有效样衣批准，但目标 SKU 无对应阶段的已批准样衣记录"],
     ["SAMPLE_SPEC_MISMATCH", "引用", 409, "否", "CAT／TRD／TSK", "既有样衣批准绑定旧技术版本（如 TECH-01-r1），而当前单据／SKU 已升至 r2（基线 15.5 / BC-AT23）"],
