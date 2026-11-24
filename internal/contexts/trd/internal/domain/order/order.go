@@ -212,6 +212,7 @@ type Order struct {
 	SnapshotHash    string // SHA-256 of Snapshot, revision 1's order hash
 	OrderHash       string // the current revision's order hash (SnapshotHash at revision 1)
 	Status          Status
+	DocumentProfile string
 	RowVersion      int64
 	Prepared        quote.Act
 	ActivatedReview string
@@ -300,10 +301,17 @@ func Prepare(p Preparation, q *quote.Quote, a *acceptance.Acceptance, scope kern
 	at := kernel.Instant(now)
 	hash := quote.Hash(snapshot)
 	return &Order{ID: p.OrderID, Source: src, Slot: quote.SlotFullV1, OrderRevision: 1, Snapshot: snapshot, SnapshotHash: hash, OrderHash: hash,
-		Status: Draft, RowVersion: 1, Prepared: quote.Act{By: by, Epoch: epoch, At: at}, Fresh: true}, nil
+		Status: Draft, RowVersion: 1, DocumentProfile: profileOrGeneric(q.DocumentProfile), Prepared: quote.Act{By: by, Epoch: epoch, At: at}, Fresh: true}, nil
 }
 
 // Check admits a command on order o at the expected row version (VERSION_CONFLICT).
+func profileOrGeneric(p string) string {
+	if p == "" {
+		return "generic"
+	}
+	return p
+}
+
 func (o *Order) Check(expected int64) error {
 	if o.RowVersion != expected {
 		return kernel.Reject(kernel.CodeVersionConflict, "/args/expected_version", "")

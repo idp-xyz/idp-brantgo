@@ -21,6 +21,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
+	"go.idp.xyz/idp-brant/internal/foundation/plugin"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -109,6 +110,25 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 		seal, err := quote.SealDraft(h.q.ID, w.Number, w.Data, f.Facts, s.calculation(w.Data, f, now), now)
 		if err != nil {
 			return action.Outcome{}, err
+		}
+		profile, err := plugin.Canonical(h.q.DocumentProfile, "/args/data/document_profile")
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		if f.rfq != nil {
+			rfqProfile, err := plugin.Canonical(f.rfq.DocumentProfile, "/args/data/rfq_ref")
+			if err != nil {
+				return action.Outcome{}, err
+			}
+			if rfqProfile != profile {
+				return action.Outcome{}, plugin.ProfileMismatch("/args/data/document_profile")
+			}
+		}
+		if profile == plugin.ProfileApparel {
+			// After the quote root FOR UPDATE and the authority guard FOR SHARE, before CAT/CST/INQ/POL/PTY.
+			if err = plugin.RequireActive(ctx, exec, plugin.ApparelPluginID, string(plugin.ProfileApparel), "/args/data/document_profile"); err != nil {
+				return action.Outcome{}, err
+			}
 		}
 		if _, err = s.guardUpstream(ctx, exec, freezeGuards(w.Data, seal, f.Profile.ContentHash), now); err != nil {
 			return action.Outcome{}, err

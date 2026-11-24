@@ -120,7 +120,8 @@ func decimal(s string) kernel.Decimal {
 // already refused it.
 func orderFact(f trdapi.ActiveOrderFact, rev *trdapi.OrderRevisionFact) *shipment.OrderFact {
 	o := &shipment.OrderFact{Binding: shipment.OrderBinding{OrderID: f.Binding.OrderID, OrderRevision: f.Binding.OrderRevision,
-		OrderHash: f.Binding.OrderHash}, Code: f.Code, CustomerID: f.CustomerRef.PartyID, Customer: f.CustomerRef.Revision}
+		OrderHash: f.Binding.OrderHash}, Code: f.Code, CustomerID: f.CustomerRef.PartyID, Customer: f.CustomerRef.Revision,
+		DocumentProfile: f.DocumentProfile}
 	if o.Code != "" {
 		return o
 	}

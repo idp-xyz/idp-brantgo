@@ -92,7 +92,7 @@ func LockFulfilment(ctx context.Context, exec bentopg.Executor, scope kernel.Sco
 	return err
 }
 
-const shipmentColumns = `shipment_id, status, row_version, route, order_id, order_revision, order_hash, customer_id, packing_records, request_hash,
+const shipmentColumns = `shipment_id, status, row_version, route, order_id, order_revision, order_hash, customer_id, packing_records, request_hash, document_profile,
 	owner_actor_id, coalesce(owner_team_id, ''), prepared_by_kind, prepared_by_id, prepare_epoch, prepared_at, confirmed_by_kind, confirmed_by_id,
 	confirm_epoch, confirmed_at, confirm_evidence_ids, guard_entries, guard_entries_sha256, unchecked_guards, cancelled_by_kind, cancelled_by_id,
 	cancel_epoch, cancelled_at, cancel_reason`
@@ -105,7 +105,7 @@ func scanShipment(row pgx.Row) (*shipment.Shipment, error) {
 	var cAt, xAt *time.Time
 	var evidence, unchecked []string
 	err := row.Scan(&s.ID, &s.Status, &s.RowVersion, &s.Route, &s.Order.OrderID, &s.Order.OrderRevision, &s.Order.OrderHash, &s.CustomerID,
-		&s.PackingRecords, &s.RequestHash, &s.OwnerActor, &s.OwnerTeam, &preparedKind, &s.Prepared.By.ID, &s.Prepared.Epoch, &s.Prepared.At,
+		&s.PackingRecords, &s.RequestHash, &s.DocumentProfile, &s.OwnerActor, &s.OwnerTeam, &preparedKind, &s.Prepared.By.ID, &s.Prepared.Epoch, &s.Prepared.At,
 		&cKind, &cID, &cEpoch, &cAt, &evidence, &entries, &sum, &unchecked, &xKind, &xID, &xEpoch, &xAt, &reason)
 	if err != nil {
 		return nil, err
@@ -278,12 +278,16 @@ func loadPacking(ctx context.Context, exec bentopg.Executor, scope kernel.Scope,
 // InsertShipment stores a new prepared shipment with its lines and parties.
 func InsertShipment(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, s *shipment.Shipment) error {
 	t, c := scope2(scope)
+	profile := s.DocumentProfile
+	if profile == "" {
+		profile = "generic"
+	}
 	if _, err := exec.Exec(ctx, `INSERT INTO brant_ful.shipment (tenant_id, company_id, shipment_id, status, row_version, route, order_id,
-		order_revision, order_hash, customer_id, line_count, party_count, packing_records, request_hash, owner_actor_id, owner_team_id,
+		order_revision, order_hash, customer_id, line_count, party_count, packing_records, request_hash, document_profile, owner_actor_id, owner_team_id,
 		prepared_by_kind, prepared_by_id, prepare_epoch, prepared_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
 		t, c, s.ID, s.Status, s.RowVersion, s.Route, s.Order.OrderID, s.Order.OrderRevision, s.Order.OrderHash, s.CustomerID, len(s.Lines),
-		len(s.Parties), s.PackingRecords, s.RequestHash, s.OwnerActor, nullable(s.OwnerTeam), string(s.Prepared.By.Kind), s.Prepared.By.ID,
+		len(s.Parties), s.PackingRecords, s.RequestHash, profile, s.OwnerActor, nullable(s.OwnerTeam), string(s.Prepared.By.Kind), s.Prepared.By.ID,
 		s.Prepared.Epoch, s.Prepared.At); err != nil {
 		return err
 	}

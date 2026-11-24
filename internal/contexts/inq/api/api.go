@@ -141,6 +141,9 @@ type SaveRfq struct {
 	// of the request hash. A process with CRM off refuses a non-empty id with
 	// DEPENDENCY_NOT_SUPPORTED.
 	OpportunityID string `json:"opportunity_id,omitempty" contract:"id" ai:"-" doc:"optional CRM opportunity; not a Q01 tool argument"`
+	// DocumentProfile is generic or apparel. Empty is generic, which is every Q01 save. json:"-"
+	// keeps it out of the Q01 tool schema; MarshalJSON adds it to the request hash only for apparel.
+	DocumentProfile string `json:"-" contract:"enum=generic|apparel" ai:"-" doc:"generic or apparel; omitted means generic"`
 }
 
 // ConfirmRfqScope makes a complete draft ready. Only a human confirms, and the evidence must cover
@@ -240,6 +243,11 @@ func (c SaveRfq) Validate() error {
 		if !text(f, 200) || slices.Index(c.UnresolvedFields, f) != i {
 			return schema("/args/unresolved_fields")
 		}
+	}
+	switch c.DocumentProfile {
+	case "", "generic", "apparel":
+	default:
+		return schema("/args/document_profile")
 	}
 	return nil
 }
@@ -474,7 +482,9 @@ type RfqView struct {
 	UnresolvedFields []string
 	// OpportunityID is the CRM opportunity the draft cites, empty when it cites none (R40).
 	OpportunityID string
-	Confirmation  *Confirmation
+	// DocumentProfile is generic or apparel. Empty on a view that has not been filled is generic.
+	DocumentProfile string
+	Confirmation    *Confirmation
 	// Corrections are every human correction and verification of the RFQ's lines, in order.
 	Corrections []Correction
 }

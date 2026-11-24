@@ -55,6 +55,8 @@ var freezeOptional = []struct {
 	{"LegalTermsRef", func(d *api.QuoteData) { d.LegalTermsRef = nil }},
 	// conversion_mode is optional: omitted, the freeze seals today's single full order (TRD-INV-024).
 	{"ConversionMode", func(d *api.QuoteData) { d.ConversionMode = "" }},
+	// document_profile is optional: omitted, the quote stays generic (S7-01).
+	{"DocumentProfile", func(d *api.QuoteData) { d.DocumentProfile = "" }},
 }
 
 // completeQuote has every member of QuoteData. Only presence matters to either rule: the values are

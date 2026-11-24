@@ -32,7 +32,7 @@ func OpenAPI() ([]byte, error) {
 	sets = append(sets, mfgCommands(struct{ MFG }{}))
 	sets = append(sets, clmCommands(struct{ CLM }{}))
 	sets = append(sets, crmCommands(struct{ CRM }{}))
-	sets = append(sets, tskCommands(struct{ TSK }{}), aiCommands(struct{ AI }{}))
+	sets = append(sets, tskCommands(struct{ TSK }{}), aiCommands(struct{ AI }{}), extCommands(struct{ EXT }{}))
 	paths := map[string]any{}
 	for _, set := range sets {
 		names := make([]string, 0, len(set.commands))
@@ -162,6 +162,7 @@ type readRoute struct {
 
 var reads = []readRoute{
 	{"/api/brant/v1/{bc}/audit", "audit", "audit", "The audit trail of one context in the caller's scope", []string{"bc"}, false},
+	{"/api/brant/v1/ext/plugins", "ext.plugins", "ext", "Registered industry plugins and the caller's company activation", nil, false},
 	{"/api/brant/v1/evd/sources/{id}", "evd.source.get", "evd", "A source with its content and imports", []string{"id"}, false},
 	{"/api/brant/v1/evd/files/{id}", "evd.file.get", "evd", "A business file with its bytes in Base64", []string{"id"}, false},
 	{"/api/brant/v1/evd/sources/{id}/extract", "evd.source.extract.get", "evd",

@@ -176,18 +176,19 @@ type Confirmation struct {
 
 // Rfq is the aggregate root. Sources are every source the RFQ uses, sorted.
 type Rfq struct {
-	ID            string
-	Status        Status
-	RowVersion    int64
-	CustomerID    string
-	ContactID     string
-	Lines         []Line
-	Sources       []string
-	Unresolved    []string
-	OwnerActor    string
-	OwnerTeam     string
-	OpportunityID string
-	Confirmation  *Confirmation
+	ID              string
+	Status          Status
+	RowVersion      int64
+	CustomerID      string
+	ContactID       string
+	Lines           []Line
+	Sources         []string
+	Unresolved      []string
+	OwnerActor      string
+	OwnerTeam       string
+	OpportunityID   string
+	DocumentProfile string
+	Confirmation    *Confirmation
 }
 
 // New returns an unsaved draft the actor will own.
@@ -197,12 +198,13 @@ func New(id, ownerActor, ownerTeam string) *Rfq {
 
 // Content is the whole content of a draft save.
 type Content struct {
-	CustomerID    string
-	ContactID     string
-	OpportunityID string
-	Lines         []Line
-	SourceIDs     []string
-	Unresolved    []string
+	CustomerID      string
+	ContactID       string
+	OpportunityID   string
+	DocumentProfile string
+	Lines           []Line
+	SourceIDs       []string
+	Unresolved      []string
 }
 
 // Party, Contact and Sku are what the upstream contexts said about a reference the caller sees; a
@@ -337,7 +339,7 @@ func (r *Rfq) ReplaceDraft(d Content, by kernel.ActorRef) []Correction {
 			}
 		}
 	}
-	r.CustomerID, r.ContactID, r.OpportunityID = d.CustomerID, d.ContactID, d.OpportunityID
+	r.CustomerID, r.ContactID, r.OpportunityID, r.DocumentProfile = d.CustomerID, d.ContactID, d.OpportunityID, d.DocumentProfile
 	r.Lines = lines
 	r.Unresolved = slices.Clone(d.Unresolved)
 	r.Sources = slices.Clone(d.SourceIDs)

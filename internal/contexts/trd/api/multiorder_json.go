@@ -41,6 +41,13 @@ func (d QuoteData) MarshalJSON() ([]byte, error) {
 		}
 		b = insertJSON(b, "ConversionMode", raw)
 	}
+	if d.DocumentProfile != "" && d.DocumentProfile != "generic" {
+		raw, err := json.Marshal(d.DocumentProfile)
+		if err != nil {
+			return nil, err
+		}
+		b = insertJSON(b, "DocumentProfile", raw)
+	}
 	return b, nil
 }
 

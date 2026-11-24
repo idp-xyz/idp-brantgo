@@ -204,6 +204,10 @@ type PrepareShipment struct {
 	Route          string
 	Lines          []ShipmentLine
 	EndUserParty   *PartyRef `json:",omitempty"`
+	// OrderIDs cites every order a consolidated shipment would carry. Empty means the one OrderID.
+	// Mixed document profiles are DOCUMENT_PROFILE_MISMATCH. json:"-" keeps the member out of the
+	// Q01 tool schema; MarshalJSON records it in the request hash only when it is set.
+	OrderIDs []string `json:"-"`
 }
 
 // PackageContent is what each carton of a package holds of shipment line LineID.
@@ -364,6 +368,13 @@ func (c PrepareShipment) Validate() error {
 		return schema("/args/route")
 	case len(c.Lines) < 1 || len(c.Lines) > MaxLines:
 		return schema("/args/lines")
+	case len(c.OrderIDs) > MaxLines:
+		return schema("/args/order_ids")
+	}
+	for i, id := range c.OrderIDs {
+		if !kernel.ValidIdentifier(id) {
+			return schema("/args/order_ids/" + strconv.Itoa(i))
+		}
 	}
 	seen := map[string]bool{}
 	for i, l := range c.Lines {

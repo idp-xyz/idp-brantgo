@@ -18,6 +18,9 @@ func TestClassify(t *testing.T) {
 		"internal/kernel":                         {layer: layerKernel},
 		"internal/foundation/messaging":           {layer: layerFoundation},
 		"internal/foundation/database/pgtest":     {layer: layerFoundation},
+		"internal/plugins/apparel":                {layer: layerPlugin, context: "apparel"},
+		"internal/plugins/apparel/cost":           {layer: layerPlugin, context: "apparel"},
+		"internal/plugins":                        {layer: layerUnknown},
 		"internal/transport/http":                 {layer: layerInbound},
 		"internal/processes/order":                {layer: layerInbound},
 		"internal/reference/api":                  {layer: layerReference, part: partAPI},
@@ -84,6 +87,27 @@ func TestImportRules(t *testing.T) {
 		{"tests/e2e", "net/http", ""},
 		{"tests/e2e", mod + "/internal/kernel", "AC6"},
 		{"tools/spikes/consistency", mod + "/internal/foundation/bento", ""},
+		// layerPlugin: calculation only, plus kernel, foundation/plugin and published api packages.
+		{"internal/plugins/apparel", "crypto/sha256", ""},
+		{"internal/plugins/apparel", "net/http", "plugin"},
+		{"internal/plugins/apparel", mod + "/internal/kernel", ""},
+		{"internal/plugins/apparel", mod + "/internal/foundation/plugin", ""},
+		{"internal/plugins/apparel", mod + "/internal/foundation/plugin/postgres", ""},
+		{"internal/plugins/apparel", mod + "/internal/foundation/database", "plugin"},
+		{"internal/plugins/apparel", mod + "/internal/contexts/cat/api", ""},
+		{"internal/plugins/apparel", mod + "/internal/contexts/cat/internal/domain", "plugin"},
+		{"internal/plugins/apparel", mod + "/internal/reference/api", ""},
+		{"internal/plugins/apparel", mod + "/internal/reference/internal/lists", "plugin"},
+		{"internal/plugins/apparel", "github.com/jackc/pgx/v5", "plugin"},
+		{"internal/plugins/apparel", "go.idp.xyz/idp-bento-go/postgres", "plugin"},
+		{"internal/plugins/apparel", mod + "/internal/bootstrap", "plugin"},
+		{"internal/plugins/apparel", mod + "/internal/transport/httpapi", "plugin"},
+		{"internal/plugins/apparel", mod + "/internal/ai/gateway", "plugin"},
+		{"internal/plugins/apparel", mod + "/internal/plugins/other", "plugin"},
+		{"internal/contexts/trd/internal/application", mod + "/internal/plugins/apparel", "layer"},
+		{"internal/foundation/plugin", mod + "/internal/plugins/apparel", "D5"},
+		{"internal/bootstrap", mod + "/internal/plugins/apparel", ""},
+		{"tools/dependency-check", mod + "/internal/plugins/apparel", ""},
 	} {
 		f, bad := judge(mod, classify(mod, mod+"/"+tc.from), tc.imp, allow)
 		if got := map[bool]string{true: f.rule}[bad]; got != tc.rule {
@@ -266,5 +290,29 @@ func TestCodeownersMustNameEveryContextAndTheKernel(t *testing.T) {
 		if got := checkCodeowners(tc.text, required); len(got) != tc.want {
 			t.Errorf("%s: %d findings %v, want %d", name, len(got), got, tc.want)
 		}
+	}
+}
+
+func TestPluginDirectoriesNeedOwners(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"internal/contexts/inq", "internal/kernel", "internal/plugins/apparel"} {
+		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dirs, err := requiredOwnedDirs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"internal/contexts/inq/", "internal/kernel/", "internal/plugins/apparel/"}
+	if strings.Join(dirs, ",") != strings.Join(want, ",") {
+		t.Fatalf("owned dirs %v, want %v", dirs, want)
+	}
+	if got := checkCodeowners("", dirs); len(got) != len(want) {
+		t.Fatalf("missing owners: %v", got)
+	}
+	text := "/internal/contexts/inq/ @idpxyz\n/internal/kernel/ @idpxyz\n/internal/plugins/apparel/ @idpxyz\n"
+	if got := checkCodeowners(text, dirs); len(got) != 0 {
+		t.Fatalf("named plugin directory: %v", got)
 	}
 }

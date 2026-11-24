@@ -160,6 +160,7 @@ const (
 	layerKernel     = "kernel"
 	layerReference  = "reference"
 	layerFoundation = "foundation"
+	layerPlugin     = "plugin"
 	layerInbound    = "inbound"
 	layerTests      = "tests"
 	layerTool       = "tool"
@@ -218,6 +219,11 @@ func classify(module, importPath string) class {
 		return class{layer: layerKernel}
 	case "foundation":
 		return class{layer: layerFoundation}
+	case "plugins":
+		if len(seg) < 3 {
+			return class{layer: layerUnknown}
+		}
+		return class{layer: layerPlugin, context: seg[2]}
 	case "transport", "ai", "processes":
 		return class{layer: layerInbound}
 	case "reference":
@@ -313,12 +319,17 @@ func checkImports(module string, pkgs []listedPackage, allow map[[2]string]bool)
 
 // judge decides one import. It returns the finding and true for a violation.
 func judge(module string, from class, imp string, allow map[[2]string]bool) (finding, bool) {
+	bad := func(rule, detail string) (finding, bool) { return finding{rule: rule, detail: detail}, true }
 	if isStandard(imp) {
+		// A plugin is pure calculation. net/http is the outbound client; the standard library
+		// otherwise is allowed.
+		if from.layer == layerPlugin && (imp == "net/http" || strings.HasPrefix(imp, "net/http/")) {
+			return bad("plugin", "imports "+imp+"; a plugin does not make outbound HTTP calls")
+		}
 		return finding{}, false
 	}
 	ours := imp == module || strings.HasPrefix(imp, module+"/")
 	target := strings.TrimPrefix(imp, module+"/")
-	bad := func(rule, detail string) (finding, bool) { return finding{rule: rule, detail: detail}, true }
 	if !ours {
 		switch {
 		case from.layer == layerKernel:
@@ -327,6 +338,8 @@ func judge(module string, from class, imp string, allow map[[2]string]bool) (fin
 			return bad("D2", "imports "+imp+"; api packages import only the standard library and the kernel (AC3)")
 		case from.layer == layerContext && from.part == partDomain:
 			return bad("domain", "imports "+imp+"; the domain depends on the standard library and the kernel only (§07)")
+		case from.layer == layerPlugin:
+			return bad("plugin", "imports "+imp+"; a plugin imports the standard library, the kernel, foundation/plugin and published api packages only")
 		}
 		return finding{}, false
 	}
@@ -362,8 +375,41 @@ func judge(module string, from class, imp string, allow map[[2]string]bool) (fin
 		}
 	case layerContext:
 		return judgeContext(from, to, target, allow)
+	case layerPlugin:
+		return judgePlugin(to, target)
 	}
 	return finding{}, false
+}
+
+// judgePlugin is the import rule for internal/plugins/<name>: the standard library (except net/http,
+// decided before this), the kernel, internal/foundation/plugin, and context or reference api packages.
+func judgePlugin(to class, target string) (finding, bool) {
+	bad := func(detail string) (finding, bool) {
+		return finding{rule: "plugin", detail: detail}, true
+	}
+	switch to.layer {
+	case layerKernel:
+		return finding{}, false
+	case layerFoundation:
+		if target == "internal/foundation/plugin" || strings.HasPrefix(target, "internal/foundation/plugin/") {
+			return finding{}, false
+		}
+		return bad("imports " + target + "; a plugin reaches foundation only through internal/foundation/plugin")
+	case layerContext:
+		if to.part == partAPI {
+			return finding{}, false
+		}
+		return bad("imports " + target + "; a plugin reaches a context only through its api package")
+	case layerReference:
+		if to.part == partAPI {
+			return finding{}, false
+		}
+		return bad("imports " + target + "; a plugin reaches reference data only through internal/reference/api")
+	case layerPlugin:
+		return bad("imports " + target + "; a plugin does not import another plugin")
+	default:
+		return bad("imports " + target + "; a plugin does not import bootstrap, transport, ai or a context's internals")
+	}
 }
 
 func judgeContext(from, to class, target string, allow map[[2]string]bool) (finding, bool) {
@@ -461,6 +507,15 @@ func requiredOwnedDirs(root string) ([]string, error) {
 	}
 	if info, err := os.Stat(filepath.Join(root, "internal", "kernel")); err == nil && info.IsDir() {
 		dirs = append(dirs, "internal/kernel/")
+	}
+	plugins, err := os.ReadDir(filepath.Join(root, "internal", "plugins"))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	for _, e := range plugins {
+		if e.IsDir() {
+			dirs = append(dirs, "internal/plugins/"+e.Name()+"/")
+		}
 	}
 	sort.Strings(dirs)
 	return dirs, nil

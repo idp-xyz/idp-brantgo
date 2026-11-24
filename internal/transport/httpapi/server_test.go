@@ -121,8 +121,22 @@ func TestCommandReachesTheContextWithTheTokenPrincipal(t *testing.T) {
 		t.Fatalf("success keys %v", a.body)
 	}
 	got := inq.saved[0]
-	if got.IdempotencyKey != "k1" || got.Lines[0].Quantity != "120" || got.SourceIDs == nil || got.UnresolvedFields != nil {
+	if got.IdempotencyKey != "k1" || got.Lines[0].Quantity != "120" || got.SourceIDs == nil || got.UnresolvedFields != nil || got.DocumentProfile != "" {
 		t.Fatalf("command %+v", got)
+	}
+}
+
+// document_profile is optional on the HTTP command. Omitted stays empty (generic). apparel is the
+// industry template. The Q01 tool schema still omits it (json:"-" and ai:"-" on the api type).
+func TestSaveRfqCarriesDocumentProfile(t *testing.T) {
+	inq := &fakeINQ{}
+	a := call(t, newServer(t, inq), "POST", saveRoute, "Bearer good",
+		request(`{"id":"rfq.1","expected_version":0,"document_profile":"apparel","lines":[{"line_id":"L1","requested_item":"成衣"}]}`))
+	if a.status != 200 || a.body["object_id"] != "rfq.1" {
+		t.Fatalf("%d %v", a.status, a.body)
+	}
+	if inq.saved[0].DocumentProfile != "apparel" {
+		t.Fatalf("profile %q", inq.saved[0].DocumentProfile)
 	}
 }
 

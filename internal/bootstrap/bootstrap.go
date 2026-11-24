@@ -47,6 +47,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/database"
 	"go.idp.xyz/idp-brant/internal/foundation/identity/oidc"
 	"go.idp.xyz/idp-brant/internal/foundation/messaging"
+	"go.idp.xyz/idp-brant/internal/foundation/plugin"
 	"go.idp.xyz/idp-brant/internal/kernel"
 	"go.idp.xyz/idp-brant/internal/reference"
 	"go.idp.xyz/idp-brant/internal/transport/httpapi"
@@ -205,7 +206,8 @@ type Contexts struct {
 	FUL *ful.Module
 	CLM *clm.Module
 	TSK *tsk.Module
-	AI  *ai.Layer // internal/ai: not a bounded context (ADR-BR-003)
+	AI  *ai.Layer      // internal/ai: not a bounded context (ADR-BR-003)
+	EXT *plugin.Module // industry plugin platform; not a bounded context (ADR-BR-EXT-001)
 }
 
 // Contexts wires reference data and every bounded context, upstream first, with CRM enabled.
@@ -412,6 +414,34 @@ func (p *Platform) ContextsWithOptions(opt PlatformConfig) (*Contexts, error) {
 		db, err = p.newDB()
 	}
 	if err == nil {
+		// EXT (S7-01) after the contexts whose open documents plugin.disable reads. It is not a
+		// bounded context. The apparel declaration is registered; the apparel implementation is S7-03.
+		c.EXT, err = plugin.New(db, nil, plugin.InFlightFunc(func(ctx context.Context, profile plugin.DocumentProfile) (bool, error) {
+			if c.INQ != nil {
+				if open, err := c.INQ.OpenProfile(ctx, string(profile)); err != nil || open {
+					return open, err
+				}
+			}
+			if c.TRD != nil {
+				if open, err := c.TRD.OpenProfile(ctx, string(profile)); err != nil || open {
+					return open, err
+				}
+			}
+			if c.FUL != nil {
+				if open, err := c.FUL.OpenProfile(ctx, string(profile)); err != nil || open {
+					return open, err
+				}
+			}
+			if c.TSK != nil {
+				return c.TSK.OpenProfile(ctx, string(profile))
+			}
+			return false, nil
+		}))
+	}
+	if err == nil {
+		db, err = p.newDB()
+	}
+	if err == nil {
 		// internal/ai (S4) last: the Q01 capabilities over the contexts' api and the execution entry
 		// of task-bound steps over TSK (unit C2, ai.go).
 		c.AI, err = newAI(db, &c)
@@ -524,6 +554,9 @@ func (p *Platform) API(cfg APIConfig) (http.Handler, error) {
 	tc.CLM = c.CLM
 	tc.TSK = c.TSK
 	tc.AI = c.AI
+	if c.EXT != nil {
+		tc.EXT = c.EXT
+	}
 	if cfg.ReplaySinkURL != "" || cfg.ReplayDispatch {
 		rc := ReplayConfig{SinkURL: cfg.ReplaySinkURL, PublishTimeout: cfg.ReplayPublishTimeout}
 		if cfg.ReplayDispatch {

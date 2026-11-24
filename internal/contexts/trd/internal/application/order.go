@@ -614,7 +614,7 @@ func (s Service) ResolveActiveOrders(ctx context.Context, ids []string) (map[str
 // activeOrderFact is what ActiveOrderRef v1 says of an order now.
 func activeOrderFact(o *order.Order, sc kernel.Scope) api.ActiveOrderFact {
 	f := api.ActiveOrderFact{Binding: api.OrderBinding{OrderID: o.ID, OrderRevision: o.OrderRevision, OrderHash: o.OrderHash},
-		Status: string(o.Status), RowVersion: o.RowVersion, QuoteID: o.Source.QuoteID, BusinessRevision: o.Source.Revision,
+		Status: string(o.Status), DocumentProfile: o.DocumentProfile, RowVersion: o.RowVersion, QuoteID: o.Source.QuoteID, BusinessRevision: o.Source.Revision,
 		BusinessHash: o.Source.BusinessHash, AcceptanceID: o.Source.AcceptanceID, ReviewID: o.ActivatedReview}
 	if len(o.Commits) > 0 {
 		f.ActivatedAt = o.Commits[len(o.Commits)-1].At

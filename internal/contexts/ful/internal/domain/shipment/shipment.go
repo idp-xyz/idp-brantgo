@@ -122,23 +122,24 @@ type Cancellation struct {
 // Shipment is the aggregate root. RowVersion counts its commands: 1 when prepared, one more for
 // every packing record and for its confirmation or cancellation.
 type Shipment struct {
-	ID             string
-	Status         string
-	RowVersion     int64
-	Route          string
-	Order          OrderBinding
-	CustomerID     string
-	Lines          []Line
-	Parties        []Party
-	PackingRecords int64
-	Plan           *Packing // the current planned packing
-	Actual         *Packing // the current actual packing
-	RequestHash    string
-	OwnerActor     string
-	OwnerTeam      string
-	Prepared       Act
-	Confirmation   *Confirmation
-	Cancellation   *Cancellation
+	ID              string
+	Status          string
+	RowVersion      int64
+	Route           string
+	Order           OrderBinding
+	CustomerID      string
+	Lines           []Line
+	Parties         []Party
+	PackingRecords  int64
+	Plan            *Packing // the current planned packing
+	Actual          *Packing // the current actual packing
+	RequestHash     string
+	DocumentProfile string
+	OwnerActor      string
+	OwnerTeam       string
+	Prepared        Act
+	Confirmation    *Confirmation
+	Cancellation    *Cancellation
 }
 
 // OrderLine is a line of the order's current revision as TRD shows it.
@@ -156,13 +157,14 @@ type OrderLine struct {
 // reads that revision (S5R-D35), its lines, the parties of the address roles it binds and its notify
 // party (nil: none; S5R-D40).
 type OrderFact struct {
-	Binding    OrderBinding
-	Code       string
-	CustomerID string
-	Customer   int64 // the customer's party revision
-	Lines      []OrderLine
-	Addresses  []Party
-	Notify     *Party
+	Binding         OrderBinding
+	Code            string
+	CustomerID      string
+	Customer        int64 // the customer's party revision
+	DocumentProfile string
+	Lines           []OrderLine
+	Addresses       []Party
+	Notify          *Party
 }
 
 // PartyRef names a PTY party at a confirmed revision (PartyRef v1).
@@ -428,8 +430,12 @@ func openShipment(req Request, in Inputs) (*Shipment, *OrderFact, error) {
 		return nil, nil, Reject(kernel.CodeReferenceInvalid, "/args/order_id", "The order is not intact")
 	}
 	now := kernel.Instant(in.Now)
+	profile := o.DocumentProfile
+	if profile == "" {
+		profile = "generic"
+	}
 	s := &Shipment{ID: req.ID, Status: StatusPrepared, RowVersion: 1, Route: req.Route, Order: o.Binding, CustomerID: o.CustomerID,
-		RequestHash: req.RequestHash, OwnerActor: in.Preparer.ID, OwnerTeam: in.Team,
+		RequestHash: req.RequestHash, DocumentProfile: profile, OwnerActor: in.Preparer.ID, OwnerTeam: in.Team,
 		Prepared: Act{By: in.Preparer, Epoch: in.Epoch, At: now}}
 	return s, o, nil
 }

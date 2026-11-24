@@ -14,11 +14,12 @@ import (
 // transaction ends.
 //
 // OrderGuard v1 is a SECURITY DEFINER function in TRD's schema with a fixed search_path
-// (migrations/trd/000005_trd_sales_orders.sql):
+// (migrations/trd/000005_trd_sales_orders.sql, return column document_profile added in
+// migrations/trd/000013_trd_document_profile.sql):
 //
 //	brant_trd.guard_order_active_v1(p_order_id text, p_order_revision bigint, p_order_hash text)
 //	    RETURNS TABLE (known boolean, status text, order_revision bigint, order_hash text, quote_id text, revision bigint,
-//	                   business_hash text, review_id text, approval_revoked boolean, code text)
+//	                   business_hash text, review_id text, approval_revoked boolean, code text, document_profile text)
 //
 // It always returns one row in the caller's scope (app.tenant_id and app.company_id) and locks the
 // one order row FOR SHARE in the caller's transaction. order.approval.revoke, the order's activation
@@ -41,7 +42,7 @@ import (
 const (
 	OrderGuardFunction = "brant_trd.guard_order_active_v1"
 	OrderGuardSQL      = `SELECT known, status, order_revision, order_hash, quote_id, revision, business_hash, review_id, approval_revoked,
-		code FROM brant_trd.guard_order_active_v1($1, $2, $3)`
+		code, document_profile FROM brant_trd.guard_order_active_v1($1, $2, $3)`
 )
 
 // OrderBinding is an order as a downstream fact binds it: the order at an order revision and its
@@ -74,20 +75,21 @@ type OrderVerdict struct {
 	ReviewID         string
 	ApprovalRevoked  bool
 	Code             string
+	DocumentProfile  string
 }
 
 // ScanOrderGuard reads the row of OrderGuardSQL for b through scan, such as a pgx row's Scan.
 func ScanOrderGuard(b OrderBinding, scan func(dest ...any) error) (OrderVerdict, error) {
 	v := OrderVerdict{Ref: b}
-	var status, hash, quote, bhash, review, code *string
+	var status, hash, quote, bhash, review, code, profile *string
 	var revision, brev *int64
-	if err := scan(&v.Known, &status, &revision, &hash, &quote, &brev, &bhash, &review, &v.ApprovalRevoked, &code); err != nil {
+	if err := scan(&v.Known, &status, &revision, &hash, &quote, &brev, &bhash, &review, &v.ApprovalRevoked, &code, &profile); err != nil {
 		return OrderVerdict{}, err
 	}
 	for _, f := range []struct {
 		from *string
 		to   *string
-	}{{status, &v.Status}, {hash, &v.OrderHash}, {quote, &v.QuoteID}, {bhash, &v.BusinessHash}, {review, &v.ReviewID}, {code, &v.Code}} {
+	}{{status, &v.Status}, {hash, &v.OrderHash}, {quote, &v.QuoteID}, {bhash, &v.BusinessHash}, {review, &v.ReviewID}, {code, &v.Code}, {profile, &v.DocumentProfile}} {
 		if f.from != nil {
 			*f.to = *f.from
 		}
@@ -174,6 +176,7 @@ type ActiveOrderFact struct {
 	ActivatedAt      time.Time
 	ApprovalRevoked  bool
 	Code             string
+	DocumentProfile  string
 }
 
 // Check returns nil when the order serves new downstream work now and its refusal at path

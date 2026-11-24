@@ -3753,8 +3753,15 @@
       "source": "idp-brant.ext",
       "events": [],
       "commands": "plugin.enable、plugin.enter_readonly、plugin.disable（人工专属，登记在 platformCommands）",
-      "queries": [],
-      "note": "S7 登记（ADR-BR-EXT-001）：行业插件平台扩展底座不是限界上下文，不增加第 19 个上下文。人工专属命令登记在 platformCommands。读取路由待 OpenAPI 落地后再登记，故 queries 为空。"
+      "queries": [
+        {
+          "name": "ext.plugins",
+          "route": "GET /api/brant/v1/ext/plugins",
+          "permission": "ext.read",
+          "audited": true
+        }
+      ],
+      "note": "S7 登记（ADR-BR-EXT-001）：行业插件平台扩展底座不是限界上下文，不增加第 19 个上下文。人工专属命令登记在 platformCommands。GET /api/brant/v1/ext/plugins 已在 OpenAPI 登记，权限 ext.read，已审计。审计读取走通用 GET /api/brant/v1/{bc}/audit（ext.audit），不单列。"
     }
   ],
   "consumers": [

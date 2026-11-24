@@ -34,6 +34,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/plugin"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -503,14 +504,31 @@ func readableSet(sources map[string]string) map[string]bool {
 // draft cites must be ones the caller reads; the references' effect is judged at the freeze.
 func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt, error) {
 	data := quoteData(cmd.Data)
+	profile, profileErr := plugin.Canonical(cmd.Data.DocumentProfile, "/args/data/document_profile")
 	h := &quoteCommand{s: s, id: cmd.QuoteID}
 	var readable map[string]bool
+	var rfqProfile string
+	var rfqFound bool
 	h.prepare = func(ctx context.Context) error {
 		found, err := s.sources(ctx, data.Sources())
 		readable = readableSet(found)
-		return err
+		if err != nil || data.Rfq == nil {
+			return err
+		}
+		rfqs, err := s.Upstream.Rfqs.ResolveRfqs(ctx, []string{data.Rfq.RfqID})
+		if err != nil {
+			return err
+		}
+		if ref, ok := rfqs[data.Rfq.RfqID]; ok {
+			rfqFound = true
+			rfqProfile = ref.DocumentProfile
+		}
+		return nil
 	}
 	h.apply = func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) (action.Outcome, error) {
+		if profileErr != nil {
+			return action.Outcome{}, profileErr
+		}
 		if err := h.admit(ctx, exec, d, cmd.ExpectedVersion == 0); err != nil {
 			return action.Outcome{}, err
 		}
@@ -520,9 +538,26 @@ func (s Service) SaveDraft(ctx context.Context, cmd api.SaveDraft) (api.Receipt,
 		if err := quote.CheckDraft(data, readable); err != nil {
 			return action.Outcome{}, err
 		}
+		if rfqFound {
+			got, err := plugin.Canonical(rfqProfile, "/args/data/rfq_ref")
+			if err != nil {
+				return action.Outcome{}, err
+			}
+			if got != profile {
+				return action.Outcome{}, plugin.ProfileMismatch("/args/data/document_profile")
+			}
+		}
+		if profile == plugin.ProfileApparel {
+			if err := plugin.RequireActive(ctx, exec, plugin.ApparelPluginID, string(plugin.ProfileApparel), "/args/data/document_profile"); err != nil {
+				return action.Outcome{}, err
+			}
+		}
 		created := h.q == nil
 		if created {
 			h.q = quote.New(cmd.QuoteID, d.Actor.ID, d.Team)
+			h.q.DocumentProfile = string(profile)
+		} else if stored, err := plugin.Canonical(h.q.DocumentProfile, "/args/data/document_profile"); err != nil || stored != profile {
+			return action.Outcome{}, plugin.ProfileMismatch("/args/data/document_profile")
 		}
 		h.q.Save(data, d.Actor, d.Epoch, s.Clock.Now())
 		return h.save(ctx, exec, created, api.StatusWorking)
