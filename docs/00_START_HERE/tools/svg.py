@@ -357,3 +357,186 @@ def wbs_roadmap(phases: list[dict], tasks: list[dict]) -> str:
             body.append(f'<path d="M{x + bw:.0f},105 L{x + bw + 12:.0f},105" stroke="{MUTED}" stroke-width="1.6" marker-end="url(#arr)"/>')
     body.append(_text(W / 2, 214, "顺序表示依赖与准入，不是已批准的排期；S1–S3 以 Python V0.50 行为等价为退出条件，S4 满足 P0 退出前提", 12, MUTED))
     return _svg(W, H, "".join(body), "Go 实施阶段路线")
+
+
+def r1_deployment_topology() -> str:
+    """R1 modular-monolith deployment topology, process isolation and external boundaries."""
+    W, H = 1140, 628
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Band 1: Ingress, OIDC, Ops
+    top_boxes = [
+        (30, 20, 330, 78, "#ffffff", "#8fa9b2", "业务客户端 ／ 前端工作台（外部）",
+         ["本仓库仅交付后端 API 与 OpenAPI 3.1 契约", "人工操作走 HTTPS ＋ Bearer JWT（at+jwt）"]),
+        (390, 20, 350, 78, "#f3eadb", "#c9b38f", "外部 IAM ／ OIDC 提供方（ACL）",
+         ["签发 RS256 at+jwt；验签 iss ／ aud ／ JWKS", "真实企业 IdP 接入延后至 B0；CI 用本地签发者"]),
+        (770, 20, 340, 78, "#e8eff3", "#9fb7bf", "运维与迁移入口（仅内网 ／ 回环）",
+         ["GET /metrics（Prometheus 0.0.4，无鉴权，禁公网）", "brant-admin（授权投影）· brant-migrate（DDL）"]),
+    ]
+    for x, y, w, h, fill, stroke, title, lines in top_boxes:
+        body.append(_box(x, y, w, h, fill, stroke, 8))
+        body.append(_text(x + 14, y + 24, title, 12.5, NAVY, "700", "start"))
+        for idx, ln in enumerate(lines):
+            body.append(_text(x + 14, y + 46 + idx * 18, ln, 11, MUTED if fill == "#ffffff" else "#38566a", "400", "start"))
+
+    # Band 2 Left: Brant runtime processes (modular monolith)
+    body.append(_box(30, 128, 710, 246, "#f4f9f8", TEAL, 10, 'stroke-dasharray="6,4" stroke-width="1.4"'))
+    body.append(_text(46, 150, "IDP Brant 模块化单体进程组（非微服务拆分 · 数据库统一使用非特权角色 brant_app）", 12, TEAL, "700", "start"))
+
+    procs = [
+        (46, 164, 214, 196, NAVY, "brant-api", "HTTP ／ OpenAPI 3.1 入口", [
+            "• 552 路径（429 POST ／ 123 GET）",
+            "• F2：ai 令牌读体前拒写 403",
+            "• strictjson 1／15／32 MiB 硬限",
+            "• 18 上下文组合根装配",
+            "• CRM 可选（-disable-crm）",
+            "• STK／MFG 按公司默认关闭",
+        ]),
+        (278, 164, 214, 196, TEAL, "brant-worker -dispatch", "Outbox 中继与 Inbox 分发", [
+            "• 参考部署：2–3 个进程",
+            "• 分区租约并发消费 Outbox",
+            "• 8 个系统消费方（事件 ID 幂等）",
+            "• 滞后告警 60s ／ 事故 300s",
+            "• 死信独立告警（人工重放）",
+            "• 实测 3w P95 6.403s（目标≤5s）",
+        ]),
+        (510, 164, 214, 196, "#6b4fa0", "brant-worker -agent", "AI 受控执行运行器（可选）", [
+            "• 系统操作者 system:ai.runner",
+            "• 进程内 AI Gateway 能力校验",
+            "• 委托 ＋ 内容绑定批准授权",
+            "• 预算：40 调用 ／ 3 重试 ／ $3",
+            "• 受限抽取 Q01.upload.v0.1",
+            "• ModelPort（openaicompat）",
+        ]),
+    ]
+    for x, y, w, h, hfill, title, sub, items in procs:
+        body.append(_box(x, y, w, h, "#ffffff", "#b8cdd2", 8))
+        body.append(_box(x, y, w, 46, hfill, hfill, 8))
+        body.append(f'<rect x="{x}" y="{y + 38}" width="{w}" height="8" fill="{hfill}"/>')
+        body.append(_text(x + w / 2, y + 20, title, 12.5, "#ffffff", "700"))
+        body.append(_text(x + w / 2, y + 37, sub, 10.2, "#dceef0", "400"))
+        for idx, ln in enumerate(items):
+            body.append(_text(x + 11, y + 66 + idx * 21, ln, 10.6, NAVY, "400", "start"))
+
+    # Band 2 Right: External boundaries
+    body.append(_box(770, 128, 340, 246, "#ffffff", "#b8cdd2", 10))
+    body.append(_text(786, 150, "外部依赖与专业系统边界（ACL）", 12, NAVY, "700", "start"))
+    exts = [
+        (786, 164, 308, 46, "#edf5f5", "#9bc2c2", "模型服务（OpenAI 兼容 HTTP）", "仅输出候选提案；密钥仅取 IDP_BRANT_MODEL_API_KEY"),
+        (786, 218, 308, 46, "#eef1fa", "#bac5e6", "EER 执行运行时（可选 ACL · S4-05 PARTIAL）", "手写客户端；本机冒烟通过，Brant 步骤未登记"),
+        (786, 272, 308, 46, "#fff8ed", "#dfc7a1", "中国专业渠道 ／ 外部 ERP（人工＋假适配器）", "单一窗口／金税／银行／法定总账：零真实外拨"),
+        (786, 326, 308, 34, "#fbeceb", "#dfa6a0", "BIP（已永久退出 · 2026-11-23）", "仅留未连接占位，全部外发走人工发送节点"),
+    ]
+    for x, y, w, h, fill, stroke, title, desc in exts:
+        body.append(_box(x, y, w, h, fill, stroke, 7))
+        body.append(_text(x + 11, y + 17, title, 11, "#9b3a30" if fill == "#fbeceb" else NAVY, "700", "start"))
+        body.append(_text(x + 11, y + 32 if h < 40 else y + 36, desc, 10, "#7c332b" if fill == "#fbeceb" else MUTED, "400", "start"))
+
+    # Band 3: PostgreSQL 16.12
+    body.append(_box(30, 410, 1080, 198, "#ffffff", NAVY, 10, 'stroke-width="1.6"'))
+    body.append(_box(30, 410, 1080, 36, NAVY, NAVY, 10))
+    body.append(f'<rect x="30" y="436" width="1080" height="10" fill="{NAVY}"/>')
+    body.append(_text(48, 433, "PostgreSQL 16.12 · 22 个 Brant Schema ＋ bento ＋ brant_migrations · 106 个迁移 · 282 张 FORCE RLS 表（app.tenant_id / app.company_id）", 12, "#ffffff", "700", "start"))
+
+    pg_blocks = [
+        (48, 460, 248, 88, "#f3eadb", "#cfb997", "平台与治理 Schema", [
+            "brant_auth（权限投影 / epoch）",
+            "brant_msg（Outbox 死信）",
+            "brant_ref（名单）· bento（Outbox/Inbox）",
+        ]),
+        (312, 460, 268, 88, "#edf5f5", "#9dc2c2", "核心业务 Schema（10）", [
+            "evd · pty · cat · pol · inq",
+            "sup · cst · trd · pur · stl",
+            "每上下文独立 bentopg.DB，禁跨库嵌套事务",
+        ]),
+        (596, 460, 252, 88, "#e8eff3", "#a2bac3", "履约、协同与条件 Schema（7）", [
+            "qlt · ful · cnx · clm",
+            "stk（条件）· mfg（条件）· crm（可选）",
+            "写本根 FOR UPDATE → 上游守卫 FOR SHARE",
+        ]),
+        (864, 460, 228, 88, "#eef1fa", "#bcc6e3", "任务与 AI 证据 Schema（2）", [
+            "tsk（任务 / 动作 / 目标核验）",
+            "brant_ai（委托 / 批准 / 调用账本）",
+            "账本仅记哈希与费用，不存密钥",
+        ]),
+    ]
+    for x, y, w, h, fill, stroke, title, lines in pg_blocks:
+        body.append(_box(x, y, w, h, fill, stroke, 7))
+        body.append(_text(x + 12, y + 22, title, 11.5, NAVY, "700", "start"))
+        for idx, ln in enumerate(lines):
+            body.append(_text(x + 12, y + 42 + idx * 17, ln, 10.2, "#38566a", "400", "start"))
+
+    body.append(_box(48, 560, 1044, 34, "#f4f8f8", "#c9d8dc", 6))
+    body.append(_text(570, 581, "账号硬分离：brant_migrator（仅 brant-migrate 执行 DDL） ≠ brant_app（NOSUPERUSER · NOBYPASSRLS · NOINHERIT） ｜ 连续 WAL 归档（RPO ≤15m · RTO ≤4h 目标，仅 WSL2 本机演练）", 11, NAVY, "600"))
+
+    # Connectors
+    arrows = [
+        # Client -> brant-api
+        (153, 98, 153, 162, TEAL),
+        # OIDC -> brant-api (routed cleanly at y=112)
+        # Ops -> PG16 / worker
+    ]
+    for x1, y1, x2, y2, col in arrows:
+        m = "url(#arrT)" if col == TEAL else "url(#arr)"
+        body.append(f'<path d="M{x1},{y1} L{x2},{y2}" stroke="{col}" stroke-width="1.6" fill="none" marker-end="{m}"/>')
+    # OIDC -> brant-api elbow
+    body.append(f'<path d="M460,98 L460,113 L190,113 L190,162" stroke="{MUTED}" stroke-width="1.4" fill="none" marker-end="url(#arr)"/>')
+    # Ops -> dispatch metrics
+    body.append(f'<path d="M840,98 L840,113 L385,113 L385,162" stroke="{MUTED}" stroke-width="1.4" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>')
+    # Processes -> PG16
+    for px in (153, 385, 617):
+        body.append(f'<path d="M{px},360 L{px},408" stroke="{TEAL}" stroke-width="1.7" fill="none" marker-end="url(#arrT)"/>')
+    # agent -> Model / EER
+    body.append(f'<path d="M724,187 L784,187" stroke="{MUTED}" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>')
+    body.append(f'<path d="M724,241 L784,241" stroke="{MUTED}" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>')
+    # Ops -> PG16 right edge (migrate / admin)
+    body.append(f'<path d="M1078,98 L1078,118 L1122,118 L1122,428 L1112,428" stroke="{MUTED}" stroke-width="1.4" fill="none" marker-end="url(#arr)"/>')
+
+    return _svg(W, H, "".join(body), "R1 部署拓扑与运行时隔离边界")
+
+
+def r1_service_boundaries() -> str:
+    """Four trust and service boundary layers of Brant R1."""
+    W, H = 1140, 514
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+    zones = [
+        (18, 92, "#fdf1f0", "#e6b8b2", "#9b3a30", "ZONE 0 · 不可信输入与外部权威区（请求体禁自报 scope/actor/grant；模型文本非真值）", [
+            ("人工 HTTP 请求", "携带 OIDC Bearer 令牌（at+jwt）；幂等键防重"),
+            ("AI 模型回复与工具调用", "ModelPort 返回候选与参数；不可直接写业务库"),
+            ("外部系统回执与名单", "报关／退税／银行回执与制裁名单；属外部权威"),
+        ]),
+        (134, 96, "#fff8ed", "#e3c9a0", "#9a622f", "ZONE 1 · 传输与身份硬边界（internal/transport/httpapi ＋ identity/oidc ＋ strictjson）", [
+            ("OIDC 验签与 Principal", "校验 iss／aud／JWKS；拒 alg:none；提取 tenant/company"),
+            ("F2 写路由硬拦截", "所有写 HTTP 路由在读请求体前拒绝 actor.kind=ai（403）"),
+            ("strictjson 严格解码", "1／15／32 MiB；深度 64；拒重复键、null、未知字段"),
+        ]),
+        (254, 112, "#edf5f5", "#9bc2c2", TEAL, "ZONE 2 · 应用授权、单写者权威与并发锁序边界（18 上下文 · 82 条白名单 · 26 条无环守卫锁）", [
+            ("RBAC · SoD · 人工专属", "16 岗位模板 · 7 禁止组合 · 10 专属 · 128 人工专属 · authority_epoch"),
+            ("单一写入方与锁序", "53 条事实权威；先锁本根 FOR UPDATE，再锁上游守卫 FOR SHARE"),
+            ("进程内 AI 能力网关", "校验 ExecutionBundle SHA-256、委托、内容绑定批准授权与预算"),
+        ]),
+        (390, 104, "#e8eff3", "#8fa9b2", NAVY, "ZONE 3 · 持久隔离、事件异步边界与权威核验闭环（PostgreSQL 16 ＋ Outbox／Inbox ＋ TSK）", [
+            ("FORCE RLS 与角色分离", "282 张表强制按 tenant/company 隔离；brant_app 无特权"),
+            ("原子 Outbox 与 8 消费方", "137 集成事件同事务落库；事件 ID 幂等；死信人工重放"),
+            ("权威记录完成判定", "TSK 仅依据权威上下文记录核验目标，绝不采信模型自述"),
+        ]),
+    ]
+    cw, gap = 338, 18
+    for zy, zh, zfill, zstroke, zink, ztitle, cards in zones:
+        body.append(_box(28, zy, W - 56, zh, zfill, zstroke, 10))
+        body.append(_text(44, zy + 22, ztitle, 11.8, zink, "700", "start"))
+        for idx, (ctitle, cdesc) in enumerate(cards):
+            cx = 44 + idx * (cw + gap)
+            cy = zy + 33
+            ch = zh - 44
+            body.append(_box(cx, cy, cw, ch, "#ffffff", zstroke, 7))
+            body.append(_text(cx + 12, cy + 20, ctitle, 11.8, NAVY, "700", "start"))
+            for li, ln in enumerate(wrap(cdesc, 10.5, cw - 24)[:2]):
+                body.append(_text(cx + 12, cy + 39 + li * 16, ln, 10.5, MUTED, "400", "start"))
+        if zy < 390:
+            ay = zy + zh
+            for idx in range(3):
+                ax = 44 + idx * (cw + gap) + cw / 2
+                body.append(f'<path d="M{ax:.0f},{ay} L{ax:.0f},{ay + 22}" stroke="{MUTED}" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>')
+    return _svg(W, H, "".join(body), "R1 授权、信任与服务边界分层")
+

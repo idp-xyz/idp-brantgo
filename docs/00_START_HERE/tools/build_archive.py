@@ -28,8 +28,8 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.11"
-ARCHIVE_DATE = "2026-11-23"
+ARCHIVE_VERSION = "1.12"
+ARCHIVE_DATE = "2026-11-24"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
 S1_EVIDENCE = "09_IMPLEMENTATION_PLAN/05_S1_EVIDENCE"
@@ -130,6 +130,7 @@ ERRORS = tool_data("error_catalog.json")
 TABLES = tool_data("table_alignment.json")
 PYSUM = tool_data("python_inventory_summary.json")
 ARCHIVE = tool_data("archive.json")
+R1SPEC = tool_data("r1_support_matrix.json")
 RERUN_PATH = DOCS / "07_ENGINEERING_BASELINE_REVIEW/05_EVIDENCE/python_v050_unittest_rerun.json"
 RERUN = json.loads(RERUN_PATH.read_text(encoding="utf-8")) if RERUN_PATH.exists() else {}
 SPIKE_PATH = DOCS / M0_EVIDENCE / "10_spike_consistency.json"
@@ -1135,6 +1136,163 @@ def inc_go_alignment(a):
     return table(["主题", "IDP-Cargo 现行", "IDP Brant 候选", "状态"], [[g["topic"], g["cargo"], g["brant"], tag(g["status"])] for g in REVIEW["goAlignment"]])
 
 
+def _r1_tag(status: str, label: str) -> Raw:
+    kind = {
+        "DONE_CI": "ok",
+        "PASS": "ok",
+        "CANDIDATE_READY": "cand",
+        "PARTIAL": "partial",
+        "NOT_SUPPORTED": "no",
+        "NO-GO": "no",
+    }.get(status, status_kind(status))
+    return tag(label, kind)
+
+
+def inc_r1_kpis(a):
+    c = counts()
+    paths = OPENAPI.get("paths", {})
+    n_get = sum(1 for item in paths.values() if "get" in item)
+    n_post = sum(1 for item in paths.values() if "post" in item)
+    n_sql = sum(1 for _ in (GO_REPO / "migrations").rglob("*.sql"))
+    n_rls = sum(p.read_text(encoding="utf-8").count("FORCE ROW LEVEL SECURITY") for p in (GO_REPO / "migrations").rglob("*.sql"))
+    return kpis([
+        (f"{c['contexts']} ／ {c['relationships']}", "限界上下文 ／ 允许关系（53 条事实权威）"),
+        (f"{len(paths)}", f"OpenAPI 3.1 路径（{n_post} POST · {n_get} GET）"),
+        (f"{n_sql} ／ {n_rls}", "Brant SQL 迁移 ／ FORCE RLS 隔离表"),
+        (f"{c['goTestFunctions']:,} ＋ {c['goFuzzTargets']}", f"Go 测试函数（{c['goIntegrationTests']} PG16 集成）＋ 模糊目标"),
+    ])
+
+
+def inc_r1_regimes(a):
+    rows = [
+        [code(r["code"]), r["scope"], r["positioning"], _r1_tag(r["status"], r["supportLabel"]), r["conditions"]]
+        for r in R1SPEC["regimes"]
+    ]
+    return table(["模式编号", "业务范围", "交付定位", "R1 支持状态", "前提、条件与排除边界"], rows, "compact")
+
+
+def inc_r1_supply_scenarios(a):
+    rows = [
+        [code(s["code"]), s["name"], s["positioning"], s["modules"], _r1_tag(s["status"], s["supportLabel"]), s["boundary"]]
+        for s in R1SPEC["supplyScenarios"]
+    ]
+    return table(["场景", "名称", "定位", "涉及模块", "实现与支持状态", "边界与不变量约束"], rows, "compact")
+
+
+def inc_r1_capabilities(a):
+    tid = "r1-caps"
+    rows = [
+        [code(x["id"]), x["name"], x["baseline"], chips(x["contexts"]), x["wbs"], _r1_tag(x["status"], x["support"]), x["notes"]]
+        for x in R1SPEC["capabilities"]
+    ]
+    return filter_bar(tid, "按能力编号（F01–F29）、上下文、状态或关键字过滤", len(rows)) + table(
+        ["编号", "能力", "基线归属", "上下文／包", "WBS", "R1 支持状态", "已验证实现与限制说明"], rows, "compact", tid
+    )
+
+
+def inc_r1_china_capabilities(a):
+    rows = [
+        [code(x["id"]), x["name"], chips(x["contexts"]), _r1_tag(x["status"], x["support"]), x["notes"]]
+        for x in R1SPEC["chinaCapabilities"]
+    ]
+    return table(["编号", "中国出口配置能力", "上下文", "R1 支持状态", "工程实现与外部权威边界"], rows, "compact")
+
+
+def inc_r1_deployments(a):
+    rows = [
+        [code(d["id"]), d["name"], d["processes"], d["switches"], d["scenarios"], _r1_tag(d["status"], d["supportLabel"]), d["notes"]]
+        for d in R1SPEC["deployments"]
+    ]
+    return table(["组合", "部署形态", "必需进程与库", "开关配置", "适用业务组合", "支持声明", "关键约束与前提"], rows, "compact")
+
+
+def inc_r1_openapi_table(a):
+    roles = {
+        "trd": "报价、审核、正式化、客户回复、外销订单与变更（含 multi_order 变更上限）",
+        "stl": "客户信用、资金核销、结算单、贷项通知、费用、订单经营结果与期初余额",
+        "cnx": "贸易合规、出口许可证、购进发票、报关与退税案件（含 5 条渠道 HTTP 命令）",
+        "sup": "供应商询价、供应报价、采购条件与物流报价",
+        "tsk": "业务任务生命周期、人工接管、动作执行与目标核验",
+        "ful": "订舱、出运（直发／库存路线）、商业条件放行、保险、单证套与出口批次",
+        "pur": "采购草稿、需求分配、采购承诺、变更与直发交付核实",
+        "cst": "核价规则、场景评估、冻结快照与可采纳守卫",
+        "pty": "主体、联系人、交易档案、地址角色与主体筛查",
+        "stk": "库存开关、收发调整、预留与 FIFO 成本层（material.handover 仅进程内）",
+        "ai": "AI 委托、批准授权、执行包与模型调用账本只读视图",
+        "cat": "商品 SKU、规格修订、货号映射与报关要素",
+        "clm": "售后索赔立项、退货登记、补救裁决与结案",
+        "inq": "客户询价草稿、确认与来源定位（含可选 CRM 商机引用）",
+        "mfg": "制造开关、协作计划、委外发出（含累计上限）与进度来源声称",
+        "qlt": "质检记录、不合格处置与质量放行",
+        "crm": "可选轻量 CRM（线索、商机、跟进；-disable-crm 时整组路由不注册）",
+        "evd": "来源四层身份、附件上传与正式单据留证",
+        "pol": "23 种商业政策与基础配置版本化发布与单据编号",
+        "ref": "合规筛查名单与国别制裁项目参考数据导入与查询",
+        "msg": "Outbox 死信人工重放（需显式开启 -replay-dispatch 或 -replay-sink）",
+        "{bc}": "按上下文的通用审计日志只读查询（受 <bc>.audit 权限约束）",
+        "healthz": "进程存活探针（无鉴权，不返回业务数据）",
+    }
+    by_bc: dict[str, dict[str, int]] = {}
+    for p, item in OPENAPI.get("paths", {}).items():
+        parts = p.strip("/").split("/")
+        bc = parts[3] if len(parts) > 3 and parts[:3] == ["api", "brant", "v1"] else parts[0]
+        rec = by_bc.setdefault(bc, {"post": 0, "get": 0, "reconcile": 0})
+        if "post" in item:
+            rec["post"] += 1
+            if p.endswith("/reconcile"):
+                rec["reconcile"] += 1
+        if "get" in item:
+            rec["get"] += 1
+    rows = []
+    tot_p = tot_r = tot_g = 0
+    for bc in sorted(by_bc, key=lambda k: (-(by_bc[k]["post"] + by_bc[k]["get"]), k)):
+        rec = by_bc[bc]
+        tot_p += rec["post"]
+        tot_r += rec["reconcile"]
+        tot_g += rec["get"]
+        label = Raw(chip(bc.upper())) if bc.upper() in CTX else code(bc)
+        rows.append([label, rec["post"], rec["reconcile"] or "—", rec["get"], rec["post"] + rec["get"], roles.get(bc, "—")])
+    rows.append([Raw("<b>合计</b>"), tot_p, tot_r, tot_g, tot_p + tot_g, "OpenAPI 3.1.0（contracts/openapi/brant-api.openapi.json）"])
+    return table(["模块／前缀", "POST 路由", "其中 /reconcile", "GET 路由", "小计", "服务接口边界职责"], rows, "compact")
+
+
+def inc_r1_context_matrix(a):
+    tid = "r1-ctx"
+    mig_counts: dict[str, int] = Counter(p.parts[1] for p in (GO_REPO / "migrations").rglob("*.sql"))
+    rows = []
+    for c in CM["contexts"]:
+        cid = c["id"]
+        low = cid.lower()
+        switch = "按公司默认关闭" if cid in ("STK", "MFG") else ("可选进程开关（-disable-crm）" if cid == "CRM" else "默认装配")
+        rows.append([
+            Raw(chip(cid)), c["name"], TIER_CN[c["tier"]] + ("（条件）" if c["conditional"] else ""),
+            code(f"brant_{low}"), mig_counts.get(low, 0), len(c["aggregates"]), len(c["commands"]), switch, c["stage"]
+        ])
+    return filter_bar(tid, "按上下文代码、名称、开关或阶段过滤", len(rows)) + table(
+        ["上下文", "名称", "分级", "独占 Schema", "迁移数", "聚合", "命令", "启用方式", "阶段"], rows, "compact", tid
+    )
+
+
+def inc_r1_g5_checklist(a):
+    rows = [
+        [x["item"], x["requirement"], x["current"], x["tier"], _r1_tag(x["verdict"], x["verdictLabel"])]
+        for x in R1SPEC["g5Checklist"]
+    ]
+    return table(["G5 检查项", "商业发布门槛要求", "当前仓库与档案现状（2026-11-24）", "证据层级", "当前判定"], rows, "compact")
+
+
+def inc_r1_deploy_diagram(a):
+    return figure(a.get("fig", "FIG 01"), "R1 模块化单体部署拓扑、进程与数据库隔离边界",
+                  "18 个上下文在同一模块化单体进程中按需装配，不拆分为微服务；brant_app 与 brant_migrator 硬分离，282 张表强制行级隔离；BIP 已永久退出。",
+                  svg.r1_deployment_topology())
+
+
+def inc_r1_boundary_diagram(a):
+    return figure(a.get("fig", "FIG 02"), "R1 授权、信任域与服务边界分层",
+                  "从外部不可信输入到权威数据落库的四层边界：传输层 F2 拦截 AI 写请求、应用层单写者锁序与职责分离、存储层 FORCE RLS 与原子 Outbox。",
+                  svg.r1_service_boundaries())
+
+
 INCLUDES = {k[4:]: v for k, v in globals().items() if k.startswith("inc_")}
 
 
@@ -1461,7 +1619,7 @@ def write_registry(pages: list[str]) -> None:
         "archive_version": ARCHIVE_VERSION, "as_of": ARCHIVE_DATE, "product": "IDP Brant · AI-Native Trade Operations Platform（中国 B2B 出口业务版）",
         "standard": "IDP-Cargo 主档案 V2.9（01–12 阶段、证据分级、门禁与 Go-first 工程基线）",
         "implementation_language": "Go (Golang)",
-        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；公开远程仓库 idp-xyz/idp-brantgo（2026-11-11 由个人账号 idpxyz 转入），GitHub Actions 通过；M0 完成，S1、S2、S3、S4（含 S5R 修订轮）与 S5 完成；S6 于 2026-11-23 有本机证据（S6-01—S6-05 与 S6-07 为 DONE_LOCAL，S6-06 为 PARTIAL；9e2502a 的远程运行不是本档案的证据）；G5 为模拟 NO-GO；main 为受保护分支，只要求 brant-ci 通过）",
+        "go_repository": "idp-brantgo（根目录 Go Module go.idp.xyz/idp-brant；公开远程仓库 idp-xyz/idp-brantgo（2026-11-11 由个人账号 idpxyz 转入），GitHub Actions 通过；M0 完成，S1、S2、S3、S4（含 S5R 修订轮）、S5 完成；S6 六项工作（S6-01—S6-05、S6-07）于 2026-11-23 在 07601c8 与 8066e1c 通过远程 CI（DONE_CI），S6-06 仍为 PARTIAL；2026-11-24 补齐 R1 公开支持矩阵、授权、部署组合与服务边界候选规格（16_…html），BIP 永久退出；G5 仍为模拟 NO-GO；main 为受保护分支，只要求 brant-ci 通过）",
         "status": "DESIGN_CANDIDATE_ARCHIVE_WITH_M0_BASELINE_AND_S1_PARTIAL", "production_ready": False,
         "gates": G1["productGates"], "gate_mapping": G1["gateMapping"],
         "versioning_policy": "Latest means the most recent design candidate, not approved or implemented",
@@ -1501,6 +1659,7 @@ def write_registry(pages: list[str]) -> None:
             "V1.9 S4 与 S5R 完成（2026-11-20）：新建 TSK 上下文与 internal/ai（schema brant_ai）：任务生命周期与控制模式、动作执行与对账、能力网关、委托与批准授权、执行器与代理运行器、预算、模型适配、受限文件抽取与来源定位、EER 与 BIP 适配、Inbox 消费方；S5R 的 47 项模拟签核决定由单元 R1—R13 落实；Q01 评测套件脚本化 70／70，本地模型上的真实试次只有正常家族一个家族 4／4，其余 13 个家族未做真实试次；G2 按负责人决定记为模拟 NO-GO。",
             "V1.10 S4 后续轮（2026-11-20）：登记 ADR-BR-IMP-003 与模拟评审 SR-86；三个 S4 消费方与它们的系统命令、类 (i) 的目录行、关系 82；F2 与 R14 写回。全量真实运行 live-20261120T054323Z 在 74743b8 上 70 次试次 15 次通过，40 次实质上没有执行；没有把其余家族记成真实通过。L1 已合并（ad704e3）。224ffcf 上的重跑 live-20261120T122849Z 跑完：45 次里 35 次通过，0 次未执行；an01 与 an03 为 0／5。被停止的 live-20261120T120042Z 不作为完成的运行。G2 仍是模拟 NO-GO。",
             "V1.11 S6（2026-11-23，分支 s6/business，尖端 9e2502a）：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_LOCAL，S6-06 为 PARTIAL。本机尖端门禁迁移 0（106 个迁移已记录）、集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。9e2502a 的 GitHub Actions 结论不在本档案里，S6 不写 DONE_CI。G5 为模拟 NO-GO：没有真实客户、没有真人签核、没有发布指标、没有真实的海关单一窗口或金税。本版不改产品行为。",
+            "V1.12 R1 发布规格候选（2026-11-24，基于 main 8066e1c／ece31a1）：新增 09 阶段 16_IDP_Brant_R1_Release_Specification_and_G5_Package_V0.1.html，系统整编 G5 所需的公开支持矩阵（F01—F29、CN-F01—CN-F08、CN-M01—CN-M06、S01—S06、Q01 与 BIP 永久退出）、授权（运行时 RBAC／SoD／F2／RLS 与待签核发布授权）、部署组合（D-01—D-04 与禁止形态、容量与恢复实测含 6.403 s 中继 P95 未达标）与服务边界（18 上下文单写者、552 OpenAPI 3.1 路径、Outbox／Inbox 与外部 ACL）。不改产品 Go 代码；S6-06 仍为 PARTIAL，G5 仍为模拟 NO-GO。",
             "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4、G5 仍为 NO-GO（G5 为 2026-11-23 的模拟结论）；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考，S6 没有 Python 对等测试。",
         ],
