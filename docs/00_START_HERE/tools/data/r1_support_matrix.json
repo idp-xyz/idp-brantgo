@@ -1,0 +1,238 @@
+{
+  "artifact": "IDP Brant R1 Public Support Matrix, Authorization, Deployment & Service Boundary Data",
+  "version": "0.1",
+  "date": "2026-11-24",
+  "codeBaseline": "8066e1c",
+  "archiveBaseline": "ece31a1",
+  "g5Status": "NO-GO（模拟，2026-11-24：缺真实客户、真人签核、实际发布指标与支持机制、真实单一窗口或金税；本文件仅补齐 G5 所需的四项公开规格材料）",
+  "bipDecision": "永久退出（2026-11-23 负责人确认：BIP 不再作为选项，后续不考虑接入；internal/ai/adapters/bip 仅留未连接占位，所有外发走人工发送节点）",
+  "regimes": [
+    {
+      "code": "CN-M01",
+      "scope": "中国境内单一经营主体、B2B 自营一般贸易货物出口",
+      "positioning": "R1 默认首发配置",
+      "status": "CANDIDATE_READY",
+      "supportLabel": "默认支持（待 G0/G3/G5 验收）",
+      "conditions": "单租户／单公司核算与隔离；含购进票据、出口批次、报关资料与回执、退税用途分配、商业资金核销；正式报关、开票、退税申报与银行结汇由授权人工在外部专业系统办理或经进程内替身测试"
+    },
+    {
+      "code": "CN-M02",
+      "scope": "生产企业自营出口／自制＋委外",
+      "positioning": "条件场景",
+      "status": "PARTIAL",
+      "supportLabel": "仅部分委外支持（不含自制车间）",
+      "conditions": "通过条件开启 STK 与 MFG 支持协作计划、工序委外、累计上限与材料交接（8066e1c）；自有车间工单／MRP／MES 与生产企业免抵退专项税务核算不在 R1 范围"
+    },
+    {
+      "code": "CN-M03",
+      "scope": "委托出口／受托代理出口",
+      "positioning": "扩展专项",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "不支持",
+      "conditions": "委托方、代理方、申报与收款责任、证明及代理服务费核算须另行建模与验收"
+    },
+    {
+      "code": "CN-M04",
+      "scope": "加工贸易、保税及特殊监管区域",
+      "positioning": "首发以外专项",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "不支持",
+      "conditions": "海关手账册、保税料件监管与核销不由普通委外台账或库存台账替代"
+    },
+    {
+      "code": "CN-M05",
+      "scope": "跨境零售、市场采购、外综服、转口／离岸、进口",
+      "positioning": "分别评审",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "不支持",
+      "conditions": "不以增加监管方式代码宣称已支持；跨境人民币及其他特殊贸易形态须专项评审"
+    },
+    {
+      "code": "CN-M06",
+      "scope": "信用证、托收、保理、信保及套期保值",
+      "positioning": "按客户专项",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "不支持（仅基础合同引用）",
+      "conditions": "仅支持记录基础收付款条款与商业结果；复杂交单、融资、保单及会计处理不在 R1"
+    }
+  ],
+  "supplyScenarios": [
+    {
+      "code": "S01",
+      "name": "现货／成品采购（供应商直发或本仓出运）",
+      "positioning": "默认首发供给路线",
+      "modules": "核心上下文（直发默认；本仓出运须开启 STK）",
+      "status": "DONE_CI",
+      "supportLabel": "已实现（CI 通过）",
+      "boundary": "直发不虚构库存收发，受 SupplierDeliveryGuard v2 约束；本仓出运须公司开启 STK（stk.module.configure），受 FIFO 成本层与 StockAvailability v1 并发守卫约束"
+    },
+    {
+      "code": "S02",
+      "name": "定制采购／包工包料",
+      "positioning": "条件场景",
+      "modules": "SUP、CAT、CST、PUR、QLT、FUL",
+      "status": "DONE_CI",
+      "supportLabel": "条件支持（核心链 CI 通过）",
+      "boundary": "覆盖寻源比选、规格修订、核价快照、独立审批采购承诺、质检放行与交付核实；复杂工艺路线与完整 PLM 不在 R1"
+    },
+    {
+      "code": "S03",
+      "name": "部分数量委外／多来源供给",
+      "positioning": "条件场景",
+      "modules": "PUR、TRD、FUL、STL",
+      "status": "DONE_CI",
+      "supportLabel": "已实现（CI 通过）",
+      "boundary": "同一订单行支持拆分给多家供应商（需求分配防超分、已发生守卫）；多来源成本汇总至订单经营结果；支持 multi_order 报价多次部分下单与变更上限守卫（8066e1c）"
+    },
+    {
+      "code": "S04",
+      "name": "供料及部分工序委外",
+      "positioning": "条件场景（依赖 STK ＋ MFG）",
+      "modules": "STK、MFG、PUR、QLT",
+      "status": "DONE_CI",
+      "supportLabel": "条件支持（须开启 STK 与 MFG）",
+      "boundary": "8066e1c 已补齐协作计划行锁（FOR UPDATE）、未取消委外累计上限（对照工序量与所引 PUR 需求）及材料交接货号核对（REFERENCE_INVALID）；进度仅为来源声称，不直接写出库存、质检放行或出运"
+    },
+    {
+      "code": "S05",
+      "name": "部件委外后继续制造／组装",
+      "positioning": "后续专项",
+      "modules": "未纳入 R1",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "不支持",
+      "boundary": "缺少部件至成品的多级生产 BOM、输入输出消耗损耗与下游组装权威事实"
+    },
+    {
+      "code": "S06",
+      "name": "自有制造＋委外组合（车间工单／排产）",
+      "positioning": "后续专项",
+      "modules": "未纳入 R1",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "不支持",
+      "boundary": "完整 MRP／MES、工单排程、在制品成本核算超出 R1 范围，须外部制造系统对接或另立专项"
+    }
+  ],
+  "capabilities": [
+    {"id": "F01", "name": "租户、内部公司、用户、角色、附件与审计", "baseline": "首发必需", "contexts": "POL EVD foundation", "wbs": "M0 / S1 / S5R", "status": "DONE_CI", "support": "已实现（OIDC 真 IdP 延后至 B0）", "notes": "16 岗位模板、7 禁止组合、10 专属权限、authority_epoch、282 张 FORCE RLS 表、EVD 来源四层身份与审计；CI 使用本地 OIDC 签发者"},
+    {"id": "F02", "name": "客户、供应商、联系人、商品与 SKU", "baseline": "首发必需", "contexts": "PTY CAT ref", "wbs": "S1 / S5", "status": "DONE_CI", "support": "已实现", "notes": "主体筛查与 PartyScreeningGuard v1、交易档案与地址角色、SKU 规格修订与 SkuGuard v1、货号映射、筛查名单与国别项目参考数据"},
+    {"id": "F03", "name": "客户询价、供应商询价、核价与报价版本", "baseline": "首发必需", "contexts": "INQ SUP CST TRD", "wbs": "S1 / S2 / S3", "status": "DONE_CI", "support": "已实现", "notes": "确定性核价链（math/big 精确算术）、冻结快照与来源否认守卫、报价审核与独立毛利例外审批、正式化单据与编号"},
+    {"id": "F04", "name": "外销订单、审批、变更和数量约束", "baseline": "首发必需", "contexts": "TRD", "wbs": "S3 / S5R / S6-07", "status": "DONE_CI", "support": "已实现（含 8066e1c 变更上限）", "notes": "客户接受按适用法律到达规则成立合同；独立订单审批；full_v1 唯一订单与 multi_order 部分多次下单；8066e1c 补齐变更增幅不得超过报价剩余上限（QUOTE_REMAINING_INSUFFICIENT）"},
+    {"id": "F05", "name": "采购及销售需求分配", "baseline": "首发必需", "contexts": "PUR", "wbs": "S3 / S5", "status": "DONE_CI", "support": "已实现", "notes": "不可变采购草稿、需求分配与防重复占用、独立审批采购承诺、变更／取消、直发交付核实与 SupplierDeliveryGuard v2（R82）"},
+    {"id": "F06", "name": "基础收发货、占用、归属与批次成本追溯", "baseline": "条件必需", "contexts": "STK FUL STL", "wbs": "S6-01", "status": "DONE_CI", "support": "条件支持（按公司默认关闭）", "notes": "stk.module.configure 按公司开启；FIFO 成本层、预留与并发出库守卫（StockAvailability v1）；直发不虚构库存移动；STL 按库存成本层计价"},
+    {"id": "F07", "name": "供应商直发、出运与业务单证", "baseline": "首发必需", "contexts": "FUL", "wbs": "S5 / S5R / S6-01", "status": "DONE_CI", "support": "已实现", "notes": "直发与库存双路线、订舱、实际出运明细、出口批次、商业条件放行、双语商业发票与装箱单、CIF／CIP 足额保险校验"},
+    {"id": "F08", "name": "销售／采购结算单、业务应收应付", "baseline": "首发必需", "contexts": "STL", "wbs": "S5 / S5R", "status": "DONE_CI", "support": "已实现（非法定总账）", "notes": "不可变条目推导业务应收应付、结算单、贷项通知单与冲销；导出过账口径边界清晰，Brant 不替代法定总账 ERP"},
+    {"id": "F09", "name": "预收预付、部分收付、核销及撤销核销", "baseline": "首发必需", "contexts": "STL", "wbs": "S5 / S5R", "status": "DONE_CI", "support": "已实现", "notes": "商业资金记录、部分核销、撤销核销与代付方校验；核销严格界定为商业资金分配，不宣称为行政出口收汇核销（CN-R11）"},
+    {"id": "F10", "name": "费用分配、订单经营结果与结算状态", "baseline": "首发必需", "contexts": "STL CLM", "wbs": "S5 / S6-03", "status": "DONE_CI", "support": "已实现", "notes": "费用分摊、按直发／FIFO 成本计算经营结果（BRC-001 净利 300.00 USD / 31.25%）、未结索赔阻止订单结果关闭"},
+    {"id": "F11", "name": "导入预检、期初余额、未完订单及导出", "baseline": "首发必需", "contexts": "STL CNX POL", "wbs": "S5", "status": "DONE_CI", "support": "部分支持（后端命令就绪，无切换演练）", "notes": "STL 期初余额与 CNX 期初退税资料已实现并防重；真实客户大批量迁移切换、历史范围截断与导出模板须在 B0 试点演练"},
+    {"id": "F12", "name": "轻量 CRM", "baseline": "可选包", "contexts": "CRM INQ", "wbs": "S6-04", "status": "DONE_CI", "support": "可选支持（-disable-crm 可关闭）", "notes": "线索、商机与跟进记录；通过 -disable-crm 或 BRANT_DISABLE_CRM=true 可整包不装配，关闭时核心交易链完整可运行（BC-AT24）"},
+    {"id": "F13", "name": "服装款色码、样衣及成本 BOM", "baseline": "条件必需（服装包）", "contexts": "CAT CST", "wbs": "S1 / S2 / S4", "status": "PARTIAL", "support": "基础语义支持（完整服装插件包未独立发布）", "notes": "CAT/CST 与 BRC-001 覆盖款色码 SKU 规格、单位换算与成本结构；多模板混单明确拒绝；独立可插拔行业包与复杂包装配比未超出核心表范围"},
+    {"id": "F14", "name": "AI 主业务链 Q01", "baseline": "首发必需", "contexts": "TSK INQ CST TRD internal/ai", "wbs": "S4-03 / S4-07", "status": "PARTIAL", "support": "脚本化 70/70 通过；本机真实模型部分通过", "notes": "脚本化 14 族 70/70 通过 CI；2026-11-23 真实模型（qwen3.8-flash-next-iq3_xxs）7 族 5/5，normal 4/5，an01/an03/an05 0/5，3 脚本族不适用"},
+    {"id": "F15", "name": "权限、幂等、运行监控、升级与恢复", "baseline": "首发必需", "contexts": "foundation", "wbs": "M0 / S1 / S5-11 / S5R-11", "status": "PARTIAL", "support": "核心完成；中继 P95 未达标；仅本机演练", "notes": "命令账本幂等、/reconcile、死信人工重放、Prometheus /metrics、PITR 演练完成；16+16 负载下 3 worker 中继 P95 为 6.403 s（未达 ≤5 s 目标）"},
+    {"id": "F16", "name": "业务任务、目标、状态、检查点及负责人", "baseline": "首发必需", "contexts": "TSK", "wbs": "S4-01", "status": "DONE_CI", "support": "已实现", "notes": "任务生命周期与控制模式（AI / 人工接管）解耦，独立于 CRM 跟进任务；对象绑定、停止屏障、恢复到达事件"},
+    {"id": "F17", "name": "授权上下文、来源、版本及数据新鲜度", "baseline": "首发必需", "contexts": "TSK EVD internal/ai", "wbs": "S4-02 / S4-04", "status": "DONE_CI", "support": "已实现", "notes": "Q01.upload.v0.1 确定性受限抽取与来源定位、ExecutionBundle SHA-256 绑定（不兼容即暂停，CT14 5/5 真实通过）、只读代理查询哈希留痕"},
+    {"id": "F18", "name": "受控业务动作、内容绑定审批及结果核验", "baseline": "首发必需", "contexts": "TSK TRD internal/ai", "wbs": "S4-02 / S4-03", "status": "DONE_CI", "support": "已实现（含 F2 传输拦截）", "notes": "ai 令牌在所有 HTTP 写路由读体前被拒（PERMISSION_DENIED）；AI 经进程内网关、委托与内容绑定批准授权执行；完成判定只读权威记录"},
+    {"id": "F19", "name": "AI 任务评测、审计、运行质量及成本计量", "baseline": "首发必需", "contexts": "internal/ai tests", "wbs": "S4-07", "status": "PARTIAL", "support": "评测套件与账本已实现；未完成真实客户与人工基线", "notes": "brant_ai 记录每次模型／工具调用的哈希、令牌、耗时、费用与预算硬限（40 次／3 重试／3.00 USD）；AN12 真实脱敏询价与人工基线未执行"},
+    {"id": "F20", "name": "寻源、供应商开发与报价比选", "baseline": "首发必需", "contexts": "SUP CST", "wbs": "S2", "status": "DONE_CI", "support": "已实现", "notes": "供应商询价、供应报价与物流报价的独立人工核实／发布、MOQ 与阶梯价（all_units / graduated）、比选入核价"},
+    {"id": "F21", "name": "产品开发、技术规格与样品过程", "baseline": "首发最小", "contexts": "CAT", "wbs": "S1 / S5", "status": "DONE_CI", "support": "首发最小实现", "notes": "SKU 规格修订版本、变更失效与 SkuGuard v1 激活重查（an07 5/5 真实通过）；完整打样工作流与 PLM 不在 R1"},
+    {"id": "F22", "name": "供需分配与混合供给", "baseline": "首发必需（混合条件）", "contexts": "PUR STK", "wbs": "S3 / S5 / S6-01", "status": "DONE_CI", "support": "已实现", "notes": "按订单行分配采购需求、多供应商拆分、直发与本仓路线混合支持（本仓须开 STK）"},
+    {"id": "F23", "name": "生产协同及部分委外", "baseline": "条件能力", "contexts": "MFG PUR QLT", "wbs": "S6-02", "status": "DONE_CI", "support": "条件支持（按公司默认关闭，含 8066e1c 上限）", "notes": "mfg.module.configure 开启；协作计划、委外发出（先锁计划、累计不超过工序与需求上限）、进度来源声称；不含自有车间 MRP/MES"},
+    {"id": "F24", "name": "材料、半成品、外厂保管与在制品", "baseline": "条件必需", "contexts": "STK MFG", "wbs": "S6-01 / S6-02", "status": "DONE_CI", "support": "条件支持（须同开 STK 与 MFG）", "notes": "material.handover 经进程内端口先由 STK 记账、MFG 核对计划材料货号（8066e1c，不符即在库存移动前拒绝）；不含复杂在制工艺核算"},
+    {"id": "F25", "name": "交期、关键节点与异常跟进", "baseline": "首发必需", "contexts": "FUL", "wbs": "S5", "status": "DONE_CI", "support": "已实现", "notes": "履约里程碑节点记录、订单变更自动触发出运复核（ful.shipment_review）"},
+    {"id": "F26", "name": "检验、不合格处置及质量放行", "baseline": "首发必需", "contexts": "QLT", "wbs": "S5 / S5R", "status": "DONE_CI", "support": "已实现", "notes": "质检记录、检验机构校验、不合格处置与质量放行；出运确认重查 QualityReleaseGuard v1 与已消费数量（R79）"},
+    {"id": "F27", "name": "包装、实际装箱与出运单证明细", "baseline": "首发必需", "contexts": "FUL", "wbs": "S5 / S5R", "status": "DONE_CI", "support": "已实现", "notes": "出运明细、出口批次、单证套（商业发票／装箱单，中英模板）、逐项核对与版本化签发"},
+    {"id": "F28", "name": "客诉、返工、补发与责任追索", "baseline": "首发最小", "contexts": "CLM STL", "wbs": "S6-03", "status": "DONE_CI", "support": "首发最小实现", "notes": "索赔立项、退货登记（不改原出运、R1 不自动写库存）、补救裁决（单次贷项幂等）、未结索赔阻断订单结果关闭"},
+    {"id": "F29", "name": "商业条件放行、外部协作与运营待办", "baseline": "首发必需", "contexts": "FUL STL TRD TSK CNX", "wbs": "S5 / S4", "status": "DONE_CI", "support": "已实现（无前端工作台）", "notes": "出运放行同时核验质量、付款条件（或授权例外）、主体筛查、贸易合规与许可证；外部渠道见 CN-F01—CN-F08；不含前端页面"}
+  ],
+  "chinaCapabilities": [
+    {"id": "CN-F01", "name": "中国企业模式与出口退税政策配置", "contexts": "POL CNX", "status": "DONE_CI", "support": "已实现（CN-M01 默认）", "notes": "company_profile、export_tax_policy 等 23 种配置版本化发布；支持不适用退税的显式声明，不预设未验证税务算法"},
+    {"id": "CN-F02", "name": "国内购进发票协同", "contexts": "CNX", "status": "DONE_CI", "support": "已实现（人工登记与核实）", "notes": "purchase_invoice.import / verify；支持多对多匹配与用途余额核对；不直连税务底账库自动拉票"},
+    {"id": "CN-F03", "name": "出口报关资料、渠道提交与回执", "contexts": "CNX FUL", "status": "DONE_CI", "support": "人工路径＋进程内假适配器（8066e1c 含 HTTP）", "notes": "declaration prepare/confirm/record_submission/record_receipt，及 8066e1c 新增 channel_submit/channel_ingest/channel_reconcile；超时记 unknown，过期回执非权威留存；无真实单一窗口外拨"},
+    {"id": "CN-F04", "name": "退税资料与用途匹配", "contexts": "CNX", "status": "DONE_CI", "support": "人工路径＋进程内假适配器（8066e1c 含 HTTP）", "notes": "tax_refund_case.allocate/record_result/rebind_policy，及 8066e1c 新增 channel_submit/channel_reconcile；期初退税资料防重；无真实金税直连"},
+    {"id": "CN-F05", "name": "银行资金与结汇协同", "contexts": "STL POL", "status": "DONE_CI", "support": "人工登记与商业核销（非银行直连）", "notes": "商业资金流水登记、核销、撤销与银行账户权限隔离（AI 禁止读取 bank_account）；不发起银行付款或行政收汇核销"},
+    {"id": "CN-F06", "name": "税额口径与订单经营结果桥接", "contexts": "CST TRD STL CNX", "status": "DONE_CI", "support": "已实现", "notes": "含税／未税精确拆分、出口成本与退税影响口径记录、订单经营结果按权威台账汇总"},
+    {"id": "CN-F07", "name": "资料包、原产地／检验检疫证书与出口许可证", "contexts": "CNX CAT", "status": "DONE_CI", "support": "已实现", "notes": "export_license register/allocate/release、document_bundle check、certificate register、SKU 申报要素与商品合规"},
+    {"id": "CN-F08", "name": "中文操作口径、双语单证与外部对账", "contexts": "CNX FUL TRD", "status": "DONE_CI", "support": "后端契约与单证生成就绪（无真实外部对账）", "notes": "中英双语模板支持、外部回执原文与映射版本留痕、reconcile 外部结果未知对账；缺真实单一窗口／金税实测证据"}
+  ],
+  "deployments": [
+    {
+      "id": "D-01",
+      "name": "B0／R1 最小核心（直发无仓、无制造、无 CRM）",
+      "processes": "brant-api -disable-crm ＋ 2–3× brant-worker -dispatch ＋（可选）brant-worker -agent ＋ PostgreSQL 16.12",
+      "switches": "DisableCRM=true；STK=关闭（默认）；MFG=关闭（默认）",
+      "scenarios": "CN-M01 ＋ S01 直发 ＋ S02/S03 成品采购 ＋ CNX 人工／替身协同",
+      "status": "CANDIDATE_READY",
+      "supportLabel": "候选推荐（验证最充分）",
+      "notes": "BC-AT24 实测通过；最小攻击面与运维复杂度；若不启用 Q01 代理可不部署 brant-worker -agent"
+    },
+    {
+      "id": "D-02",
+      "name": "核心 ＋ 轻量 CRM",
+      "processes": "brant-api（不传 -disable-crm）＋ 2–3× brant-worker -dispatch ＋（可选）brant-worker -agent ＋ PostgreSQL 16.12",
+      "switches": "DisableCRM=false；STK=关闭（默认）；MFG=关闭（默认）",
+      "scenarios": "D-01 全部场景 ＋ 线索／商机／跟进桥接询价",
+      "status": "CANDIDATE_READY",
+      "supportLabel": "候选支持（CI 通过）",
+      "notes": "零值 APIConfig 默认开启 CRM；如需关闭必须显式传入 -disable-crm 或 BRANT_DISABLE_CRM=true"
+    },
+    {
+      "id": "D-03",
+      "name": "核心 ＋ 库存台账与本仓出运",
+      "processes": "brant-api（CRM 按需）＋ 2–3× brant-worker -dispatch ＋（可选）brant-worker -agent ＋ PostgreSQL 16.12",
+      "switches": "STK=按公司开启（stk.module.configure）；MFG=关闭；CRM=按需",
+      "scenarios": "S01 本仓出运与直发混合 ＋ FIFO 成本层 ＋ 库存预留",
+      "status": "CANDIDATE_READY",
+      "supportLabel": "条件候选支持（CI 通过）",
+      "notes": "未开启 STK 的公司执行库存路线出运将被拒绝 DEPENDENCY_NOT_SUPPORTED；直发路线不受影响且不写库存移动"
+    },
+    {
+      "id": "D-04",
+      "name": "核心 ＋ 库存 ＋ 生产协同与部分委外",
+      "processes": "brant-api（CRM 按需）＋ 2–3× brant-worker -dispatch ＋（可选）brant-worker -agent ＋ PostgreSQL 16.12",
+      "switches": "STK=开启；MFG=按公司开启（mfg.module.configure）；CRM=按需",
+      "scenarios": "D-03 全部场景 ＋ S04 供料与部分工序委外（含累计上限与交接货号校验）",
+      "status": "CANDIDATE_READY",
+      "supportLabel": "条件候选支持（CI 通过）",
+      "notes": "MFG 材料交接（R42）依赖 STK 开启；不允许用于自有车间排产（S05/S06）或加工贸易保税手账册（CN-M04）"
+    },
+    {
+      "id": "D-X1",
+      "name": "按上下文拆分为独立微服务或跨库分布式事务",
+      "processes": "—",
+      "switches": "—",
+      "scenarios": "—",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "明确不支持",
+      "notes": "18 个上下文是模块化单体边界，依赖同库内上游守卫函数 FOR SHARE 与单库事务 Outbox"
+    },
+    {
+      "id": "D-X2",
+      "name": "单分发进程承载参考并发、特权数据库账号、或公网暴露诊断端口",
+      "processes": "1× brant-worker -dispatch；superuser/BYPASSRLS；公网 /metrics；-oidc-insecure-http；-agent-trace-dir",
+      "switches": "—",
+      "scenarios": "—",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "禁止用于生产",
+      "notes": "单 worker 在 8+8 即出现无界积压；应用层代码启动即拒绝特权数据库角色；/metrics 无鉴权且 trace 含明文业务文本"
+    },
+    {
+      "id": "D-X3",
+      "name": "依赖 BIP 自动外部交换或 -model scripted 上线",
+      "processes": "BIP 自动发件；-model scripted",
+      "switches": "—",
+      "scenarios": "—",
+      "status": "NOT_SUPPORTED",
+      "supportLabel": "永久排除／禁止",
+      "notes": "BIP 已于 2026-11-23 永久退出路线；-model scripted 仅限 CI 与开发回归"
+    }
+  ],
+  "g5Checklist": [
+    {"item": "1. 公开支持矩阵", "requirement": "明确已支持与未支持的能力、经营模式、供给／交付／材料组合及 AI 限制", "current": "本文件第 01 章（覆盖 F01–F29、CN-F01–CN-F08、CN-M01–06、S01–S06、Q01 与 BIP 永久退出）", "tier": "E1 文档＋E2 代码核对", "verdict": "PARTIAL", "verdictLabel": "规格已成文，待真人签核"},
+    {"item": "2. 授权（运行时＋发布许可）", "requirement": "运行时权限／职责分离／AI 委托可验证；发布适用范围与商业授权签发", "current": "运行时权限与 F2 已通过 CI（第 02 章）；商业发布授权与真人签核未签发", "tier": "E2 CI＋未签核草案", "verdict": "PARTIAL", "verdictLabel": "运行时完备，发布授权未签核"},
+    {"item": "3. 部署组合", "requirement": "明确受支持与禁止的部署形态、组件参数、数据库隔离与升级恢复路径", "current": "本文件第 03 章定义 D-01—D-04 与禁止组合；本机完成 PG16 升级与 PITR 演练；无生产主机验证", "tier": "E2 本机演练＋规格", "verdict": "PARTIAL", "verdictLabel": "规格已成文，缺生产环境验证"},
+    {"item": "4. 服务边界", "requirement": "明确内部单写者事实权威、HTTP/OpenAPI 契约、事件边界与外部系统 ACL", "current": "本文件第 04 章（18 上下文、53 事实权威、552 OpenAPI 路径、8 消费方、外部 ACL 与 BIP 永久退出）", "tier": "E2 静态检查＋CI", "verdict": "PARTIAL", "verdictLabel": "代码与规格齐备，缺真实外部对接"},
+    {"item": "5. 完整回归", "requirement": "全量静态检查、单元、PG16 集成、竞态与端到端 HTTP 回归通过", "current": "8066e1c 推送运行 45161081163（16/16 成功）；9e2502a 本机 795 集成通过；三项后续未在本机合跑集成", "tier": "E2 本机＋GitHub Actions", "verdict": "PASS", "verdictLabel": "自动化回归通过（仅合成数据）"},
+    {"item": "6. 实际发布指标", "requirement": "生产／准生产环境的真实吞吐、延迟、可用性、AI 真实模型质量与成本", "current": "WSL2 上 3 worker 中继 P95 为 6.403 s（未达 ≤5 s）；真实模型 Q01 四族未过（normal 4/5，an01/03/05 0/5）；无生产观测", "tier": "E2 本机实测（未达标）", "verdict": "NO-GO", "verdictLabel": "未达标／缺生产指标（阻断）"},
+    {"item": "7. 真实客户与专业渠道证据", "requirement": "真实 B0 客户任务对比、真实身份提供方、真实单一窗口／金税或人工核对实证", "current": "无真实客户，无真实企业 OIDC，无真实单一窗口或金税实测（仅进程内假适配器与合成数据）；S5-06 未开始", "tier": "缺席", "verdict": "NO-GO", "verdictLabel": "缺席（阻断）"},
+    {"item": "8. 支持机制与真人签核", "requirement": "生产值班／升级／SLA／停用支持机制，以及产品＋研发交付＋经营负责人召开 G5 评审签字", "current": "仅有中继与备份工程手册；无商业支持机制与 SLA；G0–G5 均未召开真人评审、无人签字", "tier": "缺席", "verdict": "NO-GO", "verdictLabel": "缺席（阻断）"}
+  ]
+}
