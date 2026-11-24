@@ -3,7 +3,7 @@ package capability
 import "slices"
 
 // humanOnly is the tactical model's humanOnlyCommands (docs/05_TACTICAL_DDD/02_IDP_Brant_Tactical_DDD_
-// Candidate_V0.1.json, 128 entries, sorted), the single source of the commands only a human may issue
+// Candidate_V0.1.json, 131 entries, sorted), the single source of the commands only a human may issue
 // (UL-INV-17, X-INV-002). TestHumanOnlyListIsTheTacticalModels keeps it in step with the archive.
 var humanOnly = []string{
 	"acceptance.invalidate", "acceptance.mark_disputed", "ai.approval_grant.issue", "ai.approval_grant.revoke",
@@ -24,7 +24,8 @@ var humanOnly = []string{
 	"order.document.record_signed", "order.prepare_partial", "order.review.decide", "order_result.close",
 	"order_result.reopen", "party.confirm", "party.deactivate", "party_screening.block",
 	"party_screening.decide", "payable_adjustment.confirm", "payable_adjustment.request",
-	"payment_plan_review.settle", "purchase.commitment.cancel", "purchase.commitment.change.apply",
+	"payment_plan_review.settle", "plugin.disable", "plugin.enable", "plugin.enter_readonly",
+	"purchase.commitment.cancel", "purchase.commitment.change.apply",
 	"purchase.commitment.change.decide", "purchase.commitment.decide", "purchase.commitment.dispose",
 	"purchase.commitment.disposition.decide", "purchase.commitment.issue", "purchase.commitment.revoke",
 	"purchase.draft.prepare", "purchase.draft.void", "purchase_invoice.verify", "purchase_terms.publish",

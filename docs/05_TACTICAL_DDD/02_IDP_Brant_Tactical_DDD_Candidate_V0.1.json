@@ -10174,7 +10174,10 @@
     "mfg.module.configure",
     "subcontract_order.issue",
     "remedy.decide",
-    "claim.close"
+    "claim.close",
+    "plugin.disable",
+    "plugin.enable",
+    "plugin.enter_readonly"
   ],
   "commandActors": {
     "order_account.open": "human|system",

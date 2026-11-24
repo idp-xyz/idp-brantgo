@@ -1,5 +1,5 @@
 {
-  "note": "错误码从 Python V0.50 源码中的字符串常量提取并按类别整理；HTTP 状态只是传输分类，业务处理以错误码为准。未出现在 Python 中、已由代码返回的码：CONTROL_EPOCH_STALE（业务核心设计第 11 章；TRD 的 control.go 与 TSK 的 task.go 对旧控制代次返回它），以及 05 阶段战术模型新增规则引用的错误码（如 ACCEPTANCE_LATE、ORDER_RISK_UNACKNOWLEDGED、PURCHASE_ALLOCATION_EXCEEDED、COMMERCIAL_RELEASE_BLOCKED），以及 S5 负责人决定（2026-11-12）引入的采购承诺、质量、履约、结算与中国出口协同码（如 PURCHASE_DRAFT_STALE、SHIPMENT_QUANTITY_EXCEEDED、APPLICATION_EXCEEDS_AVAILABLE、DECLARATION_RECEIPT_STALE），以及 S4 负责人决定（2026-11-12）引入的任务与 AI 码（产品基线第 18.2 节与 Q01 V0.1 验证包，如 CONTROL_MODE_MISMATCH、REQUIRED_CHECK_UNSATISFIED、BUDGET_EXHAUSTED），以及 S5R 模拟签核（2026-11-13，E0）统一登记的 5 个码（S5 单元提出的名称与 FUND_RECORD_HAS_APPLICATIONS；实现尚未使用，由 R5、R8、R9、R10 改用）。未单列的情形继续用 INVALID_KNOWN_VALUE 或 INVALID_STATE 并带路径；币种不符继续答 FX_SCOPE_MISMATCH（STL-INV-007）。 S6 负责人决定（2026-11-20）登记部分下单、库存与客诉码（QUOTE_REMAINING_INSUFFICIENT、STOCK_INSUFFICIENT、STOCK_RESERVATION_CONFLICT、CLAIM_RETURN_EXCEEDS_SHIPPED、CLAIM_REMEDY_ALREADY_SETTLED；实现尚未使用）。",
+  "note": "错误码从 Python V0.50 源码中的字符串常量提取并按类别整理；HTTP 状态只是传输分类，业务处理以错误码为准。未出现在 Python 中、已由代码返回的码：CONTROL_EPOCH_STALE（业务核心设计第 11 章；TRD 的 control.go 与 TSK 的 task.go 对旧控制代次返回它），以及 05 阶段战术模型新增规则引用的错误码（如 ACCEPTANCE_LATE、ORDER_RISK_UNACKNOWLEDGED、PURCHASE_ALLOCATION_EXCEEDED、COMMERCIAL_RELEASE_BLOCKED），以及 S5 负责人决定（2026-11-12）引入的采购承诺、质量、履约、结算与中国出口协同码（如 PURCHASE_DRAFT_STALE、SHIPMENT_QUANTITY_EXCEEDED、APPLICATION_EXCEEDS_AVAILABLE、DECLARATION_RECEIPT_STALE），以及 S4 负责人决定（2026-11-12）引入的任务与 AI 码（产品基线第 18.2 节与 Q01 V0.1 验证包，如 CONTROL_MODE_MISMATCH、REQUIRED_CHECK_UNSATISFIED、BUDGET_EXHAUSTED），以及 S5R 模拟签核（2026-11-13，E0）统一登记的 5 个码（S5 单元提出的名称与 FUND_RECORD_HAS_APPLICATIONS；实现尚未使用，由 R5、R8、R9、R10 改用）。未单列的情形继续用 INVALID_KNOWN_VALUE 或 INVALID_STATE 并带路径；币种不符继续答 FX_SCOPE_MISMATCH（STL-INV-007）。 S6 负责人决定（2026-11-20）登记部分下单、库存与客诉码（QUOTE_REMAINING_INSUFFICIENT、STOCK_INSUFFICIENT、STOCK_RESERVATION_CONFLICT、CLAIM_RETURN_EXCEEDS_SHIPPED、CLAIM_REMEDY_ALREADY_SETTLED；实现尚未使用）。 S7 设计源（2026-11-24）登记服装插件码（COST_PROVIDER_CONFLICT、DOCUMENT_PROFILE_MISMATCH、PLUGIN_NOT_ENABLED、PLUGIN_IN_USE、PLUGIN_VERSION_INCOMPATIBLE、SAMPLE_APPROVAL_REQUIRED、SAMPLE_SPEC_MISMATCH、BOM_UNVERIFIED、BOM_SUBSTITUTION_UNAPPROVED、BOM_SIZE_GRADE_MISSING、DELIVERY_TOLERANCE_EXCEEDED、PACKING_RATIO_MISMATCH、CONTAINER_CAPACITY_EXCEEDED；实现尚未使用）。",
   "columns": ["code", "category", "http", "retryable", "contexts", "note"],
   "codes": [
     ["UNSUPPORTED_CONTRACT", "契约与传输", 400, "否", "ALL", "契约版本或命令未登记"],
@@ -191,6 +191,19 @@
     ["STOCK_INSUFFICIENT", "履约与合规", 409, "否", "STK／FUL", "可用库存不足，无法预占或出库"],
     ["STOCK_RESERVATION_CONFLICT", "并发与幂等", 409, "否", "STK／FUL", "库存占用状态或数量冲突"],
     ["CLAIM_RETURN_EXCEEDS_SHIPPED", "履约与合规", 422, "否", "CLM", "累计退货数量超过已确认出运量"],
-    ["CLAIM_REMEDY_ALREADY_SETTLED", "并发与幂等", 409, "否", "CLM／STL", "同一获批索赔补救已生成贷项或退款"]
+    ["CLAIM_REMEDY_ALREADY_SETTLED", "并发与幂等", 409, "否", "CLM／STL", "同一获批索赔补救已生成贷项或退款"],
+    ["COST_PROVIDER_CONFLICT", "并发与幂等", 409, "否", "EXT／CST", "同一 (tenant, company, document_profile) 绑定超过一个成本提供者，或重复注册同名检查"],
+    ["DOCUMENT_PROFILE_MISMATCH", "配置与政策", 422, "否", "INQ／CST／TRD／FUL", "单据内跨行业模板混单、报价与询价／成本快照 profile 不一致，或不同模板订单合并出运"],
+    ["PLUGIN_NOT_ENABLED", "配置与政策", 422, "否", "EXT／INQ／CST／TRD／QLT／FUL", "使用 document_profile=apparel 或调用服装扩展能力时，该公司未激活 industry.apparel"],
+    ["PLUGIN_IN_USE", "状态", 409, "否", "EXT", "存在未关闭的 apparel 单据或运行中 AI 任务时尝试直接 plugin.disable（须先转入 draining_readonly）"],
+    ["PLUGIN_VERSION_INCOMPATIBLE", "配置与政策", 409, "否", "EXT／AI", "插件 manifest.requires 声明的核心／契约版本与当前构建受支持组合不匹配"],
+    ["SAMPLE_APPROVAL_REQUIRED", "报价", 422, "否", "CAT／TRD", "服装模板策略要求有效样衣批准，但目标 SKU 无对应阶段的已批准样衣记录"],
+    ["SAMPLE_SPEC_MISMATCH", "引用", 409, "否", "CAT／TRD／TSK", "既有样衣批准绑定旧技术版本（如 TECH-01-r1），而当前单据／SKU 已升至 r2（基线 15.5 / BC-AT23）"],
+    ["BOM_UNVERIFIED", "核价", 422, "否", "CST／TRD", "服装成本估算引用了草稿、已撤回或含未实测强制工艺参数的 CostBOM"],
+    ["BOM_SUBSTITUTION_UNAPPROVED", "核价", 422, "否", "CST／TRD／MFG", "使用替代面辅料但缺少独立审批决定或审批范围未覆盖当前数量／版本（基线 5.8）"],
+    ["BOM_SIZE_GRADE_MISSING", "核价", 422, "否", "CST／TRD", "CostBOM 声明按尺码分档单耗（size_graded），但订单中存在未命中分档的尺码（严禁静默回退基准码）"],
+    ["DELIVERY_TOLERANCE_EXCEEDED", "履约与合规", 409, "否", "FUL／TRD", "累计确认出运量超出订单合同约定的总溢装上限或单色单码溢装上限（generic 默认 0%）"],
+    ["PACKING_RATIO_MISMATCH", "履约与合规", 422, "否", "FUL", "服装装箱明细违反声明的尺码配比（assortment ratio）、色批同缸约束、箱规体积／毛净重推导或总件数不守恒"],
+    ["CONTAINER_CAPACITY_EXCEEDED", "履约与合规", 422, "否", "FUL", "按箱规测算的总 CBM 或总毛重超出所选集装箱型（20GP/40GP/40HQ）配置的净容积或载重上限"]
   ]
 }

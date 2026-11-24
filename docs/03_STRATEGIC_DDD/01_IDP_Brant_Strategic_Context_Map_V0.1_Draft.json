@@ -2712,6 +2712,13 @@
         "ai.approval_grant.revoke"
       ],
       "note": "人工专属：任务发起人把能力委托给 AI 执行身份（范围、自治级别、到期），或为一次具体调用签发审批凭证（租户、公司、命令、请求哈希、对象与版本、到期、单次使用）。不是报价批准、订单审批或采购承诺审批。"
+    },
+    {
+      "id": "EXT",
+      "package": "internal/foundation/plugin",
+      "schema": "brant_ext",
+      "stage": "S7",
+      "commands": ["plugin.enable", "plugin.enter_readonly", "plugin.disable"]
     }
   ],
   "externalBoundaries": [
@@ -3737,6 +3744,17 @@
         }
       ],
       "note": "S4 登记（V1.9，E2 按已合并的代码补录）：AI 能力层不是限界上下文（Cargo 标准、ADR-BR-IMP-003 的 D-6 决定使用独立 schema brant_ai），在此登记它的读取路由，使读取目录与 OpenAPI 候选一致。它不是任何关系的上游：没有以 AI 为上游的 relationships，不发布集成事件（A5-D11），上下文也不依赖它的 api，因此允许清单不变。"
+    },
+    {
+      "id": "EXT",
+      "name": "行业插件平台扩展底座",
+      "package": "internal/foundation/plugin",
+      "schema": "brant_ext",
+      "source": "idp-brant.ext",
+      "events": [],
+      "commands": "plugin.enable、plugin.enter_readonly、plugin.disable（人工专属，登记在 platformCommands）",
+      "queries": [],
+      "note": "S7 登记（ADR-BR-EXT-001）：行业插件平台扩展底座不是限界上下文，不增加第 19 个上下文。人工专属命令登记在 platformCommands。读取路由待 OpenAPI 落地后再登记，故 queries 为空。"
     }
   ],
   "consumers": [
