@@ -33,7 +33,7 @@ const (
 const rootColumns = `root_version, last_revision, owner_actor_id, coalesce(owner_team_id, ''), labels, internal_note, control_state,
 	control_epoch, coalesce(control_task_id, ''), coalesce(control_authority_epoch, 0), coalesce(control_by_kind, ''),
 	coalesce(control_by_id, ''), control_changed_at, coalesce(control_initiator_id, ''), coalesce(control_initiator_epoch, 0),
-	coalesce(control_agent_id, ''), coalesce(control_agent_epoch, 0)`
+	coalesce(control_agent_id, ''), coalesce(control_agent_epoch, 0), document_profile`
 
 // LoadRoot returns the root id without its revisions, or nil, unlocked: what visibility and the
 // object control fence of a replay need.
@@ -50,7 +50,7 @@ func loadRoot(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id
 		WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3`+string(lock), string(scope.Tenant), string(scope.Company), id).
 		Scan(&q.RootVersion, &q.LastRevision, &q.OwnerActor, &q.OwnerTeam, &q.Labels, &q.InternalNote, &state, &q.Control.Epoch,
 			&q.Control.TaskID, &q.Control.AuthorityEpoch, &byKind, &q.Control.By.ID, &changed, &d.Initiator, &d.InitiatorEpoch, &d.Agent,
-			&d.AgentEpoch)
+			&d.AgentEpoch, &q.DocumentProfile)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -154,10 +154,10 @@ func SaveQuote(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, q
 		_, err := exec.Exec(ctx, `INSERT INTO brant_trd.quote_root (tenant_id, company_id, quote_id, root_version, last_revision,
 			owner_actor_id, owner_team_id, labels, internal_note, control_state, control_epoch, control_task_id, control_authority_epoch,
 			control_by_kind, control_by_id, control_changed_at, created_at, updated_at, control_initiator_id, control_initiator_epoch,
-			control_agent_id, control_agent_epoch)
-			VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17, $18, $19, $20, $21)`,
+			control_agent_id, control_agent_epoch, document_profile)
+			VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17, $18, $19, $20, $21, $22)`,
 			t, c, q.ID, q.RootVersion, q.LastRevision, q.OwnerActor, q.OwnerTeam, labels, q.InternalNote, string(ctl.State), ctl.Epoch,
-			task, authority, byKind, byID, changed, at, initiator, initiatorEpoch, agent, agentEpoch)
+			task, authority, byKind, byID, changed, at, initiator, initiatorEpoch, agent, agentEpoch, profileOrGeneric(q.DocumentProfile))
 		if err != nil {
 			return err
 		}
@@ -298,4 +298,11 @@ func writeRevision(ctx context.Context, exec bentopg.Executor, t, c, id string, 
 		WHERE tenant_id = $1 AND company_id = $2 AND quote_id = $3 AND revision = $4 AND coalesce(base_revision, 0) = coalesce($6::bigint, 0)`,
 		args...)
 	return err
+}
+
+func profileOrGeneric(p string) string {
+	if p == "" {
+		return "generic"
+	}
+	return p
 }

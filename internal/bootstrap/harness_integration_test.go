@@ -60,6 +60,8 @@ var allPermissions = []string{
 	"purchase.supplier_confirmation.record", "supplier_delivery.record", "supplier_delivery.verify",
 	"purchase.commitment.change.prepare", "purchase.commitment.change.decide", "purchase.commitment.change.apply", "purchase.commitment.cancel",
 	"allocation_review.settle", "purchase.commitment.dispose", "purchase.commitment.disposition.decide",
+	// S7-01: the plugin platform. Extra permissions on an actor that already holds every command are safe.
+	"plugin.enable", "plugin.enter_readonly", "plugin.disable", "ext.read", "ext.audit",
 }
 
 type world struct {

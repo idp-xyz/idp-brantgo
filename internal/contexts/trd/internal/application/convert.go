@@ -236,7 +236,7 @@ func multiOrderLedger(q *quote.Quote, sums map[string]string) *api.MultiOrderLed
 // quoteView is a quote as GetQuote shows it. A frozen revision whose commercial document does not
 // hash to its business hash is refused.
 func quoteView(q *quote.Quote) (api.QuoteView, error) {
-	v := api.QuoteView{QuoteID: q.ID, RootVersion: q.RootVersion, LastRevision: q.LastRevision, Labels: q.Labels,
+	v := api.QuoteView{QuoteID: q.ID, DocumentProfile: q.DocumentProfile, RootVersion: q.RootVersion, LastRevision: q.LastRevision, Labels: q.Labels,
 		InternalNote: q.InternalNote, Control: api.ControlView{State: string(q.Control.State), ControlEpoch: q.Control.Epoch,
 			TaskID: q.Control.TaskID, InitiatorID: q.Control.Delegation.Initiator, AgentID: q.Control.Delegation.Agent,
 			ChangedBy: q.Control.By, ChangedAt: q.Control.At}}

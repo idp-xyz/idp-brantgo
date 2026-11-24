@@ -293,33 +293,56 @@ func (q *trdWorld) ensureMultiBasis(quantity string) {
 		}
 		return
 	}
-	saved, err := q.c.INQ.SaveRfq(q.author, inqapi.SaveRfq{IdempotencyKey: q.key(), RfqID: "rfq.multi",
+	version, snap := q.freezeBasis("multi", quantity, "")
+	q.multiQty = quantity
+	q.multiRfqVersion = version
+	q.multiSnap = snap
+}
+
+// freezeBasis freezes one actual costing of quantity PCS on rfq.<suffix>. profile empty is generic.
+// An apparel profile is refused until industry.apparel is active.
+func (q *trdWorld) freezeBasis(suffix, quantity, profile string) (int64, cstapi.SnapshotReceipt) {
+	q.t.Helper()
+	rfqID := "rfq." + suffix
+	saved, err := q.c.INQ.SaveRfq(q.author, inqapi.SaveRfq{IdempotencyKey: q.key(), RfqID: rfqID,
 		CustomerID: "customer.1", ContactID: "contact.1", SourceIDs: []string{"src.1"}, UnresolvedFields: []string{},
-		Lines: []inqapi.RfqLine{{LineID: "L1", SkuID: "sku.1", Quantity: quantity, UOM: "PCS", SourceID: "src.1", Locator: "第1段"}}})
+		DocumentProfile: profile,
+		Lines:           []inqapi.RfqLine{{LineID: "L1", SkuID: "sku.1", Quantity: quantity, UOM: "PCS", SourceID: "src.1", Locator: "第1段"}}})
 	q.must(err)
-	ready, err := q.c.INQ.ConfirmRfqScope(q.author, inqapi.ConfirmRfqScope{IdempotencyKey: q.key(), RfqID: "rfq.multi",
+	ready, err := q.c.INQ.ConfirmRfqScope(q.author, inqapi.ConfirmRfqScope{IdempotencyKey: q.key(), RfqID: rfqID,
 		ExpectedVersion: saved.RowVersion, EvidenceIDs: []string{"src.1"}})
 	q.must(err)
 	offer := q.offer()
 	offer.Lines = []supapi.ConditionLine{q.line()}
-	offer.Rfq = &supapi.RfqRef{RfqID: "rfq.multi", RowVersion: ready.RowVersion}
-	q.verified(supapi.KindSupplierOffer, "offer.multi", offer)
+	offer.Rfq = &supapi.RfqRef{RfqID: rfqID, RowVersion: ready.RowVersion}
+	q.verified(supapi.KindSupplierOffer, "offer."+suffix, offer)
 	ctxData := q.contextData()
-	ctxData.RfqRef = &cstapi.RfqRef{RfqID: "rfq.multi", RowVersion: ready.RowVersion}
+	ctxData.RfqRef = &cstapi.RfqRef{RfqID: rfqID, RowVersion: ready.RowVersion}
 	ctxData.Lines[0].Quantity = quantity
-	q.verifiedContext("context.multi", ctxData)
-	scenario := q.scenario("offer.multi", "log.1")
-	scenario.ContextRef = &cstapi.ContextRef{ContextID: "context.multi", Revision: 1}
+	q.verifiedContext("context."+suffix, ctxData)
+	scenario := q.scenario("offer."+suffix, "log.1")
+	scenario.ContextRef = &cstapi.ContextRef{ContextID: "context." + suffix, Revision: 1}
 	scenario.Allocations[0].PurchaseQuantity = quantity
-	_, err = q.saveScenario(q.author, "scenario.multi", 0, scenario)
+	_, err = q.saveScenario(q.author, "scenario."+suffix, 0, scenario)
 	q.must(err)
-	ev, err := q.evaluate(q.reviewer, "scenario.multi", 1)
+	ev, err := q.evaluate(q.reviewer, "scenario."+suffix, 1)
 	q.must(err)
 	snap, err := q.freeze(q.reviewer, ev, 1)
 	q.must(err)
-	q.multiQty = quantity
-	q.multiRfqVersion = ready.RowVersion
-	q.multiSnap = snap
+	return ready.RowVersion, snap
+}
+
+// apparelData is the fixture quote on an apparel RFQ and the cost snapshot of that RFQ.
+func (q *trdWorld) apparelData() trdapi.QuoteData {
+	q.t.Helper()
+	if q.apparelRfqVersion == 0 {
+		q.apparelRfqVersion, q.apparelSnap = q.freezeBasis("apparel", "120", "apparel")
+	}
+	d := q.data()
+	d.DocumentProfile = "apparel"
+	d.RfqRef = &trdapi.RfqRef{RfqID: "rfq.apparel", RowVersion: q.apparelRfqVersion}
+	d.CostSnapshotRef = &trdapi.CostSnapshotRef{SnapshotID: q.apparelSnap.SnapshotID, ResultHash: q.apparelSnap.ResultHash}
+	return d
 }
 
 func (q *trdWorld) multiAccepted(id, quantity string, uncapped bool) trdapi.AcceptanceReceipt {

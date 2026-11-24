@@ -318,6 +318,9 @@ type QuoteData struct {
 	// (TRD-INV-024). Same json tag as the line cap: absent from the Q01 schema, accepted on HTTP,
 	// and part of the request hash only when it opts in.
 	ConversionMode string `json:"-" contract:"enum=single_full|multi_order"`
+	// DocumentProfile is generic or apparel. Empty is generic. json:"-" keeps it out of the Q01
+	// tool schema; MarshalJSON records apparel in the request hash.
+	DocumentProfile string `json:"-" contract:"enum=generic|apparel" ai:"-"`
 }
 
 // SaveDraft creates a quote root with working revision 1 at ExpectedVersion 0, or replaces the
@@ -525,6 +528,11 @@ func (d QuoteData) Validate(path string) error {
 func (d QuoteData) conversionRules(path string) error {
 	if d.ConversionMode != "" && d.ConversionMode != "single_full" && d.ConversionMode != "multi_order" {
 		return schema(path + "/conversion_mode")
+	}
+	switch d.DocumentProfile {
+	case "", "generic", "apparel":
+	default:
+		return schema(path + "/document_profile")
 	}
 	for i, l := range d.Lines {
 		if l.MaxOrderQuantity != "" && !decimal(l.MaxOrderQuantity, kernel.QuantityFormat, true) {

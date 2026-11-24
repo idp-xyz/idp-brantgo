@@ -22,6 +22,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/bento"
+	"go.idp.xyz/idp-brant/internal/foundation/plugin"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -132,8 +133,12 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 	if validation == nil && cmd.OpportunityID != "" && s.Opportunities == nil {
 		validation = api.DependencyNotSupported("/args/opportunity_id")
 	}
+	profile, profileErr := plugin.Canonical(cmd.DocumentProfile, "/args/document_profile")
+	if validation == nil {
+		validation = profileErr
+	}
 	content := rfq.Content{CustomerID: cmd.CustomerID, ContactID: cmd.ContactID, OpportunityID: cmd.OpportunityID,
-		SourceIDs: cmd.SourceIDs, Unresolved: cmd.UnresolvedFields}
+		DocumentProfile: string(profile), SourceIDs: cmd.SourceIDs, Unresolved: cmd.UnresolvedFields}
 	var skus, sources []string
 	sources = append(sources, cmd.SourceIDs...)
 	for _, l := range cmd.Lines {
@@ -166,6 +171,11 @@ func (s Service) SaveRfq(ctx context.Context, cmd api.SaveRfq) (api.Receipt, err
 		}
 		if err := rfq.CheckDraft(content, h.facts); err != nil {
 			return action.Outcome{}, err
+		}
+		if profile == plugin.ProfileApparel {
+			if err := plugin.RequireActive(ctx, exec, plugin.ApparelPluginID, string(plugin.ProfileApparel), "/args/document_profile"); err != nil {
+				return action.Outcome{}, err
+			}
 		}
 		if h.rfq == nil {
 			h.rfq = rfq.New(cmd.RfqID, d.Actor.ID, d.Team)
@@ -431,7 +441,7 @@ func (s Service) GetRfq(ctx context.Context, id string) (api.RfqView, error) {
 			return kernel.Reject(kernel.CodeNotFound, "/id", "")
 		}
 		v = api.RfqView{RfqID: r.ID, Status: string(r.Status), RowVersion: r.RowVersion, CustomerID: r.CustomerID, ContactID: r.ContactID,
-			OpportunityID: r.OpportunityID, SourceIDs: nonNil(r.Sources), UnresolvedFields: nonNil(r.Unresolved),
+			OpportunityID: r.OpportunityID, DocumentProfile: r.DocumentProfile, SourceIDs: nonNil(r.Sources), UnresolvedFields: nonNil(r.Unresolved),
 			Lines: []api.RfqLineView{}, Corrections: []api.Correction{}}
 		for _, l := range r.Lines {
 			line := api.RfqLineView{SkuSpecRevision: l.SkuSpecRevision, ProposedBy: l.ProposedBy, RfqLine: api.RfqLine{LineID: l.ID,
@@ -510,7 +520,7 @@ func (s Service) ResolveRfqs(ctx context.Context, ids []string) (map[string]api.
 				continue
 			}
 			ref := api.RfqRef{RfqID: r.ID, RowVersion: r.RowVersion, Status: string(r.Status), CustomerID: r.CustomerID, ContactID: r.ContactID,
-				Lines: []api.RfqRefLine{}}
+				DocumentProfile: r.DocumentProfile, Lines: []api.RfqRefLine{}}
 			for _, l := range r.Lines {
 				ref.Lines = append(ref.Lines, api.RfqRefLine{LineID: l.ID, SkuID: l.SkuID, SkuSpecRevision: l.SkuSpecRevision,
 					Quantity: l.Quantity, UOM: l.UOM})
@@ -522,6 +532,22 @@ func (s Service) ResolveRfqs(ctx context.Context, ids []string) (map[string]api.
 		return nil
 	})
 	return out, err
+}
+
+// OpenProfile reports a non-terminal RFQ of profile (draft or ready). plugin.disable asks before
+// its own transaction.
+func (s Service) OpenProfile(ctx context.Context, profile string) (bool, error) {
+	if profile == "" {
+		profile = "generic"
+	}
+	var open bool
+	err := s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
+		scope, _ := bento.ScopeFromContext(ctx)
+		return exec.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM brant_inq.customer_rfq
+			WHERE tenant_id = $1 AND company_id = $2 AND document_profile = $3 AND status IN ('draft', 'ready'))`,
+			string(scope.Tenant), string(scope.Company), profile).Scan(&open)
+	})
+	return open, err
 }
 
 // Audit returns INQ's audit trail.

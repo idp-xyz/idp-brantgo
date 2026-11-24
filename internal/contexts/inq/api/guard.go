@@ -35,13 +35,14 @@ type RfqRefLine struct {
 // line-ID order with their LinesHash. The customer and contact are as the RFQ row stores them at
 // RowVersion; LinesHash and RfqGuard v1 cover the line set only.
 type RfqRef struct {
-	RfqID      string
-	RowVersion int64
-	Status     string
-	CustomerID string
-	ContactID  string
-	Lines      []RfqRefLine
-	LinesHash  string
+	RfqID           string
+	RowVersion      int64
+	Status          string
+	CustomerID      string
+	ContactID       string
+	DocumentProfile string
+	Lines           []RfqRefLine
+	LinesHash       string
 }
 
 // Ready reports whether the RFQ is ready: its scope is confirmed and its lines no longer change.

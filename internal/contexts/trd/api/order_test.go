@@ -160,12 +160,14 @@ func TestOrderGuardVerdict(t *testing.T) {
 	b := OrderBinding{OrderID: "order.1", OrderRevision: 1, OrderHash: someHash}
 	row := func(known bool, code *string, revoked bool) func(dest ...any) error {
 		return func(dest ...any) error {
-			if len(dest) != 10 {
+			if len(dest) != 11 {
 				t.Fatalf("%d targets", len(dest))
 			}
 			*dest[0].(*bool) = known
 			*dest[8].(*bool) = revoked
 			*dest[9].(**string) = code
+			generic := "generic"
+			*dest[10].(**string) = &generic
 			if !known {
 				return nil
 			}

@@ -30,10 +30,10 @@ func Load(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id str
 	var customerVersion, contactVersion, epoch *int64
 	var evidence []string
 	err := exec.QueryRow(ctx, `SELECT rfq_id, status, row_version, coalesce(customer_party_id, ''), coalesce(contact_id, ''),
-		coalesce(opportunity_id, ''), unresolved_fields, owner_actor_id, coalesce(owner_team_id, ''), customer_row_version,
+		coalesce(opportunity_id, ''), document_profile, unresolved_fields, owner_actor_id, coalesce(owner_team_id, ''), customer_row_version,
 		contact_row_version, evidence_ids, coalesce(confirmed_by_kind, ''), coalesce(confirmed_by_id, ''), authority_epoch
 		FROM brant_inq.customer_rfq WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3`+lock, t, c, id).
-		Scan(&r.ID, &status, &r.RowVersion, &r.CustomerID, &r.ContactID, &r.OpportunityID, &r.Unresolved, &r.OwnerActor, &r.OwnerTeam,
+		Scan(&r.ID, &status, &r.RowVersion, &r.CustomerID, &r.ContactID, &r.OpportunityID, &r.DocumentProfile, &r.Unresolved, &r.OwnerActor, &r.OwnerTeam,
 			&customerVersion, &contactVersion, &evidence, &confirmedKind, &confirmedID, &epoch)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -84,10 +84,10 @@ func Load(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id str
 // Insert stores a new RFQ with its lines and sources.
 func Insert(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *rfq.Rfq, at time.Time) error {
 	_, err := exec.Exec(ctx, `INSERT INTO brant_inq.customer_rfq (tenant_id, company_id, rfq_id, status, row_version, customer_party_id,
-		contact_id, opportunity_id, unresolved_fields, owner_actor_id, owner_team_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), nullif($8, ''), $9, $10, nullif($11, ''), $12, $12)`,
+		contact_id, opportunity_id, document_profile, unresolved_fields, owner_actor_id, owner_team_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), nullif($8, ''), $9, $10, $11, nullif($12, ''), $13, $13)`,
 		string(scope.Tenant), string(scope.Company), r.ID, string(r.Status), r.RowVersion, r.CustomerID, r.ContactID,
-		r.OpportunityID, nonNil(r.Unresolved), r.OwnerActor, r.OwnerTeam, at)
+		r.OpportunityID, profileOrGeneric(r.DocumentProfile), nonNil(r.Unresolved), r.OwnerActor, r.OwnerTeam, at)
 	if err != nil {
 		return err
 	}
@@ -110,12 +110,12 @@ func Update(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, r *r
 		customerVersion, contactVersion, epoch, evidence, kind, id = c.CustomerVersion, c.ContactVersion, c.Epoch, c.Evidence, string(c.By.Kind), c.By.ID
 	}
 	tag, err := exec.Exec(ctx, `UPDATE brant_inq.customer_rfq SET status = $4, row_version = $5, customer_party_id = nullif($6, ''),
-		contact_id = nullif($7, ''), opportunity_id = nullif($8, ''), unresolved_fields = $9, customer_row_version = $10,
-		contact_row_version = $11, evidence_ids = $12, confirmed_by_kind = $13, confirmed_by_id = $14, authority_epoch = $15,
-		confirmed_at = CASE WHEN $15::bigint IS NULL THEN NULL ELSE coalesce(confirmed_at, $16) END, updated_at = $16
-		WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3 AND row_version = $17`,
+		contact_id = nullif($7, ''), opportunity_id = nullif($8, ''), document_profile = $9, unresolved_fields = $10, customer_row_version = $11,
+		contact_row_version = $12, evidence_ids = $13, confirmed_by_kind = $14, confirmed_by_id = $15, authority_epoch = $16,
+		confirmed_at = CASE WHEN $16::bigint IS NULL THEN NULL ELSE coalesce(confirmed_at, $17) END, updated_at = $17
+		WHERE tenant_id = $1 AND company_id = $2 AND rfq_id = $3 AND row_version = $18`,
 		string(scope.Tenant), string(scope.Company), r.ID, string(r.Status), r.RowVersion, r.CustomerID, r.ContactID, r.OpportunityID,
-		nonNil(r.Unresolved), customerVersion, contactVersion, evidence, kind, id, epoch, at, from)
+		profileOrGeneric(r.DocumentProfile), nonNil(r.Unresolved), customerVersion, contactVersion, evidence, kind, id, epoch, at, from)
 	if err == nil && tag.RowsAffected() != 1 {
 		err = ErrConflict
 	}
@@ -226,6 +226,13 @@ func Corrections(ctx context.Context, exec bentopg.Executor, scope kernel.Scope,
 		x.ProposedBy.Kind, x.CorrectedBy.Kind = kernel.ActorKind(proposed), kernel.ActorKind(corrected)
 		return x, err
 	})
+}
+
+func profileOrGeneric(p string) string {
+	if p == "" {
+		return "generic"
+	}
+	return p
 }
 
 func nonNil(s []string) []string {

@@ -9,6 +9,7 @@ import (
 // QuoteView is a quote root with all its revisions, oldest first.
 type QuoteView struct {
 	QuoteID         string
+	DocumentProfile string
 	RootVersion     int64
 	WorkingRevision int64 // 0: none
 	ActiveRevision  int64 // 0: none

@@ -73,7 +73,7 @@
   "commands": [
     {"bc": "EXT", "command": "plugin.enable", "route": "POST /api/brant/v1/ext/commands/plugin.enable", "actor": "仅人工", "roles": "administrator", "purpose": "在公司作用域启用经发布登记的插件组合（校验 requires 与 COST_PROVIDER_CONFLICT）"},
     {"bc": "EXT", "command": "plugin.enter_readonly", "route": "POST /api/brant/v1/ext/commands/plugin.enter_readonly", "actor": "仅人工", "roles": "administrator", "purpose": "将插件转入只读排空态（draining_readonly），禁止新开单，允许在途单据完结与历史读取"},
-    {"bc": "EXT", "command": "plugin.disable", "route": "POST /api/brant/v1/ext/commands/plugin.disable", "actor": "仅人工", "roles": "administrator", "purpose": "在确认无在途报价／订单／AI 任务依赖后停用插件（有依赖拒 409 PLUGIN_IN_USE）"},
+    {"bc": "EXT", "command": "plugin.disable", "route": "POST /api/brant/v1/ext/commands/plugin.disable", "actor": "仅人工", "roles": "administrator", "purpose": "仅从 draining_readonly 停用插件；仍有未终态 apparel 单据或运行中 AI 任务时拒 409 PLUGIN_IN_USE。active 须先 plugin.enter_readonly"},
     {"bc": "CAT", "command": "item.save_draft", "route": "POST /api/brant/v1/cat/commands/item.save_draft", "actor": "人工／AI", "roles": "sales_clerk, merchandiser, purchaser, ai_q01_agent", "purpose": "保存商品款式（Style）、色码矩阵定义及服装技术参数草稿（单位、来源、实测标记）"},
     {"bc": "CAT", "command": "item.confirm", "route": "POST /api/brant/v1/cat/commands/item.confirm", "actor": "仅人工", "roles": "merchandiser, purchaser", "purpose": "人工核实款式与色码-SKU 矩阵并发布不可变款式修订"},
     {"bc": "CAT", "command": "sample.save_draft", "route": "POST /api/brant/v1/cat/commands/sample.save_draft", "actor": "人工／AI", "roles": "merchandiser, quality_inspector, sales_clerk", "purpose": "登记样衣送审草稿，绑定 sku_id、spec_revision、样衣阶段（proto/fit/pp_sample/shipment）与证据"},
@@ -89,7 +89,7 @@
     {"code": "COST_PROVIDER_CONFLICT", "http": "409", "category": "Conflict", "contexts": "EXT, CST", "trigger": "同一 (tenant, company, document_profile) 绑定超过一个成本提供者，或重复注册同名检查"},
     {"code": "DOCUMENT_PROFILE_MISMATCH", "http": "422", "category": "Invalid", "contexts": "INQ, CST, TRD, FUL", "trigger": "单据内跨行业模板混单、报价与询价／成本快照 profile 不一致，或不同模板订单合并出运"},
     {"code": "PLUGIN_NOT_ENABLED", "http": "422", "category": "Invalid", "contexts": "EXT, INQ, CST, TRD, QLT, FUL", "trigger": "使用 document_profile=apparel 或调用服装扩展能力时，该公司未激活 industry.apparel"},
-    {"code": "PLUGIN_IN_USE", "http": "409", "category": "Conflict", "contexts": "EXT", "trigger": "存在未关闭的 apparel 单据或运行中 AI 任务时尝试直接 plugin.disable（须先转入 draining_readonly）"},
+    {"code": "PLUGIN_IN_USE", "http": "409", "category": "Conflict", "contexts": "EXT", "trigger": "`draining_readonly` 下仍有未终态的 apparel 单据或运行中 AI 任务时执行 plugin.disable"},
     {"code": "PLUGIN_VERSION_INCOMPATIBLE", "http": "409", "category": "Conflict", "contexts": "EXT, AI", "trigger": "插件 manifest.requires 声明的核心／契约版本与当前构建受支持组合不匹配"},
     {"code": "SAMPLE_APPROVAL_REQUIRED", "http": "422", "category": "Invalid", "contexts": "CAT, TRD", "trigger": "服装模板策略要求有效样衣批准，但目标 SKU 无对应阶段的已批准样衣记录"},
     {"code": "SAMPLE_SPEC_MISMATCH", "http": "409", "category": "Conflict", "contexts": "CAT, TRD, TSK", "trigger": "既有样衣批准绑定旧技术版本（如 TECH-01-r1），而当前单据／SKU 已升至 r2（基线 15.5 / BC-AT23）"},

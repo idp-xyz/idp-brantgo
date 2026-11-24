@@ -21,7 +21,7 @@ import (
 
 const orderColumns = `order_id, quote_id, slot, revision, business_hash, number, document_sha256, acceptance_id, acceptance_version,
 	arrival_at, arrival_basis, expires_at, order_revision, snapshot, snapshot_hash, order_hash, status, row_version, prepared_by_kind,
-	prepared_by_id, prepare_epoch, prepared_at, coalesce(activated_review_id, '')`
+	prepared_by_id, prepare_epoch, prepared_at, coalesce(activated_review_id, ''), document_profile`
 
 // LoadOrder returns order id with its reviews, commit evidence and closure, or nil, locking the
 // order row as lock says.
@@ -112,7 +112,7 @@ func loadOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, w
 		string(lock), t, c, arg).Scan(&o.ID, &o.Source.QuoteID, &o.Slot, &o.Source.Revision, &o.Source.BusinessHash, &o.Source.Number,
 		&o.Source.DocumentSHA256, &o.Source.AcceptanceID, &o.Source.AcceptanceVersion, &o.Source.ArrivalAt, &o.Source.ArrivalBasis,
 		&o.Source.ExpiresAt, &o.OrderRevision, &snapshot, &o.SnapshotHash, &o.OrderHash, &status, &o.RowVersion, &kind, &o.Prepared.By.ID,
-		&o.Prepared.Epoch, &o.Prepared.At, &o.ActivatedReview)
+		&o.Prepared.Epoch, &o.Prepared.At, &o.ActivatedReview, &o.DocumentProfile)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -241,11 +241,12 @@ func SaveOrder(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, o
 		s := o.Source
 		_, err := exec.Exec(ctx, `INSERT INTO brant_trd.sales_order (tenant_id, company_id, order_id, quote_id, slot, revision, business_hash,
 			number, document_sha256, acceptance_id, acceptance_version, arrival_at, arrival_basis, expires_at, order_revision, snapshot,
-			order_hash, status, row_version, prepared_by_kind, prepared_by_id, prepare_epoch, prepared_at, updated_at, snapshot_hash)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23, $24)`,
+			order_hash, status, row_version, prepared_by_kind, prepared_by_id, prepare_epoch, prepared_at, updated_at, snapshot_hash,
+			document_profile)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23, $24, $25)`,
 			t, c, o.ID, s.QuoteID, o.Slot, s.Revision, s.BusinessHash, s.Number, s.DocumentSHA256, s.AcceptanceID, s.AcceptanceVersion,
 			s.ArrivalAt, s.ArrivalBasis, s.ExpiresAt, o.OrderRevision, string(o.Snapshot), o.OrderHash, string(o.Status), o.RowVersion,
-			string(o.Prepared.By.Kind), o.Prepared.By.ID, o.Prepared.Epoch, o.Prepared.At, o.SnapshotHash)
+			string(o.Prepared.By.Kind), o.Prepared.By.ID, o.Prepared.Epoch, o.Prepared.At, o.SnapshotHash, profileOrGeneric(o.DocumentProfile))
 		if err != nil {
 			return err
 		}

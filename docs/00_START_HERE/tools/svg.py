@@ -1095,7 +1095,7 @@ def apparel_plugin_architecture() -> str:
 
     f_cards = [
         (608, 160, 486, 44, "PluginRegistry & Manifest 强校验", "校验 requires(id, contract_version) · 拒绝同名检查覆盖 · 拒绝双成本提供者 COST_PROVIDER_CONFLICT"),
-        (608, 212, 486, 44, "brant_ext 公司级激活账本（migrations/ext/000001 · FORCE RLS）", "状态机 disabled ↔ active → draining_readonly → disabled；在途单据／任务阻断硬停用 PLUGIN_IN_USE"),
+        (608, 212, 486, 44, "brant_ext 公司级激活账本（migrations/ext/000001 · FORCE RLS）", "状态机 disabled → active → draining_readonly → disabled；仅排空态可停用，在途拒 PLUGIN_IN_USE"),
         (608, 264, 486, 38, "PluginGuard v1（SECURITY DEFINER · FOR SHARE）", "brant_ext.guard_plugin_active_v1 供下游上下文事务内复核激活态与版本，排在 manifest 中 ref 之后"),
     ]
     for cx, cy, cw, ch, ct, l1 in f_cards:
@@ -1340,7 +1340,7 @@ def apparel_plugin_lifecycle_and_ai() -> str:
     # Left Panel: Plugin Lifecycle State Machine
     body.append(_box(28, 18, 524, 460, "#ffffff", "#c2d4d9", 10))
     body.append(_text(46, 44, "插件公司级生命周期与停用在途保护（brant_ext）", 12.2, NAVY, "700", "start"))
-    body.append(_text(46, 63, "代码发布与租户启用分离；停用前强制检查在途单据与运行中 AI 任务", 10.0, MUTED, "400", "start"))
+    body.append(_text(46, 63, "plugin.disable 只从 draining_readonly 进入；排空后新单据被拒，在途只会缩小", 10.0, MUTED, "400", "start"))
 
     # States
     states = [
@@ -1363,13 +1363,10 @@ def apparel_plugin_lifecycle_and_ai() -> str:
     # draining_readonly -> disabled (elbow back)
     body.append(f'<path d="M332,261 L163,261 L163,154" stroke="{NAVY}" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>')
     body.append(_text(246, 252, "plugin.disable（无在途）", 9.6, NAVY, "700"))
-    # active -> disabled direct (only if zero in-flight)
-    body.append(f'<path d="M332,136 L254,136" stroke="{MUTED}" stroke-width="1.3" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>')
-    body.append(_text(293, 150, "无在途直停", 9.2, MUTED, "400"))
 
     # Lifecycle guarantee cards
     lc_cards = [
-        (46, 310, 488, 46, "#fdf1f0", "#e4b2ac", "#9b3a30", "在途硬保护（409 PLUGIN_IN_USE）", "存在未关闭 apparel 报价／订单或非终态 AI 任务时，直接 disable 被拒，必须先转 draining_readonly"),
+        (46, 310, 488, 46, "#fdf1f0", "#e4b2ac", "#9b3a30", "在途硬保护（409 PLUGIN_IN_USE）", "仅 draining_readonly 可 disable；新单据已拒绝故在途只会缩小，未终态仍拒"),
         (46, 364, 488, 46, "#edf5f5", "#9bc2c2", TEAL, "停用后历史只读可读（基线 5.5 / 18.3）", "历史单据保存冻结的 CostSnapshot ＋ plugin_snapshot，停用后仍由兼容读取器完整展示"),
         (46, 418, 488, 46, "#fff8ed", "#dfc7a1", "#8c5c1f", "精确版本矩阵校验（PLUGIN_VERSION_INCOMPATIBLE）", "按发布登记的精确 (core, contract, plugin) 组合验兼容，不凭语义版本号盲判"),
     ]

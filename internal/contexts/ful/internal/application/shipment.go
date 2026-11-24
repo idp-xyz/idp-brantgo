@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-brant/internal/foundation/action"
 	"go.idp.xyz/idp-brant/internal/foundation/authorization"
 	"go.idp.xyz/idp-brant/internal/foundation/identity"
+	"go.idp.xyz/idp-brant/internal/foundation/plugin"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -42,6 +43,35 @@ type prepareCommand struct {
 	replay     bool
 }
 
+func (h *prepareCommand) rejectMixedProfiles(ctx context.Context) error {
+	ids := append([]string(nil), h.cmd.OrderIDs...)
+	named := false
+	for _, id := range ids {
+		if id == h.req.OrderID {
+			named = true
+		}
+	}
+	if !named {
+		return kernel.Reject(kernel.CodeSchemaInvalid, "/args/order_ids", "order_ids includes order_id")
+	}
+	orders, err := h.s.Upstream.Orders.ResolveActiveOrders(ctx, ids)
+	if err != nil {
+		return err
+	}
+	profiles := make([]string, 0, len(ids))
+	for _, id := range ids {
+		f, ok := orders[id]
+		if !ok {
+			return kernel.Reject(kernel.CodeReferenceInvalid, "/args/order_ids", "No order the actor reads")
+		}
+		profiles = append(profiles, f.DocumentProfile)
+	}
+	if _, err = plugin.Uniform(profiles, "/args/order_id"); err != nil {
+		return err
+	}
+	return kernel.Reject(kernel.CodeInvalidKnownValue, "/args/order_ids", "A shipment prepares one order")
+}
+
 func (h *prepareCommand) Prepare(ctx context.Context) error {
 	var taken bool
 	err := h.s.Ledger.Lookup(ctx, "", func(ctx context.Context, exec bentopg.Executor, _ authorization.Decision) error {
@@ -52,6 +82,11 @@ func (h *prepareCommand) Prepare(ctx context.Context) error {
 	if err != nil || taken {
 		return err
 	}
+	if len(h.cmd.OrderIDs) > 1 {
+		// Mixed profiles are DOCUMENT_PROFILE_MISMATCH. A uniform list is still one shipment of
+		// one order: the platform does not consolidate orders in this command.
+		return h.rejectMixedProfiles(ctx)
+	}
 	if h.req.Route == shipment.RouteStock {
 		if h.s.Upstream.Stock == nil {
 			return nil
@@ -61,7 +96,20 @@ func (h *prepareCommand) Prepare(ctx context.Context) error {
 	if h.req.Route != shipment.RouteSupplierDirect {
 		return nil
 	}
-	orders, err := h.s.Upstream.Orders.ResolveActiveOrders(ctx, []string{h.req.OrderID})
+	orderIDs := []string{h.req.OrderID}
+	if len(h.cmd.OrderIDs) > 0 {
+		orderIDs = append([]string(nil), h.cmd.OrderIDs...)
+		named := false
+		for _, id := range orderIDs {
+			if id == h.req.OrderID {
+				named = true
+			}
+		}
+		if !named {
+			return kernel.Reject(kernel.CodeSchemaInvalid, "/args/order_ids", "order_ids includes order_id")
+		}
+	}
+	orders, err := h.s.Upstream.Orders.ResolveActiveOrders(ctx, orderIDs)
 	if err != nil {
 		return err
 	}

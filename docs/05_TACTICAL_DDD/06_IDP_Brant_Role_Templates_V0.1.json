@@ -738,7 +738,7 @@
   {
    "code": "administrator",
    "name": "管理员",
-   "duties": "主数据核实与停用、服务方核实、交易档案发布、配置发布与退役、编号、Outbox 死信重放、审计查阅；不作业务审批与合规结论；STK 与 MFG 的公司启用开关（S6-D02）",
+   "duties": "主数据核实与停用、服务方核实、交易档案发布、配置发布与退役、编号、Outbox 死信重放、审计查阅、行业插件启用／只读／停用；不作业务审批与合规结论；STK 与 MFG 的公司启用开关（S6-D02）",
    "permissions": [
     "ai.audit",
     "ai.read",
@@ -760,6 +760,8 @@
     "dead_letter.replay",
     "evd.audit",
     "evd.read",
+    "ext.audit",
+    "ext.read",
     "foundation.snapshot",
     "ful.audit",
     "ful.read",
@@ -772,6 +774,9 @@
     "number.issue",
     "party.confirm",
     "party.deactivate",
+    "plugin.disable",
+    "plugin.enable",
+    "plugin.enter_readonly",
     "pol.audit",
     "pol.read",
     "pol.read_sensitive",
@@ -998,6 +1003,14 @@
   {
    "permission": "ref.audit",
    "meaning": "读取参考数据的审计记录"
+  },
+  {
+   "permission": "ext.read",
+   "meaning": "读取行业插件平台扩展底座（激活状态、精确版本与登记）"
+  },
+  {
+   "permission": "ext.audit",
+   "meaning": "读取行业插件平台扩展底座的审计记录"
   },
   {
    "permission": "pol.read_sensitive",

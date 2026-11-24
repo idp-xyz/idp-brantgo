@@ -112,6 +112,7 @@ type Config struct {
 	CRM      CRM
 	TSK      TSK // S4, optional as well: TSK's commands and reads
 	AI       AI  // S4, optional: the AI layer's commands and reads and the task-step route (unit C3)
+	EXT      EXT // S7, optional: the plugin platform. Nil leaves its commands and the plugins read out.
 	Verifier Verifier
 	// Replayer replays Outbox dead letters for an authorized human (ADR-BR-015); nil leaves the
 	// route out.
@@ -213,6 +214,9 @@ func New(cfg Config) (http.Handler, error) {
 	if cfg.AI != nil {
 		s.contexts["ai"] = aiCommands(cfg.AI)
 	}
+	if cfg.EXT != nil {
+		s.contexts["ext"] = extCommands(cfg.EXT)
+	}
 	mux := &patternMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.reject(w, r, kernel.Reject(kernel.CodeNotFound, "/", "no such route"))
@@ -305,6 +309,9 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if cfg.TSK != nil {
 		s.tskRoutes(mux)
+	}
+	if cfg.EXT != nil {
+		mux.Handle("GET /api/brant/v1/ext/plugins", s.authenticated(s.plugins))
 	}
 	if cfg.AI != nil {
 		s.aiRoutes(mux)

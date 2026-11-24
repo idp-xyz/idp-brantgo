@@ -113,8 +113,8 @@ func PreparePartial(p PartialPreparation, q *quote.Quote, a *acceptance.Acceptan
 		consumed[i] = Consumption{LineID: l.LineID, Quantity: exactDec(qty), OrderRevision: 1}
 	}
 	return &Order{ID: p.OrderID, Source: src, Slot: quote.SlotMultiOrder, OrderRevision: 1, Snapshot: snapshot, SnapshotHash: hash,
-		OrderHash: hash, Status: Draft, RowVersion: 1, Prepared: quote.Act{By: by, Epoch: epoch, At: at}, Fresh: true,
-		Consumption: consumed}, nil
+		OrderHash: hash, Status: Draft, RowVersion: 1, DocumentProfile: profileOrGeneric(q.DocumentProfile),
+		Prepared: quote.Act{By: by, Epoch: epoch, At: at}, Fresh: true, Consumption: consumed}, nil
 }
 
 // withinCaps refuses a line the sealed quote does not have, a quantity that is not positive, a

@@ -58,19 +58,20 @@ type End struct {
 
 // Quote is the QuoteRoot aggregate.
 type Quote struct {
-	ID           string
-	RootVersion  int64
-	LastRevision int64
-	OwnerActor   string
-	OwnerTeam    string
-	Labels       []string // internal; never part of the business hash
-	InternalNote string   // internal; never part of the business hash
-	Control      Control
-	Revisions    []*Revision
-	Reviews      []*Review   // in the order they were requested
-	Approvals    []*Approval // in the order they were given
-	Holds        []*Hold     // risk holds, in the order they were registered
-	Slot         *Slot       // the full_v1 conversion slot, once taken
+	ID              string
+	DocumentProfile string
+	RootVersion     int64
+	LastRevision    int64
+	OwnerActor      string
+	OwnerTeam       string
+	Labels          []string // internal; never part of the business hash
+	InternalNote    string   // internal; never part of the business hash
+	Control         Control
+	Revisions       []*Revision
+	Reviews         []*Review   // in the order they were requested
+	Approvals       []*Approval // in the order they were given
+	Holds           []*Hold     // risk holds, in the order they were registered
+	Slot            *Slot       // the full_v1 conversion slot, once taken
 	// Consumed is true once any quote_order_consumption row exists (TRD-INV-024). It is derived
 	// when the root is loaded and set when a partial order is prepared. Cancelling an order does
 	// not clear it. It is not the full_v1 slot: GoalReadiness v1 still reads Slot only.

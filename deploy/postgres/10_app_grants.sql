@@ -615,6 +615,16 @@ GRANT UPDATE (status, row_version, attempts, sends, claimed_at, grant_id, settle
 -- refuses every change of a budget.
 GRANT UPDATE (source) ON brant_ai.task_budget TO brant_app;
 
+-- EXT (S7-01): company plugin activations. The guard is executed by INQ, TRD and FUL in their own
+-- transactions. History and the command ledger only grow. The activation row changes status.
+GRANT USAGE ON SCHEMA brant_ext TO brant_app;
+GRANT SELECT, INSERT ON brant_ext.plugin_activation, brant_ext.plugin_activation_history,
+    brant_ext.action_result, brant_ext.audit_event TO brant_app;
+GRANT UPDATE (document_profile, status, version, contract_version, manifest_sha256, cost_provider, row_version,
+    authority_epoch, activated_by_kind, activated_by_id, updated_at) ON brant_ext.plugin_activation TO brant_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA brant_ext TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_ext.guard_plugin_active_v1(text, text) TO brant_app;
+
 -- STK (S6-01): balances, reservations and the company switch change; movements, cost allocations
 -- and batch lineage only grow. StockAvailability v1 is executed by FUL in FUL's own transaction.
 GRANT USAGE ON SCHEMA brant_stk TO brant_app;
