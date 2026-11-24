@@ -1,0 +1,131 @@
+{
+  "artifact": "IDP Brant Apparel Industry Plugin Detailed Design Data",
+  "version": "0.1",
+  "date": "2026-11-24",
+  "baseCommit": "80e94b5",
+  "codeCommit": "8066e1c",
+  "pluginId": "industry.apparel",
+  "pluginVersion": "0.1.0",
+  "contractVersion": "trade-extension.v1",
+  "adrs": [
+    {
+      "id": "ADR-BR-EXT-001",
+      "title": "行业插件不是第 19 个限界上下文，核心交易事实永不迁出既有上下文",
+      "decision": "沿用 ADR-BR-008：商品款色码与样衣归 brant_cat，成本 BOM 与替代审批归 brant_cst，单据模板归属归 brant_inq/brant_trd/brant_ful，质检与配比归 brant_qlt/brant_ful；internal/plugins/apparel 仅提供纯计算策略、行业校验器与 AI 语义提供者。",
+      "rationale": "保住 18 上下文单写者事实权威与无环守卫锁拓扑，避免插件表持有核心金额、余额、库存或外键（基线 5.1）。",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "ADR-BR-EXT-002",
+      "title": "租户／公司级插件激活状态由平台层 brant_ext 独立持有并发布守卫函数",
+      "decision": "在 internal/foundation/plugin 下建立平台能力与 brant_ext schema（migrations/ext/000001），排在 manifest 中 ref 之后、evd 之前；发布 SECURITY DEFINER 守卫 brant_ext.guard_plugin_active_v1 供下游上下文事务内 FOR SHARE 调用。",
+      "rationale": "与 brant_auth / brant_msg 同级，既防止上下文彼此耦合插件状态，又保证锁序严格无环且支持 FORCE RLS 多租户隔离。",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "ADR-BR-EXT-003",
+      "title": "单据级 document_profile 硬绑定，禁止单据内跨模板混单与跨模板合并出运",
+      "decision": "INQ 询价、TRD 报价／订单、FUL 出运显式携带不可变 document_profile（generic | apparel，默认 generic）；同一单据全行继承该模板，跨模板混单或不同模板订单合并出运一律返回 422 DOCUMENT_PROFILE_MISMATCH。",
+      "rationale": "落实产品基线 2.3 首期粒度要求，避免首期承担逐行混合激活的组合爆炸，并清晰提示拆单方式。",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "ADR-BR-EXT-004",
+      "title": "同进程插件同步钩子必须为纯函数／无外部 I/O，不宣称同进程硬沙箱",
+      "decision": "cost.estimate.v1、quote.validate.v1、packing.validate.v1 与 inspection.validate.v1 在进程内只接收核心预读的类型化值对象，禁止数据库直连与网络 I/O；核心对每次调用记录耗时监控，不依赖 goroutine 强杀。",
+      "rationale": "严格遵守基线 5.3：Go 原生进程内代码无法靠计时器安全终止，需要硬隔离的第三方插件属于后续独立进程专项。",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "ADR-BR-EXT-005",
+      "title": "双成本提供者绑定硬拒绝，服装模板提供者故障禁止静默回退通用模型",
+      "decision": "同一 (tenant, company, document_profile) 若存在两个激活成本提供者，立即拒绝 409 COST_PROVIDER_CONFLICT（无“后安装优先”）；document_profile=apparel 时若服装成本提供者未激活或异常，直接拒绝，绝不静默回退 generic。",
+      "rationale": "遵守基线 5.3 固定计价链铁律，杜绝用错误成本口径悄悄算出低价报价。",
+      "status": "PROPOSED"
+    },
+    {
+      "id": "ADR-BR-EXT-006",
+      "title": "ExecutionBundle 纳入已激活插件版本指纹，升级自然触发 CT14 安全暂停",
+      "decision": "扩展 internal/ai/executionevidence.Bundle 增加 Plugins []PluginRef（id、version、contract_version、manifest_sha256），由规范化 JSON 参与 bundle SHA-256 计算；插件升级后在途 AI 任务在下次运行前因哈希不匹配暂停（EXECUTION_BUNDLE_INCOMPATIBLE）。",
+      "rationale": "复用已经通过脚本与现场评测 5/5 的 CT14 机制，保证插件规则或 AI 语义升级不会静默改变正在等待审批的旧任务。",
+      "status": "PROPOSED"
+    }
+  ],
+  "migrations": [
+    {"seq": "ext/000001", "file": "migrations/ext/000001_ext_plugin_activations.sql", "schema": "brant_ext", "manifestPos": "ref 之后、evd 之前", "tables": "plugin_activation, plugin_activation_history, action_result, audit_event", "guard": "brant_ext.guard_plugin_active_v1(p_plugin_id, p_document_profile)", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "cat/000005", "file": "migrations/cat/000005_cat_items_apparel_matrix.sql", "schema": "brant_cat", "manifestPos": "既有 cat 目录末尾", "tables": "item, item_revision, item_sku_variant（款-色-码-SKU 映射与服装技术参数）", "guard": "复用 SkuGuard v1 + item_sku_variant FK 约束", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "cat/000006", "file": "migrations/cat/000006_cat_sample_approvals.sql", "schema": "brant_cat", "manifestPos": "紧随 cat/000005", "tables": "sample_approval, sample_approval_revision", "guard": "brant_cat.guard_sample_approved_v1(p_sku_id, p_spec_revision, p_stage)", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "cst/000004", "file": "migrations/cst/000004_cst_cost_boms.sql", "schema": "brant_cst", "manifestPos": "既有 cst 目录末尾", "tables": "cost_bom, cost_bom_revision, cost_bom_line（面辅料单耗、幅宽、克重、缩水、损耗）", "guard": "brant_cst.guard_cost_bom_current_v1(p_bom_id, p_revision, p_content_sha256)", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "cst/000005", "file": "migrations/cst/000005_cst_bom_substitutions.sql", "schema": "brant_cst", "manifestPos": "紧随 cst/000004", "tables": "cost_bom_substitution（原/替物料、数量、技术版本、独立审批记录）", "guard": "不可变记录触发器，禁止修改已发料/已加工/已交付事实", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "inq/000005", "file": "migrations/inq/000005_inq_document_profile.sql", "schema": "brant_inq", "manifestPos": "既有 inq 目录末尾", "tables": "ALTER brant_inq.rfq ADD document_profile（默认 generic，不可变）", "guard": "确认后禁止更改 profile 触发器", "rls": "继承既表 FORCE RLS"},
+    {"seq": "trd/000013", "file": "migrations/trd/000013_trd_document_profile_and_plugin_snapshot.sql", "schema": "brant_trd", "manifestPos": "紧随 trd/000012", "tables": "ALTER quote_root / quote_revision / sales_order ADD document_profile & plugin_snapshot（版本、规则校验结果、样衣绑定引用）", "guard": "freeze/activate 时校验与 INQ/CST profile 一致", "rls": "继承既表 FORCE RLS"},
+    {"seq": "qlt/000004", "file": "migrations/qlt/000004_qlt_apparel_inspection_params.sql", "schema": "brant_qlt", "manifestPos": "既有 qlt 目录末尾", "tables": "inspection_apparel_check（色差、缩水、尺寸公差、色批/缸号实测与证据）", "guard": "仅绑定 confirmed inspection；未测标记 measured=false 不冒充实测", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "ful/000012", "file": "migrations/ful/000012_ful_document_profile_and_size_ratio.sql", "schema": "brant_ful", "manifestPos": "紧随 ful/000011", "tables": "ALTER shipment ADD document_profile；新建 packing_assortment_rule（尺码配比与色批配套校验）", "guard": "prepare 时拒绝跨模板订单合并出运", "rls": "FORCE RLS (tenant_id, company_id)"},
+    {"seq": "ai/000006", "file": "migrations/ai/000006_ai_bundle_plugins.sql", "schema": "brant_ai", "manifestPos": "既有 ai 目录末尾", "tables": "ALTER execution_bundle ADD plugins_json（规范化插件指纹数组）", "guard": "不可变触发器保护已登记 bundle", "rls": "继承既表 FORCE RLS"}
+  ],
+  "commands": [
+    {"bc": "EXT", "command": "plugin.enable", "route": "POST /api/brant/v1/ext/commands/plugin.enable", "actor": "仅人工", "roles": "administrator", "purpose": "在公司作用域启用经发布登记的插件组合（校验 requires 与 COST_PROVIDER_CONFLICT）"},
+    {"bc": "EXT", "command": "plugin.enter_readonly", "route": "POST /api/brant/v1/ext/commands/plugin.enter_readonly", "actor": "仅人工", "roles": "administrator", "purpose": "将插件转入只读排空态（draining_readonly），禁止新开单，允许在途单据完结与历史读取"},
+    {"bc": "EXT", "command": "plugin.disable", "route": "POST /api/brant/v1/ext/commands/plugin.disable", "actor": "仅人工", "roles": "administrator", "purpose": "在确认无在途报价／订单／AI 任务依赖后停用插件（有依赖拒 409 PLUGIN_IN_USE）"},
+    {"bc": "CAT", "command": "item.save_draft", "route": "POST /api/brant/v1/cat/commands/item.save_draft", "actor": "人工／AI", "roles": "sales_clerk, merchandiser, purchaser, ai_q01_agent", "purpose": "保存商品款式（Style）、色码矩阵定义及服装技术参数草稿（单位、来源、实测标记）"},
+    {"bc": "CAT", "command": "item.confirm", "route": "POST /api/brant/v1/cat/commands/item.confirm", "actor": "仅人工", "roles": "merchandiser, purchaser", "purpose": "人工核实款式与色码-SKU 矩阵并发布不可变款式修订"},
+    {"bc": "CAT", "command": "sample.save_draft", "route": "POST /api/brant/v1/cat/commands/sample.save_draft", "actor": "人工／AI", "roles": "merchandiser, quality_inspector, sales_clerk", "purpose": "登记样衣送审草稿，绑定 sku_id、spec_revision、样衣阶段（proto/fit/pp_sample/shipment）与证据"},
+    {"bc": "CAT", "command": "sample.approve", "route": "POST /api/brant/v1/cat/commands/sample.approve", "actor": "仅人工", "roles": "quality_inspector（已预登记）", "purpose": "独立人工批准样衣，绑定不可变技术版本与适用范围（BC-AT23）；不可用旧版本替代新版本"},
+    {"bc": "CAT", "command": "sample.revoke", "route": "POST /api/brant/v1/cat/commands/sample.revoke", "actor": "仅人工", "roles": "quality_inspector", "purpose": "撤销样衣批准并登记原因；通过 SampleGuard 阻止后续报价正式化／订单生效／目标核验"},
+    {"bc": "CST", "command": "cost_bom.save_draft", "route": "POST /api/brant/v1/cst/commands/cost_bom.save_draft", "actor": "人工／AI", "roles": "costing, merchandiser", "purpose": "编制版本化成本 BOM（面辅料明细、幅宽、克重、缩水、单耗、损耗率、SUP 供应报价引用）"},
+    {"bc": "CST", "command": "cost_bom.verify", "route": "POST /api/brant/v1/cst/commands/cost_bom.verify", "actor": "仅人工", "roles": "costing（独立于编制人）", "purpose": "独立人工核实成本 BOM 并冻结 content_sha256，使其可被 cost.estimate.v1 采纳"},
+    {"bc": "CST", "command": "cost_bom.withdraw", "route": "POST /api/brant/v1/cst/commands/cost_bom.withdraw", "actor": "仅人工", "roles": "costing", "purpose": "撤回已核实 BOM；使下游 CostBOMGuard 与依赖快照进入风险或不可采纳状态"},
+    {"bc": "CST", "command": "cost_bom.substitution.request", "route": "POST /api/brant/v1/cst/commands/cost_bom.substitution.request", "actor": "人工／AI", "roles": "costing, merchandiser, purchaser", "purpose": "发起替代面辅料变更申请（保留原/替物料、适用数量、技术版本、交期与成本影响）"},
+    {"bc": "CST", "command": "cost_bom.substitution.decide", "route": "POST /api/brant/v1/cst/commands/cost_bom.substitution.decide", "actor": "仅人工", "roles": "costing, margin_approver（独立于申请人）", "purpose": "批准或拒绝替代物料变更；批准生成新 BOM 修订，绝不倒写已发料／已加工／已交付事实"}
+  ],
+  "errors": [
+    {"code": "COST_PROVIDER_CONFLICT", "http": "409", "category": "Conflict", "contexts": "EXT, CST", "trigger": "同一 (tenant, company, document_profile) 绑定超过一个成本提供者，或重复注册同名检查"},
+    {"code": "DOCUMENT_PROFILE_MISMATCH", "http": "422", "category": "Invalid", "contexts": "INQ, CST, TRD, FUL", "trigger": "单据内跨行业模板混单、报价与询价／成本快照 profile 不一致，或不同模板订单合并出运"},
+    {"code": "PLUGIN_NOT_ENABLED", "http": "422", "category": "Invalid", "contexts": "EXT, INQ, CST, TRD, QLT, FUL", "trigger": "使用 document_profile=apparel 或调用服装扩展能力时，该公司未激活 industry.apparel"},
+    {"code": "PLUGIN_IN_USE", "http": "409", "category": "Conflict", "contexts": "EXT", "trigger": "存在未关闭的 apparel 单据或运行中 AI 任务时尝试直接 plugin.disable（须先转入 draining_readonly）"},
+    {"code": "PLUGIN_VERSION_INCOMPATIBLE", "http": "409", "category": "Conflict", "contexts": "EXT, AI", "trigger": "插件 manifest.requires 声明的核心／契约版本与当前构建受支持组合不匹配"},
+    {"code": "SAMPLE_APPROVAL_REQUIRED", "http": "422", "category": "Invalid", "contexts": "CAT, TRD", "trigger": "服装模板策略要求有效样衣批准，但目标 SKU 无对应阶段的已批准样衣记录"},
+    {"code": "SAMPLE_SPEC_MISMATCH", "http": "409", "category": "Conflict", "contexts": "CAT, TRD, TSK", "trigger": "既有样衣批准绑定旧技术版本（如 TECH-01-r1），而当前单据／SKU 已升至 r2（基线 15.5 / BC-AT23）"},
+    {"code": "BOM_UNVERIFIED", "http": "422", "category": "Invalid", "contexts": "CST, TRD", "trigger": "服装成本估算引用了草稿、已撤回或含未实测强制工艺参数的 CostBOM"},
+    {"code": "BOM_SUBSTITUTION_UNAPPROVED", "http": "422", "category": "Invalid", "contexts": "CST, TRD, MFG", "trigger": "使用替代面辅料但缺少独立审批决定或审批范围未覆盖当前数量／版本（基线 5.8）"},
+    {"code": "PACKING_RATIO_MISMATCH", "http": "422", "category": "Invalid", "contexts": "FUL", "trigger": "服装装箱明细违反声明的尺码配比（assortment ratio）、色批同缸约束或总件数不守恒"}
+  ],
+  "tests": [
+    {"id": "APP-T01", "basis": "基线 18.3 #1 / 15.5 S-D", "level": "PG16 集成 + HTTP", "scenario": "核心 ＋ 服装组合完整链路（ST01 红/蓝 × S/M，120 PCS，CostBOM ＋ 样衣批准 ＋ 报价 ＋ 订单 ＋ 服装质检 ＋ 尺码配比装箱）", "expected": "全链通过，金额 960.00 / 660.00 / 300.00 USD 逐分守恒，插件版本与快照哈希完整落库"},
+    {"id": "APP-T02", "basis": "基线 18.3 #2 / BC-AT24", "level": "PG16 集成 + HTTP", "scenario": "CRM 关闭（-disable-crm）下启用 industry.apparel 跑通完整交易链", "expected": "apparel.crm.bridge 不加载且不反向强制安装 CRM；主交易链完整成功"},
+    {"id": "APP-T03", "basis": "基线 18.3 #3 / 5.3", "level": "单元 + PG16 并发", "scenario": "同一公司 apparel 作用域并发绑定第二个成本提供者；以及服装提供者故障时冻结报价", "expected": "双提供者返回 409 COST_PROVIDER_CONFLICT；提供者故障拒绝，绝不静默回退 generic"},
+    {"id": "APP-T04", "basis": "基线 2.3 / ADR-BR-008", "level": "PG16 集成", "scenario": "同一询价／报价混入 generic 与 apparel 行；以及不同模板的两笔订单合并到同一 FUL 出运", "expected": "一律返回 422 DOCUMENT_PROFILE_MISMATCH 并说明拆单方式"},
+    {"id": "APP-T05", "basis": "基线 15.5 S-D", "level": "单元 + PG16 集成", "scenario": "单位换算反例（红 S 按 2 DOZEN @ 96 USD/DOZEN 换算 24 PCS @ 8 USD，误录 2 PCS 失败）；源文件矩阵合计 120 但总计写 118", "expected": "换算精确守恒 192.00 USD，误录被拒；总数冲突标 PendingConflict 阻断自动确认"},
+    {"id": "APP-T06", "basis": "基线 15.5 S-D / BC-AT23", "level": "PG16 并发 + TSK", "scenario": "样衣批准绑定 TECH-01-r1，随后 SKU 升版至 r2；尝试报价正式化、订单生效及 Q01.industry 目标核验", "expected": "SampleGuard 返回 SAMPLE_SPEC_MISMATCH；Q01.industry 判 unsatisfied，任务不可 completed"},
+    {"id": "APP-T07", "basis": "基线 5.8", "level": "PG16 集成", "scenario": "面辅料替代未审批尝试发布 BOM；以及审批通过后对已发料／已加工事实的影响检查", "expected": "未批返回 BOM_SUBSTITUTION_UNAPPROVED；批准生成新版本，历史发料与加工记录逐字节不变"},
+    {"id": "APP-T08", "basis": "基线 18.3 #4–#7 / 18.1", "level": "单元 + PG16 集成", "scenario": "必需行业检查返回 unknown/timeout；过期上下文（stale）；插件回传 required=false 企图取消平台必检；同键异内容", "expected": "unknown/timeout 使任务入 waiting_external；required=false 被平台注册表忽略；同键异内容拒 IDEMPOTENCY_PAYLOAD_CONFLICT"},
+    {"id": "APP-T09", "basis": "基线 18.3 #8–#9 / 5.5", "level": "PG16 集成 + AI", "scenario": "插件版本从 0.1.0 升级至 0.2.0 时恢复旧 AI 任务；存在在途订单时尝试停用插件 → 转 draining_readonly → 完结后停用并读取历史单据", "expected": "旧任务暂停 EXECUTION_BUNDLE_INCOMPATIBLE（CT14）；在途拒 PLUGIN_IN_USE；停用后历史快照仍可读"},
+    {"id": "APP-T10", "basis": "基线 5.8 / F2", "level": "单元 + httpapi", "scenario": "未测缩水率冒充实测值；装箱违背尺码配比；AI 令牌直接 POST 任何新增写路由（sample.approve / cost_bom.verify / plugin.enable）", "expected": "未测数据拦截；配比不符拒 PACKING_RATIO_MISMATCH；所有新增写路由读体前拒 403 PERMISSION_DENIED"}
+  ],
+  "slices": [
+    {
+      "slice": "切片 A · R0 设计源定型与插件底座",
+      "units": "P1-R0（设计源与错误码）＋ P1-Ext（foundation/plugin ＋ brant_ext ＋ dependency-check）",
+      "deliverables": "更新战术模型/Context Map/错误码/角色 JSON；tools/dependency-check 新增 layerPlugin；migrations/ext/000001；plugin.enable/enter_readonly/disable；INQ/TRD/FUL 的 document_profile 不可变校验与混单拒绝",
+      "gate": "CI=true make check 0 违规；PG16 并发双提供者冲突与在途停用阻断测试全绿"
+    },
+    {
+      "slice": "切片 B · 通用前置：samples 与 cost_bom",
+      "units": "P2-CAT（Item ＋ SampleApproval ＋ SampleGuard v1）＋ P2-CST（CostBOM ＋ 替代审批 ＋ CostBOMGuard v1）",
+      "deliverables": "migrations/cat/000005–000006；migrations/cst/000004–000005；item.*/sample.*/cost_bom.* 全部命令、HTTP 路由、OpenAPI 重新生成；TRD freeze/activate 与 Q01.industry 接入 SampleGuard v1 与 CostBOMGuard v1",
+      "gate": "CI=true make check ＋ make db ＋ make integration SHARDS=4 全绿；验证旧样衣 r1 阻断 r2 并发窗口"
+    },
+    {
+      "slice": "切片 C · industry.apparel 插件本体与四扩展点",
+      "units": "P3-Apparel（internal/plugins/apparel）＋ P3-QLTFUL（服装质检参数与尺码装箱配比）＋ P3-E2E",
+      "deliverables": "实现 cost.estimate.v1（幅宽/克重/缩水/损耗精确算术）、quote.validate.v1（校验合并与 S-D 反例）、QLT/FUL 服装扩展迁移（qlt/000004、ful/000012）、optional apparel.crm.bridge，完成 APP-T01—T10 全套端到端回归",
+      "gate": "CI=true make check ＋ 全量 bootstrap 集成与竞态分片通过；CRM 开/关双模式验证"
+    },
+    {
+      "slice": "切片 D · AI 契约接入与主档案升级",
+      "units": "P4-AI（industry.semantics / context.provider / task.profile / outcome.check ＋ ExecutionBundle 指纹）＋ P4-Docs",
+      "deliverables": "migrations/ai/000006；internal/ai 接入服装语义与 outcome.check.v1 并集断言；CT14 插件升级暂停集成测试；脚本化 Q01 新增 apparel 场景回归；更新主档案 R1 支持矩阵（F13 状态）与产品说明",
+      "gate": "CI=true make check ＋ make integration ＋ make ai-eval（脚本化全过）＋ build_archive.py 连续两次通过"
+    }
+  ]
+}
