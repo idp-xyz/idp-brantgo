@@ -337,26 +337,58 @@ def runtime_layers() -> str:
 
 
 def wbs_roadmap(phases: list[dict], tasks: list[dict]) -> str:
-    W, H = 1160, 250
-    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
-    n = len(phases)
-    bw = (W - 60 - (n - 1) * 14) / n
     counts = {p["id"]: sum(1 for t in tasks if t["phase"] == p["id"]) for p in phases}
+    done_cnt = {p["id"]: sum(1 for t in tasks if t["phase"] == p["id"] and t["status"] in ("DONE_CI", "DONE_LOCAL")) for p in phases}
+    n = len(phases)
+    per_row = 5 if n > 8 else n
+    rows = math.ceil(n / per_row)
+    W = 1160
+    bh, vgap = 148, 34
+    H = 30 + rows * bh + (rows - 1) * vgap + 44
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+    hgap = 18
+    bw = (W - 60 - (per_row - 1) * hgap) / per_row
+
+    def phase_style(pid: str):
+        if pid == "M0":
+            return "#123248", "#ffffff", "#123248"
+        if pid in ("S1", "S2", "S3"):
+            return "#0b7b7c", "#ffffff", "#0b7b7c"
+        if pid in ("S4", "S5", "S5R", "S6"):
+            return "#2d6178", "#ffffff", "#2d6178"
+        if pid == "S7":
+            return "#6b4fa0", "#ffffff", "#6b4fa0"
+        return "#ba743e", "#ffffff", "#ba743e"
+
     for i, p in enumerate(phases):
-        x = 30 + i * (bw + 14)
-        fill = "#123248" if p["id"] == "M0" else ("#0b7b7c" if p["id"] in ("S1", "S2", "S3") else ("#2d6178" if p["id"] == "S4" else "#e8eff3"))
-        ink = "#ffffff" if fill != "#e8eff3" else NAVY
-        body.append(_box(x, 30, bw, 150, fill, "#b4c7cd" if fill == "#e8eff3" else fill, 10))
-        body.append(_text(x + bw / 2, 58, p["id"], 20, ink, "800"))
-        for li, ln in enumerate(wrap(p["name"], 12, bw - 16)[:2]):
-            body.append(_text(x + bw / 2, 82 + li * 16, ln, 12, ink, "600"))
-        body.append(_text(x + bw / 2, 132, f"{counts[p['id']]} 项工作", 12, ink))
-        for li, ln in enumerate(wrap(p.get("pythonParity") or "—", 10, bw - 16)[:2]):
-            body.append(_text(x + bw / 2, 152 + li * 13, ln, 10, ink))
-        if i < n - 1:
-            body.append(f'<path d="M{x + bw:.0f},105 L{x + bw + 12:.0f},105" stroke="{MUTED}" stroke-width="1.6" marker-end="url(#arr)"/>')
-    body.append(_text(W / 2, 214, "顺序表示依赖与准入，不是已批准的排期；S1–S3 以 Python V0.50 行为等价为退出条件，S4 满足 P0 退出前提", 12, MUTED))
-    return _svg(W, H, "".join(body), "Go 实施阶段路线")
+        r, c = divmod(i, per_row)
+        x = 30 + c * (bw + hgap)
+        y = 24 + r * (bh + vgap)
+        fill, ink, stroke = phase_style(p["id"])
+        body.append(_box(x, y, bw, bh, fill, stroke, 10))
+        body.append(_text(x + bw / 2, y + 30, p["id"], 19, ink, "800"))
+        for li, ln in enumerate(wrap(p["name"], 11.5, bw - 18)[:2]):
+            body.append(_text(x + bw / 2, y + 54 + li * 16, ln, 11.5, ink, "600"))
+        tot = counts[p["id"]]
+        dn = done_cnt[p["id"]]
+        st_lbl = f"{dn}/{tot} 完成" if dn > 0 else f"0/{tot} 规划中"
+        body.append(_box(x + 16, y + 92, bw - 32, 22, "#ffffff", "none", 5))
+        body.append(_text(x + bw / 2, y + 107, f"{tot} 项 · {st_lbl}", 10.2, NAVY if dn == tot else (TEAL if dn > 0 else "#6b4fa0"), "700"))
+        sub = p.get("pythonParity") or "—"
+        if sub == "—":
+            sub = "服装＋前端＋邮件＋收口" if p["id"] == "S7" else ("专项＋真客户＋G0–G5" if p["id"] == "S8" else "无 Python 对等")
+        body.append(_text(x + bw / 2, y + 133, wrap(sub, 9.8, bw - 18)[0], 9.8, "#e6f3f5", "400"))
+        if c < per_row - 1 and i < n - 1:
+            body.append(f'<path d="M{x + bw:.0f},{y + bh / 2:.0f} L{x + bw + hgap - 2:.0f},{y + bh / 2:.0f}" stroke="{MUTED}" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>')
+        elif c == per_row - 1 and i < n - 1:
+            # clean S-bend connector from end of row r to start of row r+1
+            nx = 30 + bw / 2
+            ny = y + bh + vgap
+            my = y + bh + vgap / 2
+            body.append(f'<path d="M{x + bw / 2:.0f},{y + bh:.0f} L{x + bw / 2:.0f},{my:.0f} L{nx:.0f},{my:.0f} L{nx:.0f},{ny - 2:.0f}" stroke="{MUTED}" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arr)"/>')
+
+    body.append(_text(W / 2, H - 16, "顺序表示依赖与准入，不是已批准排期；M0–S6 为无头核心引擎，S7 为服装插件与可交付产品闭环，S8 为复杂外贸专项与 G0–G5 商业发布", 11.2, MUTED))
+    return _svg(W, H, "".join(body), "Go 实施阶段路线（M0、S1–S8）")
 
 
 def r1_deployment_topology() -> str:
@@ -1027,5 +1059,352 @@ def pm_evidence_dashboard() -> str:
         body.append(_text(tx + 12, ty + 42, t2, 9.8, NAVY, "400", "start"))
 
     return _svg(W, H, "".join(body), "科学验证金字塔与实测数据看板")
+
+
+def apparel_plugin_architecture() -> str:
+    """Apparel plugin layered architecture, dependency-check rules, and 4 extension points."""
+    W, H = 1140, 592
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Layer 1: Bootstrap Composition Root
+    body.append(_box(28, 18, W - 56, 62, NAVY, NAVY, 9))
+    body.append(_text(46, 42, "internal/bootstrap（组合根 · 唯一装配层）", 12.8, "#ffffff", "700", "start"))
+    body.append(_text(46, 63, "校验精确支持组合 (core, contract, plugin) → 注册 industry.apparel → 注入四上下文扩展端口 ＋ AI 语义提供者（CRM 关时不装 bridge）", 10.6, "#cde2e8", "400", "start"))
+
+    # Layer 2 Left: internal/plugins/apparel (new layerPlugin)
+    body.append(_box(28, 102, 540, 212, "#f4f2fa", "#a898d1", 10, 'stroke-width="1.5"'))
+    body.append(_text(46, 126, "internal/plugins/apparel（新增 layerPlugin · 纯计算与策略实现）", 12.2, "#4a3875", "700", "start"))
+    body.append(_text(46, 146, "允许导入：stdlib · kernel · foundation/plugin · 上游 api/（禁上下文 internal、禁 bentopg.DB、禁网络 I/O）", 9.8, "#5d4c86", "400", "start"))
+
+    p_cards = [
+        (46, 160, 244, 64, "cost.estimate.v1", "分码单耗 · 幅宽／克重／缩水／损耗", "按色汇总 MCQ 起染费 ＋ 版费分摊"),
+        (306, 160, 244, 64, "quote.validate.v1", "款色码 · 样衣版本 · 短溢装 · 防混单", "合并裁决 reject > requires_approval > pass"),
+        (46, 236, 244, 64, "packing & inspection", "尺码配比 · 箱规 CBM 与装柜测算", "色差／缩水／公差（禁未测冒充实测）"),
+        (306, 236, 244, 64, "AI 行业契约（4 项）", "semantics · context · task_profile", "outcome.check.v1（不可取消平台必检）"),
+    ]
+    for cx, cy, cw, ch, ct, l1, l2 in p_cards:
+        body.append(_box(cx, cy, cw, ch, "#ffffff", "#c5b9e3", 7))
+        body.append(_text(cx + 12, cy + 20, ct, 11, "#4a3875", "700", "start"))
+        body.append(_text(cx + 12, cy + 39, l1, 10.0, NAVY, "400", "start"))
+        body.append(_text(cx + 12, cy + 54, l2, 9.5, MUTED, "400", "start"))
+
+    # Layer 2 Right: internal/foundation/plugin (trade-extension.v1 + brant_ext)
+    body.append(_box(590, 102, 522, 212, "#f3eadb", "#cfb997", 10, 'stroke-width="1.5"'))
+    body.append(_text(608, 126, "internal/foundation/plugin（平台契约层 · trade-extension.v1）", 12.2, "#5b4520", "700", "start"))
+    body.append(_text(608, 146, "仅导入 stdlib ＋ kernel ＋ foundation（永不导入任何业务上下文 · 与 auth/msg 同级）", 9.8, "#775c2e", "400", "start"))
+
+    f_cards = [
+        (608, 160, 486, 44, "PluginRegistry & Manifest 强校验", "校验 requires(id, contract_version) · 拒绝同名检查覆盖 · 拒绝双成本提供者 COST_PROVIDER_CONFLICT"),
+        (608, 212, 486, 44, "brant_ext 公司级激活账本（migrations/ext/000001 · FORCE RLS）", "状态机 disabled ↔ active → draining_readonly → disabled；在途单据／任务阻断硬停用 PLUGIN_IN_USE"),
+        (608, 264, 486, 38, "PluginGuard v1（SECURITY DEFINER · FOR SHARE）", "brant_ext.guard_plugin_active_v1 供下游上下文事务内复核激活态与版本，排在 manifest 中 ref 之后"),
+    ]
+    for cx, cy, cw, ch, ct, l1 in f_cards:
+        body.append(_box(cx, cy, cw, ch, "#ffffff", "#d8c6a8", 7))
+        body.append(_text(cx + 12, cy + 18, ct, 10.8, "#5b4520", "700", "start"))
+        body.append(_text(cx + 12, cy + 33 if ch < 42 else cy + 35, l1, 9.6, NAVY, "400", "start"))
+
+    # Arrows: Bootstrap -> Plugin & Foundation; Plugin -> Foundation
+    body.append(f'<path d="M298,80 L298,100" stroke="{TEAL}" stroke-width="1.6" fill="none" marker-end="url(#arrT)"/>')
+    body.append(f'<path d="M851,80 L851,100" stroke="{TEAL}" stroke-width="1.6" fill="none" marker-end="url(#arrT)"/>')
+    body.append(f'<path d="M568,208 L588,208" stroke="#6b4fa0" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>')
+
+    # Layer 3: Four Core Context Extension Points + AI Layer
+    body.append(_box(28, 336, W - 56, 182, "#edf5f5", TEAL, 10, 'stroke-width="1.4"'))
+    body.append(_text(46, 360, "四大核心上下文扩展点 ＋ AI 层（单写者事实权威留在既有 Context · 严禁上下文反向导入 internal/plugins）", 12.0, TEAL, "700", "start"))
+
+    ext_cols = [
+        ("CAT", "Core/Supp", "款色码 ＋ 样衣批准", "Item 矩阵 · SampleApproval", "发布 SampleGuard v1", "brant_cat 000005–06"),
+        ("CST", "Core", "成本 BOM ＋ 替代审批", "CostBOM · 消耗公式 · 替代", "发布 CostBOMGuard v1", "brant_cst 000004–05"),
+        ("INQ / TRD", "Core", "模板绑定 ＋ 校验合并", "document_profile 防混单", "Q01.industry 接 SampleGuard", "inq/000005 · trd/000013"),
+        ("QLT / FUL", "Supp", "质检参数 ＋ 尺码配比", "色差缩水 · Assortment 配比", "禁跨模板订单合并出运", "qlt/000004 · ful/000012"),
+        ("TSK / AI", "AI", "语义 ＋ 断言 ＋ 指纹", "ExecutionBundle 绑插件版本", "升级触发 CT14 暂停", "ai/000006"),
+    ]
+    ew, egap = 196, 17
+    for idx, (ec, _tier, et, l1, l2, l3) in enumerate(ext_cols):
+        ex = 46 + idx * (ew + egap)
+        body.append(_box(ex, 374, ew, 128, "#ffffff", "#9dc2c2", 8))
+        body.append(_box(ex, 374, ew, 28, NAVY if idx < 4 else "#6b4fa0", NAVY if idx < 4 else "#6b4fa0", 8))
+        body.append(f'<rect x="{ex}" y="392" width="{ew}" height="10" fill="{NAVY if idx < 4 else "#6b4fa0"}"/>')
+        body.append(_text(ex + ew / 2, 392, f"{ec} · {et}", 10.6, "#ffffff", "700"))
+        body.append(_text(ex + 10, 422, l1, 10.1, NAVY, "600", "start"))
+        body.append(_text(ex + 10, 444, l2, 9.8, TEAL, "400", "start"))
+        body.append(_box(ex + 10, 464, ew - 20, 26, "#f4f8f8", "#d6e4e7", 5))
+        body.append(_text(ex + ew / 2, 481, l3, 9.5, MUTED, "600"))
+        # Downward arrow from plugin/foundation to extension points
+        ax = ex + ew / 2
+        body.append(f'<path d="M{ax:.0f},314 L{ax:.0f},334" stroke="{TEAL}" stroke-width="1.4" stroke-dasharray="4,3" fill="none" marker-end="url(#arrT)"/>')
+
+    # Bottom Guardrail Strip
+    body.append(_box(28, 534, W - 56, 40, "#fdf1f0", "#e4b2ac", 7))
+    body.append(_text(W / 2, 558, "静态门禁（tools/dependency-check）：上下文禁止 import internal/plugins/* ｜ 插件禁止 import */internal/* ｜ 核心金额／余额／库存与外键绝不落入任意 JSON 扩展字段", 10.6, "#9b3a30", "700"))
+
+    return _svg(W, H, "".join(body), "服装行业插件分层架构、依赖规则与四大扩展点")
+
+
+def apparel_domain_er() -> str:
+    """Domain aggregates, single-writer schema ownership, and cross-context guard references."""
+    W, H = 1140, 560
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Top Strip: brant_ext (Platform Activation)
+    body.append(_box(28, 18, W - 56, 78, "#f3eadb", "#cfb997", 9))
+    body.append(_text(46, 42, "brant_ext · 平台插件激活与版本登记（migrations/ext/000001 · FORCE RLS · 无业务外键）", 11.8, "#5b4520", "700", "start"))
+    body.append(_box(46, 52, 514, 34, "#ffffff", "#d8c6a8", 6))
+    body.append(_text(58, 73, "plugin_activation(tenant_id, company_id, plugin_id) · status · version · manifest_sha256", 10.0, NAVY, "600", "start"))
+    body.append(_box(578, 52, 516, 34, "#ffffff", "#d8c6a8", 6))
+    body.append(_text(590, 73, "guard_plugin_active_v1(plugin_id, document_profile) → FOR SHARE 守卫（零死锁）", 10.0, TEAL, "700", "start"))
+
+    # Row 2: CAT (Left) + CST (Right)
+    # CAT Box
+    body.append(_box(28, 118, 534, 214, "#ffffff", TEAL, 9, 'stroke-width="1.5"'))
+    body.append(_box(28, 118, 534, 32, TEAL, TEAL, 9))
+    body.append(f'<rect x="28" y="140" width="534" height="10" fill="{TEAL}"/>')
+    body.append(_text(46, 139, "brant_cat · 款色码矩阵与样衣批准（CAT-AGG-Item ＋ CAT-AGG-SampleApproval）", 11.5, "#ffffff", "700", "start"))
+
+    cat_tables = [
+        (44, 162, 246, 154, "item & item_sku_variant", [
+            "PK (tenant, company, item_id)",
+            "style_code · document_profile",
+            "color_code × size_code → sku_id",
+            "FK → brant_cat.sku (保持既有 SkuRef)",
+            "幅宽 cm · 克重 GSM · 缩水率 %",
+            "measured 标记（未测禁冒充实测）",
+            "dye_lot_policy（同缸策略引用）",
+        ]),
+        (302, 162, 244, 154, "sample_approval & revision", [
+            "PK (tenant, company, sample_id)",
+            "绑定 sku_id ＋ spec_revision",
+            "stage: proto/fit/pp_sample/ship",
+            "status: draft→approved→revoked",
+            "evidence_ids[] (EVD 留证)",
+            "仅人工批准（quality_inspector）",
+            "守卫: guard_sample_approved_v1",
+        ]),
+    ]
+    for tx, ty, tw, th, title, lines in cat_tables:
+        body.append(_box(tx, ty, tw, th, "#f7fbfb", "#b7d4d4", 7))
+        body.append(_text(tx + 10, ty + 19, title, 10.6, TEAL, "700", "start"))
+        for li, ln in enumerate(lines):
+            body.append(_text(tx + 10, ty + 39 + li * 18, "• " + ln, 9.6, NAVY if li < 6 else TEAL, "600" if li == 6 else "400", "start"))
+
+    # CST Box
+    body.append(_box(580, 118, 532, 214, "#ffffff", "#1f4a63", 9, 'stroke-width="1.5"'))
+    body.append(_box(580, 118, 532, 32, "#1f4a63", "#1f4a63", 9))
+    body.append(f'<rect x="580" y="140" width="532" height="10" fill="#1f4a63"/>')
+    body.append(_text(598, 139, "brant_cst · 成本 BOM 与替代审批（CST-AGG-CostBOM ＋ Substitution）", 11.5, "#ffffff", "700", "start"))
+
+    cst_tables = [
+        (596, 162, 246, 154, "cost_bom ＋ size_grade ＋ surcharge", [
+            "PK (tenant, company, bom_id)",
+            "引用 item_id / (sku_id, spec_rev)",
+            "status: draft→verified→withdrawn",
+            "分码单耗表（缺码拒 422 禁回退）",
+            "分色起染费 MCQ ＋ 打样／版费",
+            "SUP 供应报价引用 ＋ content_sha",
+            "守卫: guard_cost_bom_current_v1",
+        ]),
+        (854, 162, 242, 154, "cost_bom_substitution", [
+            "PK (tenant, company, subst_id)",
+            "原物料 ref → 替代物料 ref",
+            "applicable_qty · tech_revision",
+            "成本／交期影响 ＋ 批准范围",
+            "独立人工审批（禁自申自批）",
+            "批准生成新 BOM 修订",
+            "绝不倒写已发料／已加工事实",
+        ]),
+    ]
+    for tx, ty, tw, th, title, lines in cst_tables:
+        body.append(_box(tx, ty, tw, th, "#f7f9fb", "#a7bcc5", 7))
+        body.append(_text(tx + 10, ty + 19, title, 10.6, "#1f4a63", "700", "start"))
+        for li, ln in enumerate(lines):
+            body.append(_text(tx + 10, ty + 39 + li * 18, "• " + ln, 9.6, NAVY if li < 6 else "#9b3a30", "600" if li == 6 else "400", "start"))
+
+    # Row 3: Downstream Consumers (INQ, TRD, QLT, FUL, AI)
+    d_boxes = [
+        ("brant_inq", "inq/000005", "rfq.document_profile", "确认后不可变 · 防混单"),
+        ("brant_trd", "trd/000013", "profile ＋ tolerance", "快照 ＋ 短溢装容差策略"),
+        ("brant_qlt", "qlt/000004", "apparel_check", "色差／缩水／尺寸／缸号"),
+        ("brant_ful", "ful/000012", "assortment ＋ carton", "配比 · 箱规 CBM · 装柜校验"),
+        ("brant_ai", "ai/000006", "bundle.plugins_json", "插件版本指纹 → CT14"),
+    ]
+    dw, dgap = 202, 18
+    for idx, (sch, mig, fld, desc) in enumerate(d_boxes):
+        dx = 28 + idx * (dw + dgap)
+        body.append(_box(dx, 366, dw, 108, "#edf5f5" if idx < 4 else "#f4f2fa", "#9bc2c2" if idx < 4 else "#c5b9e3", 8))
+        body.append(_text(dx + 12, 389, sch, 11.4, NAVY if idx < 4 else "#4a3875", "700", "start"))
+        body.append(_text(dx + 12, 410, mig, 9.8, TEAL if idx < 4 else "#6b4fa0", "600", "start"))
+        body.append(_text(dx + 12, 434, fld, 10.2, NAVY, "600", "start"))
+        body.append(_text(dx + 12, 456, desc, 9.6, MUTED, "400", "start"))
+
+    # Arrows: brant_ext -> CAT & CST; CAT & CST -> Downstream
+    body.append(f'<path d="M295,96 L295,116" stroke="#8a6d3b" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>')
+    body.append(f'<path d="M846,96 L846,116" stroke="#8a6d3b" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>')
+    for ax in (129, 349, 569, 789, 1009):
+        body.append(f'<path d="M{ax},332 L{ax},364" stroke="{TEAL}" stroke-width="1.4" stroke-dasharray="4,3" fill="none" marker-end="url(#arrT)"/>')
+
+    # Bottom Lock Order Strip
+    body.append(_box(28, 492, W - 56, 50, NAVY, NAVY, 8))
+    body.append(_text(W / 2, 513, "事务内确定性无环锁序（ADR-BR-011 扩展）：本聚合根 FOR UPDATE → brant_auth → brant_ext → brant_cat (SkuGuard ＋ SampleGuard) → brant_cst (Adoptability ＋ CostBOM) → inq → pol → pty", 10.3, "#ffffff", "700"))
+    body.append(_text(W / 2, 532, "全部 10 个新迁移表强制启用 FORCE ROW LEVEL SECURITY（app.tenant_id / app.company_id），最小授权写入 deploy/postgres/10_app_grants.sql", 9.8, "#bdd5dd", "400"))
+
+    return _svg(W, H, "".join(body), "服装插件领域聚合、Schema 归属与无环锁序图")
+
+
+def apparel_pricing_and_validation_chain() -> str:
+    """Baseline 5.3 7-step fixed pricing chain, validation merge rule, and S-D counterexample."""
+    W, H = 1140, 566
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    body.append(_text(W / 2, 30, "固定计价与校验链（基线 5.3 七步确定性流水线 · 服装模板绝不静默回退通用成本模型）", 13.0, NAVY, "700"))
+
+    # Top Row: Steps 1 -> 4
+    top_steps = [
+        ("步骤 1 · 绑定成本提供者", "#123248", "按 document_profile 唯一查找", "双提供者 → 409 COST_PROVIDER_CONFLICT", "apparel 故障禁静默回退 generic"),
+        ("步骤 2 · cost.estimate.v1", TEAL, "分码单耗 ＋ 幅宽／克重／缩水", "按色汇总 MCQ 起染费 ＋ 打样版费", "缺码拒 422 · 未测参数禁冒充实测"),
+        ("步骤 3 · 单位与币种归一", "#1f4a63", "核心 CST/TRD 统一换算", "例：2 DOZEN × 12 = 24 PCS", "误录 2 PCS 或缺汇率直接拒绝"),
+        ("步骤 4 · 售价、折扣与舍入", "#2d6178", "定价策略或授权业务员报价", "应用客户折扣 · 逐行先舍后加", "显式 HALF_UP · 禁用 float"),
+    ]
+    sw, sgap = 257, 18
+    for idx, (st, col, l1, l2, l3) in enumerate(top_steps):
+        sx = 28 + idx * (sw + sgap)
+        body.append(_box(sx, 46, sw, 122, "#ffffff", "#b8cdd2", 8))
+        body.append(_box(sx, 46, sw, 30, col, col, 8))
+        body.append(f'<rect x="{sx}" y="66" width="{sw}" height="10" fill="{col}"/>')
+        body.append(_text(sx + sw / 2, 66, st, 11.2, "#ffffff", "700"))
+        body.append(_text(sx + 12, 97, l1, 10.2, NAVY, "600", "start"))
+        body.append(_text(sx + 12, 119, l2, 10.0, TEAL if idx > 0 else "#9b3a30", "400", "start"))
+        body.append(_text(sx + 12, 141, l3, 9.8, MUTED, "400", "start"))
+        if idx < 3:
+            body.append(f'<path d="M{sx + sw},107 L{sx + sw + sgap - 2},107" stroke="{TEAL}" stroke-width="1.6" fill="none" marker-end="url(#arrT)"/>')
+
+    # Turn-down arrow from Step 4 to Step 5
+    body.append(f'<path d="M982,168 L982,196" stroke="{TEAL}" stroke-width="1.6" fill="none" marker-end="url(#arrT)"/>')
+
+    # Middle Row: Steps 7 <- 6 <- 5 (right to left flow)
+    bot_steps = [
+        ("步骤 7 · 事务重查与快照封存", "#2f6e52", "quote.freeze / quote.activate", "锁本根 FOR UPDATE → 上游守卫 FOR SHARE", "固化成本、汇率、插件版本与校验快照"),
+        ("步骤 6 · 内容绑定审批要求", "#ba743e", "存在 requires_approval 时生成", "绑定修订号 ＋ 商业哈希 ＋ 规则版本", "仅覆盖显式可豁免规则（如低毛利）"),
+        ("步骤 5 · 核心约束 ＋ quote.validate.v1", "#6b4fa0", "先核心不变量（不可豁免），再服装校验", "合并：reject > requires_approval > pass", "保留全部明细 · 排序不改变业务结论"),
+    ]
+    bw, bgap = 348, 20
+    for idx, (st, col, l1, l2, l3) in enumerate(bot_steps):
+        bx = 28 + idx * (bw + bgap)
+        body.append(_box(bx, 198, bw, 122, "#ffffff", "#b8cdd2", 8))
+        body.append(_box(bx, 198, bw, 30, col, col, 8))
+        body.append(f'<rect x="{bx}" y="218" width="{bw}" height="10" fill="{col}"/>')
+        body.append(_text(bx + bw / 2, 218, st, 11.2, "#ffffff", "700"))
+        body.append(_text(bx + 12, 249, l1, 10.2, NAVY, "600", "start"))
+        body.append(_text(bx + 12, 271, l2, 10.0, col, "600", "start"))
+        body.append(_text(bx + 12, 293, l3, 9.8, MUTED, "400", "start"))
+        if idx > 0:
+            # arrow right-to-left: from bx -> bx - bgap + 2
+            body.append(f'<path d="M{bx},259 L{bx - bgap + 2},259" stroke="{TEAL}" stroke-width="1.6" fill="none" marker-end="url(#arrT)"/>')
+
+    # Bottom Section: S-D Counterexamples & Q01.industry
+    body.append(_box(28, 342, 650, 204, "#fdf1f0", "#e4b2ac", 9))
+    body.append(_text(46, 366, "基线 15.5 服装与单位反例 S-D（自动化回归必锁阻断用例）", 11.8, "#9b3a30", "700", "start"))
+    sd_rows = [
+        ("反例 1 · 单位换算防误录", "红 S 按 2 DOZEN @ 96 USD/DOZEN → 换算 24 PCS @ 8 USD = 192.00 USD；误录 2 PCS 必拒"),
+        ("反例 2 · 源文件总数冲突", "矩阵合计 24＋36＋12＋48 = 120 PCS，源文件总计写 118 → INQ 标 PendingConflict 待核实"),
+        ("反例 3 · 旧版样衣失效", "样衣批准绑定 TECH-01-r1，订单／SKU 规格升至 r2 → SampleGuard 拒 SAMPLE_SPEC_MISMATCH"),
+        ("反例 4 · 跨模板混单阻断", "同一询价或报价混入 generic 与 apparel，或跨模板合并出运 → 拒 DOCUMENT_PROFILE_MISMATCH"),
+    ]
+    for idx, (rt, rd) in enumerate(sd_rows):
+        ry = 380 + idx * 39
+        body.append(_box(44, ry, 618, 33, "#ffffff", "#ebc4bf", 6))
+        body.append(_text(56, ry + 20.5, f"{rt}：", 10.0, "#9b3a30", "700", "start"))
+        body.append(_text(192, ry + 20.5, rd, 9.5, NAVY, "400", "start"))
+
+    body.append(_box(696, 342, 416, 204, "#edf6f3", "#9bc2c2", 9))
+    body.append(_text(714, 366, "Q01.industry 升级后的权威核验并集", 11.8, TEAL, "700", "start"))
+    q_items = [
+        ("1. CAT SkuGuard v1（既有）", "每条行绑定的 (sku_id, spec_revision) 仍为当前确认版"),
+        ("2. CAT SampleGuard v1（新增）", "apparel 策略要求样衣时，批准必须绑定当前 spec_revision"),
+        ("3. CST CostBOMGuard v1（新增）", "成本快照依赖的 CostBOM 未被撤回且无未审批替代物料"),
+        ("4. 并集裁决铁律（基线 18.1）", "全部 satisfied 方可 completed；unknown→waiting_external"),
+    ]
+    for idx, (qt, qd) in enumerate(q_items):
+        qy = 380 + idx * 39
+        body.append(_box(712, qy, 384, 33, "#ffffff", "#b5d7ca", 6))
+        body.append(_text(722, qy + 14, qt, 10.0, NAVY, "700", "start"))
+        body.append(_text(722, qy + 28, qd, 9.4, MUTED, "400", "start"))
+
+    return _svg(W, H, "".join(body), "服装插件七步固定计价校验链与 S-D 反例拦截")
+
+
+def apparel_plugin_lifecycle_and_ai() -> str:
+    """Plugin company activation lifecycle (with draining protection) and AI industry contracts."""
+    W, H = 1140, 496
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Left Panel: Plugin Lifecycle State Machine
+    body.append(_box(28, 18, 524, 460, "#ffffff", "#c2d4d9", 10))
+    body.append(_text(46, 44, "插件公司级生命周期与停用在途保护（brant_ext）", 12.2, NAVY, "700", "start"))
+    body.append(_text(46, 63, "代码发布与租户启用分离；停用前强制检查在途单据与运行中 AI 任务", 10.0, MUTED, "400", "start"))
+
+    # States
+    states = [
+        (74, 96, 178, 56, "#eef1f3", "#8fa9b2", NAVY, "disabled", "未启用（默认）"),
+        (332, 96, 178, 56, TEAL, TEAL, "#ffffff", "active", "已启用（可新开单）"),
+        (332, 232, 178, 58, "#ba743e", "#ba743e", "#ffffff", "draining_readonly", "只读排空（禁新开单）"),
+    ]
+    for sx, sy, sw, sh, fill, stroke, ink, s1, s2 in states:
+        body.append(_box(sx, sy, sw, sh, fill, stroke, 9))
+        body.append(_text(sx + sw / 2, sy + 24, s1, 12.0, ink, "700"))
+        body.append(_text(sx + sw / 2, sy + 43, s2, 10.0, "#eef6f7" if ink == "#ffffff" else MUTED, "400"))
+
+    # Transitions
+    # disabled -> active
+    body.append(f'<path d="M252,118 L330,118" stroke="{TEAL}" stroke-width="1.6" fill="none" marker-end="url(#arrT)"/>')
+    body.append(_text(291, 109, "plugin.enable", 9.6, TEAL, "700"))
+    # active -> draining_readonly
+    body.append(f'<path d="M421,152 L421,230" stroke="#ba743e" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>')
+    body.append(_text(428, 194, "enter_readonly", 9.6, "#8c5c1f", "700", "start"))
+    # draining_readonly -> disabled (elbow back)
+    body.append(f'<path d="M332,261 L163,261 L163,154" stroke="{NAVY}" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>')
+    body.append(_text(246, 252, "plugin.disable（无在途）", 9.6, NAVY, "700"))
+    # active -> disabled direct (only if zero in-flight)
+    body.append(f'<path d="M332,136 L254,136" stroke="{MUTED}" stroke-width="1.3" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>')
+    body.append(_text(293, 150, "无在途直停", 9.2, MUTED, "400"))
+
+    # Lifecycle guarantee cards
+    lc_cards = [
+        (46, 310, 488, 46, "#fdf1f0", "#e4b2ac", "#9b3a30", "在途硬保护（409 PLUGIN_IN_USE）", "存在未关闭 apparel 报价／订单或非终态 AI 任务时，直接 disable 被拒，必须先转 draining_readonly"),
+        (46, 364, 488, 46, "#edf5f5", "#9bc2c2", TEAL, "停用后历史只读可读（基线 5.5 / 18.3）", "历史单据保存冻结的 CostSnapshot ＋ plugin_snapshot，停用后仍由兼容读取器完整展示"),
+        (46, 418, 488, 46, "#fff8ed", "#dfc7a1", "#8c5c1f", "精确版本矩阵校验（PLUGIN_VERSION_INCOMPATIBLE）", "按发布登记的精确 (core, contract, plugin) 组合验兼容，不凭语义版本号盲判"),
+    ]
+    for cx, cy, cw, ch, fill, stroke, tcol, ct, cd in lc_cards:
+        body.append(_box(cx, cy, cw, ch, fill, stroke, 7))
+        body.append(_text(cx + 12, cy + 18, ct, 10.4, tcol, "700", "start"))
+        body.append(_text(cx + 12, cy + 35, cd, 9.5, NAVY, "400", "start"))
+
+    # Right Panel: AI-Native 5 Industry Contracts + ExecutionBundle
+    body.append(_box(572, 18, 540, 460, "#ffffff", "#b8c3e0", 10))
+    body.append(_text(590, 44, "AI-Native 行业契约接入与 ExecutionBundle 升级屏障", 12.2, "#4a3875", "700", "start"))
+    body.append(_text(590, 63, "对齐产品基线第 8.8、18.1 章与附录 B Schema（全部经平台登记与鉴权）", 10.0, MUTED, "400", "start"))
+
+    ai_cards = [
+        (590, 80, 504, 54, "#f4f2fa", "#c5b9e3", "1. industry.semantics.v1（Semantics）", "声明款/色/码/样衣/用料术语与别名；字段映射仅允许调用注册纯函数，禁止任意代码注入"),
+        (590, 142, 504, 54, "#f4f2fa", "#c5b9e3", "2. context.provider.v1（ContextResult）", "向任务层提供已授权款式、BOM 与样衣查询引用；显式标注 current/stale/conflict/unconfirmed"),
+        (590, 204, 504, 54, "#f4f2fa", "#c5b9e3", "3. task.profile.v1 ＋ action.provider.v1", "版本化指令（instruction_sha256）与步骤上限；副作用动作统一经核心入口，禁扩大权限"),
+        (590, 266, 504, 58, "#edf6f3", "#9bc2c2", "4. outcome.check.v1（CheckResult · 与平台必检取并集）", "全部 satisfied 才可完成；插件回传 required=false 绝不能取消平台必检；自然语言「完成」无效"),
+    ]
+    for cx, cy, cw, ch, fill, stroke, ct, cd in ai_cards:
+        body.append(_box(cx, cy, cw, ch, fill, stroke, 7))
+        body.append(_text(cx + 12, cy + 20, ct, 10.6, "#4a3875" if fill == "#f4f2fa" else TEAL, "700", "start"))
+        for li, ln in enumerate(wrap(cd, 9.6, cw - 24)[:2]):
+            body.append(_text(cx + 12, cy + 37 + li * 15, ln, 9.6, NAVY, "400", "start"))
+
+    # ExecutionBundle fingerprint box
+    body.append(_box(590, 336, 504, 128, NAVY, NAVY, 8))
+    body.append(_text(606, 359, "ExecutionBundle 扩展指纹（migrations/ai/000006 · 复用 CT14）", 11.2, "#ffffff", "700", "start"))
+    body.append(_box(606, 370, 472, 46, "#1f4a63", "#4b748a", 6))
+    body.append(_text(618, 389, 'plugins: [{id:"industry.apparel", version:"0.1.0",', 10.0, "#dbedf0", "600", "start"))
+    body.append(_text(618, 406, '           contract:"trade-extension.v1", manifest_sha256:"..."}]', 10.0, "#dbedf0", "600", "start"))
+    body.append(_text(606, 434, "插件升级 0.1.0→0.2.0 ⇒ Bundle SHA-256 改变 ⇒ 旧任务 0 模型调用即暂停", 10.0, "#ffd8a8", "600", "start"))
+    body.append(_text(606, 452, "状态 paused/conflict（EXECUTION_BUNDLE_INCOMPATIBLE），由人工显式决定续跑或接管", 9.6, "#cde2e8", "400", "start"))
+
+    return _svg(W, H, "".join(body), "服装插件生命周期、停用保护与 AI 契约集成架构")
+
 
 

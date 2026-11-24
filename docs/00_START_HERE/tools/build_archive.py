@@ -28,7 +28,7 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.13"
+ARCHIVE_VERSION = "1.14"
 ARCHIVE_DATE = "2026-11-24"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
@@ -131,6 +131,7 @@ TABLES = tool_data("table_alignment.json")
 PYSUM = tool_data("python_inventory_summary.json")
 ARCHIVE = tool_data("archive.json")
 R1SPEC = tool_data("r1_support_matrix.json")
+APPAREL = tool_data("apparel_plugin_design.json")
 RERUN_PATH = DOCS / "07_ENGINEERING_BASELINE_REVIEW/05_EVIDENCE/python_v050_unittest_rerun.json"
 RERUN = json.loads(RERUN_PATH.read_text(encoding="utf-8")) if RERUN_PATH.exists() else {}
 SPIKE_PATH = DOCS / M0_EVIDENCE / "10_spike_consistency.json"
@@ -982,7 +983,7 @@ def inc_rd_gates(a):
 
 
 def inc_wbs_roadmap(a):
-    return figure(a.get("fig", "FIG"), "Go 实施阶段路线（M0、S1–S6）", "每块显示工作项数量与 Python 对等范围；顺序表示依赖，不是排期。", svg.wbs_roadmap(WBS["phases"], WBS["tasks"]))
+    return figure(a.get("fig", "FIG"), "Go 实施阶段路线（M0、S1–S8）", "每块显示工作项数量、完成进度与核心交付定位；顺序表示依赖，不是已批准排期。", svg.wbs_roadmap(WBS["phases"], WBS["tasks"]))
 
 
 def inc_wbs_phases(a):
@@ -1339,6 +1340,88 @@ def inc_pm_evidence_dashboard(a):
     return figure(a.get("fig", "FIG 06"), "科学验证金字塔与实测性能／现场模型数据看板",
                   "按可证伪证据层级透明披露：底层静态检查、单测、PG16 集成与脚本化评测全绿；参照负载 3w 中继 P95 为 6.403 s（未达 5 s）与现场模型 4 族失败原样保留，G0–G5 均为 NO-GO。",
                   svg.pm_evidence_dashboard())
+
+
+def inc_app_kpis(a):
+    return kpis([
+        (f"{len(APPAREL['adrs'])} 项 ADR", f"架构裁决（ADR-BR-EXT-001—00{len(APPAREL['adrs'])} · 候选待审）"),
+        (f"{len(APPAREL['migrations'])} 个迁移", "1 新平台 Schema (brant_ext) ＋ 7 上下文演进 · 全 FORCE RLS"),
+        (f"{len(APPAREL['commands'])} 命令 ／ {len(APPAREL['errors'])} 错误码", "覆盖插件、款色码、样衣、分码 BOM、MCQ、短溢装与装柜"),
+        (f"{len(APPAREL['tests'])} 组必测 ／ {len(APPAREL['slices'])} 切片", "完整覆盖基线 15.5 S-D、18.3 与服装实战核心风控"),
+    ])
+
+
+def inc_app_adrs(a):
+    rows = [[code(x["id"]), x["title"], x["decision"], x["rationale"], tag(x["status"], "cand")] for x in APPAREL["adrs"]]
+    return table(["裁决编号", "主题", "设计决定", "工程依据", "状态"], rows, "compact")
+
+
+def inc_app_migrations(a):
+    rows = [
+        [code(m["seq"]), code(m["file"]), code(m["schema"]), m["manifestPos"], m["tables"], m["guard"], m["rls"]]
+        for m in APPAREL["migrations"]
+    ]
+    return table(["序号", "新增迁移文件", "Schema", "Manifest 位置", "新增表／列变更", "守卫与约束", "隔离策略"], rows, "compact")
+
+
+def inc_app_commands(a):
+    tid = "app-cmds"
+    rows = [
+        [Raw(chip(c["bc"])) if c["bc"] in CTX else code(c["bc"]), code(c["command"]), code(c["route"]),
+         tag(c["actor"], "partial" if "仅人工" in c["actor"] else "ok"), c["roles"], c["purpose"]]
+        for c in APPAREL["commands"]
+    ]
+    return filter_bar(tid, "按上下文、命令名、人工专属或岗位过滤", len(rows)) + table(
+        ["归属", "命令", "HTTP 路由（F2 拒 AI 写）", "执行者", "岗位授权", "职责与核心不变量"], rows, "compact", tid
+    )
+
+
+def inc_app_errors(a):
+    rows = [
+        [code(x["code"]), x["http"], x["category"], x["contexts"], x["trigger"]]
+        for x in APPAREL["errors"]
+    ]
+    return table(["错误码", "HTTP", "拒绝类别", "涉及上下文", "触发条件与语义"], rows, "compact")
+
+
+def inc_app_tests(a):
+    tid = "app-tests"
+    rows = [
+        [code(t["id"]), t["basis"], t["level"], t["scenario"], t["expected"]]
+        for t in APPAREL["tests"]
+    ]
+    return filter_bar(tid, "按测试编号、基线条款、层级或关键字过滤", len(rows)) + table(
+        ["用例组", "规范依据", "验证层级", "测试场景", "可证伪断言"], rows, "compact", tid
+    )
+
+
+def inc_app_slices(a):
+    rows = [[s["slice"], s["units"], s["deliverables"], s["gate"]] for s in APPAREL["slices"]]
+    return table(["实施切片", "单元拆分", "核心交付物", "退出门禁"], rows, "compact")
+
+
+def inc_app_arch_diagram(a):
+    return figure(a.get("fig", "FIG 01"), "服装行业插件分层架构、依赖规则与四大扩展点",
+                  "新增 internal/plugins/apparel（layerPlugin）与 internal/foundation/plugin（brant_ext）；交易事实保留在既有上下文，tools/dependency-check 静态守住单向依赖。",
+                  svg.apparel_plugin_architecture())
+
+
+def inc_app_er_diagram(a):
+    return figure(a.get("fig", "FIG 02"), "服装插件领域聚合、Schema 归属与无环锁序图",
+                  "CAT 拥有 Item 款色码矩阵与 SampleApproval 样衣批准，CST 拥有 CostBOM 与替代审批，brant_ext 拥有公司级插件激活状态；全部表强制 FORCE RLS，锁序严格无环。",
+                  svg.apparel_domain_er())
+
+
+def inc_app_pricing_diagram(a):
+    return figure(a.get("fig", "FIG 03"), "服装插件七步固定计价校验链、校验合并与 S-D 反例拦截",
+                  "严格执行基线 5.3 固定计价链：双提供者冲突硬拒、故障禁回退、reject 优先于 requires_approval、事务内重查 SkuGuard＋SampleGuard＋CostBOMGuard。",
+                  svg.apparel_pricing_and_validation_chain())
+
+
+def inc_app_lifecycle_diagram(a):
+    return figure(a.get("fig", "FIG 04"), "插件公司级生命周期、停用在途保护与 AI 行业契约架构",
+                  "停用前强制检查在途单据与 AI 任务并支持 draining_readonly 只读排空；AI 侧通过 ExecutionBundle 插件指纹复用 CT14 安全暂停机制，插件不可取消平台必检。",
+                  svg.apparel_plugin_lifecycle_and_ai())
 
 
 INCLUDES = {k[4:]: v for k, v in globals().items() if k.startswith("inc_")}
@@ -1709,6 +1792,7 @@ def write_registry(pages: list[str]) -> None:
             "V1.11 S6（2026-11-23，分支 s6/business，尖端 9e2502a）：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_LOCAL，S6-06 为 PARTIAL。本机尖端门禁迁移 0（106 个迁移已记录）、集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。9e2502a 的 GitHub Actions 结论不在本档案里，S6 不写 DONE_CI。G5 为模拟 NO-GO：没有真实客户、没有真人签核、没有发布指标、没有真实的海关单一窗口或金税。本版不改产品行为。",
             "V1.12 R1 发布规格候选（2026-11-24，基于 main 8066e1c／ece31a1）：新增 09 阶段 16_IDP_Brant_R1_Release_Specification_and_G5_Package_V0.1.html，系统整编 G5 所需的公开支持矩阵（F01—F29、CN-F01—CN-F08、CN-M01—CN-M06、S01—S06、Q01 与 BIP 永久退出）、授权（运行时 RBAC／SoD／F2／RLS 与待签核发布授权）、部署组合（D-01—D-04 与禁止形态、容量与恢复实测含 6.403 s 中继 P95 未达标）与服务边界（18 上下文单写者、552 OpenAPI 3.1 路径、Outbox／Inbox 与外部 ACL）。不改产品 Go 代码；S6-06 仍为 PARTIAL，G5 仍为模拟 NO-GO。",
             "V1.13 产品说明 V1.0（2026-11-24，基于 main 48f0c1c／代码 8066e1c）：在 01 阶段新增图文并茂的完整产品说明 05_IDP_Brant_Product_Manual_V1.0.html，内联 7 张确定性矢量架构与业务图表（业务全景与 18 能力域、BRC-001 经济账瀑布、AI-Native Q01 九步与三道防线、商业放行五重闸门与 SoD、中国出口 CN-M01 三线核对与外部边界、科学验证金字塔与实测数据看板、模块化单体部署拓扑），系统阐述产品定位、业务规则、AI 安全协同、中国配置、架构部署及诚实的实测局限。不改 Go 代码，G0–G5 门禁状态不变，BIP 永久退出。",
+            "V1.14 服装行业插件详细设计与 S7–S8 完整路线（2026-11-24，基于 main 80e94b5／代码 8066e1c）：遵循「设计文档先行」，在 05 阶段新增 07_IDP_Brant_Apparel_Industry_Plugin_Detailed_Design_V0.1.html（含 7 项 ADR、分码单耗、MCQ 起染费、短溢装容差、箱规装柜、10 迁移、13 命令、13 错误码与 APP-T01—T13）；同时在 09 阶段实施总计划与 WBS 中正式新增 S7（服装插件与可交付产品闭环，S7-01—S7-09，9 项）与 S8（复杂外贸专项与规模化商业发布，S8-01—S8-04，4 项），WBS 总计 107 项，完整纳入对照 SAP／富通天下的六大差距。不改 M0–S6 已完成项状态与任何 Go／SQL 代码；BIP 永久退出，G0–G5 仍为 NO-GO。",
             "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4、G5 仍为 NO-GO（G5 为 2026-11-23 的模拟结论）；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考，S6 没有 Python 对等测试。",
         ],

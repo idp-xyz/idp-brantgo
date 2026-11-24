@@ -1,5 +1,5 @@
 {
-  "archive_version": "1.13",
+  "archive_version": "1.14",
   "as_of": "2026-11-24",
   "product": "IDP Brant · AI-Native Trade Operations Platform（中国 B2B 出口业务版）",
   "standard": "IDP-Cargo 主档案 V2.9（01–12 阶段、证据分级、门禁与 Go-first 工程基线）",
@@ -58,9 +58,9 @@
       "seq": "05",
       "folder": "05_TACTICAL_DDD",
       "stage": "战术 DDD",
-      "latest_candidate": "Tactical DDD Candidate V0.1",
-      "summary": "63 个候选聚合、48 个状态机、111 条不变量、109 条参考验收",
-      "status": "候选；源自 Python V0.50 已验证规则",
+      "latest_candidate": "Tactical DDD Candidate V0.1 · Apparel Plugin Design V0.1",
+      "summary": "63 个候选聚合、48 个状态机、111 条不变量、109 条参考验收；含服装行业插件（industry.apparel）详细设计 V0.1",
+      "status": "候选；源自 Python V0.50 已验证规则，并补齐服装插件编码前详细设计",
       "primary_file": "05_TACTICAL_DDD/01_IDP_Brant_DDD_Domain_Design_Master_V0.1.html"
     },
     {
@@ -94,9 +94,9 @@
       "seq": "09",
       "folder": "09_IMPLEMENTATION_PLAN",
       "stage": "工程实施总体计划",
-      "latest_candidate": "Implementation Plan · Go V0.1",
-      "summary": "M0 与 S1—S6 共 94 项工作；S1—S3 以 Python V0.50 行为等价为退出条件；S5 先于 S4 完成，S4（含 S5R 修订轮）随后完成；S6 有本机证据（S6-06 部分，G5 模拟 NO-GO）",
-      "status": "候选；M0、S1、S2、S3、S5、S4 与 S6 状态已回写；S6 的远程运行还不是证据；无已批准排期",
+      "latest_candidate": "Implementation Plan · Go V0.2 (M0–S8)",
+      "summary": "M0 与 S1—S8 共 107 项工作：M0–S6 无头核心引擎（S6 六项 DONE_CI，S6-06 PARTIAL）；2026-11-24 正式纳入 S7（服装插件、拼柜分摊、前端 UI、标准邮件、总账导出、压测与模型收口）与 S8（L/C、离岸双主体、真渠道联调、真客户试点与 G0–G5）",
+      "status": "候选；M0–S6 状态已回写，S7–S8 全部 NOT_STARTED；无已批准排期",
       "primary_file": "09_IMPLEMENTATION_PLAN/01_IDP_Brant_Implementation_Master_Plan_Go_V0.1.html"
     },
     {
@@ -221,7 +221,7 @@
     "pythonUniqueTests": 577,
     "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
     "goTestsPorted": 455,
-    "wbsTasks": 94,
+    "wbsTasks": 107,
     "adrs": 86,
     "g1Controls": 13,
     "sapReferenceRows": 41,
@@ -242,6 +242,7 @@
     "03_STRATEGIC_DDD/02_IDP_Brant_Strategic_DDD_Context_Map_V0.1.html",
     "04_DOMAIN_EVENT_STORMING/01_IDP_Brant_Domain_Event_Storming_V0.1.html",
     "05_TACTICAL_DDD/01_IDP_Brant_DDD_Domain_Design_Master_V0.1.html",
+    "05_TACTICAL_DDD/07_IDP_Brant_Apparel_Industry_Plugin_Detailed_Design_V0.1.html",
     "06_ENGINEERING_CONTRACTS/01_IDP_Brant_Engineering_Contracts_Go_V0.1.html",
     "07_ENGINEERING_BASELINE_REVIEW/01_IDP_Brant_Python_Baseline_Review_V0.50.html",
     "08_ENGINEERING_READINESS/01_IDP_Brant_Go_Migration_Readiness_V0.1.html",
@@ -272,6 +273,7 @@
     "V1.11 S6（2026-11-23，分支 s6/business，尖端 9e2502a）：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_LOCAL，S6-06 为 PARTIAL。本机尖端门禁迁移 0（106 个迁移已记录）、集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。9e2502a 的 GitHub Actions 结论不在本档案里，S6 不写 DONE_CI。G5 为模拟 NO-GO：没有真实客户、没有真人签核、没有发布指标、没有真实的海关单一窗口或金税。本版不改产品行为。",
     "V1.12 R1 发布规格候选（2026-11-24，基于 main 8066e1c／ece31a1）：新增 09 阶段 16_IDP_Brant_R1_Release_Specification_and_G5_Package_V0.1.html，系统整编 G5 所需的公开支持矩阵（F01—F29、CN-F01—CN-F08、CN-M01—CN-M06、S01—S06、Q01 与 BIP 永久退出）、授权（运行时 RBAC／SoD／F2／RLS 与待签核发布授权）、部署组合（D-01—D-04 与禁止形态、容量与恢复实测含 6.403 s 中继 P95 未达标）与服务边界（18 上下文单写者、552 OpenAPI 3.1 路径、Outbox／Inbox 与外部 ACL）。不改产品 Go 代码；S6-06 仍为 PARTIAL，G5 仍为模拟 NO-GO。",
     "V1.13 产品说明 V1.0（2026-11-24，基于 main 48f0c1c／代码 8066e1c）：在 01 阶段新增图文并茂的完整产品说明 05_IDP_Brant_Product_Manual_V1.0.html，内联 7 张确定性矢量架构与业务图表（业务全景与 18 能力域、BRC-001 经济账瀑布、AI-Native Q01 九步与三道防线、商业放行五重闸门与 SoD、中国出口 CN-M01 三线核对与外部边界、科学验证金字塔与实测数据看板、模块化单体部署拓扑），系统阐述产品定位、业务规则、AI 安全协同、中国配置、架构部署及诚实的实测局限。不改 Go 代码，G0–G5 门禁状态不变，BIP 永久退出。",
+    "V1.14 服装行业插件详细设计与 S7–S8 完整路线（2026-11-24，基于 main 80e94b5／代码 8066e1c）：遵循「设计文档先行」，在 05 阶段新增 07_IDP_Brant_Apparel_Industry_Plugin_Detailed_Design_V0.1.html（含 7 项 ADR、分码单耗、MCQ 起染费、短溢装容差、箱规装柜、10 迁移、13 命令、13 错误码与 APP-T01—T13）；同时在 09 阶段实施总计划与 WBS 中正式新增 S7（服装插件与可交付产品闭环，S7-01—S7-09，9 项）与 S8（复杂外贸专项与规模化商业发布，S8-01—S8-04，4 项），WBS 总计 107 项，完整纳入对照 SAP／富通天下的六大差距。不改 M0–S6 已完成项状态与任何 Go／SQL 代码；BIP 永久退出，G0–G5 仍为 NO-GO。",
     "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
     "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4、G5 仍为 NO-GO（G5 为 2026-11-23 的模拟结论）；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考，S6 没有 Python 对等测试。"
   ]
