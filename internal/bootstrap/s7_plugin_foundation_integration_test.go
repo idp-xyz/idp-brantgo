@@ -193,6 +193,9 @@ func TestApparelQuoteOrderAndShipmentProfiles(t *testing.T) {
 	_, err = q.c.TRD.Cancel(q.author, trdapi.Cancel{IdempotencyKey: q.key(), QuoteID: apparel.QuoteID,
 		ExpectedVersion: quote.RootVersion, BusinessRevision: quote.ActiveRevision, Reason: "客户取消", Evidence: q.proof})
 	q.want(err, trdapi.CodeRootConversionLocked)
+	_, err = q.c.TRD.Revise(q.author, trdapi.Revise{IdempotencyKey: q.key(), QuoteID: apparel.QuoteID,
+		ExpectedVersion: quote.RootVersion, BaseRevision: quote.ActiveRevision})
+	q.want(err, plugin.CodePluginNotEnabled)
 	_, err = q.c.EXT.Disable(q.author, plugin.DisablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
 	q.must(err)
 

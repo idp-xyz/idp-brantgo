@@ -576,6 +576,18 @@ func (s Service) Revise(ctx context.Context, cmd api.Revise) (api.Receipt, error
 		if err := quote.Check(h.q, true, cmd.ExpectedVersion); err != nil {
 			return action.Outcome{}, err
 		}
+		// A converted active revision stays active (TRD-INV-010) and is not itself in-flight, so
+		// this is the write that would open a new apparel draft after plugin.disable has read.
+		// The quote root is already FOR UPDATE and the authority row FOR SHARE.
+		profile, err := plugin.Canonical(h.q.DocumentProfile, "/args/quote_id")
+		if err != nil {
+			return action.Outcome{}, err
+		}
+		if profile == plugin.ProfileApparel {
+			if err = plugin.RequireActive(ctx, exec, plugin.ApparelPluginID, string(plugin.ProfileApparel), "/args/quote_id"); err != nil {
+				return action.Outcome{}, err
+			}
+		}
 		if _, err := h.q.Revise(cmd.BaseRevision, d.Actor, d.Epoch, s.Clock.Now()); err != nil {
 			return action.Outcome{}, err
 		}
