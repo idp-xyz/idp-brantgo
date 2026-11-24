@@ -28,7 +28,7 @@ import svg  # noqa: E402
 DOCS = TOOLS.parents[1]
 GO_REPO = DOCS.parent  # the idp-brantgo Go module that holds this archive in docs/
 PY_PACKAGE_NAME = "IDP_Brant_T04_A46采购准备_V0.50"  # Python V0.50 reference package, archived in 90_ORIGINAL_SOURCES
-ARCHIVE_VERSION = "1.12"
+ARCHIVE_VERSION = "1.13"
 ARCHIVE_DATE = "2026-11-24"
 M0_REPORT = "10_M0_ENGINEERING_BASELINE/05_IDP_Brant_M0_Execution_Report_V1.0.html"
 M0_EVIDENCE = "10_M0_ENGINEERING_BASELINE/06_M0_EVIDENCE"
@@ -1293,6 +1293,54 @@ def inc_r1_boundary_diagram(a):
                   svg.r1_service_boundaries())
 
 
+def inc_pm_kpis(a):
+    c = counts()
+    paths = OPENAPI.get("paths", {})
+    n_rls = sum(p.read_text(encoding="utf-8").count("FORCE ROW LEVEL SECURITY") for p in (GO_REPO / "migrations").rglob("*.sql"))
+    return kpis([
+        (f"{c['contexts']} ／ {c['aggregates']}", f"限界上下文 ／ 聚合（{c['stateMachines']} 状态机 · {c['invariantRegister']} 不变量）"),
+        (f"{len(paths)} ／ {c['factAuthority']}", "OpenAPI 3.1 路径 ／ 单写者事实权威"),
+        (f"{len(ROLES['templates'])} ／ {len(HUMAN_ONLY)}", f"岗位模板（{len(ROLES['forbiddenCombinations'])} 职责分离禁令）／ 人工专属命令"),
+        (f"{c['goTestFunctions']:,} ／ {n_rls}", f"Go 测试（{c['goIntegrationTests']} PG16 集成）／ FORCE RLS 表"),
+    ])
+
+
+def inc_pm_panorama(a):
+    return figure(a.get("fig", "FIG 01"), "IDP Brant 外贸全链路业务全景与 18 个能力域地图",
+                  "五个业务运营流贯穿询价、寻源核价、报价订单、采购履约、结算中国协同与售后；顶层由 TSK＋AI 协同驱动，底层由主数据、23 种政策与 282 张 FORCE RLS 表守住边界。",
+                  svg.pm_trade_panorama())
+
+
+def inc_pm_brc001(a):
+    return figure(a.get("fig", "FIG 02"), "合成核算基准 BRC-001 全链路金额与数量守恒透视图",
+                  "四行 120 PCS 实测链路：净销售 960.00 USD、冻结成本 660.00 USD、经营毛利 300.00 USD（31.25%）；所有运算使用整数最小单位与精确有理数，与 Python V0.50 逐分一致。",
+                  svg.pm_brc001_economics())
+
+
+def inc_pm_ai_q01(a):
+    return figure(a.get("fig", "FIG 03"), "AI-Native 主业务链 Q01 九步协同与三道确定性安全防线",
+                  "AI 负责资料抽取、候选草稿与提案组织，绝不直接写业务库；F2 传输拦截、进程内能力网关与内容绑定批准授权把关全部高风险动作；完成判定只读权威记录。",
+                  svg.pm_ai_q01_loop())
+
+
+def inc_pm_release_gates(a):
+    return figure(a.get("fig", "FIG 04"), "商业条件放行五重同步闸门与职责分离（SoD）防线",
+                  "出运与单证放行须同时满足质量、付款条件、主体筛查、贸易合规／许可证与供给库存五重守卫；7 组禁止兼任与 10 项专属权限从结构上阻断自审自批。",
+                  svg.pm_release_gates())
+
+
+def inc_pm_china_reconcile(a):
+    return figure(a.get("fig", "FIG 05"), "中国出口 CN-M01 三线并行核对与外部法定权威系统边界",
+                  "数量、票证、资金三条核对线并行追踪，内部资料协同与海关单一窗口／金税／银行／外部 ERP 权威办理严格分离；BIP 已永久退出后续路线。",
+                  svg.pm_china_three_reconciliations())
+
+
+def inc_pm_evidence_dashboard(a):
+    return figure(a.get("fig", "FIG 06"), "科学验证金字塔与实测性能／现场模型数据看板",
+                  "按可证伪证据层级透明披露：底层静态检查、单测、PG16 集成与脚本化评测全绿；参照负载 3w 中继 P95 为 6.403 s（未达 5 s）与现场模型 4 族失败原样保留，G0–G5 均为 NO-GO。",
+                  svg.pm_evidence_dashboard())
+
+
 INCLUDES = {k[4:]: v for k, v in globals().items() if k.startswith("inc_")}
 
 
@@ -1660,6 +1708,7 @@ def write_registry(pages: list[str]) -> None:
             "V1.10 S4 后续轮（2026-11-20）：登记 ADR-BR-IMP-003 与模拟评审 SR-86；三个 S4 消费方与它们的系统命令、类 (i) 的目录行、关系 82；F2 与 R14 写回。全量真实运行 live-20261120T054323Z 在 74743b8 上 70 次试次 15 次通过，40 次实质上没有执行；没有把其余家族记成真实通过。L1 已合并（ad704e3）。224ffcf 上的重跑 live-20261120T122849Z 跑完：45 次里 35 次通过，0 次未执行；an01 与 an03 为 0／5。被停止的 live-20261120T120042Z 不作为完成的运行。G2 仍是模拟 NO-GO。",
             "V1.11 S6（2026-11-23，分支 s6/business，尖端 9e2502a）：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_LOCAL，S6-06 为 PARTIAL。本机尖端门禁迁移 0（106 个迁移已记录）、集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。9e2502a 的 GitHub Actions 结论不在本档案里，S6 不写 DONE_CI。G5 为模拟 NO-GO：没有真实客户、没有真人签核、没有发布指标、没有真实的海关单一窗口或金税。本版不改产品行为。",
             "V1.12 R1 发布规格候选（2026-11-24，基于 main 8066e1c／ece31a1）：新增 09 阶段 16_IDP_Brant_R1_Release_Specification_and_G5_Package_V0.1.html，系统整编 G5 所需的公开支持矩阵（F01—F29、CN-F01—CN-F08、CN-M01—CN-M06、S01—S06、Q01 与 BIP 永久退出）、授权（运行时 RBAC／SoD／F2／RLS 与待签核发布授权）、部署组合（D-01—D-04 与禁止形态、容量与恢复实测含 6.403 s 中继 P95 未达标）与服务边界（18 上下文单写者、552 OpenAPI 3.1 路径、Outbox／Inbox 与外部 ACL）。不改产品 Go 代码；S6-06 仍为 PARTIAL，G5 仍为模拟 NO-GO。",
+            "V1.13 产品说明 V1.0（2026-11-24，基于 main 48f0c1c／代码 8066e1c）：在 01 阶段新增图文并茂的完整产品说明 05_IDP_Brant_Product_Manual_V1.0.html，内联 7 张确定性矢量架构与业务图表（业务全景与 18 能力域、BRC-001 经济账瀑布、AI-Native Q01 九步与三道防线、商业放行五重闸门与 SoD、中国出口 CN-M01 三线核对与外部边界、科学验证金字塔与实测数据看板、模块化单体部署拓扑），系统阐述产品定位、业务规则、AI 安全协同、中国配置、架构部署及诚实的实测局限。不改 Go 代码，G0–G5 门禁状态不变，BIP 永久退出。",
             "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4、G5 仍为 NO-GO（G5 为 2026-11-23 的模拟结论）；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考，S6 没有 Python 对等测试。",
         ],
