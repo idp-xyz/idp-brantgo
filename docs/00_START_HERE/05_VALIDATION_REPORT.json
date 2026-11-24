@@ -84,7 +84,7 @@
     {
       "check": "WBS 依赖均存在",
       "result": "PASS",
-      "detail": "94 项工作"
+      "detail": "107 项工作"
     },
     {
       "check": "岗位模板或系统消费方覆盖全部命令",
@@ -302,7 +302,7 @@
     "pythonUniqueTests": 577,
     "pythonUnittestRerun": "Ran 679 tests in 522.989s  OK ",
     "goTestsPorted": 455,
-    "wbsTasks": 94,
+    "wbsTasks": 107,
     "adrs": 86,
     "g1Controls": 13,
     "sapReferenceRows": 41,

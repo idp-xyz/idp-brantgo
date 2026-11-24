@@ -983,7 +983,7 @@ def inc_rd_gates(a):
 
 
 def inc_wbs_roadmap(a):
-    return figure(a.get("fig", "FIG"), "Go 实施阶段路线（M0、S1–S6）", "每块显示工作项数量与 Python 对等范围；顺序表示依赖，不是排期。", svg.wbs_roadmap(WBS["phases"], WBS["tasks"]))
+    return figure(a.get("fig", "FIG"), "Go 实施阶段路线（M0、S1–S8）", "每块显示工作项数量、完成进度与核心交付定位；顺序表示依赖，不是已批准排期。", svg.wbs_roadmap(WBS["phases"], WBS["tasks"]))
 
 
 def inc_wbs_phases(a):
@@ -1792,7 +1792,7 @@ def write_registry(pages: list[str]) -> None:
             "V1.11 S6（2026-11-23，分支 s6/business，尖端 9e2502a）：S6-07、S6-01、S6-02、S6-03、S6-04、S6-05 为 DONE_LOCAL，S6-06 为 PARTIAL。本机尖端门禁迁移 0（106 个迁移已记录）、集成 0（795 = 208+193+184+210，SHARDS=4，墙钟 8 分 04 秒）。9e2502a 的 GitHub Actions 结论不在本档案里，S6 不写 DONE_CI。G5 为模拟 NO-GO：没有真实客户、没有真人签核、没有发布指标、没有真实的海关单一窗口或金税。本版不改产品行为。",
             "V1.12 R1 发布规格候选（2026-11-24，基于 main 8066e1c／ece31a1）：新增 09 阶段 16_IDP_Brant_R1_Release_Specification_and_G5_Package_V0.1.html，系统整编 G5 所需的公开支持矩阵（F01—F29、CN-F01—CN-F08、CN-M01—CN-M06、S01—S06、Q01 与 BIP 永久退出）、授权（运行时 RBAC／SoD／F2／RLS 与待签核发布授权）、部署组合（D-01—D-04 与禁止形态、容量与恢复实测含 6.403 s 中继 P95 未达标）与服务边界（18 上下文单写者、552 OpenAPI 3.1 路径、Outbox／Inbox 与外部 ACL）。不改产品 Go 代码；S6-06 仍为 PARTIAL，G5 仍为模拟 NO-GO。",
             "V1.13 产品说明 V1.0（2026-11-24，基于 main 48f0c1c／代码 8066e1c）：在 01 阶段新增图文并茂的完整产品说明 05_IDP_Brant_Product_Manual_V1.0.html，内联 7 张确定性矢量架构与业务图表（业务全景与 18 能力域、BRC-001 经济账瀑布、AI-Native Q01 九步与三道防线、商业放行五重闸门与 SoD、中国出口 CN-M01 三线核对与外部边界、科学验证金字塔与实测数据看板、模块化单体部署拓扑），系统阐述产品定位、业务规则、AI 安全协同、中国配置、架构部署及诚实的实测局限。不改 Go 代码，G0–G5 门禁状态不变，BIP 永久退出。",
-            "V1.14 服装行业插件详细设计 V0.1（2026-11-24，基于 main 80e94b5／代码 8066e1c）：遵循「设计文档先行」，在 05 阶段新增 07_IDP_Brant_Apparel_Industry_Plugin_Detailed_Design_V0.1.html（源 tools/pages/05b_apparel_plugin_design.md ＋ tools/data/apparel_plugin_design.json ＋ 4 幅内联矢量图），完整定义 trade-extension.v1 扩展点底座（brant_ext ＋ layerPlugin）、CAT 款色码与样衣批准（Item/SampleApproval/SampleGuard v1）、CST 分码单耗 CostBOM 与起染费 MCQ／打样版费／替代审批（CostBOMGuard v1）、七步固定计价与混单拦截、大货短溢装容差与溢装增量信用守卫、QLT/FUL 服装质检与尺码配比／箱规装柜测算、AI 行业契约与 ExecutionBundle 指纹、10 个新增 PG16 迁移与无环锁序、13 条命令、13 个错误码、APP-T01—T13 验收矩阵及四切片实施路线。本版为编码前候选设计（E0），不改 Go 或 SQL 代码。",
+            "V1.14 服装行业插件详细设计与 S7–S8 完整路线（2026-11-24，基于 main 80e94b5／代码 8066e1c）：遵循「设计文档先行」，在 05 阶段新增 07_IDP_Brant_Apparel_Industry_Plugin_Detailed_Design_V0.1.html（含 7 项 ADR、分码单耗、MCQ 起染费、短溢装容差、箱规装柜、10 迁移、13 命令、13 错误码与 APP-T01—T13）；同时在 09 阶段实施总计划与 WBS 中正式新增 S7（服装插件与可交付产品闭环，S7-01—S7-09，9 项）与 S8（复杂外贸专项与规模化商业发布，S8-01—S8-04，4 项），WBS 总计 107 项，完整纳入对照 SAP／富通天下的六大差距。不改 M0–S6 已完成项状态与任何 Go／SQL 代码；BIP 永久退出，G0–G5 仍为 NO-GO。",
             "V1.5 S1 完成：交易档案、地址与服务方角色、货号映射、brant-cli 基础演示；T01 与共享基础 73 个 Python 测试中 67 个移植、2 个有意背离、3 个不适用。",
             "Python 测试通过数与 M0 的 Go 测试都不计入业务验收；G0、G1、G2、G3、G4、G5 仍为 NO-GO（G5 为 2026-11-23 的模拟结论）；S5 没有 Python 对等测试，S4 以 Q01 V0.1 的任务向量为对等参考，S6 没有 Python 对等测试。",
         ],

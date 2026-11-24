@@ -1,19 +1,20 @@
 # IDP Brant 主档案变更记录
 
-## V1.14 · 2026-11-24 · 服装行业插件（industry.apparel）编码前详细设计说明书 V0.1
+## V1.14 · 2026-11-24 · 服装行业插件详细设计 V0.1 ＋ S7–S8 完整路线纳入 WBS
 
-基于 `main` `80e94b5`（代码基线 `8066e1c`），遵循「设计文档先行」原则，不修改任何 Go、SQL 或既有规范 JSON 文件。
+基于 `main` `80e94b5`（代码基线 `8066e1c`），遵循「设计文档先行」与「六大差距完整纳入」原则，不修改任何 Go 或 SQL 源码。
 
-### 新增
+### 新增与更新
 - 05：新增 [服装行业插件（industry.apparel）详细设计说明书 V0.1](../05_TACTICAL_DDD/07_IDP_Brant_Apparel_Industry_Plugin_Detailed_Design_V0.1.html)（源 `tools/pages/05b_apparel_plugin_design.md` ＋ 机器可读表源 `tools/data/apparel_plugin_design.json`），内联 **4 张确定性矢量架构与业务图**：
   - `FIG 01` 服装行业插件分层架构、依赖规则与四大扩展点（新增 `internal/plugins/apparel` `layerPlugin` 与 `internal/foundation/plugin` `brant_ext`）
   - `FIG 02` 服装插件领域聚合、Schema 归属与无环锁序图（`CAT-AGG-Item`、`CAT-AGG-SampleApproval`、`CST-AGG-CostBOM`、`brant_ext`）
   - `FIG 03` 七步固定计价校验链、校验合并与基线 15.5 `S-D` 反例拦截
   - `FIG 04` 插件公司级生命周期、停用在途保护（`draining_readonly`）与 AI 五项行业契约／`ExecutionBundle` 升级屏障
 - 完整给出 7 项设计裁决（`ADR-BR-EXT-001`—`007`）、分码单耗（`cost_bom_size_grade`）、按色汇总面料起染费 MCQ 与打样版费（`cost_bom_surcharge`）、大货短溢装容差与溢装增量信用守卫、箱规体积与 20GP/40GP/40HQ 装柜测算、10 个新增 PG16 迁移清单（全 `FORCE RLS`）、无环锁序证明、13 条新增命令、4 条只读路由、13 个新增错误码、覆盖基线 15.5 与 18.3 及服装实战风控的 `APP-T01`—`APP-T13` 可证伪验证矩阵、四切片实施计划及 6 项待服装业务角色确认参数。
+- 09：在 `02_IDP_Brant_WBS_V0.1.json`、`03_IDP_Brant_WBS_V0.1.csv` 与 [工程实施总体计划](../09_IMPLEMENTATION_PLAN/01_IDP_Brant_Implementation_Master_Plan_Go_V0.1.html) 中正式新增 **S7（服装插件与可交付产品闭环：`S7-01`—`S7-09`，9 项）**与 **S8（复杂外贸专项与规模化商业发布：`S8-01`—`S8-04`，4 项）**，WBS 总计由 94 项扩充至 **107 项**，完整纳入对照 SAP／富通天下的六大差距（全部新增项均为 `NOT_STARTED`，不改 `M0`—`S6` 任何状态）；更新阶段路线图 `wbs_roadmap` 为 10 阶段双排视图。
 
 ### 限制声明
-- 本版为编码前 E0 设计文档，不改变既有 Go 源码、SQL 迁移或 G0–G5 门禁结论；BIP 已永久退出，不在任何桥接范围内。
+- 本版为编码前 E0 设计与 WBS 规划更新，不改变既有 Go 源码、SQL 迁移或 G0–G5 门禁结论；BIP 已永久退出，不在任何桥接或规划范围内。
 
 ## V1.13 · 2026-11-24 · IDP Brant 外贸业务运营平台完整产品说明 V1.0（图文全景版）
 

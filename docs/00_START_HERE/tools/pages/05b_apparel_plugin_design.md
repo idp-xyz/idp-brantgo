@@ -420,9 +420,9 @@ $$;
 
 ## 10 四切片实施路线、单元规划与待业务确认项 {#s10}
 
-### 10.1 增量四切片开发计划
+### 10.1 增量四切片开发计划（正式映射至 WBS `S7-01`—`S7-04`）
 
-按 Brant 既有纵向切片纪律（每次合入主干须过 `CI=true make check`、PG16 `make db && make integration SHARDS=4` 与 GitHub Actions），将实现拆为 4 个可独立评审、独立验收的连续切片：
+按 Brant 既有纵向切片纪律（每次合入主干须过 `CI=true make check`、PG16 `make db && make integration SHARDS=4` 与 GitHub Actions），本设计的四个实施切片已正式登记在 [工程实施总体计划 · S7 阶段](../09_IMPLEMENTATION_PLAN/01_IDP_Brant_Implementation_Master_Plan_Go_V0.1.html#s9b) 的 **`S7-01`—`S7-04`** 中（后续紧接 `S7-05` 拼柜分摊、`S7-06` 前端工作台、`S7-07` 标准邮件协同、`S7-08` 总账凭证导出与 `S7-09` 压测／大模型收口）：
 
 {{app_slices}}
 

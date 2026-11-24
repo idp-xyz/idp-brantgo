@@ -117,25 +117,25 @@
   ],
   "slices": [
     {
-      "slice": "切片 A · R0 设计源定型与插件底座",
+      "slice": "切片 A（WBS S7-01）· R0 设计源定型与插件底座",
       "units": "P1-R0（设计源与错误码）＋ P1-Ext（foundation/plugin ＋ brant_ext ＋ dependency-check）",
       "deliverables": "更新战术模型/Context Map/错误码（含 13 新码）/角色 JSON；tools/dependency-check 新增 layerPlugin；migrations/ext/000001；plugin.enable/enter_readonly/disable；INQ/TRD/FUL 的 document_profile 不可变校验与混单拒绝",
       "gate": "CI=true make check 0 违规；PG16 并发双提供者冲突与在途停用阻断测试全绿"
     },
     {
-      "slice": "切片 B · 通用前置：samples 与 cost_bom",
+      "slice": "切片 B（WBS S7-02）· 通用前置：samples 与 cost_bom",
       "units": "P2-CAT（Item ＋ SampleApproval ＋ SampleGuard v1）＋ P2-CST（CostBOM ＋ 分码单耗 ＋ MCQ／版费 ＋ 替代审批 ＋ CostBOMGuard v1）",
       "deliverables": "migrations/cat/000005–000006；migrations/cst/000004–000005（含 cost_bom_size_grade 与 cost_bom_surcharge）；item.*/sample.*/cost_bom.* 全部命令、HTTP 路由、OpenAPI 重新生成；TRD freeze/activate 与 Q01.industry 接入 SampleGuard v1 与 CostBOMGuard v1",
       "gate": "CI=true make check ＋ make db ＋ make integration SHARDS=4 全绿；验证旧样衣 r1 阻断 r2 并发窗口与分码/MCQ 核算"
     },
     {
-      "slice": "切片 C · industry.apparel 插件本体与四扩展点",
+      "slice": "切片 C（WBS S7-03）· industry.apparel 插件本体与四扩展点",
       "units": "P3-Apparel（internal/plugins/apparel）＋ P3-QLTFUL（质检参数、尺码配比、箱规装柜与短溢装容差）＋ P3-E2E",
       "deliverables": "实现 cost.estimate.v1（分码单耗/幅宽/克重/缩水/损耗/MCQ 与版费分摊）、quote.validate.v1（校验合并与 S-D 反例）、TRD/FUL/STL 大货短溢装容差与溢装增量信用守卫（trd/000013、ful/000012）、QLT 服装质检（qlt/000004）、optional apparel.crm.bridge，完成 APP-T01—T13 全套端到端回归",
       "gate": "CI=true make check ＋ 全量 bootstrap 集成与竞态分片通过；CRM 开/关双模式与溢装信用并发验证"
     },
     {
-      "slice": "切片 D · AI 契约接入与主档案升级",
+      "slice": "切片 D（WBS S7-04）· AI 契约接入与主档案升级",
       "units": "P4-AI（industry.semantics / context.provider / task.profile / outcome.check ＋ ExecutionBundle 指纹）＋ P4-Docs",
       "deliverables": "migrations/ai/000006；internal/ai 接入服装语义与 outcome.check.v1 并集断言；CT14 插件升级暂停集成测试；脚本化 Q01 新增 apparel 场景回归；更新主档案 R1 支持矩阵（F13 状态）与产品说明",
       "gate": "CI=true make check ＋ make integration ＋ make ai-eval（脚本化全过）＋ build_archive.py 连续两次通过"

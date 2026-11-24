@@ -4,18 +4,18 @@ title: IDP Brant 工程实施总体计划 · Go V0.1
 short: 工程实施总体计划 / Go V0.1
 kicker: IDP BRANT / 09 IMPLEMENTATION PLAN
 doc_title: 工程实施总体计划 · Go V0.1
-doc_desc: M0 与 S1—S6 · {{=wbsTasks}} 项工作 · Python 行为等价退出条件 · 角色、节奏与证据
-meta: 版本=V0.1 Candidate; 日期=2026-11-06; 状态=候选 · 无已批准排期; 门禁=G0 / G1 NO-GO
+doc_desc: M0 与 S1—S8 · {{=wbsTasks}} 项工作 · Python 行为等价 · 服装插件与商业化交付闭环 · 角色、节奏与证据
+meta: 版本=V0.2 Candidate; 日期=2026-11-24; 状态=候选 · 无已批准排期; 门禁=G0–G5 NO-GO
 stage: 09 · 工程实施总体计划
 eyebrow: IMPLEMENTATION PLAN
-search: 搜索工作编号、上下文或验收
-foot: Implementation Plan V0.1 · 2026-11-06
+search: 搜索工作编号、上下文、S7、S8 或验收
+foot: Implementation Plan V0.2 · 2026-11-24
 ---
-<span class="scope-badge">PLAN CANDIDATE / NO APPROVED SCHEDULE</span>
+<span class="scope-badge">PLAN CANDIDATE / M0–S8 · {{=wbsTasks}} TASKS / NO APPROVED SCHEDULE</span>
 
-<h2>一次做一个可验收的纵向切片，并以 Python 行为等价作为前三个切片的退出条件</h2>
+<h2>一次做一个可验收的纵向切片：从无头交易内核（M0–S6）走向完整可交付外贸产品（S7–S8）</h2>
 
-<p class="lede">计划把 Go 实现分为 M0 工程基线与 S1—S6 六个切片，共 {{=wbsTasks}} 项工作。前三个切片对齐 Python V0.50 的交付顺序（T01＋共享基础、T02、T03＋T04），以已验证行为为基准降低风险；S4 补齐 AI-Native 与运行能力以满足 P0 退出前提；S5、S6 分别对应 B0 受限试点与 R1 完整首发。</p>
+<p class="lede">计划把 IDP Brant 实施分为 <b>M0 工程基线</b>与 <b>S1—S8</b> 共 10 个阶段、<b>{{=wbsTasks}} 项工作</b>。S1—S3 对齐 Python V0.50（T01＋共享基础、T02、T03＋T04）以行为等价守住交易内核；S4 补齐 AI-Native 任务层与评测；S5／S5R 与 S6 完成 B0 扩展与 R1 后端条件模块；2026-11-24 依据对照 SAP 与富通天下的六大差距评估，正式纳入 <b>S7（服装行业插件与可交付产品闭环，9 项）</b>与 <b>S8（复杂外贸专项与规模化商业发布，4 项）</b>，实现软件闭环与商业发布路径全覆盖。</p>
 
 ::: cover
 - 机器可读源 | 02_IDP_Brant_WBS_V0.1.json 与 03_IDP_Brant_WBS_V0.1.csv。
@@ -76,11 +76,34 @@ S5 完成后，2026-11-13 的 S5R 模拟签核（证据层级 E0，不是真人�
 
 {{wbs_tasks phase=S5R}}
 
-## 09 S6 R1 完整首发 {#s9}
+## 09 S6 R1 完整首发（无头后端切片） {#s9}
 
 {{wbs_tasks phase=S6}}
 
-2026-11-23 的执行结果在 [S6 执行报告](14_IDP_Brant_S6_Execution_Report_V0.1.html) 与 [15_S6_EVIDENCE](15_S6_EVIDENCE/README.md)。S6-01 至 S6-05 与 S6-07 为 DONE_LOCAL，S6-06 为 PARTIAL。G5 为模拟 NO-GO。尖端提交 9e2502a 已推送，其远程运行不是本档案的证据，所以上列各项不写 DONE_CI。本版不改产品行为。S1 至 S5R 的状态不因这一段改变。
+2026-11-23 的执行结果在 [S6 执行报告](14_IDP_Brant_S6_Execution_Report_V0.1.html) 与 [15_S6_EVIDENCE](15_S6_EVIDENCE/README.md)，公开支持矩阵与发布规格在 [R1 发布规格与 G5 材料 V0.1](16_IDP_Brant_R1_Release_Specification_and_G5_Package_V0.1.html)。`S6-01` 至 `S6-05` 与 `S6-07` 已在 `07601c8` 与 `8066e1c`（含报价变更上限、委外累计上限与交接货号、五条渠道命令 HTTP）通过远程 CI，为 `DONE_CI`。`S6-06` 为 `PARTIAL`，G5 仍为模拟 `NO-GO`。BIP 已于 2026-11-23 经负责人确认永久退出路线。
+
+## 09B S7 服装行业插件与可交付产品闭环 {#s9b}
+
+2026-11-24 依据对照 SAP 外贸套件与富通天下外贸系统的客观差距评估，正式将以下 9 项工作纳入 S7，把无头后端核心升级为可直接交付服装与一般贸易出口企业上线使用的完整产品。服装行业插件（`S7-01`—`S7-04`）的编码前详细设计见 [服装行业插件详细设计说明书 V0.1](../05_TACTICAL_DDD/07_IDP_Brant_Apparel_Industry_Plugin_Detailed_Design_V0.1.html)。
+
+{{wbs_tasks phase=S7}}
+
+## 09C S8 复杂外贸专项与规模化商业发布 {#s9c}
+
+S8 覆盖面向中大型及集团型出口企业的专项能力（信用证／中信保／锁汇、香港离岸＋境内双主体关联交易）、真实企业 OIDC 与外部政务／银行渠道联调，以及首批真实服装外贸客户试点与 G0—G5 真人评审签核。
+
+{{wbs_tasks phase=S8}}
+
+### 对照 SAP 与富通天下六大差距的 WBS 全覆盖矩阵
+
+| 识别出的核心差距 | 对应 WBS 工作项 | 所在阶段 | 当前状态 |
+|---|---|---|---|
+| 1. 前端工作台（UI-01—UI-09）、双语单证套打与 Excel 批量交互 | `S7-06` | S7 | `NOT_STARTED` |
+| 2. 邮件协同（替代永久退出的 BIP）＋ 外部财务总账凭证导出（金蝶／用友） | `S7-07`、`S7-08` | S7 | `NOT_STARTED` |
+| 3. 四项高频外贸实战场景（短溢装容差、多单拼柜分摊、L/C 与中信保、香港离岸双主体） | `S7-03`、`S7-05`、`S8-01`、`S8-02` | S7 / S8 | `NOT_STARTED` |
+| 4. 服装行业插件完整实现（底座、样衣、分码 CostBOM、MCQ 版费、质检配比、装柜、AI 契约） | `S7-01`、`S7-02`、`S7-03`、`S7-04` | S7 | `NOT_STARTED`（设计已出） |
+| 5. 已暴露工程硬伤（独立主机中继 P95 ≤ 5 s ＋ 生产级大模型 Q01 全量适用族达标） | `S5R-11`、`S4-07` → `S7-09` 收口 | S4 / S5R / S7 | `PARTIAL` / `NOT_STARTED` |
+| 6. 企业 OIDC、真实单一窗口／金税／银行联调、真实客户样本撞击与 G0—G5 签核 | `S5-06`、`S4-08`、`S6-06` → `S8-03`、`S8-04` 收口 | S4 / S5 / S6 / S8 | `NOT_STARTED` / `PARTIAL` |
 
 ## 10 角色与节奏 {#s10}
 
@@ -88,12 +111,12 @@ S5 完成后，2026-11-13 的 S5R 模拟签核（证据层级 E0，不是真人�
 
 | 角色 | 主要责任 | 关键签核 |
 |---|---|---|
-| 产品与行业 | 范围、客户证据、行业规则 | G0、G3 |
-| 首席架构师 | 上下文边界、ADR、白名单、一致性策略 | ADR-BR-001—012、ADR-BR-REPO |
-| 领域与后端 | 聚合、命令、迁移、测试移植 | 各上下文 Domain Owner |
-| 交互与前端 | 工作台与人工节点（产品基线 UI-01—UI-09） | 页面验收 |
-| AI 与集成 | TSK、internal/ai、EER／BIP 适配、评测 | BC-AT26—28 |
-| 测试与交付 | 映射表维护、PG16 与 CI 证据、等价性报告 | G1、G2 |
+| 产品与行业 | 范围、客户证据、服装与外贸行业规则 | G0、G3 |
+| 首席架构师 | 上下文边界、插件扩展点、ADR、白名单、一致性策略 | ADR-BR-001—017、ADR-BR-EXT |
+| 领域与后端 | 聚合、命令、迁移、插件实现、测试移植 | 各上下文 Domain Owner |
+| 交互与前端 | Web 工作台、套打与 Excel 交互（UI-01—UI-09，`S7-06`） | 页面与端到端验收 |
+| AI 与集成 | TSK、internal/ai、EER／标准邮件 ACL、总账导出、政务渠道、评测（BIP 已永久退出） | BC-AT26—28、S7-07/08/09、S8-03 |
+| 测试与交付 | 映射表维护、PG16 与 CI 证据、独立主机压测、真实客户试点 | G1、G2、G4、G5 |
 
 每个切片的节奏：更新 UL 与战术模型 → 实现命令与聚合 → 移植映射用例 → PG16 集成与并发测试 → 回写档案证据 → 切片评审。
 

@@ -337,26 +337,58 @@ def runtime_layers() -> str:
 
 
 def wbs_roadmap(phases: list[dict], tasks: list[dict]) -> str:
-    W, H = 1160, 250
-    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
-    n = len(phases)
-    bw = (W - 60 - (n - 1) * 14) / n
     counts = {p["id"]: sum(1 for t in tasks if t["phase"] == p["id"]) for p in phases}
+    done_cnt = {p["id"]: sum(1 for t in tasks if t["phase"] == p["id"] and t["status"] in ("DONE_CI", "DONE_LOCAL")) for p in phases}
+    n = len(phases)
+    per_row = 5 if n > 8 else n
+    rows = math.ceil(n / per_row)
+    W = 1160
+    bh, vgap = 148, 34
+    H = 30 + rows * bh + (rows - 1) * vgap + 44
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+    hgap = 18
+    bw = (W - 60 - (per_row - 1) * hgap) / per_row
+
+    def phase_style(pid: str):
+        if pid == "M0":
+            return "#123248", "#ffffff", "#123248"
+        if pid in ("S1", "S2", "S3"):
+            return "#0b7b7c", "#ffffff", "#0b7b7c"
+        if pid in ("S4", "S5", "S5R", "S6"):
+            return "#2d6178", "#ffffff", "#2d6178"
+        if pid == "S7":
+            return "#6b4fa0", "#ffffff", "#6b4fa0"
+        return "#ba743e", "#ffffff", "#ba743e"
+
     for i, p in enumerate(phases):
-        x = 30 + i * (bw + 14)
-        fill = "#123248" if p["id"] == "M0" else ("#0b7b7c" if p["id"] in ("S1", "S2", "S3") else ("#2d6178" if p["id"] == "S4" else "#e8eff3"))
-        ink = "#ffffff" if fill != "#e8eff3" else NAVY
-        body.append(_box(x, 30, bw, 150, fill, "#b4c7cd" if fill == "#e8eff3" else fill, 10))
-        body.append(_text(x + bw / 2, 58, p["id"], 20, ink, "800"))
-        for li, ln in enumerate(wrap(p["name"], 12, bw - 16)[:2]):
-            body.append(_text(x + bw / 2, 82 + li * 16, ln, 12, ink, "600"))
-        body.append(_text(x + bw / 2, 132, f"{counts[p['id']]} 项工作", 12, ink))
-        for li, ln in enumerate(wrap(p.get("pythonParity") or "—", 10, bw - 16)[:2]):
-            body.append(_text(x + bw / 2, 152 + li * 13, ln, 10, ink))
-        if i < n - 1:
-            body.append(f'<path d="M{x + bw:.0f},105 L{x + bw + 12:.0f},105" stroke="{MUTED}" stroke-width="1.6" marker-end="url(#arr)"/>')
-    body.append(_text(W / 2, 214, "顺序表示依赖与准入，不是已批准的排期；S1–S3 以 Python V0.50 行为等价为退出条件，S4 满足 P0 退出前提", 12, MUTED))
-    return _svg(W, H, "".join(body), "Go 实施阶段路线")
+        r, c = divmod(i, per_row)
+        x = 30 + c * (bw + hgap)
+        y = 24 + r * (bh + vgap)
+        fill, ink, stroke = phase_style(p["id"])
+        body.append(_box(x, y, bw, bh, fill, stroke, 10))
+        body.append(_text(x + bw / 2, y + 30, p["id"], 19, ink, "800"))
+        for li, ln in enumerate(wrap(p["name"], 11.5, bw - 18)[:2]):
+            body.append(_text(x + bw / 2, y + 54 + li * 16, ln, 11.5, ink, "600"))
+        tot = counts[p["id"]]
+        dn = done_cnt[p["id"]]
+        st_lbl = f"{dn}/{tot} 完成" if dn > 0 else f"0/{tot} 规划中"
+        body.append(_box(x + 16, y + 92, bw - 32, 22, "#ffffff", "none", 5))
+        body.append(_text(x + bw / 2, y + 107, f"{tot} 项 · {st_lbl}", 10.2, NAVY if dn == tot else (TEAL if dn > 0 else "#6b4fa0"), "700"))
+        sub = p.get("pythonParity") or "—"
+        if sub == "—":
+            sub = "服装＋前端＋邮件＋收口" if p["id"] == "S7" else ("专项＋真客户＋G0–G5" if p["id"] == "S8" else "无 Python 对等")
+        body.append(_text(x + bw / 2, y + 133, wrap(sub, 9.8, bw - 18)[0], 9.8, "#e6f3f5", "400"))
+        if c < per_row - 1 and i < n - 1:
+            body.append(f'<path d="M{x + bw:.0f},{y + bh / 2:.0f} L{x + bw + hgap - 2:.0f},{y + bh / 2:.0f}" stroke="{MUTED}" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>')
+        elif c == per_row - 1 and i < n - 1:
+            # clean S-bend connector from end of row r to start of row r+1
+            nx = 30 + bw / 2
+            ny = y + bh + vgap
+            my = y + bh + vgap / 2
+            body.append(f'<path d="M{x + bw / 2:.0f},{y + bh:.0f} L{x + bw / 2:.0f},{my:.0f} L{nx:.0f},{my:.0f} L{nx:.0f},{ny - 2:.0f}" stroke="{MUTED}" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arr)"/>')
+
+    body.append(_text(W / 2, H - 16, "顺序表示依赖与准入，不是已批准排期；M0–S6 为无头核心引擎，S7 为服装插件与可交付产品闭环，S8 为复杂外贸专项与 G0–G5 商业发布", 11.2, MUTED))
+    return _svg(W, H, "".join(body), "Go 实施阶段路线（M0、S1–S8）")
 
 
 def r1_deployment_topology() -> str:
