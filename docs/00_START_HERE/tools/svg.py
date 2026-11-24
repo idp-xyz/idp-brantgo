@@ -540,3 +540,492 @@ def r1_service_boundaries() -> str:
                 body.append(f'<path d="M{ax:.0f},{ay} L{ax:.0f},{ay + 22}" stroke="{MUTED}" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>')
     return _svg(W, H, "".join(body), "R1 授权、信任与服务边界分层")
 
+
+def pm_trade_panorama() -> str:
+    """Panoramic foreign trade lifecycle and 18 bounded contexts capability map."""
+    W, H = 1140, 620
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Top AI & Task Governance Rail
+    body.append(_box(28, 18, W - 56, 76, NAVY, NAVY, 10))
+    body.append(_text(46, 42, "AI-Native 受控任务协同层（TSK 业务任务上下文 ＋ internal/ai 能力层 · 不拥有交易事实）", 13, "#ffffff", "700", "start"))
+    pills = [
+        (46, 54, 240, "13 状态任务周期 ⊥ 人工接管"),
+        (300, 54, 250, "Q01 询价→报价→订单九步主链"),
+        (564, 54, 256, "F2 写路由硬拦截 ＋ 128 人工专属"),
+        (834, 54, 260, "权威数据库核验 · 不采信模型自述"),
+    ]
+    for px, py, pw, plabel in pills:
+        body.append(_box(px, py, pw, 28, "#1e4760", "#4b748a", 6))
+        body.append(_text(px + pw / 2, py + 18, plabel, 10.8, "#e6f3f5", "600"))
+
+    # Five operational columns across the value chain
+    cols = [
+        ("① 商机与客户需求", "#2d6178", [
+            ("CRM", "Optional", "轻量 CRM（可选）", "线索 · 商机 · 跟进 · 可关"),
+            ("EVD", "Generic", "来源证据与文件", "四层身份 · 附件留证审计"),
+            ("INQ", "Supporting", "客户询价", "草稿定位 · 人工核实 ready"),
+        ], "产出：核实需求 ＋ 原文坐标"),
+        ("② 寻源、核价与报价", TEAL, [
+            ("SUP", "SupportingPlus", "供应寻源与条件", "供应商报价 · MOQ ／ 阶梯价"),
+            ("CST", "Core", "确定性核价", "场景评估 · 冻结快照 · 守卫"),
+            ("TRD", "Core", "报价与独立审批", "冻结 · 毛利例外 · 正式化"),
+        ], "产出：商业哈希正式报价"),
+        ("③ 签约与外销订单", "#0b7b7c", [
+            ("TRD", "Core", "客户接受与合同", "核实回复 · 到达规则成立"),
+            ("TRD", "Core", "外销订单生效", "full_v1 唯一 ／ multi_order"),
+            ("TRD", "Core", "订单变更与上限", "独立审批 · 报价剩余上限"),
+        ], "产出：信用＋合规生效订单"),
+        ("④ 供应、质检与出运", "#1f4a63", [
+            ("PUR", "Core", "采购与需求分配", "独立承诺 · 直发交付核实"),
+            ("STK/MFG", "Supporting", "库存与委外（条件）", "FIFO 成本层 · 委外上限交接"),
+            ("QLT+FUL", "Supporting", "质检与履约出运", "五重商业放行 · 双语单证"),
+        ], "产出：可溯出运与出口批次"),
+        ("⑤ 结算、中国与售后", "#6b4fa0", [
+            ("STL", "Core", "业务结算与经营", "信用 · 商业核销 · 净利结果"),
+            ("CNX", "Supporting", "中国出口协同", "发票 · 报关／退税 · 许可证"),
+            ("CLM", "Supporting", "售后与索赔", "退货留痕 · 单次贷项 · 关门"),
+        ], "产出：三线核对与净利闭环"),
+    ]
+    cw, gap = 202, 18
+    top_y, col_h = 114, 336
+    for idx, (ctitle, hcol, cards, foot) in enumerate(cols):
+        cx = 28 + idx * (cw + gap)
+        body.append(_box(cx, top_y, cw, col_h, "#ffffff", "#c2d4d9", 9))
+        body.append(_box(cx, top_y, cw, 38, hcol, hcol, 9))
+        body.append(f'<rect x="{cx}" y="{top_y + 28}" width="{cw}" height="10" fill="{hcol}"/>')
+        body.append(_text(cx + cw / 2, top_y + 24, ctitle, 12, "#ffffff", "700"))
+        for ci, (code_lbl, tier, name, desc) in enumerate(cards):
+            by = top_y + 48 + ci * 78
+            bfill, bink = TIER_FILL.get(tier, ("#e8eff3", NAVY))
+            body.append(_box(cx + 10, by, cw - 20, 68, "#f7fbfb", "#d6e4e7", 7))
+            bx_w = 58 if ("/" in code_lbl or "+" in code_lbl) else 44
+            body.append(_box(cx + 16, by + 9, bx_w, 20, bfill, "none", 4))
+            body.append(_text(cx + 16 + bx_w / 2, by + 23, code_lbl, 9.4, bink, "700"))
+            body.append(_text(cx + 22 + bx_w, by + 23, name, 10.2, NAVY, "700", "start"))
+            body.append(_text(cx + 16, by + 48, desc, 10.0, MUTED, "400", "start"))
+        body.append(_box(cx + 10, top_y + col_h - 42, cw - 20, 32, "#edf5f5", "#b7d4d4", 6))
+        body.append(_text(cx + cw / 2, top_y + col_h - 22, foot, 10.2, TEAL, "700"))
+        if idx < len(cols) - 1:
+            ax1 = cx + cw
+            ax2 = cx + cw + gap - 2
+            ay = top_y + col_h / 2 - 10
+            body.append(f'<path d="M{ax1:.0f},{ay:.0f} L{ax2:.0f},{ay:.0f}" stroke="{TEAL}" stroke-width="1.8" fill="none" marker-end="url(#arrT)"/>')
+
+    # Down arrows from AI layer to columns 1-3 (Q01 scope)
+    for idx in (0, 1, 2):
+        ax = 28 + idx * (cw + gap) + cw / 2
+        body.append(f'<path d="M{ax:.0f},94 L{ax:.0f},112" stroke="{TEAL}" stroke-width="1.4" stroke-dasharray="4,3" fill="none" marker-end="url(#arrT)"/>')
+
+    # Feedback rail (Event-driven closed loop)
+    body.append(_box(28, 464, W - 56, 30, "#fff8ed", "#e3c9a0", 6))
+    body.append(_text(W / 2, 483, "异步事件驱动闭环（Transactional Outbox ＋ 8 系统消费方）：来源否认 → 风险冻结 ｜ 订单变更 → 采购／出运／合规／结算自动复核 ｜ 未结索赔 → 阻断经营结果关闭", 10.8, "#8c5c1f", "600"))
+
+    # Bottom Shared Master Data & Foundation Rail
+    bases = [
+        ("PTY · 交易主体与筛查", "客户／供应商／地址角色", "PartyScreeningGuard v1"),
+        ("CAT · 商品与规格修订", "款色码 SKU ／ 货号映射", "SkuGuard v1 失效阻断"),
+        ("POL · 23 种商业政策", "汇率／税价／毛利／模板", "ConfigGuard v1 版本守卫"),
+        ("Foundation & PG16", "kernel.Money 精确算术", "282 表 FORCE RLS · Outbox"),
+    ]
+    bw, bgap = 257, 18
+    for idx, (bt, b1, b2) in enumerate(bases):
+        bx = 28 + idx * (bw + bgap)
+        body.append(_box(bx, 508, bw, 92, "#e8eff3" if idx < 3 else "#f3eadb", "#a7bcc5" if idx < 3 else "#d1bc9a", 8))
+        body.append(_text(bx + 14, 533, bt, 12, NAVY, "700", "start"))
+        body.append(_text(bx + 14, 557, b1, 10.8, "#38566a", "400", "start"))
+        body.append(_text(bx + 14, 580, b2, 10.6, TEAL if idx < 3 else "#7a5321", "600", "start"))
+
+    return _svg(W, H, "".join(body), "IDP Brant 外贸全链路业务全景与 18 个能力域地图")
+
+
+def pm_brc001_economics() -> str:
+    """End-to-end verified BRC-001 financial, quantity and rounding conservation diagram."""
+    W, H = 1140, 526
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Top input strip: 4 SKU lines -> 120 PCS / 960.00 USD
+    body.append(_box(28, 18, W - 56, 66, NAVY, NAVY, 9))
+    body.append(_text(46, 40, "合成核算基准 BRC-001（PG16 端到端 HTTP 实测逐分验证）", 12.5, "#ffffff", "700", "start"))
+    sku_pills = [
+        (46, 49, 178, "ST01.red.S · 24 PCS"),
+        (234, 49, 182, "ST01.red.M · 36 PCS"),
+        (426, 49, 182, "ST01.blue.S · 12 PCS"),
+        (618, 49, 184, "ST01.blue.M · 48 PCS"),
+    ]
+    for sx, sy, sw, sl in sku_pills:
+        body.append(_box(sx, sy, sw, 26, "#1f4a63", "#4e778e", 5))
+        body.append(_text(sx + sw / 2, sy + 17, sl, 10.8, "#e6f3f5", "600"))
+    body.append(_box(818, 30, 278, 44, TEAL, "#53b8b9", 7))
+    body.append(_text(957, 57, "120 PCS × 8.00 = 960.00 USD", 13.5, "#ffffff", "700"))
+
+    # Middle Left: Exact Revenue -> Cost -> Margin Waterfall
+    body.append(_box(28, 102, 534, 294, "#ffffff", "#c2d4d9", 9))
+    body.append(_text(46, 128, "收入 → 冻结成本 → 订单净毛利瀑布（整数最小单位 · 禁用 float）", 12.5, NAVY, "700", "start"))
+    bars = [
+        ("净销售收入（TRD 报价／订单）", 960.0, 0.0, 960.0, TEAL, "960.00 USD (100.00%)"),
+        ("采购成本（120×5.00 · PUR）", 600.0, 0.0, 600.0, "#1f4a63", "600.00 USD (62.50%)"),
+        ("物流与费用（分摊 · CST）", 60.0, 600.0, 60.0, "#4b6b82", "60.00 USD (6.25%)"),
+        ("冻结成本快照合计（CST）", 660.0, 0.0, 660.0, "#ba743e", "660.00 USD (68.75%)"),
+        ("订单经营毛利（STL 结果）", 300.0, 660.0, 300.0, "#2f6e52", "300.00 USD (31.25%)"),
+    ]
+    bx0, max_w = 228, 310
+    for idx, (label, _val, start_v, span_v, col, txt) in enumerate(bars):
+        ry = 148 + idx * 41
+        body.append(_text(46, ry + 18, label, 10.8, NAVY, "600", "start"))
+        # track
+        body.append(_box(bx0, ry + 2, max_w, 24, "#f0f5f6", "#dce6e8", 4))
+        x_bar = bx0 + (start_v / 960.0) * max_w
+        w_bar = max(18, (span_v / 960.0) * max_w)
+        body.append(_box(x_bar, ry + 2, w_bar, 24, col, "none", 4))
+        # label placed neatly inside or right of bar
+        if w_bar >= 145:
+            body.append(_text(x_bar + w_bar / 2, ry + 18, txt, 10, "#ffffff", "700"))
+        else:
+            tx = x_bar + w_bar + 6 if (x_bar + w_bar + 135) < (bx0 + max_w) else bx0 + 8
+            tcol = NAVY
+            body.append(_text(tx, ry + 18, txt, 9.8, tcol, "700", "start"))
+    # Margin floor callout
+    body.append(_box(46, 354, 498, 28, "#edf6f3", "#b5d7ca", 5))
+    body.append(_text(295, 372, "毛利红线：成本 660.00 @ 最低毛利率 25% → 精确下限 880.00（879.99 须毛利例外审批）", 10.2, "#2f6e52", "600"))
+
+    # Middle Right: Payment Schedule, Dual Routes & Partial Orders
+    body.append(_box(580, 102, 532, 294, "#ffffff", "#c2d4d9", 9))
+    body.append(_text(598, 128, "资金分期守恒、双履约成本路线与 S6 上限／结案约束", 12.5, NAVY, "700", "start"))
+
+    r_cards = [
+        (144, 72, "#edf5f5", "#9bc2c2", "付款计划最大余数法守恒（30% 预付 ／ 70% 赊销尾款）",
+         "预付 288.00 USD（出运前核销）＋ 尾款 672.00 USD（触发 STL 信用占用）= 960.00 USD",
+         "付款计划不冒充应收或到账；新客户默认信用额度 0，超额须非销售信用岗位放行"),
+        (226, 76, "#e8eff3", "#a2bac3", "双履约成本路线（直发默认 vs 本仓 FIFO）",
+         "• 直发路线（S01）：受 SupplierDeliveryGuard v2 约束，绝不虚构库存移动",
+         "• 本仓路线（开 STK）：FIFO 成本层出库 ＋ StockAvailability v1 并发锁，STL 按层计价"),
+        (312, 70, "#fff8ed", "#dfc7a1", "部分多次下单与索赔关门（S6 实测）",
+         "multi_order 1,200 拆 700＋500 后再增 1 → 拒 QUOTE_REMAINING_INSUFFICIENT",
+         "未结索赔使经营结果索赔维不满足，order_result.close 被拒；结案后方可关闭"),
+    ]
+    for cy, ch, fill, stroke, ct, l1, l2 in r_cards:
+        body.append(_box(598, cy, 496, ch, fill, stroke, 7))
+        body.append(_text(612, cy + 20, ct, 11.2, NAVY, "700", "start"))
+        body.append(_text(612, cy + 40, l1, 10.2, "#38566a", "400", "start"))
+        body.append(_text(612, cy + 57, l2, 10.2, MUTED, "400", "start"))
+
+    # Bottom 4 arithmetic invariants verified against Python V0.50
+    inv_cards = [
+        ("逐行先舍后加", "2 行各 1 × 0.005 → 1＋1 = 2 分", "若先汇总再舍仅得 1 分（违约）"),
+        ("含税反算应付守恒", "960.00 含 13% 税 → 净 849.56", "税 110.44；净＋税 = 960.00 精确守恒"),
+        ("汇率计算单次终舍", "100 USD × 7.123456 CNY/USD", "精确有理数运算 → 终舍 712.35 CNY"),
+        ("MOQ 与双阶梯计价", "120 PCS: [0,100)@6, [100,∞)@5", "分段 700.00 ≠ 全量 600.00（差 100）"),
+    ]
+    iw, igap = 257, 18
+    for idx, (it, i1, i2) in enumerate(inv_cards):
+        ix = 28 + idx * (iw + igap)
+        body.append(_box(ix, 414, iw, 92, "#f4f8f8", "#c2d4d9", 8))
+        body.append(_text(ix + 14, 438, it, 11.8, TEAL, "700", "start"))
+        body.append(_text(ix + 14, 462, i1, 10.5, NAVY, "600", "start"))
+        body.append(_text(ix + 14, 484, i2, 10.2, MUTED, "400", "start"))
+
+    return _svg(W, H, "".join(body), "合成核算基准 BRC-001 全链路金额与数量守恒透视图")
+
+
+def pm_ai_q01_loop() -> str:
+    """AI-Native Q01 9-stage human-AI collaborative loop with 3 hard safety barriers."""
+    W, H = 1140, 560
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Top Swimlane: AI Execution Layer
+    body.append(_box(28, 18, W - 56, 174, "#f4f6fc", "#b8c3e0", 10))
+    body.append(_text(46, 42, "AI 执行层（brant-worker -agent ＋ ModelPort · 仅生成候选与受控提案 · 绝不直接写业务库）", 12.2, "#4a3875", "700", "start"))
+    body.append(_box(846, 25, 248, 26, "#6b4fa0", "none", 6))
+    body.append(_text(970, 42, "预算硬限：40 调用 ／ 3 重试 ／ $3.00", 10.5, "#ffffff", "700"))
+
+    ai_steps = [
+        ("① 受限抽取", "Q01.upload.v0.1", "Text ／ PDF ／ XLSX 纯解析", "超限整文件拒绝 · 绝不截断"),
+        ("② 询价草稿", "rfq.save_draft", "提取候选行 ＋ 原文坐标定位", "候选非事实 · 等人工核实"),
+        ("③ 报价草稿", "quote.save_draft", "引用冻结成本快照编制报价", "缺快照网关直接拒 422"),
+        ("④ 订单提案", "proposal agp.*", "生成受控动作与载荷哈希", "等待人工审阅签发授权"),
+        ("⑤ 授权提交", "order.prepare", "持一次性批准授权写入", "并发幂等 · 宕机可对账"),
+    ]
+    sw, sgap = 196, 17
+    for idx, (st, sc, l1, l2) in enumerate(ai_steps):
+        sx = 46 + idx * (sw + sgap)
+        body.append(_box(sx, 60, sw, 118, "#ffffff", "#b8c3e0", 8))
+        body.append(_box(sx, 60, sw, 30, "#6b4fa0", "#6b4fa0", 8))
+        body.append(f'<rect x="{sx}" y="{80}" width="{sw}" height="10" fill="#6b4fa0"/>')
+        body.append(_text(sx + sw / 2, 80, st, 11.5, "#ffffff", "700"))
+        body.append(_text(sx + sw / 2, 110, sc, 10.5, "#4a3875", "700"))
+        body.append(_text(sx + sw / 2, 134, l1, 10.2, NAVY, "400"))
+        body.append(_text(sx + sw / 2, 156, l2, 9.8, MUTED, "400"))
+        if idx < len(ai_steps) - 1:
+            body.append(f'<path d="M{sx + sw},{119} L{sx + sw + sgap - 2},{119}" stroke="#6b4fa0" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>')
+
+    # Middle Hard Safety Barrier
+    body.append(_box(28, 210, W - 56, 86, "#fdf1f0", "#d98d85", 10, 'stroke-width="1.6"'))
+    body.append(_text(46, 232, "三道不可绕过的确定性安全防线（代码硬约束 · 自动化回归与现场对抗实测）", 12, "#9b3a30", "700", "start"))
+    guards = [
+        ("防线 1 · F2 传输层硬拦截", "所有写 HTTP 路由在读请求体前拒绝 actor.kind=ai（403）"),
+        ("防线 2 · 进程内 AI 能力网关", "强校验 ExecutionBundle 哈希、有效委托、128 人工专属与预算"),
+        ("防线 3 · 内容绑定批准授权", "agp.* 绑定对象＋修订＋规范化载荷 SHA-256；改一字节即拒"),
+    ]
+    gw, ggap = 338, 17
+    for idx, (gt, gd) in enumerate(guards):
+        gx = 46 + idx * (gw + ggap)
+        body.append(_box(gx, 242, gw, 44, "#ffffff", "#e4b2ac", 6))
+        body.append(_text(gx + 12, 260, gt, 10.8, "#9b3a30", "700", "start"))
+        body.append(_text(gx + 12, 277, gd, 9.8, "#4b2c2a", "400", "start"))
+
+    # Bottom Swimlane: Human Decisions & Authoritative System
+    body.append(_box(28, 314, W - 56, 166, "#eef6f6", "#9dc2c2", 10))
+    body.append(_text(46, 338, "人工决策与权威系统层（16 岗位职责分离 · 128 人工专属命令 · 权威账本落库）", 12.2, NAVY, "700", "start"))
+    h_steps = [
+        ("核实原文定位", "rfq.confirm_scope", "核对来源坐标与缺省字段", "BC-AT27 人工负责真值"),
+        ("冻结与独立审批", "quote.freeze / activate", "编制与审核人严格分离", "低毛利须独立毛利审批"),
+        ("核实客户接受", "quote.response.verify", "按到达时间判定合同成立", "无自动发送 · 人工登记回复"),
+        ("审阅签发批准", "approval_grant.issue", "核对载荷哈希后一次放行", "撤委托即暂停（AN04 5/5）"),
+        ("独立订单生效", "order.activate", "信用＋合规守卫全通过", "TSK 读权威记录验完成"),
+    ]
+    for idx, (ht, hc, l1, l2) in enumerate(h_steps):
+        sx = 46 + idx * (sw + sgap)
+        body.append(_box(sx, 354, sw, 112, "#ffffff", "#9dc2c2", 8))
+        body.append(_box(sx, 354, sw, 28, TEAL, TEAL, 8))
+        body.append(f'<rect x="{sx}" y="{372}" width="{sw}" height="10" fill="{TEAL}"/>')
+        body.append(_text(sx + sw / 2, 372, ht, 11.2, "#ffffff", "700"))
+        body.append(_text(sx + sw / 2, 400, hc, 10.2, TEAL, "700"))
+        body.append(_text(sx + sw / 2, 424, l1, 10.2, NAVY, "400"))
+        body.append(_text(sx + sw / 2, 446, l2, 9.8, MUTED, "400"))
+        # Vertical cross-barrier arrows
+        ax = sx + sw / 2
+        body.append(f'<path d="M{ax:.0f},178 L{ax:.0f},208" stroke="{MUTED}" stroke-width="1.4" fill="none" marker-end="url(#arr)"/>')
+        body.append(f'<path d="M{ax:.0f},296 L{ax:.0f},352" stroke="{TEAL}" stroke-width="1.4" fill="none" marker-end="url(#arrT)"/>')
+
+    # Footer bar
+    body.append(_box(28, 496, W - 56, 46, NAVY, NAVY, 8))
+    body.append(_text(W / 2, 516, "任务双轨控制（TSK）：13 状态生命周期 ⊥ control_mode (ai ／ manual) ＋ stopping 接管屏障，人工接管不回滚已提交业务事实", 11.2, "#ffffff", "600"))
+    body.append(_text(W / 2, 534, "完成判定唯一标准：quote_ready 与 order_active 仅由 TSK 读取权威上下文记录核验，模型自述无效（AN11 现场实测 5/5 通过）", 10.5, "#bdd5dd", "400"))
+
+    return _svg(W, H, "".join(body), "AI-Native 主业务链 Q01 九步协同与三道安全防线")
+
+
+def pm_release_gates() -> str:
+    """Five simultaneous commercial release guards and segregation of duties (SoD)."""
+    W, H = 1140, 496
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Top header
+    body.append(_text(W / 2, 32, "出运与单证商业条件放行五重同步闸门（全部同时通过方可执行 shipment.confirm）", 13.5, NAVY, "700"))
+    gates = [
+        ("闸门 1 · 质量放行", "QLT", "#0b7b7c", "QualityRelease v1", "核验有效质检放行结论", "防超放校验已消费量 R79"),
+        ("闸门 2 · 付款条件", "STL", "#1f4a63", "PaymentCond v1", "预付／信用额度满足合同", "例外仅限信用经理（禁销售）"),
+        ("闸门 3 · 主体筛查", "PTY", "#2d6178", "PartyScreening v1", "主体最新筛查结论有效", "仅合规岗位裁决 · 禁过期放行"),
+        ("闸门 4 · 贸易合规", "CNX", "#6b4fa0", "TradeCompliance", "当前修订 clear ＋ 许可证", "blocked 不可任何例外覆盖"),
+        ("闸门 5 · 供给库存", "PUR/STK", "#ba743e", "Delivery / Stock", "直发核实供应商交付量", "本仓锁 FIFO 库存行防超卖"),
+    ]
+    gw, ggap = 202, 18
+    for idx, (gt, gbc, col, guard, l1, l2) in enumerate(gates):
+        gx = 28 + idx * (gw + ggap)
+        body.append(_box(gx, 48, gw, 148, "#ffffff", "#c2d4d9", 8))
+        body.append(_box(gx, 48, gw, 36, col, col, 8))
+        body.append(f'<rect x="{gx}" y="74" width="{gw}" height="10" fill="{col}"/>')
+        body.append(_text(gx + gw / 2, 71, gt, 11.5, "#ffffff", "700"))
+        body.append(_box(gx + 14, 94, 58, 20, "#edf5f5", "#b7d4d4", 4))
+        body.append(_text(gx + 43, 108, gbc, 9.6, NAVY, "700"))
+        body.append(_text(gx + 78, 108, guard, 9.6, TEAL, "700", "start"))
+        body.append(_text(gx + 14, 136, l1, 10.6, NAVY, "600", "start"))
+        body.append(_text(gx + 14, 158, l2, 10.2, MUTED, "400", "start"))
+        body.append(_text(gx + 14, 182, "事务内 FOR SHARE 守卫", 9.6, col, "600", "start"))
+        # Arrow down to merge bar
+        ax = gx + gw / 2
+        body.append(f'<path d="M{ax:.0f},196 L{ax:.0f},230" stroke="{col}" stroke-width="1.6" fill="none" marker-end="url(#arrT)"/>')
+
+    # Merge bar: FUL Release
+    body.append(_box(28, 232, W - 56, 52, NAVY, NAVY, 9))
+    body.append(_text(W / 2, 254, "FUL 商业条件放行 ＋ 实际出运确认 ＋ 双语商业发票／装箱单签发 ＋ 出口批次形成", 13, "#ffffff", "700"))
+    body.append(_text(W / 2, 274, "CIF ／ CIP 条款须足额保险方可放行单证 ｜ 外部上报、检验附件、普通备注或 AI 建议均不可单独替代放行事实", 10.6, "#bdd5dd", "400"))
+
+    # Bottom Left: 7 Forbidden SoD Combinations
+    body.append(_box(28, 304, 594, 174, "#fdf1f0", "#e6b8b2", 9))
+    body.append(_text(46, 329, "职责分离硬禁令（7 组禁止兼任岗位模板 · 编译生成 roles_gen.go 强制校验）", 11.8, "#9b3a30", "700", "start"))
+    sods = [
+        "销售经办  ✕  报价审核人（报价编审分离）",
+        "销售经办  ✕  订单审核人（订单编审分离）",
+        "销售经办  ✕  毛利审批人（禁批本人例外）",
+        "核价岗位  ✕  毛利审批人（成本与审批分离）",
+        "采购岗位  ✕  订单审核人（采购承诺编审分离）",
+        "销售经办  ✕  信用专员（销售禁放行信用）",
+        "销售经办  ✕  信用经理（销售禁放行信用）",
+    ]
+    for idx, label in enumerate(sods):
+        col_i = idx % 2
+        row_i = idx // 2
+        px = 46 + col_i * 284
+        py = 344 + row_i * 31
+        pw = 274 if idx < 6 else 558
+        body.append(_box(px, py, pw, 25, "#ffffff", "#ebc4bf", 5))
+        body.append(_text(px + 12, py + 16.5, label, 10.4, "#7a2c24", "600", "start"))
+
+    # Bottom Right: 10 Exclusive Permissions
+    body.append(_box(640, 304, 472, 174, "#edf5f5", "#a8cbcb", 9))
+    body.append(_text(658, 329, "10 项唯一岗位专属权限（其他岗位与 AI 均不可持有）", 11.8, NAVY, "700", "start"))
+
+    body.append(_box(658, 344, 436, 62, "#ffffff", "#b7d4d4", 6))
+    body.append(_text(672, 363, "合规岗位专属（compliance · 6 项）", 11, TEAL, "700", "start"))
+    body.append(_text(672, 382, "主体筛查决定与拦截 · 贸易合规裁决 · 筛查名单与国别项目导入", 10.2, NAVY, "400", "start"))
+    body.append(_text(672, 398, "合规法规与启用名单发布（config.publish.screening_regulation）", 10.2, MUTED, "400", "start"))
+
+    body.append(_box(658, 414, 436, 52, "#ffffff", "#b7d4d4", 6))
+    body.append(_text(672, 433, "信用经理专属（credit_manager · 4 项）", 11, "#1f4a63", "700", "start"))
+    body.append(_text(672, 452, "信用确认 · 信用额度发布 · 信用政策发布 · 商业放行付款条件例外", 10.2, NAVY, "400", "start"))
+
+    return _svg(W, H, "".join(body), "商业条件放行五重闸门与职责分离防线")
+
+
+def pm_china_three_reconciliations() -> str:
+    """China CN-M01 three parallel reconciliations and external statutory system ACL boundary."""
+    W, H = 1140, 514
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Left: Brant Controllable Domain
+    body.append(_box(28, 18, 678, 362, "#f4f9f8", TEAL, 10, 'stroke-width="1.4"'))
+    body.append(_text(46, 42, "Brant 内部协同域（CN-M01：境内单主体自营一般贸易出口 · 三线并行核对）", 12.2, TEAL, "700", "start"))
+
+    lanes = [
+        (56, "#edf5f5", "#9bc2c2", NAVY, "① 数量核对线（PUR ／ STK ／ MFG ／ FUL）",
+         "原料、在制与成品口径严格分开；直发按已核实交付守卫，本仓按 FIFO 批次成本层",
+         "委外受计划锁、累计上限与交接货号校验；海关放行、离境、送达、验收各自独立（CN-R07）"),
+        (140, "#f4f2fa", "#bfb3dc", "#4a3875", "② 票证核对线（CNX · 多对多用途匹配）",
+         "购进发票（import/verify）、出口批次、报关资料、退税用途分配与原产地／检验证书多对多关联",
+         "可抵扣／可退／不可收回税额按核实口径区分，绝不既计全额采购成本又计预计退税利润（CN-R03）"),
+        (224, "#e8eff3", "#a2bac3", "#1f4a63", "③ 资金核对线（STL · 商业资金台账）",
+         "预收预付、部分收付、商业核销、撤销核销、费用分摊与订单经营结果按不可变条目推导",
+         "严守 CN-R11：系统内核销只是商业资金分配，不得冒充行政意义的出口收汇核销"),
+    ]
+    for ly, fill, stroke, tcol, lt, l1, l2 in lanes:
+        body.append(_box(46, ly, 642, 74, fill, stroke, 7))
+        body.append(_text(60, ly + 20, lt, 11.4, tcol, "700", "start"))
+        body.append(_text(60, ly + 41, l1, 10.2, NAVY, "400", "start"))
+        body.append(_text(60, ly + 59, l2, 10.2, MUTED, "400", "start"))
+
+    # Channel reconciliation state machine strip
+    body.append(_box(46, 308, 642, 58, "#ffffff", "#b8cdd2", 7))
+    body.append(_text(60, 327, "CNX 渠道提交与对账状态机（S6-05 · 8066e1c 已开放 5 条 HTTP 路由，结算不对外暴露）", 10.8, NAVY, "700", "start"))
+    body.append(_text(60, 349, "planned → submitted → [ succeeded | failed | unknown → reconcile → not_received 可重提 ]  ·  迟到乱序回执留痕不回退案件", 10.2, TEAL, "600", "start"))
+
+    # Right: External Statutory Authorities (ACL)
+    body.append(_box(744, 18, 368, 362, "#ffffff", "#b8cdd2", 10))
+    body.append(_text(762, 42, "外部法定权威系统（ACL · R1 零真实外拨）", 12.2, NAVY, "700", "start"))
+    exts = [
+        (58, "#fff8ed", "#dfc7a1", "中国国际贸易单一窗口（海关）", "报关单受理、放行、离境属外部权威", "R1：人工路径 ＋ 进程内假适配器"),
+        (138, "#fff8ed", "#dfc7a1", "金税 ／ 税务机关", "购进底账与出口退税核准属税务权威", "R1：人工登记与核实 · 不预设算法"),
+        (218, "#e8eff3", "#a2bac3", "银行与外汇系统", "收付清算与结汇水单属银行权威", "AI 禁止读取 bank_account 配置"),
+        (298, "#e8eff3", "#a2bac3", "外部法定总账 ERP", "财务凭证与法定报表属 ERP 权威", "Brant 输出业务台账口径，非法定总账"),
+    ]
+    for ey, fill, stroke, et, e1, e2 in exts:
+        body.append(_box(762, ey, 332, 68, fill, stroke, 7))
+        body.append(_text(776, ey + 21, et, 11.4, NAVY, "700", "start"))
+        body.append(_text(776, ey + 41, e1, 10.2, "#38566a", "400", "start"))
+        body.append(_text(776, ey + 57, e2, 10.0, "#8c5c1f" if fill == "#fff8ed" else MUTED, "600", "start"))
+
+    # Bidirectional ACL arrows between Left & Right
+    for ay in (92, 172, 252, 332):
+        body.append(f'<path d="M706,{ay} L742,{ay}" stroke="{MUTED}" stroke-width="1.6" fill="none" marker-start="url(#arr)" marker-end="url(#arr)"/>')
+
+    # Bottom boundary strip
+    body.append(_box(28, 398, 534, 96, "#fbeceb", "#dfa6a0", 8))
+    body.append(_text(46, 424, "永久退出项 · BIP 交换与渠道平台（2026-11-23 负责人确认）", 11.8, "#9b3a30", "700", "start"))
+    body.append(_text(46, 448, "BIP 不再作为 Brant 产品选项，后续不考虑、不规划接入。", 10.6, "#6f2821", "600", "start"))
+    body.append(_text(46, 470, "代码仅留未连接占位（EXTERNAL_CHANNEL_NOT_CONFIGURED），外发统一走人工节点。", 10.2, "#7c332b", "400", "start"))
+
+    body.append(_box(580, 398, 532, 96, "#fff8ed", "#e3c9a0", 8))
+    body.append(_text(598, 424, "中国模式排除边界（不以单模式推导全部外贸形态）", 11.8, "#8c5c1f", "700", "start"))
+    body.append(_text(598, 448, "支持 CN-M01 默认首发，及 CN-M02 下的部分工序委外（不含自有车间排产）。", 10.6, NAVY, "600", "start"))
+    body.append(_text(598, 470, "不支持：CN-M03 代理 · CN-M04 加工贸易保税手账册 · CN-M05 跨境零售/离岸 · CN-M06 融资。", 10.1, MUTED, "400", "start"))
+
+    return _svg(W, H, "".join(body), "中国出口 CN-M01 三线并行核对与外部权威边界")
+
+
+def pm_evidence_dashboard() -> str:
+    """Scientific 5-tier verification pyramid and real measured benchmarks (honest misses included)."""
+    W, H = 1140, 534
+    body = [_box(0, 0, W, H, "#fbfdfd", "none", 0)]
+
+    # Left Panel: 5-Tier Verification Pyramid
+    body.append(_box(28, 18, 464, 498, "#ffffff", "#c2d4d9", 10))
+    body.append(_text(46, 44, "五层可证伪验证金字塔（代码 8066e1c ／ 归档 48f0c1c）", 12.2, NAVY, "700", "start"))
+    body.append(_text(46, 63, "下层自动化通过绝不替代上层生产与客户证据", 10.4, MUTED, "400", "start"))
+
+    tiers = [
+        ("L5 生产环境与真实客户", "G0–G5 NO-GO", "#b6463a", "#ffffff", "缺真实客户、真人签核、企业 OIDC 与真实单一窗口／金税", 268),
+        ("L4 参照负载与现场模型", "部分未达标", "#ba743e", "#ffffff", "脚本 Q01 70/70 过；中继 3w P95 6.403s；模型 7/11 族过", 316),
+        ("L3 PG16 集成与竞态", "CI 16/16 过", "#0b7b7c", "#ffffff", "900 集成 · 106 迁移 · 282 FORCE RLS · 795 本机端到端", 364),
+        ("L2 单元与算术等价", "PASS", "#1f4a63", "#ffffff", "1,433 单元 ＋ 9 模糊目标 · Python V0.50 455 项逐分一致", 404),
+        ("L1 静态规则与架构红线", "0 违规", NAVY, "#ffffff", "215 Go 包 · 82 白名单 · 26 无环守卫 · golangci-lint 0", 430),
+    ]
+    cx_p = 260
+    for idx, (tt, st, fill, ink, desc, tw) in enumerate(tiers):
+        ty = 82 + idx * 84
+        tx = cx_p - tw / 2
+        body.append(_box(tx, ty, tw, 72, fill, "none", 8))
+        body.append(_text(cx_p, ty + 23, f"{tt}  ·  {st}", 11.4, ink, "700"))
+        for li, ln in enumerate(wrap(desc, 10.0, tw - 22)[:2]):
+            body.append(_text(cx_p, ty + 44 + li * 16, ln, 10.0, "#eef6f7", "400"))
+
+    # Right Top Panel: Reference Load & Recovery Benchmark Bars
+    body.append(_box(510, 18, 602, 244, "#ffffff", "#c2d4d9", 10))
+    body.append(_text(528, 44, "参照负载实测 vs 目标（16 命令＋16 读取 · WSL2 · 1264d61）", 12.2, NAVY, "700", "start"))
+    body.append(_text(528, 63, "实测中继 P95 未达 5 s 目标，主因 WAL 写锁排队与 WSL2 虚拟盘，目标未放宽", 10.2, MUTED, "400", "start"))
+
+    metrics = [
+        ("读取 P95（3w）", 0.232, 0.500, 0.232 / 0.500, "#2f6e52", "0.232 s ／ 限 0.50 s · PASS"),
+        ("命令 P95（3w）", 0.668, 0.800, 0.668 / 0.800, "#2f6e52", "0.668 s ／ 限 0.80 s · PASS"),
+        ("中继 P95（2w）", 13.011, 5.000, 1.00, "#b6463a", "13.011 s ／ 限 5.00 s · MISS"),
+        ("中继 P95（3w）", 6.403, 5.000, 0.88, "#ba743e", "6.403 s ／ 限 5.00 s · MISS (94.06%≤5s)"),
+        ("中继 P99（3w）", 16.293, 30.000, 16.293 / 30.000, "#2f6e52", "16.293 s ／ 限 30.0 s · PASS"),
+    ]
+    bar_x, bar_w = 646, 224
+    for idx, (ml, _obs, _lim, frac, col, lbl) in enumerate(metrics):
+        my = 80 + idx * 33
+        body.append(_text(528, my + 16, ml, 10.5, NAVY, "600", "start"))
+        body.append(_box(bar_x, my + 2, bar_w, 20, "#f0f5f6", "#dce6e8", 4))
+        fw = max(14, min(bar_w, frac * bar_w))
+        body.append(_box(bar_x, my + 2, fw, 20, col, "none", 4))
+        # target threshold tick for missed relay bars at 5/13 or 5/6.4
+        if ml.startswith("中继 P95"):
+            tick_x = bar_x + (0.38 if "2w" in ml else 0.68) * bar_w
+            body.append(f'<line x1="{tick_x:.1f}" y1="{my}" x2="{tick_x:.1f}" y2="{my + 24}" stroke="{NAVY}" stroke-width="1.6" stroke-dasharray="2,2"/>')
+        body.append(_text(bar_x + bar_w + 10, my + 16, lbl, 9.8, "#9b3a30" if "MISS" in lbl else "#2f6e52", "700", "start"))
+
+    # Right Bottom Panel: Live Model Eval Breakdown
+    body.append(_box(510, 278, 602, 238, "#ffffff", "#c2d4d9", 10))
+    body.append(_text(528, 304, "Q01 现场模型 14 族实测分布（qwen3.8-flash-next-iq3_xxs · 1264d61）", 12.2, NAVY, "700", "start"))
+    body.append(_text(528, 323, "脚本化 CI 为 70/70 全通过；现场模型合并 3 轮无重跑记录如下", 10.2, MUTED, "400", "start"))
+
+    # Segmented 14-family bar
+    seg_x, seg_y, seg_w, seg_h = 528, 338, 566, 28
+    segs = [
+        (7 / 14, "#2f6e52", "7 族 5/5 过"),
+        (1 / 14, "#ba743e", "1"),
+        (3 / 14, "#b6463a", "3 族 0/5"),
+        (3 / 14, "#5a6b8c", "3 族不适用"),
+    ]
+    cur_x = seg_x
+    for ratio, col, sl in segs:
+        sw_s = seg_w * ratio
+        body.append(_box(cur_x, seg_y, sw_s - 2, seg_h, col, "none", 4))
+        body.append(_text(cur_x + (sw_s - 2) / 2, seg_y + 18, sl, 10.2, "#ffffff", "700"))
+        cur_x += sw_s
+
+    # 4 detail tiles
+    tiles = [
+        (528, 378, 276, 60, "#edf6f3", "#b5d7ca", "#2f6e52", "7 族 5/5 通过（35/35）", "an04 · an06 · an07 · an09 · an10 · an11 · ct14"),
+        (818, 378, 276, 60, "#fff8ed", "#e3c9a0", "#8c5c1f", "1 族部分通过：normal（4/5）", "normal-2 停于 422 legal_terms_ref"),
+        (528, 446, 276, 56, "#fbeceb", "#dfa6a0", "#9b3a30", "3 族 0/5 失败（待攻关）", "an01 缺字段 · an03 960≠948 · an05 25m 预算"),
+        (818, 446, 276, 56, "#eef1fa", "#cdd5ee", "#3d4e8c", "3 族 NOT APPLICABLE", "an08 · reads · feedback（脚本专属，非失败）"),
+    ]
+    for tx, ty, tw, th, fill, stroke, tcol, t1, t2 in tiles:
+        body.append(_box(tx, ty, tw, th, fill, stroke, 6))
+        body.append(_text(tx + 12, ty + 21, t1, 10.8, tcol, "700", "start"))
+        body.append(_text(tx + 12, ty + 42, t2, 9.8, NAVY, "400", "start"))
+
+    return _svg(W, H, "".join(body), "科学验证金字塔与实测数据看板")
+
+
