@@ -23,6 +23,7 @@ type (
 		cstapi.ScenarioQueries
 		cstapi.SnapshotCommands
 		cstapi.SnapshotQueries
+		cstapi.CostBOMCommands
 		cstapi.Reconciler
 		cstapi.ActionReconciler
 		cstapi.Auditor
@@ -80,7 +81,12 @@ func cstCommands(c CST) *commandSet {
 		cstapi.CommandSaveScenario:         reflected("ScenarioID", "", c.SaveScenario),
 		cstapi.CommandEvaluateScenario:     reflected("ScenarioID", "", evaluate),
 		// Python cost_snapshot.freeze names the scenario scenario_id (the object made is the snapshot).
-		cstapi.CommandFreezeSnapshot: reflected("", "", freeze),
-		cstapi.CommandAttestSource:   reflected("AttestationID", "", c.AttestSource),
+		cstapi.CommandFreezeSnapshot:      reflected("", "", freeze),
+		cstapi.CommandAttestSource:        reflected("AttestationID", "", c.AttestSource),
+		cstapi.CommandSaveCostBOM:         reflected("BomID", "", c.SaveCostBOM),
+		cstapi.CommandVerifyCostBOM:       reflected("BomID", "", c.VerifyCostBOM),
+		cstapi.CommandWithdrawCostBOM:     reflected("BomID", "", c.WithdrawCostBOM),
+		cstapi.CommandRequestSubstitution: reflected("BomID", "", c.RequestSubstitution),
+		cstapi.CommandDecideSubstitution:  reflected("BomID", "", c.DecideSubstitution),
 	}}
 }

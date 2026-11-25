@@ -153,6 +153,19 @@ GRANT UPDATE (snapshot_id) ON brant_cst.cost_snapshot TO brant_app;
 GRANT UPDATE (root_version, status, denial_id, denied_at, updated_at) ON brant_cst.source_standing TO brant_app;
 -- AdoptabilityGuard v1: downstream contexts call it in their own transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_cst.guard_cost_snapshot_adoptable_v1(text, text, timestamptz) TO brant_app;
+-- Cost BOMs (S7-02). A draft's lines are replaced; a sealed revision is only promoted, superseded
+-- or withdrawn. A substitution is inserted requested and updated once to a decision.
+GRANT SELECT, INSERT ON brant_cst.cost_bom, brant_cst.cost_bom_revision, brant_cst.cost_bom_line,
+    brant_cst.cost_bom_size_grade, brant_cst.cost_bom_surcharge, brant_cst.cost_bom_substitution TO brant_app;
+GRANT UPDATE (root_version, last_revision, active_revision, status, document_profile, base_size_code, item_id, sku_id, spec_revision, updated_at)
+    ON brant_cst.cost_bom TO brant_app;
+GRANT UPDATE (status, content_sha256, contributors, saved_by_kind, saved_by_id, saved_epoch, saved_at, verified_by_kind, verified_by_id,
+    verify_epoch, verified_at, superseded_at, ended_by_kind, ended_by_id, end_epoch, ended_at, end_reason)
+    ON brant_cst.cost_bom_revision TO brant_app;
+GRANT DELETE ON brant_cst.cost_bom_line, brant_cst.cost_bom_size_grade, brant_cst.cost_bom_surcharge TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decided_at, authority_epoch, decided_revision)
+    ON brant_cst.cost_bom_substitution TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cst.guard_cost_bom_current_v1(text, bigint, text, text, text) TO brant_app;
 
 -- SUP: a supplier RFQ's draft is replaced whole, an issued one is only closed (trigger). A supply
 -- condition's root moves its version; a draft revision is edited, sealed or discarded, a sealed one

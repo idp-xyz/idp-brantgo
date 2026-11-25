@@ -321,6 +321,17 @@ type QuoteData struct {
 	// DocumentProfile is generic or apparel. Empty is generic. json:"-" keeps it out of the Q01
 	// tool schema; MarshalJSON records apparel in the request hash.
 	DocumentProfile string `json:"-" contract:"enum=generic|apparel" ai:"-"`
+	// CostBOMRef cites a CST cost BOM. json:"-" and ai:"-" keep it out of the Q01 tool schema.
+	// MarshalJSON records it in the request hash only when it is set.
+	CostBOMRef *CostBOMRef `json:"-" ai:"-"`
+}
+
+// CostBOMRef cites one cost BOM revision. An empty hash or size skips that guard check.
+type CostBOMRef struct {
+	BomID         string `contract:"required,id"`
+	Revision      int64  `contract:"required,min=1"`
+	ContentSHA256 string `contract:"hash"`
+	SizeCode      string `contract:"id"`
 }
 
 // SaveDraft creates a quote root with working revision 1 at ExpectedVersion 0, or replaces the
@@ -533,6 +544,18 @@ func (d QuoteData) conversionRules(path string) error {
 	case "", "generic", "apparel":
 	default:
 		return schema(path + "/document_profile")
+	}
+	if r := d.CostBOMRef; r != nil {
+		switch {
+		case !kernel.ValidIdentifier(r.BomID):
+			return schema(path + "/cost_bom_ref/bom_id")
+		case r.Revision < 1:
+			return schema(path + "/cost_bom_ref/revision")
+		case r.ContentSHA256 != "" && !hash64.MatchString(r.ContentSHA256):
+			return schema(path + "/cost_bom_ref/content_sha256")
+		case r.SizeCode != "" && !kernel.ValidIdentifier(r.SizeCode):
+			return schema(path + "/cost_bom_ref/size_code")
+		}
 	}
 	for i, l := range d.Lines {
 		if l.MaxOrderQuantity != "" && !decimal(l.MaxOrderQuantity, kernel.QuantityFormat, true) {

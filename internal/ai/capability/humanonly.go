@@ -3,14 +3,15 @@ package capability
 import "slices"
 
 // humanOnly is the tactical model's humanOnlyCommands (docs/05_TACTICAL_DDD/02_IDP_Brant_Tactical_DDD_
-// Candidate_V0.1.json, 131 entries, sorted), the single source of the commands only a human may issue
+// Candidate_V0.1.json, 134 entries, sorted), the single source of the commands only a human may issue
 // (UL-INV-17, X-INV-002). TestHumanOnlyListIsTheTacticalModels keeps it in step with the archive.
 var humanOnly = []string{
 	"acceptance.invalidate", "acceptance.mark_disputed", "ai.approval_grant.issue", "ai.approval_grant.revoke",
 	"ai.delegation.grant", "ai.delegation.revoke", "allocation_review.settle", "application.apply",
 	"application.unapply", "certificate.register", "charge.confirm", "claim.close",
 	"commercial_release.grant_exception", "config.discard_draft", "config.publish", "config.retire",
-	"contact.confirm", "cost_snapshot.freeze", "costing.attest_source", "costing_context.verify",
+	"contact.confirm", "cost_bom.substitution.decide", "cost_bom.verify", "cost_bom.withdraw",
+	"cost_snapshot.freeze", "costing.attest_source", "costing_context.verify",
 	"costing_context.withdraw", "credit.confirm", "credit_exception.decide", "credit_limit.publish",
 	"declaration_case.confirm", "declaration_case.record_receipt", "declaration_case.record_submission",
 	"declaration_profile.discard_draft", "declaration_profile.verify", "disposition.decide",

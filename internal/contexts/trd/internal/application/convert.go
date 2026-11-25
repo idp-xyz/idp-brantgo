@@ -83,6 +83,9 @@ func quoteData(a api.QuoteData) quote.Data {
 	if r := a.CostSnapshotRef; r != nil {
 		d.Snapshot = &quote.SnapshotRef{SnapshotID: r.SnapshotID, ResultHash: r.ResultHash}
 	}
+	if r := a.CostBOMRef; r != nil {
+		d.CostBOM = &quote.CostBOMRef{BomID: r.BomID, Revision: r.Revision, ContentSHA256: r.ContentSHA256, SizeCode: r.SizeCode}
+	}
 	if r := a.NamedPlaceRef; r != nil {
 		p := business(*r)
 		d.NamedPlace = &p
@@ -157,6 +160,9 @@ func apiData(d quote.Data) api.QuoteData {
 	}
 	if r := d.Snapshot; r != nil {
 		a.CostSnapshotRef = &api.CostSnapshotRef{SnapshotID: r.SnapshotID, ResultHash: r.ResultHash}
+	}
+	if r := d.CostBOM; r != nil {
+		a.CostBOMRef = &api.CostBOMRef{BomID: r.BomID, Revision: r.Revision, ContentSHA256: r.ContentSHA256, SizeCode: r.SizeCode}
 	}
 	if r := d.NamedPlace; r != nil {
 		p := apiBusiness(*r)
