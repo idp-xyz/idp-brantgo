@@ -262,6 +262,9 @@ type Line struct {
 	// request hash when they are set.
 	MaxOrderQuantity string `json:"-" contract:"decimal=quantity,positive"`
 	Uncapped         *bool  `json:"-"`
+	// SampleStage names the apparel sample stage this line requires. Empty names none.
+	// json:"-" and ai:"-" keep it out of the Q01 tool schema. HTTP still accepts sample_stage.
+	SampleStage string `json:"-" ai:"-" contract:"enum=proto|fit|pp_sample|shipment"`
 }
 
 // Charge is a sales charge {charge_id, fee_category_ref (fee_category, sales_charge side),
@@ -585,6 +588,11 @@ func lines(ls []Line, path string) error {
 		}
 		if err := evidence(l.Evidence, p+"/evidence"); err != nil {
 			return err
+		}
+		switch l.SampleStage {
+		case "", "proto", "fit", "pp_sample", "shipment":
+		default:
+			return schema(p + "/sample_stage")
 		}
 	}
 	return nil

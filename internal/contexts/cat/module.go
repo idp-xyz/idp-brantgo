@@ -27,6 +27,10 @@ var (
 	_ api.Queries             = (*Module)(nil)
 	_ api.DeclarationCommands = (*Module)(nil)
 	_ api.DeclarationQueries  = (*Module)(nil)
+	_ api.ItemCommands        = (*Module)(nil)
+	_ api.ItemQueries         = (*Module)(nil)
+	_ api.SampleCommands      = (*Module)(nil)
+	_ api.SampleQueries       = (*Module)(nil)
 	_ api.Auditor             = (*Module)(nil)
 )
 

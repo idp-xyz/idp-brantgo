@@ -119,7 +119,11 @@
         "sku.deactivate",
         "item_code_mapping.save_draft",
         "item_code_mapping.publish",
+        "item.save_draft",
+        "item.confirm",
+        "sample.save_draft",
         "sample.approve",
+        "sample.revoke",
         "declaration_profile.save_draft",
         "declaration_profile.verify",
         "declaration_profile.discard_draft"
@@ -129,7 +133,9 @@
         "SpecificationRevised",
         "SkuDeactivated",
         "ItemCodeMappingPublished",
+        "ItemConfirmed",
         "SampleApproved",
+        "SampleRevoked",
         "DeclarationProfileVerified"
       ],
       "queries": [
@@ -142,6 +148,18 @@
         {
           "name": "cat.item_code_mapping.get",
           "route": "GET /api/brant/v1/cat/item_code_mappings/{id}",
+          "permission": "cat.read",
+          "audited": true
+        },
+        {
+          "name": "cat.item.get",
+          "route": "GET /api/brant/v1/cat/items/{id}",
+          "permission": "cat.read",
+          "audited": true
+        },
+        {
+          "name": "cat.sample_approval.get",
+          "route": "GET /api/brant/v1/cat/sample_approvals/{id}",
           "permission": "cat.read",
           "audited": true
         },

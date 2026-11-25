@@ -592,6 +592,11 @@ func catCommands(c CAT) *commandSet {
 		}, c.PublishItemCodeMapping),
 		catapi.CommandSaveDeclarationProfile:   reflected("ProfileID", "", c.SaveDeclarationProfile),
 		catapi.CommandVerifyDeclarationProfile: reflected("ProfileID", "", c.VerifyDeclarationProfile),
+		catapi.CommandSaveItem:                 reflected("ItemID", "", c.SaveItem),
+		catapi.CommandConfirmItem:              reflected("ItemID", "", c.ConfirmItem),
+		catapi.CommandSaveSample:               reflected("SampleApprovalID", "", c.SaveSample),
+		catapi.CommandApproveSample:            reflected("SampleApprovalID", "", c.ApproveSample),
+		catapi.CommandRevokeSample:             reflected("SampleApprovalID", "", c.RevokeSample),
 	}}
 }
 

@@ -146,6 +146,11 @@ type Commands interface {
 	DeactivateSku(ctx context.Context, cmd DeactivateSku) (Receipt, error)
 	SaveItemCodeMapping(ctx context.Context, cmd SaveItemCodeMapping) (Receipt, error)
 	PublishItemCodeMapping(ctx context.Context, cmd PublishItemCodeMapping) (Receipt, error)
+	SaveItem(ctx context.Context, cmd SaveItem) (Receipt, error)
+	ConfirmItem(ctx context.Context, cmd ConfirmItem) (Receipt, error)
+	SaveSample(ctx context.Context, cmd SaveSample) (Receipt, error)
+	ApproveSample(ctx context.Context, cmd ApproveSample) (Receipt, error)
+	RevokeSample(ctx context.Context, cmd RevokeSample) (Receipt, error)
 }
 
 // SkuRef is SkuRef v1: a SKU, its specification revision (0 before the first confirmation) and
@@ -195,6 +200,8 @@ type Queries interface {
 	// company; it needs no permission beyond an active grant. Ask before opening your own
 	// transaction.
 	ResolveItemCodes(ctx context.Context, codes []ItemCode) (map[ItemCode]ResolvedItemCode, error)
+	GetItem(ctx context.Context, itemID string) (ItemView, error)
+	GetSampleApproval(ctx context.Context, sampleApprovalID string) (SampleApprovalView, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 }
 

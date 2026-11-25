@@ -23,6 +23,13 @@ func (l Line) MarshalJSON() ([]byte, error) {
 	if l.Uncapped != nil && *l.Uncapped {
 		b = insertJSON(b, "Uncapped", []byte("true"))
 	}
+	if l.SampleStage != "" {
+		raw, err := json.Marshal(l.SampleStage)
+		if err != nil {
+			return nil, err
+		}
+		b = insertJSON(b, "SampleStage", raw)
+	}
 	return b, nil
 }
 
