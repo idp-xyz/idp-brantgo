@@ -122,11 +122,19 @@ func OpenAPI() ([]byte, error) {
 			for _, f := range l.filters {
 				params = append(params, map[string]any{"name": f, "in": "query", "required": false, "schema": map[string]any{"type": "string", "minLength": 1}})
 			}
-			params = append(params,
-				map[string]any{"name": "after", "in": "query", "required": false, "schema": map[string]any{"type": "string", "minLength": 1},
-					"description": "The next of the previous page"},
-				map[string]any{"name": "limit", "in": "query", "required": false,
-					"schema": map[string]any{"type": "integer", "minimum": 1, "maximum": kernel.MaxListPage, "default": kernel.DefaultListPage}})
+			for _, f := range l.flags {
+				params = append(params, map[string]any{"name": f, "in": "query", "required": false, "schema": map[string]any{"type": "string", "enum": []string{"true"}}})
+			}
+			if l.repeated != "" {
+				params = append(params, map[string]any{"name": l.repeated, "in": "query", "required": true, "style": "form", "explode": true,
+					"schema": map[string]any{"type": "array", "minItems": 1, "maxItems": l.max, "items": map[string]any{"type": "string", "minLength": 1}}})
+			} else {
+				params = append(params,
+					map[string]any{"name": "after", "in": "query", "required": false, "schema": map[string]any{"type": "string", "minLength": 1},
+						"description": "The next of the previous page"},
+					map[string]any{"name": "limit", "in": "query", "required": false,
+						"schema": map[string]any{"type": "integer", "minimum": 1, "maximum": kernel.MaxListPage, "default": kernel.DefaultListPage}})
+			}
 			get["responses"] = listResponses(l.page)
 		}
 		if params != nil {
@@ -218,7 +226,11 @@ var reads = []readRoute{
 		"Whether the snapshot may be adopted now, as AdoptabilityGuard v1 decides it (Python snapshot_query)", []string{"id"}, false},
 	{"/api/brant/v1/cst/source_attestations/{id}", "cst.source_attestation.get", "cst", "A source attestation or denial", []string{"id"}, false},
 	{"/api/brant/v1/trd/quotes", "trd.quote.list", "trd",
-		"A page of the quotes the caller sees, most recently changed first; status, customer and RFQ are those of the latest revision (?status=, ?customer_id=, ?rfq_id=, ?after=, ?limit=)", nil, false},
+		"A page of the quotes the caller sees, most recently changed first; status, customer and RFQ are those of the latest revision; awaiting_response keeps the quotes whose active revision has no customer response (?status=, ?customer_id=, ?rfq_id=, ?awaiting_response=true, ?after=, ?limit=)", nil, false},
+	{"/api/brant/v1/trd/customer_responses", "trd.customer_response.list", "trd",
+		"A page of the recorded customer responses the caller sees, most recently recorded first, without what the customer wrote (?quote_id=, ?classification=, ?unverified=true, ?after=, ?limit=)", nil, false},
+	{"/api/brant/v1/trd/rfq_coverage", "trd.quote.rfq_coverage", "trd",
+		"Which of the named RFQs already have a live quote the caller sees (?rfq_id= once per RFQ, at most 50)", nil, false},
 	{"/api/brant/v1/trd/orders", "trd.order.list", "trd",
 		"A page of the orders the caller sees, most recently changed first (?status=, ?quote_id=, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/trd/quotes/{id}", "trd.quote.get", "trd",

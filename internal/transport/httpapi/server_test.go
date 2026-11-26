@@ -112,6 +112,23 @@ func TestRfqListRoute(t *testing.T) {
 	}
 }
 
+// The trading worklist reads refuse a malformed query at the transport, before the context is asked.
+func TestWorklistRoutesRefuseMalformedQueries(t *testing.T) {
+	h := newServer(t, &fakeINQ{})
+	for _, target := range []string{
+		"/api/brant/v1/trd/quotes?awaiting_response=yes",
+		"/api/brant/v1/trd/quotes?awaiting_response=true&awaiting_response=true",
+		"/api/brant/v1/trd/customer_responses?unverified=1",
+		"/api/brant/v1/trd/customer_responses?state=unverified",
+		"/api/brant/v1/trd/rfq_coverage?rfq=rfq.1",
+		"/api/brant/v1/trd/orders?limit=0",
+	} {
+		if a := call(t, h, "GET", target, "Bearer good", ""); a.status != 422 || a.body["code"] != "SCHEMA_INVALID" {
+			t.Fatalf("%s: %d %v", target, a.status, a.body)
+		}
+	}
+}
+
 func newServer(t *testing.T, inq *fakeINQ) http.Handler {
 	t.Helper()
 	h, err := New(Config{EVD: struct{ EVD }{}, PTY: struct{ PTY }{}, CAT: struct{ CAT }{}, INQ: inq, POL: struct{ POL }{}, REF: struct{ REF }{}, SUP: struct{ SUP }{}, CST: struct{ CST }{}, TRD: struct{ TRD }{}, PUR: struct{ PUR }{}, QLT: struct{ QLT }{}, CNX: struct{ CNX }{},

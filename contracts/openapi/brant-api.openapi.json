@@ -89411,6 +89411,171 @@
         ]
       }
     },
+    "/api/brant/v1/trd/customer_responses": {
+      "get": {
+        "operationId": "trd.customer_response.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "quote_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "classification",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unverified",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "The next of the previous page",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "next": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "responses": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "business_revision": {
+                            "type": "integer"
+                          },
+                          "classification": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "received_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "recorded_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "recorded_by_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "response_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "verified": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "A page of the recorded customer responses the caller sees, most recently recorded first, without what the customer wrote (?quote_id=, ?classification=, ?unverified=true, ?after=, ?limit=)",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
     "/api/brant/v1/trd/customer_responses/{id}": {
       "get": {
         "operationId": "trd.customer_response.get",
@@ -89987,6 +90152,17 @@
             }
           },
           {
+            "in": "query",
+            "name": "awaiting_response",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "description": "The next of the previous page",
             "in": "query",
             "name": "after",
@@ -90028,6 +90204,9 @@
                         "properties": {
                           "active_revision": {
                             "type": "integer"
+                          },
+                          "awaiting_response": {
+                            "type": "boolean"
                           },
                           "control_state": {
                             "minLength": 1,
@@ -90127,7 +90306,7 @@
             "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
           }
         },
-        "summary": "A page of the quotes the caller sees, most recently changed first; status, customer and RFQ are those of the latest revision (?status=, ?customer_id=, ?rfq_id=, ?after=, ?limit=)",
+        "summary": "A page of the quotes the caller sees, most recently changed first; status, customer and RFQ are those of the latest revision; awaiting_response keeps the quotes whose active revision has no customer response (?status=, ?customer_id=, ?rfq_id=, ?awaiting_response=true, ?after=, ?limit=)",
         "tags": [
           "trd"
         ]
@@ -91266,6 +91445,114 @@
           }
         },
         "summary": "A formal quote document: its binding and bytes (Base64), verified on read",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/rfq_coverage": {
+      "get": {
+        "operationId": "trd.quote.rfq_coverage",
+        "parameters": [
+          {
+            "explode": true,
+            "in": "query",
+            "name": "rfq_id",
+            "required": true,
+            "schema": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "covered": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "latest_quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "quotes": {
+                            "type": "integer"
+                          },
+                          "rfq_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "Which of the named RFQs already have a live quote the caller sees (?rfq_id= once per RFQ, at most 50)",
         "tags": [
           "trd"
         ]

@@ -5,7 +5,9 @@ package bootstrap_test
 import (
 	"context"
 	"slices"
+	"strconv"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-brant/internal/bootstrap"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
@@ -132,4 +134,104 @@ func TestQuoteAndOrderListsFollowTheDataScope(t *testing.T) {
 	if !q.audited(trdapi.QueryQuoteList, "", "read", "") || !q.audited(trdapi.QueryOrderList, "", "rejected", kernel.CodeSchemaInvalid) {
 		t.Fatal("the list reads are not in the audit trail")
 	}
+}
+
+// The worklist queries: quotes whose active revision no customer response answers, the recorded
+// responses that can still be verified, and which RFQs already have a live quote. A response
+// summary identifies the response and never carries what the customer wrote.
+func TestWorklistQueriesOfQuotesResponsesAndRfqs(t *testing.T) {
+	q := newOrderWorld(t)
+	lead := q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "work.lead"},
+		Permissions: allPermissions, DataScope: authorization.DataScopeCompany})
+	own := q.provision(bootstrap.Grant{Scope: q.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "work.own"},
+		Permissions: allPermissions, DataScope: "own"})
+
+	q.drafted("quote.draft")
+	q.activated("quote.sent")
+	replied := q.activated("quote.replied")
+	_, err := q.c.TRD.RecordResponse(q.author, q.full("response.replied", "quote.replied", 1, replied.BusinessHash))
+	q.must(err)
+	_, err = q.c.TRD.RecordResponse(q.author, q.reply("response.cond", "quote.replied", 1, replied.BusinessHash,
+		trdapi.ClassificationConditional, time.Now(), trdapi.ArrivalChannelServer))
+	q.must(err)
+	q.accepted("quote.done")
+
+	awaiting, err := q.c.TRD.ListQuotes(lead, trdapi.QuoteListQuery{AwaitingResponse: true})
+	q.must(err)
+	if len(awaiting.Quotes) != 1 || awaiting.Quotes[0].QuoteID != "quote.sent" || !awaiting.Quotes[0].AwaitingResponse {
+		t.Fatalf("awaiting a response: %+v", awaiting.Quotes)
+	}
+	all, err := q.c.TRD.ListQuotes(lead, trdapi.QuoteListQuery{})
+	q.must(err)
+	for _, r := range all.Quotes {
+		if r.AwaitingResponse != (r.QuoteID == "quote.sent") {
+			t.Fatalf("%s awaiting %v", r.QuoteID, r.AwaitingResponse)
+		}
+	}
+
+	responses := func(ctx context.Context, query trdapi.ResponseListQuery) []string {
+		t.Helper()
+		p, err := q.c.TRD.ListResponses(ctx, query)
+		q.must(err)
+		ids := []string{}
+		for _, r := range p.Responses {
+			ids = append(ids, r.ResponseID)
+		}
+		return ids
+	}
+	if got := responses(lead, trdapi.ResponseListQuery{}); !slices.Equal(got, []string{"response.quote.done", "response.cond", "response.replied"}) {
+		t.Fatalf("responses %v", got)
+	}
+	if got := responses(lead, trdapi.ResponseListQuery{Unverified: true}); !slices.Equal(got, []string{"response.replied"}) {
+		t.Fatalf("unverified %v", got)
+	}
+	if got := responses(lead, trdapi.ResponseListQuery{Classification: trdapi.ClassificationConditional}); !slices.Equal(got, []string{"response.cond"}) {
+		t.Fatalf("conditional %v", got)
+	}
+	if got := responses(lead, trdapi.ResponseListQuery{QuoteID: "quote.replied", Limit: 1}); !slices.Equal(got, []string{"response.cond"}) {
+		t.Fatalf("of one quote, first page %v", got)
+	}
+	if got := responses(own, trdapi.ResponseListQuery{}); len(got) != 0 {
+		t.Fatalf("a caller that owns no quote sees %v", got)
+	}
+	page, err := q.c.TRD.ListResponses(lead, trdapi.ResponseListQuery{Limit: 2})
+	q.must(err)
+	rest, err := q.c.TRD.ListResponses(lead, trdapi.ResponseListQuery{Limit: 2, After: page.Next})
+	q.must(err)
+	if page.Next == "" || rest.Next != "" || len(rest.Responses) != 1 || rest.Responses[0].ResponseID != "response.replied" {
+		t.Fatalf("pages %+v then %+v", page, rest)
+	}
+	if r := page.Responses[0]; !r.Verified || r.QuoteID != "quote.done" || r.BusinessRevision != 1 ||
+		r.Classification != trdapi.ClassificationFullUnconditional || r.RecordedAt.IsZero() || r.ReceivedAt.IsZero() || r.RecordedByID == "" {
+		t.Fatalf("verified response %+v", r)
+	}
+	// A response to a revision that is no longer the active one cannot be verified, so it leaves
+	// the worklist.
+	_, err = q.c.TRD.Cancel(q.author, trdapi.Cancel{IdempotencyKey: q.key(), QuoteID: "quote.replied",
+		ExpectedVersion: q.getQuote("quote.replied").RootVersion, BusinessRevision: 1, Reason: "客户改期", Evidence: q.proof})
+	q.must(err)
+	if got := responses(lead, trdapi.ResponseListQuery{Unverified: true}); len(got) != 0 {
+		t.Fatalf("unverified after the cancellation %v", got)
+	}
+
+	cover, err := q.c.TRD.RfqCoverage(lead, trdapi.RfqCoverageQuery{RfqIDs: []string{"rfq.none", "rfq.1"}})
+	q.must(err)
+	if len(cover.Covered) != 1 || cover.Covered[0].RfqID != "rfq.1" || cover.Covered[0].Quotes != 3 {
+		t.Fatalf("coverage %+v", cover.Covered)
+	}
+	hidden, err := q.c.TRD.RfqCoverage(own, trdapi.RfqCoverageQuery{RfqIDs: []string{"rfq.1"}})
+	q.must(err)
+	if len(hidden.Covered) != 0 {
+		t.Fatalf("a caller that sees no quote learns of %+v", hidden.Covered)
+	}
+	many := make([]string, trdapi.MaxCoverageRfqs+1)
+	for i := range many {
+		many[i] = "rfq." + strconv.Itoa(i)
+	}
+	for _, bad := range [][]string{nil, many, {"rfq.1", "rfq.1"}, {"has space"}} {
+		_, err = q.c.TRD.RfqCoverage(lead, trdapi.RfqCoverageQuery{RfqIDs: bad})
+		q.want(err, kernel.CodeSchemaInvalid)
+	}
+	_, err = q.c.TRD.ListResponses(lead, trdapi.ResponseListQuery{Classification: "yes"})
+	q.want(err, kernel.CodeSchemaInvalid)
 }
