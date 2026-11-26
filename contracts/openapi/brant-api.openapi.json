@@ -27349,6 +27349,135 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "account_ref": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "author_claim": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "content_sha256": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "content_text": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "external_message_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "extract": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "characters": {
+                          "type": "integer"
+                        },
+                        "extract_sha256": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "extractor": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "file_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "file_sha256": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        },
+                        "profile": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sheets": {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "imports": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actor": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "import_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "imported_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "provider": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "registered_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "source_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "source_kind": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": "The object as the caller may see it."
           },
           "401": {
@@ -37617,6 +37746,299 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "confirmation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authority_epoch": {
+                          "type": "integer"
+                        },
+                        "confirmed_by": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        "contact_row_version": {
+                          "type": "integer"
+                        },
+                        "customer_row_version": {
+                          "type": "integer"
+                        },
+                        "evidence_ids": {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "contact_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "corrections": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "candidates": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "command": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "corrected_by": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "field": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "from": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "line_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "locator": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "proposed_by": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "reason": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "recorded_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "row_version": {
+                            "type": "integer"
+                          },
+                          "seq": {
+                            "type": "integer"
+                          },
+                          "to": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "customer_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "document_profile": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "lines": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "line_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "locator": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "locators": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "field": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "locator": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "pending": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "candidates": {
+                                  "items": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "field": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "proposed_by": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "quantity": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "quotes_withheld": {
+                            "type": "boolean"
+                          },
+                          "requested_item": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "sku_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "sku_spec_revision": {
+                            "type": "integer"
+                          },
+                          "source_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "uom": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "opportunity_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "rfq_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "row_version": {
+                      "type": "integer"
+                    },
+                    "source_ids": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "status": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "unresolved_fields": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": "The object as the caller may see it."
           },
           "401": {

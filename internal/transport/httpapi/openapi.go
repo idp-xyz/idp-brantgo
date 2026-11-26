@@ -137,6 +137,9 @@ func OpenAPI() ([]byte, error) {
 			}
 			get["responses"] = listResponses(l.page)
 		}
+		if view, ok := readViews[r.path]; ok {
+			get["responses"] = viewResponses(view)
+		}
 		if params != nil {
 			get["parameters"] = params
 		}
@@ -349,6 +352,25 @@ func reconcileResponses() map[string]any {
 		"content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/Reconciliation"}}}}
 	out["400"] = commandResponses()["400"]
 	out["413"] = commandResponses()["413"]
+	return out
+}
+
+// readViews are the reads whose 200 response the document describes with a schema: the view
+// structure the handler writes. A read that is not here answers "the object as the caller may
+// see it" without one; add a read when a client is built against it.
+var readViews = map[string]reflect.Type{
+	"/api/brant/v1/inq/rfqs/{id}":    reflect.TypeFor[rfqJSON](),
+	"/api/brant/v1/evd/sources/{id}": reflect.TypeFor[sourceJSON](),
+}
+
+// viewResponses are the responses of a read by ID whose view has a schema. Members with no value
+// are omitted, so only "ok" is required.
+func viewResponses(view reflect.Type) map[string]any {
+	schema := schemaOf(view)
+	schema["required"] = []string{"ok"}
+	out := readResponses()
+	out["200"] = map[string]any{"description": "The object as the caller may see it.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
 	return out
 }
 
