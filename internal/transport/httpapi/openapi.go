@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -139,6 +140,9 @@ func OpenAPI() ([]byte, error) {
 		}
 		if view, ok := readViews[r.path]; ok {
 			get["responses"] = viewResponses(view)
+		}
+		if view, ok := apiViews[r.path]; ok {
+			get["responses"] = apiViewResponses(view)
 		}
 		if params != nil {
 			get["parameters"] = params
@@ -361,6 +365,26 @@ func reconcileResponses() map[string]any {
 var readViews = map[string]reflect.Type{
 	"/api/brant/v1/inq/rfqs/{id}":    reflect.TypeFor[rfqJSON](),
 	"/api/brant/v1/evd/sources/{id}": reflect.TypeFor[sourceJSON](),
+}
+
+// apiViews are the reads that write an api structure through okView: its tagged form with "ok".
+var apiViews = map[string]reflect.Type{
+	"/api/brant/v1/trd/quotes/{id}":                               reflect.TypeFor[trdapi.QuoteView](),
+	"/api/brant/v1/trd/quotes/{id}/ready":                         reflect.TypeFor[trdapi.QuoteReadiness](),
+	"/api/brant/v1/trd/quotes/{id}/history":                       reflect.TypeFor[trdapi.QuoteHistoryPage](),
+	"/api/brant/v1/trd/quotes/{id}/approvals":                     reflect.TypeFor[trdapi.ApprovalHistoryPage](),
+	"/api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check": reflect.TypeFor[trdapi.ApprovalCheck](),
+}
+
+// apiViewResponses are viewResponses for an api structure written through okView.
+func apiViewResponses(view reflect.Type) map[string]any {
+	schema := schemaOf(taggedType(view))
+	schema["properties"].(map[string]any)["ok"] = map[string]any{"type": "boolean"}
+	schema["required"] = []string{"ok"}
+	out := readResponses()
+	out["200"] = map[string]any{"description": "The object as the caller may see it.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
+	return out
 }
 
 // viewResponses are the responses of a read by ID whose view has a schema. Members with no value
