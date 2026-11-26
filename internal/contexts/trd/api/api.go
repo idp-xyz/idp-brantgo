@@ -733,6 +733,12 @@ type Commands interface {
 
 // Queries is TRD's audited read side.
 type Queries interface {
+	// ListQuotes returns a page of the quotes the caller sees, most recently changed first,
+	// audited as quote.list (trd.read); lists.go.
+	ListQuotes(ctx context.Context, q QuoteListQuery) (QuotePage, error)
+	// ListOrders returns a page of the orders the caller sees, most recently changed first,
+	// audited as order.list (trd.read); lists.go.
+	ListOrders(ctx context.Context, q OrderListQuery) (OrderPage, error)
 	// GetQuote returns a quote root the caller sees with all its revisions, reviews and approvals,
 	// audited as quote.get (trd.read). A frozen revision's commercial document is checked against
 	// its business hash (BUSINESS_HASH_MISMATCH for a corrupt one).

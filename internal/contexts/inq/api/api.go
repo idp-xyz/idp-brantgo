@@ -509,13 +509,9 @@ func (q RfqQuery) Validate() error {
 		return schema("/status")
 	case q.CustomerID != "" && !kernel.ValidIdentifier(q.CustomerID):
 		return schema("/customer_id")
-	case q.Limit < 0 || q.Limit > kernel.MaxListPage:
-		return schema("/limit")
 	}
-	if q.After != "" {
-		if _, err := kernel.ParseListCursor(q.After); err != nil {
-			return schema("/after")
-		}
+	if _, field := kernel.ListPosition(q.After, q.Limit); field != "" {
+		return schema("/" + field)
 	}
 	return nil
 }

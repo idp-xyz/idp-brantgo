@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	tskapi "go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
@@ -50,7 +52,10 @@ type listRoute struct {
 }
 
 var listRoutes = map[string]listRoute{
-	"/api/brant/v1/inq/rfqs": {[]string{"status", "customer_id"}, reflect.TypeFor[inqapi.RfqPage]()},
+	"/api/brant/v1/inq/rfqs":   {[]string{"status", "customer_id"}, reflect.TypeFor[inqapi.RfqPage]()},
+	"/api/brant/v1/trd/quotes": {[]string{"status", "customer_id", "rfq_id"}, reflect.TypeFor[trdapi.QuotePage]()},
+	"/api/brant/v1/trd/orders": {[]string{"status", "quote_id"}, reflect.TypeFor[trdapi.OrderPage]()},
+	"/api/brant/v1/tsk/tasks":  {[]string{"lifecycle", "control_mode", "rfq_id", "quote_id"}, reflect.TypeFor[tskapi.TaskPage]()},
 }
 
 func (s *server) listRfqs(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +63,45 @@ func (s *server) listRfqs(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		var page inqapi.RfqPage
 		if page, err = s.cfg.INQ.ListRfqs(r.Context(), inqapi.RfqQuery{Status: p["status"], CustomerID: p["customer_id"], After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listQuotes(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listParams(r, listRoutes["/api/brant/v1/trd/quotes"].filters...)
+	if err == nil {
+		var page trdapi.QuotePage
+		if page, err = s.cfg.TRD.ListQuotes(r.Context(), trdapi.QuoteListQuery{Status: p["status"], CustomerID: p["customer_id"],
+			RfqID: p["rfq_id"], After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listOrders(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listParams(r, listRoutes["/api/brant/v1/trd/orders"].filters...)
+	if err == nil {
+		var page trdapi.OrderPage
+		if page, err = s.cfg.TRD.ListOrders(r.Context(), trdapi.OrderListQuery{Status: p["status"], QuoteID: p["quote_id"],
+			After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listParams(r, listRoutes["/api/brant/v1/tsk/tasks"].filters...)
+	if err == nil {
+		var page tskapi.TaskPage
+		if page, err = s.cfg.TSK.ListTasks(r.Context(), tskapi.TaskQuery{Lifecycle: p["lifecycle"], ControlMode: p["control_mode"],
+			RfqID: p["rfq_id"], QuoteID: p["quote_id"], After: p["after"], Limit: limit}); err == nil {
 			writeJSON(w, http.StatusOK, okView(page))
 			return
 		}

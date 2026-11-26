@@ -59,3 +59,19 @@ func ListSize(limit int) int {
 	}
 	return limit
 }
+
+// ListPosition checks the paging of a list query and returns the position after names, nil when
+// after is empty. field is the offending member, "after" or "limit", when the paging is not valid.
+func ListPosition(after string, limit int) (pos *ListCursor, field string) {
+	if limit < 0 || limit > MaxListPage {
+		return nil, "limit"
+	}
+	if after == "" {
+		return nil, ""
+	}
+	c, err := ParseListCursor(after)
+	if err != nil {
+		return nil, "after"
+	}
+	return &c, ""
+}

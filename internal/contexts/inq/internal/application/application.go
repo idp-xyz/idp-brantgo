@@ -564,14 +564,7 @@ func (s Service) ListRfqs(ctx context.Context, q api.RfqQuery) (api.RfqPage, err
 		}
 		return api.RfqPage{}, err
 	}
-	var after *kernel.ListCursor
-	if q.After != "" {
-		c, err := kernel.ParseListCursor(q.After)
-		if err != nil {
-			return api.RfqPage{}, err // Validate accepted it
-		}
-		after = &c
-	}
+	after, _ := kernel.ListPosition(q.After, q.Limit) // Validate accepted it
 	size := kernel.ListSize(q.Limit)
 	out := api.RfqPage{Rfqs: []api.RfqSummary{}}
 	err := s.Ledger.Read(ctx, CommandListRfqs, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {

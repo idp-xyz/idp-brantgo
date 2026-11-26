@@ -89485,6 +89485,164 @@
         ]
       }
     },
+    "/api/brant/v1/trd/orders": {
+      "get": {
+        "operationId": "trd.order.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The next of the previous page",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "next": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "orders": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "document_profile": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "number": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "open_review_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "order_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "order_revision": {
+                            "type": "integer"
+                          },
+                          "quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "row_version": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "A page of the orders the caller sees, most recently changed first (?status=, ?quote_id=, ?after=, ?limit=)",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
     "/api/brant/v1/trd/orders/{id}": {
       "get": {
         "operationId": "trd.order.get",
@@ -89792,6 +89950,184 @@
           }
         },
         "summary": "What OrderCommercialSnapshot v1 tells STL, CNX and FUL of a draft or active order at its current revision, from what TRD sealed: binding, state, terms with address roles and the payment plan with its credit portion, lines, charges, totals, S/C and PI references and the analysis rate (code REFERENCE_INVALID when the sealed revision is not intact)",
+        "tags": [
+          "trd"
+        ]
+      }
+    },
+    "/api/brant/v1/trd/quotes": {
+      "get": {
+        "operationId": "trd.quote.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rfq_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The next of the previous page",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "next": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "quotes": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "active_revision": {
+                            "type": "integer"
+                          },
+                          "control_state": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "customer_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "document_profile": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "last_revision": {
+                            "type": "integer"
+                          },
+                          "open_review_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "owner_actor_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "rfq_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "root_version": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "A page of the quotes the caller sees, most recently changed first; status, customer and RFQ are those of the latest revision (?status=, ?customer_id=, ?rfq_id=, ?after=, ?limit=)",
         "tags": [
           "trd"
         ]
@@ -96456,6 +96792,199 @@
           }
         },
         "summary": "What became of task.wait sent with this idempotency key (动作对账)",
+        "tags": [
+          "tsk"
+        ]
+      }
+    },
+    "/api/brant/v1/tsk/tasks": {
+      "get": {
+        "operationId": "tsk.task.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lifecycle",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "control_mode",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rfq_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The next of the previous page",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "next": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "tasks": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "agent_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "bound_quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "control_mode": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "deadline": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "goal_code": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "lifecycle": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "owner_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "target_quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "target_rfq_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "task_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "task_version": {
+                            "type": "integer"
+                          },
+                          "updated_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "wait_kind": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "A page of the tasks the caller sees, most recently changed first (?lifecycle=, ?control_mode=, ?rfq_id=, ?quote_id=, ?after=, ?limit=)",
         "tags": [
           "tsk"
         ]

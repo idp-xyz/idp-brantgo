@@ -266,6 +266,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/cst/cost_snapshots/{id}", s.authenticated(read(s, cfg.CST.GetSnapshot, okView[cstapi.SnapshotView])))
 	mux.Handle("GET /api/brant/v1/cst/cost_snapshots/{id}/adoptability", s.authenticated(read(s, cfg.CST.QuerySnapshot, okView[cstapi.SnapshotQuery])))
 	mux.Handle("GET /api/brant/v1/cst/source_attestations/{id}", s.authenticated(read(s, cfg.CST.GetAttestation, okView[cstapi.AttestationView])))
+	mux.Handle("GET /api/brant/v1/trd/quotes", s.authenticated(s.listQuotes))
+	mux.Handle("GET /api/brant/v1/trd/orders", s.authenticated(s.listOrders))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}", s.authenticated(read(s, cfg.TRD.GetQuote, okView[trdapi.QuoteView])))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/active", s.authenticated(read(s, cfg.TRD.GetActiveRevision, okView[trdapi.FormalRevision])))
 	mux.Handle("GET /api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check", s.authenticated(s.approvalCheck))

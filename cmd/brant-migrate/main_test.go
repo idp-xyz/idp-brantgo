@@ -102,7 +102,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000004_trd_customer_acceptance", "brant:000005_trd_sales_orders", "brant:000006_trd_order_amendments",
 		"brant:000007_trd_order_documents", "brant:000008_trd_order_state", "brant:000009_trd_control_manual",
 		"brant:000010_trd_cost_source_holds", "brant:000011_trd_quote_order_ledger",
-		"brant:000012_trd_amendment_cap", "brant:000013_trd_document_profile",
+		"brant:000012_trd_amendment_cap", "brant:000013_trd_document_profile", "brant:000014_trd_listing",
 		"brant:000001_pur_purchase_drafts", "brant:000002_pur_purchase_commitments", "brant:000003_pur_supplier_deliveries",
 		"brant:000004_pur_commitment_changes", "brant:000005_pur_allocation_reviews", "brant:000006_pur_commitment_dispositions",
 		"brant:000007_pur_supplier_delivery_guard_v2",
@@ -124,7 +124,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000001_clm_claims",
 		"brant:000001_crm_core",
 		"brant:000001_tsk_tasks", "brant:000002_tsk_action_executions", "brant:000003_tsk_goal_verifications",
-		"brant:000004_tsk_barrier_reconciliation", "brant:000005_tsk_source_file", "brant:000006_tsk_resume_arrival",
+		"brant:000004_tsk_barrier_reconciliation", "brant:000005_tsk_source_file", "brant:000006_tsk_resume_arrival", "brant:000007_tsk_task_listing",
 		"brant:000001_ai_delegations", "brant:000002_ai_model_calls", "brant:000003_ai_model_call_waiting",
 		"brant:000004_ai_model_call_refusal", "brant:000005_ai_proposal",
 	}

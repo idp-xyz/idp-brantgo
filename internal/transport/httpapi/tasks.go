@@ -70,6 +70,7 @@ func tskCommands(c TSK) *commandSet {
 // route: an HTTP client cannot carry it into a command — a person's step on a task goes through the
 // task-step route, which takes the claim itself.
 func (s *server) tskRoutes(mux routeMux) {
+	mux.Handle("GET /api/brant/v1/tsk/tasks", s.authenticated(s.listTasks))
 	mux.Handle("GET /api/brant/v1/tsk/tasks/{id}", s.authenticated(read(s, s.cfg.TSK.GetTask, okView[tskapi.TaskView])))
 	mux.Handle("GET /api/brant/v1/tsk/tasks/{id}/verifications", s.authenticated(listRead(s, s.cfg.TSK.GoalVerifications, "task_id", "verifications")))
 	mux.Handle("GET /api/brant/v1/tsk/tasks/{id}/actions", s.authenticated(listRead(s, s.cfg.TSK.TaskActions, "task_id", "actions")))
@@ -78,6 +79,8 @@ func (s *server) tskRoutes(mux routeMux) {
 
 // tskReads are TSK's read routes and the task-step route in the OpenAPI document.
 var tskReads = []readRoute{
+	{"/api/brant/v1/tsk/tasks", "tsk.task.list", "tsk",
+		"A page of the tasks the caller sees, most recently changed first (?lifecycle=, ?control_mode=, ?rfq_id=, ?quote_id=, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/tsk/tasks/{id}", "tsk.task.get", "tsk",
 		"A business task: goal and version, lifecycle, control mode, the control epoch recorded from TRD and the binding of its quote root, owner, agent, target, source (kind evd_source, evd_file or rfq, and the id of that EVD source, uploaded EVD file or RFQ), budget, execution bundle, what it waits for or why it is paused or stopping, how it ended, and its append-only history, in which a resume keeps what it named as arrived (arrival: kind, id, version) (task.get)", []string{"id"}, false},
 	{"/api/brant/v1/tsk/tasks/{id}/verifications", "tsk.task.verification.list", "tsk",
