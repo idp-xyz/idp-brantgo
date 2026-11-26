@@ -94,7 +94,7 @@ func TestRepositoryManifestLoads(t *testing.T) {
 		"brant:000004_pol_order_document_template", "brant:000005_pol_s5_kinds", "brant:000006_pol_config_at",
 		"brant:000007_pol_sales_price",
 		"brant:000001_inq_customer_rfqs", "brant:000002_inq_rfq_guard", "brant:000003_inq_rfq_line_locators",
-		"brant:000004_inq_opportunity_ref", "brant:000005_inq_document_profile",
+		"brant:000004_inq_opportunity_ref", "brant:000005_inq_document_profile", "brant:000006_inq_rfq_listing",
 		"brant:000001_sup_supply_conditions", "brant:000002_sup_supply_condition_guard",
 		"brant:000001_cst_costing_contexts", "brant:000002_cst_cost_scenarios", "brant:000003_cst_cost_snapshots",
 		"brant:000004_cst_cost_boms", "brant:000005_cst_bom_substitutions",

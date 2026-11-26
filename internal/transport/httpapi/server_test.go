@@ -42,6 +42,7 @@ var alice = identity.Principal{Actor: kernel.ActorRef{Kind: kernel.ActorHuman, I
 type fakeINQ struct {
 	INQ
 	saved   []inqapi.SaveRfq
+	listed  []inqapi.RfqQuery
 	audited []string
 	err     error
 }
@@ -68,6 +69,47 @@ func (f *fakeINQ) GetRfq(_ context.Context, id string) (inqapi.RfqView, error) {
 	}
 	return inqapi.RfqView{RfqID: id, Status: "draft", RowVersion: 1, Lines: []inqapi.RfqLineView{{RfqLine: inqapi.RfqLine{LineID: "L1", Quantity: "120"}}},
 		SourceIDs: []string{}, UnresolvedFields: []string{}}, nil
+}
+
+func (f *fakeINQ) ListRfqs(_ context.Context, q inqapi.RfqQuery) (inqapi.RfqPage, error) {
+	if err := q.Validate(); err != nil {
+		return inqapi.RfqPage{}, err
+	}
+	f.listed = append(f.listed, q)
+	if q.Status == "closed" {
+		return inqapi.RfqPage{Rfqs: []inqapi.RfqSummary{}}, nil
+	}
+	return inqapi.RfqPage{Rfqs: []inqapi.RfqSummary{{RfqID: "rfq.1", Status: "draft", RowVersion: 1, OwnerActorID: "u1",
+		UpdatedAt: time.Date(2026, 11, 26, 1, 2, 3, 4000, time.UTC)}}, Next: "bmV4dA"}, nil
+}
+
+// A list read passes its filters, cursor and limit to the context, writes the page with its next,
+// and refuses unknown, repeated and empty parameters at the transport.
+func TestRfqListRoute(t *testing.T) {
+	inq := &fakeINQ{}
+	h := newServer(t, inq)
+	a := call(t, h, "GET", "/api/brant/v1/inq/rfqs?status=draft&customer_id=customer.1&limit=20", "Bearer good", "")
+	rfqs, _ := a.body["rfqs"].([]any)
+	if a.status != 200 || a.body["ok"] != true || a.body["next"] != "bmV4dA" || len(rfqs) != 1 {
+		t.Fatalf("%d %v", a.status, a.body)
+	}
+	if row := rfqs[0].(map[string]any); row["rfq_id"] != "rfq.1" || row["updated_at"] != "2026-11-26T01:02:03.000004Z" || row["customer_id"] != nil {
+		t.Fatalf("row %v", row)
+	}
+	if want := (inqapi.RfqQuery{Status: "draft", CustomerID: "customer.1", Limit: 20}); len(inq.listed) != 1 || inq.listed[0] != want {
+		t.Fatalf("query %+v", inq.listed)
+	}
+	if a = call(t, h, "GET", "/api/brant/v1/inq/rfqs?status=closed", "Bearer good", ""); a.status != 200 || a.body["ok"] != true || a.body["rfqs"] != nil {
+		t.Fatalf("empty page %d %v", a.status, a.body)
+	}
+	for _, query := range []string{"owner=u1", "status=draft&status=ready", "status=", "limit=0", "limit=201", "limit=x", "status=open", "after=not-a-cursor"} {
+		if a = call(t, h, "GET", "/api/brant/v1/inq/rfqs?"+query, "Bearer good", ""); a.status != 422 || a.body["code"] != "SCHEMA_INVALID" {
+			t.Fatalf("%s: %d %v", query, a.status, a.body)
+		}
+	}
+	if a = call(t, h, "GET", "/api/brant/v1/inq/rfqs", "", ""); a.status != 401 {
+		t.Fatalf("no token: %d %v", a.status, a.body)
+	}
 }
 
 func newServer(t *testing.T, inq *fakeINQ) http.Handler {

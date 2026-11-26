@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // OpenAPIPath is where the generated candidate OpenAPI 3.1 document is kept.
@@ -117,6 +118,17 @@ func OpenAPI() ([]byte, error) {
 		for _, p := range readTextQuery[r.path] {
 			params = append(params, map[string]any{"name": p.name, "in": "query", "required": p.required, "schema": map[string]any{"type": "string", "minLength": 1}})
 		}
+		if l, ok := listRoutes[r.path]; ok {
+			for _, f := range l.filters {
+				params = append(params, map[string]any{"name": f, "in": "query", "required": false, "schema": map[string]any{"type": "string", "minLength": 1}})
+			}
+			params = append(params,
+				map[string]any{"name": "after", "in": "query", "required": false, "schema": map[string]any{"type": "string", "minLength": 1},
+					"description": "The next of the previous page"},
+				map[string]any{"name": "limit", "in": "query", "required": false,
+					"schema": map[string]any{"type": "integer", "minimum": 1, "maximum": kernel.MaxListPage, "default": kernel.DefaultListPage}})
+			get["responses"] = listResponses(l.page)
+		}
 		if params != nil {
 			get["parameters"] = params
 		}
@@ -186,6 +198,8 @@ var reads = []readRoute{
 		"A style, its color and size matrix and the technical parameters of each revision, including measured", []string{"id"}, false},
 	{"/api/brant/v1/cat/sample_approvals/{id}", "cat.sample_approval.get", "cat",
 		"A sample approval, the specification revision it binds, and its revocation history", []string{"id"}, false},
+	{"/api/brant/v1/inq/rfqs", "inq.rfq.list", "inq",
+		"A page of the customer RFQs the caller sees, most recently changed first (?status=, ?customer_id=, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
 	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
 	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
@@ -319,6 +333,19 @@ func reconcileResponses() map[string]any {
 		"content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/Reconciliation"}}}}
 	out["400"] = commandResponses()["400"]
 	out["413"] = commandResponses()["413"]
+	return out
+}
+
+// listResponses are a list read's responses: the page as it is written (okView), so the 200
+// response has a schema. Members with no value are omitted; an empty page is {"ok": true}.
+func listResponses(page reflect.Type) map[string]any {
+	schema := schemaOf(taggedType(page))
+	schema["properties"].(map[string]any)["ok"] = map[string]any{"type": "boolean"}
+	schema["required"] = []string{"ok"}
+	out := readResponses()
+	delete(out, "404")
+	out["200"] = map[string]any{"description": "A page of the objects the caller sees; next is absent on the last page.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
 	return out
 }
 

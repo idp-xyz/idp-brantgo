@@ -29,6 +29,7 @@ import (
 // Read commands and permissions.
 const (
 	CommandGetRfq   = "rfq.get"
+	CommandListRfqs = "rfq.list"
 	CommandAudit    = "inq.audit"
 	PermissionRead  = "inq.read"
 	PermissionAudit = "inq.audit"
@@ -45,6 +46,7 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandCancelRfq, api.CommandCancelRfq),
 		authorization.HumanOnly(api.CommandCloseRfq, api.CommandCloseRfq),
 		{Command: CommandGetRfq, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListRfqs, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 }
@@ -548,6 +550,53 @@ func (s Service) OpenProfile(ctx context.Context, profile string) (bool, error) 
 			string(scope.Tenant), string(scope.Company), profile).Scan(&open)
 	})
 	return open, err
+}
+
+// ListRfqs returns a page of the RFQs the caller sees, most recently changed first, audited as
+// rfq.list. The data scope is applied in the query itself, so a page never spends its limit on
+// rows the caller does not see. A query that fails validation is refused and audited.
+func (s Service) ListRfqs(ctx context.Context, q api.RfqQuery) (api.RfqPage, error) {
+	if err := q.Validate(); err != nil {
+		if rej, ok := kernel.AsRejection(err); ok {
+			if aerr := s.Ledger.AuditRejected(ctx, CommandListRfqs, "", rej.Code); aerr != nil {
+				return api.RfqPage{}, errors.Join(err, aerr)
+			}
+		}
+		return api.RfqPage{}, err
+	}
+	var after *kernel.ListCursor
+	if q.After != "" {
+		c, err := kernel.ParseListCursor(q.After)
+		if err != nil {
+			return api.RfqPage{}, err // Validate accepted it
+		}
+		after = &c
+	}
+	size := kernel.ListSize(q.Limit)
+	out := api.RfqPage{Rfqs: []api.RfqSummary{}}
+	err := s.Ledger.Read(ctx, CommandListRfqs, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		scope, _ := bento.ScopeFromContext(ctx)
+		rows, err := postgres.List(ctx, exec, scope, postgres.ListFilter{Status: q.Status, CustomerID: q.CustomerID,
+			DataScope: string(d.DataScope), ActorID: d.Actor.ID, Team: d.Team, After: after, Limit: size + 1})
+		if err != nil {
+			return err
+		}
+		if len(rows) > size {
+			rows = rows[:size]
+			last := rows[size-1]
+			out.Next = kernel.ListCursor{At: last.UpdatedAt, ID: last.ID}.String()
+		}
+		for _, r := range rows {
+			out.Rfqs = append(out.Rfqs, api.RfqSummary{RfqID: r.ID, Status: r.Status, RowVersion: r.RowVersion, CustomerID: r.CustomerID,
+				ContactID: r.ContactID, DocumentProfile: r.DocumentProfile, Unresolved: r.Unresolved, OwnerActorID: r.OwnerActor,
+				UpdatedAt: r.UpdatedAt})
+		}
+		return nil
+	})
+	if err != nil {
+		return api.RfqPage{}, err
+	}
+	return out, nil
 }
 
 // Audit returns INQ's audit trail.

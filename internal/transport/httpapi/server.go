@@ -248,6 +248,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/cat/skus/{id}/declaration_profiles", s.authenticated(read(s, cfg.CAT.ListDeclarationProfiles, okView[catapi.DeclarationProfileList])))
 	mux.Handle("GET /api/brant/v1/cat/items/{id}", s.authenticated(read(s, cfg.CAT.GetItem, okView[catapi.ItemView])))
 	mux.Handle("GET /api/brant/v1/cat/sample_approvals/{id}", s.authenticated(read(s, cfg.CAT.GetSampleApproval, okView[catapi.SampleApprovalView])))
+	mux.Handle("GET /api/brant/v1/inq/rfqs", s.authenticated(s.listRfqs))
 	mux.Handle("GET /api/brant/v1/inq/rfqs/{id}", s.authenticated(read(s, cfg.INQ.GetRfq, rfqView)))
 	mux.Handle("GET /api/brant/v1/pol/configs/{kind}/{id}", s.authenticated(s.configRead))
 	mux.Handle("GET /api/brant/v1/pol/snapshots/{id}", s.authenticated(read(s, cfg.POL.GetSnapshot, snapshotView)))
