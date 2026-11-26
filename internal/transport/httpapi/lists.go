@@ -6,7 +6,9 @@ import (
 	"slices"
 	"strconv"
 
+	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
+	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	tskapi "go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -68,9 +70,12 @@ type listRoute struct {
 }
 
 var listRoutes = map[string]listRoute{
-	"/api/brant/v1/inq/rfqs":   {filters: []string{"status", "customer_id"}, page: reflect.TypeFor[inqapi.RfqPage]()},
-	"/api/brant/v1/trd/quotes": {filters: []string{"status", "customer_id", "rfq_id"}, flags: []string{"awaiting_response"}, page: reflect.TypeFor[trdapi.QuotePage]()},
-	"/api/brant/v1/trd/orders": {filters: []string{"status", "quote_id"}, flags: []string{"open_review"}, page: reflect.TypeFor[trdapi.OrderPage]()},
+	"/api/brant/v1/pty/parties":  {filters: []string{"status", "role", "q"}, page: reflect.TypeFor[ptyapi.PartyPage]()},
+	"/api/brant/v1/pty/contacts": {filters: []string{"party_id", "status", "q"}, page: reflect.TypeFor[ptyapi.ContactPage]()},
+	"/api/brant/v1/cat/skus":     {filters: []string{"status", "q"}, page: reflect.TypeFor[catapi.SkuPage]()},
+	"/api/brant/v1/inq/rfqs":     {filters: []string{"status", "customer_id"}, page: reflect.TypeFor[inqapi.RfqPage]()},
+	"/api/brant/v1/trd/quotes":   {filters: []string{"status", "customer_id", "rfq_id"}, flags: []string{"awaiting_response"}, page: reflect.TypeFor[trdapi.QuotePage]()},
+	"/api/brant/v1/trd/orders":   {filters: []string{"status", "quote_id"}, flags: []string{"open_review"}, page: reflect.TypeFor[trdapi.OrderPage]()},
 	"/api/brant/v1/trd/customer_responses": {filters: []string{"quote_id", "classification"}, flags: []string{"unverified"},
 		page: reflect.TypeFor[trdapi.ResponsePage]()},
 	"/api/brant/v1/trd/rfq_coverage": {repeated: "rfq_id", max: trdapi.MaxCoverageRfqs, page: reflect.TypeFor[trdapi.RfqCoverage]()},
@@ -169,6 +174,42 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		var page tskapi.TaskPage
 		if page, err = s.cfg.TSK.ListTasks(r.Context(), tskapi.TaskQuery{Lifecycle: p["lifecycle"], ControlMode: p["control_mode"],
 			RfqID: p["rfq_id"], QuoteID: p["quote_id"], After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listParties(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listRoutes["/api/brant/v1/pty/parties"].params(r)
+	if err == nil {
+		var page ptyapi.PartyPage
+		if page, err = s.cfg.PTY.ListParties(r.Context(), ptyapi.PartyQuery{Status: p["status"], Role: p["role"], Search: p["q"], After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listContacts(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listRoutes["/api/brant/v1/pty/contacts"].params(r)
+	if err == nil {
+		var page ptyapi.ContactPage
+		if page, err = s.cfg.PTY.ListContacts(r.Context(), ptyapi.ContactQuery{PartyID: p["party_id"], Status: p["status"], Search: p["q"], After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listSkus(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listRoutes["/api/brant/v1/cat/skus"].params(r)
+	if err == nil {
+		var page catapi.SkuPage
+		if page, err = s.cfg.CAT.ListSkus(r.Context(), catapi.SkuQuery{Status: p["status"], Search: p["q"], After: p["after"], Limit: limit}); err == nil {
 			writeJSON(w, http.StatusOK, okView(page))
 			return
 		}

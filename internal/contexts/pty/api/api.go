@@ -349,6 +349,10 @@ type ContactView struct {
 type Queries interface {
 	GetParty(ctx context.Context, partyID string) (PartyView, error)
 	GetContact(ctx context.Context, contactID string) (ContactView, error)
+	// ListParties and ListContacts return a page of what the caller sees, most recently changed
+	// first, audited as party.list and contact.list (pty.read); lists.go.
+	ListParties(ctx context.Context, q PartyQuery) (PartyPage, error)
+	ListContacts(ctx context.Context, q ContactQuery) (ContactPage, error)
 	// ResolveParties answers reference lookups of downstream contexts. It needs no permission
 	// beyond an active grant; records outside the caller's data scope are absent (Python
 	// _master_ref). Ask before opening your own transaction.

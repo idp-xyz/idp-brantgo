@@ -54,6 +54,7 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandApproveSample, api.CommandApproveSample),
 		authorization.HumanOnly(api.CommandRevokeSample, api.CommandRevokeSample),
 		{Command: CommandGetSku, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListSkus, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetItem, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetSample, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetItemCodeMapping, Permission: PermissionRead, ActorKinds: anyActor},
