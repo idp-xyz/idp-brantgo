@@ -84,11 +84,14 @@ type QuotePage struct {
 
 // OrderListQuery asks for a page of orders. QuoteID narrows the list to the orders one quote was
 // converted into. After and Limit are QuoteListQuery's.
+//
+// OpenReview narrows to the orders that have a review waiting for a decision.
 type OrderListQuery struct {
-	Status  string
-	QuoteID string
-	After   string
-	Limit   int
+	Status     string
+	QuoteID    string
+	OpenReview bool
+	After      string
+	Limit      int
 }
 
 // Validate checks the closed contract.

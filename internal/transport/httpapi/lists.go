@@ -70,7 +70,7 @@ type listRoute struct {
 var listRoutes = map[string]listRoute{
 	"/api/brant/v1/inq/rfqs":   {filters: []string{"status", "customer_id"}, page: reflect.TypeFor[inqapi.RfqPage]()},
 	"/api/brant/v1/trd/quotes": {filters: []string{"status", "customer_id", "rfq_id"}, flags: []string{"awaiting_response"}, page: reflect.TypeFor[trdapi.QuotePage]()},
-	"/api/brant/v1/trd/orders": {filters: []string{"status", "quote_id"}, page: reflect.TypeFor[trdapi.OrderPage]()},
+	"/api/brant/v1/trd/orders": {filters: []string{"status", "quote_id"}, flags: []string{"open_review"}, page: reflect.TypeFor[trdapi.OrderPage]()},
 	"/api/brant/v1/trd/customer_responses": {filters: []string{"quote_id", "classification"}, flags: []string{"unverified"},
 		page: reflect.TypeFor[trdapi.ResponsePage]()},
 	"/api/brant/v1/trd/rfq_coverage": {repeated: "rfq_id", max: trdapi.MaxCoverageRfqs, page: reflect.TypeFor[trdapi.RfqCoverage]()},
@@ -148,10 +148,14 @@ func (s *server) rfqCoverage(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) listOrders(w http.ResponseWriter, r *http.Request) {
 	p, limit, err := listRoutes["/api/brant/v1/trd/orders"].params(r)
+	var open bool
+	if err == nil {
+		open, err = flag(p, "open_review")
+	}
 	if err == nil {
 		var page trdapi.OrderPage
 		if page, err = s.cfg.TRD.ListOrders(r.Context(), trdapi.OrderListQuery{Status: p["status"], QuoteID: p["quote_id"],
-			After: p["after"], Limit: limit}); err == nil {
+			OpenReview: open, After: p["after"], Limit: limit}); err == nil {
 			writeJSON(w, http.StatusOK, okView(page))
 			return
 		}

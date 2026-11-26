@@ -69,7 +69,7 @@ func (s Service) ListOrders(ctx context.Context, q api.OrderListQuery) (api.Orde
 	size, more, err := s.listRead(ctx, api.QueryOrderList, q.Validate(), q.After, q.Limit,
 		func(ctx context.Context, exec bentopg.Executor, sight postgres.Sight) (int, error) {
 			var err error
-			rows, err = postgres.ListOrders(ctx, exec, scope(ctx), q.Status, q.QuoteID, sight)
+			rows, err = postgres.ListOrders(ctx, exec, scope(ctx), q.Status, q.QuoteID, q.OpenReview, sight)
 			return len(rows), err
 		})
 	if err != nil {

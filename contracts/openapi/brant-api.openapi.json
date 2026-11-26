@@ -89673,6 +89673,17 @@
             }
           },
           {
+            "in": "query",
+            "name": "open_review",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "description": "The next of the previous page",
             "in": "query",
             "name": "after",
@@ -89802,7 +89813,7 @@
             "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
           }
         },
-        "summary": "A page of the orders the caller sees, most recently changed first (?status=, ?quote_id=, ?after=, ?limit=)",
+        "summary": "A page of the orders the caller sees, most recently changed first; open_review keeps the orders with a review waiting for a decision (?status=, ?quote_id=, ?open_review=true, ?after=, ?limit=)",
         "tags": [
           "trd"
         ]

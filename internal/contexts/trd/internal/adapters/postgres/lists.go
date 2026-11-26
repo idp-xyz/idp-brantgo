@@ -237,8 +237,8 @@ type OrderListRow struct {
 
 // ListOrders returns the orders of the scope whose quote root the caller sees, in (updated_at,
 // order_id) descending order (index sales_order_listing), without locks. status and quote narrow
-// when not empty.
-func ListOrders(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, status, quote string, s Sight) ([]OrderListRow, error) {
+// when not empty, openReview to the orders with a review waiting for a decision.
+func ListOrders(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, status, quote string, openReview bool, s Sight) ([]OrderListRow, error) {
 	var w where
 	w.add("o.tenant_id = " + w.arg(string(scope.Tenant)))
 	w.add("o.company_id = " + w.arg(string(scope.Company)))
@@ -247,6 +247,10 @@ func ListOrders(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, 
 	}
 	if quote != "" {
 		w.add("o.quote_id = " + w.arg(quote))
+	}
+	if openReview {
+		w.add(`EXISTS (SELECT 1 FROM brant_trd.sales_order_review v WHERE v.tenant_id = o.tenant_id AND v.company_id = o.company_id
+			AND v.order_id = o.order_id AND v.status = 'open')`)
 	}
 	w.sees(s, "q.owner_actor_id", "q.owner_team_id")
 	w.after(s, "o.updated_at", "o.order_id")

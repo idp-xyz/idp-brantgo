@@ -122,6 +122,7 @@ func TestWorklistRoutesRefuseMalformedQueries(t *testing.T) {
 		"/api/brant/v1/trd/customer_responses?state=unverified",
 		"/api/brant/v1/trd/rfq_coverage?rfq=rfq.1",
 		"/api/brant/v1/trd/orders?limit=0",
+		"/api/brant/v1/trd/orders?open_review=false",
 	} {
 		if a := call(t, h, "GET", target, "Bearer good", ""); a.status != 422 || a.body["code"] != "SCHEMA_INVALID" {
 			t.Fatalf("%s: %d %v", target, a.status, a.body)

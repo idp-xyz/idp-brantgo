@@ -119,6 +119,19 @@ func TestQuoteAndOrderListsFollowTheDataScope(t *testing.T) {
 	if got := orders(lead, trdapi.OrderListQuery{QuoteID: "sold", Status: "active"}).Orders; len(got) != 1 {
 		t.Fatalf("orders of the quote %+v", got)
 	}
+	// A prepared order with a review waiting for a decision is the review worklist; the activated
+	// order's review was decided, so it is not.
+	_, waiting := q.prepared("waiting")
+	requested, err := q.c.TRD.RequestOrderReview(q.author, q.requestCmd(waiting.ObjectID, waiting.RowVersion, "review.waiting"))
+	q.must(err)
+	open := orders(lead, trdapi.OrderListQuery{OpenReview: true})
+	if len(open.Orders) != 1 || open.Orders[0].OrderID != "order.waiting" || open.Orders[0].OpenReviewID != "review.waiting" ||
+		open.Orders[0].Status != "draft" || open.Orders[0].RowVersion != requested.RowVersion {
+		t.Fatalf("orders with an open review %+v", open.Orders)
+	}
+	if got := orders(lead, trdapi.OrderListQuery{OpenReview: true, Status: "active"}).Orders; len(got) != 0 {
+		t.Fatalf("active orders with an open review %+v", got)
+	}
 	if got := orders(lead, trdapi.OrderListQuery{QuoteID: "quote.draft"}).Orders; len(got) != 0 {
 		t.Fatalf("orders of a draft quote %+v", got)
 	}
@@ -127,7 +140,7 @@ func TestQuoteAndOrderListsFollowTheDataScope(t *testing.T) {
 		_, err := q.c.TRD.ListQuotes(lead, bad)
 		q.want(err, kernel.CodeSchemaInvalid)
 	}
-	_, err := q.c.TRD.ListOrders(lead, trdapi.OrderListQuery{Status: "frozen"})
+	_, err = q.c.TRD.ListOrders(lead, trdapi.OrderListQuery{Status: "frozen"})
 	q.want(err, kernel.CodeSchemaInvalid)
 	_, err = q.c.TRD.ListQuotes(q.actor("list.none"), trdapi.QuoteListQuery{})
 	q.want(err, kernel.CodePermissionDenied)

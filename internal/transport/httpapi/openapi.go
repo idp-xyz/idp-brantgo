@@ -232,7 +232,7 @@ var reads = []readRoute{
 	{"/api/brant/v1/trd/rfq_coverage", "trd.quote.rfq_coverage", "trd",
 		"Which of the named RFQs already have a live quote the caller sees (?rfq_id= once per RFQ, at most 50)", nil, false},
 	{"/api/brant/v1/trd/orders", "trd.order.list", "trd",
-		"A page of the orders the caller sees, most recently changed first (?status=, ?quote_id=, ?after=, ?limit=)", nil, false},
+		"A page of the orders the caller sees, most recently changed first; open_review keeps the orders with a review waiting for a decision (?status=, ?quote_id=, ?open_review=true, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/trd/quotes/{id}", "trd.quote.get", "trd",
 		"A quote: root versions, object control, every revision with its calculation, reviews, approvals, holds and the conversion slot", []string{"id"}, false},
 	{"/api/brant/v1/trd/quotes/{id}/active", "trd.quote.active.get", "trd", "The quote's active formal revision", []string{"id"}, false},
