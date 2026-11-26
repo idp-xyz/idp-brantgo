@@ -53,8 +53,10 @@ const (
 var codes = map[string]kernel.Category{
 	CodeBusinessKeyConflict:          kernel.CategoryConflict,
 	CodeReferenceStale:               kernel.CategoryConflict,
-	CodeIndependentReviewRequired:    kernel.CategoryInvalid, // declaration.go
-	CodeDeclarationProfileUnverified: kernel.CategoryInvalid, // declaration.go
+	CodeIndependentReviewRequired:    kernel.CategoryInvalid,  // declaration.go
+	CodeDeclarationProfileUnverified: kernel.CategoryInvalid,  // declaration.go
+	CodeSampleApprovalRequired:       kernel.CategoryInvalid,  // sample_guard.go
+	CodeSampleSpecMismatch:           kernel.CategoryConflict, // sample_guard.go
 }
 
 // Category returns the category of a code CAT declares.

@@ -48,7 +48,14 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandPublishItemCodeMapping, api.CommandPublishItemCodeMapping),
 		{Command: api.CommandSaveDeclarationProfile, Permission: api.CommandSaveDeclarationProfile, ActorKinds: humanOrAgent},
 		authorization.HumanOnly(api.CommandVerifyDeclarationProfile, api.CommandVerifyDeclarationProfile),
+		{Command: api.CommandSaveItem, Permission: api.CommandSaveItem, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandConfirmItem, api.CommandConfirmItem),
+		{Command: api.CommandSaveSample, Permission: api.CommandSaveSample, ActorKinds: humanOrAgent},
+		authorization.HumanOnly(api.CommandApproveSample, api.CommandApproveSample),
+		authorization.HumanOnly(api.CommandRevokeSample, api.CommandRevokeSample),
 		{Command: CommandGetSku, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetItem, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandGetSample, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetItemCodeMapping, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetDeclarationProfile, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandListDeclarationProfiles, Permission: PermissionRead, ActorKinds: anyActor},
@@ -61,7 +68,8 @@ func Rules() []authorization.Rule {
 // owner), so the read permission the ledger checks before a replay is their only restriction.
 func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decision, command, id string) (bool, error) {
 	switch command {
-	case api.CommandSaveItemCodeMapping, api.CommandPublishItemCodeMapping, api.CommandSaveDeclarationProfile, api.CommandVerifyDeclarationProfile:
+	case api.CommandSaveItemCodeMapping, api.CommandPublishItemCodeMapping, api.CommandSaveDeclarationProfile, api.CommandVerifyDeclarationProfile,
+		api.CommandSaveItem, api.CommandConfirmItem, api.CommandSaveSample, api.CommandApproveSample, api.CommandRevokeSample:
 		return true, nil
 	}
 	scope, _ := bento.ScopeFromContext(ctx)

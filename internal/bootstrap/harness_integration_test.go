@@ -30,6 +30,8 @@ var allPermissions = []string{
 	"service_role.verify", "trading_profile.save_draft", "trading_profile.publish",
 	"pty.read", "pty.audit",
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "item_code_mapping.save_draft", "item_code_mapping.publish",
+	"item.save_draft", "item.confirm", "sample.save_draft", "sample.approve", "sample.revoke",
+	"item.save_draft", "item.confirm", "sample.save_draft", "sample.approve", "sample.revoke",
 	"cat.read", "cat.audit",
 	"config.save_draft", "config.discard_draft", "config.publish", "config.retire", "number.issue", "foundation.snapshot",
 	// S5R-D30: publication by kind (polapi.PublishCapability).

@@ -129,6 +129,11 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 			if err = plugin.RequireActive(ctx, exec, plugin.ApparelPluginID, string(plugin.ProfileApparel), "/args/data/document_profile"); err != nil {
 				return action.Outcome{}, err
 			}
+			// SampleGuard v1 for lines that name a sample stage. SkuGuard still runs next, inside
+			// guardUpstream, and CST's guards stay after that CAT section.
+			if err = guardSampleApprovals(ctx, exec, w.Data, "/args/data"); err != nil {
+				return action.Outcome{}, err
+			}
 		}
 		if _, err = s.guardUpstream(ctx, exec, freezeGuards(w.Data, seal, f.Profile.ContentHash), now); err != nil {
 			return action.Outcome{}, err

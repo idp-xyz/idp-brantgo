@@ -156,6 +156,9 @@ type Line struct {
 	// Uncapped is an explicit decision that this line has no quantity cap (SIM-03's repeat PO).
 	// Omitted when false.
 	Uncapped bool `json:"uncapped,omitempty"`
+	// SampleStage is the apparel sample stage this line requires (proto, fit, pp_sample, shipment).
+	// Empty means the line names none, and is omitted so a default line hashes as it did.
+	SampleStage string `json:"sample_stage,omitempty"`
 }
 
 // Charge is a sales charge: a fee category, the obligation it settles (counted once), its amount in
