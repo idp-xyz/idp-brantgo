@@ -255,6 +255,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET /api/brant/v1/inq/rfqs/{id}", s.authenticated(read(s, cfg.INQ.GetRfq, rfqView)))
 	mux.Handle("GET /api/brant/v1/pol/configs/{kind}/{id}", s.authenticated(s.configRead))
 	mux.Handle("GET /api/brant/v1/pol/snapshots/{id}", s.authenticated(read(s, cfg.POL.GetSnapshot, snapshotView)))
+	mux.Handle("GET /api/brant/v1/sup/supplier_rfqs", s.authenticated(s.listSupplierRfqs))
+	mux.Handle("GET /api/brant/v1/sup/supplier_offers", s.authenticated(s.listSupplierOffers))
 	mux.Handle("GET /api/brant/v1/sup/supplier_rfqs/{id}", s.authenticated(read(s, cfg.SUP.GetSupplierRfq, okView[supapi.SupplierRfqView])))
 	for _, k := range supConditionKinds {
 		get := func(ctx context.Context, id string) (supapi.ConditionView, error) {

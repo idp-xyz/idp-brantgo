@@ -58,6 +58,8 @@ func Rules() []authorization.Rule {
 		authorization.HumanOnly(api.CommandIssueSupplierRfq, api.CommandIssueSupplierRfq),
 		authorization.HumanOnly(api.CommandCloseSupplierRfq, api.CommandCloseSupplierRfq),
 		{Command: CommandGetSupplierRfq, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListSupplierRfqs, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListOffers, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 	for _, kind := range []string{api.KindSupplierOffer, api.KindPurchaseTerms, api.KindLogisticsOffer} {

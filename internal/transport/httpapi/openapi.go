@@ -11,6 +11,7 @@ import (
 
 	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
 	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
+	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	tskapi "go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
@@ -230,6 +231,10 @@ var reads = []readRoute{
 	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
 	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
 	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
+	{"/api/brant/v1/sup/supplier_rfqs", "sup.supplier_rfq.list", "sup",
+		"A page of the supplier RFQs the caller sees, most recently changed first (?rfq_id=, ?supplier_id=, ?status=, ?after=, ?limit=)", nil, false},
+	{"/api/brant/v1/sup/supplier_offers", "sup.supplier_offer.list", "sup",
+		"A page of the supplier offers the caller sees, most recently changed first, each with its latest revision's status (?rfq_id=, ?supplier_id=, ?status=, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/sup/supplier_rfqs/{id}", "sup.supplier_rfq.get", "sup", "A supplier RFQ", []string{"id"}, false},
 	{"/api/brant/v1/sup/supplier_offers/{id}", "sup.supplier_offer.get", "sup", "A supplier offer and every revision", []string{"id"}, false},
 	{"/api/brant/v1/sup/purchase_terms/{id}", "sup.purchase_terms.get", "sup", "Purchase terms and every revision", []string{"id"}, false},
@@ -393,6 +398,8 @@ var apiViews = map[string]reflect.Type{
 	"/api/brant/v1/trd/acceptances/{id}":                          reflect.TypeFor[trdapi.AcceptanceView](),
 	"/api/brant/v1/trd/orders/{id}":                               reflect.TypeFor[trdapi.OrderView](),
 	"/api/brant/v1/trd/orders/{id}/check":                         reflect.TypeFor[trdapi.OrderCheck](),
+	"/api/brant/v1/sup/supplier_rfqs/{id}":                        reflect.TypeFor[supapi.SupplierRfqView](),
+	"/api/brant/v1/sup/supplier_offers/{id}":                      reflect.TypeFor[supapi.ConditionView](),
 	"/api/brant/v1/tsk/tasks/{id}":                                reflect.TypeFor[tskapi.TaskView](),
 	"/api/brant/v1/cnx/trade_compliance_checks/{id}":              reflect.TypeFor[cnxapi.CheckView](),
 	"/api/brant/v1/stl/customers/{id}/credit":                     reflect.TypeFor[stlapi.CustomerCreditView](),
