@@ -68,7 +68,7 @@ func Rules() []authorization.Rule {
 		{Command: CommandGetContext, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetMeasurement, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
-	}, scenarioRules()...)
+	}, append(scenarioRules(), costBOMRules()...)...)
 }
 
 // Visible reports whether d's actor sees the costing context or measurement a stored result names.
@@ -80,6 +80,10 @@ func Visible(ctx context.Context, exec bentopg.Executor, d authorization.Decisio
 	if measurementCommand(command) {
 		s, err := postgres.LoadMeasurement(ctx, exec, sc, id, postgres.NoLock)
 		return err == nil && s != nil && d.Sees(s.OwnerActor, s.OwnerTeam), err
+	}
+	if costBOMCommand(command) {
+		b, err := postgres.LoadBOM(ctx, exec, sc, id, postgres.NoLock)
+		return err == nil && b != nil && d.Sees(b.OwnerActor, b.OwnerTeam), err
 	}
 	cc, err := postgres.LoadContext(ctx, exec, sc, id, postgres.NoLock)
 	return err == nil && cc != nil && d.Sees(cc.OwnerActor, cc.OwnerTeam), err
@@ -159,6 +163,9 @@ func request(cmd api.Command) (name, key string, args any) {
 	case api.WithdrawMeasurement:
 		key, c.IdempotencyKey, c.ExpectedVersion = c.IdempotencyKey, "", 0
 		return api.CommandWithdrawMeasurement, key, c
+	}
+	if name, key, args = costBOMRequest(cmd); name != "" {
+		return name, key, args
 	}
 	return scenarioRequest(cmd)
 }

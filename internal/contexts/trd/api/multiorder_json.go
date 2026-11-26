@@ -55,6 +55,13 @@ func (d QuoteData) MarshalJSON() ([]byte, error) {
 		}
 		b = insertJSON(b, "DocumentProfile", raw)
 	}
+	if d.CostBOMRef != nil {
+		raw, err := json.Marshal(d.CostBOMRef)
+		if err != nil {
+			return nil, err
+		}
+		b = insertJSON(b, "CostBOMRef", raw)
+	}
 	return b, nil
 }
 

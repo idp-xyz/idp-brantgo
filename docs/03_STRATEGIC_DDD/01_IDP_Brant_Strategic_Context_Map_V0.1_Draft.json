@@ -469,7 +469,12 @@
         "cost_scenario.save_draft",
         "cost_scenario.evaluate",
         "cost_snapshot.freeze",
-        "costing.attest_source"
+        "costing.attest_source",
+        "cost_bom.save_draft",
+        "cost_bom.verify",
+        "cost_bom.withdraw",
+        "cost_bom.substitution.request",
+        "cost_bom.substitution.decide"
       ],
       "facts": [
         "CostingContextVerified",

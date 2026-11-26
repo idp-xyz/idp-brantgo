@@ -95,6 +95,14 @@ type SnapshotRef struct {
 	ResultHash string `json:"result_hash"`
 }
 
+// CostBOMRef cites one CST cost BOM revision (WBS S7-02). Empty hash and size skip those checks.
+type CostBOMRef struct {
+	BomID         string `json:"bom_id"`
+	Revision      int64  `json:"revision"`
+	ContentSHA256 string `json:"content_sha256,omitempty"`
+	SizeCode      string `json:"size_code,omitempty"`
+}
+
 // SkuRef is a CAT SKU at a confirmed specification revision (Context Map R14).
 type SkuRef struct {
 	SkuID        string `json:"sku_id"`
@@ -205,6 +213,8 @@ type Data struct {
 	CustomerNotes    *string      `json:"customer_notes,omitempty"`
 	Evidence         []Evidence   `json:"evidence,omitempty"`
 	LegalTerms       *Ref         `json:"legal_terms_ref,omitempty"`
+	// CostBOM cites a cost BOM. Omitted when absent, so a draft that does not cite one hashes as it did.
+	CostBOM *CostBOMRef `json:"cost_bom_ref,omitempty"`
 	// ConversionMode is how the sealed quote converts into orders (TRD-INV-024): empty or
 	// single_full is today's one full_v1 order and is omitted; multi_order opts into
 	// order.prepare_partial. Omitted from the draft hash when it is the default.

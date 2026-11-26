@@ -27,27 +27,34 @@ const (
 	// COST_SNAPSHOT_INELIGIBLE is the catalog's TRD row "快照当前不可采纳"; CST declares it for the
 	// AdoptabilityGuard's verdict a downstream context passes on.
 	CodeCostSnapshotIneligible = "COST_SNAPSHOT_INELIGIBLE"
+	// Cost BOM verdicts CostBOMGuard v1 returns (WBS S7-02).
+	CodeBOMUnverified             = "BOM_UNVERIFIED"
+	CodeBOMSizeGradeMissing       = "BOM_SIZE_GRADE_MISSING"
+	CodeBOMSubstitutionUnapproved = "BOM_SUBSTITUTION_UNAPPROVED"
 )
 
 var codes = map[string]kernel.Category{
-	CodeCalculationLimitExceeded: kernel.CategoryInvalid,
-	CodeDependencyNotSupported:   kernel.CategoryInvalid,
-	CodeUnsupportedPricingMode:   kernel.CategoryInvalid,
-	CodeFXNotApplicable:          kernel.CategoryInvalid,
-	CodeTaxTreatmentUnknown:      kernel.CategoryInvalid,
-	CodeTaxRecoveryRateInvalid:   kernel.CategoryInvalid,
-	CodeCostInputNotReady:        kernel.CategoryInvalid,
-	CodeComparisonBasisMismatch:  kernel.CategoryInvalid,
-	CodeMOQNotMet:                kernel.CategoryInvalid,
-	CodeOrderMultipleInvalid:     kernel.CategoryInvalid,
-	CodePriceTierAmbiguous:       kernel.CategoryInvalid,
-	CodeChargeDoubleCount:        kernel.CategoryInvalid,
-	CodeChargeScopeUnresolved:    kernel.CategoryInvalid,
-	CodeAllocationInvalid:        kernel.CategoryInvalid,
-	CodeMeasurementConflict:      kernel.CategoryInvalid,
-	CodeEvidenceHashMismatch:     kernel.CategoryInvalid,
-	CodeReferenceStale:           kernel.CategoryConflict,
-	CodeCostSnapshotIneligible:   kernel.CategoryInvalid,
+	CodeCalculationLimitExceeded:  kernel.CategoryInvalid,
+	CodeDependencyNotSupported:    kernel.CategoryInvalid,
+	CodeUnsupportedPricingMode:    kernel.CategoryInvalid,
+	CodeFXNotApplicable:           kernel.CategoryInvalid,
+	CodeTaxTreatmentUnknown:       kernel.CategoryInvalid,
+	CodeTaxRecoveryRateInvalid:    kernel.CategoryInvalid,
+	CodeCostInputNotReady:         kernel.CategoryInvalid,
+	CodeComparisonBasisMismatch:   kernel.CategoryInvalid,
+	CodeMOQNotMet:                 kernel.CategoryInvalid,
+	CodeOrderMultipleInvalid:      kernel.CategoryInvalid,
+	CodePriceTierAmbiguous:        kernel.CategoryInvalid,
+	CodeChargeDoubleCount:         kernel.CategoryInvalid,
+	CodeChargeScopeUnresolved:     kernel.CategoryInvalid,
+	CodeAllocationInvalid:         kernel.CategoryInvalid,
+	CodeMeasurementConflict:       kernel.CategoryInvalid,
+	CodeEvidenceHashMismatch:      kernel.CategoryInvalid,
+	CodeReferenceStale:            kernel.CategoryConflict,
+	CodeCostSnapshotIneligible:    kernel.CategoryInvalid,
+	CodeBOMUnverified:             kernel.CategoryInvalid,
+	CodeBOMSizeGradeMissing:       kernel.CategoryInvalid,
+	CodeBOMSubstitutionUnapproved: kernel.CategoryInvalid,
 }
 
 // Category returns the category of a code CST declares.

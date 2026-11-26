@@ -57,6 +57,8 @@ var freezeOptional = []struct {
 	{"ConversionMode", func(d *api.QuoteData) { d.ConversionMode = "" }},
 	// document_profile is optional: omitted, the quote stays generic (S7-01).
 	{"DocumentProfile", func(d *api.QuoteData) { d.DocumentProfile = "" }},
+	// A cost BOM citation is optional. Omitted, freeze does not call CostBOMGuard (S7-02).
+	{"CostBOMRef", func(d *api.QuoteData) { d.CostBOMRef = nil }},
 }
 
 // completeQuote has every member of QuoteData. Only presence matters to either rule: the values are
