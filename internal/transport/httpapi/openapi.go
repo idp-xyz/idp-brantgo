@@ -10,6 +10,7 @@ import (
 	"time"
 
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	tskapi "go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -143,6 +144,9 @@ func OpenAPI() ([]byte, error) {
 		}
 		if view, ok := apiViews[r.path]; ok {
 			get["responses"] = apiViewResponses(view)
+		}
+		if m, ok := memberViews[r.path]; ok {
+			get["responses"] = memberViewResponses(m.member, m.elem, m.tagged)
 		}
 		if params != nil {
 			get["parameters"] = params
@@ -378,6 +382,33 @@ var apiViews = map[string]reflect.Type{
 	"/api/brant/v1/trd/acceptances/{id}":                          reflect.TypeFor[trdapi.AcceptanceView](),
 	"/api/brant/v1/trd/orders/{id}":                               reflect.TypeFor[trdapi.OrderView](),
 	"/api/brant/v1/trd/orders/{id}/check":                         reflect.TypeFor[trdapi.OrderCheck](),
+	"/api/brant/v1/tsk/tasks/{id}":                                reflect.TypeFor[tskapi.TaskView](),
+}
+
+// memberViews are the reads that answer {"ok", "task_id", "<member>": [...]}: the list of one
+// task's actions, goal verifications or model calls. tagged says the element is an api structure
+// (written through wire) rather than a view structure with its own tags.
+var memberViews = map[string]struct {
+	member string
+	elem   reflect.Type
+	tagged bool
+}{
+	"/api/brant/v1/tsk/tasks/{id}/actions":       {"actions", reflect.TypeFor[tskapi.ActionView](), true},
+	"/api/brant/v1/tsk/tasks/{id}/verifications": {"verifications", reflect.TypeFor[tskapi.GoalVerification](), true},
+	"/api/brant/v1/ai/tasks/{id}/model_calls":    {"calls", reflect.TypeFor[callView](), false},
+}
+
+func memberViewResponses(member string, elem reflect.Type, tagged bool) map[string]any {
+	if tagged {
+		elem = taggedType(elem)
+	}
+	str := map[string]any{"type": "string", "minLength": 1}
+	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"ok", "task_id", member},
+		"properties": map[string]any{"ok": map[string]any{"type": "boolean"}, "task_id": str, member: map[string]any{"type": "array", "items": schemaOf(elem)}}}
+	out := readResponses()
+	out["200"] = map[string]any{"description": "The list as the caller may see it; empty when there is nothing.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
+	return out
 }
 
 // apiViewResponses are viewResponses for an api structure written through okView.
