@@ -30,6 +30,8 @@ var allPermissions = []string{
 	"service_role.verify", "trading_profile.save_draft", "trading_profile.publish",
 	"pty.read", "pty.audit",
 	"sku.save_draft", "sku.confirm", "sku.revise_spec", "sku.deactivate", "item_code_mapping.save_draft", "item_code_mapping.publish",
+	"item.save_draft", "item.confirm", "sample.save_draft", "sample.approve", "sample.revoke",
+	"item.save_draft", "item.confirm", "sample.save_draft", "sample.approve", "sample.revoke",
 	"cat.read", "cat.audit",
 	"config.save_draft", "config.discard_draft", "config.publish", "config.retire", "number.issue", "foundation.snapshot",
 	// S5R-D30: publication by kind (polapi.PublishCapability).
@@ -41,6 +43,7 @@ var allPermissions = []string{
 	"costing_context.save_draft", "costing_context.revise", "costing_context.discard_draft", "costing_context.verify",
 	"costing_context.withdraw", "measurement.record_verified", "measurement.supersede", "measurement.withdraw", "cst.read", "cst.audit",
 	"cost_scenario.save_draft", "cost_scenario.evaluate", "cost_snapshot.freeze", "costing.attest_source",
+	"cost_bom.save_draft", "cost_bom.verify", "cost_bom.withdraw", "cost_bom.substitution.request", "cost_bom.substitution.decide",
 	"supplier_rfq.save_draft", "supplier_rfq.record_issued", "supplier_rfq.close",
 	"supplier_offer.save_draft", "supplier_offer.revise", "supplier_offer.discard_draft", "supplier_offer.verify", "supplier_offer.withdraw",
 	"purchase_terms.save_draft", "purchase_terms.revise", "purchase_terms.discard_draft", "purchase_terms.publish", "purchase_terms.retire",

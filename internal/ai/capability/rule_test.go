@@ -499,6 +499,9 @@ func TestSchemaStatesWhatADraftNeeds(t *testing.T) {
 		strings.Contains(string(quote), "document_profile") || strings.Contains(string(quote), "DocumentProfile") {
 		t.Fatalf("a Q01 tool schema names document_profile, which would change the q01.agent bundle")
 	}
+	if strings.Contains(string(quote), "sample_stage") || strings.Contains(string(quote), "SampleStage") {
+		t.Fatalf("a Q01 tool schema names sample_stage, which would change the q01.agent bundle")
+	}
 	if got := strs(schemaAt(t, rfq)["required"]); !slices.Equal(got, []string{"RfqID"}) {
 		t.Errorf("rfq.save_draft requires %v", got)
 	}

@@ -64,6 +64,7 @@ func Rules() []authorization.Rule {
 	}
 	return append(append(rules,
 		authorization.Rule{Command: api.CommandGetTask, Permission: api.PermissionRead, ActorKinds: anyActor},
+		authorization.Rule{Command: api.CommandListTasks, Permission: api.PermissionRead, ActorKinds: anyActor},
 		authorization.Rule{Command: api.CommandClaim, Permission: api.PermissionRead, ActorKinds: []kernel.ActorKind{kernel.ActorHuman, kernel.ActorAI}},
 		authorization.Rule{Command: api.CommandAudit, Permission: api.PermissionAudit, ActorKinds: anyActor},
 		authorization.Rule{Command: api.CommandVerifications, Permission: api.PermissionRead, ActorKinds: anyActor},

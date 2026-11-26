@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-brant/internal/contexts/cst/api"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/budget"
+	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/costbom"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/costing"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/delivery"
 	"go.idp.xyz/idp-brant/internal/contexts/cst/internal/domain/measurement"
@@ -22,6 +23,7 @@ func TestRuleCodesAreTheContractsCodes(t *testing.T) {
 	maps.Copy(domain, budget.Categories)
 	maps.Copy(domain, costing.Categories)
 	maps.Copy(domain, measurement.Categories)
+	maps.Copy(domain, costbom.Categories)
 	for code, category := range domain {
 		if got, ok := api.Category(code); !ok || got != category {
 			t.Errorf("%s: api says %q (declared %v), domain says %q", code, got, ok, category)
@@ -34,7 +36,8 @@ func TestRuleCodesAreTheContractsCodes(t *testing.T) {
 // HUMAN_ACTIONS).
 func TestRulesKeepVerificationHumanOnly(t *testing.T) {
 	humanOnly := []string{api.CommandVerifyContext, api.CommandWithdrawContext, api.CommandRecordMeasurement,
-		api.CommandSupersedeMeasurement, api.CommandWithdrawMeasurement, api.CommandFreezeSnapshot, api.CommandAttestSource}
+		api.CommandSupersedeMeasurement, api.CommandWithdrawMeasurement, api.CommandFreezeSnapshot, api.CommandAttestSource,
+		api.CommandVerifyCostBOM, api.CommandWithdrawCostBOM, api.CommandDecideSubstitution}
 	seen := map[string]bool{}
 	for _, r := range Rules() {
 		seen[r.Command] = true

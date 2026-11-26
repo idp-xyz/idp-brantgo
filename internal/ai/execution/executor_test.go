@@ -37,6 +37,9 @@ func newFake(quote string, epoch int64) *fakeTSK {
 func (f *fakeTSK) GetTask(context.Context, string) (tskapi.TaskView, error) {
 	return tskapi.TaskView{}, nil
 }
+func (f *fakeTSK) ListTasks(context.Context, tskapi.TaskQuery) (tskapi.TaskPage, error) {
+	return tskapi.TaskPage{}, nil
+}
 func (f *fakeTSK) Audit(context.Context) ([]kernel.AuditEntry, error)  { return nil, nil }
 func (f *fakeTSK) Claim(context.Context, string) (tskapi.Claim, error) { return f.claim, f.claimErr }
 func (f *fakeTSK) TaskActions(context.Context, string) ([]tskapi.ActionView, error) {

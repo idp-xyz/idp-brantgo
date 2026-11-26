@@ -32,7 +32,8 @@ func readRules() []authorization.Rule {
 	var out []authorization.Rule
 	for _, q := range []string{api.QueryQuoteReady, api.QueryQuoteHistory, api.QueryApprovalHistory, api.QueryDocumentHistory,
 		api.QueryCommitHistory, api.QueryOutboxHistory, api.QueryDispatchPreflight, api.QueryDispatchTarget, api.QueryGoalReadiness,
-		api.QueryPriceProposal} {
+		api.QueryPriceProposal, api.QueryQuoteList, api.QueryOrderList, api.QueryResponseList,
+		api.QueryRfqCoverage} {
 		out = append(out, authorization.Rule{Command: q, Permission: PermissionRead, ActorKinds: anyActor})
 	}
 	return out

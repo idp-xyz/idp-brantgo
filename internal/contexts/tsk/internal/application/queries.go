@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"slices"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -112,4 +113,46 @@ func view(t *task.Task, history []task.Change) api.TaskView {
 		v.History = append(v.History, tv)
 	}
 	return v
+}
+
+// ListTasks returns a page of the tasks the caller sees, most recently changed first, audited as
+// task.list. The data scope is applied in the query itself, so a page never spends its limit on
+// tasks the caller does not see. A query that fails validation is refused and audited.
+func (s Service) ListTasks(ctx context.Context, q api.TaskQuery) (api.TaskPage, error) {
+	if err := q.Validate(); err != nil {
+		if rej, ok := kernel.AsRejection(err); ok {
+			if aerr := s.Ledger.AuditRejected(ctx, api.CommandListTasks, "", rej.Code); aerr != nil {
+				return api.TaskPage{}, errors.Join(err, aerr)
+			}
+		}
+		return api.TaskPage{}, err
+	}
+	after, _ := kernel.ListPosition(q.After, q.Limit) // Validate accepted it
+	size := kernel.ListSize(q.Limit)
+	out := api.TaskPage{Tasks: []api.TaskSummary{}}
+	err := s.Ledger.Read(ctx, api.CommandListTasks, "", func(ctx context.Context, exec bentopg.Executor, d authorization.Decision) error {
+		rows, err := postgres.List(ctx, exec, scope(ctx), postgres.ListFilter{Lifecycle: q.Lifecycle, ControlMode: q.ControlMode,
+			RfqID: q.RfqID, QuoteID: q.QuoteID, DataScope: string(d.DataScope), ActorID: d.Actor.ID, Team: d.Team, After: after, Limit: size + 1})
+		if err != nil {
+			return err
+		}
+		if len(rows) > size {
+			rows = rows[:size]
+			out.Next = kernel.ListCursor{At: rows[size-1].UpdatedAt, ID: rows[size-1].ID}.String()
+		}
+		for _, r := range rows {
+			t := api.TaskSummary{TaskID: r.ID, GoalCode: r.GoalCode, Lifecycle: r.Lifecycle, ControlMode: r.ControlMode, TaskVersion: r.TaskVersion,
+				OwnerID: r.Owner, AgentID: r.Agent, TargetRfqID: r.TargetRfq, TargetQuoteID: r.TargetQuote, BoundQuoteID: r.BoundQuote,
+				WaitKind: r.WaitKind, UpdatedAt: r.UpdatedAt}
+			if r.Deadline != nil {
+				t.Deadline = *r.Deadline
+			}
+			out.Tasks = append(out.Tasks, t)
+		}
+		return nil
+	})
+	if err != nil {
+		return api.TaskPage{}, err
+	}
+	return out, nil
 }

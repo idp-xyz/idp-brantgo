@@ -258,8 +258,13 @@
           "identity": "(tenant, item_id)",
           "concurrency": "待详细设计",
           "invariants": [],
-          "commands": [],
-          "events": [],
+          "commands": [
+            "item.save_draft",
+            "item.confirm"
+          ],
+          "events": [
+            "ItemConfirmed"
+          ],
           "goPackage": "internal/contexts/cat/internal/domain/item",
           "pythonSource": "—（Python 未实现）",
           "notes": "商品身份；SKU 为可交易规格。轮廓聚合，待详细设计。"
@@ -275,10 +280,13 @@
           "concurrency": "待详细设计",
           "invariants": [],
           "commands": [
-            "sample.approve"
+            "sample.save_draft",
+            "sample.approve",
+            "sample.revoke"
           ],
           "events": [
-            "SampleApproved"
+            "SampleApproved",
+            "SampleRevoked"
           ],
           "goPackage": "internal/contexts/cat/internal/domain/sampleapproval",
           "pythonSource": "—（Python 未实现）",
@@ -10055,8 +10063,10 @@
     "party_screening.decide",
     "sku.confirm",
     "sku.deactivate",
+    "item.confirm",
     "item_code_mapping.publish",
     "sample.approve",
+    "sample.revoke",
     "declaration_profile.verify",
     "config.publish",
     "config.retire",
@@ -10076,6 +10086,9 @@
     "measurement.record_verified",
     "cost_snapshot.freeze",
     "costing.attest_source",
+    "cost_bom.verify",
+    "cost_bom.withdraw",
+    "cost_bom.substitution.decide",
     "quote.freeze",
     "quote.submit_review",
     "quote.review.decide",

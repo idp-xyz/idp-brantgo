@@ -46,6 +46,8 @@ var (
 
 	// S5-16: the snapshot's components by cost category for FUL (R78).
 	_ api.ComponentLookups = (*Module)(nil)
+
+	_ api.CostBOMCommands = (*Module)(nil)
 )
 
 // New wires CST to db, a transaction owner that belongs to CST alone, and to the lookups of its

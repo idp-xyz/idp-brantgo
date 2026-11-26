@@ -3,20 +3,21 @@ package capability
 import "slices"
 
 // humanOnly is the tactical model's humanOnlyCommands (docs/05_TACTICAL_DDD/02_IDP_Brant_Tactical_DDD_
-// Candidate_V0.1.json, 131 entries, sorted), the single source of the commands only a human may issue
+// Candidate_V0.1.json, 136 entries, sorted), the single source of the commands only a human may issue
 // (UL-INV-17, X-INV-002). TestHumanOnlyListIsTheTacticalModels keeps it in step with the archive.
 var humanOnly = []string{
 	"acceptance.invalidate", "acceptance.mark_disputed", "ai.approval_grant.issue", "ai.approval_grant.revoke",
 	"ai.delegation.grant", "ai.delegation.revoke", "allocation_review.settle", "application.apply",
 	"application.unapply", "certificate.register", "charge.confirm", "claim.close",
 	"commercial_release.grant_exception", "config.discard_draft", "config.publish", "config.retire",
-	"contact.confirm", "cost_snapshot.freeze", "costing.attest_source", "costing_context.verify",
+	"contact.confirm", "cost_bom.substitution.decide", "cost_bom.verify", "cost_bom.withdraw",
+	"cost_snapshot.freeze", "costing.attest_source", "costing_context.verify",
 	"costing_context.withdraw", "credit.confirm", "credit_exception.decide", "credit_limit.publish",
 	"declaration_case.confirm", "declaration_case.record_receipt", "declaration_case.record_submission",
 	"declaration_profile.discard_draft", "declaration_profile.verify", "disposition.decide",
 	"document_release.record", "export_license.register", "export_license.release",
 	"external_reconciliation.resolve", "fund.record", "fund.resolve_difference", "fund.reverse",
-	"fund.verify_payer", "item_code_mapping.publish", "logistics_offer.verify", "logistics_offer.withdraw",
+	"fund.verify_payer", "item.confirm", "item_code_mapping.publish", "logistics_offer.verify", "logistics_offer.withdraw",
 	"measurement.record_verified", "measurement.supersede", "measurement.withdraw", "mfg.module.configure",
 	"object_control.release", "object_control.stop", "opening_balance.record", "order.activate",
 	"order.amendment.apply", "order.amendment.decide", "order.amendment.submit", "order.amendment.withdraw",
@@ -32,7 +33,7 @@ var humanOnly = []string{
 	"purchase_terms.retire", "quality_release.grant", "quality_release.revoke", "quote.activate",
 	"quote.approval.revoke", "quote.cancel", "quote.freeze", "quote.replace", "quote.response.verify",
 	"quote.review.decide", "quote.submit_review", "quote.withdraw", "remedy.decide", "rfq.cancel", "rfq.close",
-	"rfq.confirm_scope", "sample.approve", "service_role.verify", "settlement.confirm", "settlement.reverse",
+	"rfq.confirm_scope", "sample.approve", "sample.revoke", "service_role.verify", "settlement.confirm", "settlement.reverse",
 	"shipment.confirm", "shipment_document.issue", "shipment_document.record_signed", "shipment_review.settle",
 	"sku.confirm", "sku.deactivate", "stk.module.configure", "stock.adjust", "stock.issue", "stock.receive",
 	"subcontract_order.issue", "supplier_delivery.verify", "supplier_offer.verify", "supplier_offer.withdraw",

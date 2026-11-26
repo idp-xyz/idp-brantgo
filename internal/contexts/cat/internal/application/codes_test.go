@@ -52,7 +52,8 @@ func TestRulesKeepConfirmationAndPublicationHumanOnly(t *testing.T) {
 	for _, r := range Rules() {
 		human := len(r.ActorKinds) == 1 && r.ActorKinds[0] == kernel.ActorHuman
 		switch r.Command {
-		case api.CommandConfirmSku, api.CommandDeactivateSku, api.CommandPublishItemCodeMapping, api.CommandVerifyDeclarationProfile:
+		case api.CommandConfirmSku, api.CommandDeactivateSku, api.CommandPublishItemCodeMapping, api.CommandVerifyDeclarationProfile,
+			api.CommandConfirmItem, api.CommandApproveSample, api.CommandRevokeSample:
 			if !human {
 				t.Errorf("%s must be human only", r.Command)
 			}

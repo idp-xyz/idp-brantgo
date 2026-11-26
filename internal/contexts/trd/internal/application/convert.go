@@ -83,6 +83,9 @@ func quoteData(a api.QuoteData) quote.Data {
 	if r := a.CostSnapshotRef; r != nil {
 		d.Snapshot = &quote.SnapshotRef{SnapshotID: r.SnapshotID, ResultHash: r.ResultHash}
 	}
+	if r := a.CostBOMRef; r != nil {
+		d.CostBOM = &quote.CostBOMRef{BomID: r.BomID, Revision: r.Revision, ContentSHA256: r.ContentSHA256, SizeCode: r.SizeCode}
+	}
 	if r := a.NamedPlaceRef; r != nil {
 		p := business(*r)
 		d.NamedPlace = &p
@@ -100,7 +103,7 @@ func quoteData(a api.QuoteData) quote.Data {
 		d.Lines = append(d.Lines, quote.Line{LineID: l.LineID, RfqLineID: l.RfqLineID, Sku: quote.SkuRef{SkuID: l.Sku.SkuID,
 			SpecRevision: l.Sku.SpecRevision}, Quantity: l.Quantity, Unit: ref(l.UnitRef), Conversion: optRef(l.ConversionRef),
 			BaseQuantity: l.BaseQuantity, UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
-			TaxApplication: ref(l.TaxApplicationRef), Evidence: evidence(l.Evidence)})
+			TaxApplication: ref(l.TaxApplicationRef), Evidence: evidence(l.Evidence), SampleStage: l.SampleStage})
 	}
 	for _, c := range a.Charges {
 		d.Charges = append(d.Charges, quote.Charge{ChargeID: c.ChargeID, FeeCategory: ref(c.FeeCategoryRef), ObligationKey: c.ObligationKey,
@@ -158,6 +161,9 @@ func apiData(d quote.Data) api.QuoteData {
 	if r := d.Snapshot; r != nil {
 		a.CostSnapshotRef = &api.CostSnapshotRef{SnapshotID: r.SnapshotID, ResultHash: r.ResultHash}
 	}
+	if r := d.CostBOM; r != nil {
+		a.CostBOMRef = &api.CostBOMRef{BomID: r.BomID, Revision: r.Revision, ContentSHA256: r.ContentSHA256, SizeCode: r.SizeCode}
+	}
 	if r := d.NamedPlace; r != nil {
 		p := apiBusiness(*r)
 		a.NamedPlaceRef = &p
@@ -170,7 +176,7 @@ func apiData(d quote.Data) api.QuoteData {
 		a.Lines = append(a.Lines, api.Line{LineID: l.LineID, RfqLineID: l.RfqLineID, Sku: api.SkuRef{SkuID: l.Sku.SkuID,
 			SpecRevision: l.Sku.SpecRevision}, Quantity: l.Quantity, UnitRef: apiRef(l.Unit), ConversionRef: optAPIRef(l.Conversion),
 			BaseQuantity: l.BaseQuantity, UnitPrice: l.UnitPrice, PriceBasisQuantity: l.PriceBasisQuantity, DiscountRatio: l.DiscountRatio,
-			TaxApplicationRef: apiRef(l.TaxApplication), Evidence: apiEvidence(l.Evidence)})
+			TaxApplicationRef: apiRef(l.TaxApplication), Evidence: apiEvidence(l.Evidence), SampleStage: l.SampleStage})
 	}
 	for _, c := range d.Charges {
 		a.Charges = append(a.Charges, api.Charge{ChargeID: c.ChargeID, FeeCategoryRef: apiRef(c.FeeCategory), ObligationKey: c.ObligationKey,

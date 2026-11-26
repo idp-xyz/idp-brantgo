@@ -42,6 +42,12 @@ func Load(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id str
 		string(scope.Tenant), string(scope.Company), id))
 }
 
+// LoadShare locks the SKU FOR SHARE. Callers lock their own aggregate root FOR UPDATE first.
+func LoadShare(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, id string) (*sku.Sku, error) {
+	return scan(exec.QueryRow(ctx, `SELECT `+columns+` FROM brant_cat.sku WHERE tenant_id = $1 AND company_id = $2 AND sku_id = $3 FOR SHARE`,
+		string(scope.Tenant), string(scope.Company), id))
+}
+
 // Skus returns the SKUs among ids, without locks.
 func Skus(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, ids []string) ([]*sku.Sku, error) {
 	rows, err := exec.Query(ctx, `SELECT `+columns+` FROM brant_cat.sku WHERE tenant_id = $1 AND company_id = $2 AND sku_id = ANY ($3)`,

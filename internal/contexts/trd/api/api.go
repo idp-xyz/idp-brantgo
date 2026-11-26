@@ -262,6 +262,9 @@ type Line struct {
 	// request hash when they are set.
 	MaxOrderQuantity string `json:"-" contract:"decimal=quantity,positive"`
 	Uncapped         *bool  `json:"-"`
+	// SampleStage names the apparel sample stage this line requires. Empty names none.
+	// json:"-" and ai:"-" keep it out of the Q01 tool schema. HTTP still accepts sample_stage.
+	SampleStage string `json:"-" ai:"-" contract:"enum=proto|fit|pp_sample|shipment"`
 }
 
 // Charge is a sales charge {charge_id, fee_category_ref (fee_category, sales_charge side),
@@ -321,6 +324,17 @@ type QuoteData struct {
 	// DocumentProfile is generic or apparel. Empty is generic. json:"-" keeps it out of the Q01
 	// tool schema; MarshalJSON records apparel in the request hash.
 	DocumentProfile string `json:"-" contract:"enum=generic|apparel" ai:"-"`
+	// CostBOMRef cites a CST cost BOM. json:"-" and ai:"-" keep it out of the Q01 tool schema.
+	// MarshalJSON records it in the request hash only when it is set.
+	CostBOMRef *CostBOMRef `json:"-" ai:"-"`
+}
+
+// CostBOMRef cites one cost BOM revision. An empty hash or size skips that guard check.
+type CostBOMRef struct {
+	BomID         string `contract:"required,id"`
+	Revision      int64  `contract:"required,min=1"`
+	ContentSHA256 string `contract:"hash"`
+	SizeCode      string `contract:"id"`
 }
 
 // SaveDraft creates a quote root with working revision 1 at ExpectedVersion 0, or replaces the
@@ -534,6 +548,18 @@ func (d QuoteData) conversionRules(path string) error {
 	default:
 		return schema(path + "/document_profile")
 	}
+	if r := d.CostBOMRef; r != nil {
+		switch {
+		case !kernel.ValidIdentifier(r.BomID):
+			return schema(path + "/cost_bom_ref/bom_id")
+		case r.Revision < 1:
+			return schema(path + "/cost_bom_ref/revision")
+		case r.ContentSHA256 != "" && !hash64.MatchString(r.ContentSHA256):
+			return schema(path + "/cost_bom_ref/content_sha256")
+		case r.SizeCode != "" && !kernel.ValidIdentifier(r.SizeCode):
+			return schema(path + "/cost_bom_ref/size_code")
+		}
+	}
 	for i, l := range d.Lines {
 		if l.MaxOrderQuantity != "" && !decimal(l.MaxOrderQuantity, kernel.QuantityFormat, true) {
 			return schema(index(path+"/lines", i) + "/max_order_quantity")
@@ -585,6 +611,11 @@ func lines(ls []Line, path string) error {
 		}
 		if err := evidence(l.Evidence, p+"/evidence"); err != nil {
 			return err
+		}
+		switch l.SampleStage {
+		case "", "proto", "fit", "pp_sample", "shipment":
+		default:
+			return schema(p + "/sample_stage")
 		}
 	}
 	return nil
@@ -702,6 +733,18 @@ type Commands interface {
 
 // Queries is TRD's audited read side.
 type Queries interface {
+	// ListQuotes returns a page of the quotes the caller sees, most recently changed first,
+	// audited as quote.list (trd.read); lists.go.
+	ListQuotes(ctx context.Context, q QuoteListQuery) (QuotePage, error)
+	// ListOrders returns a page of the orders the caller sees, most recently changed first,
+	// audited as order.list (trd.read); lists.go.
+	ListOrders(ctx context.Context, q OrderListQuery) (OrderPage, error)
+	// ListResponses returns a page of the customer responses the caller sees, most recently
+	// recorded first, audited as quote.response.list (trd.read); lists.go.
+	ListResponses(ctx context.Context, q ResponseListQuery) (ResponsePage, error)
+	// RfqCoverage says which of the asked RFQs have a live quote the caller sees, audited as
+	// quote.rfq_coverage (trd.read); lists.go.
+	RfqCoverage(ctx context.Context, q RfqCoverageQuery) (RfqCoverage, error)
 	// GetQuote returns a quote root the caller sees with all its revisions, reviews and approvals,
 	// audited as quote.get (trd.read). A frozen revision's commercial document is checked against
 	// its business hash (BUSINESS_HASH_MISMATCH for a corrupt one).

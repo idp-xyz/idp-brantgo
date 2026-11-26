@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
+	"go.idp.xyz/idp-brant/internal/kernel"
 )
 
 // OpenAPIPath is where the generated candidate OpenAPI 3.1 document is kept.
@@ -117,6 +118,25 @@ func OpenAPI() ([]byte, error) {
 		for _, p := range readTextQuery[r.path] {
 			params = append(params, map[string]any{"name": p.name, "in": "query", "required": p.required, "schema": map[string]any{"type": "string", "minLength": 1}})
 		}
+		if l, ok := listRoutes[r.path]; ok {
+			for _, f := range l.filters {
+				params = append(params, map[string]any{"name": f, "in": "query", "required": false, "schema": map[string]any{"type": "string", "minLength": 1}})
+			}
+			for _, f := range l.flags {
+				params = append(params, map[string]any{"name": f, "in": "query", "required": false, "schema": map[string]any{"type": "string", "enum": []string{"true"}}})
+			}
+			if l.repeated != "" {
+				params = append(params, map[string]any{"name": l.repeated, "in": "query", "required": true, "style": "form", "explode": true,
+					"schema": map[string]any{"type": "array", "minItems": 1, "maxItems": l.max, "items": map[string]any{"type": "string", "minLength": 1}}})
+			} else {
+				params = append(params,
+					map[string]any{"name": "after", "in": "query", "required": false, "schema": map[string]any{"type": "string", "minLength": 1},
+						"description": "The next of the previous page"},
+					map[string]any{"name": "limit", "in": "query", "required": false,
+						"schema": map[string]any{"type": "integer", "minimum": 1, "maximum": kernel.MaxListPage, "default": kernel.DefaultListPage}})
+			}
+			get["responses"] = listResponses(l.page)
+		}
 		if params != nil {
 			get["parameters"] = params
 		}
@@ -182,6 +202,12 @@ var reads = []readRoute{
 		"A declaration profile: its SKU specification revision and code table version, every revision with its classification parts and verification", []string{"id"}, false},
 	{"/api/brant/v1/cat/skus/{id}/declaration_profiles", "cat.declaration_profile.list", "cat",
 		"The declaration profiles kept for a SKU, by specification revision and code table version", []string{"id"}, false},
+	{"/api/brant/v1/cat/items/{id}", "cat.item.get", "cat",
+		"A style, its color and size matrix and the technical parameters of each revision, including measured", []string{"id"}, false},
+	{"/api/brant/v1/cat/sample_approvals/{id}", "cat.sample_approval.get", "cat",
+		"A sample approval, the specification revision it binds, and its revocation history", []string{"id"}, false},
+	{"/api/brant/v1/inq/rfqs", "inq.rfq.list", "inq",
+		"A page of the customer RFQs the caller sees, most recently changed first (?status=, ?customer_id=, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
 	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
 	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
@@ -199,6 +225,14 @@ var reads = []readRoute{
 	{"/api/brant/v1/cst/cost_snapshots/{id}/adoptability", "cst.cost_snapshot.query", "cst",
 		"Whether the snapshot may be adopted now, as AdoptabilityGuard v1 decides it (Python snapshot_query)", []string{"id"}, false},
 	{"/api/brant/v1/cst/source_attestations/{id}", "cst.source_attestation.get", "cst", "A source attestation or denial", []string{"id"}, false},
+	{"/api/brant/v1/trd/quotes", "trd.quote.list", "trd",
+		"A page of the quotes the caller sees, most recently changed first; status, customer and RFQ are those of the latest revision; awaiting_response keeps the quotes whose active revision has no customer response (?status=, ?customer_id=, ?rfq_id=, ?awaiting_response=true, ?after=, ?limit=)", nil, false},
+	{"/api/brant/v1/trd/customer_responses", "trd.customer_response.list", "trd",
+		"A page of the recorded customer responses the caller sees, most recently recorded first, without what the customer wrote (?quote_id=, ?classification=, ?unverified=true, ?after=, ?limit=)", nil, false},
+	{"/api/brant/v1/trd/rfq_coverage", "trd.quote.rfq_coverage", "trd",
+		"Which of the named RFQs already have a live quote the caller sees (?rfq_id= once per RFQ, at most 50)", nil, false},
+	{"/api/brant/v1/trd/orders", "trd.order.list", "trd",
+		"A page of the orders the caller sees, most recently changed first; open_review keeps the orders with a review waiting for a decision (?status=, ?quote_id=, ?open_review=true, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/trd/quotes/{id}", "trd.quote.get", "trd",
 		"A quote: root versions, object control, every revision with its calculation, reviews, approvals, holds and the conversion slot", []string{"id"}, false},
 	{"/api/brant/v1/trd/quotes/{id}/active", "trd.quote.active.get", "trd", "The quote's active formal revision", []string{"id"}, false},
@@ -315,6 +349,19 @@ func reconcileResponses() map[string]any {
 		"content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/Reconciliation"}}}}
 	out["400"] = commandResponses()["400"]
 	out["413"] = commandResponses()["413"]
+	return out
+}
+
+// listResponses are a list read's responses: the page as it is written (okView), so the 200
+// response has a schema. Members with no value are omitted; an empty page is {"ok": true}.
+func listResponses(page reflect.Type) map[string]any {
+	schema := schemaOf(taggedType(page))
+	schema["properties"].(map[string]any)["ok"] = map[string]any{"type": "boolean"}
+	schema["required"] = []string{"ok"}
+	out := readResponses()
+	delete(out, "404")
+	out["200"] = map[string]any{"description": "A page of the objects the caller sees; next is absent on the last page.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
 	return out
 }
 

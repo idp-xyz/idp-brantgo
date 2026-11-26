@@ -23,6 +23,13 @@ func (l Line) MarshalJSON() ([]byte, error) {
 	if l.Uncapped != nil && *l.Uncapped {
 		b = insertJSON(b, "Uncapped", []byte("true"))
 	}
+	if l.SampleStage != "" {
+		raw, err := json.Marshal(l.SampleStage)
+		if err != nil {
+			return nil, err
+		}
+		b = insertJSON(b, "SampleStage", raw)
+	}
 	return b, nil
 }
 
@@ -47,6 +54,13 @@ func (d QuoteData) MarshalJSON() ([]byte, error) {
 			return nil, err
 		}
 		b = insertJSON(b, "DocumentProfile", raw)
+	}
+	if d.CostBOMRef != nil {
+		raw, err := json.Marshal(d.CostBOMRef)
+		if err != nil {
+			return nil, err
+		}
+		b = insertJSON(b, "CostBOMRef", raw)
 	}
 	return b, nil
 }

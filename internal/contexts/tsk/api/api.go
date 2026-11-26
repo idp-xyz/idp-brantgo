@@ -944,6 +944,9 @@ type Queries interface {
 	// NOT_FOUND otherwise. The owner and the owner's team (by data scope), the initiator and the
 	// task's AI agent see it.
 	GetTask(ctx context.Context, taskID string) (TaskView, error)
+	// ListTasks returns a page of the tasks the caller sees, most recently changed first, audited
+	// as task.list (tsk.read); list.go.
+	ListTasks(ctx context.Context, q TaskQuery) (TaskPage, error)
 	// Claim issues the claim of a task step to the caller, audited as task.claim (tsk.read; human
 	// or AI): NOT_FOUND for a task the caller does not see; INVALID_STATE while the task is stopping
 	// or has ended (Q01 V0.1 tests/test_execution.py::test_terminal_task_rejects_new_forward_action);

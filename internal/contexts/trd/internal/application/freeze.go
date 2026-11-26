@@ -124,13 +124,26 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 				return action.Outcome{}, plugin.ProfileMismatch("/args/data/document_profile")
 			}
 		}
+		guards := freezeGuards(w.Data, seal, f.Profile.ContentHash)
 		if profile == plugin.ProfileApparel {
 			// After the quote root FOR UPDATE and the authority guard FOR SHARE, before CAT/CST/INQ/POL/PTY.
 			if err = plugin.RequireActive(ctx, exec, plugin.ApparelPluginID, string(plugin.ProfileApparel), "/args/data/document_profile"); err != nil {
 				return action.Outcome{}, err
 			}
+			// SampleGuard v1 for lines that name a sample stage. SkuGuard still runs next, inside
+			// guardUpstream, and CST's guards stay after that CAT section.
+			if err = guardSampleApprovals(ctx, exec, w.Data, "/args/data"); err != nil {
+				return action.Outcome{}, err
+			}
+			// CostBOMGuard v1 is bound here; its FOR SHARE lock runs inside guardUpstream, after CAT
+			// SkuGuard and CST AdoptabilityGuard.
+			bindCostBOMGuard(&guards, w.Data.CostBOM)
+		} else if err = refuseApparelCitations(w.Data, "/args/data"); err != nil {
+			// Only an apparel freeze runs SampleGuard and CostBOMGuard. Another profile that carried
+			// these citations would seal them unchecked, so it is refused.
+			return action.Outcome{}, err
 		}
-		if _, err = s.guardUpstream(ctx, exec, freezeGuards(w.Data, seal, f.Profile.ContentHash), now); err != nil {
+		if _, err = s.guardUpstream(ctx, exec, guards, now); err != nil {
 			return action.Outcome{}, err
 		}
 		if _, err = h.q.Freeze(cmd.WorkingRevision, seal, d.Actor, d.Epoch, now); err != nil {
@@ -189,6 +202,9 @@ type guarded struct {
 	// legal is where refusals of the legal terms the freeze adopted from the issuer's default point
 	// (quote/legal.go): the draft names none, so they are refused at its issuer_ref; "" otherwise.
 	legal string
+	// costBOM is set by quote.freeze when an apparel draft cites a cost BOM. guardUpstream locks it
+	// FOR SHARE after CAT's SkuGuard and CST's AdoptabilityGuard.
+	costBOM *quote.CostBOMRef
 	// notify is the notify party an order's revision binds (S5R-D40), guarded with the addresses at
 	// notifyPath; nil for none (a quote binds none).
 	notify     *ptyapi.AddressRoleRef
@@ -288,6 +304,12 @@ func (s Service) checkUpstream(ctx context.Context, exec bentopg.Executor, g gua
 	}
 	if err = lapsed(adoptable.Check(p+"/cost_snapshot_ref"), adoptable.Input); err != nil {
 		return none, err
+	}
+	// CST CostBOMGuard v1, after AdoptabilityGuard, when the apparel draft cites a BOM.
+	if g.costBOM != nil {
+		if err = guardCostBOM(ctx, exec, *g.costBOM, p+"/cost_bom_ref"); err != nil {
+			return none, err
+		}
 	}
 	// INQ (R12): RfqGuard v1 on the RFQ at its row version with its line set.
 	rfq := inqapi.RfqBinding{RfqID: g.rfq.ID, RowVersion: g.rfq.Version, LinesHash: g.rfq.ContentHash}

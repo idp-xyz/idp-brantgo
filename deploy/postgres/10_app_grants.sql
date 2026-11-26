@@ -97,6 +97,26 @@ GRANT UPDATE (root_version, last_revision, updated_at) ON brant_cat.declaration_
 GRANT UPDATE (status, content, content_hash, saved_by_kind, saved_by_id, saved_epoch, saved_at, verified_by_kind, verified_by_id,
               verify_epoch, verified_at, evidence_ids, superseded_at)
     ON brant_cat.declaration_profile_revision TO brant_app;
+-- CAT styles: the root version grows; a draft revision and its matrix change; confirming and
+-- superseding are the only writes to a revision that is no longer a draft.
+GRANT SELECT, INSERT ON brant_cat.item, brant_cat.item_revision, brant_cat.item_sku_variant TO brant_app;
+GRANT UPDATE (root_version, last_revision, current_revision, updated_at) ON brant_cat.item TO brant_app;
+GRANT UPDATE (status, content_hash, fabric_composition, fabric_spec, fabric_width_cm, fabric_width_unit, fabric_width_measured,
+              fabric_width_source, fabric_gsm, fabric_gsm_unit, fabric_gsm_measured, fabric_gsm_source, warp_shrinkage_pct,
+              warp_shrinkage_unit, warp_shrinkage_measured, warp_shrinkage_source, weft_shrinkage_pct, weft_shrinkage_unit,
+              weft_shrinkage_measured, weft_shrinkage_source, dye_lot_policy, size_chart_evidence_id, saved_by_kind, saved_by_id,
+              saved_epoch, saved_at, confirmed_by_kind, confirmed_by_id, confirm_epoch, confirmed_at, evidence_ids, superseded_at)
+    ON brant_cat.item_revision TO brant_app;
+GRANT DELETE ON brant_cat.item_sku_variant TO brant_app;
+-- CAT sample approvals: the root version and status change; a draft revision is edited; approving,
+-- superseding and revoking are the later writes. SampleGuard v1 is called by downstream transactions.
+GRANT SELECT, INSERT ON brant_cat.sample_approval, brant_cat.sample_approval_revision TO brant_app;
+GRANT UPDATE (status, root_version, last_revision, current_revision, updated_at) ON brant_cat.sample_approval TO brant_app;
+GRANT UPDATE (status, spec_revision, tech_pack_sha256, evidence_ids, saved_by_kind, saved_by_id, saved_epoch, saved_at,
+              approved_by_kind, approved_by_id, approve_epoch, approved_at, revoke_reason, revoked_by_kind, revoked_by_id,
+              revoke_epoch, revoked_at, superseded_at)
+    ON brant_cat.sample_approval_revision TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cat.guard_sample_approved_v1(text, bigint, text) TO brant_app;
 
 -- POL: a root's version and a working revision change; a published revision changes only its status and
 -- end (trigger); counters count up; issued numbers, snapshots and the ledger only grow.
@@ -153,6 +173,19 @@ GRANT UPDATE (snapshot_id) ON brant_cst.cost_snapshot TO brant_app;
 GRANT UPDATE (root_version, status, denial_id, denied_at, updated_at) ON brant_cst.source_standing TO brant_app;
 -- AdoptabilityGuard v1: downstream contexts call it in their own transactions with their own executors.
 GRANT EXECUTE ON FUNCTION brant_cst.guard_cost_snapshot_adoptable_v1(text, text, timestamptz) TO brant_app;
+-- Cost BOMs (S7-02). A draft's lines are replaced; a sealed revision is only promoted, superseded
+-- or withdrawn. A substitution is inserted requested and updated once to a decision.
+GRANT SELECT, INSERT ON brant_cst.cost_bom, brant_cst.cost_bom_revision, brant_cst.cost_bom_line,
+    brant_cst.cost_bom_size_grade, brant_cst.cost_bom_surcharge, brant_cst.cost_bom_substitution TO brant_app;
+GRANT UPDATE (root_version, last_revision, active_revision, status, document_profile, base_size_code, item_id, sku_id, spec_revision, updated_at)
+    ON brant_cst.cost_bom TO brant_app;
+GRANT UPDATE (status, content_sha256, contributors, saved_by_kind, saved_by_id, saved_epoch, saved_at, verified_by_kind, verified_by_id,
+    verify_epoch, verified_at, superseded_at, ended_by_kind, ended_by_id, end_epoch, ended_at, end_reason)
+    ON brant_cst.cost_bom_revision TO brant_app;
+GRANT DELETE ON brant_cst.cost_bom_line, brant_cst.cost_bom_size_grade, brant_cst.cost_bom_surcharge TO brant_app;
+GRANT UPDATE (status, decided_by_kind, decided_by_id, decided_at, authority_epoch, decided_revision)
+    ON brant_cst.cost_bom_substitution TO brant_app;
+GRANT EXECUTE ON FUNCTION brant_cst.guard_cost_bom_current_v1(text, bigint, text, text, text) TO brant_app;
 
 -- SUP: a supplier RFQ's draft is replaced whole, an issued one is only closed (trigger). A supply
 -- condition's root moves its version; a draft revision is edited, sealed or discarded, a sealed one

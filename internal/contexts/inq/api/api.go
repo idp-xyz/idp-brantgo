@@ -489,9 +489,57 @@ type RfqView struct {
 	Corrections []Correction
 }
 
+// RfqQuery asks for a page of the RFQs the caller sees, most recently changed first
+// (kernel.ListCursor). Status and CustomerID narrow the list when set. After is the Next of the
+// previous page, empty for the first. Limit is 0 (kernel.DefaultListPage) to kernel.MaxListPage.
+type RfqQuery struct {
+	Status     string
+	CustomerID string
+	After      string
+	Limit      int
+}
+
+// RfqStatuses are the statuses an RfqQuery may name.
+var RfqStatuses = []string{"draft", "ready", "cancelled", "closed"}
+
+// Validate checks the closed contract.
+func (q RfqQuery) Validate() error {
+	switch {
+	case q.Status != "" && !slices.Contains(RfqStatuses, q.Status):
+		return schema("/status")
+	case q.CustomerID != "" && !kernel.ValidIdentifier(q.CustomerID):
+		return schema("/customer_id")
+	}
+	if _, field := kernel.ListPosition(q.After, q.Limit); field != "" {
+		return schema("/" + field)
+	}
+	return nil
+}
+
+// RfqSummary is one RFQ of a list: what a worklist shows before the RFQ is opened. Unresolved is
+// the number of fields still to be resolved before the scope can be confirmed.
+type RfqSummary struct {
+	RfqID           string
+	Status          string
+	RowVersion      int64
+	CustomerID      string
+	ContactID       string
+	DocumentProfile string
+	Unresolved      int
+	OwnerActorID    string
+	UpdatedAt       time.Time
+}
+
+// RfqPage is a page of an RfqQuery. Next is the After of the following page, empty on the last.
+type RfqPage struct {
+	Rfqs []RfqSummary
+	Next string
+}
+
 // Queries is INQ's read side.
 type Queries interface {
 	GetRfq(ctx context.Context, rfqID string) (RfqView, error)
+	ListRfqs(ctx context.Context, q RfqQuery) (RfqPage, error)
 	Audit(ctx context.Context) ([]kernel.AuditEntry, error)
 }
 
