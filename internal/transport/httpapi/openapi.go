@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	cnxapi "go.idp.xyz/idp-brant/internal/contexts/cnx/api"
+	stlapi "go.idp.xyz/idp-brant/internal/contexts/stl/api"
+	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
+	tskapi "go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/foundation/strictjson"
 	"go.idp.xyz/idp-brant/internal/kernel"
 )
@@ -136,6 +140,15 @@ func OpenAPI() ([]byte, error) {
 						"schema": map[string]any{"type": "integer", "minimum": 1, "maximum": kernel.MaxListPage, "default": kernel.DefaultListPage}})
 			}
 			get["responses"] = listResponses(l.page)
+		}
+		if view, ok := readViews[r.path]; ok {
+			get["responses"] = viewResponses(view)
+		}
+		if view, ok := apiViews[r.path]; ok {
+			get["responses"] = apiViewResponses(view)
+		}
+		if m, ok := memberViews[r.path]; ok {
+			get["responses"] = memberViewResponses(m.owner, m.member, m.elem, m.tagged)
 		}
 		if params != nil {
 			get["parameters"] = params
@@ -349,6 +362,81 @@ func reconcileResponses() map[string]any {
 		"content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/Reconciliation"}}}}
 	out["400"] = commandResponses()["400"]
 	out["413"] = commandResponses()["413"]
+	return out
+}
+
+// readViews are the reads whose 200 response the document describes with a schema: the view
+// structure the handler writes. A read that is not here answers "the object as the caller may
+// see it" without one; add a read when a client is built against it.
+var readViews = map[string]reflect.Type{
+	"/api/brant/v1/inq/rfqs/{id}":    reflect.TypeFor[rfqJSON](),
+	"/api/brant/v1/evd/sources/{id}": reflect.TypeFor[sourceJSON](),
+}
+
+// apiViews are the reads that write an api structure through okView: its tagged form with "ok".
+var apiViews = map[string]reflect.Type{
+	"/api/brant/v1/trd/quotes/{id}":                               reflect.TypeFor[trdapi.QuoteView](),
+	"/api/brant/v1/trd/quotes/{id}/ready":                         reflect.TypeFor[trdapi.QuoteReadiness](),
+	"/api/brant/v1/trd/quotes/{id}/history":                       reflect.TypeFor[trdapi.QuoteHistoryPage](),
+	"/api/brant/v1/trd/quotes/{id}/approvals":                     reflect.TypeFor[trdapi.ApprovalHistoryPage](),
+	"/api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check": reflect.TypeFor[trdapi.ApprovalCheck](),
+	"/api/brant/v1/trd/customer_responses/{id}":                   reflect.TypeFor[trdapi.CustomerResponseView](),
+	"/api/brant/v1/trd/acceptances/{id}":                          reflect.TypeFor[trdapi.AcceptanceView](),
+	"/api/brant/v1/trd/orders/{id}":                               reflect.TypeFor[trdapi.OrderView](),
+	"/api/brant/v1/trd/orders/{id}/check":                         reflect.TypeFor[trdapi.OrderCheck](),
+	"/api/brant/v1/tsk/tasks/{id}":                                reflect.TypeFor[tskapi.TaskView](),
+	"/api/brant/v1/cnx/trade_compliance_checks/{id}":              reflect.TypeFor[cnxapi.CheckView](),
+	"/api/brant/v1/stl/customers/{id}/credit":                     reflect.TypeFor[stlapi.CustomerCreditView](),
+	"/api/brant/v1/stl/credit_reservations/{id}":                  reflect.TypeFor[stlapi.ReservationView](),
+}
+
+// memberViews are the reads that answer {"ok", "<owner>": "<id>", "<member>": [...]}: the list of
+// one task's actions, goal verifications or model calls, or of one order's trade compliance
+// checks. tagged says the element is an api structure (written through wire) rather than a view
+// structure with its own tags.
+var memberViews = map[string]struct {
+	owner, member string
+	elem          reflect.Type
+	tagged        bool
+}{
+	"/api/brant/v1/tsk/tasks/{id}/actions":           {"task_id", "actions", reflect.TypeFor[tskapi.ActionView](), true},
+	"/api/brant/v1/tsk/tasks/{id}/verifications":     {"task_id", "verifications", reflect.TypeFor[tskapi.GoalVerification](), true},
+	"/api/brant/v1/ai/tasks/{id}/model_calls":        {"task_id", "calls", reflect.TypeFor[callView](), false},
+	"/api/brant/v1/cnx/orders/{id}/trade_compliance": {"order_id", "checks", reflect.TypeFor[cnxapi.CheckSummary](), true},
+}
+
+func memberViewResponses(owner, member string, elem reflect.Type, tagged bool) map[string]any {
+	if tagged {
+		elem = taggedType(elem)
+	}
+	str := map[string]any{"type": "string", "minLength": 1}
+	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"ok", owner, member},
+		"properties": map[string]any{"ok": map[string]any{"type": "boolean"}, owner: str, member: map[string]any{"type": "array", "items": schemaOf(elem)}}}
+	out := readResponses()
+	out["200"] = map[string]any{"description": "The list as the caller may see it; empty when there is nothing.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
+	return out
+}
+
+// apiViewResponses are viewResponses for an api structure written through okView.
+func apiViewResponses(view reflect.Type) map[string]any {
+	schema := schemaOf(taggedType(view))
+	schema["properties"].(map[string]any)["ok"] = map[string]any{"type": "boolean"}
+	schema["required"] = []string{"ok"}
+	out := readResponses()
+	out["200"] = map[string]any{"description": "The object as the caller may see it.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
+	return out
+}
+
+// viewResponses are the responses of a read by ID whose view has a schema. Members with no value
+// are omitted, so only "ok" is required.
+func viewResponses(view reflect.Type) map[string]any {
+	schema := schemaOf(view)
+	schema["required"] = []string{"ok"}
+	out := readResponses()
+	out["200"] = map[string]any{"description": "The object as the caller may see it.",
+		"content": map[string]any{"application/json": map[string]any{"schema": schema}}}
 	return out
 }
 

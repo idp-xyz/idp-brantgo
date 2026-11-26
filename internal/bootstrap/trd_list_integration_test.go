@@ -227,6 +227,17 @@ func TestWorklistQueriesOfQuotesResponsesAndRfqs(t *testing.T) {
 		t.Fatalf("unverified after the cancellation %v", got)
 	}
 
+	// A second full acceptance of a revision that already has a valid acceptance can never be
+	// verified (ACCEPTANCE_ALREADY_EXISTS), so it is not in the worklist.
+	done := q.getQuote("quote.done")
+	_, err = q.c.TRD.RecordResponse(q.author, q.full("response.again", "quote.done", 1, done.Revisions[0].BusinessHash))
+	q.must(err)
+	if got := responses(lead, trdapi.ResponseListQuery{Unverified: true}); len(got) != 0 {
+		t.Fatalf("unverified with a reply to an accepted revision %v", got)
+	}
+	_, err = q.c.TRD.VerifyResponse(q.reviewer, q.verification("response.again", "acceptance.again", 1, done.Revisions[0].BusinessHash))
+	q.want(err, trdapi.CodeAcceptanceAlreadyExists)
+
 	cover, err := q.c.TRD.RfqCoverage(lead, trdapi.RfqCoverageQuery{RfqIDs: []string{"rfq.none", "rfq.1"}})
 	q.must(err)
 	if len(cover.Covered) != 1 || cover.Covered[0].RfqID != "rfq.1" || cover.Covered[0].Quotes != 3 {

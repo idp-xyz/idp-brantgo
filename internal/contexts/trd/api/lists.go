@@ -135,7 +135,8 @@ var ResponseClassifications = []string{"full_unconditional", "conditional", "par
 // A response never changes, so its position in the list does not either. QuoteID and
 // Classification narrow; Unverified narrows to the responses quote.response.verify can still
 // take: full_unconditional, answering the revision that is active now, with no acceptance made
-// from them. After and Limit are QuoteListQuery's.
+// from them, and whose revision has no valid or disputed acceptance from another reply. After and
+// Limit are QuoteListQuery's.
 type ResponseListQuery struct {
 	QuoteID        string
 	Classification string
