@@ -58,6 +58,7 @@ func Rules() []authorization.Rule {
 		{Command: api.CommandCaptureSnapshot, Permission: api.CommandCaptureSnapshot, ActorKinds: humanOrAgent},
 		{Command: CommandGetConfig, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandLookupConfig, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListConfigs, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetSnapshot, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 		{Command: CommandReadSensitive, Permission: PermissionReadSensitive, ActorKinds: humanOrProcess},

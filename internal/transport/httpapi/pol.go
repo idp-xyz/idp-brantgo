@@ -14,6 +14,7 @@ import (
 type POL interface {
 	polapi.Commands
 	polapi.Queries
+	polapi.ListQueries
 	polapi.Auditor
 }
 
@@ -202,4 +203,20 @@ func (s *server) configRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, configView(v))
+}
+
+func (s *server) listConfigs(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listRoutes["/api/brant/v1/pol/configs/{kind}"].params(r)
+	var active bool
+	if err == nil {
+		active, err = flag(p, "active")
+	}
+	if err == nil {
+		var page polapi.ConfigPage
+		if page, err = s.cfg.POL.ListConfigs(r.Context(), polapi.ConfigQuery{Kind: r.PathValue("kind"), Search: p["q"], Active: active, After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
 }

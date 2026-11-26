@@ -8,6 +8,7 @@ import (
 
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
+	polapi "go.idp.xyz/idp-brant/internal/contexts/pol/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
 	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
@@ -74,6 +75,7 @@ var listRoutes = map[string]listRoute{
 	"/api/brant/v1/pty/parties":         {filters: []string{"status", "role", "q"}, page: reflect.TypeFor[ptyapi.PartyPage]()},
 	"/api/brant/v1/pty/contacts":        {filters: []string{"party_id", "status", "q"}, page: reflect.TypeFor[ptyapi.ContactPage]()},
 	"/api/brant/v1/cat/skus":            {filters: []string{"status", "q"}, page: reflect.TypeFor[catapi.SkuPage]()},
+	"/api/brant/v1/pol/configs/{kind}":  {filters: []string{"q"}, flags: []string{"active"}, page: reflect.TypeFor[polapi.ConfigPage]()},
 	"/api/brant/v1/sup/supplier_rfqs":   {filters: []string{"rfq_id", "supplier_id", "status"}, page: reflect.TypeFor[supapi.SupplierRfqPage]()},
 	"/api/brant/v1/sup/supplier_offers": {filters: []string{"rfq_id", "supplier_id", "status"}, page: reflect.TypeFor[supapi.OfferPage]()},
 	"/api/brant/v1/inq/rfqs":            {filters: []string{"status", "customer_id"}, page: reflect.TypeFor[inqapi.RfqPage]()},
