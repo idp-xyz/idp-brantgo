@@ -185,7 +185,8 @@ type ResponseListRow struct {
 // ListResponses returns the customer responses of the scope whose quote root the caller sees, in
 // (recorded_at, response_id) descending order (index customer_response_listing), without locks.
 // unverified narrows to the responses quote.response.verify can still take: full_unconditional,
-// answering the revision that is active now, with no acceptance made from them.
+// answering the revision that is active now, with no acceptance made from them, and whose
+// revision has no valid or disputed acceptance from another reply.
 func ListResponses(ctx context.Context, exec bentopg.Executor, scope kernel.Scope, quote, classification string, unverified bool, s Sight) ([]ResponseListRow, error) {
 	const verified = `EXISTS (SELECT 1 FROM brant_trd.acceptance x WHERE x.tenant_id = c.tenant_id AND x.company_id = c.company_id
 			AND x.response_id = c.response_id)`
@@ -203,6 +204,10 @@ func ListResponses(ctx context.Context, exec bentopg.Executor, scope kernel.Scop
 		w.add("NOT " + verified)
 		w.add(`EXISTS (SELECT 1 FROM brant_trd.quote_revision a WHERE a.tenant_id = c.tenant_id AND a.company_id = c.company_id
 			AND a.quote_id = c.quote_id AND a.revision = c.revision AND a.status = 'active')`)
+		// A revision takes one live acceptance (index acceptance_valid_revision, and a disputed one
+		// still stands in its way): once it has one, its other replies can no longer be verified.
+		w.add(`NOT EXISTS (SELECT 1 FROM brant_trd.acceptance x WHERE x.tenant_id = c.tenant_id AND x.company_id = c.company_id
+			AND x.quote_id = c.quote_id AND x.revision = c.revision AND x.effectivity IN ('valid', 'disputed'))`)
 	}
 	w.sees(s, "q.owner_actor_id", "q.owner_team_id")
 	w.after(s, "c.recorded_at", "c.response_id")

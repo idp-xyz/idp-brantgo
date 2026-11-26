@@ -74174,6 +74174,201 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "acceptance_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "arrival_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "arrival_basis": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "business_hash": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "business_revision": {
+                      "type": "integer"
+                    },
+                    "contact_ref": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contact_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "row_version": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "customer_ref": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "party_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "effectivity": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "effectivity_version": {
+                      "type": "integer"
+                    },
+                    "expires_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "formation_basis": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "formation_rule": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "formed": {
+                      "type": "boolean"
+                    },
+                    "history": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "changed_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "changed_by": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "effectivity": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "effectivity_version": {
+                            "type": "integer"
+                          },
+                          "evidence": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "locator": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "source_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "reason": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "line_ids": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "number": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "quote_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "response_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "source_ref": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "locator": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "source_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "verified_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "verified_by": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": "The object as the caller may see it."
           },
           "401": {
@@ -90013,6 +90208,308 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "acceptances": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "acceptance_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "arrival_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "arrival_basis": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "business_hash": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "business_revision": {
+                            "type": "integer"
+                          },
+                          "contact_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contact_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "row_version": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "customer_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "party_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "effectivity": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "effectivity_version": {
+                            "type": "integer"
+                          },
+                          "expires_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "formation_basis": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "formation_rule": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "formed": {
+                            "type": "boolean"
+                          },
+                          "history": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "changed_at": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "changed_by": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "effectivity": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "effectivity_version": {
+                                  "type": "integer"
+                                },
+                                "evidence": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "locator": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "source_id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "line_ids": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "number": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "quote_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "response_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "source_ref": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "locator": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "source_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "verified_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "verified_by": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "business_hash": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "business_revision": {
+                      "type": "integer"
+                    },
+                    "classification": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "customer_po_number": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "locator": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "source_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "expires_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "late": {
+                      "type": "boolean"
+                    },
+                    "number": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "quote_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "received_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "received_at_basis": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "recorded_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "recorded_by": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    "response_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "source_ref": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "locator": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "source_id": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "summary": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": "The object as the caller may see it."
           },
           "401": {

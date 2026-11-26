@@ -374,6 +374,8 @@ var apiViews = map[string]reflect.Type{
 	"/api/brant/v1/trd/quotes/{id}/history":                       reflect.TypeFor[trdapi.QuoteHistoryPage](),
 	"/api/brant/v1/trd/quotes/{id}/approvals":                     reflect.TypeFor[trdapi.ApprovalHistoryPage](),
 	"/api/brant/v1/trd/quotes/{id}/approvals/{approval_id}/check": reflect.TypeFor[trdapi.ApprovalCheck](),
+	"/api/brant/v1/trd/customer_responses/{id}":                   reflect.TypeFor[trdapi.CustomerResponseView](),
+	"/api/brant/v1/trd/acceptances/{id}":                          reflect.TypeFor[trdapi.AcceptanceView](),
 }
 
 // apiViewResponses are viewResponses for an api structure written through okView.
