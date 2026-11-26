@@ -75,3 +75,19 @@ func ListPosition(after string, limit int) (pos *ListCursor, field string) {
 	}
 	return &c, ""
 }
+
+// MaxSearchText is the most characters a list query's search text holds.
+const MaxSearchText = 64
+
+// ValidSearchText reports whether s can be a list query's search text: 1 to MaxSearchText
+// characters, none of them a control character, with something other than space.
+func ValidSearchText(s string) bool {
+	n := 0
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+		n++
+	}
+	return n >= 1 && n <= MaxSearchText && strings.TrimSpace(s) != ""
+}

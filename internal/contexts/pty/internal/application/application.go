@@ -70,6 +70,8 @@ func Rules() []authorization.Rule {
 		{Command: CommandScreeningsDue, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetParty, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandGetContact, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListParties, Permission: PermissionRead, ActorKinds: anyActor},
+		{Command: CommandListContacts, Permission: PermissionRead, ActorKinds: anyActor},
 		{Command: CommandAudit, Permission: PermissionAudit, ActorKinds: anyActor},
 	}
 }

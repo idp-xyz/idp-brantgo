@@ -185,6 +185,9 @@ type SkuView struct {
 // Queries is CAT's read side.
 type Queries interface {
 	GetSku(ctx context.Context, skuID string) (SkuView, error)
+	// ListSkus returns a page of the SKUs the caller sees, most recently changed first, audited
+	// as sku.list (cat.read); lists.go.
+	ListSkus(ctx context.Context, q SkuQuery) (SkuPage, error)
 	// ResolveSkus answers reference lookups of downstream contexts; SKUs outside the caller's data
 	// scope are absent. Ask before opening your own transaction.
 	ResolveSkus(ctx context.Context, ids []string) (map[string]SkuRef, error)
