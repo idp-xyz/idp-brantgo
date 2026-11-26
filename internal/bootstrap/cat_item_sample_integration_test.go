@@ -5,6 +5,7 @@ package bootstrap_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"go.idp.xyz/idp-brant/internal/bootstrap"
@@ -88,6 +89,12 @@ func TestItemMatrixAndSampleGuard(t *testing.T) {
 	if _, err = w.c.CAT.GetItem(other, "item.1"); code(err) != kernel.CodeNotFound {
 		t.Fatalf("other company sees the style: %v", err)
 	}
+	// Row-level security itself: a bare count as the application role in another company's scope.
+	for _, table := range []string{"brant_cat.item", "brant_cat.item_revision", "brant_cat.item_sku_variant"} {
+		if a, b := w.count("company.A", table), w.count("company.B", table); a == 0 || b != 0 {
+			t.Fatalf("%s: company.A sees %d rows, company.B sees %d", table, a, b)
+		}
+	}
 
 	pack := strings.Repeat("ab", 32)
 	draft, err := w.c.CAT.SaveSample(ai, catapi.SaveSample{IdempotencyKey: w.key(), SampleApprovalID: "sample.1", SkuID: "sku.red.s",
@@ -109,6 +116,11 @@ func TestItemMatrixAndSampleGuard(t *testing.T) {
 	approved, err := w.c.CAT.ApproveSample(inspector, catapi.ApproveSample{IdempotencyKey: w.key(), SampleApprovalID: "sample.1",
 		ExpectedVersion: draft.RowVersion, Revision: 1, EvidenceIDs: []string{"src.1"}})
 	w.must(err)
+	for _, table := range []string{"brant_cat.sample_approval", "brant_cat.sample_approval_revision"} {
+		if a, b := w.count("company.A", table), w.count("company.B", table); a == 0 || b != 0 {
+			t.Fatalf("%s: company.A sees %d rows, company.B sees %d", table, a, b)
+		}
+	}
 	bound := catapi.SampleRef{SkuID: "sku.red.s", SpecRevision: 1, Stage: catapi.StagePPSample}
 	if got := code(w.sampleGuard("company.A", bound).Check("/stage")); got != "OK" {
 		t.Fatalf("bound spec: %s", got)
@@ -170,10 +182,76 @@ func TestApparelFreezeRequiresTheNamedSample(t *testing.T) {
 	saved, err := q.c.CAT.SaveSample(q.author, catapi.SaveSample{IdempotencyKey: q.key(), SampleApprovalID: "sample.pp",
 		SkuID: "sku.1", SpecRevision: q.spec, SampleStage: catapi.StagePPSample, TechPackSHA256: pack, EvidenceIDs: []string{"evidence"}})
 	q.must(err)
-	_, err = q.c.CAT.ApproveSample(q.reviewer, catapi.ApproveSample{IdempotencyKey: q.key(), SampleApprovalID: "sample.pp",
+	approved, err := q.c.CAT.ApproveSample(q.reviewer, catapi.ApproveSample{IdempotencyKey: q.key(), SampleApprovalID: "sample.pp",
 		ExpectedVersion: saved.RowVersion, Revision: 1, EvidenceIDs: []string{"evidence"}})
 	q.must(err)
 	if _, err = q.freezeQuote(q.author, "quote.apparel", 1, 1); err != nil {
 		t.Fatalf("freeze after approval: %v", err)
+	}
+
+	// An apparel quote that names no stage freezes without an approval.
+	plain, err := q.saveQuote(q.author, "quote.apparel.plain", 0, q.apparelData())
+	q.must(err)
+	if _, err = q.freezeQuote(q.author, "quote.apparel.plain", plain.RowVersion, 1); err != nil {
+		t.Fatalf("apparel quote that names no stage: %v", err)
+	}
+
+	// After the approval is revoked a new quote that names the stage does not freeze.
+	_, err = q.c.CAT.RevokeSample(q.reviewer, catapi.RevokeSample{IdempotencyKey: q.key(), SampleApprovalID: "sample.pp",
+		ExpectedVersion: approved.RowVersion, Reason: "面料变更"})
+	q.must(err)
+	again, err := q.saveQuote(q.author, "quote.apparel.revoked", 0, d)
+	q.must(err)
+	_, err = q.freezeQuote(q.author, "quote.apparel.revoked", again.RowVersion, 1)
+	q.want(err, catapi.CodeSampleApprovalRequired)
+
+	// A generic quote that names a stage is refused: nothing would check it.
+	g := q.data()
+	g.Lines[0].SampleStage = catapi.StagePPSample
+	named, err := q.saveQuote(q.author, "quote.generic.stage", 0, g)
+	q.must(err)
+	_, err = q.freezeQuote(q.author, "quote.generic.stage", named.RowVersion, 1)
+	q.want(err, plugin.CodeDocumentProfileMismatch)
+}
+
+// Two inspectors approve the same sample draft at once: one approval, one version conflict.
+func TestTwoConcurrentSampleApprovalsHaveOneWinner(t *testing.T) {
+	w := newWorld(t)
+	editor := w.companyHuman("company.A", "editor")
+	w.source(editor, "src.1", "text")
+	w.sku(editor, "sku.race", true, "src.1")
+	draft, err := w.c.CAT.SaveSample(editor, catapi.SaveSample{IdempotencyKey: w.key(), SampleApprovalID: "sample.race", SkuID: "sku.race",
+		SpecRevision: 1, SampleStage: catapi.StagePPSample, TechPackSHA256: strings.Repeat("ab", 32), EvidenceIDs: []string{"src.1"}})
+	w.must(err)
+	ctxs := []context.Context{w.companyHuman("company.A", "inspector.a"), w.companyHuman("company.A", "inspector.b")}
+	errs := make([]error, len(ctxs))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range ctxs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, errs[i] = w.c.CAT.ApproveSample(ctxs[i], catapi.ApproveSample{IdempotencyKey: w.key(), SampleApprovalID: "sample.race",
+				ExpectedVersion: draft.RowVersion, Revision: 1, EvidenceIDs: []string{"src.1"}})
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	wins := 0
+	for _, err := range errs {
+		switch code(err) {
+		case "OK":
+			wins++
+		case kernel.CodeVersionConflict:
+		default:
+			t.Fatalf("concurrent approve: %v", err)
+		}
+	}
+	if wins != 1 {
+		t.Fatalf("winners %d, errors %v", wins, errs)
+	}
+	if got := code(w.sampleGuard("company.A", catapi.SampleRef{SkuID: "sku.race", SpecRevision: 1, Stage: catapi.StagePPSample}).Check("/stage")); got != "OK" {
+		t.Fatalf("guard after the race: %s", got)
 	}
 }

@@ -138,6 +138,10 @@ func (s Service) Freeze(ctx context.Context, cmd api.Freeze) (api.FreezeReceipt,
 			// CostBOMGuard v1 is bound here; its FOR SHARE lock runs inside guardUpstream, after CAT
 			// SkuGuard and CST AdoptabilityGuard.
 			bindCostBOMGuard(&guards, w.Data.CostBOM)
+		} else if err = refuseApparelCitations(w.Data, "/args/data"); err != nil {
+			// Only an apparel freeze runs SampleGuard and CostBOMGuard. Another profile that carried
+			// these citations would seal them unchecked, so it is refused.
+			return action.Outcome{}, err
 		}
 		if _, err = s.guardUpstream(ctx, exec, guards, now); err != nil {
 			return action.Outcome{}, err

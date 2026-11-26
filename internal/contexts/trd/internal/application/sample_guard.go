@@ -9,6 +9,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	"go.idp.xyz/idp-brant/internal/contexts/trd/internal/domain/quote"
+	"go.idp.xyz/idp-brant/internal/foundation/plugin"
 )
 
 // guardSampleApprovals calls CAT's SampleGuard v1 for every line of an apparel quote that names a sample
@@ -40,6 +41,20 @@ func guardSampleApprovals(ctx context.Context, exec bentopg.Executor, d quote.Da
 		}
 		if err = v.Check(fmt.Sprintf("%s/lines/%d/sample_stage", prefix, row.index)); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// refuseApparelCitations refuses a quote of another document profile that names a sample stage or
+// cites a cost BOM: only the apparel freeze checks them (SampleGuard v1, CostBOMGuard v1).
+func refuseApparelCitations(d quote.Data, path string) error {
+	if d.CostBOM != nil {
+		return plugin.ProfileMismatch(path + "/cost_bom_ref")
+	}
+	for i, l := range d.Lines {
+		if l.SampleStage != "" {
+			return plugin.ProfileMismatch(fmt.Sprintf("%s/lines/%d/sample_stage", path, i))
 		}
 	}
 	return nil

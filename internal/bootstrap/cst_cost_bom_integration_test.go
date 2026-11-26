@@ -4,6 +4,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -21,7 +22,10 @@ import (
 
 func TestCostBOMGuardVerificationSizeGradeAndSubstitution(t *testing.T) {
 	w := newWorld(t)
-	drafter := w.actor("bom.drafter", cstapi.CommandSaveCostBOM, cstapi.CommandVerifyCostBOM, cstapi.CommandRequestSubstitution, "cst.read")
+	// The drafter holds verify and decide too, so the refusals below are the separation-of-duty rules
+	// and not a missing permission.
+	drafter := w.actor("bom.drafter", cstapi.CommandSaveCostBOM, cstapi.CommandVerifyCostBOM, cstapi.CommandRequestSubstitution,
+		cstapi.CommandDecideSubstitution, "cst.read")
 	checker := w.provision(bootstrap.Grant{Scope: w.scope("company.A"), Actor: kernel.ActorRef{Kind: kernel.ActorHuman, ID: "bom.checker"},
 		Permissions: []string{cstapi.CommandVerifyCostBOM, cstapi.CommandWithdrawCostBOM, cstapi.CommandDecideSubstitution, "cst.read"},
 		DataScope:   "company"})
@@ -96,6 +100,9 @@ func TestCostBOMGuardVerificationSizeGradeAndSubstitution(t *testing.T) {
 
 	_, err = w.c.CST.RequestSubstitution(drafter, substitution("bom.size", "sub.1", sized.RowVersion+1))
 	w.must(err)
+	if got := code(w.costBOMGuard("company.A", cstapi.CostBOMRef{BomID: "bom.size", Revision: 1, SizeCode: "S"}).Check("/bom")); got != cstapi.CodeBOMSubstitutionUnapproved {
+		t.Fatalf("a pending substitution left the BOM adoptable: %s", got)
+	}
 	_, err = w.c.CST.DecideSubstitution(drafter, cstapi.DecideSubstitution{IdempotencyKey: w.key(), BomID: "bom.size", ExpectedVersion: sized.RowVersion + 2,
 		SubstitutionID: "sub.1", Decision: cstapi.DecisionApprove})
 	w.want(err, kernel.CodePermissionDenied)
@@ -105,14 +112,42 @@ func TestCostBOMGuardVerificationSizeGradeAndSubstitution(t *testing.T) {
 	if decided.Status != "approved" {
 		t.Fatalf("decision %s", decided.Status)
 	}
-	if err = w.exec("company.A", `UPDATE brant_cst.cost_bom_substitution SET reason = 'changed' WHERE substitution_id = 'sub.1'`); err == nil {
-		t.Fatal("a decided substitution row was updated")
+	// status is a column the application role may update, so this refusal is the trigger's.
+	err = w.exec("company.A", `UPDATE brant_cst.cost_bom_substitution SET status = 'rejected' WHERE substitution_id = 'sub.1'`)
+	if err == nil || !strings.Contains(err.Error(), "a decided substitution does not change") {
+		t.Fatalf("a decided substitution row was updated, or refused for another reason: %v", err)
 	}
 	if code(w.costBOMGuard("company.A", cstapi.CostBOMRef{BomID: "bom.size", Revision: 1, SizeCode: "S"}).Check("/bom")) != cstapi.CodeBOMUnverified {
 		t.Fatal("superseded revision stayed adoptable")
 	}
 	if err = w.costBOMGuard("company.A", cstapi.CostBOMRef{BomID: "bom.size", Revision: 2, SizeCode: "S"}).Check("/bom"); err != nil {
 		t.Fatalf("approved revision: %v", err)
+	}
+	named := cstapi.CostBOMRef{BomID: "bom.size", Revision: 2, SizeCode: "S", SubstitutionID: "sub.1"}
+	if err = w.costBOMGuard("company.A", named).Check("/bom"); err != nil {
+		t.Fatalf("the approved substitution, named: %v", err)
+	}
+	named.SubstitutionID = "sub.none"
+	if got := code(w.costBOMGuard("company.A", named).Check("/bom")); got != cstapi.CodeBOMSubstitutionUnapproved {
+		t.Fatalf("a substitution that was never approved: %s", got)
+	}
+
+	// A rejected request stops blocking and leaves the revision as it was.
+	second := substitution("bom.size", "sub.2", decided.RowVersion)
+	second.OriginalMaterialCode, second.SubstituteMaterialCode = "FAB.2", "FAB.3"
+	_, err = w.c.CST.RequestSubstitution(drafter, second)
+	w.must(err)
+	if got := code(w.costBOMGuard("company.A", cstapi.CostBOMRef{BomID: "bom.size", Revision: 2, SizeCode: "S"}).Check("/bom")); got != cstapi.CodeBOMSubstitutionUnapproved {
+		t.Fatalf("a second pending substitution left the BOM adoptable: %s", got)
+	}
+	rejected, err := w.c.CST.DecideSubstitution(checker, cstapi.DecideSubstitution{IdempotencyKey: w.key(), BomID: "bom.size",
+		ExpectedVersion: decided.RowVersion + 1, SubstitutionID: "sub.2", Decision: cstapi.DecisionReject})
+	w.must(err)
+	if rejected.Status != "rejected" {
+		t.Fatalf("decision %s", rejected.Status)
+	}
+	if err = w.costBOMGuard("company.A", cstapi.CostBOMRef{BomID: "bom.size", Revision: 2, SizeCode: "S"}).Check("/bom"); err != nil {
+		t.Fatalf("after a rejected request: %v", err)
 	}
 }
 
@@ -175,6 +210,47 @@ func TestApparelQuoteFreezeRefusesAnUnverifiedCostBOM(t *testing.T) {
 	}
 	_, err = q.freezeQuote(q.author, "quote.apparel", 1, 1)
 	q.want(err, cstapi.CodeBOMUnverified)
+}
+
+// The freeze accepts a verified apparel BOM, refuses a size the BOM does not store and a BOM of
+// another profile, and refuses a generic quote that cites a BOM at all: nothing would check it.
+func TestQuoteFreezeChecksTheCitedCostBOM(t *testing.T) {
+	q := newTrdWorld(t)
+	_, err := q.c.EXT.Enable(q.author, plugin.EnablePlugin{IdempotencyKey: q.key(), PluginID: plugin.ApparelPluginID})
+	q.must(err)
+	verified := func(id, profile, mode string, grades []cstapi.SizeGrade) {
+		t.Helper()
+		saved, err := q.c.CST.SaveCostBOM(q.author, bomDraft(id, profile, true, mode, grades))
+		q.must(err)
+		_, err = q.c.CST.VerifyCostBOM(q.reviewer, cstapi.VerifyCostBOM{IdempotencyKey: q.key(), BomID: id, ExpectedVersion: saved.RowVersion, Revision: 1})
+		q.must(err)
+	}
+	verified("bom.ok", "apparel", cstapi.GradingUniform, nil)
+	verified("bom.sized", "apparel", cstapi.GradingSized, []cstapi.SizeGrade{{SizeCode: "S", ConsumptionPerUnit: "1.45"}})
+	verified("bom.generic", "generic", cstapi.GradingUniform, nil)
+
+	freeze := func(quoteID string, d trdapi.QuoteData) error {
+		t.Helper()
+		saved, err := q.saveQuote(q.author, quoteID, 0, d)
+		q.must(err)
+		_, err = q.freezeQuote(q.author, quoteID, saved.RowVersion, 1)
+		return err
+	}
+	cite := func(ref trdapi.CostBOMRef) trdapi.QuoteData {
+		d := q.apparelData()
+		d.CostBOMRef = &ref
+		return d
+	}
+	q.want(freeze("quote.sized", cite(trdapi.CostBOMRef{BomID: "bom.sized", Revision: 1, SizeCode: "3XL"})), cstapi.CodeBOMSizeGradeMissing)
+	q.want(freeze("quote.profile", cite(trdapi.CostBOMRef{BomID: "bom.generic", Revision: 1})), plugin.CodeDocumentProfileMismatch)
+	q.want(freeze("quote.missing", cite(trdapi.CostBOMRef{BomID: "bom.none", Revision: 1})), kernel.CodeReferenceInvalid)
+	if err = freeze("quote.ok", cite(trdapi.CostBOMRef{BomID: "bom.ok", Revision: 1})); err != nil {
+		t.Fatalf("apparel quote citing a verified BOM: %v", err)
+	}
+
+	d := q.data()
+	d.CostBOMRef = &trdapi.CostBOMRef{BomID: "bom.ok", Revision: 1}
+	q.want(freeze("quote.generic.cites", d), plugin.CodeDocumentProfileMismatch)
 }
 
 func bomDraft(id, profile string, measured bool, mode string, grades []cstapi.SizeGrade) cstapi.SaveCostBOM {
