@@ -375,8 +375,11 @@ func reconcileResponses() map[string]any {
 // structure the handler writes. A read that is not here answers "the object as the caller may
 // see it" without one; add a read when a client is built against it.
 var readViews = map[string]reflect.Type{
-	"/api/brant/v1/inq/rfqs/{id}":    reflect.TypeFor[rfqJSON](),
-	"/api/brant/v1/evd/sources/{id}": reflect.TypeFor[sourceJSON](),
+	"/api/brant/v1/inq/rfqs/{id}":     reflect.TypeFor[rfqJSON](),
+	"/api/brant/v1/evd/sources/{id}":  reflect.TypeFor[sourceJSON](),
+	"/api/brant/v1/pty/parties/{id}":  reflect.TypeFor[partyJSON](),
+	"/api/brant/v1/pty/contacts/{id}": reflect.TypeFor[contactJSON](),
+	"/api/brant/v1/cat/skus/{id}":     reflect.TypeFor[skuJSON](),
 }
 
 // apiViews are the reads that write an api structure through okView: its tagged form with "ok".
