@@ -229,6 +229,8 @@ var reads = []readRoute{
 	{"/api/brant/v1/inq/rfqs", "inq.rfq.list", "inq",
 		"A page of the customer RFQs the caller sees, most recently changed first (?status=, ?customer_id=, ?after=, ?limit=)", nil, false},
 	{"/api/brant/v1/inq/rfqs/{id}", "inq.rfq.get", "inq", "A customer RFQ", []string{"id"}, false},
+	{"/api/brant/v1/pol/configs/{kind}", "pol.config.list", "pol",
+		"A page of the configurations of a kind, most recently changed first, each with its active revision and no body; bank_account is refused (?q=, ?active=, ?after=, ?limit=)", []string{"kind"}, false},
 	{"/api/brant/v1/pol/configs/{kind}/{id}", "pol.config.get", "pol", "A configuration and its revisions", []string{"kind", "id"}, false},
 	{"/api/brant/v1/pol/snapshots/{id}", "pol.snapshot.get", "pol", "A foundation snapshot", []string{"id"}, false},
 	{"/api/brant/v1/sup/supplier_rfqs", "sup.supplier_rfq.list", "sup",

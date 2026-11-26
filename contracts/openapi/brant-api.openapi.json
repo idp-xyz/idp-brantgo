@@ -41807,6 +41807,176 @@
         ]
       }
     },
+    "/api/brant/v1/pol/configs/{kind}": {
+      "get": {
+        "operationId": "pol.config.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "The next of the previous page",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "configs": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "active_revision": {
+                            "type": "integer"
+                          },
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "last_revision": {
+                            "type": "integer"
+                          },
+                          "root_version": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "valid_from": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "valid_until": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "kind": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "next": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "A page of the configurations of a kind, most recently changed first, each with its active revision and no body; bank_account is refused (?q=, ?active=, ?after=, ?limit=)",
+        "tags": [
+          "pol"
+        ]
+      }
+    },
     "/api/brant/v1/pol/configs/{kind}/{id}": {
       "get": {
         "operationId": "pol.config.get",

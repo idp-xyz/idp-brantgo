@@ -1173,4 +1173,5 @@
 "too many values"
 "trailing data"
 "unknown field"
+"which bank accounts exist follows the bank account read rules, which this list does not apply"
 "wrong type"
