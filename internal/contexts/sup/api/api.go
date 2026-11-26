@@ -585,6 +585,10 @@ type Queries interface {
 	// GetCondition returns a supply condition the caller sees and all its revisions, audited as
 	// <kind>.get.
 	GetCondition(ctx context.Context, kind, id string) (ConditionView, error)
+	// ListSupplierRfqs and ListOffers return a page of what the caller sees, most recently
+	// changed first, audited as supplier_rfq.list and supplier_offer.list (sup.read); lists.go.
+	ListSupplierRfqs(ctx context.Context, q SupplierRfqQuery) (SupplierRfqPage, error)
+	ListOffers(ctx context.Context, q OfferQuery) (OfferPage, error)
 	// ResolveSupplyConditions answers SupplyConditionRef v1 lookups of downstream contexts at
 	// instant at. It needs no permission beyond an active grant; references that do not exist in
 	// the caller's company or data scope, and drafts, are absent. Ask before opening your own

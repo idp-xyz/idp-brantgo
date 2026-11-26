@@ -9,6 +9,7 @@ import (
 	catapi "go.idp.xyz/idp-brant/internal/contexts/cat/api"
 	inqapi "go.idp.xyz/idp-brant/internal/contexts/inq/api"
 	ptyapi "go.idp.xyz/idp-brant/internal/contexts/pty/api"
+	supapi "go.idp.xyz/idp-brant/internal/contexts/sup/api"
 	trdapi "go.idp.xyz/idp-brant/internal/contexts/trd/api"
 	tskapi "go.idp.xyz/idp-brant/internal/contexts/tsk/api"
 	"go.idp.xyz/idp-brant/internal/kernel"
@@ -70,12 +71,14 @@ type listRoute struct {
 }
 
 var listRoutes = map[string]listRoute{
-	"/api/brant/v1/pty/parties":  {filters: []string{"status", "role", "q"}, page: reflect.TypeFor[ptyapi.PartyPage]()},
-	"/api/brant/v1/pty/contacts": {filters: []string{"party_id", "status", "q"}, page: reflect.TypeFor[ptyapi.ContactPage]()},
-	"/api/brant/v1/cat/skus":     {filters: []string{"status", "q"}, page: reflect.TypeFor[catapi.SkuPage]()},
-	"/api/brant/v1/inq/rfqs":     {filters: []string{"status", "customer_id"}, page: reflect.TypeFor[inqapi.RfqPage]()},
-	"/api/brant/v1/trd/quotes":   {filters: []string{"status", "customer_id", "rfq_id"}, flags: []string{"awaiting_response"}, page: reflect.TypeFor[trdapi.QuotePage]()},
-	"/api/brant/v1/trd/orders":   {filters: []string{"status", "quote_id"}, flags: []string{"open_review"}, page: reflect.TypeFor[trdapi.OrderPage]()},
+	"/api/brant/v1/pty/parties":         {filters: []string{"status", "role", "q"}, page: reflect.TypeFor[ptyapi.PartyPage]()},
+	"/api/brant/v1/pty/contacts":        {filters: []string{"party_id", "status", "q"}, page: reflect.TypeFor[ptyapi.ContactPage]()},
+	"/api/brant/v1/cat/skus":            {filters: []string{"status", "q"}, page: reflect.TypeFor[catapi.SkuPage]()},
+	"/api/brant/v1/sup/supplier_rfqs":   {filters: []string{"rfq_id", "supplier_id", "status"}, page: reflect.TypeFor[supapi.SupplierRfqPage]()},
+	"/api/brant/v1/sup/supplier_offers": {filters: []string{"rfq_id", "supplier_id", "status"}, page: reflect.TypeFor[supapi.OfferPage]()},
+	"/api/brant/v1/inq/rfqs":            {filters: []string{"status", "customer_id"}, page: reflect.TypeFor[inqapi.RfqPage]()},
+	"/api/brant/v1/trd/quotes":          {filters: []string{"status", "customer_id", "rfq_id"}, flags: []string{"awaiting_response"}, page: reflect.TypeFor[trdapi.QuotePage]()},
+	"/api/brant/v1/trd/orders":          {filters: []string{"status", "quote_id"}, flags: []string{"open_review"}, page: reflect.TypeFor[trdapi.OrderPage]()},
 	"/api/brant/v1/trd/customer_responses": {filters: []string{"quote_id", "classification"}, flags: []string{"unverified"},
 		page: reflect.TypeFor[trdapi.ResponsePage]()},
 	"/api/brant/v1/trd/rfq_coverage": {repeated: "rfq_id", max: trdapi.MaxCoverageRfqs, page: reflect.TypeFor[trdapi.RfqCoverage]()},
@@ -210,6 +213,30 @@ func (s *server) listSkus(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		var page catapi.SkuPage
 		if page, err = s.cfg.CAT.ListSkus(r.Context(), catapi.SkuQuery{Status: p["status"], Search: p["q"], After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listSupplierRfqs(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listRoutes["/api/brant/v1/sup/supplier_rfqs"].params(r)
+	if err == nil {
+		var page supapi.SupplierRfqPage
+		if page, err = s.cfg.SUP.ListSupplierRfqs(r.Context(), supapi.SupplierRfqQuery{RfqID: p["rfq_id"], SupplierID: p["supplier_id"], Status: p["status"], After: p["after"], Limit: limit}); err == nil {
+			writeJSON(w, http.StatusOK, okView(page))
+			return
+		}
+	}
+	s.fail(w, r, err)
+}
+
+func (s *server) listSupplierOffers(w http.ResponseWriter, r *http.Request) {
+	p, limit, err := listRoutes["/api/brant/v1/sup/supplier_offers"].params(r)
+	if err == nil {
+		var page supapi.OfferPage
+		if page, err = s.cfg.SUP.ListOffers(r.Context(), supapi.OfferQuery{RfqID: p["rfq_id"], SupplierID: p["supplier_id"], Status: p["status"], After: p["after"], Limit: limit}); err == nil {
 			writeJSON(w, http.StatusOK, okView(page))
 			return
 		}

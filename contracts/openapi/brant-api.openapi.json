@@ -76546,6 +76546,187 @@
         ]
       }
     },
+    "/api/brant/v1/sup/supplier_offers": {
+      "get": {
+        "operationId": "sup.supplier_offer.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rfq_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supplier_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The next of the previous page",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "next": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "offers": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "active_revision": {
+                            "type": "integer"
+                          },
+                          "last_revision": {
+                            "type": "integer"
+                          },
+                          "lines": {
+                            "type": "integer"
+                          },
+                          "offer_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "owner_actor_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "rfq_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "root_version": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "supplier_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "supplier_rfq_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "valid_from": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "valid_until": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "A page of the supplier offers the caller sees, most recently changed first, each with its latest revision's status (?rfq_id=, ?supplier_id=, ?status=, ?after=, ?limit=)",
+        "tags": [
+          "sup"
+        ]
+      }
+    },
     "/api/brant/v1/sup/supplier_offers/{id}": {
       "get": {
         "operationId": "sup.supplier_offer.get",
@@ -76561,6 +76742,1450 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "active_revision": {
+                      "type": "integer"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "revisions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "base_revision": {
+                            "type": "integer"
+                          },
+                          "content_hash": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "contributors": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "end": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "at": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "authority_epoch": {
+                                "type": "integer"
+                              },
+                              "by": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "evidence": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "locator": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "source_id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "reason": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "logistics": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "destination": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "locator": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "source_id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "fees": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "allocation": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "basis": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "measurement_ref": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "measurement_id": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "type": "object"
+                                        },
+                                        "target_line_ids": {
+                                          "items": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "weights": {
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "line_id": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "weight": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "billing": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "basis_quantity": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "minimum_amount": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "pricing_mode": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "rate": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "tiers": {
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "lower_inclusive": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "unit_price": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "upper_exclusive": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zero_price_reason": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "unit_ref": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "id"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "chargeable": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "billing_increment": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "divisor_m3_per_kg": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "max_scope": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "measurement_ref": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "measurement_id": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "type": "object"
+                                        },
+                                        "rounding_mode": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "rounding_scope": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "currency_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "fee_type_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "included_in_component_ref": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "obligation_id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "responsible_party": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "tax_application_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "tax_profile_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "zero_price_reason": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "mode": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "origin": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "service_code": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "service_role_ref": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "party_id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "integer"
+                                  },
+                                  "service_role_id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "valid_from": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "valid_until": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "offer": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "evidence": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "locator": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "source_id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "lines": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "conversion_refs": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "currency_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "delivery": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "anchor_event": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "calendar_ref": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "id"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "date": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "day_basis": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "days": {
+                                          "type": "integer"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "milestone": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "place": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "time_zone": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "included_obligation_ids": {
+                                      "items": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "item_code_mapping": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "mapping_id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "moq": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "group_id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "member_line_ids": {
+                                          "items": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "quantity": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "scope": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "unit_ref": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "id"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "order_multiple": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "payment_terms_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "price_basis_quantity": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "price_tier_scope": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "price_unit_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "pricing_mode": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "purchase_unit_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "sku": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "sku_id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "spec_revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "supplier_item_code": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "tax_application_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "tax_profile_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "tier_unit_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "tiers": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "lower_inclusive": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "unit_price": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "upper_exclusive": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zero_price_reason": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "trade_terms_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "origin": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "supplier_rfq": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "row_version": {
+                                        "type": "integer"
+                                      },
+                                      "supplier_rfq_id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "rfq": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "rfq_id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "row_version": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "rfq_line_ids": {
+                                "items": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "supplier": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "party_id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "row_version": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "valid_from": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "valid_until": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          },
+                          "saved_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "saved_by": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          "status": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "superseded_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "terms": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "evidence": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "locator": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "source_id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "lines": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "conversion_refs": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "currency_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "delivery": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "anchor_event": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "calendar_ref": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "id"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "date": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "day_basis": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "days": {
+                                          "type": "integer"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "milestone": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "place": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "time_zone": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "included_obligation_ids": {
+                                      "items": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "item_code_mapping": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "mapping_id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "moq": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "group_id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "member_line_ids": {
+                                          "items": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "quantity": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "scope": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "unit_ref": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "id"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "order_multiple": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "payment_terms_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "price_basis_quantity": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "price_tier_scope": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "price_unit_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "pricing_mode": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "purchase_unit_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "sku": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "sku_id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "spec_revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "supplier_item_code": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "tax_application_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "tax_profile_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "tier_unit_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "tiers": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "lower_inclusive": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "unit_price": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "upper_exclusive": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zero_price_reason": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "trade_terms_ref": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "source_offer_ref": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "supplier": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "party_id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "row_version": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "valid_from": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "valid_until": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "validity_mode": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "verification": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "at": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "authority_epoch": {
+                                "type": "integer"
+                              },
+                              "by": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "evidence": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "locator": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "source_id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "reason": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "root_version": {
+                      "type": "integer"
+                    },
+                    "working_revision": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": "The object as the caller may see it."
           },
           "401": {
@@ -76620,6 +78245,169 @@
         ]
       }
     },
+    "/api/brant/v1/sup/supplier_rfqs": {
+      "get": {
+        "operationId": "sup.supplier_rfq.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rfq_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supplier_id",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The next of the previous page",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "next": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "supplier_rfqs": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lines": {
+                            "type": "integer"
+                          },
+                          "owner_actor_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "rfq_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "row_version": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "supplier_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "supplier_rfq_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of the objects the caller sees; next is absent on the last page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "UNAUTHENTICATED: no valid bearer token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            },
+            "description": "SCHEMA_INVALID or a business rejection"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportError"
+                }
+              }
+            },
+            "description": "UNAVAILABLE or COMMIT_UNCERTAIN: reconcile the command, or replay it with the same idempotency key"
+          }
+        },
+        "summary": "A page of the supplier RFQs the caller sees, most recently changed first (?rfq_id=, ?supplier_id=, ?status=, ?after=, ?limit=)",
+        "tags": [
+          "sup"
+        ]
+      }
+    },
     "/api/brant/v1/sup/supplier_rfqs/{id}": {
       "get": {
         "operationId": "sup.supplier_rfq.get",
@@ -76635,6 +78423,219 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "close": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "at": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "authority_epoch": {
+                          "type": "integer"
+                        },
+                        "by": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        "evidence": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "locator": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "source_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "reason": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "content_hash": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "evidence": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "locator": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "source_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "rfq": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "rfq_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "row_version": {
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "rfq_line_ids": {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "supplier": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "party_id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "row_version": {
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "issue": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "at": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "authority_epoch": {
+                          "type": "integer"
+                        },
+                        "by": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        "evidence": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "locator": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "source_id": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "reason": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "issued_version": {
+                      "type": "integer"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "row_version": {
+                      "type": "integer"
+                    },
+                    "saved_at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "saved_by": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "supplier_rfq_id": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": "The object as the caller may see it."
           },
           "401": {
